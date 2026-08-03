@@ -39,7 +39,12 @@ make run-cloud     # http://127.0.0.1:8750/admin
 ```
 
 Panelda ko‘rinadi: mijozlar soni, faol obunalar, **7 kun ichida tugaydiganlar**,
-juftlangan qurilmalar va **oylik daromad** (faol + grace mijozlar bo‘yicha).
+**ishlamayotgan tizimlar**, juftlangan qurilmalar va **oylik daromad**
+(faol + grace mijozlar bo‘yicha).
+
+“Ishlamayapti” qizil raqami — to‘lovi joyida, lekin 24 soatdan beri aloqaga
+chiqmagan mijozlar. Ularga o‘zingiz qo‘ng‘iroq qiling: mijoz shikoyat qilguncha
+kutish — obunani yo‘qotishning eng oson yo‘li.
 
 Batafsil: [INSTALLER.md](INSTALLER.md)
 

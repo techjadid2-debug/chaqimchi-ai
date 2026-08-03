@@ -94,9 +94,23 @@ takrorlanmaydi).
 
 ## 6. Holatlar
 
+**Obuna** (to‘lov bo‘yicha):
+
 | status | Ma’nosi |
 |--------|---------|
 | active | Hammasi ishlaydi |
 | grace | Muddati o‘tgan, 14 kun ichida to‘lov |
 | expired | Kameralar ishlamaydi |
 | suspended | Admin to‘xtatgan |
+
+**Aloqa** (tizim rostdan ishlayaptimi):
+
+| Holat | Ma’nosi | Nima qilish kerak |
+|-------|---------|-------------------|
+| Ishlayapti | 1 soat ichida xabar bergan | — |
+| Aloqa uzilgan | 1–24 soat jim | Kuzating; takrorlansa internetni tekshiring |
+| Ishlamayapti | 24 soatdan ortiq jim | **Qo‘ng‘iroq qiling** — tok, internet yoki Mini PC |
+| Juftlanmagan | Qurilma ulanmagan | O‘rnatish tugallanmagan (3-bo‘lim) |
+
+O‘rnatishni tugatgach panelda mijoz “Ishlayapti” bo‘lganiga ishonch hosil
+qiling — aks holda juftlash bajarilmagan.

@@ -77,6 +77,32 @@ curl http://127.0.0.1:8742/metrics
 | 7.6 | Admin web panel (UI) | [x] `GET /admin` (8750) — mijozlar, obuna, pairing, hisob-fakturalar |
 | 7.7 | Arxiv muddati (retention) | [x] Tarifdagi 30/90/365 kun endi rostdan qo‘llanadi |
 | 7.8 | Zaxira nusxa va tiklash | [x] `make backup` / `make restore`, `GET/POST /api/backup` |
+| 7.9 | Aloqa nazorati | [x] Panelda qaysi mijoz tizimi ishlamayotgani ko‘rinadi |
+
+### 7.9 — Aloqa nazorati
+
+Edge har 30 daqiqada cloud ga xabar beradi va `last_seen` yozilardi — lekin bu
+son faqat sayt tafsilotida xom matn bo‘lib turardi. Ya’ni mijozning tizimi
+o‘chib qolganini bilish uchun har bir saytni qo‘lda ochib ko‘rish kerak edi.
+Amalda buni hech kim qilmaydi va nosozlik mijoz qo‘ng‘iroq qilgandagina
+ma’lum bo‘ladi — oyiga 790 000–2 990 000 so‘m to‘layotgan mijoz uchun yomon.
+
+Endi har bir sayt aloqa holatiga ega:
+
+| Holat | Ma’nosi | Panelda |
+|-------|---------|---------|
+| `online` | 1 soat ichida xabar bergan | yashil |
+| `stale` | 1–24 soat jim — internet uzilgan yoki qayta yuklanmoqda | sariq |
+| `offline` | 24 soatdan ortiq jim — **tizim ishlamayapti** | qizil |
+| `not_paired` | Qurilma umuman juftlanmagan — o‘rnatish tugallanmagan | kulrang |
+
+Panel yuqorisida **“Ishlamayapti”** qizil raqami: `offline + not_paired`.
+Obunasi to‘xtatilgan yoki muddati tugagan mijozlar bu raqamga qo‘shilmaydi —
+ular jim turishi kutilgan holat.
+
+`GET /api/v1/admin/stats` → `offline`, `not_paired`, `by_connection`;
+`GET /api/v1/admin/sites` → har bir saytda `connection`, `last_seen`,
+`minutes_since_seen`.
 
 ### 7.8 — Zaxira nusxa
 

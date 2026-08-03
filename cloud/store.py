@@ -23,6 +23,47 @@ def _iso(dt: datetime) -> str:
 #: Obuna tugagach nechа kun ichida tizim ishlashda davom etadi (grace).
 GRACE_DAYS = 14
 
+# ── Aloqa holati ─────────────────────────────────────────────────────────
+#
+# Edge har `heartbeat_interval_sec` (standart 1800s = 30 daqiqa) da bir marta
+# xabar beradi. Shu sababli:
+#   - 1 soatgacha jim  → normal (bitta heartbeat o'tkazib yuborilgan bo'lishi mumkin)
+#   - 1–24 soat        → shubhali: internet uzilgan yoki qayta yuklanmoqda
+#   - 24 soatdan ortiq → tizim ishlamayapti, mijozga qo'ng'iroq qilish kerak
+#
+# Bungacha `last_seen` faqat sayt tafsilotida xom matn bo'lib turardi — ya'ni
+# mijozning tizimi o'chib qolganini bilish uchun har bir saytni qo'lda ochib
+# ko'rish kerak edi.
+
+ONLINE_MINUTES = 60
+OFFLINE_HOURS = 24
+
+
+def _connection_state(
+    last_seen: Optional[str], devices: int, now: Optional[datetime] = None
+) -> Dict[str, Any]:
+    """Aloqa holati: not_paired | online | stale | offline."""
+    now = now or _utc_now().replace(tzinfo=None)
+
+    if not devices:
+        return {"connection": "not_paired", "minutes_since_seen": None}
+    if not last_seen:
+        return {"connection": "offline", "minutes_since_seen": None}
+
+    try:
+        seen = datetime.strptime(last_seen, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return {"connection": "offline", "minutes_since_seen": None}
+
+    minutes = max(0, int((now - seen).total_seconds() // 60))
+    if minutes <= ONLINE_MINUTES:
+        state = "online"
+    elif minutes <= OFFLINE_HOURS * 60:
+        state = "stale"
+    else:
+        state = "offline"
+    return {"connection": state, "minutes_since_seen": minutes}
+
 
 def _compute_status(site: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
     """Obuna holatini hisoblaydi: active / grace / expired / suspended.
@@ -155,12 +196,12 @@ class CloudStore:
         """Barcha saytlar — har biriga hisoblangan holat, tarif narxi va qurilma soni bilan."""
         conn = self._connect()
         rows = conn.execute("SELECT * FROM sites ORDER BY created_at DESC").fetchall()
-        device_counts = {
-            r["site_id"]: r["n"]
-            for r in conn.execute(
-                "SELECT site_id, COUNT(*) AS n FROM devices GROUP BY site_id"
-            ).fetchall()
-        }
+        device_rows = conn.execute(
+            "SELECT site_id, COUNT(*) AS n, MAX(last_seen) AS last_seen"
+            " FROM devices GROUP BY site_id"
+        ).fetchall()
+        device_counts = {r["site_id"]: r["n"] for r in device_rows}
+        last_seen_by_site = {r["site_id"]: r["last_seen"] for r in device_rows}
         conn.close()
 
         now = _utc_now().replace(tzinfo=None)
@@ -172,6 +213,10 @@ class CloudStore:
             site["license_status"] = computed["status"]
             site["days_left"] = computed["days_left"]
             site["devices"] = device_counts.get(site["id"], 0)
+            site["last_seen"] = last_seen_by_site.get(site["id"])
+            site.update(
+                _connection_state(site["last_seen"], site["devices"], now)
+            )
             site["monthly_price_uzs"] = limits.monthly_price_uzs
             site["max_cameras"] = limits.max_cameras
             site["max_persons"] = limits.max_persons
@@ -185,6 +230,7 @@ class CloudStore:
             raise ValueError("Sayt topilmadi")
 
         conn = self._connect()
+        now = _utc_now().replace(tzinfo=None)
         devices = [
             {
                 "id": r["id"],
@@ -192,6 +238,7 @@ class CloudStore:
                 "hardware_id": r["hardware_id"],
                 "last_seen": r["last_seen"],
                 "created_at": r["created_at"],
+                **_connection_state(r["last_seen"], 1, now),
             }
             for r in conn.execute(
                 "SELECT * FROM devices WHERE site_id = ? ORDER BY created_at", (site_id,)
@@ -221,6 +268,10 @@ class CloudStore:
             "install_price_uzs": limits.install_price_uzs,
         }
         site["devices"] = devices
+        site["last_seen"] = max(
+            (d["last_seen"] for d in devices if d["last_seen"]), default=None
+        )
+        site.update(_connection_state(site["last_seen"], len(devices), now))
         site["active_pairing_codes"] = codes
         return site
 
@@ -252,11 +303,16 @@ class CloudStore:
         """Panel uchun umumiy ko‘rsatkichlar: mijozlar, holatlar, oylik daromad."""
         sites = self.list_sites()
         by_status: Dict[str, int] = {}
+        by_connection: Dict[str, int] = {}
         monthly_revenue = 0
         for site in sites:
             by_status[site["license_status"]] = by_status.get(site["license_status"], 0) + 1
             if site["license_status"] in ("active", "grace"):
                 monthly_revenue += int(site["monthly_price_uzs"])
+                # Aloqa faqat to'lovi joyida bo'lgan mijozlar uchun muhim:
+                # o'zimiz to'xtatgan sayt jim turishi — normal holat.
+                conn_state = site["connection"]
+                by_connection[conn_state] = by_connection.get(conn_state, 0) + 1
 
         return {
             "total_sites": len(sites),
@@ -267,6 +323,11 @@ class CloudStore:
             ),
             "total_devices": sum(int(s["devices"]) for s in sites),
             "monthly_revenue_uzs": monthly_revenue,
+            "by_connection": by_connection,
+            # Panelda qizil raqam: to'lovi joyida, lekin tizimi ishlamayotgan
+            # mijozlar. Bularga qo'ng'iroq qilish kerak.
+            "offline": by_connection.get("offline", 0),
+            "not_paired": by_connection.get("not_paired", 0),
         }
 
     def get_site(self, site_id: str) -> Optional[Dict[str, Any]]:

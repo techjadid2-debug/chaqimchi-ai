@@ -90,6 +90,7 @@
               <th>Holat</th>
               <th>Obuna tugaydi</th>
               <th>Qolgan</th>
+              <th>Aloqa</th>
               <th>Qurilma</th>
               <th>Oylik</th>
               <th></th>
@@ -152,6 +153,21 @@
       expired: "Muddati tugagan",
       suspended: "To'xtatilgan",
     };
+    // Aloqa holati: edge 30 daqiqada bir marta xabar beradi.
+    const CONN_LABEL = {
+      online: "Ishlayapti",
+      stale: "Aloqa uzilgan",
+      offline: "Ishlamayapti",
+      not_paired: "Juftlanmagan",
+    };
+    // "3 soat oldin" ko'rinishida — xom UTC vaqtdan ko'ra tezroq o'qiladi.
+    function sinceLabel(minutes) {
+      if (minutes == null) return "—";
+      if (minutes < 60) return `${minutes} daq oldin`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours} soat oldin`;
+      return `${Math.floor(hours / 24)} kun oldin`;
+    }
     const INVOICE_LABEL = {
       pending: "Kutilmoqda",
       paid: "To'langan",
@@ -223,18 +239,21 @@
 
     // ── Ko'rsatkichlar va ro'yxat ────────────────────────────────────────
     function renderStats(s) {
+      const brokenCount = (s.offline || 0) + (s.not_paired || 0);
       const items = [
         ["Mijozlar", s.total_sites],
         ["Faol", s.active],
         ["7 kunda tugaydi", s.expiring_soon],
+        // To'lovi joyida, lekin tizimi ishlamayotgan mijozlar — qo'ng'iroq qilish kerak.
+        ["Ishlamayapti", brokenCount, brokenCount > 0],
         ["Qurilmalar", s.total_devices],
         ["Oylik daromad", uzs(s.monthly_revenue_uzs)],
         ["Kutilayotgan to'lov", uzs(s.pending_amount_uzs)],
       ];
       $("stats").innerHTML = items
         .map(
-          ([label, value]) =>
-            `<div class="stat"><div class="stat-value">${esc(value)}</div><div class="stat-label">${label}</div></div>`
+          ([label, value, alert]) =>
+            `<div class="stat${alert ? " stat-alert" : ""}"><div class="stat-value">${esc(value)}</div><div class="stat-label">${label}</div></div>`
         )
         .join("");
     }
@@ -243,7 +262,7 @@
       $("siteCount").textContent = sites.length ? `${sites.length} ta` : "";
       if (!sites.length) {
         $("sitesBody").innerHTML =
-          '<tr><td colspan="8" class="muted" style="padding: 1.5rem 0.75rem;">Hali mijoz yo\'q — yuqoridagi shakl orqali oching.</td></tr>';
+          '<tr><td colspan="9" class="muted" style="padding: 1.5rem 0.75rem;">Hali mijoz yo\'q — yuqoridagi shakl orqali oching.</td></tr>';
         return;
       }
       $("sitesBody").innerHTML = sites
@@ -259,6 +278,12 @@
             <td><span class="badge badge-${esc(s.license_status)}">${STATUS_LABEL[s.license_status] || esc(s.license_status)}</span></td>
             <td class="muted">${esc((s.subscription_until || "").slice(0, 10))}</td>
             <td class="${s.days_left <= 7 ? "" : "muted"}">${s.days_left} kun</td>
+            <td>
+              <span class="badge badge-${esc(s.connection)}" title="Oxirgi aloqa: ${esc(s.last_seen || "hech qachon")} UTC">
+                ${CONN_LABEL[s.connection] || esc(s.connection)}
+              </span>
+              <div class="muted" style="font-size: 0.7rem;">${esc(sinceLabel(s.minutes_since_seen))}</div>
+            </td>
             <td class="muted">${s.devices}</td>
             <td class="muted">${uzs(s.monthly_price_uzs)}</td>
             <td>
@@ -563,10 +588,18 @@
           ? d.devices
               .map(
                 (dev) =>
-                  `<tr><td>${esc(dev.label)}</td><td class="muted mono">${esc(dev.id)}</td><td class="muted">${esc(dev.last_seen || "—")}</td></tr>`
+                  `<tr>
+                    <td>${esc(dev.label)}</td>
+                    <td class="muted mono">${esc(dev.id)}</td>
+                    <td class="muted">${esc(dev.last_seen || "—")}</td>
+                    <td>
+                      <span class="badge badge-${esc(dev.connection)}">${CONN_LABEL[dev.connection] || esc(dev.connection)}</span>
+                      <span class="muted" style="font-size: 0.7rem;">${esc(sinceLabel(dev.minutes_since_seen))}</span>
+                    </td>
+                  </tr>`
               )
               .join("")
-          : '<tr><td colspan="3" class="muted">Hali qurilma juftlanmagan</td></tr>';
+          : '<tr><td colspan="4" class="muted">Hali qurilma juftlanmagan</td></tr>';
 
         const codes = d.active_pairing_codes.length
           ? d.active_pairing_codes
@@ -592,7 +625,7 @@
           <div class="card-title" style="margin-top: 1.25rem;">Qurilmalar</div>
           <div class="table-scroll">
             <table>
-              <thead><tr><th>Nomi</th><th>ID</th><th>Oxirgi aloqa (UTC)</th></tr></thead>
+              <thead><tr><th>Nomi</th><th>ID</th><th>Oxirgi aloqa (UTC)</th><th>Holat</th></tr></thead>
               <tbody>${devices}</tbody>
             </table>
           </div>

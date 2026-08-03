@@ -178,6 +178,23 @@ async def admin_stats(_: None = Depends(require_admin)) -> Dict[str, Any]:
     return {**get_store().stats(), **get_payments().invoice_stats()}
 
 
+class CamerasBody(BaseModel):
+    expected: int = Field(ge=0, le=64)
+
+
+@app.post("/api/v1/admin/sites/{site_id}/cameras")
+async def admin_set_cameras(
+    site_id: str,
+    body: CamerasBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """O‘rnatilgan kamera sonini belgilash (kamera ataylab olib tashlanganda)."""
+    try:
+        return get_store().set_cameras_expected(site_id, body.expected)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
 @app.get("/api/v1/admin/alerts")
 async def admin_alerts_status(_: None = Depends(require_admin)) -> Dict[str, Any]:
     """Ogohlantirish sozlamasi va oxirgi tekshiruv natijasi."""

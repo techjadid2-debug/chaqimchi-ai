@@ -79,6 +79,39 @@ curl http://127.0.0.1:8742/metrics
 | 7.8 | Zaxira nusxa va tiklash | [x] `make backup` / `make restore`, `GET/POST /api/backup` |
 | 7.9 | Aloqa nazorati | [x] Panelda qaysi mijoz tizimi ishlamayotgani ko‘rinadi |
 | 7.10 | Telegram ogohlantirishi | [x] Mijoz o‘chsa cloud o‘zi xabar beradi |
+| 7.11 | Kamera nazorati | [x] 3 kameradan bittasi o‘chsa ham bilinadi |
+
+### 7.11 — Kamera nazorati
+
+Edge har heartbeat'da `active_cameras` yuborardi, lekin cloud uni **faqat
+javobda qaytarib tashlardi** — hech qayerda saqlanmasdi. Natijada 3 kamerali
+Business mijozda (1 490 000 so‘m/oy) bitta kamera o‘chsa, panelda hamma narsa
+yashil turardi: aloqa bor, obuna faol. Mijoz oylab bilmasligi mumkin edi.
+
+Bu aloqa uzilishidan xavfliroq: tizim butunlay o‘chsa mijoz sezadi, bitta
+kamera o‘chsa — yo‘q.
+
+- Kamera soni endi `devices.active_cameras` da saqlanadi.
+- `sites.cameras_expected` — shu obyektda ishlagani ma’lum bo‘lgan eng katta
+  son. O‘rnatuvchidan alohida so‘ralmaydi: tizim bir marta 3 kamera bilan
+  ishlagan bo‘lsa, keyin 2 kelishi nosozlik demakdir.
+- Panelda “Kamera” ustuni: `2/3` qizil rangda.
+- Telegram: “📹 Oq Saroy — 1 ta kamera ishlamayapti” + telefon raqami.
+  Ahvol yomonlashsa (2 ta o‘chsa) yangi xabar ketadi; tuzatilsa ✅.
+- Tizim butunlay o‘chgan bo‘lsa kamera xabari **yuborilmaydi** — aloqa
+  ogohlantirishi allaqachon ketgan, ikkita xabar shovqin.
+
+Kamera ataylab olib tashlansa kutilgan sonni tushiring, aks holda tizim uni
+abadiy “yo‘qolgan” deb hisoblaydi:
+
+```bash
+curl -X POST "$CLOUD/api/v1/admin/sites/SITE_ID/cameras" \
+  -H "X-Cloud-Admin-Key: $CHAQIMCHI_CLOUD_ADMIN_KEY" \
+  -H "Content-Type: application/json" -d '{"expected": 2}'
+```
+
+Eski bazalar avtomatik migratsiya qilinadi (yangi ustunlar qo‘shiladi,
+ogohlantirish holati saqlanadi).
 
 ### 7.10 — Telegram ogohlantirishi
 

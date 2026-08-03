@@ -93,6 +93,7 @@
               <th>Obuna tugaydi</th>
               <th>Qolgan</th>
               <th>Aloqa</th>
+              <th>Kamera</th>
               <th>Qurilma</th>
               <th>Oylik</th>
               <th></th>
@@ -273,7 +274,7 @@
       $("siteCount").textContent = sites.length ? `${sites.length} ta` : "";
       if (!sites.length) {
         $("sitesBody").innerHTML =
-          '<tr><td colspan="9" class="muted" style="padding: 1.5rem 0.75rem;">Hali mijoz yo\'q — yuqoridagi shakl orqali oching.</td></tr>';
+          '<tr><td colspan="10" class="muted" style="padding: 1.5rem 0.75rem;">Hali mijoz yo\'q — yuqoridagi shakl orqali oching.</td></tr>';
         return;
       }
       $("sitesBody").innerHTML = sites
@@ -294,6 +295,9 @@
                 ${CONN_LABEL[s.connection] || esc(s.connection)}
               </span>
               <div class="muted" style="font-size: 0.7rem;">${esc(sinceLabel(s.minutes_since_seen))}</div>
+            </td>
+            <td class="${s.cameras_ok ? "muted" : "bad"}">
+              ${s.cameras_expected ? `${s.cameras_active}/${s.cameras_expected}` : "—"}
             </td>
             <td class="muted">${s.devices}</td>
             <td class="muted">${uzs(s.monthly_price_uzs)}</td>

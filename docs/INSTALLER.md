@@ -112,6 +112,15 @@ takrorlanmaydi).
 | expired | Kameralar ishlamaydi |
 | suspended | Admin to‘xtatgan |
 
+**Kamera**: panelda `2/3` ko‘rinsa — bitta kamera o‘chgan. Telegramga ham xabar
+ketadi. Kamera ataylab olib tashlangan bo‘lsa kutilgan sonni tushiring:
+
+```bash
+curl -X POST "http://CLOUD:8750/api/v1/admin/sites/SITE_ID/cameras" \
+  -H "X-Cloud-Admin-Key: $CHAQIMCHI_CLOUD_ADMIN_KEY" \
+  -H "Content-Type: application/json" -d '{"expected": 2}'
+```
+
 **Aloqa** (tizim rostdan ishlayaptimi):
 
 | Holat | Ma’nosi | Nima qilish kerak |

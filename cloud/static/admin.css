@@ -204,6 +204,12 @@ tbody tr:hover {
   color: var(--accent-red);
 }
 
+/* Jadvaldagi nosoz qiymat (masalan 2/3 kamera) */
+.bad {
+  color: var(--accent-red);
+  font-weight: 600;
+}
+
 /* Tugmalar va maydonlar */
 .btn {
   display: inline-flex;

@@ -84,6 +84,8 @@ class Alert:
     text: str
     #: `alert_state` ga yoziladigan qiymat. `None` — yozuvni o‘chirish.
     remember: Optional[str]
+    #: Ogohlantirish turi — har biri mustaqil kuzatiladi.
+    kind: str = "connection"
 
 
 @dataclass
@@ -152,6 +154,74 @@ def _recovery_text(site: Dict[str, Any]) -> str:
         f"✅ <b>{site.get('name', '?')}</b> — qayta ishga tushdi\n"
         f"Aloqa tiklandi."
     )
+
+
+def _camera_text(site: Dict[str, Any]) -> str:
+    active = site.get("cameras_active", 0)
+    expected = site.get("cameras_expected", 0)
+    phone = site.get("contact_phone")
+    tail = f"\n📞 {phone}" if phone else ""
+    lost = expected - active
+    return (
+        f"📹 <b>{site.get('name', '?')}</b> — {lost} ta kamera ishlamayapti\n"
+        f"{expected} tadan {active} tasi ulangan.\n"
+        f"Kamera tokini, tarmoq kabelini yoki RTSP manzilini tekshiring.{tail}"
+    )
+
+
+def _camera_recovery_text(site: Dict[str, Any]) -> str:
+    return (
+        f"✅ <b>{site.get('name', '?')}</b> — kameralar tiklandi\n"
+        f"Barcha {site.get('cameras_expected', 0)} kamera ishlayapti."
+    )
+
+
+def plan_camera_alerts(
+    sites: List[Dict[str, Any]], previous: Dict[str, str]
+) -> Tuple[List[Alert], List[str]]:
+    """Kamera yo‘qolganini aniqlaydi.
+
+    Mijoz 3 kamerali tarif uchun pul to‘lab, bittasi o‘chib qolsa — tizim
+    “ishlayapti” bo‘lib turadi va buni hech kim sezmaydi. Bu jimgina buzilish
+    aloqa uzilishidan ham xavfliroq: mijoz o‘zi ham bilmaydi.
+
+    Faqat aloqasi bor saytlar tekshiriladi — tizim butunlay o‘chgan bo‘lsa
+    kameralar haqida alohida yozish shovqin (aloqa ogohlantirishi allaqachon
+    ketgan).
+    """
+    alerts: List[Alert] = []
+    forget: List[str] = []
+
+    for site in sites:
+        site_id = site["id"]
+        prev = previous.get(site_id)
+
+        watched = site.get("license_status") in ("active", "grace") and site.get(
+            "connection"
+        ) in ("online", "stale")
+        if not watched:
+            if prev is not None:
+                forget.append(site_id)
+            continue
+
+        expected = int(site.get("cameras_expected") or 0)
+        active = int(site.get("cameras_active") or 0)
+        if not expected:
+            continue
+
+        state = "ok" if active >= expected else f"missing:{expected - active}"
+
+        if state.startswith("missing"):
+            if prev != state:
+                alerts.append(
+                    Alert(site_id, state, _camera_text(site), remember=state, kind="cameras")
+                )
+        elif prev is not None:
+            alerts.append(
+                Alert(site_id, state, _camera_recovery_text(site), remember=None, kind="cameras")
+            )
+
+    return alerts, forget
 
 
 def plan_alerts(
@@ -256,12 +326,18 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
 
     sites = store.list_sites()
     run.checked = len(sites)
-    alerts, forget = plan_alerts(sites, store.alert_states(), now=now)
 
-    for site_id in forget:
-        store.clear_alert_state(site_id)
+    conn_alerts, conn_forget = plan_alerts(
+        sites, store.alert_states("connection"), now=now
+    )
+    cam_alerts, cam_forget = plan_camera_alerts(sites, store.alert_states("cameras"))
 
-    for alert in alerts:
+    for site_id in conn_forget:
+        store.clear_alert_state(site_id, kind="connection")
+    for site_id in cam_forget:
+        store.clear_alert_state(site_id, kind="cameras")
+
+    for alert in conn_alerts + cam_alerts:
         if await sender.send(alert.text):
             run.sent += 1
             run.messages.append(alert.text)
@@ -269,9 +345,9 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
             # tarmoq uzilganda muammo "xabar berilgan" deb belgilanib,
             # ogohlantirish butunlay yo'qolardi.
             if alert.remember is None:
-                store.clear_alert_state(alert.site_id)
+                store.clear_alert_state(alert.site_id, kind=alert.kind)
             else:
-                store.set_alert_state(alert.site_id, alert.remember)
+                store.set_alert_state(alert.site_id, alert.remember, kind=alert.kind)
         else:
             run.failed += 1
 
@@ -354,6 +430,7 @@ __all__ = [
     "PAIRING_GRACE_HOURS",
     "TelegramSender",
     "plan_alerts",
+    "plan_camera_alerts",
     "run_check",
     "test_message",
 ]

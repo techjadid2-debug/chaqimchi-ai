@@ -135,16 +135,55 @@ class CloudStore:
             );
             -- Telegram ogohlantirishi qaysi holat uchun yuborilganini eslaydi:
             -- shusiz har tekshiruvda o'sha xabar qayta-qayta ketardi.
+            -- `kind`: connection | cameras — har bir turi mustaqil kuzatiladi.
             CREATE TABLE IF NOT EXISTS alert_state (
-                site_id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'connection',
                 connection TEXT NOT NULL,
                 notified_at TEXT NOT NULL,
+                PRIMARY KEY (site_id, kind),
                 FOREIGN KEY (site_id) REFERENCES sites(id)
             );
             """
         )
+        self._migrate(conn)
         conn.commit()
         conn.close()
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        """Ishlayotgan bazani yangi ustunlar bilan to‘ldiradi.
+
+        `CREATE TABLE IF NOT EXISTS` eski jadvalni o‘zgartirmaydi, shuning uchun
+        allaqachon ishlab turgan cloud yangilanganda ustunlar qo‘lda qo‘shiladi.
+        """
+
+        def columns(table: str) -> set:
+            return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+        if "active_cameras" not in columns("devices"):
+            conn.execute("ALTER TABLE devices ADD COLUMN active_cameras INTEGER")
+
+        if "cameras_expected" not in columns("sites"):
+            conn.execute("ALTER TABLE sites ADD COLUMN cameras_expected INTEGER")
+
+        # `alert_state` bir turdan (connection) ikki turga (kind) o'tdi.
+        if "kind" not in columns("alert_state"):
+            conn.executescript(
+                """
+                ALTER TABLE alert_state RENAME TO alert_state_old;
+                CREATE TABLE alert_state (
+                    site_id TEXT NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'connection',
+                    connection TEXT NOT NULL,
+                    notified_at TEXT NOT NULL,
+                    PRIMARY KEY (site_id, kind),
+                    FOREIGN KEY (site_id) REFERENCES sites(id)
+                );
+                INSERT INTO alert_state (site_id, kind, connection, notified_at)
+                    SELECT site_id, 'connection', connection, notified_at FROM alert_state_old;
+                DROP TABLE alert_state_old;
+                """
+            )
 
     def create_site(
         self,
@@ -205,11 +244,13 @@ class CloudStore:
         conn = self._connect()
         rows = conn.execute("SELECT * FROM sites ORDER BY created_at DESC").fetchall()
         device_rows = conn.execute(
-            "SELECT site_id, COUNT(*) AS n, MAX(last_seen) AS last_seen"
+            "SELECT site_id, COUNT(*) AS n, MAX(last_seen) AS last_seen,"
+            " SUM(COALESCE(active_cameras, 0)) AS cameras"
             " FROM devices GROUP BY site_id"
         ).fetchall()
         device_counts = {r["site_id"]: r["n"] for r in device_rows}
         last_seen_by_site = {r["site_id"]: r["last_seen"] for r in device_rows}
+        cameras_by_site = {r["site_id"]: r["cameras"] for r in device_rows}
         conn.close()
 
         now = _utc_now().replace(tzinfo=None)
@@ -224,6 +265,13 @@ class CloudStore:
             site["last_seen"] = last_seen_by_site.get(site["id"])
             site.update(
                 _connection_state(site["last_seen"], site["devices"], now)
+            )
+            site["cameras_active"] = int(cameras_by_site.get(site["id"]) or 0)
+            site["cameras_expected"] = int(site.get("cameras_expected") or 0)
+            site["cameras_ok"] = (
+                site["cameras_active"] >= site["cameras_expected"]
+                if site["cameras_expected"]
+                else True
             )
             site["monthly_price_uzs"] = limits.monthly_price_uzs
             site["max_cameras"] = limits.max_cameras
@@ -246,6 +294,7 @@ class CloudStore:
                 "hardware_id": r["hardware_id"],
                 "last_seen": r["last_seen"],
                 "created_at": r["created_at"],
+                "active_cameras": r["active_cameras"],
                 **_connection_state(r["last_seen"], 1, now),
             }
             for r in conn.execute(
@@ -280,8 +329,35 @@ class CloudStore:
             (d["last_seen"] for d in devices if d["last_seen"]), default=None
         )
         site.update(_connection_state(site["last_seen"], len(devices), now))
+        site["cameras_active"] = sum(int(d["active_cameras"] or 0) for d in devices)
+        site["cameras_expected"] = int(site.get("cameras_expected") or 0)
+        site["cameras_ok"] = (
+            site["cameras_active"] >= site["cameras_expected"]
+            if site["cameras_expected"]
+            else True
+        )
         site["active_pairing_codes"] = codes
         return site
+
+    def set_cameras_expected(self, site_id: str, expected: int) -> Dict[str, Any]:
+        """O‘rnatilgan kamera sonini qo‘lda belgilash.
+
+        Kamera ataylab olib tashlanganda kerak: aks holda tizim uni abadiy
+        “yo‘qolgan” deb hisoblab, har kuni ogohlantirib turadi.
+        """
+        if expected < 0:
+            raise ValueError("Kamera soni manfiy bo‘lishi mumkin emas")
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+
+        conn = self._connect()
+        conn.execute(
+            "UPDATE sites SET cameras_expected = ? WHERE id = ?", (int(expected), site_id)
+        )
+        conn.commit()
+        conn.close()
+        self.clear_alert_state(site_id, kind="cameras")
+        return self.site_detail(site_id)
 
     def set_status(self, site_id: str, status: str) -> Dict[str, Any]:
         """Obunani to‘xtatish (`suspended`) yoki qayta yoqish (`active`)."""
@@ -340,26 +416,36 @@ class CloudStore:
 
     # ── Ogohlantirish holati ──────────────────────────────────────────────
 
-    def alert_states(self) -> Dict[str, str]:
-        """Har bir sayt uchun oxirgi xabar berilgan aloqa holati."""
+    def alert_states(self, kind: str = "connection") -> Dict[str, str]:
+        """Shu tur bo‘yicha oxirgi xabar berilgan holat (sayt → holat)."""
         conn = self._connect()
-        rows = conn.execute("SELECT site_id, connection FROM alert_state").fetchall()
+        rows = conn.execute(
+            "SELECT site_id, connection FROM alert_state WHERE kind = ?", (kind,)
+        ).fetchall()
         conn.close()
         return {r["site_id"]: r["connection"] for r in rows}
 
-    def set_alert_state(self, site_id: str, connection: str) -> None:
+    def set_alert_state(self, site_id: str, connection: str, *, kind: str = "connection") -> None:
+        now = _iso(_utc_now())
         conn = self._connect()
         conn.execute(
-            "INSERT INTO alert_state (site_id, connection, notified_at) VALUES (?, ?, ?)"
-            " ON CONFLICT(site_id) DO UPDATE SET connection = ?, notified_at = ?",
-            (site_id, connection, _iso(_utc_now()), connection, _iso(_utc_now())),
+            "INSERT INTO alert_state (site_id, kind, connection, notified_at)"
+            " VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(site_id, kind) DO UPDATE SET connection = ?, notified_at = ?",
+            (site_id, kind, connection, now, connection, now),
         )
         conn.commit()
         conn.close()
 
-    def clear_alert_state(self, site_id: str) -> None:
+    def clear_alert_state(self, site_id: str, *, kind: Optional[str] = None) -> None:
+        """`kind` berilmasa — saytning barcha ogohlantirish holatlari o‘chadi."""
         conn = self._connect()
-        conn.execute("DELETE FROM alert_state WHERE site_id = ?", (site_id,))
+        if kind is None:
+            conn.execute("DELETE FROM alert_state WHERE site_id = ?", (site_id,))
+        else:
+            conn.execute(
+                "DELETE FROM alert_state WHERE site_id = ? AND kind = ?", (site_id, kind)
+            )
         conn.commit()
         conn.close()
 
@@ -441,9 +527,19 @@ class CloudStore:
 
         conn = self._connect()
         conn.execute(
-            "UPDATE devices SET last_seen = ? WHERE id = ?",
-            (_iso(now), device["id"]),
+            "UPDATE devices SET last_seen = ?, active_cameras = ? WHERE id = ?",
+            (_iso(now), int(active_cameras), device["id"]),
         )
+        # `cameras_expected` — shu obyektda ishlagani ma'lum bo'lgan eng katta
+        # kamera soni. O'rnatuvchi nechta kamera qo'yganini alohida so'ramaymiz:
+        # tizim bir marta 3 kamera bilan ishlagan bo'lsa, keyin 2 ta kelishi —
+        # nosozlik. Kamera ataylab olib tashlansa admin qiymatni tushiradi.
+        expected = site.get("cameras_expected") or 0
+        if int(active_cameras) > int(expected):
+            conn.execute(
+                "UPDATE sites SET cameras_expected = ? WHERE id = ?",
+                (int(active_cameras), site_id),
+            )
         conn.commit()
         conn.close()
 

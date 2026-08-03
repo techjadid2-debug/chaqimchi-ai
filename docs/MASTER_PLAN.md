@@ -76,6 +76,28 @@ curl http://127.0.0.1:8742/metrics
 | 7.5 | To‘lov integratsiyasi (Payme/Click) | [x] Hisob-faktura + avtomatik obuna — [TOLOV.md](TOLOV.md) |
 | 7.6 | Admin web panel (UI) | [x] `GET /admin` (8750) — mijozlar, obuna, pairing, hisob-fakturalar |
 | 7.7 | Arxiv muddati (retention) | [x] Tarifdagi 30/90/365 kun endi rostdan qo‘llanadi |
+| 7.8 | Zaxira nusxa va tiklash | [x] `make backup` / `make restore`, `GET/POST /api/backup` |
+
+### 7.8 — Zaxira nusxa
+
+`INSTALLER.md` da “qurilma almashganda yangi pairing kod” jarayoni bor edi,
+lekin bazani yangi qurilmaga ko‘chirish yo‘li yo‘q edi. Enterprise tarifda
+2000 shaxs — har biri bir marta kamera oldiga kelgan; SSD ishdan chiqsa bu ish
+qaytadan boshlanardi.
+
+Nusxa — bitta ZIP: `manifest.json` (versiya, sana, sha256) + `metadata.json` +
+vektorlar. Tiklash **avval to‘liq tekshiradi** (versiya, checksum, o‘lcham,
+soni), shundan keyingina bazaga yozadi — buzuq fayl bazani buzmaydi.
+
+```bash
+make backup OUT=/Volumes/USB          # o'rnatishdan keyin va har oy
+python scripts/backup_db.py info n.zip
+make restore FILE=n.zip                # yoki --merge: birlashtirish
+```
+
+Baza shifrlangan bo‘lsa nusxa ham shifrlanadi; tiklashda o‘sha
+`CHAQIMCHI_EMBEDDING_KEY` kerak. Ikkala marshrut ham API kalit talab qiladi va
+audit jurnaliga yoziladi.
 
 ### 7.7 — Arxiv muddati
 

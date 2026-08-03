@@ -68,6 +68,9 @@
         <button id="btnCalibrate" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem;">
           <i data-lucide="sliders-horizontal"></i> Threshold kalibrlash
         </button>
+        <button id="btnBackup" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem;">
+          <i data-lucide="download"></i> Zaxira nusxa olish
+        </button>
         <button id="btnApiKey" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem; display: none;">
           <i data-lucide="key"></i> API kalit
         </button>
@@ -97,6 +100,7 @@
     const btnRegister = document.getElementById('btnRegister');
     const btnCalibrate = document.getElementById('btnCalibrate');
     const btnApiKey = document.getElementById('btnApiKey');
+    const btnBackup = document.getElementById('btnBackup');
 
     function apiHeaders(extra = {}) {
       const key = sessionStorage.getItem('chaqimchi_api_key');
@@ -222,6 +226,35 @@
     btnApiKey.onclick = () => {
       const key = prompt('API kalit (X-API-Key):', sessionStorage.getItem('chaqimchi_api_key') || '');
       if (key !== null) sessionStorage.setItem('chaqimchi_api_key', key.trim());
+    };
+
+    // Zaxira nusxa: oddiy havola ishlamaydi — API kalit sarlavhada ketishi kerak,
+    // shuning uchun blob orqali yuklab olamiz.
+    btnBackup.onclick = async () => {
+      btnBackup.disabled = true;
+      try {
+        const resp = await fetch('/api/backup', { headers: apiHeaders() });
+        if (!resp.ok) {
+          const msg = await resp.json().catch(() => ({}));
+          alert('Xato: ' + (msg.error || (resp.status === 401 ? 'API kalit kerak' : resp.status)));
+          return;
+        }
+        const disp = resp.headers.get('content-disposition') || '';
+        const match = disp.match(/filename="([^"]+)"/);
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = match ? match[1] : 'chaqimchi-nusxa.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Xato: ' + e.message);
+      } finally {
+        btnBackup.disabled = false;
+      }
     };
 
     btnCalibrate.onclick = async () => {

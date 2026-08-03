@@ -37,6 +37,8 @@ Muhit o‘zgaruvchisi: `CHAQIMCHI_CONFIG=/yo'l/config.yaml`
 | `make lint` / `make fmt` | Ruff |
 | `make run-web` | FastAPI server (8742) |
 | `make demo` | CLI kamera |
+| `make backup` | Baza zaxira nusxasi (`OUT=/Volumes/USB`) |
+| `make restore FILE=n.zip` | Nusxadan tiklash |
 | `make calibrate` | Threshold tavsiyasi |
 | `make validate-antispoof` | Anti-spoof sifatini o‘lchash |
 
@@ -53,6 +55,8 @@ Muhit o‘zgaruvchisi: `CHAQIMCHI_CONFIG=/yo'l/config.yaml`
 | `POST/DELETE /api/persons/...` | Boshqaruv (API kalit) |
 | `GET /api/retention` | Arxiv muddati va oxirgi tozalash |
 | `POST /api/retention/purge` | Arxivni darhol tozalash (API kalit) |
+| `GET /api/backup` | Bazani ZIP qilib yuklab olish (API kalit) |
+| `POST /api/backup/restore` | Nusxadan tiklash (API kalit) |
 
 ## Struktura
 
@@ -85,6 +89,9 @@ docker run -p 8742:8742 -v "$(pwd)/config:/app/config" chaqimchi-ai
 - **FAISS**: `pip install -r requirements-optional.txt`, `storage.vector_backend: faiss`.
 - **Prometheus**: `GET /metrics`.
 - **Threshold**: [CALIBRATION.md](docs/CALIBRATION.md).
+- **Zaxira nusxa**: `make backup` — butun yuz bazasi bitta ZIP faylga.
+  Qurilma almashganda `make restore FILE=n.zip`. Nusxa biometrik ma’lumot:
+  himoyalangan joyda saqlang. Batafsil: [INSTALLER.md](docs/INSTALLER.md).
 - **Arxiv muddati**: `events.retention_days` — muddati o‘tgan voqealar va yuz
   rasmlari avtomatik o‘chadi (6 soatda bir marta). `0` bo‘lsa tarif belgilaydi:
   Starter 30, Business 90, Enterprise 365 kun. Diskni to‘lib ketishdan saqlaydi

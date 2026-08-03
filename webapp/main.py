@@ -29,7 +29,7 @@ from chaqimchi_ai.licensing.enforce import filter_cameras
 from chaqimchi_ai.retention import retention_loop
 from chaqimchi_ai.runtime.container import AppContainer
 from webapp.errors import register_error_handlers
-from webapp.routers import auth, calibrate, events, persons, system
+from webapp.routers import auth, backup, calibrate, events, persons, system
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +250,7 @@ def create_app(container: Optional[AppContainer] = None) -> FastAPI:
     app.include_router(persons.router)
     app.include_router(events.router)
     app.include_router(calibrate.router)
+    app.include_router(backup.router)
     return app
 
 

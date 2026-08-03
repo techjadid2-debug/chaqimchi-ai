@@ -51,7 +51,48 @@ curl -X POST "http://127.0.0.1:8750/api/v1/admin/sites/SITE_ID/extend" \
   -d '{"months": 1}'
 ```
 
-## 5. Holatlar
+## 5. Zaxira nusxa (majburiy odat)
+
+Yuz bazasi eng qimmat narsa: har bir shaxs bir marta kamera oldiga kelib
+ro‘yxatdan o‘tgan. SSD ishdan chiqsa yoki Mini PC almashsa — nusxasiz bu ish
+qaytadan boshlanadi.
+
+**O‘rnatishdan keyin va har oy** nusxa oling, fleshka yoki o‘z serveringizda
+saqlang:
+
+```bash
+make backup                    # data/backups/ ga
+make backup OUT=/Volumes/USB   # fleshkaga
+python scripts/backup_db.py info nusxa.zip   # ichida nima bor
+```
+
+Yoki serverdan (API kalit bilan):
+
+```bash
+curl -H "X-API-Key: $CHAQIMCHI_API_KEY" http://MINI_PC:8742/api/backup -O -J
+```
+
+### Qurilma almashganda
+
+1. Eski qurilmadan nusxa oling (agar ishlayotgan bo‘lsa)
+2. Panelda “Yangi pairing kod” → yangi Mini PC ni juftlang (3-bo‘lim)
+3. Bazani tiklang:
+
+```bash
+make restore FILE=nusxa.zip
+```
+
+Ikki do‘kon bazasini birlashtirish kerak bo‘lsa: `--merge` (bor shaxslar
+takrorlanmaydi).
+
+> **Shifrlangan baza** (`storage.encrypt_embeddings: true`) nusxasi ham
+> shifrlangan bo‘ladi. Tiklashda **o‘sha** `CHAQIMCHI_EMBEDDING_KEY` kerak —
+> kalitni nusxadan **alohida** joyda saqlang. Kalit yo‘qolsa nusxa foydasiz.
+
+> Nusxa — biometrik ma’lumot. Ochiq joyda, umumiy bulutda yoki messenjerda
+> saqlamang.
+
+## 6. Holatlar
 
 | status | Ma’nosi |
 |--------|---------|

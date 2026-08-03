@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chaqimchi — to'lov</title>
+  <link rel="stylesheet" href="/assets/admin.css" />
+  <style>
+    .pay-wrap { max-width: 460px; margin: 0 auto; padding: 2rem 1.25rem; }
+    .amount { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .pay-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; padding: 0.95rem 1rem; margin-top: 0.75rem;
+      border-radius: 12px; border: 1px solid var(--glass-border);
+      font-size: 0.95rem; font-weight: 600; text-decoration: none;
+      color: #0a0c10; transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    .pay-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .pay-payme { background: #33cccc; }
+    .pay-click { background: #40b6e8; }
+    .paid-box {
+      text-align: center; padding: 1.5rem 1rem;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.08); border-radius: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="pay-wrap">
+    <div class="logo" style="text-align: center; margin-bottom: 1.5rem;">Chaqimchi AI</div>
+    <div class="card" id="box">
+      <p class="muted">Yuklanmoqda…</p>
+    </div>
+    <p class="muted" style="text-align: center; margin-top: 1.25rem; font-size: 0.75rem;">
+      To'lov Payme yoki Click orqali xavfsiz amalga oshiriladi.
+    </p>
+  </div>
+
+  <script>
+    const PLAN_LABEL = { starter: "Starter", business: "Business", enterprise: "Enterprise" };
+    const uzs = (n) => Number(n || 0).toLocaleString("ru-RU") + " so'm";
+    const esc = (s) =>
+      String(s ?? "").replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+      );
+
+    const invoiceId = location.pathname.split("/").filter(Boolean).pop();
+
+    function renderPaid(inv) {
+      return `
+        <div class="paid-box">
+          <div style="font-size: 1.6rem; margin-bottom: 0.5rem;">✓</div>
+          <div style="font-weight: 600;">To'lov qabul qilindi</div>
+          <p class="muted" style="margin-top: 0.5rem; font-size: 0.82rem;">
+            ${esc(inv.months)} oylik obuna faollashtirildi.
+          </p>
+        </div>`;
+    }
+
+    function renderCancelled() {
+      return `<p>Bu hisob-faktura bekor qilingan.</p>
+              <p class="muted" style="margin-top: 0.5rem; font-size: 0.82rem;">
+                Yangi hisob uchun menejerga murojaat qiling.
+              </p>`;
+    }
+
+    function renderPending(inv) {
+      const buttons = [
+        inv.payme_url ? `<a class="pay-btn pay-payme" href="${esc(inv.payme_url)}">Payme orqali to'lash</a>` : "",
+        inv.click_url ? `<a class="pay-btn pay-click" href="${esc(inv.click_url)}">Click orqali to'lash</a>` : "",
+      ].join("");
+
+      const noProvider = buttons
+        ? ""
+        : `<p class="muted" style="margin-top: 1rem; font-size: 0.82rem;">
+             Onlayn to'lov hozircha ulanmagan — menejer bilan bog'laning.
+           </p>`;
+
+      return `
+        <div class="muted" style="font-size: 0.8rem;">${esc(inv.site_name || "")}</div>
+        <div class="amount" style="margin: 0.35rem 0 0.25rem;">${uzs(inv.amount_uzs)}</div>
+        <div class="muted" style="font-size: 0.82rem;">
+          ${esc(PLAN_LABEL[inv.plan] || inv.plan)} tarifi · ${esc(inv.months)} oy
+        </div>
+        <div class="muted mono" style="font-size: 0.7rem; margin-top: 0.75rem;">
+          Hisob: ${esc(inv.id)}
+        </div>
+        ${buttons}${noProvider}`;
+    }
+
+    (async () => {
+      const box = document.getElementById("box");
+      try {
+        const res = await fetch(`/api/v1/invoices/${encodeURIComponent(invoiceId)}`);
+        if (!res.ok) throw new Error("Hisob-faktura topilmadi");
+        const inv = await res.json();
+        box.innerHTML =
+          inv.state === "paid" ? renderPaid(inv)
+          : inv.state === "cancelled" ? renderCancelled()
+          : renderPending(inv);
+      } catch (err) {
+        box.innerHTML = `<p>${esc(err.message)}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>

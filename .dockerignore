@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.github/
+data/
+tests/
+docs/
+Makefile
+pytest.ini
+scripts/
+test_data_lena.jpg
+.git/
+.gitignore

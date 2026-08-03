@@ -1,0 +1,22 @@
+[project]
+name = "chaqimchi-ai"
+version = "0.2.0"
+description = "Real-time face recognition server (SCRFD + ArcFace)"
+readme = "README.md"
+# 3.12 — rasmiy qo'llab-quvvatlanadigan versiya (Docker va CI shu).
+# Yuqori chegara 3.15: 3.13/3.14 da ham ishlaydi, lekin test qilinmaydi.
+requires-python = ">=3.10,<3.15"
+
+# Diqqat: pytest sozlamalari pytest.ini da. Bu yerda takrorlanmasin —
+# pytest.ini ustunlik qiladi va pyproject dagi blok jimgina e'tiborsiz qolardi.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402"]

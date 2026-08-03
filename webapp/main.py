@@ -1,0 +1,256 @@
+"""
+Chaqimchi AI — Pro Server Edition.
+
+Bir nechta RTSP kameralarini fon rejimida tahlil qiladi va voqealarni SQL bazasiga saqlaydi.
+Mini PC (Server) uchun moslashtirilgan.
+
+Bu fayl faqat ilovani yig'adi: marshrutlar `webapp/routers/` da, uzoq yashovchi
+komponentlar `AppContainer` da (`app.state.container`).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Dict, Optional
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from chaqimchi_ai import telegram_bot
+from chaqimchi_ai.antispoof import build_checker
+from chaqimchi_ai.camera_manager import CameraManager
+from chaqimchi_ai.licensing.client import EdgeLicenseClient
+from chaqimchi_ai.licensing.enforce import filter_cameras
+from chaqimchi_ai.retention import retention_loop
+from chaqimchi_ai.runtime.container import AppContainer
+from webapp.errors import register_error_handlers
+from webapp.routers import auth, calibrate, events, persons, system
+
+logger = logging.getLogger(__name__)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+# ── Litsenziya ───────────────────────────────────────────────────────────
+
+
+async def _resolve_license_client(container: AppContainer) -> EdgeLicenseClient:
+    lic = container.settings.license
+    client = EdgeLicenseClient(
+        lic.cloud_url,
+        lic.site_id or "",
+        lic.device_token or "",
+        container.base_dir / "data" / "license_cache.json",
+        offline_grace_days=lic.offline_grace_days,
+    )
+    if lic.pairing_code and not lic.device_token:
+        claimed = await client.claim_device(lic.pairing_code, label="edge-server")
+        client.site_id = claimed["site_id"]
+        client.device_token = claimed["device_token"]
+        logger.warning(
+            "Juftlash muvaffaqiyatli. config.yaml ga yozing: site_id=%s device_token=<token>",
+            claimed["site_id"],
+        )
+    return client
+
+
+async def _license_heartbeat_loop(container: AppContainer) -> None:
+    while True:
+        try:
+            cfg = container.settings
+            if not cfg.license.enabled or container.license_client is None:
+                break
+            active = len(container.camera_manager.cameras) if container.camera_manager else 0
+            container.license_state = await container.license_client.refresh(
+                active_cameras=active
+            )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning("License heartbeat: %s", e)
+        await asyncio.sleep(container.settings.license.heartbeat_interval_sec)
+
+
+# ── Kameralar va voqea callback'i ────────────────────────────────────────
+
+
+def _make_on_face_match(container: AppContainer):
+    """Kamera callback'ini konteynerga bog'lab qaytaradi.
+
+    Faza 2 da bu butunlay `bus.publish(FaceMatched(...))` ga aylanadi va
+    quyidagi to'rtta yon ta'sir mustaqil obunachilarga bo'linadi.
+    """
+
+    async def on_face_match(
+        camera_id: str,
+        person_meta: Dict,
+        face_data: Dict,
+        image_path: Optional[str] = None,
+    ) -> None:
+        container.events.log_event(
+            person_id=str(person_meta["id"]),
+            person_name=person_meta["name"],
+            camera_id=camera_id,
+            score=float(person_meta["score"]),
+            image_path=image_path,
+            track_id=face_data.get("track_id"),
+        )
+
+        payload = {
+            "type": "event",
+            "camera_id": camera_id,
+            "person_name": person_meta["name"],
+            "score": person_meta["score"],
+            "timestamp": time.strftime("%H:%M:%S"),
+            "snapshot_url": f"/api/snapshots/{Path(image_path).name}" if image_path else None,
+            "track_id": face_data.get("track_id"),
+        }
+        # Nusxa bo'yicha yuriladi: yuborish paytida ro'yxat o'zgarishi mumkin.
+        for client in list(container.ws_clients):
+            try:
+                await client.send_json(payload)
+            except Exception:
+                logger.debug("WebSocket mijoziga yuborib bo‘lmadi", exc_info=True)
+                try:
+                    container.ws_clients.remove(client)
+                except ValueError:
+                    pass
+
+        cfg = container.settings
+        if cfg.telegram.enabled:
+            task = asyncio.create_task(
+                telegram_bot.send_alert(
+                    name=person_meta["name"],
+                    score=person_meta["score"],
+                    interval=cfg.telegram.alert_interval_sec,
+                )
+            )
+            # Havolani ushlab turish: aks holda task GC bo'lib ketishi va
+            # xatosi hech qachon ko'rinmasligi mumkin.
+            container.background_tasks.add(task)
+            task.add_done_callback(container.background_tasks.discard)
+
+    return on_face_match
+
+
+async def _start_cameras(container: AppContainer) -> None:
+    cfg = container.settings
+    cameras = cfg.cameras
+    if container.license_state is not None:
+        cameras = filter_cameras(cameras, container.license_state.max_cameras)
+        if not container.license_state.telegram_allowed:
+            cfg.telegram.enabled = False
+
+    antispoof_checker = None
+    if cfg.antispoof.enabled:
+        antispoof_checker = build_checker(
+            backend=cfg.antispoof.backend,
+            model_path=(
+                container.base_dir / cfg.antispoof.model_path
+                if cfg.antispoof.model_path
+                else None
+            ),
+            min_score=cfg.antispoof.min_score,
+            min_blur_variance=cfg.antispoof.min_blur_variance,
+            live_index=cfg.antispoof.live_index,
+        )
+
+    container.camera_manager = CameraManager(
+        container.engine,
+        container.db,
+        compare_threshold=cfg.face.compare_threshold,
+        match_debounce_sec=cfg.events.match_debounce_sec,
+        save_snapshots=cfg.events.save_snapshots,
+        snapshots_dir=container.base_dir / cfg.paths.snapshots_dir,
+        enable_tracking=cfg.tracking.enabled,
+        tracking_iou=cfg.tracking.iou_threshold,
+        tracking_max_missed=cfg.tracking.max_missed_frames,
+        frame_skip=cfg.camera.frame_skip,
+        antispoof_enabled=cfg.antispoof.enabled,
+        antispoof_min_blur=cfg.antispoof.min_blur_variance,
+        antispoof_checker=antispoof_checker,
+    )
+    on_match = _make_on_face_match(container)
+    for cam in cameras:
+        if cam.enabled:
+            await container.camera_manager.add_camera(cam.id, cam.source, on_match=on_match)
+
+
+# ── Ilova ────────────────────────────────────────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    container: AppContainer = app.state.container
+    cfg = container.settings
+
+    container.warmup()
+
+    if cfg.telegram.enabled:
+        await telegram_bot.init_bot(cfg.telegram.token, cfg.telegram.chat_id)
+
+    if cfg.license.enabled:
+        container.license_client = await _resolve_license_client(container)
+        try:
+            container.license_state = await container.license_client.refresh(active_cameras=0)
+        except Exception as e:
+            logger.warning("Litsenziya serveriga ulanib bo‘lmadi: %s", e)
+            container.license_state = container.license_client.load_cache()
+
+        if container.license_state and container.license_state.is_operational:
+            await _start_cameras(container)
+            container.license_task = asyncio.create_task(_license_heartbeat_loop(container))
+        else:
+            logger.error("Litsenziya faol emas — kameralar ishga tushirilmadi.")
+    else:
+        await _start_cameras(container)
+
+    # Arxiv tozalash kameralardan mustaqil: obuna to'xtatilgan bo'lsa ham
+    # eski biometrik kadrlar muddatidan ortiq saqlanib qolmasligi kerak.
+    container.retention_task = asyncio.create_task(retention_loop(container))
+
+    try:
+        yield
+    finally:
+        await container.aclose()
+
+
+def create_app(container: Optional[AppContainer] = None) -> FastAPI:
+    """Ilovani yig'ish.
+
+    Args:
+        container: Testlar uchun tayyor konteyner. Berilmasa `config.yaml`
+            asosida yangi konteyner quriladi (og'ir komponentlar dangasa).
+    """
+    app = FastAPI(title="Chaqimchi AI — Server Edition", lifespan=lifespan)
+    app.state.container = container or AppContainer(BASE_DIR)
+
+    origins = app.state.container.settings.server.cors_origins
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(origins),
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    register_error_handlers(app)
+
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR)), name="assets")
+    app.include_router(system.router)
+    app.include_router(auth.router)
+    app.include_router(persons.router)
+    app.include_router(events.router)
+    app.include_router(calibrate.router)
+    return app
+
+
+app = create_app()

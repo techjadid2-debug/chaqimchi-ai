@@ -1,0 +1,98 @@
+# Chaqimchi AI — Server Edition Config
+
+face:
+  model_name: buffalo_l
+  det_size: [640, 640]
+  preprocess_max_side: 1024
+  compare_threshold: 0.4
+
+camera:
+  frame_skip: 5
+
+# Xizmat litsenziyasi (cloud bilan)
+license:
+  enabled: false
+  cloud_url: "http://127.0.0.1:8750"
+  # pairing_code: "ABC123"   # o'rnatishda bir marta
+  # site_id: "..."
+  # device_token: "..."
+  heartbeat_interval_sec: 1800
+  offline_grace_days: 7
+
+paths:
+  db_path: data/database
+  events_db: data/events.db
+  snapshots_dir: data/snapshots
+  calibration_dir: data/calibration
+
+events:
+  match_debounce_sec: 30
+  save_snapshots: true
+  # Voqea arxivi necha kun saqlanadi. 0 — tarif belgilaydi
+  # (Starter 30, Business 90, Enterprise 365 kun).
+  # Bu yerda kichikroq son yozsangiz — kamroq saqlanadi; tarifdan ko'p emas.
+  retention_days: 0
+  retention_interval_sec: 21600  # tozalash oralig'i (6 soat)
+
+tracking:
+  enabled: true
+  iou_threshold: 0.35
+  max_missed_frames: 15
+
+security:
+  api_key_enabled: false
+  # api_key: "maxfiy-kalit"  # yoki muhit: CHAQIMCHI_API_KEY
+  jwt:
+    enabled: false
+    # secret: muhit CHAQIMCHI_JWT_SECRET
+    expire_hours: 24
+
+rate_limit:
+  enabled: false
+  requests_per_minute: 120
+
+storage:
+  encrypt_embeddings: false
+  vector_backend: numpy  # numpy | faiss (pip install faiss-cpu)
+
+roi:
+  enabled: false
+  normalized: true
+  x1: 0.0
+  y1: 0.0
+  x2: 1.0
+  y2: 1.0
+
+antispoof:
+  enabled: false
+  backend: heuristic       # heuristic | onnx
+  # backend: onnx bo'lganda:
+  # model_path: models/antispoof.onnx
+  # live_index: 1          # modelning "tirik" sinf indeksi
+  min_score: 0.5           # shundan past ball — soxta
+  min_blur_variance: 80.0  # qattiq chegara: xira kadr har doim rad etiladi
+
+server:
+  host: "0.0.0.0" # Barcha tarmoq interfeyslari uchun ochiq
+  port: 8742
+
+webcam:
+  client_interval_ms: 140
+  jpeg_quality: 0.85
+
+telegram:
+  enabled: false
+  token: "YOUR_BOT_TOKEN"
+  chat_id: "YOUR_CHAT_ID"
+  alert_interval_sec: 60
+
+# RTSP kameralar ro'yxati
+cameras:
+  - id: "Kirish-1"
+    source: 0 # Lokal veb-kamera (demo uchun)
+    enabled: true
+  
+  # IP-kamera namunasi:
+  # - id: "Ombor-Kamera"
+  #   source: "rtsp://admin:password@192.168.1.100:554/live"
+  #   enabled: true

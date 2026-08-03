@@ -1,0 +1,23 @@
+# Chaqimchi AI — Face Recognition Core
+#
+# Python: 3.12 — rasmiy qo'llab-quvvatlanadigan versiya (Docker va CI shu).
+# 3.10–3.14 da ham ishlaydi, lekin faqat 3.12 test qilinadi.
+# Apple Silicon: onnxruntime odatda CoreMLExecutionProvider ni beradi.
+# Agar alohida "silicon" build kerak bo‘lsa: pip install onnxruntime-silicon
+#
+# Har bir bog'liqlikda yuqori chegara bor — buzuvchi major versiya jimgina kirib
+# kelmasligi uchun. Chegaralar ishlayotgani tasdiqlangan versiyalarga asoslangan.
+
+numpy>=1.24.0,<3.0.0
+opencv-python>=4.8.0,<5.0.0
+insightface>=0.7.3,<0.8.0
+onnx>=1.14.0,<2.0.0
+onnxruntime>=1.16.0,<2.0.0
+fastapi>=0.110.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+PyYAML>=6.0.0,<7.0.0
+pydantic>=2.5.0,<3.0.0
+python-multipart>=0.0.9,<0.1.0
+httpx>=0.25.0,<1.0.0
+PyJWT>=2.8.0,<3.0.0
+cryptography>=42.0.0,<49.0.0

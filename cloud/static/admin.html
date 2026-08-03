@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chaqimchi Cloud — Admin</title>
+  <link rel="stylesheet" href="/assets/admin.css" />
+</head>
+<body>
+  <!-- Kirish oynasi -->
+  <div id="loginOverlay" class="overlay">
+    <div class="modal" style="max-width: 380px;">
+      <div class="logo" style="margin-bottom: 1rem;">Chaqimchi Cloud</div>
+      <p class="muted" style="margin-bottom: 1rem; font-size: 0.82rem;">
+        Admin kalitni kiriting (<span class="mono">CHAQIMCHI_CLOUD_ADMIN_KEY</span>).
+      </p>
+      <form id="loginForm">
+        <label for="adminKey">Admin kalit</label>
+        <input id="adminKey" type="password" autocomplete="current-password" required />
+        <div id="loginError" class="toast toast-err" style="margin-top: 0.75rem;" hidden></div>
+        <button class="btn btn-primary" type="submit" style="width: 100%; margin-top: 1rem; justify-content: center;">
+          Kirish
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="wrap" id="app" hidden>
+    <header class="header">
+      <div class="logo">Chaqimchi Cloud <small>Admin panel</small></div>
+      <div class="row">
+        <button id="btnRefresh" class="btn">Yangilash</button>
+        <button id="btnLogout" class="btn">Chiqish</button>
+      </div>
+    </header>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- Ko'rsatkichlar -->
+    <section class="stats" id="stats"></section>
+
+    <!-- Yangi mijoz -->
+    <section class="card">
+      <div class="card-title">Yangi mijoz ochish</div>
+      <form id="createForm" class="form-grid">
+        <div style="grid-column: span 2;">
+          <label for="cName">Mijoz / joy nomi</label>
+          <input id="cName" required placeholder="Masalan: Chorsu do'koni" />
+        </div>
+        <div>
+          <label for="cPlan">Tarif</label>
+          <select id="cPlan">
+            <option value="starter">Starter</option>
+            <option value="business" selected>Business</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </div>
+        <div>
+          <label for="cMonths">Obuna (oy)</label>
+          <input id="cMonths" type="number" min="1" max="60" value="12" />
+        </div>
+        <div>
+          <label for="cPhone">Telefon</label>
+          <input id="cPhone" placeholder="+998 90 000 00 00" />
+        </div>
+        <div>
+          <label for="cAddress">Manzil</label>
+          <input id="cAddress" placeholder="Toshkent, ..." />
+        </div>
+        <div>
+          <button class="btn btn-primary" type="submit" style="width: 100%; justify-content: center;">
+            Ochish
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Mijozlar -->
+    <section class="card">
+      <div class="card-title">
+        <span>Mijozlar</span>
+        <span id="siteCount" class="muted" style="font-weight: 400; font-size: 0.8rem;"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Nomi</th>
+              <th>Tarif</th>
+              <th>Holat</th>
+              <th>Obuna tugaydi</th>
+              <th>Qolgan</th>
+              <th>Qurilma</th>
+              <th>Oylik</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="sitesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- To'lovlar -->
+    <section class="card">
+      <div class="card-title">
+        <span>Hisob-fakturalar</span>
+        <span id="providerInfo" class="muted" style="font-weight: 400; font-size: 0.8rem;"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Mijoz</th>
+              <th>Summa</th>
+              <th>Muddat</th>
+              <th>Holat</th>
+              <th>Ochilgan</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="invoicesBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- Tafsilot oynasi -->
+  <div id="detailOverlay" class="overlay" hidden>
+    <div class="modal">
+      <div class="card-title">
+        <span id="detailTitle">Mijoz</span>
+        <button class="btn btn-sm" data-close-detail>Yopish</button>
+      </div>
+      <div id="detailBody"></div>
+    </div>
+  </div>
+
+  <script>
+    // ── Holat ────────────────────────────────────────────────────────────
+    const KEY_STORAGE = "chaqimchi_admin_key";
+    let adminKey = sessionStorage.getItem(KEY_STORAGE) || "";
+    let sites = [];
+    let invoices = [];
+    let providers = { payme: false, click: false, public_url: "" };
+
+    const $ = (id) => document.getElementById(id);
+
+    const PLAN_LABEL = { starter: "Starter", business: "Business", enterprise: "Enterprise" };
+    const STATUS_LABEL = {
+      active: "Faol",
+      grace: "Grace (to'lov kutilmoqda)",
+      expired: "Muddati tugagan",
+      suspended: "To'xtatilgan",
+    };
+    const INVOICE_LABEL = {
+      pending: "Kutilmoqda",
+      paid: "To'langan",
+      cancelled: "Bekor qilingan",
+    };
+    // Hisob holatlari mavjud badge ranglariga moslanadi.
+    const INVOICE_BADGE = { pending: "grace", paid: "active", cancelled: "expired" };
+
+    const uzs = (n) => Number(n || 0).toLocaleString("ru-RU") + " so'm";
+    const esc = (s) =>
+      String(s ?? "").replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+      );
+
+    // ── API ──────────────────────────────────────────────────────────────
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Cloud-Admin-Key": adminKey,
+          ...(options.headers || {}),
+        },
+      });
+      if (!res.ok) {
+        let detail = `Xato ${res.status}`;
+        try {
+          const body = await res.json();
+          if (body.detail) detail = body.detail;
+        } catch (_) {}
+        const err = new Error(detail);
+        err.status = res.status;
+        throw err;
+      }
+      return res.json();
+    }
+
+    function notify(message, ok = true) {
+      const el = $("toast");
+      el.textContent = message;
+      el.className = "toast " + (ok ? "toast-ok" : "toast-err");
+      el.hidden = false;
+      clearTimeout(notify._t);
+      notify._t = setTimeout(() => (el.hidden = true), 6000);
+    }
+
+    // ── Kirish ───────────────────────────────────────────────────────────
+    $("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      adminKey = $("adminKey").value.trim();
+      try {
+        await api("/api/v1/admin/stats");
+        sessionStorage.setItem(KEY_STORAGE, adminKey);
+        $("loginOverlay").hidden = true;
+        $("app").hidden = false;
+        await refresh();
+      } catch (err) {
+        $("loginError").textContent = err.message;
+        $("loginError").hidden = false;
+      }
+    });
+
+    $("btnLogout").addEventListener("click", () => {
+      sessionStorage.removeItem(KEY_STORAGE);
+      location.reload();
+    });
+
+    $("btnRefresh").addEventListener("click", () => refresh());
+
+    // ── Ko'rsatkichlar va ro'yxat ────────────────────────────────────────
+    function renderStats(s) {
+      const items = [
+        ["Mijozlar", s.total_sites],
+        ["Faol", s.active],
+        ["7 kunda tugaydi", s.expiring_soon],
+        ["Qurilmalar", s.total_devices],
+        ["Oylik daromad", uzs(s.monthly_revenue_uzs)],
+        ["Kutilayotgan to'lov", uzs(s.pending_amount_uzs)],
+      ];
+      $("stats").innerHTML = items
+        .map(
+          ([label, value]) =>
+            `<div class="stat"><div class="stat-value">${esc(value)}</div><div class="stat-label">${label}</div></div>`
+        )
+        .join("");
+    }
+
+    function renderSites() {
+      $("siteCount").textContent = sites.length ? `${sites.length} ta` : "";
+      if (!sites.length) {
+        $("sitesBody").innerHTML =
+          '<tr><td colspan="8" class="muted" style="padding: 1.5rem 0.75rem;">Hali mijoz yo\'q — yuqoridagi shakl orqali oching.</td></tr>';
+        return;
+      }
+      $("sitesBody").innerHTML = sites
+        .map((s) => {
+          const suspended = s.status === "suspended";
+          return `
+          <tr>
+            <td>
+              <div>${esc(s.name)}</div>
+              <div class="muted mono" style="font-size: 0.7rem;">${esc(s.id)}</div>
+            </td>
+            <td>${PLAN_LABEL[s.plan] || esc(s.plan)}</td>
+            <td><span class="badge badge-${esc(s.license_status)}">${STATUS_LABEL[s.license_status] || esc(s.license_status)}</span></td>
+            <td class="muted">${esc((s.subscription_until || "").slice(0, 10))}</td>
+            <td class="${s.days_left <= 7 ? "" : "muted"}">${s.days_left} kun</td>
+            <td class="muted">${s.devices}</td>
+            <td class="muted">${uzs(s.monthly_price_uzs)}</td>
+            <td>
+              <div class="row">
+                <button class="btn btn-sm" data-detail="${esc(s.id)}">Tafsilot</button>
+                <button class="btn btn-sm" data-invoice="${esc(s.id)}">Hisob</button>
+                <button class="btn btn-sm" data-extend="${esc(s.id)}">+ Oy</button>
+                <button class="btn btn-sm ${suspended ? "" : "btn-danger"}"
+                        data-status="${esc(s.id)}" data-to="${suspended ? "active" : "suspended"}">
+                  ${suspended ? "Yoqish" : "To'xtatish"}
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    function renderProviderInfo() {
+      const on = [providers.payme && "Payme", providers.click && "Click"].filter(Boolean);
+      $("providerInfo").textContent = on.length
+        ? `Onlayn to'lov: ${on.join(" · ")}`
+        : "Onlayn to'lov ulanmagan — faqat naqd/bank";
+    }
+
+    function payLink(inv) {
+      const base = providers.public_url || location.origin;
+      return `${base}/pay/${inv.id}`;
+    }
+
+    function renderInvoices() {
+      if (!invoices.length) {
+        $("invoicesBody").innerHTML =
+          '<tr><td colspan="6" class="muted" style="padding: 1.5rem 0.75rem;">Hali hisob-faktura yo\'q — mijoz qatoridagi “Hisob” tugmasi orqali oching.</td></tr>';
+        return;
+      }
+      $("invoicesBody").innerHTML = invoices
+        .map((inv) => {
+          const pending = inv.state === "pending";
+          return `
+          <tr>
+            <td>
+              <div>${esc(inv.site_name || "—")}</div>
+              <div class="muted mono" style="font-size: 0.7rem;">${esc(inv.id)}</div>
+            </td>
+            <td>${uzs(inv.amount_uzs)}</td>
+            <td class="muted">${esc(inv.months)} oy</td>
+            <td><span class="badge badge-${INVOICE_BADGE[inv.state] || "grace"}">${INVOICE_LABEL[inv.state] || esc(inv.state)}</span>
+                ${inv.provider ? `<span class="muted" style="font-size: 0.72rem;">${esc(inv.provider)}</span>` : ""}</td>
+            <td class="muted">${esc((inv.created_at || "").slice(0, 10))}</td>
+            <td>
+              <div class="row">
+                <button class="btn btn-sm" data-invoice-show="${esc(inv.id)}">Havola</button>
+                ${pending ? `<button class="btn btn-sm" data-invoice-paid="${esc(inv.id)}">To'landi</button>` : ""}
+                ${pending ? `<button class="btn btn-sm btn-danger" data-invoice-cancel="${esc(inv.id)}">Bekor</button>` : ""}
+              </div>
+            </td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    async function refresh() {
+      try {
+        const [stats, list, invoiceList, provs] = await Promise.all([
+          api("/api/v1/admin/stats"),
+          api("/api/v1/admin/sites"),
+          api("/api/v1/admin/invoices?limit=50"),
+          api("/api/v1/admin/payments/providers"),
+        ]);
+        sites = list;
+        invoices = invoiceList;
+        providers = provs;
+        renderStats(stats);
+        renderSites();
+        renderProviderInfo();
+        renderInvoices();
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    // ── Yangi mijoz ──────────────────────────────────────────────────────
+    $("createForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector("button[type=submit]");
+      btn.disabled = true;
+      try {
+        const data = await api("/api/v1/admin/sites", {
+          method: "POST",
+          body: JSON.stringify({
+            name: $("cName").value.trim(),
+            plan: $("cPlan").value,
+            subscription_months: Number($("cMonths").value) || 1,
+            contact_phone: $("cPhone").value.trim() || null,
+            address: $("cAddress").value.trim() || null,
+          }),
+        });
+        e.target.reset();
+        $("cMonths").value = 12;
+        showPairing(data.name, data.pairing_code, data.pairing_expires_at, data.site_id);
+        await refresh();
+      } catch (err) {
+        notify(err.message, false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    function showPairing(name, code, expires, siteId) {
+      $("detailTitle").textContent = `${name} — juftlash kodi`;
+      $("detailBody").innerHTML = `
+        <div class="code-box">${esc(code)}</div>
+        <p class="muted" style="margin: 0.75rem 0;">
+          Amal qiladi: ${esc((expires || "").slice(0, 16))} (UTC). O'rnatuvchiga shu kodni bering.
+        </p>
+        <p style="margin-bottom: 0.4rem; font-size: 0.8rem;">Edge <span class="mono">config.yaml</span>:</p>
+        <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.78rem; overflow-x: auto;">license:
+  enabled: true
+  cloud_url: "${esc(location.origin)}"
+  pairing_code: "${esc(code)}"</pre>
+        <p class="muted mono" style="margin-top: 0.75rem; font-size: 0.72rem;">site_id: ${esc(siteId)}</p>`;
+      $("detailOverlay").hidden = false;
+    }
+
+    // ── Amallar ──────────────────────────────────────────────────────────
+    document.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+
+      if (btn.hasAttribute("data-close-detail")) {
+        $("detailOverlay").hidden = true;
+        return;
+      }
+      if (btn.dataset.detail) return openDetail(btn.dataset.detail);
+      if (btn.dataset.extend) return extendSite(btn.dataset.extend, 1);
+      if (btn.dataset.status) return setStatus(btn.dataset.status, btn.dataset.to);
+      if (btn.dataset.pairing) return newPairing(btn.dataset.pairing);
+      if (btn.dataset.invoice) return createInvoice(btn.dataset.invoice);
+      if (btn.dataset.invoiceShow) return showInvoiceById(btn.dataset.invoiceShow);
+      if (btn.dataset.invoicePaid) return markInvoicePaid(btn.dataset.invoicePaid);
+      if (btn.dataset.invoiceCancel) return cancelInvoice(btn.dataset.invoiceCancel);
+      if (btn.dataset.copy) return copyText(btn.dataset.copy);
+    });
+
+    // ── Hisob-fakturalar ─────────────────────────────────────────────────
+    async function createInvoice(siteId) {
+      const site = sites.find((s) => s.id === siteId);
+      const input = prompt(
+        `Necha oylik hisob ochamiz? (${site ? site.name : siteId})\nYillik = oylik × 10 (2 oy tekin).`,
+        "1"
+      );
+      if (input === null) return;
+      const n = Number(input);
+      if (!Number.isInteger(n) || n < 1 || n > 60) return notify("1–60 oralig'ida oy kiriting", false);
+      try {
+        const inv = await api(`/api/v1/admin/sites/${siteId}/invoices`, {
+          method: "POST",
+          body: JSON.stringify({ months: n }),
+        });
+        await refresh();
+        showInvoice(inv);
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    function showInvoiceById(invoiceId) {
+      const inv = invoices.find((i) => i.id === invoiceId);
+      if (inv) showInvoice(inv);
+    }
+
+    function showInvoice(inv) {
+      const link = payLink(inv);
+      const providerBtns = [
+        inv.payme_url
+          ? `<a class="btn" href="${esc(inv.payme_url)}" target="_blank" rel="noopener">Payme</a>`
+          : "",
+        inv.click_url
+          ? `<a class="btn" href="${esc(inv.click_url)}" target="_blank" rel="noopener">Click</a>`
+          : "",
+      ].join("");
+
+      $("detailTitle").textContent = `${inv.site_name || ""} — hisob-faktura`;
+      $("detailBody").innerHTML = `
+        <dl class="kv">
+          <dt>Summa</dt><dd style="font-size: 1.15rem; font-weight: 600;">${uzs(inv.amount_uzs)}</dd>
+          <dt>Muddat</dt><dd>${esc(inv.months)} oy · ${PLAN_LABEL[inv.plan] || esc(inv.plan)}</dd>
+          <dt>Holat</dt><dd><span class="badge badge-${INVOICE_BADGE[inv.state] || "grace"}">${INVOICE_LABEL[inv.state] || esc(inv.state)}</span></dd>
+          <dt>Hisob ID</dt><dd class="mono">${esc(inv.id)}</dd>
+        </dl>
+        <p style="margin: 1rem 0 0.4rem; font-size: 0.8rem;">Mijozga yuboriladigan havola:</p>
+        <div class="mono" style="background: rgba(0,0,0,0.35); padding: 0.7rem; border-radius: 10px; font-size: 0.78rem; word-break: break-all;">${esc(link)}</div>
+        <div class="row" style="margin-top: 1rem;">
+          <button class="btn btn-primary" data-copy="${esc(link)}">Havolani nusxalash</button>
+          ${providerBtns}
+        </div>
+        <p class="muted" style="margin-top: 0.9rem; font-size: 0.78rem;">
+          To'lov tushgach obuna avtomatik uzayadi — qo'lda tasdiqlash shart emas.
+          ${providers.public_url ? "" : "<br><b>CHAQIMCHI_PUBLIC_URL</b> sozlanmagan: havola faqat shu tarmoqdan ochiladi."}
+        </p>`;
+      $("detailOverlay").hidden = false;
+    }
+
+    async function markInvoicePaid(invoiceId) {
+      const inv = invoices.find((i) => i.id === invoiceId);
+      const provider = prompt(
+        `To'lov qanday qabul qilindi? (naqd / bank)\n${inv ? uzs(inv.amount_uzs) : ""}`,
+        "naqd"
+      );
+      if (provider === null) return;
+      if (!["naqd", "bank"].includes(provider.trim())) return notify("naqd yoki bank yozing", false);
+      try {
+        await api(`/api/v1/admin/invoices/${invoiceId}/paid`, {
+          method: "POST",
+          body: JSON.stringify({ provider: provider.trim() }),
+        });
+        notify("To'lov qayd etildi, obuna uzaytirildi");
+        await refresh();
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    async function cancelInvoice(invoiceId) {
+      if (!confirm("Hisob-fakturani bekor qilamizmi?")) return;
+      try {
+        await api(`/api/v1/admin/invoices/${invoiceId}/cancel`, { method: "POST" });
+        notify("Hisob-faktura bekor qilindi");
+        await refresh();
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        notify("Havola nusxalandi");
+      } catch (_) {
+        notify("Nusxalab bo'lmadi — havolani qo'lda belgilang", false);
+      }
+    }
+
+    $("detailOverlay").addEventListener("click", (e) => {
+      if (e.target === $("detailOverlay")) $("detailOverlay").hidden = true;
+    });
+
+    async function extendSite(siteId, months) {
+      const site = sites.find((s) => s.id === siteId);
+      const input = prompt(`Necha oyga uzaytiramiz? (${site ? site.name : siteId})`, String(months));
+      if (input === null) return;
+      const n = Number(input);
+      if (!Number.isInteger(n) || n < 1 || n > 36) return notify("1–36 oralig'ida oy kiriting", false);
+      try {
+        const res = await api(`/api/v1/admin/sites/${siteId}/extend`, {
+          method: "POST",
+          body: JSON.stringify({ months: n }),
+        });
+        notify(`Obuna uzaytirildi: ${res.subscription_until.slice(0, 10)} gacha`);
+        await refresh();
+        if (!$("detailOverlay").hidden) await openDetail(siteId);
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    async function setStatus(siteId, to) {
+      const site = sites.find((s) => s.id === siteId);
+      const label = to === "suspended" ? "to'xtatmoqchimisiz" : "qayta yoqmoqchimisiz";
+      if (!confirm(`"${site ? site.name : siteId}" obunasini ${label}?`)) return;
+      try {
+        await api(`/api/v1/admin/sites/${siteId}/status`, {
+          method: "POST",
+          body: JSON.stringify({ status: to }),
+        });
+        notify(to === "suspended" ? "Obuna to'xtatildi" : "Obuna qayta yoqildi");
+        await refresh();
+        if (!$("detailOverlay").hidden) await openDetail(siteId);
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    async function newPairing(siteId) {
+      try {
+        const res = await api(`/api/v1/admin/sites/${siteId}/pairing`, { method: "POST" });
+        const site = sites.find((s) => s.id === siteId);
+        showPairing(site ? site.name : siteId, res.pairing_code, res.pairing_expires_at, siteId);
+        await refresh();
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    // ── Tafsilot ─────────────────────────────────────────────────────────
+    async function openDetail(siteId) {
+      try {
+        const d = await api(`/api/v1/admin/sites/${siteId}`);
+        $("detailTitle").textContent = d.name;
+        const devices = d.devices.length
+          ? d.devices
+              .map(
+                (dev) =>
+                  `<tr><td>${esc(dev.label)}</td><td class="muted mono">${esc(dev.id)}</td><td class="muted">${esc(dev.last_seen || "—")}</td></tr>`
+              )
+              .join("")
+          : '<tr><td colspan="3" class="muted">Hali qurilma juftlanmagan</td></tr>';
+
+        const codes = d.active_pairing_codes.length
+          ? d.active_pairing_codes
+              .map(
+                (c) =>
+                  `<span class="mono">${esc(c.code)}</span> <span class="muted">(${esc(c.expires_at.slice(0, 16))} gacha)</span>`
+              )
+              .join("<br>")
+          : '<span class="muted">Faol kod yo\'q</span>';
+
+        $("detailBody").innerHTML = `
+          <dl class="kv">
+            <dt>Sayt ID</dt><dd class="mono">${esc(d.id)}</dd>
+            <dt>Tarif</dt><dd>${PLAN_LABEL[d.plan] || esc(d.plan)} — ${uzs(d.limits.monthly_price_uzs)}/oy</dd>
+            <dt>Holat</dt><dd><span class="badge badge-${esc(d.license_status)}">${STATUS_LABEL[d.license_status] || esc(d.license_status)}</span> <span class="muted">${esc(d.message)}</span></dd>
+            <dt>Obuna tugaydi</dt><dd>${esc((d.subscription_until || "").slice(0, 10))} (${d.days_left} kun)</dd>
+            <dt>Cheklovlar</dt><dd>${d.limits.max_cameras} kamera · ${d.limits.max_persons} shaxs · ${d.limits.retention_days} kun arxiv · Telegram: ${d.limits.telegram_allowed ? "bor" : "yo'q"}</dd>
+            <dt>Telefon</dt><dd>${esc(d.contact_phone || "—")}</dd>
+            <dt>Manzil</dt><dd>${esc(d.address || "—")}</dd>
+            <dt>Juftlash kodi</dt><dd>${codes}</dd>
+          </dl>
+
+          <div class="card-title" style="margin-top: 1.25rem;">Qurilmalar</div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Nomi</th><th>ID</th><th>Oxirgi aloqa (UTC)</th></tr></thead>
+              <tbody>${devices}</tbody>
+            </table>
+          </div>
+
+          <div class="row" style="margin-top: 1.25rem;">
+            <button class="btn btn-primary" data-invoice="${esc(d.id)}">Hisob ochish</button>
+            <button class="btn" data-extend="${esc(d.id)}">To'lovsiz uzaytirish</button>
+            <button class="btn" data-pairing="${esc(d.id)}">Yangi juftlash kodi</button>
+            <button class="btn ${d.status === "suspended" ? "" : "btn-danger"}"
+                    data-status="${esc(d.id)}" data-to="${d.status === "suspended" ? "active" : "suspended"}">
+              ${d.status === "suspended" ? "Qayta yoqish" : "Obunani to'xtatish"}
+            </button>
+          </div>`;
+        $("detailOverlay").hidden = false;
+      } catch (err) {
+        notify(err.message, false);
+      }
+    }
+
+    // ── Ishga tushirish ──────────────────────────────────────────────────
+    (async () => {
+      if (!adminKey) return;
+      try {
+        await api("/api/v1/admin/stats");
+        $("loginOverlay").hidden = true;
+        $("app").hidden = false;
+        await refresh();
+      } catch (_) {
+        sessionStorage.removeItem(KEY_STORAGE);
+        adminKey = "";
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+# Ixtiyoriy kengaytirishlar
+faiss-cpu>=1.7.4

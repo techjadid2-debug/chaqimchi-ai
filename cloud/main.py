@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from chaqimchi_ai.licensing.plans import PLANS, PlanTier
+from chaqimchi_ai.licensing.plans import PLANS, PlanTier, cheapest_plan_for
 from cloud.alerts import AlertService, test_message
 from cloud.payments import PaymentStore, click_config, payme_config, public_url
 from cloud.payments import click as click_api
@@ -64,6 +64,8 @@ class CreateSiteBody(BaseModel):
     subscription_months: int = Field(default=1, ge=1, le=60)
     contact_phone: Optional[str] = None
     address: Optional[str] = None
+    #: Davomat tariflarida shartnomadagi xodim soni — oylik to‘lov shunga bog‘liq.
+    billable_persons: int = Field(default=0, ge=0, le=100_000)
 
 
 class ClaimDeviceBody(BaseModel):
@@ -148,6 +150,8 @@ async def list_plans() -> Dict[str, Any]:
                 "retention_days": v.retention_days,
                 "monthly_price_uzs": v.monthly_price_uzs,
                 "install_price_uzs": v.install_price_uzs,
+                "per_person_uzs": v.price_per_person_uzs,
+                "billing": "per_person" if v.is_per_person else "flat",
             }
             for k, v in PLANS.items()
         }
@@ -165,6 +169,7 @@ async def admin_create_site(
         subscription_months=body.subscription_months,
         contact_phone=body.contact_phone,
         address=body.address,
+        billable_persons=body.billable_persons,
     )
 
 
@@ -176,6 +181,44 @@ async def admin_list_sites(_: None = Depends(require_admin)) -> List[Dict[str, A
 @app.get("/api/v1/admin/stats")
 async def admin_stats(_: None = Depends(require_admin)) -> Dict[str, Any]:
     return {**get_store().stats(), **get_payments().invoice_stats()}
+
+
+class PersonsBody(BaseModel):
+    persons: int = Field(ge=0, le=100_000)
+
+
+@app.post("/api/v1/admin/sites/{site_id}/persons")
+async def admin_set_persons(
+    site_id: str,
+    body: PersonsBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Shartnomadagi xodim sonini o‘zgartirish (davomat tariflari)."""
+    try:
+        return get_store().set_billable_persons(site_id, body.persons)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+@app.get("/api/v1/quote")
+async def price_quote(persons: int = 0) -> Dict[str, Any]:
+    """Shu xodim soniga qaysi tarif arzon — sotuvchi qo‘lda hisoblamasin."""
+    persons = max(0, min(100_000, persons))
+    plan, monthly = cheapest_plan_for(persons)
+    limits = PLANS[plan]
+    return {
+        "persons": persons,
+        "plan": plan,
+        "monthly_uzs": monthly,
+        "yearly_uzs": monthly * 10,  # 2 oy tekin
+        "install_uzs": limits.install_price_uzs,
+        "first_payment_uzs": limits.install_price_uzs + monthly * 10,
+        "options": {
+            name: p.monthly_price(persons)
+            for name, p in PLANS.items()
+            if p.is_per_person and persons <= p.max_persons
+        },
+    }
 
 
 class CamerasBody(BaseModel):

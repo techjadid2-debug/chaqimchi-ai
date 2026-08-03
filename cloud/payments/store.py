@@ -108,7 +108,9 @@ class PaymentStore:
         months = max(1, min(60, int(months)))
 
         limits = get_plan(site["plan"])
-        amount = limits.monthly_price_uzs * billable_months(months)
+        # Davomat tarifida summa xodim soniga bog'liq.
+        monthly = limits.monthly_price(int(site.get("billable_persons") or 0))
+        amount = monthly * billable_months(months)
         invoice_id = uuid.uuid4().hex[:12]
 
         conn = self._connect()

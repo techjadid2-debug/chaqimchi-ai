@@ -52,10 +52,22 @@
         <div>
           <label for="cPlan">Tarif</label>
           <select id="cPlan">
-            <option value="starter">Starter</option>
-            <option value="business" selected>Business</option>
-            <option value="enterprise">Enterprise</option>
+            <optgroup label="Kamera bo'yicha (do'kon, ombor)">
+              <option value="starter">Starter</option>
+              <option value="business" selected>Business</option>
+              <option value="enterprise">Enterprise</option>
+            </optgroup>
+            <optgroup label="Xodim bo'yicha (davomat)">
+              <option value="staff_starter">Davomat S</option>
+              <option value="staff_business">Davomat M</option>
+              <option value="staff_enterprise">Davomat L</option>
+            </optgroup>
           </select>
+        </div>
+        <div>
+          <label for="cPersons">Xodim soni <span class="muted">(davomat uchun)</span></label>
+          <input id="cPersons" type="number" min="0" max="100000" value="0" />
+          <div id="cQuote" class="muted" style="font-size: 0.72rem; margin-top: 0.3rem;"></div>
         </div>
         <div>
           <label for="cMonths">Obuna (oy)</label>
@@ -149,7 +161,10 @@
 
     const $ = (id) => document.getElementById(id);
 
-    const PLAN_LABEL = { starter: "Starter", business: "Business", enterprise: "Enterprise" };
+    const PLAN_LABEL = {
+      starter: "Starter", business: "Business", enterprise: "Enterprise",
+      staff_starter: "Davomat S", staff_business: "Davomat M", staff_enterprise: "Davomat L",
+    };
     const STATUS_LABEL = {
       active: "Faol",
       grace: "Grace (to'lov kutilmoqda)",
@@ -286,7 +301,12 @@
               <div>${esc(s.name)}</div>
               <div class="muted mono" style="font-size: 0.7rem;">${esc(s.id)}</div>
             </td>
-            <td>${PLAN_LABEL[s.plan] || esc(s.plan)}</td>
+            <td>
+              ${PLAN_LABEL[s.plan] || esc(s.plan)}
+              ${s.per_person_uzs
+                ? `<div class="muted" style="font-size:0.7rem;">${s.billable_persons} xodim</div>`
+                : ""}
+            </td>
             <td><span class="badge badge-${esc(s.license_status)}">${STATUS_LABEL[s.license_status] || esc(s.license_status)}</span></td>
             <td class="muted">${esc((s.subscription_until || "").slice(0, 10))}</td>
             <td class="${s.days_left <= 7 ? "" : "muted"}">${s.days_left} kun</td>
@@ -401,6 +421,26 @@
     }
 
     // ── Yangi mijoz ──────────────────────────────────────────────────────
+    // Narxni sotuvchi qo'lda hisoblamasin — xodim sonini yozganda o'zi chiqadi.
+    async function refreshQuote() {
+      const persons = Number($("cPersons").value) || 0;
+      const el = $("cQuote");
+      if (!persons) { el.textContent = ""; return; }
+      try {
+        const q = await api(`/api/v1/quote?persons=${persons}`);
+        const plan = PLAN_LABEL[q.plan] || q.plan;
+        el.innerHTML =
+          `Eng arzon: <b>${esc(plan)}</b> — ${uzs(q.monthly_uzs)}/oy<br>` +
+          `Yillik ${uzs(q.yearly_uzs)} · shartnoma kuni ${uzs(q.first_payment_uzs)}`;
+        // Tavsiya etilgan tarifni o'zi tanlaydi.
+        if ($("cPlan").value.startsWith("staff_")) $("cPlan").value = q.plan;
+      } catch (err) {
+        el.textContent = "";
+      }
+    }
+    $("cPersons").addEventListener("change", refreshQuote);
+    $("cPersons").addEventListener("blur", refreshQuote);
+
     $("createForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const btn = e.target.querySelector("button[type=submit]");
@@ -414,6 +454,7 @@
             subscription_months: Number($("cMonths").value) || 1,
             contact_phone: $("cPhone").value.trim() || null,
             address: $("cAddress").value.trim() || null,
+            billable_persons: Number($("cPersons").value) || 0,
           }),
         });
         e.target.reset();

@@ -16,6 +16,59 @@
 
 Yillik: oylik × **10** (2 oy tekin).
 
+## Davomat tariflari (xodim bo‘yicha)
+
+Korxona uchun qiymat kamera sonida emas, **xodim sonida**: 200 xodimli zavodga
+2 kamera yetadi, lekin 200 ta yuz kerak.
+
+```
+Oylik = eng kam narx  YOKI  xodim × narx  (qaysi biri katta)
+```
+
+| Tarif | Eng kam/oy | Har xodim | Kamera | Arxiv | O‘rnatish |
+|-------|-----------|-----------|--------|-------|-----------|
+| **Davomat S** | 500 000 | 15 000 | 2 | 30 kun | 6 500 000 |
+| **Davomat M** | 1 200 000 | 12 000 | 5 | 90 kun | 9 500 000 |
+| **Davomat L** | 2 500 000 | 9 000 | 15 | 365 kun | 15 000 000 |
+
+Katta tarifda xodim arzonroq — mijoz o‘sganda ko‘tarilishni **o‘zi so‘raydi**:
+
+| Xodim | Eng arzon tarif | Oylik |
+|-------|----------------|-------|
+| 30 | Davomat S | 500 000 |
+| 50 | Davomat S | 750 000 |
+| 100 | Davomat M | 1 200 000 |
+| 200 | Davomat M | 2 400 000 |
+| 300 | Davomat L | 2 700 000 |
+| 500 | Davomat L | 4 500 000 |
+
+**Baza chegarasi = to‘langan xodim soni.** 100 xodim uchun to‘lasa, 101-chisini
+qo‘shmoqchi bo‘lganda tizim “tarifni kengaytiring” deydi — tijorat mantiqi va
+texnik cheklov bir joyda.
+
+Narxni qo‘lda hisoblamang:
+
+```bash
+curl "http://CLOUD:8750/api/v1/quote?persons=120"
+# → tarif, oylik, yillik va shartnoma kuni qo'lga tushadigan summa
+```
+
+Admin panelda “Xodim soni” maydoniga son yozsangiz narx o‘zi chiqadi va mos
+tarif tanlanadi.
+
+Xodim soni o‘zgarganda (mijoz o‘sdi yoki qisqardi):
+
+```bash
+curl -X POST "http://CLOUD:8750/api/v1/admin/sites/SITE_ID/persons" \
+  -H "X-Cloud-Admin-Key: $CHAQIMCHI_CLOUD_ADMIN_KEY" \
+  -H "Content-Type: application/json" -d '{"persons": 260}'
+```
+
+Keyingi hisob-faktura avtomatik yangi narxda ochiladi.
+
+> Kamera tariflari (Starter/Business/Enterprise) **o‘zgarmadi**. Hozirgi
+> mijozlarning narxi va shartnomasi avvalgidek qoladi.
+
 Cheklovlar rostdan qo‘llanadi: kamera soni va shaxs bazasi limitdan oshmaydi,
 voqea arxivi esa muddati o‘tgach avtomatik tozalanadi (rasmlar bilan birga).
 

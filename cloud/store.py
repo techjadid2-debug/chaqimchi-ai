@@ -166,6 +166,12 @@ class CloudStore:
         if "cameras_expected" not in columns("sites"):
             conn.execute("ALTER TABLE sites ADD COLUMN cameras_expected INTEGER")
 
+        # Davomat tariflarida oylik to'lov shu songa bog'liq.
+        if "billable_persons" not in columns("sites"):
+            conn.execute(
+                "ALTER TABLE sites ADD COLUMN billable_persons INTEGER NOT NULL DEFAULT 0"
+            )
+
         # `alert_state` bir turdan (connection) ikki turga (kind) o'tdi.
         if "kind" not in columns("alert_state"):
             conn.executescript(
@@ -193,19 +199,22 @@ class CloudStore:
         subscription_months: int = 1,
         contact_phone: Optional[str] = None,
         address: Optional[str] = None,
+        billable_persons: int = 0,
     ) -> Dict[str, Any]:
         limits = get_plan(plan)
         site_id = str(uuid.uuid4())[:12]
         until = _utc_now() + timedelta(days=30 * max(1, subscription_months))
         now = _iso(_utc_now())
+        persons = max(0, int(billable_persons))
 
         conn = self._connect()
         conn.execute(
             """
-            INSERT INTO sites (id, name, plan, status, subscription_until, contact_phone, address, created_at)
-            VALUES (?, ?, ?, 'active', ?, ?, ?, ?)
+            INSERT INTO sites (id, name, plan, status, subscription_until,
+                               contact_phone, address, created_at, billable_persons)
+            VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?)
             """,
-            (site_id, name, plan, _iso(until), contact_phone, address, now),
+            (site_id, name, plan, _iso(until), contact_phone, address, now, persons),
         )
 
         code, expires = self._insert_pairing_code(conn, site_id)
@@ -219,13 +228,30 @@ class CloudStore:
             "subscription_until": _iso(until),
             "pairing_code": code,
             "pairing_expires_at": expires,
+            "billable_persons": persons,
             "limits": {
                 "max_cameras": limits.max_cameras,
-                "max_persons": limits.max_persons,
-                "monthly_price_uzs": limits.monthly_price_uzs,
+                "max_persons": limits.effective_max_persons(persons),
+                "monthly_price_uzs": limits.monthly_price(persons),
                 "install_price_uzs": limits.install_price_uzs,
+                "per_person_uzs": limits.price_per_person_uzs,
             },
         }
+
+    def set_billable_persons(self, site_id: str, persons: int) -> Dict[str, Any]:
+        """Shartnomadagi xodim sonini o‘zgartirish (davomat tariflari uchun)."""
+        if persons < 0:
+            raise ValueError("Xodim soni manfiy bo‘lishi mumkin emas")
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+
+        conn = self._connect()
+        conn.execute(
+            "UPDATE sites SET billable_persons = ? WHERE id = ?", (int(persons), site_id)
+        )
+        conn.commit()
+        conn.close()
+        return self.site_detail(site_id)
 
     def _insert_pairing_code(
         self, conn: sqlite3.Connection, site_id: str, *, valid_hours: int = 48
@@ -273,9 +299,12 @@ class CloudStore:
                 if site["cameras_expected"]
                 else True
             )
-            site["monthly_price_uzs"] = limits.monthly_price_uzs
+            persons = int(site.get("billable_persons") or 0)
+            site["billable_persons"] = persons
+            site["monthly_price_uzs"] = limits.monthly_price(persons)
+            site["per_person_uzs"] = limits.price_per_person_uzs
             site["max_cameras"] = limits.max_cameras
-            site["max_persons"] = limits.max_persons
+            site["max_persons"] = limits.effective_max_persons(persons)
             out.append(site)
         return out
 
@@ -316,13 +345,16 @@ class CloudStore:
         site["license_status"] = computed["status"]
         site["days_left"] = computed["days_left"]
         site["message"] = computed["message"]
+        persons = int(site.get("billable_persons") or 0)
+        site["billable_persons"] = persons
         site["limits"] = {
             "max_cameras": limits.max_cameras,
-            "max_persons": limits.max_persons,
+            "max_persons": limits.effective_max_persons(persons),
             "retention_days": limits.retention_days,
             "telegram_allowed": limits.telegram_allowed,
-            "monthly_price_uzs": limits.monthly_price_uzs,
+            "monthly_price_uzs": limits.monthly_price(persons),
             "install_price_uzs": limits.install_price_uzs,
+            "per_person_uzs": limits.price_per_person_uzs,
         }
         site["devices"] = devices
         site["last_seen"] = max(
@@ -549,7 +581,9 @@ class CloudStore:
             "status": status,
             "subscription_until": site["subscription_until"],
             "max_cameras": limits.max_cameras,
-            "max_persons": limits.max_persons,
+            "max_persons": limits.effective_max_persons(
+                int(site.get("billable_persons") or 0)
+            ),
             "retention_days": limits.retention_days,
             "telegram_allowed": limits.telegram_allowed,
             "active_cameras_reported": active_cameras,

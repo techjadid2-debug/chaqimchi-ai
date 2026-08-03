@@ -4,8 +4,17 @@
 
 ```bash
 export CHAQIMCHI_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
+
+# Ogohlantirish (tavsiya etiladi): mijoz tizimi o'chsa Telegramga xabar keladi
+export CHAQIMCHI_CLOUD_TELEGRAM_TOKEN="123456:ABC..."   # @BotFather dan
+export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
+
 make run-cloud
 ```
+
+Bot yaratish: Telegramda **@BotFather** → `/newbot` → token. Keyin botni
+o‘zingiz bilan (yoki xodimlar guruhi bilan) suhbatga qo‘shing va `chat_id` ni
+oling. Panelda **“Sinov xabari”** tugmasi bilan tekshiring.
 
 ## 2. Yangi mijoz
 

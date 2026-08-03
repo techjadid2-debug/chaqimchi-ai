@@ -46,6 +46,9 @@ Panelda ko‘rinadi: mijozlar soni, faol obunalar, **7 kun ichida tugaydiganlar*
 chiqmagan mijozlar. Ularga o‘zingiz qo‘ng‘iroq qiling: mijoz shikoyat qilguncha
 kutish — obunani yo‘qotishning eng oson yo‘li.
 
+Telegram ulansa panelni ochish ham shart emas — cloud o‘zi xabar beradi
+(`CHAQIMCHI_CLOUD_TELEGRAM_TOKEN`, [INSTALLER.md](INSTALLER.md)).
+
 Batafsil: [INSTALLER.md](INSTALLER.md)
 
 ## Texnik

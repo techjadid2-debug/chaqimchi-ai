@@ -133,6 +133,14 @@ class CloudStore:
                 used INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (site_id) REFERENCES sites(id)
             );
+            -- Telegram ogohlantirishi qaysi holat uchun yuborilganini eslaydi:
+            -- shusiz har tekshiruvda o'sha xabar qayta-qayta ketardi.
+            CREATE TABLE IF NOT EXISTS alert_state (
+                site_id TEXT PRIMARY KEY,
+                connection TEXT NOT NULL,
+                notified_at TEXT NOT NULL,
+                FOREIGN KEY (site_id) REFERENCES sites(id)
+            );
             """
         )
         conn.commit()
@@ -329,6 +337,31 @@ class CloudStore:
             "offline": by_connection.get("offline", 0),
             "not_paired": by_connection.get("not_paired", 0),
         }
+
+    # ── Ogohlantirish holati ──────────────────────────────────────────────
+
+    def alert_states(self) -> Dict[str, str]:
+        """Har bir sayt uchun oxirgi xabar berilgan aloqa holati."""
+        conn = self._connect()
+        rows = conn.execute("SELECT site_id, connection FROM alert_state").fetchall()
+        conn.close()
+        return {r["site_id"]: r["connection"] for r in rows}
+
+    def set_alert_state(self, site_id: str, connection: str) -> None:
+        conn = self._connect()
+        conn.execute(
+            "INSERT INTO alert_state (site_id, connection, notified_at) VALUES (?, ?, ?)"
+            " ON CONFLICT(site_id) DO UPDATE SET connection = ?, notified_at = ?",
+            (site_id, connection, _iso(_utc_now()), connection, _iso(_utc_now())),
+        )
+        conn.commit()
+        conn.close()
+
+    def clear_alert_state(self, site_id: str) -> None:
+        conn = self._connect()
+        conn.execute("DELETE FROM alert_state WHERE site_id = ?", (site_id,))
+        conn.commit()
+        conn.close()
 
     def get_site(self, site_id: str) -> Optional[Dict[str, Any]]:
         conn = self._connect()

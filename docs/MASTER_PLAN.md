@@ -78,6 +78,47 @@ curl http://127.0.0.1:8742/metrics
 | 7.7 | Arxiv muddati (retention) | [x] Tarifdagi 30/90/365 kun endi rostdan qo‘llanadi |
 | 7.8 | Zaxira nusxa va tiklash | [x] `make backup` / `make restore`, `GET/POST /api/backup` |
 | 7.9 | Aloqa nazorati | [x] Panelda qaysi mijoz tizimi ishlamayotgani ko‘rinadi |
+| 7.10 | Telegram ogohlantirishi | [x] Mijoz o‘chsa cloud o‘zi xabar beradi |
+
+### 7.10 — Telegram ogohlantirishi
+
+Panelda aloqa holati ko‘rinadi (7.9), lekin buning uchun panelni ochish kerak.
+Do‘kon ertalab soat 9 da o‘chsa, panel kechqurun ochilsa — kun yo‘qoladi.
+Endi cloud o‘zi Telegramga yozadi.
+
+```bash
+export CHAQIMCHI_CLOUD_TELEGRAM_TOKEN="123456:ABC..."   # @BotFather
+export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
+make run-cloud
+```
+
+Ikkalasi ham berilmasa modul jim turadi — cloud oddiy ishlaydi. Panel yuqorisida
+holat ko‘rinib turadi (🔕 o‘chiq / 🔔 yoqilgan) va **“Sinov xabari”** tugmasi bor.
+
+Qachon xabar ketadi:
+
+| Hodisa | Xabar |
+|--------|-------|
+| Mijoz 24 soatdan ortiq jim | 🔴 tizim ishlamayapti + telefon raqami |
+| Yangi mijoz 48 soatda juftlanmagan | ⚠️ o‘rnatish tugallanmagan |
+| Aloqa tiklandi | ✅ qayta ishga tushdi |
+
+**Shovqinga qarshi uch qoida:**
+
+1. Xabar faqat holat **o‘zgarganda** ketadi (`alert_state` jadvali) — har 15
+   daqiqada takrorlanmaydi.
+2. `stale` (1–24 soat) uchun xabar yo‘q — internetning qisqa uzilishi odatiy hol.
+3. Obunasi to‘xtatilgan yoki tugagan mijozlar kuzatilmaydi — ular jim turishi
+   kutilgan holat.
+
+Telegram javob bermasa holat **yozilmaydi** — xabar keyingi tekshiruvda qayta
+urinib ko‘riladi, ya’ni tarmoq uzilishi tufayli ogohlantirish yo‘qolmaydi.
+
+| Endpoint | Vazifa |
+|----------|--------|
+| `GET /api/v1/admin/alerts` | Sozlama va oxirgi tekshiruv |
+| `POST /api/v1/admin/alerts/test` | Sinov xabari |
+| `POST /api/v1/admin/alerts/check` | Darhol tekshirish |
 
 ### 7.9 — Aloqa nazorati
 

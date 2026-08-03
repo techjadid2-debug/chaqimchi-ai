@@ -29,6 +29,8 @@
     <header class="header">
       <div class="logo">Chaqimchi Cloud <small>Admin panel</small></div>
       <div class="row">
+        <span id="alertInfo" class="muted" style="font-size: 0.75rem;"></span>
+        <button id="btnAlertTest" class="btn" hidden>Sinov xabari</button>
         <button id="btnRefresh" class="btn">Yangilash</button>
         <button id="btnLogout" class="btn">Chiqish</button>
       </div>
@@ -237,6 +239,15 @@
 
     $("btnRefresh").addEventListener("click", () => refresh());
 
+    $("btnAlertTest").addEventListener("click", async () => {
+      try {
+        await api("/api/v1/admin/alerts/test", { method: "POST" });
+        notify("Sinov xabari yuborildi — Telegramni tekshiring");
+      } catch (err) {
+        notify(err.message, false);
+      }
+    });
+
     // ── Ko'rsatkichlar va ro'yxat ────────────────────────────────────────
     function renderStats(s) {
       const brokenCount = (s.offline || 0) + (s.not_paired || 0);
@@ -302,6 +313,23 @@
         .join("");
     }
 
+    // Ogohlantirish sozlanmagan bo'lsa buni ko'rsatib turish kerak: aks holda
+    // "xabar kelmayapti, demak hammasi joyida" deb o'ylash oson.
+    function renderAlertInfo(status) {
+      const el = $("alertInfo");
+      $("btnAlertTest").hidden = !status.enabled;
+      if (!status.enabled) {
+        el.textContent = "🔕 Telegram ogohlantirishi o'chiq";
+        el.title = "CHAQIMCHI_CLOUD_TELEGRAM_TOKEN va _CHAT_ID ni sozlang";
+        return;
+      }
+      const last = status.last_run;
+      el.textContent = last
+        ? `🔔 Ogohlantirish yoqilgan · oxirgi tekshiruv ${last.ran_at.slice(11, 16)} UTC`
+        : "🔔 Ogohlantirish yoqilgan";
+      el.title = `Har ${Math.round(status.interval_sec / 60)} daqiqada tekshiriladi`;
+    }
+
     function renderProviderInfo() {
       const on = [providers.payme && "Payme", providers.click && "Click"].filter(Boolean);
       $("providerInfo").textContent = on.length
@@ -348,11 +376,12 @@
 
     async function refresh() {
       try {
-        const [stats, list, invoiceList, provs] = await Promise.all([
+        const [stats, list, invoiceList, provs, alertStatus] = await Promise.all([
           api("/api/v1/admin/stats"),
           api("/api/v1/admin/sites"),
           api("/api/v1/admin/invoices?limit=50"),
           api("/api/v1/admin/payments/providers"),
+          api("/api/v1/admin/alerts"),
         ]);
         sites = list;
         invoices = invoiceList;
@@ -360,6 +389,7 @@
         renderStats(stats);
         renderSites();
         renderProviderInfo();
+        renderAlertInfo(alertStatus);
         renderInvoices();
       } catch (err) {
         notify(err.message, false);

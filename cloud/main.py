@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from chaqimchi_ai.licensing.plans import PLANS, PlanTier
+from cloud.alerts import AlertService, test_message
 from cloud.payments import PaymentStore, click_config, payme_config, public_url
 from cloud.payments import click as click_api
 from cloud.payments import payme as payme_api
@@ -28,6 +29,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _store: Optional[CloudStore] = None
 _payments: Optional[PaymentStore] = None
+_alerts: Optional[AlertService] = None
 
 
 def get_store() -> CloudStore:
@@ -95,10 +97,24 @@ class ManualPaymentBody(BaseModel):
     reference: Optional[str] = None
 
 
+def get_alerts() -> AlertService:
+    """Aloqa ogohlantirishi xizmati. `_store` almashsa qayta quriladi."""
+    global _alerts
+    store = get_store()
+    if _alerts is None or _alerts.store is not store:
+        _alerts = AlertService(store)
+    return _alerts
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     get_payments()
-    yield
+    alerts = get_alerts()
+    alerts.start()
+    try:
+        yield
+    finally:
+        await alerts.stop()
 
 
 app = FastAPI(title="Chaqimchi Cloud", lifespan=lifespan)
@@ -160,6 +176,34 @@ async def admin_list_sites(_: None = Depends(require_admin)) -> List[Dict[str, A
 @app.get("/api/v1/admin/stats")
 async def admin_stats(_: None = Depends(require_admin)) -> Dict[str, Any]:
     return {**get_store().stats(), **get_payments().invoice_stats()}
+
+
+@app.get("/api/v1/admin/alerts")
+async def admin_alerts_status(_: None = Depends(require_admin)) -> Dict[str, Any]:
+    """Ogohlantirish sozlamasi va oxirgi tekshiruv natijasi."""
+    return get_alerts().status()
+
+
+@app.post("/api/v1/admin/alerts/test")
+async def admin_alerts_test(_: None = Depends(require_admin)) -> Dict[str, Any]:
+    """Sinov xabari — token va chat_id to‘g‘ri sozlanganini tekshiradi."""
+    service = get_alerts()
+    if not service.config.enabled:
+        raise HTTPException(
+            400,
+            "CHAQIMCHI_CLOUD_TELEGRAM_TOKEN va CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID sozlanmagan",
+        )
+    ok = await service.sender.send(test_message())
+    if not ok:
+        raise HTTPException(502, "Telegramga yuborilmadi — token yoki chat_id ni tekshiring")
+    return {"ok": True, "message": "Sinov xabari yuborildi"}
+
+
+@app.post("/api/v1/admin/alerts/check")
+async def admin_alerts_check(_: None = Depends(require_admin)) -> Dict[str, Any]:
+    """Tekshiruvni darhol ishga tushirish (fon vazifasini kutmasdan)."""
+    run = await get_alerts().check_once()
+    return {"ok": True, **run.to_dict()}
 
 
 @app.get("/api/v1/admin/sites/{site_id}")

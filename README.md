@@ -57,6 +57,8 @@ Muhit o‘zgaruvchisi: `CHAQIMCHI_CONFIG=/yo'l/config.yaml`
 | `POST /api/retention/purge` | Arxivni darhol tozalash (API kalit) |
 | `GET /api/backup` | Bazani ZIP qilib yuklab olish (API kalit) |
 | `POST /api/backup/restore` | Nusxadan tiklash (API kalit) |
+| `GET /api/vision/status` | Ko‘rish agenti: sozlama va sarf |
+| `POST /api/vision/analyze` | Kadrni AI ga tahlil qildirish (API kalit) |
 
 ## Struktura
 
@@ -103,6 +105,7 @@ docker run -p 8742:8742 -v "$(pwd)/config:/app/config" chaqimchi-ai
 ## Hujjatlar
 
 - [Umumiy reja](docs/MASTER_PLAN.md)
+- [Ko‘rish agenti (AI)](docs/KORISH_AGENTI.md) — narx jadvali bilan
 - [To‘lov integratsiyasi](docs/TOLOV.md)
 - [Arxitektura](docs/ARXITEKTURA.md)
 - [Rivojlanish rejasi](docs/REJA.md)

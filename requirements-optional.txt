@@ -1,2 +1,5 @@
 # Ixtiyoriy kengaytirishlar
 faiss-cpu>=1.7.4
+
+# Ko'rish agenti (vision.enabled: true) — kadrni AI ko'rib tushuntiradi
+anthropic>=0.40.0

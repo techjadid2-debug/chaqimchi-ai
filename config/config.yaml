@@ -72,6 +72,19 @@ antispoof:
   min_score: 0.5           # shundan past ball — soxta
   min_blur_variance: 80.0  # qattiq chegara: xira kadr har doim rad etiladi
 
+# Ko'rish agenti — AI kadrni ko'rib "nima bo'layapti" deb aytadi.
+# DIQQAT: pul sarflaydi. Bitta tahlil ~87 so'm, kuniga 100 ta ≈ 262 000 so'm/oy.
+# Batafsil va narx jadvali: docs/KORISH_AGENTI.md
+vision:
+  enabled: false
+  model: claude-opus-5
+  max_side: 768            # kadr o'lchami — narxning asosiy sozlamasi
+  min_interval_sec: 300    # bitta kamera uchun 5 daqiqada bir marta
+  max_calls_per_day: 100   # limit tugasa modul to'xtaydi
+  max_calls_per_month: 2000
+  effort: low              # low | medium | high
+  telegram_alerts: true
+
 server:
   host: "0.0.0.0" # Barcha tarmoq interfeyslari uchun ochiq
   port: 8742

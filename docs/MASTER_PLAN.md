@@ -81,6 +81,34 @@ curl http://127.0.0.1:8742/metrics
 | 7.10 | Telegram ogohlantirishi | [x] Mijoz o‘chsa cloud o‘zi xabar beradi |
 | 7.11 | Kamera nazorati | [x] 3 kameradan bittasi o‘chsa ham bilinadi |
 
+---
+
+## 8. Ko‘rish agenti (AI)
+
+| # | Vazifa | Holat |
+|---|--------|-------|
+| 8.1 | Kadrni AI ko‘rib tushuntirishi | [x] `vision.enabled`, `claude-opus-5` |
+| 8.2 | Xarajat tormozlari (limit + oraliq) | [x] Diskda saqlanadi, restart aylanib o‘tmaydi |
+| 8.3 | Kameraga ulash (avtomatik tahlil) | [ ] Keyingi qadam |
+| 8.4 | Ogohlantirishni Telegramga yuborish | [ ] Keyingi qadam |
+
+Yuz tanish “bu kim?” degan savolga javob beradi; ko‘rish agenti “nima
+bo‘layapti?” degan savolga: kassada navbat, yiqilgan odam, tutun, ish
+vaqtidan tashqari harakat.
+
+**Bu modul pul sarflaydi** — bitta tahlil ~87 so‘m, kuniga 100 ta ≈ 262 000
+so‘m/oy, ya’ni Business tarifi daromadining ~17.6% i. Tarifni qayta hisoblash
+kerak; variantlar [KORISH_AGENTI.md](KORISH_AGENTI.md) da.
+
+Ikki qavatli tormoz (ikkalasi ham majburiy): bitta kamera uchun 5 daqiqada bir
+marta, va kunlik/oylik qattiq limit. Hisob `data/vision_usage.db` da — server
+qayta ishga tushsa ham limit nolga qaytmaydi.
+
+`enabled: false` (standart) bo‘lsa modul umuman qurilmaydi va bir tiyin ham
+sarflanmaydi.
+
+Batafsil, narx jadvali va chegaralari: [KORISH_AGENTI.md](KORISH_AGENTI.md)
+
 ### 7.11 — Kamera nazorati
 
 Edge har heartbeat'da `active_cameras` yuborardi, lekin cloud uni **faqat

@@ -18,6 +18,16 @@ data/
 .env.*
 !.env.example
 
+# Maxfiy kalitlar va lokal credential fayllari
+.deploy_keys/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+config/secrets.yaml
+config/secrets.yml
+
 # IDE / OS
 .idea/
 .vscode/

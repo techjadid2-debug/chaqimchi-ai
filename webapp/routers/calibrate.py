@@ -53,6 +53,7 @@ def apply_threshold(container: AppContainer, value: float) -> None:
 async def calibrate_threshold(
     use_dir: bool = True,
     container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
 ):
     report = await asyncio.get_running_loop().run_in_executor(
         None, _run_calibration, container, use_dir

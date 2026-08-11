@@ -12,9 +12,12 @@ from pydantic import BaseModel, Field, field_validator
 
 class FaceSettings(BaseModel):
     model_name: str = "buffalo_l"
+    model_root: Optional[str] = None
+    model_version: Optional[str] = None
     det_size: Tuple[int, int] = (640, 640)
     preprocess_max_side: int = Field(default=1024, ge=64, le=4096)
     compare_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
+    commercial_model_licensed: bool = False
 
     @field_validator("det_size")
     @classmethod
@@ -51,6 +54,52 @@ class SecuritySettings(BaseModel):
     api_key_enabled: bool = False
     api_key: Optional[str] = None
     jwt: JwtSettings = Field(default_factory=JwtSettings)
+
+
+class CloudSyncSettings(BaseModel):
+    enabled: bool = False
+    url: str = "http://127.0.0.1:8750"
+    site_id: Optional[str] = None
+    device_id: Optional[str] = None
+    device_token: Optional[str] = None
+    interval_sec: int = Field(default=5, ge=1, le=3600)
+    heartbeat_interval_sec: int = Field(default=60, ge=10, le=3600)
+    batch_size: int = Field(default=50, ge=1, le=500)
+    queue_days: int = Field(default=7, ge=1, le=30)
+    queue_max_bytes: int = Field(default=20 * 1024**3, ge=1024**2)
+
+
+class SceneZoneSettings(BaseModel):
+    name: str
+    camera_id: str
+    polygon: List[Tuple[float, float]]
+    restricted: bool = False
+
+    @field_validator("polygon")
+    @classmethod
+    def _polygon(cls, value: Any) -> List[Tuple[float, float]]:
+        if not isinstance(value, (list, tuple)) or len(value) < 3:
+            raise ValueError("polygon kamida uchta [x,y] nuqtadan iborat bo'lishi kerak")
+        points = [(float(point[0]), float(point[1])) for point in value]
+        if any(x < 0 or x > 1 or y < 0 or y > 1 for x, y in points):
+            raise ValueError("polygon nuqtalari 0..1 oralig'ida bo'lishi kerak")
+        return points
+
+
+class SceneSettings(BaseModel):
+    enabled: bool = False
+    backend: Literal["onnx", "rknn"] = "onnx"
+    model_path: Optional[str] = None
+    confidence: float = Field(default=0.45, ge=0.05, le=0.99)
+    nms_threshold: float = Field(default=0.45, ge=0.05, le=0.99)
+    input_size: int = Field(default=640, ge=160, le=1280)
+    analyze_fps: float = Field(default=2.0, ge=0.2, le=30.0)
+    burst_fps: float = Field(default=5.0, ge=0.2, le=30.0)
+    motion_min_area_ratio: float = Field(default=0.01, ge=0.0001, le=1.0)
+    loitering_sec: int = Field(default=60, ge=5, le=86400)
+    occupancy_limit: int = Field(default=20, ge=1, le=10000)
+    event_debounce_sec: int = Field(default=30, ge=1, le=3600)
+    zones: List[SceneZoneSettings] = Field(default_factory=list)
 
 
 class StorageSettings(BaseModel):
@@ -166,12 +215,15 @@ class LicenseSettings(BaseModel):
 
 
 class AppSettings(BaseModel):
+    environment: Literal["development", "test", "production"] = "development"
     license: LicenseSettings = Field(default_factory=LicenseSettings)
     face: FaceSettings = Field(default_factory=FaceSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
     events: EventsSettings = Field(default_factory=EventsSettings)
     tracking: TrackingSettings = Field(default_factory=TrackingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    cloud_sync: CloudSyncSettings = Field(default_factory=CloudSyncSettings)
+    scene: SceneSettings = Field(default_factory=SceneSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     camera: CameraRuntimeSettings = Field(default_factory=CameraRuntimeSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
@@ -191,7 +243,16 @@ class AppSettings(BaseModel):
                 raw = yaml.safe_load(f) or {}
         else:
             raw = {}
-        cfg = AppSettings.model_validate(raw)
+        def expand(value: Any) -> Any:
+            if isinstance(value, str):
+                return os.path.expandvars(value)
+            if isinstance(value, list):
+                return [expand(item) for item in value]
+            if isinstance(value, dict):
+                return {key: expand(item) for key, item in value.items()}
+            return value
+
+        cfg = AppSettings.model_validate(expand(raw))
         return cfg
 
     def resolved_reference_path(self, base_dir: Path) -> Path:
@@ -199,6 +260,54 @@ class AppSettings(BaseModel):
         if p.is_absolute():
             return p
         return (base_dir / p).resolve()
+
+    def production_errors(self) -> List[str]:
+        """Production ishga tushishidan oldingi fail-closed tekshiruvlar."""
+        if self.environment != "production":
+            return []
+        errors: List[str] = []
+        if not self.security.api_key_enabled:
+            errors.append("API key autentifikatsiyasi yoqilishi shart")
+        if self.security.api_key_enabled and not (
+            os.environ.get("CHAQIMCHI_API_KEY", "").strip() or self.security.api_key
+        ):
+            errors.append("CHAQIMCHI_API_KEY berilishi shart")
+        jwt_secret = os.environ.get("CHAQIMCHI_JWT_SECRET", "").strip() or self.security.jwt.secret
+        if self.security.jwt.enabled and (not jwt_secret or len(jwt_secret) < 32):
+            errors.append("CHAQIMCHI_JWT_SECRET kamida 32 belgidan iborat bo'lishi shart")
+        if not self.rate_limit.enabled:
+            errors.append("rate_limit productionda yoqilishi shart")
+        if not self.storage.encrypt_embeddings:
+            errors.append("embedding shifrlash productionda yoqilishi shart")
+        if self.storage.encrypt_embeddings and not os.environ.get(
+            "CHAQIMCHI_EMBEDDING_KEY", ""
+        ).strip():
+            errors.append("CHAQIMCHI_EMBEDDING_KEY berilishi shart")
+        licensed = self.face.commercial_model_licensed or os.environ.get(
+            "CHAQIMCHI_FACE_MODEL_LICENSED", ""
+        ).lower() in {"1", "true", "yes"}
+        if not licensed:
+            errors.append("commercial Face ID model litsenziyasi tasdiqlanishi shart")
+        if self.cloud_sync.enabled:
+            if not self.cloud_sync.url.lower().startswith("https://"):
+                errors.append("cloud_sync.url productionda HTTPS bo'lishi shart")
+            if not all(
+                (self.cloud_sync.site_id, self.cloud_sync.device_id, self.cloud_sync.device_token)
+            ):
+                errors.append("cloud sync site_id, device_id va device_token talab qiladi")
+            elif any(
+                "${" in str(value)
+                for value in (
+                    self.cloud_sync.site_id,
+                    self.cloud_sync.device_id,
+                    self.cloud_sync.device_token,
+                )
+            ):
+                errors.append("cloud sync muhit o'zgaruvchilari to'liq berilishi shart")
+        for camera in self.cameras:
+            if isinstance(camera.source, str) and "${" in camera.source:
+                errors.append(f"{camera.id} RTSP manzili muhitda berilmagan")
+        return errors
 
 
 def default_config_path(base_dir: Path) -> Path:

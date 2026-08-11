@@ -15,6 +15,7 @@ from chaqimchi_ai.face_engine import FaceEngine
 from chaqimchi_ai.face_tracker import FaceTracker
 from chaqimchi_ai.match_debounce import MatchDebouncer
 from chaqimchi_ai.metrics import get_metrics
+from chaqimchi_ai.scene_analytics import SceneAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class CameraTask:
         antispoof_enabled: bool = False,
         antispoof_min_blur: float = 80.0,
         antispoof_checker: Optional[Any] = None,
+        scene_analyzer: Optional[SceneAnalyzer] = None,
+        on_event: Optional[Callable] = None,
     ):
         self.camera_id = camera_id
         self.source = source
@@ -55,6 +58,8 @@ class CameraTask:
         self.antispoof_enabled = antispoof_enabled
         self.antispoof_min_blur = antispoof_min_blur
         self.antispoof_checker = antispoof_checker
+        self.scene_analyzer = scene_analyzer
+        self.on_event = on_event
         self.is_running = False
         self._task: Optional[asyncio.Task] = None
 
@@ -112,6 +117,17 @@ class CameraTask:
             logger.warning(f"Snapshot saqlashda xato: {e}")
             return None
 
+    def _save_event_snapshot(self, frame_bgr: np.ndarray) -> Optional[str]:
+        try:
+            self.snapshots_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"{self.camera_id}_event_{int(time.time() * 1000)}.jpg"
+            filepath = self.snapshots_dir / filename
+            ok = cv2.imwrite(str(filepath), frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 82])
+            return str(filepath) if ok else None
+        except Exception as exc:
+            logger.warning("Event snapshot saqlashda xato: %s", exc)
+            return None
+
     async def _run(self):
         backoff = 5
         max_backoff = 60
@@ -123,6 +139,16 @@ class CameraTask:
                 ):
                     if not self.is_running:
                         break
+
+                    if self.scene_analyzer is not None and result.frame is not None:
+                        scene_events = await asyncio.to_thread(
+                            self.scene_analyzer.process, result.frame
+                        )
+                        for event in scene_events:
+                            if self.save_snapshots:
+                                event.snapshot_path = self._save_event_snapshot(result.frame)
+                            if self.on_event:
+                                await self.on_event(event)
 
                     if result.skipped or not result.faces:
                         continue
@@ -226,6 +252,8 @@ class CameraManager:
         antispoof_enabled: bool = False,
         antispoof_min_blur: float = 80.0,
         antispoof_checker: Optional[Any] = None,
+        scene_analyzers: Optional[Dict[str, SceneAnalyzer]] = None,
+        on_event: Optional[Callable] = None,
     ):
         self.engine = engine
         self.db = db
@@ -240,6 +268,8 @@ class CameraManager:
         self.antispoof_enabled = antispoof_enabled
         self.antispoof_min_blur = antispoof_min_blur
         self.antispoof_checker = antispoof_checker
+        self.scene_analyzers = scene_analyzers or {}
+        self.on_event = on_event
         self.cameras: Dict[str, CameraTask] = {}
 
     async def add_camera(
@@ -268,6 +298,8 @@ class CameraManager:
             antispoof_enabled=self.antispoof_enabled,
             antispoof_min_blur=self.antispoof_min_blur,
             antispoof_checker=self.antispoof_checker,
+            scene_analyzer=self.scene_analyzers.get(camera_id),
+            on_event=self.on_event,
         )
         self.cameras[camera_id] = task
         await task.start()

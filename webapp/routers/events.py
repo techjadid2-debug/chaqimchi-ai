@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from chaqimchi_ai.events import EventLog
 from chaqimchi_ai.runtime.container import AppContainer
-from webapp.deps import get_container, get_events
+from webapp.deps import get_container, get_events, require_protected
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +22,24 @@ async def get_recent_events(
     # xotiraga tortardi.
     limit: int = Query(50, ge=1, le=500),
     events: EventLog = Depends(get_events),
+    _actor: str = Depends(require_protected),
 ):
     return events.get_recent_events(limit)
 
 
 @router.get("/api/stats")
-async def get_stats(events: EventLog = Depends(get_events)):
+async def get_stats(
+    events: EventLog = Depends(get_events), _actor: str = Depends(require_protected)
+):
     return events.get_stats_today()
 
 
 @router.get("/api/snapshots/{filename}")
-async def get_snapshot(filename: str, container: AppContainer = Depends(get_container)):
+async def get_snapshot(
+    filename: str,
+    container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
+):
     if not filename or "/" in filename or "\\" in filename or ".." in filename:
         return JSONResponse({"ok": False, "error": "Noto‘g‘ri fayl nomi"}, status_code=400)
 
@@ -46,6 +53,19 @@ async def get_snapshot(filename: str, container: AppContainer = Depends(get_cont
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
     container: AppContainer = ws.app.state.container
+    from chaqimchi_ai.auth import verify_access
+
+    try:
+        token = ws.query_params.get("token")
+        authorization = f"Bearer {token}" if token else ws.headers.get("Authorization")
+        verify_access(
+            security=container.settings.security,
+            x_api_key=ws.headers.get("X-API-Key"),
+            authorization=authorization,
+        )
+    except Exception:
+        await ws.close(code=1008, reason="Autentifikatsiya talab qilinadi")
+        return
     await ws.accept()
     container.ws_clients.append(ws)
     try:

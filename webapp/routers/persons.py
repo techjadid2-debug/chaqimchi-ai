@@ -33,7 +33,9 @@ _NO_FACE = JSONResponse({"ok": False, "error": "Rasmda yuz topilmadi"}, status_c
 
 
 @router.get("/persons")
-async def list_persons(db: FaceDatabase = Depends(get_db)):
+async def list_persons(
+    db: FaceDatabase = Depends(get_db), _actor: str = Depends(require_protected)
+):
     return db.metadata
 
 
@@ -41,6 +43,7 @@ async def list_persons(db: FaceDatabase = Depends(get_db)):
 async def analyze_image(
     file: UploadFile = File(...),
     engine: "FaceEngine" = Depends(get_engine),
+    _actor: str = Depends(require_protected),
 ):
     """Rasmdagi yuzlar (bbox, ball) — bazaga yozmaydi."""
     img = await decode_upload(file)

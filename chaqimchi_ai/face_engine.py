@@ -11,6 +11,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Sequence, Tuple, Union
 
 import cv2
@@ -100,6 +101,7 @@ class FaceEngine:
         onnx_providers: Optional[Sequence[Union[str, Tuple[str, Dict[str, Any]]]]] = None,
         ctx_id: int = -1,
         roi: Optional[RoiConfig] = None,
+        model_root: Optional[Path] = None,
     ) -> None:
         if FaceAnalysis is None or face_align is None:
             raise ImportError(
@@ -111,6 +113,7 @@ class FaceEngine:
         self._preprocess_max_side = int(preprocess_max_side)
         self._roi = roi
         self.ctx_id = ctx_id
+        self.model_root = model_root
         self._providers: List[Union[str, Tuple[str, Dict[str, Any]]]] = (
             list(onnx_providers) if onnx_providers is not None else _default_onnx_providers()
         )
@@ -118,11 +121,14 @@ class FaceEngine:
         logger.info("FaceEngine: model=%s, providers=%s", model_name, self._providers)
 
         # Faqat deteksiya va tanish — boshqa modullarni o‘chirib, tezlikni oshiramiz
-        self._app = FaceAnalysis(
-            name=model_name,
-            allowed_modules=["detection", "recognition"],
-            providers=self._providers,
-        )
+        app_kwargs: Dict[str, Any] = {
+            "name": model_name,
+            "allowed_modules": ["detection", "recognition"],
+            "providers": self._providers,
+        }
+        if model_root is not None:
+            app_kwargs["root"] = str(model_root)
+        self._app = FaceAnalysis(**app_kwargs)
         self._app.prepare(ctx_id=self.ctx_id, det_size=self.det_size)
 
         self._rec_model = self._app.models.get("recognition")
@@ -322,7 +328,14 @@ class FaceEngine:
                         frame_skip,
                         read_ms,
                     )
-                    yield VideoFrameResult(frame_index=frame_index, skipped=True, total_ms=read_ms)
+                    # Scene analytics motion gate'i yuz inferensi o'tkazib yuborilgan
+                    # freymlarni ham ko'rishi kerak.
+                    yield VideoFrameResult(
+                        frame_index=frame_index,
+                        skipped=True,
+                        total_ms=read_ms,
+                        frame=frame,
+                    )
                     frame_index += 1
                     continue
 

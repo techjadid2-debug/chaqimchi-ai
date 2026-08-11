@@ -73,7 +73,10 @@ async def health(container: AppContainer = Depends(get_container)) -> JSONRespon
 
 
 @router.get("/ready")
-async def readiness(container: AppContainer = Depends(get_container)) -> JSONResponse:
+async def readiness(
+    container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
+) -> JSONResponse:
     eng = container.engine_or_none
     if eng is None or not eng.recognition_ready:
         return JSONResponse(status_code=503, content={"ok": False, "status": "not_ready"})
@@ -81,7 +84,10 @@ async def readiness(container: AppContainer = Depends(get_container)) -> JSONRes
 
 
 @router.get("/api/license")
-async def api_license_status(container: AppContainer = Depends(get_container)) -> JSONResponse:
+async def api_license_status(
+    container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
+) -> JSONResponse:
     if not container.settings.license.enabled:
         return JSONResponse(
             {"ok": True, "enabled": False, "message": "Litsenziya o‘chirilgan (dev)"}
@@ -95,7 +101,10 @@ async def api_license_status(container: AppContainer = Depends(get_container)) -
 
 
 @router.get("/api/retention")
-async def api_retention(container: AppContainer = Depends(get_container)) -> JSONResponse:
+async def api_retention(
+    container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
+) -> JSONResponse:
     """Arxiv saqlash muddati va oxirgi tozalash natijasi."""
     return JSONResponse(purge_summary(container))
 
@@ -108,7 +117,10 @@ async def api_retention_purge(container: AppContainer = Depends(get_container)) 
 
 
 @router.get("/api/metrics")
-async def api_metrics(container: AppContainer = Depends(get_container)) -> JSONResponse:
+async def api_metrics(
+    container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
+) -> JSONResponse:
     snap = get_metrics().snapshot()
     snap["ws_clients"] = len(container.ws_clients)
     return JSONResponse(snap)
@@ -117,6 +129,7 @@ async def api_metrics(container: AppContainer = Depends(get_container)) -> JSONR
 @router.get("/metrics")
 async def prometheus_metrics(
     container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
 ) -> PlainTextResponse:
     snap = get_metrics().snapshot()
     snap["ws_clients"] = len(container.ws_clients)

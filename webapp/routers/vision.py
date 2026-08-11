@@ -39,7 +39,10 @@ MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 
 
 @router.get("/status")
-async def vision_status(container: AppContainer = Depends(get_container)) -> JSONResponse:
+async def vision_status(
+    container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
+) -> JSONResponse:
     """Sozlama, sarf va limitdan qolgani."""
     agent = container.vision
     if agent is None:
@@ -59,7 +62,9 @@ async def vision_status(container: AppContainer = Depends(get_container)) -> JSO
 
 @router.get("/recent")
 async def vision_recent(
-    limit: int = 20, container: AppContainer = Depends(get_container)
+    limit: int = 20,
+    container: AppContainer = Depends(get_container),
+    _actor: str = Depends(require_protected),
 ) -> JSONResponse:
     """Oxirgi tahlillar (narxi bilan)."""
     agent = container.vision

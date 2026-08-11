@@ -1,7 +1,7 @@
 # Chaqimchi AI
 PY ?= python3
 
-.PHONY: install-dev test lint fmt run-web run-cloud demo calibrate validate-antispoof provision backup restore docker-build
+.PHONY: install-dev test lint fmt run-web run-cloud demo calibrate validate-antispoof provision backup restore docker-build cloud-config cloud-deploy benchmark-set1 verify-models
 
 install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
@@ -48,3 +48,15 @@ validate-antispoof:
 
 docker-build:
 	docker build -t chaqimchi-ai .
+
+cloud-config:
+	docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet
+
+cloud-deploy:
+	./scripts/deploy_cloud.sh
+
+benchmark-set1:
+	$(PY) scripts/benchmark_streams.py --config config/production.yaml --duration 300 --output benchmark-set1.json
+
+verify-models:
+	$(PY) scripts/verify_model_bundle.py models/manifest.json

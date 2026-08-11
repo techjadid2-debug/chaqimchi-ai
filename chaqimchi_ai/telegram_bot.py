@@ -87,3 +87,24 @@ async def send_alert(name: str, score: float, photo_bytes: Optional[bytes] = Non
         await _bot_instance.send_photo(photo_bytes, caption)
     else:
         await _bot_instance.send_message(caption)
+
+
+async def send_event_alert(event: dict) -> None:
+    """Scene analytics hodisasini mavjud edge chatiga yuboradi."""
+    if _bot_instance is None:
+        return
+    labels = {
+        "zone_entered": "Cheklangan zonaga kirish",
+        "loitering": "Uzoq turish aniqlandi",
+        "occupancy_exceeded": "Odamlar soni limitdan oshdi",
+        "person_detected": "Odam aniqlandi",
+        "employee_seen": "Xodim aniqlandi",
+    }
+    kind = str(event.get("event_type", "event"))
+    text = (
+        f"⚠️ <b>{labels.get(kind, kind)}</b>\n"
+        f"Kamera: {event.get('camera_id', '-')}\n"
+        f"Zona: {event.get('zone') or '-'}\n"
+        f"Odamlar: {event.get('occupancy') if event.get('occupancy') is not None else '-'}"
+    )
+    await _bot_instance.send_message(text)

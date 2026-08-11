@@ -17,6 +17,7 @@ data/
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Maxfiy kalitlar va lokal credential fayllari
 .deploy_keys/

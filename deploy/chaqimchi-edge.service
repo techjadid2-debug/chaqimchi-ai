@@ -1,0 +1,25 @@
+[Unit]
+Description=Chaqimchi AI Edge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chaqimchi
+Group=chaqimchi
+WorkingDirectory=/opt/chaqimchi/current
+EnvironmentFile=/etc/chaqimchi/edge.env
+ExecStart=/opt/chaqimchi/venv/bin/uvicorn webapp.main:app --host 127.0.0.1 --port 8742 --workers 1
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/chaqimchi/shared/data /opt/chaqimchi/shared/logs
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

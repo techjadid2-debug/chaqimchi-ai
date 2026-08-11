@@ -1,0 +1,12 @@
+{
+  "bundle": "set1-commercial-models",
+  "version": "1.0.0",
+  "licensed_for_commercial_use": false,
+  "files": {
+    "person_detector.onnx": "SHA256_REQUIRED",
+    "person_detector.rknn": "SHA256_REQUIRED",
+    "face_detection.onnx": "SHA256_REQUIRED",
+    "face_recognition.onnx": "SHA256_REQUIRED"
+  },
+  "license_reference": "CONTRACT_OR_LICENSE_REFERENCE_REQUIRED"
+}

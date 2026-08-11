@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, List, Optional, Set
 from chaqimchi_ai.audit import AuditLog
 from chaqimchi_ai.database import FaceDatabase
 from chaqimchi_ai.events import EventLog
+from chaqimchi_ai.outbox import EventOutbox
 from chaqimchi_ai.roi import RoiConfig
 from chaqimchi_ai.settings import AppSettings, load_app_settings
 
@@ -67,6 +68,7 @@ class AppContainer:
         self._db = db
         self._events = events
         self._audit = audit
+        self._outbox: Optional[EventOutbox] = None
         self._vision: Optional["VisionAgent"] = None
 
         # Lifespan tomonidan boshqariladigan holat.
@@ -75,6 +77,9 @@ class AppContainer:
         self.license_client: Optional["EdgeLicenseClient"] = None
         self.license_task: Optional[Any] = None
         self.retention_task: Optional[Any] = None
+        self.cloud_sync: Optional[Any] = None
+        self.cloud_sync_task: Optional[Any] = None
+        self.remote_config_revision: int = 0
         #: Oxirgi arxiv tozalash natijasi (`chaqimchi_ai.retention.PurgeResult`).
         self.last_purge: Optional[Any] = None
         self.ws_clients: List[Any] = []
@@ -114,6 +119,13 @@ class AppContainer:
                     y1=roi.y1,
                     x2=roi.x2,
                     y2=roi.y2,
+                ),
+                model_root=(
+                    (self.base_dir / cfg.face.model_root).resolve()
+                    if cfg.face.model_root and not Path(cfg.face.model_root).is_absolute()
+                    else Path(cfg.face.model_root).resolve()
+                    if cfg.face.model_root
+                    else None
                 ),
             )
         return self._engine
@@ -155,6 +167,17 @@ class AppContainer:
         if self._audit is None:
             self._audit = AuditLog(self.base_dir / self.settings.paths.audit_db)
         return self._audit
+
+    @property
+    def outbox(self) -> EventOutbox:
+        if self._outbox is None:
+            cfg = self.settings.cloud_sync
+            self._outbox = EventOutbox(
+                self.base_dir / "data" / "outbox.db",
+                max_bytes=cfg.queue_max_bytes,
+                retention_days=cfg.queue_days,
+            )
+        return self._outbox
 
     @property
     def vision(self) -> Optional["VisionAgent"]:
@@ -201,6 +224,13 @@ class AppContainer:
         if self.retention_task is not None:
             self.retention_task.cancel()
             self.retention_task = None
+
+        if self.cloud_sync_task is not None:
+            self.cloud_sync_task.cancel()
+            self.cloud_sync_task = None
+        if self.cloud_sync is not None:
+            await self.cloud_sync.close()
+            self.cloud_sync = None
 
         if self.camera_manager is not None:
             try:

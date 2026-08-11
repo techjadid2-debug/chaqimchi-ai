@@ -11,7 +11,10 @@ komponentlar `AppContainer` da (`app.state.container`).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import shutil
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,10 +27,14 @@ from fastapi.staticfiles import StaticFiles
 from chaqimchi_ai import telegram_bot
 from chaqimchi_ai.antispoof import build_checker
 from chaqimchi_ai.camera_manager import CameraManager
+from chaqimchi_ai.cloud_sync import CloudEventSync
+from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.licensing.client import EdgeLicenseClient
 from chaqimchi_ai.licensing.enforce import filter_cameras
 from chaqimchi_ai.retention import retention_loop
 from chaqimchi_ai.runtime.container import AppContainer
+from chaqimchi_ai.scene_analytics import build_scene_analyzer
+from chaqimchi_ai.settings import SceneSettings
 from webapp.errors import register_error_handlers
 from webapp.routers import auth, backup, calibrate, events, persons, system, vision
 
@@ -35,6 +42,43 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+def _apply_remote_scene_config(
+    container: AppContainer, payload: Dict, *, persist: bool = True
+) -> None:
+    revision = int(payload.get("revision", 0))
+    if revision <= container.remote_config_revision:
+        return
+    remote = payload.get("config") or {}
+    current = container.settings.scene.model_dump()
+    for key in ("occupancy_limit", "loitering_sec", "zones"):
+        if key in remote:
+            current[key] = remote[key]
+    scene = SceneSettings.model_validate(current)
+    container.settings.scene = scene
+    container.remote_config_revision = revision
+    if container.camera_manager:
+        for camera_id, analyzer in container.camera_manager.scene_analyzers.items():
+            analyzer.settings = scene
+            analyzer.zones = [zone for zone in scene.zones if zone.camera_id == camera_id]
+    if persist:
+        cache = container.base_dir / "data" / "remote_scene_config.json"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        temporary = cache.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporary, cache)
+
+
+def _load_remote_scene_cache(container: AppContainer) -> None:
+    cache = container.base_dir / "data" / "remote_scene_config.json"
+    if not cache.is_file():
+        return
+    try:
+        payload = json.loads(cache.read_text(encoding="utf-8"))
+        _apply_remote_scene_config(container, payload, persist=False)
+    except (OSError, ValueError, TypeError):
+        logger.warning("Remote scene config cache yaroqsiz", exc_info=True)
 
 
 # ── Litsenziya ───────────────────────────────────────────────────────────
@@ -93,14 +137,19 @@ def _make_on_face_match(container: AppContainer):
         face_data: Dict,
         image_path: Optional[str] = None,
     ) -> None:
-        container.events.log_event(
+        event = EdgeEvent(
+            event_type="employee_seen",
+            camera_id=camera_id,
             person_id=str(person_meta["id"]),
             person_name=person_meta["name"],
-            camera_id=camera_id,
             score=float(person_meta["score"]),
-            image_path=image_path,
+            model_version=container.settings.face.model_version,
+            snapshot_path=image_path,
             track_id=face_data.get("track_id"),
         )
+        container.events.log_edge_event(event)
+        if container.settings.cloud_sync.enabled:
+            container.outbox.enqueue(event)
 
         payload = {
             "type": "event",
@@ -139,6 +188,37 @@ def _make_on_face_match(container: AppContainer):
     return on_face_match
 
 
+def _make_on_scene_event(container: AppContainer):
+    async def on_scene_event(event: EdgeEvent) -> None:
+        container.events.log_edge_event(event)
+        if container.settings.cloud_sync.enabled:
+            container.outbox.enqueue(event)
+        payload = {
+            "type": "event",
+            **event.cloud_payload(),
+            "snapshot_url": (
+                f"/api/snapshots/{Path(event.snapshot_path).name}"
+                if event.snapshot_path
+                else None
+            ),
+        }
+        for client in list(container.ws_clients):
+            try:
+                await client.send_json(payload)
+            except Exception:
+                try:
+                    container.ws_clients.remove(client)
+                except ValueError:
+                    pass
+
+        if container.settings.telegram.enabled and event.severity in {"warning", "critical"}:
+            task = asyncio.create_task(telegram_bot.send_event_alert(event.cloud_payload()))
+            container.background_tasks.add(task)
+            task.add_done_callback(container.background_tasks.discard)
+
+    return on_scene_event
+
+
 async def _start_cameras(container: AppContainer) -> None:
     cfg = container.settings
     cameras = cfg.cameras
@@ -161,6 +241,11 @@ async def _start_cameras(container: AppContainer) -> None:
             live_index=cfg.antispoof.live_index,
         )
 
+    scene_analyzers = {
+        cam.id: build_scene_analyzer(cam.id, cfg.scene, container.base_dir)
+        for cam in cameras
+        if cam.enabled and cfg.scene.enabled
+    }
     container.camera_manager = CameraManager(
         container.engine,
         container.db,
@@ -175,6 +260,8 @@ async def _start_cameras(container: AppContainer) -> None:
         antispoof_enabled=cfg.antispoof.enabled,
         antispoof_min_blur=cfg.antispoof.min_blur_variance,
         antispoof_checker=antispoof_checker,
+        scene_analyzers={key: value for key, value in scene_analyzers.items() if value},
+        on_event=_make_on_scene_event(container),
     )
     on_match = _make_on_face_match(container)
     for cam in cameras:
@@ -191,7 +278,14 @@ async def lifespan(app: FastAPI):
     container: AppContainer = app.state.container
     cfg = container.settings
 
+    production_errors = cfg.production_errors()
+    if production_errors:
+        raise RuntimeError(
+            "Production konfiguratsiyasi xavfsiz emas: " + "; ".join(production_errors)
+        )
+
     container.warmup()
+    _load_remote_scene_cache(container)
 
     if cfg.telegram.enabled:
         await telegram_bot.init_bot(cfg.telegram.token, cfg.telegram.chat_id)
@@ -216,6 +310,35 @@ async def lifespan(app: FastAPI):
     # eski biometrik kadrlar muddatidan ortiq saqlanib qolmasligi kerak.
     container.retention_task = asyncio.create_task(retention_loop(container))
 
+    if cfg.cloud_sync.enabled:
+        def health_payload():
+            thermal = Path("/sys/class/thermal/thermal_zone0/temp")
+            try:
+                temperature = float(thermal.read_text().strip()) / 1000
+            except (OSError, ValueError):
+                temperature = None
+            disk = shutil.disk_usage(container.base_dir / "data")
+            queue = container.outbox.stats()
+            return {
+                "cameras_active": len(container.camera_manager.cameras)
+                if container.camera_manager
+                else 0,
+                "temperature_c": temperature,
+                "disk_free_bytes": disk.free,
+                "outbox_pending": queue["pending"],
+                "outbox_bytes": queue["bytes"],
+                "app_version": "0.3.0",
+                "model_version": cfg.face.model_version,
+            }
+
+        container.cloud_sync = CloudEventSync(
+            cfg.cloud_sync,
+            container.outbox,
+            health_provider=health_payload,
+            config_applier=lambda payload: _apply_remote_scene_config(container, payload),
+        )
+        container.cloud_sync_task = asyncio.create_task(container.cloud_sync.run())
+
     try:
         yield
     finally:
@@ -229,8 +352,16 @@ def create_app(container: Optional[AppContainer] = None) -> FastAPI:
         container: Testlar uchun tayyor konteyner. Berilmasa `config.yaml`
             asosida yangi konteyner quriladi (og'ir komponentlar dangasa).
     """
-    app = FastAPI(title="Chaqimchi AI — Server Edition", lifespan=lifespan)
-    app.state.container = container or AppContainer(BASE_DIR)
+    resolved_container = container or AppContainer(BASE_DIR)
+    production = resolved_container.settings.environment == "production"
+    app = FastAPI(
+        title="Chaqimchi AI — Server Edition",
+        lifespan=lifespan,
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
+    )
+    app.state.container = resolved_container
 
     origins = app.state.container.settings.server.cors_origins
     if origins:

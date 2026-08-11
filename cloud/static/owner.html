@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Chaqimchi AI — Do‘kon paneli</title>
+  <link rel="stylesheet" href="/assets/admin.css">
+  <style>
+    body{max-width:1180px;margin:auto;padding:24px} .hidden{display:none!important}
+    .login{max-width:440px;margin:10vh auto}.row{display:flex;gap:10px;flex-wrap:wrap}
+    input,select,button{padding:11px;border-radius:8px;border:1px solid #344155;background:#111827;color:#f8fafc}
+    button{cursor:pointer;background:#2563eb}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .card{background:#111827;border:1px solid #263449;border-radius:12px;padding:16px}.events{width:100%;border-collapse:collapse}
+    th,td{text-align:left;padding:10px;border-bottom:1px solid #263449}small{color:#94a3b8}.error{color:#f87171}
+  </style>
+</head>
+<body>
+  <section id="login" class="login card">
+    <h1>Chaqimchi AI</h1><p>Telegram orqali xavfsiz kirish</p>
+    <div class="row"><input id="telegram" placeholder="Telegram ID"><button onclick="requestOtp()">Kod olish</button></div>
+    <div id="verify" class="hidden"><div class="row"><input id="code" inputmode="numeric" maxlength="6" placeholder="6 xonali kod"><button onclick="verifyOtp()">Kirish</button></div></div>
+    <p id="loginMsg"></p>
+  </section>
+  <main id="app" class="hidden">
+    <div class="row" style="justify-content:space-between"><h1>Do‘kon nazorati</h1><button onclick="logout()">Chiqish</button></div>
+    <div class="cards"><div class="card"><small>Bugungi hodisalar</small><h2 id="total">0</h2></div><div class="card"><small>Odamlar</small><h2 id="people">0</h2></div><div class="card"><small>Zona hodisalari</small><h2 id="zones">0</h2></div><div class="card"><small>Edge holati</small><h2 id="edgeHealth">—</h2></div></div>
+    <div class="card" style="margin-top:16px"><h2>Asosiy qoidalar</h2><div class="row"><label>Odam limiti <input id="occupancy" type="number" min="1"></label><label>Uzoq turish (soniya) <input id="loitering" type="number" min="5"></label><button onclick="saveConfig()">Saqlash</button></div><small>Zona polygonlari owner API orqali site survey paytida kiritiladi. Xodim Face ID’i maxfiylik sabab faqat edge lokal panelida ro‘yxatga olinadi.</small></div>
+    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Oxirgi hodisalar</h2><button onclick="loadData()">Yangilash</button></div><div style="overflow:auto"><table class="events"><thead><tr><th>Vaqt</th><th>Kamera</th><th>Hodisa</th><th>Zona/xodim</th><th>Rasm</th></tr></thead><tbody id="events"></tbody></table></div></div>
+  </main>
+<script>
+let token=localStorage.getItem('chaqimchi_owner_token')||'';
+const $=id=>document.getElementById(id);
+async function requestOtp(){const id=$('telegram').value.trim();const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegram_id:id})});const d=await r.json();$('loginMsg').textContent=d.message||d.detail||'';$('verify').classList.remove('hidden')}
+async function verifyOtp(){const params=new URLSearchParams(location.search);const body={telegram_id:$('telegram').value.trim(),code:$('code').value.trim()};if(params.get('site'))body.site_id=params.get('site');const r=await fetch('/api/v1/owner/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
+async function api(path){const r=await fetch(path,{headers:{Authorization:`Bearer ${token}`}});if(r.status===401){logout();throw new Error('Session tugadi')}return r.json()}
+let currentConfig=null;
+async function loadData(){const [stats,data,health,config]=await Promise.all([api('/api/v1/owner/stats'),api('/api/v1/owner/events?limit=100'),api('/api/v1/owner/health'),api('/api/v1/owner/config')]);currentConfig=config.config;$('total').textContent=stats.total;$('people').textContent=stats.by_type.person_detected||0;$('zones').textContent=stats.by_type.zone_entered||0;const device=health.devices[0];$('edgeHealth').textContent=device?`${device.health.cameras_active}/8 · ${device.health.temperature_c??'—'}°C`:'Offline';$('occupancy').value=currentConfig.occupancy_limit;$('loitering').value=currentConfig.loitering_sec;$('events').innerHTML=data.events.map(e=>`<tr><td>${new Date(e.occurred_at).toLocaleString()}</td><td>${e.camera_id}</td><td>${e.event_type}</td><td>${e.zone||e.person_name||'—'}</td><td>${e.snapshot_key?`<a href="#" onclick="snapshot('${e.event_id}');return false">Ko‘rish</a>`:'—'}</td></tr>`).join('')}
+async function saveConfig(){if(!currentConfig)return;const body={...currentConfig,occupancy_limit:Number($('occupancy').value),loitering_sec:Number($('loitering').value)};const r=await fetch('/api/v1/owner/config',{method:'PUT',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)alert((await r.json()).detail||'Saqlanmadi');else await loadData()}
+async function snapshot(id){const r=await fetch(`/api/v1/owner/events/${id}/snapshot`,{headers:{Authorization:`Bearer ${token}`}});if(r.ok)window.open(URL.createObjectURL(await r.blob()),'_blank')}
+function showApp(){$('login').classList.add('hidden');$('app').classList.remove('hidden');loadData().catch(()=>{})}
+function logout(){token='';localStorage.removeItem('chaqimchi_owner_token');location.reload()}
+if(token)showApp();
+</script>
+</body>
+</html>

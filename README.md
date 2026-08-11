@@ -1,5 +1,11 @@
 # Chaqimchi AI
 
+> Production Set-1: 8 kamera, NVR + edge analytics, Telegram va cloud owner panel.
+
+Production arxitekturasi, apparat BOM’i, o‘rnatish, benchmark, backup va rollback bo‘yicha yagona qo‘llanma: [docs/PRODUCTION_SET1.md](docs/PRODUCTION_SET1.md).
+
+Muhim: repository’dagi InsightFace demo modeli commercial mahsulot litsenziyasi degani emas. Litsenziyalangan model manifesti tasdiqlanmaguncha production Face ID fail-closed holatda qoladi. Oddiy mijozlar uchun persistent Face ID V1 scope’ida yo‘q.
+
 Real vaqtga yaqin yuzni tanish: SCRFD deteksiya, ArcFace 512 embedding, ko‘p kamera va veb-dashboard.
 
 ## Talablar

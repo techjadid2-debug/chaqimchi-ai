@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from typing import Optional
 
 from fastapi import HTTPException
@@ -33,7 +34,7 @@ def verify_api_key(
             status_code=503,
             detail="API kalit yoqilgan, lekin CHAQIMCHI_API_KEY yoki config.security.api_key berilmagan",
         )
-    if not x_api_key or x_api_key.strip() != expected:
+    if not x_api_key or not secrets.compare_digest(x_api_key.strip(), expected):
         raise HTTPException(status_code=401, detail="Noto‘g‘ri yoki yo‘q API kalit (X-API-Key)")
 
 

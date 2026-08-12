@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Protocol, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
 import cv2
 import numpy as np
 
 from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.face_tracker import FaceTracker
+from chaqimchi_ai.retail.lines import CountingLine, DwellTracker, LineCounter
+from chaqimchi_ai.retail.tracker import MotionTracker
 from chaqimchi_ai.settings import SceneSettings, SceneZoneSettings
 
 logger = logging.getLogger(__name__)
@@ -189,10 +190,34 @@ class SceneAnalyzer:
         self.detector = detector
         self.settings = settings
         self.motion = MotionGate(settings.motion_min_area_ratio)
-        self.tracker = FaceTracker(iou_threshold=0.25, max_missed_frames=10)
+        # Yuz uchun mo'ljallangan IoU tracker do'kon eshigida ishlamaydi: normal
+        # yurgan odam bir kadrda ramkasining yarmidan ko'p siljiydi va track
+        # uziladi — kirish kam sanaladi.  Batafsil `retail/tracker.py` da.
+        self.tracker = MotionTracker(iou_threshold=0.2, max_missed_frames=15)
         self.zones: List[SceneZoneSettings] = [
             zone for zone in settings.zones if zone.camera_id == camera_id
         ]
+        self.lines = LineCounter(
+            [
+                CountingLine(
+                    name=line.name,
+                    camera_id=line.camera_id,
+                    start=line.start,
+                    end=line.end,
+                    swap_direction=line.swap_direction,
+                )
+                for line in settings.lines
+                if line.camera_id == camera_id
+            ]
+        )
+        self.dwell = DwellTracker(
+            {
+                zone.name: float(zone.dwell_sec)
+                for zone in self.zones
+                if zone.dwell_sec is not None
+            }
+        )
+        self._queue_alerted = False
         self._last_analysis = 0.0
         self._track_first_seen: Dict[int, float] = {}
         self._track_last_seen: Dict[int, float] = {}
@@ -221,6 +246,10 @@ class SceneAnalyzer:
         events: List[EdgeEvent] = []
         height, width = frame.shape[:2]
         active_ids: set[int] = set()
+        #: Shu kadrda har zonada nechta odam bor.  Navbat aynan shundan
+        #: hisoblanadi — `_track_zones` da 120 sekundgacha eskirgan tracklar
+        #: qolib ketadi va navbat bo'shagan bo'lsa ham to'la ko'rinardi.
+        zone_counts: Dict[str, int] = {}
 
         for detection in detections:
             track_id = int(detection["track_id"])
@@ -243,6 +272,8 @@ class SceneAnalyzer:
             current_zones = {
                 zone.name for zone in self.zones if _inside(center, zone.polygon)
             }
+            for zone_name in current_zones:
+                zone_counts[zone_name] = zone_counts.get(zone_name, 0) + 1
             previous_zones = self._track_zones.setdefault(track_id, set())
             for zone_name in current_zones - previous_zones:
                 zone = next(item for item in self.zones if item.name == zone_name)
@@ -259,6 +290,32 @@ class SceneAnalyzer:
                 )
             self._track_zones[track_id] = current_zones
 
+            # Kirish/chiqish — konversiya hisobining maxraji.
+            for crossing in self.lines.update(track_id, center):
+                events.append(
+                    EdgeEvent(
+                        event_type="line_crossed",
+                        camera_id=self.camera_id,
+                        track_id=track_id,
+                        direction=crossing.direction,
+                        line=crossing.line,
+                        metadata={"bbox": detection["bbox"]},
+                    )
+                )
+
+            # Zonada uzoq turish — "tokcha oldida 3 daqiqa turdi".
+            for alert in self.dwell.update(track_id, current_zones, now):
+                events.append(
+                    EdgeEvent(
+                        event_type="dwell_exceeded",
+                        camera_id=self.camera_id,
+                        track_id=track_id,
+                        zone=alert.zone,
+                        dwell_sec=round(alert.dwell_sec, 1),
+                        metadata={"bbox": detection["bbox"]},
+                    )
+                )
+
             elapsed = now - self._track_first_seen[track_id]
             if elapsed >= self.settings.loitering_sec and self._emit_allowed(
                 "loitering", str(track_id), now
@@ -273,6 +330,30 @@ class SceneAnalyzer:
                         metadata={"duration_sec": round(elapsed, 1), "bbox": detection["bbox"]},
                     )
                 )
+
+        # Navbat: kassa zonasidagi odam soni.  Bandlik kabi latch bilan —
+        # navbat tarqalmaguncha qayta ogohlantirilmaydi.
+        queue_zones = [zone.name for zone in self.zones if zone.queue]
+        longest_queue = 0
+        longest_zone: Optional[str] = None
+        for zone_name in queue_zones:
+            waiting = zone_counts.get(zone_name, 0)
+            if waiting > longest_queue:
+                longest_queue, longest_zone = waiting, zone_name
+        if queue_zones:
+            if longest_queue >= self.settings.queue_limit and not self._queue_alerted:
+                self._queue_alerted = True
+                events.append(
+                    EdgeEvent(
+                        event_type="queue_threshold_exceeded",
+                        severity="warning",
+                        camera_id=self.camera_id,
+                        zone=longest_zone,
+                        queue_length=longest_queue,
+                    )
+                )
+            elif longest_queue < self.settings.queue_limit:
+                self._queue_alerted = False
 
         occupancy = len(detections)
         if occupancy >= self.settings.occupancy_limit and not self._occupancy_alerted:
@@ -293,6 +374,12 @@ class SceneAnalyzer:
             self._track_last_seen.pop(track_id, None)
             self._track_first_seen.pop(track_id, None)
             self._track_zones.pop(track_id, None)
+        if stale:
+            # Chiziq va dwell holati ham tozalansin — aks holda kun bo'yi
+            # o'sib boradigan lug'atlar 8/128 qurilmada xotirani yeydi.
+            alive = set(self._track_last_seen)
+            self.lines.retain(alive)
+            self.dwell.retain(alive)
         return events
 
 
@@ -306,11 +393,22 @@ def build_scene_analyzer(
     model_path = Path(settings.model_path)
     if not model_path.is_absolute():
         model_path = base_dir / model_path
-    detector_class = RKNNPersonDetector if settings.backend == "rknn" else OpenCVDnnPersonDetector
-    detector = detector_class(
-        model_path,
-        input_size=settings.input_size,
-        confidence=settings.confidence,
-        nms_threshold=settings.nms_threshold,
-    )
+    if settings.backend == "openvino":
+        # Import shu yerda: OpenVINO faqat qurilmada o'rnatiladi, ishlab
+        # chiqish mashinasida yo'q.
+        from chaqimchi_ai.retail.detector_ov import OpenVINOPersonDetector
+
+        detector: PersonDetector = OpenVINOPersonDetector(
+            model_path, confidence=settings.confidence
+        )
+    else:
+        detector_class = (
+            RKNNPersonDetector if settings.backend == "rknn" else OpenCVDnnPersonDetector
+        )
+        detector = detector_class(
+            model_path,
+            input_size=settings.input_size,
+            confidence=settings.confidence,
+            nms_threshold=settings.nms_threshold,
+        )
     return SceneAnalyzer(camera_id, detector, settings)

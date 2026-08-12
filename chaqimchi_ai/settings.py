@@ -74,6 +74,12 @@ class SceneZoneSettings(BaseModel):
     camera_id: str
     polygon: List[Tuple[float, float]]
     restricted: bool = False
+    #: Navbat zonasi (kassa oldi).  Ichidagi odam soni `scene.queue_limit` dan
+    #: oshsa `queue_threshold_exceeded` chiqadi.
+    queue: bool = False
+    #: Shu zonada shuncha soniyadan uzoq turgan mijoz uchun `dwell_exceeded`.
+    #: `None` — zona uchun dwell o'lchanmaydi (yo'lak, kirish maydoni).
+    dwell_sec: Optional[int] = Field(default=None, ge=5, le=86400)
 
     @field_validator("polygon")
     @classmethod
@@ -86,9 +92,33 @@ class SceneZoneSettings(BaseModel):
         return points
 
 
+class SceneLineSettings(BaseModel):
+    """Kirish/chiqish chizig'i.
+
+    `start`→`end` yo'nalishining chap tomoni "ichkari" hisoblanadi.  O'rnatuvchi
+    teskari chizib qo'ysa `swap_direction: true` yetadi — obyektga borib
+    chiziqni qayta chizish shart emas.
+    """
+
+    name: str
+    camera_id: str
+    start: Tuple[float, float]
+    end: Tuple[float, float]
+    swap_direction: bool = False
+
+    @field_validator("start", "end")
+    @classmethod
+    def _point(cls, value: Any) -> Tuple[float, float]:
+        point = (float(value[0]), float(value[1]))
+        if any(coordinate < 0 or coordinate > 1 for coordinate in point):
+            raise ValueError("chiziq nuqtalari 0..1 oralig'ida bo'lishi kerak")
+        return point
+
+
 class SceneSettings(BaseModel):
     enabled: bool = False
-    backend: Literal["onnx", "rknn"] = "onnx"
+    #: `openvino` — Sotqin (Intel N100) uchun asosiy yo'l.
+    backend: Literal["onnx", "rknn", "openvino"] = "onnx"
     model_path: Optional[str] = None
     confidence: float = Field(default=0.45, ge=0.05, le=0.99)
     nms_threshold: float = Field(default=0.45, ge=0.05, le=0.99)
@@ -99,7 +129,10 @@ class SceneSettings(BaseModel):
     loitering_sec: int = Field(default=60, ge=5, le=86400)
     occupancy_limit: int = Field(default=20, ge=1, le=10000)
     event_debounce_sec: int = Field(default=30, ge=1, le=3600)
+    #: Navbatdagi odam soni shundan oshsa `queue_threshold_exceeded`.
+    queue_limit: int = Field(default=5, ge=1, le=1000)
     zones: List[SceneZoneSettings] = Field(default_factory=list)
+    lines: List[SceneLineSettings] = Field(default_factory=list)
 
 
 class StorageSettings(BaseModel):

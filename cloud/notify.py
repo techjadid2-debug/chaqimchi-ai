@@ -39,6 +39,11 @@ EVENT_LABELS: Dict[str, str] = {
     "zone_entered": "Taqiqlangan zonaga kirish",
     "loitering": "Uzoq turish",
     "occupancy_exceeded": "Bandlik chegarasi oshdi",
+    "line_crossed": "Kirish/chiqish",
+    "dwell_exceeded": "Zonada uzoq turdi",
+    "queue_threshold_exceeded": "Navbat uzun",
+    "after_hours_presence": "Ish vaqtidan tashqari harakat",
+    "camera_tampered": "Kamera yopildi yoki burildi",
 }
 
 

@@ -11,13 +11,29 @@ from pydantic import BaseModel, Field
 from chaqimchi_ai import __version__
 
 EventType = Literal[
+    # ── V1 ────────────────────────────────────────────────────────────────
     "person_detected",
     "employee_seen",
     "zone_entered",
     "loitering",
     "occupancy_exceeded",
+    # ── Retail (Chaqimchi Retail AI) ──────────────────────────────────────
+    #: Kirish/chiqish chizig'i kesildi.  `direction` bilan birga keladi —
+    #: mijozlar oqimi va konversiya hisobining asosi.
+    "line_crossed",
+    #: Mijoz zonada belgilangan vaqtdan uzoq turdi (`dwell_sec`).
+    "dwell_exceeded",
+    #: Navbatdagi odam soni chegaradan oshdi (`queue_length`).
+    "queue_threshold_exceeded",
+    #: Ish vaqtidan tashqari harakat.
+    "after_hours_presence",
+    #: Kamera yopildi, burildi yoki ko'rinishi buzildi.
+    "camera_tampered",
 ]
 Severity = Literal["info", "warning", "critical"]
+
+#: Kirish/chiqish yo'nalishi.  Chiziq normalidan qaysi tomonga o'tilgani.
+Direction = Literal["in", "out"]
 
 
 def utc_now_iso() -> str:
@@ -37,6 +53,19 @@ class EdgeEvent(BaseModel):
     score: Optional[float] = None
     zone: Optional[str] = None
     occupancy: Optional[int] = None
+    # ── Retail maydonlari ─────────────────────────────────────────────────
+    #
+    # Bular `metadata` ichida ham turishi mumkin edi, lekin KPI hisoboti
+    # aynan shular bo'yicha guruhlaydi (kuniga nechta kirish, o'rtacha navbat).
+    # JSON ichidan qidirish esa indekssiz va sekin bo'lardi.
+    #: `line_crossed` uchun: qaysi tomonga o'tildi.
+    direction: Optional[Direction] = None
+    #: Kesilgan chiziq yoki tegishli zona nomi.
+    line: Optional[str] = None
+    #: `dwell_exceeded` uchun: zonada necha soniya turgani.
+    dwell_sec: Optional[float] = None
+    #: `queue_threshold_exceeded` uchun: navbatdagi odam soni.
+    queue_length: Optional[int] = None
     snapshot_path: Optional[str] = None
     has_snapshot: bool = False
     metadata: Dict[str, Any] = Field(default_factory=dict)

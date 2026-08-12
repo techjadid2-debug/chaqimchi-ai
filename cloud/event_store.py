@@ -135,6 +135,36 @@ class EventStore:
         with self._connect() as conn:
             for statement in statements:
                 conn.execute(statement)
+            self._migrate(conn)
+
+    def _existing_columns(self, conn: Any, table: str) -> set:
+        """Jadvaldagi ustunlar.  Ikkala dialekt uchun ham ishlaydi."""
+        if self.postgres:
+            rows = conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name=%s",
+                (table,),
+            ).fetchall()
+            return {str(self._dict(row)["column_name"]) for row in rows}
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        return {str(row["name"]) for row in rows}
+
+    def _migrate(self, conn: Any) -> None:
+        """Retail ustunlarini mavjud bazaga qo'shadi.
+
+        `ADD COLUMN` ni sinab ko'rib xatoni yutish mumkin emas: PostgreSQL'da
+        muvaffaqiyatsiz statement butun tranzaksiyani bekor qiladi.  Shu sabab
+        avval ustun bor-yo'qligi tekshiriladi.
+        """
+        existing = self._existing_columns(conn, "production_events")
+        retail_columns = (
+            ("direction", "TEXT"),
+            ("line_name", "TEXT"),
+            ("dwell_sec", "REAL"),
+            ("queue_length", "INTEGER"),
+        )
+        for name, column_type in retail_columns:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE production_events ADD COLUMN {name} {column_type}")
 
     @staticmethod
     def _dict(row: Any) -> Dict[str, Any]:
@@ -147,8 +177,9 @@ class EventStore:
             INSERT INTO production_events (
                 event_id,site_id,device_id,event_type,severity,camera_id,occurred_at,
                 ended_at,track_id,person_id,person_name,score,zone,occupancy,
+                direction,line_name,dwell_sec,queue_length,
                 metadata_json,edge_version,model_version,has_snapshot,created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(event_id) DO NOTHING
             """
         )
@@ -171,6 +202,10 @@ class EventStore:
                         event.score,
                         event.zone,
                         event.occupancy,
+                        event.direction,
+                        event.line,
+                        event.dwell_sec,
+                        event.queue_length,
                         json.dumps(event.metadata, ensure_ascii=False, separators=(",", ":")),
                         event.edge_version,
                         event.model_version,

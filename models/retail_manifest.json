@@ -1,0 +1,20 @@
+{
+  "model": "person-detection-retail-0013",
+  "source": "OpenVINO Open Model Zoo",
+  "license": "Apache-2.0",
+  "license_url": "https://github.com/openvinotoolkit/open_model_zoo/blob/master/LICENSE",
+  "input": "1x3x320x544 BGR",
+  "output": "1x1xNx7 SSD [image_id, label, conf, x_min, y_min, x_max, y_max]",
+  "gflops": 2.3,
+  "note": "sha256 bo'sh — birinchi yuklashdan keyin `--print-checksums` chiqargan qiymatni shu yerga yozing va commit qiling. Bo'sh sha256 bilan skript modelni o'rnatmaydi.",
+  "files": {
+    "person-detection-retail-0013.xml": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-detection-retail-0013/FP16/person-detection-retail-0013.xml",
+      "sha256": ""
+    },
+    "person-detection-retail-0013.bin": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-detection-retail-0013/FP16/person-detection-retail-0013.bin",
+      "sha256": ""
+    }
+  }
+}

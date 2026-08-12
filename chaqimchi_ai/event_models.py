@@ -8,6 +8,8 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from chaqimchi_ai import __version__
+
 EventType = Literal[
     "person_detected",
     "employee_seen",
@@ -38,7 +40,7 @@ class EdgeEvent(BaseModel):
     snapshot_path: Optional[str] = None
     has_snapshot: bool = False
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    edge_version: str = "0.3.0"
+    edge_version: str = __version__
     model_version: Optional[str] = None
 
     def cloud_payload(self) -> Dict[str, Any]:

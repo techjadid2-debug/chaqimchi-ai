@@ -10,6 +10,7 @@ RUN groupadd --gid 10001 chaqimchi && useradd --uid 10001 --gid 10001 --no-creat
 COPY --from=builder /install /usr/local
 COPY chaqimchi_ai ./chaqimchi_ai
 COPY cloud ./cloud
+COPY deploy ./deploy
 RUN mkdir -p /app/data/cloud && chown -R chaqimchi:chaqimchi /app/data
 USER 10001:10001
 EXPOSE 8750

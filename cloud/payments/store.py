@@ -108,9 +108,18 @@ class PaymentStore:
         months = max(1, min(60, int(months)))
 
         limits = get_plan(site["plan"])
-        # Davomat tarifida summa xodim soniga bog'liq.
-        monthly = limits.monthly_price(int(site.get("billable_persons") or 0))
-        amount = monthly * billable_months(months)
+        feature_summary = self.cloud.site_feature_summary(site_id)
+        if feature_summary["assignments"]:
+            # Published price-book qiymatlari assignment ichida snapshot qilingan.
+            # Shu sabab katalog keyin o'zgarsa mavjud mijoz invoice'i muzlaydi.
+            monthly = int(feature_summary["active_quote"]["monthly_uzs"])
+        else:
+            # Davomat tarifida summa xodim soniga bog'liq.
+            monthly = limits.monthly_price(int(site.get("billable_persons") or 0))
+        # Yillik chegirma barcha tarifga bir xil qo'llanadi: rasmiy saytdagi
+        # "2 oy bepul" va'dasi va hisob-faktura bitta qoidadan chiqishi shart.
+        charged_months = billable_months(months)
+        amount = monthly * charged_months
         invoice_id = uuid.uuid4().hex[:12]
 
         conn = self._connect()

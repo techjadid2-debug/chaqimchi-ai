@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex"><title>Sotqinni ulash — Chaqimchi AI</title>
+  <link rel="stylesheet" href="/assets/site.css?v=20260812-conversion">
+</head>
+<body class="utility-page">
+  <header class="nav-shell"><nav class="nav"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-black-crop-v1.png" alt=""></span><span>Chaqimchi <b>AI</b></span></a><div class="nav-actions"><a class="button button-small" href="/#pilot">Raqam qoldirish</a></div></nav></header>
+  <main class="utility-main">
+    <p class="eyebrow"><span></span> Sotqin ulash</p>
+    <h1>Sotqin bor ekan, qolganini biz qilamiz</h1>
+    <p class="hero-text">Agar Sotqin qurilmasi yoningizda bo‘lsa, telefon raqamingizni qoldiring. Mutaxassis pairing kod beradi va masofadan ulashga yordam beradi.</p>
+    <p><a class="button" href="/#pilot">Telefon raqam qoldirish</a></p>
+    <section class="utility-card">
+      <h2>Mutaxassis uchun tezkor ulash</h2>
+      <p>Bu bo‘lim faqat Chaqimchi xodimi yoki texnik mutaxassis pairing kod berganidan keyin ishlatiladi.</p>
+      <div class="connect-form">
+        <input id="pairCode" maxlength="6" pattern="[A-Fa-f0-9]{6}" placeholder="ABC123" aria-label="6 xonali pairing kod">
+        <button id="makeCommand" class="button" type="button">Buyruq yaratish</button>
+      </div>
+      <code id="command" class="command">Pairing kodni kiriting.</code>
+      <button id="copyCommand" class="button button-ghost" type="button" hidden style="margin-top:12px">Nusxalash</button>
+      <p id="copyStatus" class="form-status" role="status"></p>
+    </section>
+    <section class="utility-card">
+      <h2>Ulanishdan keyin</h2>
+      <ol>
+        <li>Sotqinni internetga ulang.</li>
+        <li>Mutaxassis qurilmani cloud’ga biriktiradi.</li>
+        <li>Kamera, NVR, tarif va funksiyalar masofadan sozlanadi.</li>
+      </ol>
+      <p class="model-note">Bu jarayon model o‘rnatmaydi. Hozir faqat qurilma autentifikatsiyasi, cloud aloqasi va monitoring sozlanadi.</p>
+    </section>
+  </main>
+  <script>
+    const code = document.getElementById('pairCode');
+    const output = document.getElementById('command');
+    const copy = document.getElementById('copyCommand');
+    const status = document.getElementById('copyStatus');
+    function make(){
+      const value=code.value.trim().toUpperCase();
+      if(!/^[A-F0-9]{6}$/.test(value)){status.textContent='6 xonali pairing kodni kiriting.';status.className='form-status error';return}
+      output.textContent=`curl -fsSL ${location.origin}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${location.origin} --code ${value}`;
+      copy.hidden=false;status.textContent='Buyruq tayyor.';status.className='form-status ok';
+    }
+    document.getElementById('makeCommand').addEventListener('click',make);
+    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(output.textContent);status.textContent='Buyruq nusxalandi.';status.className='form-status ok'}catch(_){status.textContent='Qo‘lda nusxalang.';status.className='form-status error'}});
+  </script>
+</body>
+</html>

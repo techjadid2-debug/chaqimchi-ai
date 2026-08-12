@@ -1,4 +1,4 @@
-# O‘rnatuvchi qo‘llanmasi
+# Chaqimchi Sotqin o‘rnatuvchi qo‘llanmasi
 
 ## 1. Cloud (markaz)
 
@@ -20,14 +20,30 @@ oling. Panelda **“Sinov xabari”** tugmasi bilan tekshiring.
 
 ```bash
 export CHAQIMCHI_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
-python scripts/provision_site.py "Oq Saroy Do'kon" --plan starter --months 12
+python scripts/provision_site.py "Oq Saroy Do'kon" --plan lite --months 1
 ```
 
 Chiqadi: `site_id`, `pairing_code`, narxlar.
 
-## 3. Mini PC (mijoz joyida)
+## 3. Sotqin R1 (mijoz joyida)
 
-`config/config.yaml`:
+Canonical profil: `config/lite.yaml`. Hozir AI modelsiz control-only agent
+o‘rnatiladi. Admin paneldagi pairing kod bilan:
+
+```bash
+sudo ./scripts/install_sotqin.sh
+sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py \
+  --cloud https://YOUR_DOMAIN --code ABC123
+sudo systemctl start chaqimchi-sotqin
+curl http://127.0.0.1:8742/health
+```
+
+Pairing skripti `/etc/chaqimchi/sotqin.env` dagi lokal secretlarni
+saqlaydi, cloud identifikatorlarini atomik yangilaydi va fayl huquqini `0600`
+qiladi. Admin onboarding ro‘yxatida Sotqin juftlangan va online bo‘lishi
+kerak.
+
+Development uchun `config/config.yaml`:
 
 ```yaml
 license:

@@ -69,7 +69,11 @@ class AlertConfig:
             logger.warning("CHAQIMCHI_CLOUD_ALERT_INTERVAL_SEC son emas — standart qiymat")
             interval = DEFAULT_INTERVAL_SEC
         return AlertConfig(
-            token=os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip() or None,
+            token=(
+                os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+                or os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+                or None
+            ),
             chat_id=os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "").strip() or None,
             interval_sec=max(60, interval),
         )
@@ -288,7 +292,17 @@ class TelegramSender:
         self._client: Optional[httpx.AsyncClient] = None
 
     async def send(self, text: str) -> bool:
-        if not self.config.enabled:
+        if not self.config.chat_id:
+            return False
+        return await self.send_to(self.config.chat_id, text)
+
+    async def send_to(self, chat_id: str, text: str) -> bool:
+        """Bitta ishonchli chatga xabar yuboradi.
+
+        Leadlar uchun bir nechta ichki sales guruhini qo'llash kerak bo'lishi
+        mumkin. Token yagona bo'ladi, qabul qiluvchi esa alohida beriladi.
+        """
+        if not self.config.token or not chat_id:
             return False
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=15.0)
@@ -297,7 +311,7 @@ class TelegramSender:
             resp = await self._client.post(
                 url,
                 json={
-                    "chat_id": self.config.chat_id,
+                    "chat_id": chat_id,
                     "text": text,
                     "parse_mode": "HTML",
                     "disable_web_page_preview": True,
@@ -386,7 +400,7 @@ class AlertService:
         if not self.config.enabled:
             logger.info(
                 "Telegram ogohlantirishi o‘chiq "
-                "(CHAQIMCHI_CLOUD_TELEGRAM_TOKEN / _CHAT_ID berilmagan)"
+                "(CHAQIMCHI_CLOUD_TELEGRAM_TOKEN yoki OWNER token / _CHAT_ID berilmagan)"
             )
             return
         if self._task is None:

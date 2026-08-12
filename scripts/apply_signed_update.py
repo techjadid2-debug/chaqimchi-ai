@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Imzolangan edge paketini atomik o'rnatadi va health xatosida rollback qiladi."""
+"""Imzolangan Sotqin paketini atomik o'rnatadi va xatoda rollback qiladi."""
 
 from __future__ import annotations
 
 import argparse
 import os
+import platform
 import shutil
 import subprocess
 import tarfile
@@ -14,6 +15,26 @@ import urllib.request
 from pathlib import Path
 
 from chaqimchi_ai.signed_update import UpdateVerificationError, verify_release_manifest
+
+
+def _normalized_arch(value: str) -> str:
+    aliases = {"arm64": "aarch64", "amd64": "x86_64"}
+    key = value.strip().lower()
+    return aliases.get(key, key)
+
+
+def validate_release_target(manifest: dict, machine: str | None = None) -> None:
+    """V2 Sotqin paketining shu qurilmaga mo'ljallanganini tekshiradi."""
+    if int(manifest.get("schema_version", 1)) < 2:
+        return
+    if manifest.get("product") not in {"chaqimchi-sotqin", "chaqimchi-lite"}:
+        raise UpdateVerificationError("Release boshqa mahsulot uchun")
+    expected = _normalized_arch(str(manifest.get("target_arch", "")))
+    actual = _normalized_arch(machine or platform.machine())
+    if expected not in {"any", actual}:
+        raise UpdateVerificationError(
+            f"Release arxitekturasi mos emas: paket={expected}, qurilma={actual}"
+        )
 
 
 def _health(timeout: int = 90) -> bool:
@@ -38,6 +59,7 @@ def main() -> int:
 
     try:
         manifest = verify_release_manifest(args.archive, args.manifest, args.public_key)
+        validate_release_target(manifest)
     except UpdateVerificationError as exc:
         parser.error(str(exc))
     root = args.root.resolve()
@@ -56,8 +78,13 @@ def main() -> int:
             package.extractall(stage, filter="data")
         children = list(stage.iterdir())
         source = children[0] if len(children) == 1 and children[0].is_dir() else stage
-        if not (source / "webapp" / "main.py").is_file():
-            parser.error("Paketda webapp/main.py yo'q")
+        product = manifest.get("product", "chaqimchi-lite")
+        if product == "chaqimchi-sotqin":
+            required = source / "chaqimchi_ai" / "sotqin_agent.py"
+        else:
+            required = source / "webapp" / "main.py"
+        if not required.is_file():
+            parser.error(f"Paketda {required.relative_to(source)} yo'q")
         if source == stage:
             destination.mkdir()
             for child in children:
@@ -79,7 +106,7 @@ def main() -> int:
     current_tmp.unlink(missing_ok=True)
     current_tmp.symlink_to(destination, target_is_directory=True)
     os.replace(current_tmp, root / "current")
-    subprocess.run(["systemctl", "restart", "chaqimchi-edge"], check=True)
+    subprocess.run(["systemctl", "restart", "chaqimchi-sotqin"], check=True)
     if _health():
         print(f"Update muvaffaqiyatli: {manifest['version']}")
         return 0
@@ -89,7 +116,7 @@ def main() -> int:
         rollback_tmp.unlink(missing_ok=True)
         rollback_tmp.symlink_to(previous, target_is_directory=True)
         os.replace(rollback_tmp, root / "current")
-        subprocess.run(["systemctl", "restart", "chaqimchi-edge"], check=False)
+        subprocess.run(["systemctl", "restart", "chaqimchi-sotqin"], check=False)
     print("Health-check o'tmadi, oldingi versiyaga qaytildi")
     return 2
 

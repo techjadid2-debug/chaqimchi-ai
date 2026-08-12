@@ -1,10 +1,17 @@
 # Chaqimchi AI
 
-> Production Set-1: 8 kamera, NVR + edge analytics, Telegram va cloud owner panel.
+> Lokal qurilma — **Sotqin R1**: Intel N100 mini-kompyuter, NVR/IP kameralar
+> va Chaqimchi Cloud orasidagi xavfsiz gateway. AI inferens faqat cloud'da.
 
-Production arxitekturasi, apparat BOM’i, o‘rnatish, benchmark, backup va rollback bo‘yicha yagona qo‘llanma: [docs/PRODUCTION_SET1.md](docs/PRODUCTION_SET1.md).
+Mahsulot scope'i, edge/server chegarasi, o‘rnatish va rollout:
+[docs/CHAQIMCHI_LITE.md](docs/CHAQIMCHI_LITE.md). Batafsil apparat, benchmark,
+backup va rollback: [docs/PRODUCTION_SET1.md](docs/PRODUCTION_SET1.md).
 
 Muhim: repository’dagi InsightFace demo modeli commercial mahsulot litsenziyasi degani emas. Litsenziyalangan model manifesti tasdiqlanmaguncha production Face ID fail-closed holatda qoladi. Oddiy mijozlar uchun persistent Face ID V1 scope’ida yo‘q.
+
+Sotqin control plane pairing, hardware identity, heartbeat, cloud config,
+ACK/NACK va imzolangan update/rollbackni bajaradi. Media worker keyingi bosqichda
+ONVIF, RTSP, non-AI filter, shifrlangan buffer va cloud uploadni qo‘shadi.
 
 Real vaqtga yaqin yuzni tanish: SCRFD deteksiya, ArcFace 512 embedding, ko‘p kamera va veb-dashboard.
 
@@ -42,6 +49,7 @@ Muhit o‘zgaruvchisi: `CHAQIMCHI_CONFIG=/yo'l/config.yaml`
 | `make test` | Pytest |
 | `make lint` / `make fmt` | Ruff |
 | `make run-web` | FastAPI server (8742) |
+| `make run-sotqin` | Sotqin R1 control agent (8742) |
 | `make demo` | CLI kamera |
 | `make backup` | Baza zaxira nusxasi (`OUT=/Volumes/USB`) |
 | `make restore FILE=n.zip` | Nusxadan tiklash |
@@ -85,7 +93,9 @@ docker run -p 8742:8742 -v "$(pwd)/config:/app/config" chaqimchi-ai
 - O‘rnatuvchi: [docs/INSTALLER.md](docs/INSTALLER.md)
 - Cloud: `make run-cloud` + `CHAQIMCHI_CLOUD_ADMIN_KEY`
 - Admin panel: [http://127.0.0.1:8750/admin](http://127.0.0.1:8750/admin) — mijoz ochish, obunani uzaytirish/to‘xtatish, pairing kod, hisob-fakturalar
-- Mijoz ochish (CLI): `make provision NAME="Do'kon nomi" PLAN=starter`
+- Rasmiy sayt: [http://127.0.0.1:8750/](http://127.0.0.1:8750/) — Lite mahsuloti va pilot ariza
+- Sotqinni ulash: [http://127.0.0.1:8750/connect](http://127.0.0.1:8750/connect)
+- Lite mijoz ochish (CLI): `make provision NAME="Do'kon nomi" PLAN=lite MONTHS=1`
 - To‘lov (Payme/Click): [docs/TOLOV.md](docs/TOLOV.md) — hisob-faktura ochiladi,
   to‘lov tushgach obuna avtomatik uzayadi
 
@@ -111,6 +121,8 @@ docker run -p 8742:8742 -v "$(pwd)/config:/app/config" chaqimchi-ai
 ## Hujjatlar
 
 - [Umumiy reja](docs/MASTER_PLAN.md)
+- [Chaqimchi Lite: mahsulot, ulanish va rollout](docs/CHAQIMCHI_LITE.md)
+- [Sotqin R1: apparat va cloud kontrakti](docs/SOTQIN.md)
 - [Ko‘rish agenti (AI)](docs/KORISH_AGENTI.md) — narx jadvali bilan
 - [To‘lov integratsiyasi](docs/TOLOV.md)
 - [Arxitektura](docs/ARXITEKTURA.md)

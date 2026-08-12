@@ -1,0 +1,79 @@
+# Pilot deploy: existing serverdagi robosinf-caddy 80/443 ni boshqaradi.
+# Shu sabab bu stack o'z Caddy containerini ishga tushirmaydi.
+name: chaqimchi-ai
+
+services:
+  cloud:
+    build:
+      context: .
+      dockerfile: Dockerfile.cloud
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      CHAQIMCHI_S3_ENDPOINT: http://minio:9000
+    volumes:
+      - cloud_state:/app/data/cloud
+      - ./releases:/app/releases:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      edge:
+        aliases: [chaqimchi-cloud]
+      backend: {}
+    security_opt: [no-new-privileges:true]
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: .env.production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    restart: unless-stopped
+    env_file: .env.production
+    command: server /data --console-address :9001
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    env_file: .env.production
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
+        mc mb --ignore-existing "local/$${CHAQIMCHI_S3_BUCKET}";
+        mc anonymous set none "local/$${CHAQIMCHI_S3_BUCKET}"
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks: [backend]
+
+volumes:
+  postgres_data:
+  minio_data:
+  cloud_state:
+
+networks:
+  edge:
+    external: true
+    name: robosinf_default
+  backend:
+    internal: true

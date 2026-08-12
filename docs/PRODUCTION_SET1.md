@@ -1,8 +1,12 @@
-# Chaqimchi AI-1 Set-1 production qo‘llanmasi
+# Chaqimchi Lite production qo‘llanmasi
+
+> `Set-1` — mahsulotning eski ichki nomi. 2026-08 dan Orange Pi asosidagi
+> ushbu mahsulot **Chaqimchi Lite** deb ataladi. Yangi canonical konfiguratsiya
+> `config/lite.yaml`; `config/production.yaml` eski o‘rnatishlar uchun saqlanadi.
 
 ## Reliz tarkibi
 
-`v0.3.0` bitta obyekt va sakkizta kamera uchun quyidagilarni beradi:
+`v0.4.0` bitta obyekt va sakkizta kamera uchun quyidagilarni beradi:
 
 - motion-gated person detection;
 - person, zona, loitering va occupancy eventlari;
@@ -14,7 +18,7 @@
 
 Oddiy mijozlarga doimiy Face ID berilmaydi. Tizim “niyat”, “o‘g‘rilik” yoki jinoyatni taxmin qilmaydi. V1 faqat konfiguratsiya qilingan ko‘rinadigan hodisalarni qayd etadi.
 
-## Set-1 apparat nomzodlari
+## Chaqimchi Lite apparat nomzodlari
 
 Hikvision testi:
 
@@ -47,7 +51,7 @@ Cloud quyidagilarni tashqi portga chiqarmaydi: PostgreSQL, MinIO va legacy subsc
 Sayt va qurilma yaratish:
 
 ```bash
-python scripts/provision_site.py "Set-1 do‘kon" --plan enterprise --months 1
+python scripts/provision_site.py "Lite do‘kon" --plan lite --months 1
 ```
 
 Pairing javobidagi `site_id`, `device_id` va `device_token` edge env fayliga xavfsiz ko‘chiriladi. Owner Telegram ID’i admin API’dagi `POST /api/v1/admin/sites/{site_id}/members` orqali `owner` roli bilan qo‘shiladi.
@@ -60,15 +64,23 @@ https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<DOMAIN>/api/v1/teleg
 
 ## Edge o‘rnatish
 
+Hozirgi `v0.4.0` installer AI modelini emas, **Chaqimchi Lite control-only**
+agentini o‘rnatadi. Quyidagi model tekshiruvi AI sprinti ochilgunga qadar
+production onboarding uchun talab qilinmaydi.
+
 ```bash
 sudo ./scripts/install_edge.sh
-sudoedit /etc/chaqimchi/edge.env
-python scripts/verify_model_bundle.py /opt/chaqimchi/shared/models/manifest.json
+sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_edge.py \
+  --cloud https://YOUR_DOMAIN --code ABC123
 sudo systemctl start chaqimchi-edge
 curl http://127.0.0.1:8742/health
 ```
 
-Commercial model paketi repository’ga kiritilmaydi. `manifest.json` ichidagi `licensed_for_commercial_use`, license reference va barcha SHA-256 qiymatlari tasdiqlanmaguncha `CHAQIMCHI_FACE_MODEL_LICENSED=true` qilish taqiqlanadi. InsightFace taqdim etgan pretrained modellar commercial litsenziyasiz productionga qo‘yilmaydi.
+AI sprinti ochilgach commercial model paketi repository’ga kiritilmaydi.
+O‘sha bosqichda `python scripts/verify_model_bundle.py
+/opt/chaqimchi/shared/models/manifest.json` ishlatiladi. `licensed_for_commercial_use`,
+license reference va barcha SHA-256 qiymatlari tasdiqlanmaguncha
+`CHAQIMCHI_FACE_MODEL_LICENSED=true` qilish taqiqlanadi.
 
 Har bir do‘konda `scene.zones` normalized polygonlar bilan site survey asosida to‘ldiriladi. Face threshold real xodimlar va real yorug‘likdagi calibration dataset bilan belgilanadi.
 
@@ -76,9 +88,9 @@ Har bir do‘konda `scene.zones` normalized polygonlar bilan site survey asosida
 
 ```bash
 python scripts/benchmark_streams.py \
-  --config config/production.yaml \
+  --config config/lite.yaml \
   --duration 300 \
-  --output benchmark-set1.json
+  --output benchmark-lite.json
 ```
 
 Qabul mezoni:

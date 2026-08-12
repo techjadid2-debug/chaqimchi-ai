@@ -210,6 +210,42 @@ tbody tr:hover {
   font-weight: 600;
 }
 
+.readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.7rem;
+}
+
+.readiness-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+.readiness-item > span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 800;
+}
+
+.readiness-item.ready > span { color: var(--accent-green); background: rgba(16,185,129,.12); }
+.readiness-item.missing > span { color: var(--accent-amber); background: rgba(245,158,11,.12); }
+.readiness-item strong, .readiness-item small { display: block; }
+.readiness-item small { margin-top: .15rem; color: var(--text-secondary); font-size: .68rem; }
+
+.progress { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.08); }
+.progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent-green); }
+.onboarding-list { display: grid; gap: .55rem; }
+.onboarding-step { display: flex; gap: .65rem; align-items: center; padding: .7rem .8rem; border: 1px solid var(--glass-border); border-radius: 10px; }
+.onboarding-step.done span { color: var(--accent-green); }
+.onboarding-step.pending { color: var(--text-secondary); }
+
 /* Tugmalar va maydonlar */
 .btn {
   display: inline-flex;
@@ -367,3 +403,9 @@ label {
 .kv dt {
   color: var(--text-secondary);
 }
+
+.feature-choices { display: grid; gap: .45rem; margin-top: .85rem; max-height: 460px; overflow: auto; padding-right: .25rem; }
+.feature-choice { display: grid; grid-template-columns: auto 1fr 70px; align-items: center; gap: .7rem; padding: .65rem .75rem; border: 1px solid var(--glass-border); border-radius: 9px; cursor: pointer; }
+.feature-choice small { display: block; color: var(--text-secondary); font-size: .72rem; margin-top: .15rem; }
+.feature-choice input[type="number"] { min-width: 0; padding: .4rem; }
+.quote-box { margin-top: .8rem; padding: .7rem .8rem; border-radius: 8px; background: rgba(16, 185, 129, .1); color: var(--text); }

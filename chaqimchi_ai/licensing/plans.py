@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Dict, Literal
 
+from chaqimchi_ai.sotqin_profile import MAX_CAMERAS
+
 PlanTier = Literal[
+    # Dastlabki tijoriy mahsulot — Orange Pi asosidagi Chaqimchi Lite.
+    "lite",
     # Kamera bo'yicha — do'kon, ombor, ofis xavfsizligi
     "starter",
     "business",
@@ -16,6 +21,29 @@ PlanTier = Literal[
     "staff_business",
     "staff_enterprise",
 ]
+
+# Sotqin platforma bazasi; AI funksiyalar kamera bo'yicha ustiga qo'shiladi.
+LITE_MONTHLY_PRICE_USD_CENTS = 2_000
+DEFAULT_USD_RATE_UZS = 13_000
+
+
+def usd_rate_uzs() -> int:
+    """Hisob-faktura uchun USD/UZS kursi.
+
+    Lite narxi USD'da qat'iy ($30), Payme/Click esa UZS qabul qiladi. Kurs
+    serverda boshqariladi va hisob ochilgan paytdagi UZS summa invoice ichida
+    saqlanib qoladi. Tashqi kurs servisiga runtime bog'liqlik ataylab yo'q.
+    """
+    raw = os.environ.get("CHAQIMCHI_USD_RATE_UZS", "").strip()
+    if not raw:
+        return DEFAULT_USD_RATE_UZS
+    try:
+        rate = int(raw)
+    except ValueError as exc:
+        raise ValueError("CHAQIMCHI_USD_RATE_UZS butun son bo'lishi kerak") from exc
+    if not 1_000 <= rate <= 100_000:
+        raise ValueError("CHAQIMCHI_USD_RATE_UZS 1000–100000 oralig'ida bo'lishi kerak")
+    return rate
 
 
 @dataclass(frozen=True)
@@ -30,10 +58,16 @@ class PlanLimits:
     install_price_uzs: int
     #: Har bir xodim uchun narx. 0 — tarif kamera bo'yicha.
     price_per_person_uzs: int = 0
+    #: USD'da sotiladigan tarif uchun sentdagi qat'iy narx. 0 — faqat UZS.
+    monthly_price_usd_cents: int = 0
 
     @property
     def is_per_person(self) -> bool:
         return self.price_per_person_uzs > 0
+
+    @property
+    def monthly_price_usd(self) -> float:
+        return self.monthly_price_usd_cents / 100
 
     def monthly_price(self, persons: int = 0) -> int:
         """Oylik to‘lov.
@@ -41,6 +75,10 @@ class PlanLimits:
         Xodim tarifida: eng kam narx yoki `xodim × narx` — qaysi biri katta.
         Kamera tarifida `persons` e’tiborga olinmaydi.
         """
+        if self.monthly_price_usd_cents:
+            # Sent × (so'm / dollar) / 100. Yuqoriga yaxlitlash bir sentlik
+            # qoldiq sabab invoice summasi kamayib ketmasligini ta'minlaydi.
+            return (self.monthly_price_usd_cents * usd_rate_uzs() + 99) // 100
         if not self.is_per_person:
             return self.monthly_price_uzs
         return max(self.monthly_price_uzs, self.price_per_person_uzs * max(0, persons))
@@ -58,6 +96,19 @@ class PlanLimits:
 
 
 PLANS: Dict[PlanTier, PlanLimits] = {
+    "lite": PlanLimits(
+        # Sotqin N100 8/128 R1: 4 kamera SLA, 8 kamera qabul testidan keyingi maksimum.
+        max_cameras=MAX_CAMERAS,
+        max_persons=200,
+        retention_days=30,
+        telegram_allowed=True,
+        # Faqat fallback/display qiymat; amaldagi invoice `monthly_price()`
+        # orqali CHAQIMCHI_USD_RATE_UZS bilan hisoblanadi.
+        monthly_price_uzs=LITE_MONTHLY_PRICE_USD_CENTS * DEFAULT_USD_RATE_UZS // 100,
+        # Orange Pi, NVR/kameralar va montaj alohida smeta qilinadi.
+        install_price_uzs=0,
+        monthly_price_usd_cents=LITE_MONTHLY_PRICE_USD_CENTS,
+    ),
     "starter": PlanLimits(
         max_cameras=1,
         max_persons=50,
@@ -105,7 +156,7 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         price_per_person_uzs=12_000,
     ),
     "staff_enterprise": PlanLimits(
-        max_cameras=15,
+        max_cameras=MAX_CAMERAS,
         max_persons=2000,
         retention_days=365,
         telegram_allowed=True,

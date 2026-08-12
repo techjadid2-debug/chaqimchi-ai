@@ -39,3 +39,27 @@ def test_outbox_enforces_size_limit(tmp_path: Path) -> None:
         )
     assert outbox.stats()["bytes"] <= 800
     assert outbox.stats()["pending"] < 10
+
+
+def test_outbox_keeps_critical_events_before_batch_events_when_disk_is_full(tmp_path: Path) -> None:
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=700)
+    for number in range(3):
+        outbox.enqueue(
+            EdgeEvent(
+                event_type="person_detected",
+                severity="info",
+                camera_id="cam",
+                metadata={"padding": "x" * 180, "number": number},
+            )
+        )
+    critical = EdgeEvent(
+        event_type="zone_entered",
+        severity="critical",
+        camera_id="cam",
+        metadata={"padding": "x" * 180},
+    )
+    outbox.enqueue(critical)
+
+    rows = outbox.pending()
+    assert rows[0]["event_id"] == critical.event_id
+    assert any(row["event_id"] == critical.event_id for row in rows)

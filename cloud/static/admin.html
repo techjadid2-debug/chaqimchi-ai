@@ -41,6 +41,40 @@
     <!-- Ko'rsatkichlar -->
     <section class="stats" id="stats"></section>
 
+    <section class="card">
+      <div class="card-title">
+        <span>Production tayyorligi</span>
+        <span id="readinessSummary" class="muted" style="font-weight:400;font-size:.8rem"></span>
+      </div>
+      <div id="readiness" class="readiness-grid"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <span>Cloud AI funksiyalar katalogi</span>
+        <span id="catalogInfo" class="muted" style="font-weight:400;font-size:.8rem"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Funksiya</th><th>Tur</th><th>Navbat</th><th>Narx</th><th>Tannarx ceiling</th></tr></thead>
+          <tbody id="catalogBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <span>Pilot arizalar</span>
+        <span id="leadCount" class="muted" style="font-weight:400;font-size:.8rem"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Murojaat</th><th>Obyekt</th><th>Kamera</th><th>Holat</th><th>Sana</th><th></th></tr></thead>
+          <tbody id="leadsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Yangi mijoz -->
     <section class="card">
       <div class="card-title">Yangi mijoz ochish</div>
@@ -52,9 +86,12 @@
         <div>
           <label for="cPlan">Tarif</label>
           <select id="cPlan">
-            <optgroup label="Kamera bo'yicha (do'kon, ombor)">
+            <optgroup label="Asosiy mahsulot">
+              <option value="lite" selected>Sotqin Base — $20/oy + AI funksiyalar</option>
+            </optgroup>
+            <optgroup label="Legacy tariflar">
               <option value="starter">Starter</option>
-              <option value="business" selected>Business</option>
+              <option value="business">Business</option>
               <option value="enterprise">Enterprise</option>
             </optgroup>
             <optgroup label="Xodim bo'yicha (davomat)">
@@ -71,7 +108,7 @@
         </div>
         <div>
           <label for="cMonths">Obuna (oy)</label>
-          <input id="cMonths" type="number" min="1" max="60" value="12" />
+          <input id="cMonths" type="number" min="1" max="60" value="1" />
         </div>
         <div>
           <label for="cPhone">Telefon</label>
@@ -156,12 +193,16 @@
     const KEY_STORAGE = "chaqimchi_admin_key";
     let adminKey = sessionStorage.getItem(KEY_STORAGE) || "";
     let sites = [];
+    let featureCatalog = [];
+    let businessTemplates = [];
+    let leads = [];
     let invoices = [];
     let providers = { payme: false, click: false, public_url: "" };
 
     const $ = (id) => document.getElementById(id);
 
     const PLAN_LABEL = {
+      lite: "Sotqin Base",
       starter: "Starter", business: "Business", enterprise: "Enterprise",
       staff_starter: "Davomat S", staff_business: "Davomat M", staff_enterprise: "Davomat L",
     };
@@ -193,8 +234,14 @@
     };
     // Hisob holatlari mavjud badge ranglariga moslanadi.
     const INVOICE_BADGE = { pending: "grace", paid: "active", cancelled: "expired" };
+    const LEAD_LABEL = {
+      new: "Yangi", contacted: "Bog'lanildi", qualified: "Mos", converted: "Mijoz bo'ldi", closed: "Yopildi",
+    };
+    const LEAD_BADGE = { new: "grace", contacted: "online", qualified: "active", converted: "active", closed: "not_paired" };
 
     const uzs = (n) => Number(n || 0).toLocaleString("ru-RU") + " so'm";
+    const monthly = (plan, amount, usdAmount = 0) =>
+      usdAmount ? `$${Number(usdAmount).toLocaleString("en-US")}/oy ≈ ${uzs(amount)}` : `${uzs(amount)}/oy`;
     const esc = (s) =>
       String(s ?? "").replace(/[&<>"']/g, (c) =>
         ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
@@ -269,6 +316,7 @@
       const brokenCount = (s.offline || 0) + (s.not_paired || 0);
       const items = [
         ["Mijozlar", s.total_sites],
+        ["Yangi arizalar", s.new_leads || 0],
         ["Faol", s.active],
         ["7 kunda tugaydi", s.expiring_soon],
         // To'lovi joyida, lekin tizimi ishlamayotgan mijozlar — qo'ng'iroq qilish kerak.
@@ -283,6 +331,46 @@
             `<div class="stat${alert ? " stat-alert" : ""}"><div class="stat-value">${esc(value)}</div><div class="stat-label">${label}</div></div>`
         )
         .join("");
+    }
+
+    function renderReadiness(data) {
+      $("readinessSummary").textContent = data.ready ? "Majburiy qismlar tayyor" : "Sozlash kerak";
+      $("readiness").innerHTML = data.items.map((item) => `
+        <div class="readiness-item ${item.ok ? "ready" : "missing"}">
+          <span>${item.ok ? "✓" : "!"}</span>
+          <div><strong>${esc(item.label)}</strong><small>${item.required ? "Majburiy" : "Ixtiyoriy"}</small></div>
+        </div>`).join("");
+    }
+
+    function renderCatalog(data) {
+      featureCatalog = data.features || [];
+      const book = data.price_book || {};
+      $("catalogInfo").textContent = `${book.label || "Katalog"} · baza $${(Number(book.base_fee_usd_cents || 0) / 100).toFixed(0)}/obyekt`;
+      $("catalogBody").innerHTML = featureCatalog.map((f) => `
+        <tr><td>${esc(f.name)}</td><td class="muted">${esc(f.category)}</td><td><span class="badge badge-${f.queue_kind === "realtime" ? "active" : "online"}">${f.queue_kind === "realtime" ? "Tezkor" : "22:00 gacha"}</span></td><td>$${(Number(f.monthly_usd_cents) / 100).toFixed(0)} / kamera</td><td class="muted">$${(Number(f.cost_usd_cents) / 100).toFixed(2)}</td></tr>`).join("");
+    }
+
+    function renderLeads() {
+      $("leadCount").textContent = leads.length ? `${leads.length} ta` : "";
+      if (!leads.length) {
+        $("leadsBody").innerHTML = '<tr><td colspan="6" class="muted" style="padding:1.5rem .75rem">Rasmiy saytdan hali ariza kelmagan.</td></tr>';
+        return;
+      }
+      $("leadsBody").innerHTML = leads.map((lead) => `
+        <tr>
+          <td><div>${esc(lead.full_name)}</div><a class="muted" href="tel:${esc(lead.phone)}" style="font-size:.72rem">${esc(lead.phone)}</a></td>
+          <td><div>${esc(lead.company || "—")}</div><div class="muted" style="font-size:.72rem">${esc(lead.city || "—")}</div></td>
+          <td>${esc(lead.cameras)}</td>
+          <td><span class="badge badge-${LEAD_BADGE[lead.status] || "not_paired"}">${LEAD_LABEL[lead.status] || esc(lead.status)}</span></td>
+          <td class="muted">${esc((lead.created_at || "").slice(0, 16))}</td>
+          <td><div class="row">
+            ${lead.status === "new" ? `<button class="btn btn-sm" data-lead-status="${esc(lead.id)}" data-lead-to="contacted">Bog'landik</button>` : ""}
+            ${["new","contacted"].includes(lead.status) ? `<button class="btn btn-sm" data-lead-status="${esc(lead.id)}" data-lead-to="qualified">Mos</button>` : ""}
+            ${!lead.site_id && lead.status !== "closed" ? `<button class="btn btn-sm btn-primary" data-lead-convert="${esc(lead.id)}">Sotqin mijoz ochish</button>` : ""}
+            ${lead.status !== "closed" && !lead.site_id ? `<button class="btn btn-sm btn-danger" data-lead-status="${esc(lead.id)}" data-lead-to="closed">Yopish</button>` : ""}
+            ${lead.site_id ? `<button class="btn btn-sm" data-detail="${esc(lead.site_id)}">Mijoz</button>` : ""}
+          </div></td>
+        </tr>`).join("");
     }
 
     function renderSites() {
@@ -320,7 +408,7 @@
               ${s.cameras_expected ? `${s.cameras_active}/${s.cameras_expected}` : "—"}
             </td>
             <td class="muted">${s.devices}</td>
-            <td class="muted">${uzs(s.monthly_price_uzs)}</td>
+            <td class="muted">${monthly(s.plan, s.monthly_price_uzs, s.monthly_price_usd)}</td>
             <td>
               <div class="row">
                 <button class="btn btn-sm" data-detail="${esc(s.id)}">Tafsilot</button>
@@ -400,17 +488,26 @@
 
     async function refresh() {
       try {
-        const [stats, list, invoiceList, provs, alertStatus] = await Promise.all([
+        const [stats, list, leadList, invoiceList, provs, alertStatus, readiness, catalog, templates] = await Promise.all([
           api("/api/v1/admin/stats"),
           api("/api/v1/admin/sites"),
+          api("/api/v1/admin/leads?limit=100"),
           api("/api/v1/admin/invoices?limit=50"),
           api("/api/v1/admin/payments/providers"),
           api("/api/v1/admin/alerts"),
+          api("/api/v1/admin/readiness"),
+          api("/api/v1/admin/features"),
+          api("/api/v1/admin/business-templates"),
         ]);
         sites = list;
+        leads = leadList;
         invoices = invoiceList;
         providers = provs;
+        businessTemplates = templates;
         renderStats(stats);
+        renderReadiness(readiness);
+        renderCatalog(catalog);
+        renderLeads();
         renderSites();
         renderProviderInfo();
         renderAlertInfo(alertStatus);
@@ -458,7 +555,7 @@
           }),
         });
         e.target.reset();
-        $("cMonths").value = 12;
+        $("cMonths").value = 1;
         showPairing(data.name, data.pairing_code, data.pairing_expires_at, data.site_id);
         await refresh();
       } catch (err) {
@@ -475,11 +572,9 @@
         <p class="muted" style="margin: 0.75rem 0;">
           Amal qiladi: ${esc((expires || "").slice(0, 16))} (UTC). O'rnatuvchiga shu kodni bering.
         </p>
-        <p style="margin-bottom: 0.4rem; font-size: 0.8rem;">Edge <span class="mono">config.yaml</span>:</p>
-        <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.78rem; overflow-x: auto;">license:
-  enabled: true
-  cloud_url: "${esc(location.origin)}"
-  pairing_code: "${esc(code)}"</pre>
+        <p style="margin-bottom: 0.4rem; font-size: 0.8rem;">Sotqin pairing buyrug'i:</p>
+        <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.78rem; overflow-x: auto;">sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py --cloud ${esc(location.origin)} --code ${esc(code)}</pre>
+        <a class="btn" href="/connect" target="_blank" rel="noopener">Ulash sahifasini ochish</a>
         <p class="muted mono" style="margin-top: 0.75rem; font-size: 0.72rem;">site_id: ${esc(siteId)}</p>`;
       $("detailOverlay").hidden = false;
     }
@@ -497,18 +592,122 @@
       if (btn.dataset.extend) return extendSite(btn.dataset.extend, 1);
       if (btn.dataset.status) return setStatus(btn.dataset.status, btn.dataset.to);
       if (btn.dataset.pairing) return newPairing(btn.dataset.pairing);
+      if (btn.dataset.onboarding) return openOnboarding(btn.dataset.onboarding);
+      if (btn.dataset.owner) return addOwner(btn.dataset.owner);
+      if (btn.dataset.cameras) return setExpectedCameras(btn.dataset.cameras);
+      if (btn.dataset.cameraInventory) return openCameraInventory(btn.dataset.cameraInventory);
+      if (btn.dataset.addCamera) return addOrReplaceCamera(btn.dataset.addCamera);
+      if (btn.dataset.features) return openFeatures(btn.dataset.features);
+      if (btn.dataset.saveFeatures) return saveFeatureDraft(btn.dataset.saveFeatures);
+      if (btn.dataset.approveFeatures) return approveFeatures(btn.dataset.approveFeatures);
       if (btn.dataset.invoice) return createInvoice(btn.dataset.invoice);
       if (btn.dataset.invoiceShow) return showInvoiceById(btn.dataset.invoiceShow);
       if (btn.dataset.invoicePaid) return markInvoicePaid(btn.dataset.invoicePaid);
       if (btn.dataset.invoiceCancel) return cancelInvoice(btn.dataset.invoiceCancel);
+      if (btn.dataset.leadStatus) return updateLead(btn.dataset.leadStatus, btn.dataset.leadTo);
+      if (btn.dataset.leadConvert) return convertLead(btn.dataset.leadConvert);
       if (btn.dataset.copy) return copyText(btn.dataset.copy);
     });
+
+    async function updateLead(leadId, status) {
+      try {
+        await api(`/api/v1/admin/leads/${leadId}/status`, {
+          method: "POST",
+          body: JSON.stringify({ status }),
+        });
+        notify("Ariza holati yangilandi");
+        await refresh();
+      } catch (err) { notify(err.message, false); }
+    }
+
+    async function convertLead(leadId) {
+      if (!confirm("Arizadan Sotqin mijozini ochamizmi?")) return;
+      try {
+        const site = await api(`/api/v1/admin/leads/${leadId}/convert`, {
+          method: "POST",
+          body: JSON.stringify({ subscription_months: 1 }),
+        });
+        await refresh();
+        showPairing(site.name, site.pairing_code, site.pairing_expires_at, site.site_id);
+      } catch (err) { notify(err.message, false); }
+    }
+
+    async function addOwner(siteId) {
+      const telegramId = prompt("Mijozning Telegram ID raqami:");
+      if (telegramId === null) return;
+      if (!/^[-0-9]{3,32}$/.test(telegramId.trim())) return notify("Telegram ID noto'g'ri", false);
+      try {
+        await api(`/api/v1/admin/sites/${siteId}/members`, {
+          method: "POST",
+          body: JSON.stringify({ telegram_id: telegramId.trim(), role: "owner" }),
+        });
+        notify("Telegram egasi qo'shildi");
+        await openOnboarding(siteId);
+      } catch (err) { notify(err.message, false); }
+    }
+
+    async function setExpectedCameras(siteId) {
+      const value = prompt("Obyektdagi kutilgan kamera soni (0–8):", "4");
+      if (value === null) return;
+      const expected = Number(value);
+      if (!Number.isInteger(expected) || expected < 0 || expected > 8) return notify("0–8 oralig'ida son kiriting", false);
+      try {
+        await api(`/api/v1/admin/sites/${siteId}/cameras`, {
+          method: "POST",
+          body: JSON.stringify({ expected }),
+        });
+        notify("Kamera soni saqlandi");
+        await refresh();
+      } catch (err) { notify(err.message, false); }
+    }
+
+    async function openCameraInventory(siteId) {
+      try {
+        const [inventory, site] = await Promise.all([
+          api(`/api/v1/admin/sites/${siteId}/camera-inventory`),
+          api(`/api/v1/admin/sites/${siteId}`),
+        ]);
+        const rows = inventory.cameras.length ? inventory.cameras.map((camera) => `
+          <tr><td><b>${esc(camera.camera_id)}</b><div class="muted">${esc(camera.label)}</div></td>
+          <td><span class="badge badge-${camera.probe_status === "online" ? "online" : "offline"}">${esc(camera.probe_status)}</span><div class="muted">${esc(camera.probe_error || "")}</div></td>
+          <td class="muted">${esc([camera.codec, camera.width && camera.height ? `${camera.width}×${camera.height}` : "", camera.fps ? `${camera.fps} FPS` : ""].filter(Boolean).join(" · ") || "—")}</td>
+          <td>${camera.enabled ? "Faol" : "O'chirilgan"}</td></tr>`).join("")
+          : '<tr><td colspan="4" class="muted">Kamera kiritilmagan</td></tr>';
+        $("detailTitle").textContent = `${site.name} — kamera/NVR inventari`;
+        $("detailBody").innerHTML = `
+          <p class="muted">RTSP login faqat shifrlangan holda saqlanadi va bu panelda qayta ko'rinmaydi. Substream (H.264, 720p) kiriting.</p>
+          <div class="table-scroll"><table><thead><tr><th>Kamera</th><th>Probe</th><th>Stream</th><th>Holat</th></tr></thead><tbody>${rows}</tbody></table></div>
+          <div class="row" style="margin-top:1rem"><button class="btn btn-primary" data-add-camera="${esc(siteId)}">Kamera qo'shish/yangi manzil berish</button><button class="btn" data-detail="${esc(siteId)}">Orqaga</button></div>`;
+        $("detailOverlay").hidden = false;
+      } catch (err) { notify(err.message, false); }
+    }
+
+    async function addOrReplaceCamera(siteId) {
+      const cameraId = prompt("Kamera ID (camera-01 ... camera-08):", "camera-01");
+      if (cameraId === null) return;
+      if (!/^camera-0[1-8]$/.test(cameraId.trim())) return notify("camera-01 ... camera-08 kiriting", false);
+      const label = prompt("Kamera nomi:", "Kirish");
+      if (label === null || !label.trim()) return;
+      const rtspUrl = prompt("NVR substream RTSP manzili:", "rtsp://user:password@NVR:554/stream/sub");
+      if (rtspUrl === null) return;
+      if (!/^rtsps?:\/\//.test(rtspUrl.trim())) return notify("rtsp:// yoki rtsps:// manzil kiriting", false);
+      try {
+        await api(`/api/v1/admin/sites/${siteId}/camera-inventory/${encodeURIComponent(cameraId.trim())}`, {
+          method: "PUT", body: JSON.stringify({label: label.trim(), rtsp_url: rtspUrl.trim(), enabled: true}),
+        });
+        notify("Kamera saqlandi; Sotqin keyingi poll'da tekshiradi");
+        await openCameraInventory(siteId);
+      } catch (err) { notify(err.message, false); }
+    }
 
     // ── Hisob-fakturalar ─────────────────────────────────────────────────
     async function createInvoice(siteId) {
       const site = sites.find((s) => s.id === siteId);
+      const pricingHint = site?.plan === "lite"
+        ? "Sotqin Base: $20/oy + aktiv AI funksiyalar."
+        : "Yillik = oylik × 10 (2 oy tekin).";
       const input = prompt(
-        `Necha oylik hisob ochamiz? (${site ? site.name : siteId})\nYillik = oylik × 10 (2 oy tekin).`,
+        `Necha oylik hisob ochamiz? (${site ? site.name : siteId})\n${pricingHint}`,
         "1"
       );
       if (input === null) return;
@@ -654,6 +853,76 @@
       }
     }
 
+    async function openFeatures(siteId) {
+      try {
+        const [summary, site] = await Promise.all([
+          api(`/api/v1/admin/sites/${siteId}/features`),
+          api(`/api/v1/admin/sites/${siteId}`),
+        ]);
+        const selected = summary.drafts.length ? summary.drafts : summary.assignments.filter((x) => x.status === "active");
+        const selectedByCode = Object.fromEntries(selected.map((item) => [item.feature_code, item]));
+        const templateOptions = businessTemplates.map((t) => `<option value="${esc(t.code)}">${esc(t.name)}</option>`).join("");
+        const rows = featureCatalog.map((f) => {
+          const current = selectedByCode[f.code];
+          return `<label class="feature-choice">
+            <input type="checkbox" data-feature-code="${esc(f.code)}" ${current ? "checked" : ""} />
+            <span><b>${esc(f.name)}</b><small>${f.queue_kind === "realtime" ? "Tezkor alert" : "Kunlik analitika · 22:00 gacha"} · $${(Number(f.monthly_usd_cents) / 100).toFixed(0)}/kamera</small></span>
+            <input aria-label="${esc(f.name)} kamera soni" data-feature-count="${esc(f.code)}" type="number" min="1" max="8" value="${current ? esc(current.camera_count) : 1}" />
+          </label>`;
+        }).join("");
+        const q = summary.active_quote;
+        $("detailTitle").textContent = `${site.name} — Cloud AI funksiyalar`;
+        $("detailBody").innerHTML = `
+          <p class="muted" style="margin:0 0 .9rem">$20/obyekt + funksiya × kamera. Saqlash draft yaratadi; tasdiqlashdan keyin Sotqin yangi konfiguratsiyani oladi.</p>
+          <label>Biznes preset <select id="featureTemplate"><option value="">Qo'lda tanlash</option>${templateOptions}</select></label>
+          <div id="featureChoices" class="feature-choices">${rows}</div>
+          <div id="featureQuote" class="quote-box">Amaldagi: $${(Number(q.monthly_usd_cents || 0) / 100).toFixed(0)}/oy · marja ${esc(q.gross_margin_percent || 0)}%</div>
+          <div class="row" style="margin-top:1rem"><button class="btn" data-save-features="${esc(siteId)}">Draft saqlash</button><button class="btn btn-primary" data-approve-features="${esc(siteId)}">Draftni tasdiqlash</button></div>`;
+        $("featureTemplate").addEventListener("change", () => {
+          const template = businessTemplates.find((t) => t.code === $("featureTemplate").value);
+          if (!template) return;
+          document.querySelectorAll("[data-feature-code]").forEach((input) => {
+            input.checked = template.feature_codes.includes(input.dataset.featureCode);
+          });
+        });
+        $("detailOverlay").hidden = false;
+      } catch (err) { notify(err.message, false); }
+    }
+
+    function selectedFeatures() {
+      return [...document.querySelectorAll("[data-feature-code]")]
+        .filter((input) => input.checked)
+        .map((input) => ({
+          feature_code: input.dataset.featureCode,
+          camera_count: Number(document.querySelector(`[data-feature-count="${CSS.escape(input.dataset.featureCode)}"]`).value),
+        }));
+    }
+
+    async function saveFeatureDraft(siteId) {
+      const selections = selectedFeatures();
+      if (!selections.length) return notify("Kamida bitta funksiya tanlang", false);
+      if (selections.some((item) => !Number.isInteger(item.camera_count) || item.camera_count < 1 || item.camera_count > 8)) {
+        return notify("Kamera soni 1–8 bo'lishi kerak", false);
+      }
+      try {
+        const quote = await api(`/api/v1/admin/sites/${siteId}/features/quote`, { method: "POST", body: JSON.stringify({ selections }) });
+        if (!confirm(`Yangi oylik: $${(quote.monthly_usd_cents / 100).toFixed(0)} (≈ ${uzs(quote.monthly_uzs)}). Draftni saqlaymizmi?`)) return;
+        await api(`/api/v1/admin/sites/${siteId}/features/draft`, { method: "PUT", body: JSON.stringify({ selections }) });
+        notify("Draft saqlandi — tasdiqlashni kutmoqda");
+        await openFeatures(siteId);
+      } catch (err) { notify(err.message, false); }
+    }
+
+    async function approveFeatures(siteId) {
+      if (!confirm("Draft tasdiqlansa u cloud konfiguratsiyasiga aktiv bo'ladi. Davom etamizmi?")) return;
+      try {
+        const result = await api(`/api/v1/admin/sites/${siteId}/features/approve`, { method: "POST" });
+        notify(`Funksiyalar aktiv. Yangi oylik: $${(result.active_quote.monthly_usd_cents / 100).toFixed(0)}`);
+        await refresh();
+        await openFeatures(siteId);
+      } catch (err) { notify(err.message, false); }
+    }
+
     // ── Tafsilot ─────────────────────────────────────────────────────────
     async function openDetail(siteId) {
       try {
@@ -664,12 +933,13 @@
               .map(
                 (dev) =>
                   `<tr>
-                    <td>${esc(dev.label)}</td>
+                    <td><b>${esc(dev.product_name || "Sotqin")}</b><div class="muted">${esc(dev.hardware_model || dev.label)}</div><div class="muted mono" style="font-size:.68rem">${esc(dev.serial_number || "serial yo'q")}</div></td>
                     <td class="muted mono">${esc(dev.id)}</td>
                     <td class="muted">${esc(dev.last_seen || "—")}</td>
                     <td>
                       <span class="badge badge-${esc(dev.connection)}">${CONN_LABEL[dev.connection] || esc(dev.connection)}</span>
                       <span class="muted" style="font-size: 0.7rem;">${esc(sinceLabel(dev.minutes_since_seen))}</span>
+                      <div class="muted" style="font-size:.68rem">Config r${esc(dev.config_revision)} · ${esc(dev.config_status)}</div>
                     </td>
                   </tr>`
               )
@@ -688,7 +958,7 @@
         $("detailBody").innerHTML = `
           <dl class="kv">
             <dt>Sayt ID</dt><dd class="mono">${esc(d.id)}</dd>
-            <dt>Tarif</dt><dd>${PLAN_LABEL[d.plan] || esc(d.plan)} — ${uzs(d.limits.monthly_price_uzs)}/oy</dd>
+            <dt>Tarif</dt><dd>${PLAN_LABEL[d.plan] || esc(d.plan)} — ${monthly(d.plan, d.limits.monthly_price_uzs, d.limits.monthly_price_usd)}</dd>
             <dt>Holat</dt><dd><span class="badge badge-${esc(d.license_status)}">${STATUS_LABEL[d.license_status] || esc(d.license_status)}</span> <span class="muted">${esc(d.message)}</span></dd>
             <dt>Obuna tugaydi</dt><dd>${esc((d.subscription_until || "").slice(0, 10))} (${d.days_left} kun)</dd>
             <dt>Cheklovlar</dt><dd>${d.limits.max_cameras} kamera · ${d.limits.max_persons} shaxs · ${d.limits.retention_days} kun arxiv · Telegram: ${d.limits.telegram_allowed ? "bor" : "yo'q"}</dd>
@@ -700,13 +970,18 @@
           <div class="card-title" style="margin-top: 1.25rem;">Qurilmalar</div>
           <div class="table-scroll">
             <table>
-              <thead><tr><th>Nomi</th><th>ID</th><th>Oxirgi aloqa (UTC)</th><th>Holat</th></tr></thead>
+              <thead><tr><th>Sotqin</th><th>ID</th><th>Oxirgi aloqa (UTC)</th><th>Holat</th></tr></thead>
               <tbody>${devices}</tbody>
             </table>
           </div>
 
           <div class="row" style="margin-top: 1.25rem;">
             <button class="btn btn-primary" data-invoice="${esc(d.id)}">Hisob ochish</button>
+            <button class="btn" data-onboarding="${esc(d.id)}">Onboarding</button>
+            <button class="btn" data-owner="${esc(d.id)}">Telegram egasi</button>
+            <button class="btn" data-cameras="${esc(d.id)}">Kamera soni</button>
+            <button class="btn" data-camera-inventory="${esc(d.id)}">Kamera/NVR</button>
+            <button class="btn btn-primary" data-features="${esc(d.id)}">AI funksiyalar</button>
             <button class="btn" data-extend="${esc(d.id)}">To'lovsiz uzaytirish</button>
             <button class="btn" data-pairing="${esc(d.id)}">Yangi juftlash kodi</button>
             <button class="btn ${d.status === "suspended" ? "" : "btn-danger"}"
@@ -718,6 +993,22 @@
       } catch (err) {
         notify(err.message, false);
       }
+    }
+
+    async function openOnboarding(siteId) {
+      try {
+        const data = await api(`/api/v1/admin/sites/${siteId}/onboarding`);
+        const site = sites.find((item) => item.id === siteId);
+        $("detailTitle").textContent = `${site ? site.name : siteId} — onboarding`;
+        $("detailBody").innerHTML = `
+          <div class="progress"><span style="width:${data.percent}%"></span></div>
+          <p class="muted" style="margin:.6rem 0 1rem">${data.completed}/${data.total} bosqich · ${data.percent}%</p>
+          <div class="onboarding-list">${data.steps.map((step) => `
+            <div class="onboarding-step ${step.done ? "done" : "pending"}"><span>${step.done ? "✓" : "○"}</span>${esc(step.label)}</div>`).join("")}</div>
+          ${data.pairing ? `<button class="btn btn-primary" style="margin-top:1rem" data-pairing="${esc(siteId)}">Pairing kodni ko'rsatish</button>` : ""}
+          <a class="btn" style="margin-top:1rem" href="/connect" target="_blank" rel="noopener">Sotqinni ulash sahifasi</a>`;
+        $("detailOverlay").hidden = false;
+      } catch (err) { notify(err.message, false); }
     }
 
     // ── Ishga tushirish ──────────────────────────────────────────────────

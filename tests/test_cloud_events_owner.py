@@ -113,6 +113,7 @@ def test_edge_health_heartbeat_is_visible_to_owner(production_client) -> None:
         "/api/v1/owner/health", headers={"Authorization": f"Bearer {token}"}
     ).json()
     assert health["devices"][0]["health"]["cameras_active"] == 8
+    assert health["cameras_expected"] == 8
 
 
 def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
@@ -178,4 +179,19 @@ def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
     assert config.json()["revision"] == 1
     edge_config = client.get("/api/v1/edge/config", headers=headers).json()
     assert edge_config["config"]["occupancy_limit"] == 15
+
+    feature_view = client.get("/api/v1/owner/features", headers=owner_headers)
+    assert feature_view.status_code == 200
+    assert feature_view.json()["catalog"]["price_book"]["base_fee_usd_cents"] == 2_000
+    feature_request = client.put(
+        "/api/v1/owner/features/request",
+        headers=owner_headers,
+        json={"selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    )
+    assert feature_request.status_code == 200
+    assert feature_request.json()["drafts"][0]["feature_code"] == "person_count"
+    invoice = client.post("/api/v1/owner/invoices", headers=owner_headers, json={"months": 1})
+    assert invoice.status_code == 200
+    assert invoice.json()["pay_url"].startswith("/pay/")
+    assert client.get("/api/v1/owner/invoices", headers=owner_headers).json()[0]["id"] == invoice.json()["id"]
     assert client.get("/owner").status_code == 200

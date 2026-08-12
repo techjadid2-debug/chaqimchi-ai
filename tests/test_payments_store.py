@@ -37,6 +37,38 @@ def test_invoice_amount_follows_plan(stores) -> None:
     assert yearly["amount_uzs"] == 1_490_000 * 10
 
 
+def test_sotqin_base_invoice_locks_20_usd_at_current_rate(stores, monkeypatch) -> None:
+    cloud, pay = stores
+    site = cloud.create_site("Lite do'kon", "lite", subscription_months=1)
+    monkeypatch.setenv("CHAQIMCHI_USD_RATE_UZS", "12750")
+
+    invoice = pay.create_invoice(site["site_id"], 1)
+    assert invoice["amount_uzs"] == 255_000
+
+    # Kurs o'zgarsa eski invoice o'zgarmaydi, faqat yangisi yangi summada ochiladi.
+    monkeypatch.setenv("CHAQIMCHI_USD_RATE_UZS", "13000")
+    assert pay.get_invoice(invoice["id"])["amount_uzs"] == 255_000
+    assert pay.create_invoice(site["site_id"], 1)["amount_uzs"] == 260_000
+    # Yillik chegirma barcha tarifga bir xil: rasmiy saytdagi "2 oy bepul"
+    # va'dasi bilan hisob-faktura bitta qoidadan chiqishi shart.
+    assert pay.create_invoice(site["site_id"], 12)["amount_uzs"] == 260_000 * 10
+
+
+def test_invoice_uses_active_cloud_features_snapshot(stores) -> None:
+    cloud, pay = stores
+    site = cloud.create_site("Sotqin do'kon", "lite")
+    cloud.replace_feature_draft(
+        site["site_id"],
+        [
+            {"feature_code": "person_count", "camera_count": 2},
+            {"feature_code": "queue_length", "camera_count": 1},
+        ],
+    )
+    cloud.approve_feature_draft(site["site_id"])
+    # $20 baza + 2×$3 odam sanash + 1×$5 navbat = $31; seed kursi 13 000.
+    assert pay.create_invoice(site["site_id"], 1)["amount_uzs"] == 403_000
+
+
 def test_unknown_site_cannot_be_invoiced(stores) -> None:
     _, pay = stores
     with pytest.raises(ValueError):

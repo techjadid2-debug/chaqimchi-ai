@@ -7,23 +7,41 @@ Ishga tushirish: make run-cloud  (port 8750)
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import html
 import os
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from chaqimchi_ai import __version__
 from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.licensing.plans import PLANS, PlanTier, cheapest_plan_for
+from chaqimchi_ai.licensing.plans import (
+    PLANS,
+    PlanTier,
+    cheapest_plan_for,
+    get_plan,
+    usd_rate_uzs,
+)
 from chaqimchi_ai.settings import SceneZoneSettings
+from chaqimchi_ai.sotqin_profile import (
+    BUFFER_MAX_BYTES,
+    BUFFER_RETENTION_DAYS,
+    MAX_CAMERAS,
+    MIN_FREE_BYTES,
+    product_payload,
+)
+from cloud import ratelimit
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService
 from cloud.event_store import EventStore, event_store_from_env
+from cloud.notify import build_alert
 from cloud.owner_auth import (
     OwnerPrincipal,
     issue_owner_token,
@@ -33,8 +51,9 @@ from cloud.owner_auth import (
 from cloud.payments import PaymentStore, click_config, payme_config, public_url
 from cloud.payments import click as click_api
 from cloud.payments import payme as payme_api
+from cloud.payments.store import billable_months
 from cloud.snapshots import SnapshotStore, snapshot_store_from_env
-from cloud.store import CloudStore
+from cloud.store import CloudStore, available_feature_codes
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "data" / "cloud" / "cloud.db"
@@ -99,7 +118,7 @@ def require_admin(
 
 class CreateSiteBody(BaseModel):
     name: str
-    plan: PlanTier = "business"
+    plan: PlanTier = "lite"
     subscription_months: int = Field(default=1, ge=1, le=60)
     contact_phone: Optional[str] = None
     address: Optional[str] = None
@@ -109,13 +128,17 @@ class CreateSiteBody(BaseModel):
 
 class ClaimDeviceBody(BaseModel):
     pairing_code: str
-    label: str = "edge-1"
+    label: str = "sotqin-1"
     hardware_id: Optional[str] = None
+    product_name: str = Field(default="Sotqin", max_length=64)
+    hardware_model: Optional[str] = Field(default=None, max_length=120)
+    hardware_revision: Optional[str] = Field(default="R1", max_length=32)
+    serial_number: Optional[str] = Field(default=None, max_length=120)
 
 
 class HeartbeatBody(BaseModel):
     active_cameras: int = 0
-    app_version: str = "0.2.0"
+    app_version: str = __version__
 
 
 class ExtendBody(BaseModel):
@@ -166,6 +189,17 @@ class EdgeHeartbeatBody(BaseModel):
     outbox_bytes: int = Field(default=0, ge=0)
     app_version: str = Field(default="unknown", max_length=64)
     model_version: Optional[str] = Field(default=None, max_length=128)
+    product_name: str = Field(default="Sotqin", max_length=64)
+    hardware_model: Optional[str] = Field(default=None, max_length=120)
+    hardware_revision: Optional[str] = Field(default=None, max_length=32)
+    serial_number: Optional[str] = Field(default=None, max_length=120)
+    config_revision: int = Field(default=0, ge=0)
+
+
+class ConfigAckBody(BaseModel):
+    revision: int = Field(ge=0)
+    status: Literal["applied", "rejected"]
+    error: Optional[str] = Field(default=None, max_length=500)
 
 
 class SiteConfigBody(BaseModel):
@@ -173,6 +207,35 @@ class SiteConfigBody(BaseModel):
     occupancy_limit: int = Field(default=20, ge=1, le=10000)
     loitering_sec: int = Field(default=60, ge=5, le=86400)
     zones: List[SceneZoneSettings] = Field(default_factory=list, max_length=128)
+
+
+class FeatureSelectionBody(BaseModel):
+    feature_code: str = Field(min_length=2, max_length=64)
+    camera_count: int = Field(ge=1, le=MAX_CAMERAS)
+
+
+class FeatureDraftBody(BaseModel):
+    selections: List[FeatureSelectionBody] = Field(default_factory=list, max_length=24)
+
+
+class PublicLeadBody(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=5, max_length=32)
+    company: Optional[str] = Field(default=None, max_length=160)
+    city: Optional[str] = Field(default=None, max_length=120)
+    cameras: int = Field(default=1, ge=1, le=64)
+    message: Optional[str] = Field(default=None, max_length=1_000)
+    consent: bool = False
+    website: str = Field(default="", max_length=200)  # spam honeypot
+
+
+class LeadStatusBody(BaseModel):
+    status: Literal["new", "contacted", "qualified", "converted", "closed"]
+    note: Optional[str] = Field(default=None, max_length=1_000)
+
+
+class ConvertLeadBody(BaseModel):
+    subscription_months: int = Field(default=1, ge=1, le=12)
 
 
 def require_device(
@@ -232,12 +295,28 @@ async def _notify_site_members(site_id: str, text: str) -> None:
             continue
 
 
+def _purge_expired_events() -> int:
+    """Har obyektni **o'z tarifi** muddati bo'yicha tozalaydi.
+
+    Bungacha hammaga 30 kun qo'llanardi: 90 yoki 365 kunlik arxiv uchun
+    to'lagan mijoz to'lagan narsasini olmasdi.
+    """
+    removed = 0
+    for site in get_store().list_sites():
+        try:
+            retention = get_plan(str(site["plan"])).retention_days
+        except ValueError:
+            retention = 30
+        for key in get_event_store().purge_site(str(site["id"]), retention_days=retention):
+            get_snapshot_store().delete(key)
+            removed += 1
+    return removed
+
+
 async def _maintenance_loop() -> None:
     while True:
         try:
-            keys = get_event_store().purge(retention_days=30)
-            for key in keys:
-                get_snapshot_store().delete(key)
+            await asyncio.to_thread(_purge_expired_events)
         except asyncio.CancelledError:
             break
         except Exception:
@@ -265,10 +344,16 @@ async def lifespan(app: FastAPI):
             errors.append("MinIO/S3 endpoint sozlanishi shart")
         if not os.environ.get("CHAQIMCHI_SNAPSHOT_KEY", "").strip():
             errors.append("snapshot encryption key sozlanishi shart")
+        if not os.environ.get("CHAQIMCHI_CAMERA_SECRET_KEY", "").strip():
+            errors.append("camera credential encryption key sozlanishi shart")
         if len(os.environ.get("CHAQIMCHI_OWNER_JWT_SECRET", "")) < 32:
             errors.append("owner JWT secret kamida 32 belgi bo'lishi shart")
         if len(os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "")) < 32:
             errors.append("cloud admin key kamida 32 belgi bo'lishi shart")
+        try:
+            usd_rate_uzs()
+        except ValueError as exc:
+            errors.append(str(exc))
         if errors:
             raise RuntimeError("Cloud production konfiguratsiyasi xavfsiz emas: " + "; ".join(errors))
     get_event_store()
@@ -311,6 +396,88 @@ async def health() -> Dict[str, Any]:
     return {"ok": True, "service": "chaqimchi-cloud"}
 
 
+def _static_page(name: str) -> FileResponse:
+    page = STATIC_DIR / name
+    if not page.is_file():
+        raise HTTPException(404, "Sahifa topilmadi")
+    return FileResponse(page)
+
+
+@app.get("/", include_in_schema=False)
+async def public_site(request: Request) -> HTMLResponse:
+    page = STATIC_DIR / "site.html"
+    if not page.is_file():
+        raise HTTPException(404, "Sahifa topilmadi")
+    origin = str(request.base_url).rstrip("/")
+    content = page.read_text(encoding="utf-8").replace("__PUBLIC_ORIGIN__", origin)
+    return HTMLResponse(content)
+
+
+@app.get("/connect", include_in_schema=False)
+async def connect_page() -> FileResponse:
+    return _static_page("connect.html")
+
+
+@app.get("/install", include_in_schema=False)
+async def install_page() -> FileResponse:
+    """Mijozning mustaqil o'rnatish yo'riqnomasi."""
+    return _static_page("install.html")
+
+
+@app.get("/downloads/sotqin-installer.sh", include_in_schema=False)
+async def sotqin_bootstrap(request: Request) -> Response:
+    """Rasmiy saytdan Sotqin first-install bootstrap.
+
+    Release URL va SHA deploy paytida environmentga qo'yiladi; bo'sh bo'lsa
+    noto'g'ri yoki eski paketni mijozga berish o'rniga endpoint yopiq turadi.
+    """
+    release_url = os.environ.get("CHAQIMCHI_SOTQIN_RELEASE_URL", "").strip()
+    release_sha256 = os.environ.get("CHAQIMCHI_SOTQIN_RELEASE_SHA256", "").strip()
+    if not release_url.startswith("https://") or len(release_sha256) != 64:
+        raise HTTPException(503, "Sotqin release hali nashr qilinmagan")
+    template = BASE_DIR / "deploy" / "bootstrap_sotqin.sh"
+    if not template.is_file():
+        raise HTTPException(404, "Installer template topilmadi")
+    cloud_url = str(request.base_url).rstrip("/")
+    script = (
+        template.read_text(encoding="utf-8")
+        .replace("__RELEASE_URL__", release_url)
+        .replace("__RELEASE_SHA256__", release_sha256.lower())
+        .replace("__CLOUD_URL__", cloud_url)
+    )
+    return Response(
+        script,
+        media_type="text/x-shellscript; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=sotqin-installer.sh"},
+    )
+
+
+@app.get("/releases/{release_name}", include_in_schema=False)
+async def sotqin_release(release_name: str) -> FileResponse:
+    """Serve only a named, locally published Sotqin release archive."""
+    if Path(release_name).name != release_name or not release_name.endswith(".tar.gz"):
+        raise HTTPException(404, "Release topilmadi")
+    archive = BASE_DIR / "releases" / release_name
+    if not archive.is_file():
+        raise HTTPException(404, "Release topilmadi")
+    return FileResponse(
+        archive,
+        media_type="application/gzip",
+        filename=release_name,
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@app.get("/privacy", include_in_schema=False)
+async def privacy_page() -> FileResponse:
+    return _static_page("privacy.html")
+
+
+@app.get("/status", include_in_schema=False)
+async def status_page() -> FileResponse:
+    return _static_page("status.html")
+
+
 @app.get("/admin", include_in_schema=False)
 async def admin_panel() -> FileResponse:
     """Admin paneli. Kirish admin kalit bilan — brauzerda so‘raladi va API ga yuboriladi."""
@@ -336,13 +503,133 @@ async def list_plans() -> Dict[str, Any]:
                 "max_cameras": v.max_cameras,
                 "max_persons": v.max_persons,
                 "retention_days": v.retention_days,
-                "monthly_price_uzs": v.monthly_price_uzs,
+                "monthly_price_uzs": v.monthly_price(),
+                "monthly_price_usd": v.monthly_price_usd,
                 "install_price_uzs": v.install_price_uzs,
                 "per_person_uzs": v.price_per_person_uzs,
                 "billing": "per_person" if v.is_per_person else "flat",
             }
             for k, v in PLANS.items()
         }
+    }
+
+
+#: Yillik to'lovda nechа oy hisoblanadi (2 oy bepul). Sayt ham, hisob-faktura
+#: ham shu bitta qoidani ishlatadi.
+YEARLY_MONTHS_CHARGED = billable_months(12)
+
+#: Baza obunaga kiradigan, AI inferens talab qilmaydigan imkoniyatlar.
+BASE_PLAN_INCLUDES = (
+    "Qurilma va kamera holati 24/7 nazorat",
+    "Hodisa arxivi 30 kun",
+    "Telegram ogohlantirishlari",
+    "Mijoz paneli va kunlik hisobot",
+    "Imzolangan dastur yangilanishlari",
+)
+
+
+@app.get("/api/v1/public/pricing")
+async def public_pricing() -> Dict[str, Any]:
+    """Rasmiy sayt narxni shu yerdan oladi.
+
+    Bungacha narxlar `site.html` ichida qo'lda yozilgan edi — katalog
+    o'zgarganda sayt eski narxni ko'rsatib turaverardi. Tannarx va marja bu
+    javobga **chiqmaydi**: ular faqat admin endpointida qoladi.
+    """
+    catalog = get_store().list_feature_catalog()
+    rate = usd_rate_uzs()
+    base_cents = int(catalog["price_book"]["base_fee_usd_cents"])
+    available = available_feature_codes()
+    return {
+        "currency_default": "uzs",
+        "usd_rate_uzs": rate,
+        "yearly_months_charged": YEARLY_MONTHS_CHARGED,
+        "base": {
+            "monthly_usd_cents": base_cents,
+            "monthly_uzs": (base_cents * rate + 99) // 100,
+            "includes": list(BASE_PLAN_INCLUDES),
+        },
+        "features": [
+            {
+                "code": item["code"],
+                "name": item["name"],
+                "category": item["category"],
+                "queue_kind": item["queue_kind"],
+                "monthly_usd_cents": int(item["monthly_usd_cents"]),
+                "monthly_uzs": (int(item["monthly_usd_cents"]) * rate + 99) // 100,
+                "available": item["code"] in available,
+            }
+            for item in catalog["features"]
+            if item["active"]
+        ],
+        "max_cameras": MAX_CAMERAS,
+    }
+
+
+async def _notify_new_lead(lead: Dict[str, Any]) -> None:
+    service = get_alerts()
+    if not service.config.token:
+        return
+    text = (
+        "📥 <b>Yangi Chaqimchi Lite arizasi</b>\n"
+        f"Ism: {html.escape(str(lead['full_name']))}\n"
+        f"Telefon: {html.escape(str(lead['phone']))}\n"
+        f"Tashkilot: {html.escape(str(lead.get('company') or '—'))}\n"
+        f"Hudud: {html.escape(str(lead.get('city') or '—'))}\n"
+        f"Kamera: {int(lead.get('cameras') or 1)} ta"
+    )
+    recipients = []
+    if service.config.chat_id:
+        recipients.append(service.config.chat_id)
+    recipients.extend(item["chat_id"] for item in get_store().telegram_lead_destinations())
+    for chat_id in dict.fromkeys(recipients):
+        await service.sender.send_to(chat_id, text)
+
+
+@app.post("/api/v1/public/leads")
+async def public_create_lead(
+    body: PublicLeadBody,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> Dict[str, Any]:
+    """Rasmiy saytdan pilot ariza; AI modeliga bog'liq emas."""
+    if body.website:
+        return {"ok": True, "message": "Arizangiz qabul qilindi"}
+    ratelimit.check(
+        "leads",
+        request.client.host if request.client else "unknown",
+        limit=5,
+        window_sec=3_600,
+        message="Juda ko'p ariza yuborildi. Bir soatdan keyin urinib ko'ring.",
+    )
+    if not body.consent:
+        raise HTTPException(422, "Bog'lanish uchun rozilik talab qilinadi")
+    full_name = " ".join(body.full_name.split())
+    phone = " ".join(body.phone.split())
+    if sum(char.isdigit() for char in phone) < 5:
+        raise HTTPException(422, "Telefon raqami noto'g'ri")
+    client_host = request.client.host if request.client else "unknown"
+    source_hash = hashlib.sha256(client_host.encode("utf-8")).hexdigest()
+    try:
+        created = get_store().create_lead(
+            full_name=full_name,
+            phone=phone,
+            company=" ".join(body.company.split()) if body.company else None,
+            city=" ".join(body.city.split()) if body.city else None,
+            cameras=body.cameras,
+            message=body.message.strip() if body.message else None,
+            source_hash=source_hash,
+        )
+    except ValueError as exc:
+        raise HTTPException(429, str(exc)) from exc
+    lead = get_store().get_lead(created["id"])
+    if lead and not created["duplicate"]:
+        background_tasks.add_task(_notify_new_lead, lead)
+    return {
+        "ok": True,
+        "lead_id": created["id"],
+        "duplicate": created["duplicate"],
+        "message": "Arizangiz qabul qilindi. Jamoamiz siz bilan bog'lanadi.",
     }
 
 
@@ -366,9 +653,159 @@ async def admin_list_sites(_: None = Depends(require_admin)) -> List[Dict[str, A
     return get_store().list_sites()
 
 
+@app.get("/api/v1/admin/features")
+async def admin_feature_catalog(_: None = Depends(require_admin)) -> Dict[str, Any]:
+    """Funksiya katalogi va amaldagi, versiyalangan narxlar."""
+    return get_store().list_feature_catalog()
+
+
+@app.get("/api/v1/admin/business-templates")
+async def admin_business_templates(_: None = Depends(require_admin)) -> List[Dict[str, Any]]:
+    return get_store().list_business_templates()
+
+
+@app.post("/api/v1/admin/sites/{site_id}/features/quote")
+async def admin_feature_quote(
+    site_id: str,
+    body: FeatureDraftBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Sayt topilmadi")
+    try:
+        return get_store().feature_quote([item.model_dump() for item in body.selections])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/api/v1/admin/sites/{site_id}/features")
+async def admin_site_features(site_id: str, _: None = Depends(require_admin)) -> Dict[str, Any]:
+    try:
+        return get_store().site_feature_summary(site_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.put("/api/v1/admin/sites/{site_id}/features/draft")
+async def admin_save_feature_draft(
+    site_id: str,
+    body: FeatureDraftBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    try:
+        return get_store().replace_feature_draft(site_id, [item.model_dump() for item in body.selections])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/v1/admin/sites/{site_id}/features/approve")
+async def admin_approve_feature_draft(
+    site_id: str,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Tasdiqlangandan keyin keyingi edge config revision faol funksiyalarni oladi."""
+    try:
+        summary = get_store().approve_feature_draft(site_id)
+        # Edge polling revision orqali yangi vazifalarni ko'radi. Asosiy
+        # konfiguratsiya owner sozlamalarini saqlagan holda faqat revision oladi.
+        current = get_event_store().get_site_config(site_id)
+        config = dict(current["config"])
+        config["cloud_feature_revision"] = int(current["revision"]) + 1
+        summary["edge_config"] = get_event_store().update_site_config(site_id, config)
+        return summary
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @app.get("/api/v1/admin/stats")
 async def admin_stats(_: None = Depends(require_admin)) -> Dict[str, Any]:
-    return {**get_store().stats(), **get_payments().invoice_stats()}
+    return {
+        **get_store().stats(),
+        **get_store().lead_stats(),
+        **get_payments().invoice_stats(),
+    }
+
+
+@app.get("/api/v1/admin/leads")
+async def admin_list_leads(
+    status: Optional[str] = None,
+    limit: int = 200,
+    _: None = Depends(require_admin),
+) -> List[Dict[str, Any]]:
+    return get_store().list_leads(status=status, limit=limit)
+
+
+@app.post("/api/v1/admin/leads/{lead_id}/status")
+async def admin_update_lead(
+    lead_id: str,
+    body: LeadStatusBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    try:
+        return get_store().update_lead(lead_id, status=body.status, admin_note=body.note)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.post("/api/v1/admin/leads/{lead_id}/convert")
+async def admin_convert_lead(
+    lead_id: str,
+    body: ConvertLeadBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    lead = get_store().get_lead(lead_id)
+    if not lead:
+        raise HTTPException(404, "Ariza topilmadi")
+    if lead.get("site_id"):
+        raise HTTPException(409, "Bu ariza allaqachon mijozga aylantirilgan")
+    site = get_store().create_site(
+        lead.get("company") or lead["full_name"],
+        "lite",
+        subscription_months=body.subscription_months,
+        contact_phone=lead["phone"],
+        address=lead.get("city"),
+    )
+    get_store().link_lead_site(lead_id, site["site_id"])
+    return site
+
+
+@app.get("/api/v1/admin/readiness")
+async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
+    public = public_url()
+    owner_token = os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+    webhook_secret = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
+    alert_status = get_alerts().status()
+    items = [
+        {"key": "database", "label": "Mijoz va obuna bazasi", "ok": True, "required": True},
+        {
+            "key": "public_url",
+            "label": "HTTPS rasmiy domen",
+            "ok": public.startswith("https://"),
+            "required": True,
+        },
+        {
+            "key": "owner_bot",
+            "label": "Mijoz Telegram boti",
+            "ok": bool(owner_token and webhook_secret),
+            "required": True,
+        },
+        {
+            "key": "service_alerts",
+            "label": "Servis Telegram ogohlantirishi",
+            "ok": bool(alert_status["enabled"]),
+            "required": False,
+        },
+        {
+            "key": "payments",
+            "label": "Payme yoki Click",
+            "ok": bool(payme_config().configured or click_config().configured),
+            "required": False,
+        },
+    ]
+    return {
+        "ready": all(item["ok"] for item in items if item["required"]),
+        "items": items,
+    }
 
 
 class PersonsBody(BaseModel):
@@ -410,7 +847,23 @@ async def price_quote(persons: int = 0) -> Dict[str, Any]:
 
 
 class CamerasBody(BaseModel):
-    expected: int = Field(ge=0, le=64)
+    expected: int = Field(ge=0, le=MAX_CAMERAS)
+
+
+class CameraConfigBody(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+    rtsp_url: str = Field(min_length=10, max_length=2_000)
+    enabled: bool = True
+
+
+class CameraProbeBody(BaseModel):
+    camera_id: str = Field(pattern=r"^camera-\d{2}$")
+    status: Literal["online", "offline", "pending"]
+    error: Optional[str] = Field(default=None, max_length=500)
+    codec: Optional[str] = Field(default=None, max_length=32)
+    width: Optional[int] = Field(default=None, ge=1, le=16_384)
+    height: Optional[int] = Field(default=None, ge=1, le=16_384)
+    fps: Optional[float] = Field(default=None, ge=0.01, le=240)
 
 
 @app.post("/api/v1/admin/sites/{site_id}/cameras")
@@ -424,6 +877,55 @@ async def admin_set_cameras(
         return get_store().set_cameras_expected(site_id, body.expected)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+
+
+@app.get("/api/v1/admin/sites/{site_id}/camera-inventory")
+async def admin_list_camera_inventory(
+    site_id: str, _: None = Depends(require_admin)
+) -> Dict[str, Any]:
+    """Admin RTSP secretini ko'rmaydi; u faqat qayta yozilishi mumkin."""
+    try:
+        return {"cameras": get_store().list_cameras(site_id)}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.put("/api/v1/admin/sites/{site_id}/camera-inventory/{camera_id}")
+async def admin_upsert_camera_inventory(
+    site_id: str,
+    camera_id: str,
+    body: CameraConfigBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    try:
+        camera = get_store().upsert_camera(
+            site_id,
+            camera_id,
+            label=body.label,
+            rtsp_url=body.rtsp_url,
+            enabled=body.enabled,
+        )
+        # Sotqin keyingi poll'da yangi inventarni olishi uchun config revision oshadi.
+        current = get_event_store().get_site_config(site_id)
+        updated = get_event_store().update_site_config(site_id, current["config"])
+        return {"camera": camera, "config_revision": updated["revision"]}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.delete("/api/v1/admin/sites/{site_id}/camera-inventory/{camera_id}")
+async def admin_delete_camera_inventory(
+    site_id: str, camera_id: str, _: None = Depends(require_admin)
+) -> Dict[str, Any]:
+    try:
+        removed = get_store().delete_camera(site_id, camera_id)
+        if not removed:
+            raise HTTPException(404, "Kamera topilmadi")
+        current = get_event_store().get_site_config(site_id)
+        get_event_store().update_site_config(site_id, current["config"])
+        return {"ok": True, "camera_id": camera_id}
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @app.get("/api/v1/admin/alerts")
@@ -465,6 +967,50 @@ async def admin_site_detail(
         raise HTTPException(404, str(e)) from e
 
 
+@app.get("/api/v1/admin/sites/{site_id}/onboarding")
+async def admin_site_onboarding(
+    site_id: str,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Pilot obyektning modeldan mustaqil ulanish bosqichlari."""
+    try:
+        detail = get_store().site_detail(site_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    members = get_event_store().list_members(site_id)
+    invoices = get_payments().list_invoices(site_id, limit=100)
+    device_paired = bool(detail["devices"])
+    cameras_seen = int(detail["cameras_expected"] or 0) > 0
+    steps = [
+        {"key": "customer", "label": "Mijoz ochildi", "done": True},
+        {"key": "owner", "label": "Telegram egasi qo'shildi", "done": bool(members)},
+        {"key": "device", "label": "Sotqin juftlandi", "done": device_paired},
+        {
+            "key": "online",
+            "label": "Qurilma cloud bilan aloqada",
+            "done": detail["connection"] == "online",
+        },
+        {"key": "cameras", "label": "Kameralar xabar berdi", "done": cameras_seen},
+        {"key": "invoice", "label": "Hisob-faktura ochildi", "done": bool(invoices)},
+        {
+            "key": "payment",
+            "label": "Birinchi to'lov qabul qilindi",
+            "done": any(invoice["state"] == "paid" for invoice in invoices),
+        },
+    ]
+    completed = sum(1 for step in steps if step["done"])
+    active_code = detail["active_pairing_codes"][0] if detail["active_pairing_codes"] else None
+    return {
+        "site_id": site_id,
+        "completed": completed,
+        "total": len(steps),
+        "percent": round(completed * 100 / len(steps)),
+        "steps": steps,
+        "pairing": active_code,
+        "connect_url": f"{public_url() or ''}/connect",
+    }
+
+
 @app.post("/api/v1/admin/sites/{site_id}/extend")
 async def admin_extend_subscription(
     site_id: str,
@@ -503,12 +1049,17 @@ async def admin_new_pairing_code(
 
 
 @app.post("/api/v1/devices/claim")
+@app.post("/api/v1/sotqin/claim")
 async def claim_device(body: ClaimDeviceBody) -> Dict[str, str]:
     try:
         return get_store().claim_device(
             body.pairing_code,
             hardware_id=body.hardware_id,
             label=body.label,
+            product_name=body.product_name,
+            hardware_model=body.hardware_model,
+            hardware_revision=body.hardware_revision,
+            serial_number=body.serial_number,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
@@ -539,21 +1090,22 @@ async def ingest_event_batch(
     background_tasks: BackgroundTasks,
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
+    ratelimit.check(
+        "events",
+        device["device_id"],
+        limit=120,
+        window_sec=3_600,
+        message="Event yuborish chegarasi oshdi — keyinroq qayta yuboriladi",
+    )
     accepted = get_event_store().ingest(
         device["site_id"], device["device_id"], body.events
     )
-    for event in body.events:
-        if event.severity in {"warning", "critical"}:
-            background_tasks.add_task(
-                _notify_site_members,
-                device["site_id"],
-                (
-                    f"⚠️ {event.event_type}\n"
-                    f"Kamera: {event.camera_id}\n"
-                    f"Zona: {event.zone or '-'}\n"
-                    f"Vaqt: {event.occurred_at}"
-                ),
-            )
+    # Butun batch uchun **bitta** yig'ma xabar. Har event uchun alohida yuborish
+    # 500 talik batchda botni Telegram limitiga urib, xabarni butunlay
+    # yo'qotardi — batafsili `cloud/notify.py` da.
+    message = build_alert(device["site_id"], body.events)
+    if message:
+        background_tasks.add_task(_notify_site_members, device["site_id"], message)
     return {"ok": True, "accepted": accepted}
 
 
@@ -563,6 +1115,15 @@ async def upload_event_snapshot(
     request: Request,
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
+    # Snapshot 8 MB gacha bo'lishi mumkin — kunlik chegara S3 hisobini va
+    # diskni bitta buzuq qurilmadan himoya qiladi.
+    ratelimit.check(
+        "snapshots",
+        device["site_id"],
+        limit=500,
+        window_sec=86_400,
+        message="Kunlik snapshot chegarasi oshdi",
+    )
     event = get_event_store().event(device["site_id"], event_id)
     if not event or event["device_id"] != device["device_id"]:
         raise HTTPException(404, "Event topilmadi")
@@ -580,6 +1141,7 @@ async def upload_event_snapshot(
 
 
 @app.post("/api/v1/edge/heartbeat")
+@app.post("/api/v1/sotqin/heartbeat")
 async def edge_health_heartbeat(
     body: EdgeHeartbeatBody,
     device: Dict[str, Any] = Depends(require_device),
@@ -593,14 +1155,86 @@ async def edge_health_heartbeat(
         device["device_token"],
         active_cameras=body.cameras_active,
     )
-    return {"ok": True, "received": body.model_dump()}
+    # Qurilma har daqiqada `/config` ni to'liq tortib olardi — kuniga 1440 ta
+    # og'ir so'rov, javob esa deyarli har doim bir xil. Endi javobdagi shu
+    # bitta son qurilmaga o'zgarish bor-yo'qligini aytadi.
+    revision = get_event_store().config_revision(device["site_id"])
+    return {
+        "ok": True,
+        "config_revision": revision,
+        "config_changed": body.config_revision != revision,
+        "received": body.model_dump(),
+    }
 
 
 @app.get("/api/v1/edge/config")
+@app.get("/api/v1/sotqin/config")
 async def edge_site_config(
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
-    return get_event_store().get_site_config(device["site_id"])
+    config = get_event_store().get_site_config(device["site_id"])
+    features = get_store().site_feature_summary(device["site_id"])
+    # Edge AI qarorini chiqarmaydi: faqat cloud jobiga kerakli sampling va
+    # queue turini qabul qiladi. Active assignmentlar revision bilan keladi.
+    config["product"] = product_payload()
+    config["buffer_policy"] = {
+        "max_days": BUFFER_RETENTION_DAYS,
+        "max_bytes": BUFFER_MAX_BYTES,
+        "min_free_bytes": MIN_FREE_BYTES,
+        "critical_priority": True,
+        "full_video_storage": "nvr",
+    }
+    config["cameras"] = get_store().list_cameras(device["site_id"], include_source=True)
+    config["cloud_features"] = [
+        {
+            "code": item["feature_code"],
+            "camera_count": item["camera_count"],
+            "queue_kind": item["queue_kind"],
+        }
+        for item in features["assignments"]
+        if item["status"] == "active"
+    ]
+    return config
+
+
+@app.post("/api/v1/sotqin/config/ack")
+async def sotqin_config_ack(
+    body: ConfigAckBody,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Sotqin config'ni atomik qo'llaganini yoki rad etganini qayd etadi."""
+    try:
+        updated = get_store().record_config_ack(
+            device["site_id"],
+            device["device_id"],
+            revision=body.revision,
+            status=body.status,
+            error=body.error,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {
+        "ok": True,
+        "device_id": updated["id"],
+        "revision": updated["config_revision"],
+        "status": updated["config_status"],
+    }
+
+
+@app.post("/api/v1/sotqin/camera-probes")
+async def sotqin_camera_probes(
+    body: List[CameraProbeBody] = Body(max_length=MAX_CAMERAS),
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Sotqin ffprobe natijasini yuboradi; RTSP URL hech qachon qaytib kelmaydi."""
+    saved = 0
+    for item in body:
+        try:
+            get_store().record_camera_probe(device["site_id"], **item.model_dump())
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        saved += 1
+    return {"ok": True, "saved": saved}
 
 
 # ── Owner/manager Telegram OTP va panel API ──────────────────────────────
@@ -624,6 +1258,15 @@ async def admin_add_member(
 
 @app.post("/api/v1/owner/auth/request")
 async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
+    # Har chaqiruv Telegramga xabar yuboradi — cheklovsiz bu mijozning
+    # telefonini ham, botni ham ko'mib tashlaydi.
+    ratelimit.check(
+        "otp",
+        body.telegram_id,
+        limit=3,
+        window_sec=600,
+        message="Juda ko'p kod so'raldi. 10 daqiqadan keyin urinib ko'ring.",
+    )
     members = get_event_store().members_for_telegram(body.telegram_id)
     # Akkaunt bor-yo'qligini tashqariga oshkor qilmaymiz.
     if not members:
@@ -700,7 +1343,12 @@ async def owner_stats(owner: OwnerPrincipal = Depends(require_active_owner)) -> 
 
 @app.get("/api/v1/owner/health")
 async def owner_health(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
-    return {"devices": get_event_store().health(owner.site_id)}
+    detail = get_store().site_detail(owner.site_id)
+    return {
+        "devices": get_event_store().health(owner.site_id),
+        "cameras_expected": detail["cameras_expected"],
+        "connection": detail["connection"],
+    }
 
 
 @app.get("/api/v1/owner/config")
@@ -716,12 +1364,47 @@ async def owner_update_config(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     require_owner_role(owner, "owner", "service_admin")
-    allowed_cameras = {f"camera-{number:02d}" for number in range(1, 9)}
+    allowed_cameras = {f"camera-{number:02d}" for number in range(1, MAX_CAMERAS + 1)}
     if any(camera_id not in allowed_cameras for camera_id in body.camera_labels):
-        raise HTTPException(422, "Set-1 camera ID camera-01..camera-08 bo'lishi kerak")
+        raise HTTPException(
+            422, f"Sotqin kamera ID camera-01..camera-{MAX_CAMERAS:02d} bo'lishi kerak"
+        )
     if any(zone.camera_id not in allowed_cameras for zone in body.zones):
         raise HTTPException(422, "Zona noma'lum kameraga bog'langan")
     return get_event_store().update_site_config(owner.site_id, body.model_dump())
+
+
+@app.get("/api/v1/owner/features")
+async def owner_features(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    """Mijoz o'z obunasi va tanlash mumkin bo'lgan funksiyalarni ko'radi."""
+    return {
+        "catalog": get_store().list_feature_catalog(),
+        "summary": get_store().site_feature_summary(owner.site_id),
+    }
+
+
+@app.post("/api/v1/owner/features/quote")
+async def owner_feature_quote(
+    body: FeatureDraftBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    try:
+        return get_store().feature_quote([item.model_dump() for item in body.selections])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.put("/api/v1/owner/features/request")
+async def owner_feature_request(
+    body: FeatureDraftBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Mijoz so'rovi draft bo'ladi; narx o'zgarishini admin tasdiqlaydi."""
+    require_owner_role(owner, "owner", "manager")
+    try:
+        return get_store().replace_feature_draft(
+            owner.site_id, [item.model_dump() for item in body.selections]
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.get("/api/v1/owner/members")
@@ -782,10 +1465,54 @@ async def owner_telegram_webhook(webhook_secret: str, request: Request) -> Dict[
         update = await request.json()
     except Exception as exc:
         raise HTTPException(400, "Telegram update noto'g'ri") from exc
+    membership = update.get("my_chat_member") or {}
+    membership_chat = membership.get("chat") or {}
+    if membership_chat.get("type") in {"group", "supergroup"}:
+        # Pilotda sales boti ichki guruhga qo'shilishi bilan leadlar shu yerga
+        # ham yuboriladi. Flag o'chirilsa hech bir yangi guruh avtomatik
+        # ro'yxatdan o'tmaydi.
+        auto_groups = os.environ.get("CHAQIMCHI_TELEGRAM_AUTO_GROUP_LEADS", "").strip().lower()
+        if auto_groups in {"1", "true", "yes", "on"}:
+            status = str((membership.get("new_chat_member") or {}).get("status") or "")
+            chat_id = str(membership_chat.get("id") or "")
+            if chat_id and status in {"member", "administrator"}:
+                get_store().upsert_telegram_lead_destination(
+                    chat_id,
+                    chat_type=str(membership_chat["type"]),
+                    title=str(membership_chat.get("title") or "Telegram guruhi"),
+                )
+                await _send_owner_telegram(
+                    chat_id,
+                    "✅ Chaqimchi AI lead xabarlari ushbu guruhga yoqildi.",
+                )
+            elif chat_id and status in {"left", "kicked"}:
+                get_store().remove_telegram_lead_destination(chat_id)
+        return {"ok": True}
+
     message = update.get("message") or {}
     chat = message.get("chat") or {}
     telegram_id = str(chat.get("id") or "")
-    command = str(message.get("text") or "").split()[0].lower()
+    command = str(message.get("text") or "").split()[0].lower().split("@", 1)[0]
+    # Telegram ba'zan bot qo'shilishidagi `my_chat_member` update'ini
+    # yubormaydi (masalan bot guruhga webhook sozlanishidan oldin kiritilgan
+    # bo'lsa). Sales guruhi ichidagi /leads buni qo'lda, lekin bir qadamda
+    # tiklash yo'lidir.
+    auto_groups = os.environ.get("CHAQIMCHI_TELEGRAM_AUTO_GROUP_LEADS", "").strip().lower()
+    if (
+        chat.get("type") in {"group", "supergroup"}
+        and auto_groups in {"1", "true", "yes", "on"}
+        and command in {"/leads", "/start"}
+    ):
+        get_store().upsert_telegram_lead_destination(
+            telegram_id,
+            chat_type=str(chat["type"]),
+            title=str(chat.get("title") or "Telegram guruhi"),
+        )
+        await _send_owner_telegram(
+            telegram_id,
+            "✅ Chaqimchi AI lead xabarlari ushbu guruhga yoqildi.",
+        )
+        return {"ok": True}
     members = get_event_store().members_for_telegram(telegram_id)
     if not telegram_id or not members:
         return {"ok": True}
@@ -849,6 +1576,25 @@ async def admin_create_invoice(
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return _with_links(invoice)
+
+
+@app.get("/api/v1/owner/invoices")
+async def owner_list_invoices(
+    limit: int = 30, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> List[Dict[str, Any]]:
+    return [_with_links(i) for i in get_payments().list_invoices(owner.site_id, limit=limit)]
+
+
+@app.post("/api/v1/owner/invoices")
+async def owner_create_invoice(
+    body: CreateInvoiceBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Mijoz faol tarif bo'yicha Payme/Click hisobini mustaqil ochishi mumkin."""
+    require_owner_role(owner, "owner", "manager")
+    try:
+        return _with_links(get_payments().create_invoice(owner.site_id, body.months))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.get("/api/v1/admin/invoices")

@@ -19,14 +19,26 @@ natija bir xil, obuna o'sha zahoti uzayadi.
 
 ## Narx qoidasi
 
-Summa = tarif oylik narxi × to'lanadigan oy. **Har to'liq yil uchun 2 oy tekin**
-(yillik = oylik × 10) — `billable_months()` da, bitta joyda.
+Summa = oylik narx × to'lanadigan oy. **Har to'liq yil uchun 2 oy tekin**
+(yillik = oylik × 10) — `billable_months()` da, **barcha tarifga bir xil**.
+Rasmiy saytdagi “2 oy bepul” va'dasi va hisob-faktura shu bitta funksiyadan
+chiqadi; ular ajralib qolsa mijoz saytda ko‘rgan summadan boshqasini to‘laydi.
 
-| Tarif | 1 oy | 12 oy |
-|-------|------|-------|
+**Sotqin Base** canonical narxi `$20/oy`; aktiv AI funksiyalar kamera bo‘yicha
+qo‘shiladi. Shartnoma **dollar narxini** muzlatadi, kursni emas: invoice
+ochilgan paytdagi `CHAQIMCHI_USD_RATE_UZS` bo‘yicha UZS ga aylantiriladi va
+`invoices.amount_uzs` da o‘zgarmas qolib ketadi. Kurs ko‘tarilsa keyingi hisob
+yangi kursda ochiladi — eskisi tegilmaydi.
+
+| Tarif | 1 oy | 12 oy (2 oy tekin) |
+|-------|------|--------------------|
+| Sotqin Base | $20 ekvivalenti | $200 ekvivalenti |
 | Starter | 790 000 | 7 900 000 |
 | Business | 1 490 000 | 14 900 000 |
 | Enterprise | 2 990 000 | 29 900 000 |
+
+Standart namuna kurs 13 000 bo‘lsa Sotqin Base 1 oy — **260 000 so‘m**,
+12 oy — **2 600 000 so‘m**. Production operator kursni o‘zi yangilaydi.
 
 ## Sozlash
 

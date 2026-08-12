@@ -18,10 +18,10 @@ def main() -> int:
     parser.add_argument("name", help="Mijoz / joy nomi")
     parser.add_argument(
         "--plan",
-        choices=["starter", "business", "enterprise"],
-        default="business",
+        choices=["lite", "starter", "business", "enterprise"],
+        default="lite",
     )
-    parser.add_argument("--months", type=int, default=12)
+    parser.add_argument("--months", type=int, default=1)
     parser.add_argument("--cloud-url", default=DEFAULT_URL)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -51,8 +51,14 @@ def main() -> int:
         print(f"Sayt: {data['site_id']}")
         print(f"Tarif: {data['plan']} — {data['subscription_until']}")
         print(f"Pairing kod (48 soat): {data['pairing_code']}")
-        print(f"O‘rnatish narxi (reja): {data['limits']['install_price_uzs']:,} so‘m")
-        print(f"Oylik: {data['limits']['monthly_price_uzs']:,} so‘m")
+        install_price = data["limits"]["install_price_uzs"]
+        if install_price:
+            print(f"O‘rnatish narxi (reja): {install_price:,} so‘m")
+        else:
+            print("Sotqin, NVR/kameralar va o‘rnatish: alohida smeta")
+        usd = data["limits"].get("monthly_price_usd") or 0
+        usd_label = f"${usd:g}/oy ≈ " if usd else ""
+        print(f"Oylik: {usd_label}{data['limits']['monthly_price_uzs']:,} so‘m")
         print("\nEdge config.yaml:")
         print("license:")
         print("  enabled: true")

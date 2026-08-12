@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""8 RTSP scene analytics throughput qabul testi."""
+"""Chaqimchi Lite uchun 8 RTSP scene analytics qabul testi."""
 
 from __future__ import annotations
 
@@ -48,14 +48,14 @@ def run_camera(camera, analyzer, duration: int) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, default=Path("config/production.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("config/lite.yaml"))
     parser.add_argument("--duration", type=int, default=300)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     settings = AppSettings.load(args.config, base_dir=Path.cwd())
     cameras = [camera for camera in settings.cameras if camera.enabled]
     if len(cameras) != 8:
-        parser.error("Set-1 benchmark uchun aynan 8 faol kamera kerak")
+        parser.error("Chaqimchi Lite benchmarki uchun aynan 8 faol kamera kerak")
     analyzers = {
         camera.id: build_scene_analyzer(camera.id, settings.scene, Path.cwd())
         for camera in cameras

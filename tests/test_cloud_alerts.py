@@ -46,6 +46,15 @@ def _site(
     }
 
 
+def test_alert_config_can_reuse_owner_bot_token(monkeypatch) -> None:
+    monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", raising=False)
+    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "owner-token")
+    monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "123")
+    config = AlertConfig.from_env()
+    assert config.enabled
+    assert config.token == "owner-token"
+
+
 # ── plan_alerts: kimga xabar ketadi ──────────────────────────────────────
 
 

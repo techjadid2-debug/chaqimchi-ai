@@ -24,7 +24,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from chaqimchi_ai import telegram_bot
+from chaqimchi_ai import __version__, telegram_bot
 from chaqimchi_ai.antispoof import build_checker
 from chaqimchi_ai.camera_manager import CameraManager
 from chaqimchi_ai.cloud_sync import CloudEventSync
@@ -327,7 +327,7 @@ async def lifespan(app: FastAPI):
                 "disk_free_bytes": disk.free,
                 "outbox_pending": queue["pending"],
                 "outbox_bytes": queue["bytes"],
-                "app_version": "0.3.0",
+                "app_version": __version__,
                 "model_version": cfg.face.model_version,
             }
 

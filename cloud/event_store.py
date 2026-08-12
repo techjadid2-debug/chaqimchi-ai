@@ -311,6 +311,19 @@ class EventStore:
             "updated_at": row["updated_at"],
         }
 
+    def config_revision(self, site_id: str) -> int:
+        """Faqat revision — heartbeat har daqiqada shuni so'raydi.
+
+        To'liq `get_site_config()` JSON parse qiladi, `/config` marshruti esa
+        ustiga funksiya narxini hisoblab, har kameraning RTSP parolini
+        deshifrlaydi. Qurilma o'zgarish bor-yo'qligini shu bitta sondan biladi.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT revision FROM site_configs WHERE site_id=?"), (site_id,)
+            ).fetchone()
+        return int(row["revision"]) if row else 0
+
     def update_site_config(self, site_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
         current = self.get_site_config(site_id)
         revision = int(current["revision"]) + 1
@@ -488,6 +501,27 @@ class EventStore:
             ).fetchall()
             conn.execute(
                 self._sql("DELETE FROM production_events WHERE occurred_at<?"), (cutoff,)
+            )
+        return [str(row["snapshot_key"]) for row in rows]
+
+    def purge_site(self, site_id: str, retention_days: int) -> List[str]:
+        """Bitta obyektni **o'z tarifi** muddati bo'yicha tozalaydi.
+
+        Umumiy `purge()` hammaga bitta muddat qo'llaydi — 365 kun to'lagan
+        mijozning arxivi 30 kunda o'chib ketardi.
+        """
+        cutoff = (_now() - timedelta(days=max(1, retention_days))).isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT snapshot_key FROM production_events "
+                    "WHERE site_id=? AND occurred_at<? AND snapshot_key IS NOT NULL"
+                ),
+                (site_id, cutoff),
+            ).fetchall()
+            conn.execute(
+                self._sql("DELETE FROM production_events WHERE site_id=? AND occurred_at<?"),
+                (site_id, cutoff),
             )
         return [str(row["snapshot_key"]) for row in rows]
 

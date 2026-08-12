@@ -1,0 +1,39 @@
+# Sotqin R1 — Intel N100, 8 GB RAM, 128 GB NVMe cloud video gateway profili.
+# AI inferens bu qurilmada bajarilmaydi; barcha qaror Chaqimchi Cloud'da.
+product:
+  name: Sotqin
+  profile: SOTQIN-N100-8-128-R1
+  hardware_revision: R1
+  guaranteed_cameras: 4
+  max_cameras: 8
+
+cloud:
+  url: "${CHAQIMCHI_CLOUD_URL}"
+  site_id: "${CHAQIMCHI_SITE_ID}"
+  device_id: "${CHAQIMCHI_DEVICE_ID}"
+  device_token: "${CHAQIMCHI_DEVICE_TOKEN}"
+  heartbeat_sec: 60
+  config_poll_sec: 60
+
+media:
+  hardware_decode: qsv
+  preferred_codec: h264
+  preferred_width: 1280
+  preferred_height: 720
+  motion_filter: true
+  quality_filter: true
+  ai_inference: false
+
+buffer:
+  path: /opt/chaqimchi/shared/data/buffer
+  # NVR to'liq videoni saqlaydi. Sotqin faqat event clip/frame navbatidir.
+  max_days: 3
+  max_bytes: 42949672960
+  min_free_bytes: 21474836480
+  encryption: true
+  critical_priority: true
+
+update:
+  signed_only: true
+  automatic_rollback: true
+  rollout_channel: stable

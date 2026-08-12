@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from chaqimchi_ai import __version__
 from chaqimchi_ai.licensing.models import LicenseState
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class EdgeLicenseClient:
         self,
         *,
         active_cameras: int = 0,
-        app_version: str = "0.2.0",
+        app_version: str = __version__,
     ) -> LicenseState:
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.post(

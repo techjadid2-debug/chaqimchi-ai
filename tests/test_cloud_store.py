@@ -98,3 +98,66 @@ def test_stats_counts_and_revenue(tmp_path) -> None:
     assert stats["by_status"]["suspended"] == 1
     # To'xtatilgan mijoz daromadga qo'shilmaydi.
     assert stats["monthly_revenue_uzs"] == 790_000
+
+
+def test_public_lead_pipeline_and_duplicate_guard(tmp_path) -> None:
+    store = CloudStore(tmp_path / "cloud.db")
+    lead = store.create_lead(
+        full_name="Ali Valiyev",
+        phone="+998 90 123 45 67",
+        company="Pilot Do'kon",
+        city="Toshkent",
+        cameras=4,
+        message="Ulanish kerak",
+        source_hash="ip-hash",
+    )
+    assert lead["status"] == "new"
+    assert store.lead_stats()["new_leads"] == 1
+
+    duplicate = store.create_lead(
+        full_name="Ali Valiyev",
+        phone="+998 90 123 45 67",
+        company=None,
+        city=None,
+        cameras=1,
+        message=None,
+        source_hash="ip-hash",
+    )
+    assert duplicate["id"] == lead["id"]
+    assert duplicate["duplicate"] is True
+    assert len(store.list_leads()) == 1
+
+    qualified = store.update_lead(lead["id"], status="qualified", admin_note="Mos")
+    assert qualified["status"] == "qualified"
+    site = store.create_site("Pilot Do'kon", "lite")
+    linked = store.link_lead_site(lead["id"], site["site_id"])
+    assert linked["status"] == "converted"
+    assert linked["site_id"] == site["site_id"]
+
+
+def test_feature_catalog_quote_and_draft_activation(tmp_path) -> None:
+    store = CloudStore(tmp_path / "cloud.db")
+    catalog = store.list_feature_catalog()
+    assert catalog["price_book"]["base_fee_usd_cents"] == 2_000
+    assert any(item["code"] == "smoke_fire" for item in catalog["features"])
+    assert any(item["code"] == "retail" for item in store.list_business_templates())
+
+    site = store.create_site("Cloud do'kon", "lite")
+    quote = store.feature_quote(
+        [
+            {"feature_code": "person_count", "camera_count": 2},
+            {"feature_code": "queue_length", "camera_count": 1},
+        ]
+    )
+    assert quote["monthly_usd_cents"] == 3_100  # $20 + 2×$3 + $5
+    assert quote["gross_margin_percent"] >= 65
+
+    draft = store.replace_feature_draft(site["site_id"], quote["features"])
+    assert len(draft["drafts"]) == 2
+    assert draft["assignments"] == []
+    active = store.approve_feature_draft(site["site_id"])
+    assert {item["feature_code"] for item in active["assignments"]} == {
+        "person_count",
+        "queue_length",
+    }
+    assert active["drafts"] == []

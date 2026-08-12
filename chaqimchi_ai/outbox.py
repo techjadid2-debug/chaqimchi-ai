@@ -25,12 +25,19 @@ class EventOutbox:
                     payload TEXT NOT NULL,
                     snapshot_path TEXT,
                     snapshot_size INTEGER NOT NULL DEFAULT 0,
+                    priority INTEGER NOT NULL DEFAULT 10,
                     created_at TEXT NOT NULL,
                     attempts INTEGER NOT NULL DEFAULT 0,
                     last_error TEXT
                 )
                 """
             )
+            columns = {
+                str(row[1])
+                for row in conn.execute("PRAGMA table_info(outbox)").fetchall()
+            }
+            if "priority" not in columns:
+                conn.execute("ALTER TABLE outbox ADD COLUMN priority INTEGER NOT NULL DEFAULT 10")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30)
@@ -45,15 +52,19 @@ class EventOutbox:
             if path.is_file():
                 snapshot_size = path.stat().st_size
         payload = json.dumps(event.cloud_payload(), ensure_ascii=False, separators=(",", ":"))
+        # Internet uzilganda 8/128 disk avval analytics batch emas, xavfsizlik
+        # ogohlantirishlarini saqlashi kerak. Critical > warning > normal.
+        priority = {"critical": 30, "warning": 20}.get(event.severity, 10)
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO outbox "
-                "(event_id,payload,snapshot_path,snapshot_size,created_at) VALUES (?,?,?,?,?)",
+                "(event_id,payload,snapshot_path,snapshot_size,priority,created_at) VALUES (?,?,?,?,?,?)",
                 (
                     event.event_id,
                     payload,
                     event.snapshot_path,
                     snapshot_size,
+                    priority,
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
@@ -62,7 +73,7 @@ class EventOutbox:
     def pending(self, limit: int = 50) -> List[Dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM outbox ORDER BY created_at,event_id LIMIT ?", (int(limit),)
+                "SELECT * FROM outbox ORDER BY priority DESC,created_at,event_id LIMIT ?", (int(limit),)
             ).fetchall()
         return [
             {
@@ -111,7 +122,7 @@ class EventOutbox:
             if total > self.max_bytes:
                 rows = conn.execute(
                     "SELECT event_id,snapshot_size+length(payload) AS size FROM outbox "
-                    "ORDER BY created_at,event_id"
+                    "ORDER BY priority ASC,created_at,event_id"
                 ).fetchall()
                 for row in rows:
                     if total <= self.max_bytes:

@@ -37,7 +37,10 @@
   </div>
 
   <script>
-    const PLAN_LABEL = { starter: "Starter", business: "Business", enterprise: "Enterprise" };
+    const PLAN_LABEL = {
+      lite: "Chaqimchi Lite",
+      starter: "Starter", business: "Business", enterprise: "Enterprise"
+    };
     const uzs = (n) => Number(n || 0).toLocaleString("ru-RU") + " so'm";
     const esc = (s) =>
       String(s ?? "").replace(/[&<>"']/g, (c) =>

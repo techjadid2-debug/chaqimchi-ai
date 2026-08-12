@@ -1,7 +1,7 @@
 # Chaqimchi AI
 PY ?= python3
 
-.PHONY: install-dev test lint fmt run-web run-cloud demo calibrate validate-antispoof provision backup restore docker-build cloud-config cloud-deploy benchmark-set1 verify-models
+.PHONY: install-dev test lint fmt run-web run-sotqin run-edge-control run-cloud demo calibrate validate-antispoof provision backup restore docker-build cloud-config cloud-deploy benchmark-lite benchmark-set1 verify-models
 
 install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
@@ -18,14 +18,20 @@ fmt:
 run-web:
 	$(PY) -m uvicorn webapp.main:app --host 127.0.0.1 --port 8742
 
+run-sotqin:
+	$(PY) -m uvicorn chaqimchi_ai.sotqin_agent:app --host 127.0.0.1 --port 8742
+
+run-edge-control:
+	$(PY) -m uvicorn chaqimchi_ai.sotqin_agent:app --host 127.0.0.1 --port 8742
+
 run-cloud:
 	$(PY) -m uvicorn cloud.main:app --host 127.0.0.1 --port 8750
 
-PLAN ?= business
-MONTHS ?= 12
+PLAN ?= lite
+MONTHS ?= 1
 
 provision:
-	@test -n "$(NAME)" || (echo 'Usage: make provision NAME="Mijoz nomi" [PLAN=starter] [MONTHS=12]' && exit 1)
+	@test -n "$(NAME)" || (echo 'Usage: make provision NAME="Mijoz nomi" [PLAN=lite] [MONTHS=12]' && exit 1)
 	$(PY) scripts/provision_site.py "$(NAME)" --plan $(PLAN) --months $(MONTHS)
 
 # Zaxira nusxa: make backup [OUT=/Volumes/USB]
@@ -55,8 +61,11 @@ cloud-config:
 cloud-deploy:
 	./scripts/deploy_cloud.sh
 
-benchmark-set1:
-	$(PY) scripts/benchmark_streams.py --config config/production.yaml --duration 300 --output benchmark-set1.json
+benchmark-lite:
+	$(PY) scripts/benchmark_streams.py --config config/lite.yaml --duration 300 --output benchmark-lite.json
+
+# Eski avtomatlashtirishlar buzilmasligi uchun vaqtinchalik alias.
+benchmark-set1: benchmark-lite
 
 verify-models:
 	$(PY) scripts/verify_model_bundle.py models/manifest.json

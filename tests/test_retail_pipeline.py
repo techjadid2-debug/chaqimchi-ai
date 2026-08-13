@@ -6,6 +6,7 @@ almashtiriladi, vaqt esa tashqaridan beriladi — natija takrorlanadigan.
 
 from __future__ import annotations
 
+from datetime import time as dt_time
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -17,7 +18,8 @@ from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.budget import InferenceBudget
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.pipeline import MOTION_SATURATION, RetailPipeline
-from chaqimchi_ai.retail.rules import Rule, RuleEngine
+from chaqimchi_ai.retail.rules import Rule, RuleEngine, Schedule
+from chaqimchi_ai.retail.tamper import TamperAlert
 from chaqimchi_ai.scene_analytics import SceneAnalyzer
 from chaqimchi_ai.settings import SceneSettings
 
@@ -398,6 +400,137 @@ def test_security_camera_wins_the_contested_budget(tmp_path: Path) -> None:
     result = pipeline.step(now=10.0)
 
     assert result is not None and result.camera_id == "ombor"
+
+
+# ── Kamera buzilishi ─────────────────────────────────────────────────────
+
+
+class FakeTamper:
+    """Belgilangan kadrda bir marta ogohlantiradi."""
+
+    def __init__(self, *, at: int = 1) -> None:
+        self.at = at
+        self.calls = 0
+        self.alerted = False
+
+    def update(self, _frame, *, now: float):
+        self.calls += 1
+        if self.calls != self.at:
+            return None
+        self.alerted = True
+        return TamperAlert(reason="qorong'i", score=0.97, duration_sec=12.0)
+
+
+def test_a_covered_camera_reports_even_without_motion(tmp_path: Path) -> None:
+    """Butun tekshiruvning sababi shu: yopilgan kamerada harakat yo'q.
+
+    Filtr ichida turganda buzilish hech qachon sezilmasdi — tizim
+    "hammasi joyida" deb ko'rsatib turaverardi.
+    """
+    pipeline, analyzer, recorder, _buffer = build(tmp_path)
+    tamper = FakeTamper()
+    pipeline.add_camera("yopiq-01", analyzer, tamper=tamper, now=0.0)  # type: ignore[arg-type]
+    analyzer.motion.ratio = 0.0  # harakat umuman yo'q
+
+    assert pipeline.offer("yopiq-01", FRAME, now=1.0) is False  # kadr tahlilga ketmadi
+
+    assert recorder.names == ["cloud_sync"]
+    event = recorder.actions[0][1]
+    assert event.event_type == "camera_tampered"
+    assert event.severity == "critical"
+    assert event.metadata["reason"] == "qorong'i"
+    assert pipeline.stats()["tamper_alerts"] == 1
+
+
+def test_tamper_event_obeys_the_rules(tmp_path: Path) -> None:
+    rules = RuleEngine(
+        [Rule(name="buzilish", event_type="camera_tampered", actions=("telegram_alert",))]
+    )
+    pipeline, analyzer, recorder, _buffer = build(tmp_path, rules=rules)
+    pipeline.add_camera("yopiq-01", analyzer, tamper=FakeTamper(), now=0.0)  # type: ignore[arg-type]
+
+    pipeline.offer("yopiq-01", FRAME, now=1.0)
+
+    assert recorder.names == ["telegram_alert"]
+
+
+def test_a_camera_without_the_check_stays_silent(tmp_path: Path) -> None:
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path)
+
+    pipeline.offer("kassa-01", FRAME, now=1.0)
+
+    assert recorder.actions == []
+    assert pipeline.stats()["tamper_alerts"] == 0
+
+
+# ── Ish vaqtidan tashqari ────────────────────────────────────────────────
+
+WORKDAY = Schedule.parse("09:00", "21:00")
+
+
+def person() -> EdgeEvent:
+    return EdgeEvent(event_type="person_detected", camera_id="kassa-01", track_id=7)
+
+
+def build_hours(tmp_path: Path, *, hour: int, **kwargs):
+    broker = FrameBroker(InferenceBudget(target_fps=30.0, min_fps=1.0, max_fps=60.0))
+    analyzer = FakeAnalyzer([person()])
+    recorder = Recorder()
+    pipeline = RetailPipeline(
+        broker,
+        RuleEngine(),
+        on_action=recorder,
+        clock=Clock(),
+        local_time=lambda: dt_time(hour=hour),
+        business_hours=WORKDAY,
+        **kwargs,
+    )
+    pipeline.add_camera("kassa-01", analyzer, now=0.0)  # type: ignore[arg-type]
+    return pipeline, recorder
+
+
+def test_a_person_at_night_becomes_an_alert(tmp_path: Path) -> None:
+    """Kunduzi kadrdagi odam — mijoz, kechasi — ogohlantirish."""
+    pipeline, recorder = build_hours(tmp_path, hour=23)
+
+    run(pipeline)
+
+    kinds = [event.event_type for _action, event in recorder.actions]
+    assert "after_hours_presence" in kinds
+    alert = next(event for _a, event in recorder.actions if event.event_type == "after_hours_presence")
+    assert alert.severity == "warning"
+    assert alert.track_id == 7
+    assert alert.metadata["local_time"] == "23:00"
+
+
+def test_a_person_during_opening_hours_is_just_a_customer(tmp_path: Path) -> None:
+    pipeline, recorder = build_hours(tmp_path, hour=12)
+
+    run(pipeline)
+
+    kinds = [event.event_type for _action, event in recorder.actions]
+    assert kinds == ["person_detected"]
+
+
+def test_the_night_alert_is_not_repeated_for_every_frame(tmp_path: Path) -> None:
+    """Kechasi turgan odam har kadrda yangi ogohlantirish bermasin."""
+    pipeline, recorder = build_hours(tmp_path, hour=23, after_hours_debounce_sec=300.0)
+
+    run(pipeline, now=1.0)
+    run(pipeline, now=100.0)
+    run(pipeline, now=400.0)
+
+    alerts = [e for _a, e in recorder.actions if e.event_type == "after_hours_presence"]
+    assert len(alerts) == 2  # 1.0 va 400.0; 100.0 tormozlangan
+
+
+def test_without_business_hours_the_event_never_appears(tmp_path: Path) -> None:
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[person()])
+
+    run(pipeline)
+
+    kinds = [event.event_type for _action, event in recorder.actions]
+    assert kinds == ["person_detected"]
 
 
 # ── Haqiqiy `SceneAnalyzer` bilan ─────────────────────────────────────────

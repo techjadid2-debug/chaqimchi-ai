@@ -103,6 +103,14 @@ retail:
   pre_sec: 10.0                # klip hodisadan necha soniya oldin boshlanadi
   post_sec: 20.0               # va necha soniya keyin tugaydi
   # rules_path: config/rules.yaml
+  # Kamera yopilgani/burilgani/bo'yalgani sezilsin (harakat filtridan oldin).
+  tamper_enabled: true
+  tamper_min_duration_sec: 10.0   # shuncha davom etsagina hodisa chiqadi
+  # Do'kon ish vaqti. Ikkalasi yozilsa, tashqarisida ko'ringan odam uchun
+  # "Ish vaqtidan tashqari harakat" hodisasi chiqadi. Yozilmasa — bu hodisa yo'q.
+  # open_from: "09:00"
+  # open_to: "21:00"
+  after_hours_debounce_sec: 300   # kechasi turgan odam har kadrda xabar bermasin
   cameras: []
   # - id: kassa-01
   #   stream_url: "rtsp://admin:parol@192.168.1.100:554/sub"   # tahlil uchun

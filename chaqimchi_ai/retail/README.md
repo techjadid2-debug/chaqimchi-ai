@@ -149,6 +149,40 @@ klipsiz ishlaydi — hodisa baribir yuboriladi.
 Hamma kamera **bitta modelni** bo'lishadi: 8 kameraga 8 model yuklash
 xotirani ham, iGPU compile vaqtini ham bekorga sarflardi.
 
+### Ikki xavfsizlik hodisasi
+
+**Kamera buzilishi** (`camera_tampered`, `tamper.py`) — yopilgan, burilgan,
+bo'yalgan yoki fokusi buzilgan kamera. Tekshiruv **harakat filtridan oldin**
+turadi: yopilgan kamerada harakat yo'q, ya'ni filtr ichida bo'lganda buzilish
+hech qachon sezilmasdi va tizim "hammasi joyida" deb ko'rsatib turaverardi.
+
+Model ishlatilmaydi — o'rtacha yorug'lik, Laplacian dispersiyasi va 8×8 imzo
+o'rganilgan me'yorga solishtiriladi. Shovqinga qarshi ikki qoida: anomaliya
+`tamper_min_duration_sec` davom etishi kerak (kamera oldidan o'tgan odam
+hodisa emas) va hodisa **bir marta** chiqadi.
+
+> **Diqqat:** chiroq o'chganda ham kadr qorong'i bo'ladi (IR yorug'ligi
+> bo'lmagan kamerada). Buni algoritm ajrata olmaydi — do'kon yopilgandan
+> keyingi soatlar uchun qoidaga jadval qo'ying:
+>
+> ```yaml
+> schedules:
+>   ish-vaqti: {start: "09:00", end: "21:00"}
+> rules:
+>   - name: Kamera buzildi
+>     event_type: camera_tampered
+>     schedule: ish-vaqti
+>     severity: critical
+>     actions: [save_clip, telegram_alert]
+> ```
+
+**Ish vaqtidan tashqari harakat** (`after_hours_presence`) — `open_from` va
+`open_to` berilgan bo'lsa, o'sha oynadan tashqarida ko'ringan odam uchun
+alohida hodisa chiqadi. Alohida tur kerak, chunki bu boshqa savol: kunduzi
+kadrdagi odam — mijoz, kechasi — ogohlantirish. Mijoz panelida ham "Odam
+aniqlandi" emas, "Ish vaqtidan tashqari harakat" deb ko'rinadi. Vaqt
+berilmasa hodisa umuman chiqmaydi: noto'g'ri vaqt yolg'on signal beradi.
+
 ### Hodisa qayerga boradi
 
 Xizmat hodisani mavjud outbox'ga (`data/outbox.db`) yozadi, uni allaqachon
@@ -170,9 +204,9 @@ emas. `scripts/benchmark_n100.py` (T1.10) haqiqiy qurilmada tasdiqlamaguncha
 
 Ochiq bandlar:
 
-- `camera_tampered` va `after_hours_presence` hodisa turlari e'lon qilingan,
-  cloud ularni nom bilan biladi, lekin **hech qaysi modul ularni
-  chiqarmaydi**.
+- Buzilish chegaralari (`dark_ratio`, `blur_ratio`, `change_threshold`)
+  boshqa tizimlardan olingan **boshlang'ich** qiymatlar. Haqiqiy obyektda
+  kalibrlash kerak; shu sabab hodisa `score` bilan chiqadi.
 - Bitta kamera ham yuz tanish, ham analitika uchun kerak bo'lsa oqim ikki
   marta ochiladi (ikki jarayon, ikki dekod). Ataylab: xato ajratilishi shu
   narxga arziydi.

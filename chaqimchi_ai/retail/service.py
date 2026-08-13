@@ -42,8 +42,9 @@ from chaqimchi_ai.retail.budget import InferenceBudget
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.pipeline import RetailPipeline
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
-from chaqimchi_ai.retail.rules import RuleEngine
+from chaqimchi_ai.retail.rules import RuleEngine, Schedule
 from chaqimchi_ai.retail.runner import CameraSource, RetailRunner
+from chaqimchi_ai.retail.tamper import TamperDetector
 from chaqimchi_ai.scene_analytics import PersonDetector, SceneAnalyzer, build_person_detector
 from chaqimchi_ai.settings import AppSettings
 
@@ -146,6 +147,9 @@ def build_runner(
         )
     )
     rules_path = _resolve(base_dir, cfg.rules_path) if cfg.rules_path else None
+    business_hours = (
+        Schedule.parse(cfg.open_from, cfg.open_to) if cfg.open_from and cfg.open_to else None
+    )
     pipeline = RetailPipeline(
         broker,
         load_rules(rules_path),
@@ -154,6 +158,8 @@ def build_runner(
         clip_dir=_resolve(base_dir, cfg.clip_dir),
         pre_sec=cfg.pre_sec,
         post_sec=cfg.post_sec,
+        business_hours=business_hours,
+        after_hours_debounce_sec=cfg.after_hours_debounce_sec,
     )
     runner = RetailRunner(
         pipeline,
@@ -192,6 +198,11 @@ def build_runner(
             ),
             analyzer,
             clips=clips,
+            tamper=(
+                TamperDetector(min_duration_sec=cfg.tamper_min_duration_sec)
+                if cfg.tamper_enabled
+                else None
+            ),
         )
     return runner
 

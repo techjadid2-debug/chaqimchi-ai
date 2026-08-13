@@ -40,7 +40,8 @@ from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
-from chaqimchi_ai.retail.rules import Decision, RuleEngine
+from chaqimchi_ai.retail.rules import Decision, RuleEngine, Schedule
+from chaqimchi_ai.retail.tamper import TamperDetector
 from chaqimchi_ai.scene_analytics import SceneAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -64,10 +65,14 @@ MAX_PENDING_CLIPS = 200
 class _Camera:
     analyzer: SceneAnalyzer
     clips: Optional[RingBuffer] = None
+    tamper: Optional[TamperDetector] = None
     offered: int = 0
     gated: int = 0
     analyzed: int = 0
     errors: int = 0
+    tamper_alerts: int = 0
+    #: Oxirgi "ish vaqtidan tashqari" hodisasi — takror oqimini to'sish uchun.
+    after_hours_at: float = float("-inf")
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,8 @@ class _Totals:
     clips_missing: int = 0
     clips_dropped: int = 0
     clips_unavailable: int = 0
+    tamper_alerts: int = 0
+    after_hours: int = 0
 
 
 class RetailPipeline:
@@ -141,6 +148,8 @@ class RetailPipeline:
         clock: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], float] = time.time,
         local_time: Optional[Callable[[], clock_time]] = None,
+        business_hours: Optional[Schedule] = None,
+        after_hours_debounce_sec: float = 300.0,
     ) -> None:
         if pre_sec < 0 or post_sec < 0:
             raise ValueError("pre_sec va post_sec manfiy bo'lmasin")
@@ -159,6 +168,10 @@ class RetailPipeline:
         #: Qoida jadvallari do'konning **mahalliy** vaqtiga qaraydi ("09:00 dan
         #: 21:00 gacha") — qurilma do'kon bilan bir zonada turadi.
         self._local_time = local_time or (lambda: datetime.now().time())
+        #: Do'kon ish vaqti.  Berilsa, tashqarisida ko'ringan odam uchun
+        #: `after_hours_presence` chiqadi.  Berilmasa bu hodisa umuman yo'q.
+        self.business_hours = business_hours
+        self.after_hours_debounce_sec = float(after_hours_debounce_sec)
         self._cameras: Dict[str, _Camera] = {}
         self._pending: List[_PendingClip] = []
         self._totals = _Totals()
@@ -174,15 +187,17 @@ class RetailPipeline:
         priority: Priority = Priority.RETAIL,
         floor_fps: Optional[float] = None,
         clips: Optional[RingBuffer] = None,
+        tamper: Optional[TamperDetector] = None,
         now: float = 0.0,
     ) -> None:
         """Kamerani zanjirga qo'shadi va brokerga ro'yxatdan o'tkazadi.
 
         `clips` berilmasa shu kameraning `save_clip` qoidalari bajarilmaydi —
-        hodisa baribir yuboriladi, faqat videosiz.
+        hodisa baribir yuboriladi, faqat videosiz.  `tamper` berilmasa kamera
+        yopilganini hech kim sezmaydi.
         """
         with self._lock:
-            self._cameras[camera_id] = _Camera(analyzer=analyzer, clips=clips)
+            self._cameras[camera_id] = _Camera(analyzer=analyzer, clips=clips, tamper=tamper)
             self.broker.register(camera_id, priority=priority, floor_fps=floor_fps, now=now)
 
     # ── Kadr qabul qilish ────────────────────────────────────────────────
@@ -197,6 +212,14 @@ class RetailPipeline:
         har kadrni ko'rgani uchun to'g'ri o'rganadi.
         """
         camera = self._require(camera_id)
+        # Kamera buzilishi **filtrdan oldin** tekshiriladi: yopilgan kamerada
+        # harakat yo'q, ya'ni filtr uni o'tkazmasdi va buzilish hech qachon
+        # sezilmasdi.
+        if camera.tamper is not None:
+            alert = camera.tamper.update(frame, now=now)
+            if alert is not None:
+                self._report_tamper(camera_id, alert, now=now)
+
         # Filtr qulfdan tashqarida: u har kadr uchun ishlaydi va uni qulf
         # ichiga olish 8 kameraning oqimini navbatga tizib qo'yardi.  Xavfsiz,
         # chunki har kameraning fon modeliga faqat o'z oqimi tegadi.
@@ -240,19 +263,15 @@ class RetailPipeline:
                 if failed:
                     camera.errors += 1
                     self._totals.errors += 1
-                self._totals.events += len(events)
                 # Kamera har qanday holatda bo'shatilishi kerak — xato bo'lsa ham.
                 self.broker.complete(claim.camera_id, latency_sec=latency, now=now)
 
         decisions: List[Decision] = []
         if events:
-            local_time = self._local_time()
-            with self._lock:
-                # Qoida dvigatelida cooldown holati bor — u ham qulf ostida.
-                decisions = self.rules.decisions(events, now=now, local_time=local_time)
-                self._totals.suppressed += len(events) - len(decisions)
-            for decision in decisions:
-                self._dispatch(decision, camera_id=claim.camera_id)
+            after_hours = self._after_hours_event(events, claim.camera_id, now=now)
+            if after_hours is not None:
+                events.append(after_hours)
+            decisions = self._report(events, camera_id=claim.camera_id, now=now)
         return Analysis(
             camera_id=claim.camera_id,
             events=events,
@@ -260,6 +279,78 @@ class RetailPipeline:
             latency_sec=latency,
             rescued=claim.rescued,
             failed=failed,
+        )
+
+    # ── Hodisadan harakatgacha ───────────────────────────────────────────
+
+    def _report(self, events: List[EdgeEvent], *, camera_id: str, now: float) -> List[Decision]:
+        """Hodisalarni qoidadan o'tkazib, harakatlarni bajaradi.
+
+        Ikki manbadan chaqiriladi: inferens halqasi (tahlil natijasi) va kadr
+        halqasi (kamera buzilishi).  Ikkalasi ham bir xil yo'ldan o'tishi
+        kerak, aks holda buzilish hodisasiga qoida yozib bo'lmasdi.
+        """
+        local_time = self._local_time()
+        with self._lock:
+            self._totals.events += len(events)
+            # Qoida dvigatelida cooldown holati bor — u ham qulf ostida.
+            decisions = self.rules.decisions(events, now=now, local_time=local_time)
+            self._totals.suppressed += len(events) - len(decisions)
+        for decision in decisions:
+            self._dispatch(decision, camera_id=camera_id)
+        return decisions
+
+    def _report_tamper(self, camera_id: str, alert: Any, *, now: float) -> None:
+        logger.warning(
+            "[%s] kamera buzilgan: %s (%.0f soniya)", camera_id, alert.reason, alert.duration_sec
+        )
+        with self._lock:
+            self._cameras[camera_id].tamper_alerts += 1
+            self._totals.tamper_alerts += 1
+        self._report(
+            [
+                EdgeEvent(
+                    event_type="camera_tampered",
+                    severity="critical",
+                    camera_id=camera_id,
+                    score=alert.score,
+                    metadata={"reason": alert.reason, "duration_sec": alert.duration_sec},
+                )
+            ],
+            camera_id=camera_id,
+            now=now,
+        )
+
+    def _after_hours_event(
+        self, events: List[EdgeEvent], camera_id: str, *, now: float
+    ) -> Optional[EdgeEvent]:
+        """Ish vaqtidan tashqari ko'ringan odam.
+
+        Alohida hodisa turi kerak, chunki bu boshqa savol: kunduzi kadrdagi
+        odam — mijoz, kechasi esa **ogohlantirish**.  Mijozga ham "Odam
+        aniqlandi" emas, "Ish vaqtidan tashqari harakat" deb ko'rsatiladi.
+        """
+        if self.business_hours is None:
+            return None
+        local_time = self._local_time()
+        if local_time is None or self.business_hours.contains(local_time):
+            return None
+        people = [event for event in events if event.event_type == "person_detected"]
+        if not people:
+            return None
+        with self._lock:
+            camera = self._cameras[camera_id]
+            if now - camera.after_hours_at < self.after_hours_debounce_sec:
+                return None
+            camera.after_hours_at = now
+            self._totals.after_hours += 1
+        return EdgeEvent(
+            event_type="after_hours_presence",
+            severity="warning",
+            camera_id=camera_id,
+            track_id=people[0].track_id,
+            occupancy=len(people),
+            metadata={"local_time": local_time.strftime("%H:%M")},
         )
 
     def _dispatch(self, decision: Decision, *, camera_id: str) -> None:
@@ -377,6 +468,8 @@ class RetailPipeline:
             "errors": self._totals.errors,
             "events": self._totals.events,
             "suppressed": self._totals.suppressed,
+            "tamper_alerts": self._totals.tamper_alerts,
+            "after_hours": self._totals.after_hours,
             "actions": dict(sorted(self._totals.actions.items())),
             "action_errors": self._totals.action_errors,
             "clips": {
@@ -392,6 +485,8 @@ class RetailPipeline:
                     "gated": camera.gated,
                     "analyzed": camera.analyzed,
                     "errors": camera.errors,
+                    "tamper_alerts": camera.tamper_alerts,
+                    "tampered": camera.tamper is not None and camera.tamper.alerted,
                 }
                 for camera_id, camera in sorted(self._cameras.items())
             },

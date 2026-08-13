@@ -175,6 +175,16 @@ class RetailSettings(BaseModel):
     #: Qoidalar fayli (YAML yoki JSON).  Berilmasa hamma hodisa cloudga ketadi.
     rules_path: Optional[str] = None
     housekeeping_sec: float = Field(default=30.0, gt=0, le=3600)
+    #: Do'kon ish vaqti ("09:00" / "21:00").  Ikkalasi berilsa, tashqarisida
+    #: ko'ringan odam uchun `after_hours_presence` chiqadi.  Berilmasa bu
+    #: hodisa umuman bo'lmaydi — noto'g'ri vaqt yolg'on signal beradi.
+    open_from: Optional[str] = None
+    open_to: Optional[str] = None
+    after_hours_debounce_sec: float = Field(default=300.0, ge=10, le=86400)
+    #: Kamera yopilgani/burilganini sezish.  Yopilgan kamerada harakat yo'q,
+    #: shuning uchun bu tekshiruv harakat filtridan oldin ishlaydi.
+    tamper_enabled: bool = True
+    tamper_min_duration_sec: float = Field(default=10.0, gt=0, le=600)
     cameras: List[RetailCameraSettings] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -184,6 +194,17 @@ class RetailSettings(BaseModel):
         names = [camera.id for camera in self.cameras]
         if len(names) != len(set(names)):
             raise ValueError("retail: kamera id lari takrorlanmasin")
+        if bool(self.open_from) != bool(self.open_to):
+            raise ValueError("retail: open_from va open_to birga berilishi kerak")
+        for value in (self.open_from, self.open_to):
+            if value is None:
+                continue
+            parts = str(value).split(":")
+            if len(parts) != 2 or not all(part.isdigit() for part in parts):
+                raise ValueError(f"retail: vaqt 'HH:MM' ko'rinishida bo'lsin: {value}")
+            hour, minute = int(parts[0]), int(parts[1])
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError(f"retail: vaqt noto'g'ri: {value}")
         return self
 
 

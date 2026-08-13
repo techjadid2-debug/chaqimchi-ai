@@ -37,6 +37,7 @@ from typing import Any, Callable, Dict, List, Optional
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.pipeline import RetailPipeline
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
+from chaqimchi_ai.retail.tamper import TamperDetector
 from chaqimchi_ai.scene_analytics import SceneAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,7 @@ class RetailRunner:
         analyzer: SceneAnalyzer,
         *,
         clips: Optional[RingBuffer] = None,
+        tamper: Optional[TamperDetector] = None,
         now: Optional[float] = None,
     ) -> None:
         if self._running:
@@ -161,6 +163,7 @@ class RetailRunner:
             priority=source.priority,
             floor_fps=source.floor_fps,
             clips=clips,
+            tamper=tamper,
             now=self._clock() if now is None else now,
         )
 

@@ -6,6 +6,7 @@ beriladi.
 
 from __future__ import annotations
 
+from datetime import time as dt_time
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -114,6 +115,51 @@ def test_duplicate_camera_ids_are_rejected() -> None:
 def test_impossible_budget_is_rejected() -> None:
     with pytest.raises(ValueError):
         settings_for(target_fps=1.0, min_fps=5.0, max_fps=10.0)
+
+
+# ── Kamera buzilishi va ish vaqti ────────────────────────────────────────
+
+
+def test_tamper_check_is_on_by_default(tmp_path: Path) -> None:
+    """O'g'ri birinchi navbatda kamerani yopadi — bu standart yoqiq bo'lsin."""
+    runner, _outbox = runner_for(tmp_path)
+
+    assert runner.pipeline._cameras["kassa-01"].tamper is not None
+
+
+def test_tamper_check_can_be_turned_off(tmp_path: Path) -> None:
+    runner, _outbox = runner_for(tmp_path, tamper_enabled=False)
+
+    assert runner.pipeline._cameras["kassa-01"].tamper is None
+
+
+def test_business_hours_reach_the_pipeline(tmp_path: Path) -> None:
+    runner, _outbox = runner_for(tmp_path, open_from="09:00", open_to="21:00")
+
+    hours = runner.pipeline.business_hours
+    assert hours is not None
+    assert hours.contains(dt_time(hour=12)) is True
+    assert hours.contains(dt_time(hour=23)) is False
+
+
+def test_without_business_hours_the_night_event_is_off(tmp_path: Path) -> None:
+    """Vaqt berilmasa hodisa umuman chiqmaydi — noto'g'ri vaqt yolg'on
+    signal bergandan ko'ra yaxshiroq."""
+    runner, _outbox = runner_for(tmp_path)
+
+    assert runner.pipeline.business_hours is None
+
+
+def test_half_written_business_hours_are_rejected() -> None:
+    with pytest.raises(ValueError):
+        settings_for(open_from="09:00")
+
+
+def test_a_wrong_time_format_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        settings_for(open_from="9 tong", open_to="21:00")
+    with pytest.raises(ValueError):
+        settings_for(open_from="09:00", open_to="25:00")
 
 
 # ── Qoidalar ─────────────────────────────────────────────────────────────

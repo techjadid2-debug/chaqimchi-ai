@@ -59,7 +59,7 @@ def test_lite_profile_is_the_eight_camera_orange_pi_profile(monkeypatch) -> None
     assert cfg.production_errors() == []
 
 
-def test_sotqin_r1_profile_is_cloud_only_n100_gateway() -> None:
+def test_sotqin_r1_profile_matches_the_hardware() -> None:
     root = Path(__file__).resolve().parents[1]
     profile = yaml.safe_load((root / "config" / "sotqin.yaml").read_text(encoding="utf-8"))
     assert profile["product"] == {
@@ -70,6 +70,26 @@ def test_sotqin_r1_profile_is_cloud_only_n100_gateway() -> None:
         "max_cameras": 8,
     }
     assert profile["media"]["hardware_decode"] == "qsv"
+    # Media worker (probe/filtr/buffer) AI ishlatmaydi — u faqat oqim bilan
+    # ishlaydi.  Odam deteksiyasi alohida xizmatda (`retail`).
     assert profile["media"]["ai_inference"] is False
     assert profile["buffer"]["max_days"] == 3
     assert profile["buffer"]["max_bytes"] == 40 * 1024**3
+
+
+def test_sotqin_profile_carries_the_on_device_ai_section() -> None:
+    """Qurilmada AI ishlaydi — profil buni ko'rsatishi kerak.
+
+    Avval bu profil "AI umuman yo'q" deb turardi va yangi odam qurilmada
+    nima ishlayotganini konfigdan bilolmasdi.
+    """
+    root = Path(__file__).resolve().parents[1]
+    settings = AppSettings.load(root / "config" / "sotqin.yaml", base_dir=root)
+
+    assert settings.scene.enabled is True
+    assert settings.scene.backend == "openvino"
+    # Buffer chegaralari ikkala bo'limda bir xil bo'lishi kerak: retail
+    # xizmati segmentni o'chirmasa, 128 GB disk to'ladi.
+    profile = yaml.safe_load((root / "config" / "sotqin.yaml").read_text(encoding="utf-8"))
+    assert settings.retail.buffer_max_bytes == profile["buffer"]["max_bytes"]
+    assert settings.retail.buffer_retention_sec == profile["buffer"]["max_days"] * 24 * 3600

@@ -1,7 +1,7 @@
 # Chaqimchi AI
 PY ?= python3
 
-.PHONY: install-dev test lint fmt run-web run-sotqin run-edge-control run-cloud demo calibrate validate-antispoof provision backup restore docker-build cloud-config cloud-deploy benchmark-lite benchmark-set1 verify-models
+.PHONY: install-dev test lint fmt run-web run-sotqin run-edge-control run-cloud run-retail demo calibrate validate-antispoof provision backup restore docker-build cloud-config cloud-deploy benchmark-lite benchmark-set1 verify-models
 
 install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
@@ -26,6 +26,9 @@ run-edge-control:
 
 run-cloud:
 	$(PY) -m uvicorn cloud.main:app --host 127.0.0.1 --port 8750
+
+run-retail:
+	$(PY) -m chaqimchi_ai.retail.service
 
 PLAN ?= lite
 MONTHS ?= 1

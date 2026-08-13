@@ -21,6 +21,9 @@ qiladi.
 Ishga tushirish:
 
     python -m chaqimchi_ai.retail.service --config config/config.yaml
+
+Qurilmada `--config` berilmaydi: yo'l `CHAQIMCHI_CONFIG` da turadi va yuz
+tanish xizmati bilan **bitta** fayl bo'ladi — kamera ikki joyda ta'riflanmasin.
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ from chaqimchi_ai.retail.rules import RuleEngine, Schedule
 from chaqimchi_ai.retail.runner import CameraSource, RetailRunner
 from chaqimchi_ai.retail.tamper import TamperDetector
 from chaqimchi_ai.scene_analytics import PersonDetector, SceneAnalyzer, build_person_detector
-from chaqimchi_ai.settings import AppSettings
+from chaqimchi_ai.settings import AppSettings, default_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +230,9 @@ def _log_stats(stats: Dict[str, Any]) -> None:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Retail AI xizmati")
-    parser.add_argument("--config", default="config/config.yaml", help="config.yaml yo'li")
+    parser.add_argument(
+        "--config", default=None, help="config yo'li (standart: $CHAQIMCHI_CONFIG)"
+    )
     parser.add_argument("--base-dir", default=".", help="loyiha ildizi")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args(argv)
@@ -237,7 +242,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     base_dir = Path(args.base_dir).resolve()
-    settings = AppSettings.load(_resolve(base_dir, args.config), base_dir=base_dir)
+    # Qurilmada konfig yo'li `CHAQIMCHI_CONFIG` da turadi (sotqin.env) — xizmat
+    # yuz tanish bilan **bitta** faylni o'qishi kerak, aks holda kamera ikki
+    # joyda ta'riflanardi.
+    config_path = _resolve(base_dir, args.config) if args.config else default_config_path(base_dir)
+    logger.info("Konfig: %s", config_path)
+    settings = AppSettings.load(config_path, base_dir=base_dir)
 
     runner = build_runner(settings, base_dir)
     runner.start()

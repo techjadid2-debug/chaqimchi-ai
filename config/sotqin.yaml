@@ -1,5 +1,9 @@
-# Sotqin R1 — Intel N100, 8 GB RAM, 128 GB NVMe cloud video gateway profili.
-# AI inferens bu qurilmada bajarilmaydi; barcha qaror Chaqimchi Cloud'da.
+# Sotqin R1 — Intel N100, 8 GB RAM, 128 GB NVMe qurilma profili.
+#
+# Yengil inferens (odam deteksiyasi, do'kon analitikasi) shu qurilmada
+# bajariladi — pastdagi `retail` bo'limi va chaqimchi-retail.service.
+# Qimmat AI (ko'rish agenti, hisobotlar) Chaqimchi Cloud'da qoladi,
+# to'liq video arxiv esa NVR'da.
 product:
   name: Sotqin
   profile: SOTQIN-N100-8-128-R1
@@ -22,6 +26,8 @@ media:
   preferred_height: 720
   motion_filter: true
   quality_filter: true
+  # Media worker (probe, filtr, buffer) AI ishlatmaydi — u faqat oqim bilan
+  # ishlaydi. Odam deteksiyasi alohida xizmatda: `retail` bo'limi.
   ai_inference: false
 
 buffer:
@@ -37,3 +43,35 @@ update:
   signed_only: true
   automatic_rollback: true
   rollout_channel: stable
+
+# ── Qurilmadagi AI (chaqimchi-retail.service) ────────────────────────────
+# Odam deteksiyasi modeli. Yuklash: python scripts/fetch_retail_model.py
+scene:
+  enabled: true
+  backend: openvino
+  model_path: models/retail/person-detection-retail-0013.xml
+  confidence: 0.5
+  queue_limit: 5
+  # Chiziq va zonalar 0..1 koordinatada — rezolyutsiya o'zgarsa qayta
+  # chizilmasin. O'rnatuvchi obyektda to'ldiradi.
+  lines: []
+  zones: []
+
+retail:
+  enabled: false        # kameralar yozilgach true qilinadi
+  target_fps: 30.0      # scripts/benchmark_n100.py o'lchagan songa moslang
+  min_fps: 2.0
+  max_fps: 45.0
+  buffer_dir: /opt/chaqimchi/shared/data/buffer
+  clip_dir: /opt/chaqimchi/shared/data/clips
+  buffer_retention_sec: 259200      # 3 kun — buffer.max_days bilan bir xil
+  buffer_max_bytes: 42949672960     # 40 GB — buffer.max_bytes bilan bir xil
+  tamper_enabled: true
+  # open_from: "09:00"
+  # open_to: "21:00"
+  # rules_path: /opt/chaqimchi/shared/config/rules.yaml
+  cameras: []
+  # - id: kassa-01
+  #   stream_url: "${CAMERA_01_RTSP}"        # substream — tahlil uchun
+  #   record_url: "${CAMERA_01_RTSP_MAIN}"   # main — klip uchun
+  #   priority: security

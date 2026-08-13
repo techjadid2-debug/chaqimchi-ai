@@ -6,6 +6,7 @@ Bu hujjat **Face Recognition Core** modulining mantiqiy arxitekturasini o‘zbek
 
 - **Maqsad**: real vaqtga yaqin video oqimida yuzni aniqlash, geometrik tekislash (alignment), 512 o‘lchamli embedding olish va ma’lum bazadagi vektorlar bilan kosinus o‘xshashligi bo‘yicha solishtirish.
 - **Chegara**: bu modul faqat **kompyuter ko‘rishi yadrosi**; autentifikatsiya siyosati, foydalanuvchi interfeysi va server API alohida qatlamlarda bo‘lishi tavsiya etiladi.
+- **Bu yerda yo‘q**: do‘kon analitikasi (odam deteksiyasi, sanoq, dwell, navbat) butunlay boshqa yo‘l — alohida jarayon, alohida model va o‘z inferens byudjeti bilan: [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md).
 
 ## 2. Yuqori darajadagi komponentlar
 

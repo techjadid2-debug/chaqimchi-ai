@@ -1,7 +1,9 @@
 # Chaqimchi AI
 
 > Lokal qurilma — **Sotqin R1**: Intel N100 mini-kompyuter, NVR/IP kameralar
-> va Chaqimchi Cloud orasidagi xavfsiz gateway. AI inferens faqat cloud'da.
+> va Chaqimchi Cloud orasidagi xavfsiz ko'prik. Yengil inferens (odam
+> deteksiyasi, do'kon analitikasi) qurilmaning o'zida; qimmat AI — ko'rish
+> agenti va hisobotlar — cloudda. To'liq video arxiv NVR'da qoladi.
 
 Mahsulot scope'i, edge/server chegarasi, o‘rnatish va rollout:
 [docs/CHAQIMCHI_LITE.md](docs/CHAQIMCHI_LITE.md). Batafsil apparat, benchmark,
@@ -10,8 +12,11 @@ backup va rollback: [docs/PRODUCTION_SET1.md](docs/PRODUCTION_SET1.md).
 Muhim: repository’dagi InsightFace demo modeli commercial mahsulot litsenziyasi degani emas. Litsenziyalangan model manifesti tasdiqlanmaguncha production Face ID fail-closed holatda qoladi. Oddiy mijozlar uchun persistent Face ID V1 scope’ida yo‘q.
 
 Sotqin control plane pairing, hardware identity, heartbeat, cloud config,
-ACK/NACK va imzolangan update/rollbackni bajaradi. Media worker keyingi bosqichda
-ONVIF, RTSP, non-AI filter, shifrlangan buffer va cloud uploadni qo‘shadi.
+ACK/NACK va imzolangan update/rollbackni bajaradi. Do‘kon analitikasi (odam
+sanog‘i, dwell, navbat, kamera buzilishi) alohida xizmatda ishlaydi —
+`make run-retail`, batafsil
+[chaqimchi_ai/retail/README.md](chaqimchi_ai/retail/README.md). ONVIF discovery
+keyingi bosqichda.
 
 Real vaqtga yaqin yuzni tanish: SCRFD deteksiya, ArcFace 512 embedding, ko‘p kamera va veb-dashboard.
 
@@ -50,6 +55,7 @@ Muhit o‘zgaruvchisi: `CHAQIMCHI_CONFIG=/yo'l/config.yaml`
 | `make lint` / `make fmt` | Ruff |
 | `make run-web` | FastAPI server (8742) |
 | `make run-sotqin` | Sotqin R1 control agent (8742) |
+| `make run-retail` | Do‘kon analitikasi xizmati (`retail.enabled: true` kerak) |
 | `make demo` | CLI kamera |
 | `make backup` | Baza zaxira nusxasi (`OUT=/Volumes/USB`) |
 | `make restore FILE=n.zip` | Nusxadan tiklash |
@@ -123,6 +129,8 @@ docker run -p 8742:8742 -v "$(pwd)/config:/app/config" chaqimchi-ai
 - [Umumiy reja](docs/MASTER_PLAN.md)
 - [Chaqimchi Lite: mahsulot, ulanish va rollout](docs/CHAQIMCHI_LITE.md)
 - [Sotqin R1: apparat va cloud kontrakti](docs/SOTQIN.md)
+- [Do‘kon analitikasi (Retail AI)](chaqimchi_ai/retail/README.md) — inferens
+  byudjeti, zanjir va qurilma sig‘imi
 - [Ko‘rish agenti (AI)](docs/KORISH_AGENTI.md) — narx jadvali bilan
 - [To‘lov integratsiyasi](docs/TOLOV.md)
 - [Arxitektura](docs/ARXITEKTURA.md)

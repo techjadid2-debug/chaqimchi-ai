@@ -298,8 +298,52 @@ Batafsil: [TOLOV.md](TOLOV.md)
 
 ---
 
+## 9. Do‘kon analitikasi (Chaqimchi Retail AI)
+
+Yuz tanish “bu kim?” degan savolga javob beradi. Do‘konga esa boshqa savol
+kerak: **nechta odam kirdi, qayerda to‘xtadi, navbat qancha, kim kamerani
+yopdi.** Buning uchun yuz emas, **odam** aniqlanadi — arzonroq model, kamroq
+maxfiylik yuki.
+
+| # | Vazifa | Holat |
+|---|--------|-------|
+| 9.1 | Inferens byudjeti va navbat (`broker`, `budget`) | [x] |
+| 9.2 | Retail hodisa turlari | [x] |
+| 9.3 | Deklarativ qoida dvigateli (JSON/YAML) | [x] |
+| 9.4 | Chiziq kesish, dwell, navbat + harakat trackeri | [x] |
+| 9.5 | OpenVINO detektor (`person-detection-retail-0013`) | [x] |
+| 9.6 | Hodisa klipi uchun ring buffer (`-c copy`) | [x] |
+| 9.7 | Zanjir: kadr → filtr → navbat → tahlil → qoida → harakat | [x] |
+| 9.8 | Alohida xizmat (`chaqimchi-retail.service`) | [x] |
+| 9.9 | Kamera buzilishi va ish vaqtidan tashqari harakat | [x] |
+| 9.10 | N100 sig‘imini o‘lchash skripti | [x] skript tayyor, **o‘lchov o‘tkazilmagan** |
+
+### Qurilmada AI — chegara o‘zgardi
+
+Avvalgi rejada Sotqin AI umuman ishlatmaydigan gateway edi: har kadr cloudga
+ketishi kerak edi. Bu ishlamadi — do‘kondan chiqadigan internet kanali ham,
+cloud GPU narxi ham yetmaydi. Yangi chegara:
+
+| Qayerda | Nima |
+|---------|------|
+| Qurilma (N100 iGPU) | Odam deteksiyasi (2.3 GFLOPs), tracking, sanoq, dwell, navbat, kamera buzilishi, qoidalar, klip |
+| Cloud | Ko‘rish agenti (Claude), arxiv, panel, Telegram, obuna, ko‘p obyekt hisoboti |
+| NVR | To‘liq video arxiv |
+
+Sabab oddiy: 8 kamera × 5 FPS = sekundiga 40 kadr. Ularni cloudga yuborish
+oyiga terabaytlab trafik va GPU hisobi degani; qurilmada esa 2.3 GFLOPs model
+shu ishni bajaradi va cloudga faqat **hodisa** ketadi.
+
+**Ochiq**: sig‘im o‘lchanmagan (`scripts/benchmark_n100.py`), kamera ro‘yxati
+cloud inventari bilan ulanmagan, buzilish chegaralari kalibrlanmagan.
+Batafsil: [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md),
+[SOTQIN.md](SOTQIN.md).
+
+---
+
 **Ustuvorlik**: mahsulot barqaror → xizmat modeli → to‘lov avtomatlashtirish.
 
-**Keyingi qadam**: 6.7 gRPC mikroservis (ixtiyoriy, GPU serverga chiqarishda kerak
-bo‘ladi) va 6.6 anti-spoof modelini kuchaytirish (o‘z hujum suratlaringiz kerak —
-`scripts/validate_antispoof.py`).
+**Keyingi qadam**: N100 da benchmark o‘tkazish (9.10) — 8 kamera va’dasi shu
+raqamga bog‘liq. Keyin: 8.3/8.4 ko‘rish agentini kameraga ulash, 6.7 gRPC
+mikroservis (ixtiyoriy) va 6.6 anti-spoof modelini kuchaytirish
+(`scripts/validate_antispoof.py`).

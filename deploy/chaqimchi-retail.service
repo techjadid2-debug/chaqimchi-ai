@@ -9,8 +9,9 @@ User=chaqimchi
 Group=chaqimchi
 WorkingDirectory=/opt/chaqimchi/current
 EnvironmentFile=/etc/chaqimchi/sotqin.env
+# Konfig yo'li sotqin.env dagi CHAQIMCHI_CONFIG dan olinadi — yuz tanish
+# xizmati bilan bitta fayl.
 ExecStart=/opt/chaqimchi/venv/bin/python -m chaqimchi_ai.retail.service \
-    --config /opt/chaqimchi/shared/config/config.yaml \
     --base-dir /opt/chaqimchi/shared
 Restart=always
 RestartSec=5

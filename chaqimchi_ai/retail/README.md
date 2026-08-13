@@ -1,4 +1,4 @@
-# chaqimchi_ai/retail — inferens byudjeti va navbat
+# chaqimchi_ai/retail — do'kon analitikasining edge qismi
 
 ## Muammo
 
@@ -90,8 +90,69 @@ tafsilot. `budget` ichida `target_fps`, `p95_latency_ms`, `pressure`.
 Ishga tushirishda kuzatiladigan asosiy ikki raqam: **`floor_violations`**
 (qurilma yetishmayapti) va **`p95_latency_ms`** (model sekinlashgan).
 
+## Zanjir (`pipeline.py` va `runner.py`)
+
+Yuqoridagi broker — zanjirning bir bo'g'ini. To'liq yo'l:
+
+```
+kamera → grab/retrieve → harakat filtri → broker → detektor+analiz → qoida → harakat
+   (runner.py)              (pipeline.offer)        (pipeline.step)      │
+                                                                        ├→ cloud_sync
+                                                                        ├→ telegram_alert
+                                                                        └→ save_clip → ring buffer
+```
+
+`RetailPipeline` — mantiq (kadr qabul qilish, tahlil, qoida, klip navbati).
+`RetailRunner` — o'sha mantiqni qurilmada aylantiruvchi oqimlar. Ikkalasi ham
+kamera, ffmpeg va soatsiz sinaladi.
+
+### Uchta halqa, uchta tezlik
+
+| Halqa | Kim chaqiradi | Tezlik | Nima uchun ajratilgan |
+|-------|---------------|--------|-----------------------|
+| `offer()` | har kameraning o'z oqimi | kameraning FPS'i | filtr arzon, bloklanmasin |
+| `step()` | bitta inferens oqimi | `burst/target_fps` dan tez (~66 ms) | byudjet token yo'qotmasin |
+| `flush_clips()` | uy ishlari oqimi | 30 soniyada | ffmpeg sekin, byudjetni yemasin |
+
+### Nega dekodlash tejaladi
+
+`grab()` kadrni oladi, `retrieve()` esa dekodlaydi. Kamera 15 FPS bersa ham
+tahlilga sekundiga 5 ta kadr yetadi — qolgani dekodlanmasdan tashlanadi. Har
+kadrni dekodlash 8 kamerada N100 ning katta qismini yeb qo'yardi.
+
+### Nega klip kechiktiriladi
+
+Hodisa 14:30:00 da bo'lsa klip [14:29:50, 14:30:20] — oxirgi 20 soniya hali
+yozilmagan. Darhol kesilsa aynan "keyin nima bo'ldi" degan qism yo'qoladi.
+Shuning uchun so'rov navbatga tushadi va `post_sec` o'tgach kesiladi.
+**Hodisaning o'zi kutmaydi** — u allaqachon yuborilgan, klip keyin qo'shiladi
+(`metadata.clip_path` + `on_clip`).
+
+### Ishlatish
+
+```python
+pipeline = RetailPipeline(broker, rules, on_action=send, clip_dir=Path("data/clips"))
+runner = RetailRunner(pipeline)
+runner.add_camera(
+    CameraSource("kassa-01", "rtsp://nvr/sub", priority=Priority.SECURITY,
+                 record_url="rtsp://nvr/main", sample_fps=5.0),
+    analyzer,
+    clips=RingBuffer("kassa-01", Path("data/buffer")),
+)
+runner.start()
+```
+
+`on_action(action, event)` — `cloud_sync` va `telegram_alert` ni chaqiruvchi
+bajaradi (mavjud `EventOutbox` va Telegram moduli). `save_clip` ni zanjirning
+o'zi bajaradi.
+
 ## Holat
 
 Sig'im raqamlari (30 inf/s) boshqa modeldan miqyoslangan **taxmin**, o'lchov
 emas. `scripts/benchmark_n100.py` (T1.10) haqiqiy qurilmada tasdiqlamaguncha
-8 kamera sotilmasin — batafsil `docs/RETAIL_ARXITEKTURA.md`.
+8 kamera sotilmasin.
+
+Zanjir **ishga tushirilmagan**: uni qaysi jarayon boshlashi (alohida xizmatmi
+yoki mavjud webapp ichidami) hal qilinmagan — mavjud `CameraManager` o'sha
+kameralarni yuz tanish uchun allaqachon ochadi va ikkalasi bir vaqtda ishlasa
+oqim ikki marta dekodlanadi.

@@ -155,6 +155,12 @@ class RKNNPersonDetector:
         self._runtime.release()
 
 
+#: Fon modeli o'rganilguncha o'tadigan kadrlar.  Shu oraliqda hamma narsa
+#: "harakat" deb qaraladi — aks holda tizim endi yoqilganda birinchi hodisani
+#: o'tkazib yuborardi.
+WARMUP_FRAMES = 5
+
+
 class MotionGate:
     def __init__(self, min_area_ratio: float = 0.01) -> None:
         self.min_area_ratio = float(min_area_ratio)
@@ -163,15 +169,24 @@ class MotionGate:
         )
         self._frames = 0
 
-    def has_motion(self, frame: np.ndarray) -> bool:
+    def motion_ratio(self, frame: np.ndarray) -> float:
+        """Kadrning necha ulushi o'zgargani (0..1).
+
+        Ha/yo'q javobidan tashqari **miqdor** ham kerak: broker kameralar
+        orasida byudjetni taqsimlaganda ko'p harakatli kameraga ko'proq ulush
+        beradi.  Hisob baribir bajarilayotgan edi — faqat tashqariga
+        chiqarilmasdi.
+        """
         self._frames += 1
         small = cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA)
         mask = self._subtractor.apply(small)
-        if self._frames <= 5:
-            return True
+        if self._frames <= WARMUP_FRAMES:
+            return 1.0
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-        changed = float(cv2.countNonZero(mask)) / float(mask.size)
-        return changed >= self.min_area_ratio
+        return float(cv2.countNonZero(mask)) / float(mask.size)
+
+    def has_motion(self, frame: np.ndarray) -> bool:
+        return self.motion_ratio(frame) >= self.min_area_ratio
 
 
 def _inside(point: Tuple[float, float], polygon: Sequence[Tuple[float, float]]) -> bool:
@@ -234,12 +249,27 @@ class SceneAnalyzer:
         return True
 
     def process(self, frame: np.ndarray, *, now: float | None = None) -> List[EdgeEvent]:
+        """Kadrni filtrlab, kerak bo'lsa tahlil qiladi.
+
+        Bitta kamerali yo'l uchun: harakat filtri va tezlik chegarasi shu
+        yerda.  Ko'p kamerali retail yo'lida navbatni `FrameBroker` hal
+        qiladi, shuning uchun u to'g'ridan-to'g'ri `analyze()` ni chaqiradi.
+        """
         now = time.monotonic() if now is None else float(now)
         if not self.motion.has_motion(frame):
             return []
         min_interval = 1.0 / self.settings.burst_fps
         if now - self._last_analysis < min_interval:
             return []
+        return self.analyze(frame, now=now)
+
+    def analyze(self, frame: np.ndarray, *, now: float | None = None) -> List[EdgeEvent]:
+        """Kadrni **filtrsiz** tahlil qiladi — kim chaqirsa, o'sha hal qilgan.
+
+        Byudjet allaqachon shu kadrga token bergan bo'lsa, uni yana bir marta
+        filtrga solish qo'sh ish bo'lardi.
+        """
+        now = time.monotonic() if now is None else float(now)
         self._last_analysis = now
 
         detections = self.tracker.update(self.detector.detect(frame))

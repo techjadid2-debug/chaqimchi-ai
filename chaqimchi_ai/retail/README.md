@@ -196,14 +196,44 @@ Disk kvotasi (40 GB) yozayotgan kameralar orasida **teng bo'linadi**. Har
 kamera to'liq kvotani o'ziniki deb bilsa 8 kamera 320 GB talab qilardi —
 128 GB disk esa ancha oldin to'lardi.
 
-## Holat
+## Sig'imni o'lchash (`scripts/benchmark_n100.py`)
 
-Sig'im raqamlari (30 inf/s) boshqa modeldan miqyoslangan **taxmin**, o'lchov
-emas. `scripts/benchmark_n100.py` (T1.10) haqiqiy qurilmada tasdiqlamaguncha
-8 kamera sotilmasin.
+Sig'im raqamlari (30 inf/s) boshqa modeldan miqyoslangan **taxmin** edi.
+Mijozga 8 kamera va'da qilishdan oldin shu skript haqiqiy qurilmada
+ishlatilsin:
+
+```bash
+python scripts/fetch_retail_model.py            # model + sha256
+python scripts/benchmark_n100.py --seconds 120 --cameras 8 \
+    --source rtsp://admin:parol@192.168.1.100:554/sub \
+    --json releases/n100-benchmark.json
+```
+
+Skript to'rtta narsani o'lchaydi va bitta javob beradi — **shu konfiguratsiya
+sotilishi mumkinmi**:
+
+| O'lchov | Nima uchun |
+|---------|-----------|
+| Detektor p50/p95 va tezligi | Byudjet aynan p95 ga qarab target qo'yadi |
+| Birinchi va oxirgi uchdan bir | Qurilma qizib sekinlashsa qisqa o'lchov yolg'on |
+| Filtr + buzilish tekshiruvi | Har kadrda ishlaydi: 8 kamera × 5 FPS = 40/s |
+| Dekodlash (`--source` bilan) | Kadr olishning o'zi ham CPU yeydi |
+
+Xulosa **xom tezlikka emas**, byudjet qabul qiladigan songa asoslanadi
+(`0.8 × workers / p95`) — ishlash paytida target aynan shu atrofda turadi.
+Zaxira 25% dan kam bo'lsa ham "sotilmasin" deb chiqadi: issiq kunda yoki
+og'irroq kadrda byudjet tushadi va kafolat buziladi.
+
+O'lchov qachon yolg'on bo'ladi (skript o'zi ogohlantiradi): sun'iy kadrda
+(`--source` bermasangiz), inferens CPU'ga tushib qolganda (iGPU drayveri yo'q)
+va 60 soniyadan qisqa ishlaganda.
+
+## Holat
 
 Ochiq bandlar:
 
+- **Benchmark hali ishlatilmagan.** Skript tayyor, lekin haqiqiy N100 da
+  o'lchov o'tkazilmagan — shu vaqtgacha 8 kamera va'da qilinmasin.
 - Buzilish chegaralari (`dark_ratio`, `blur_ratio`, `change_threshold`)
   boshqa tizimlardan olingan **boshlang'ich** qiymatlar. Haqiqiy obyektda
   kalibrlash kerak; shu sabab hodisa `score` bilan chiqadi.

@@ -7,7 +7,7 @@ tekshiradi: nechta kirdi, qaysi soat gavjum, navbat qancha bo'ldi.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
@@ -288,3 +288,94 @@ def test_security_problems_are_pushed_into_the_message(tmp_path: Path) -> None:
     )
 
     assert "⚠️ 1 marta kamera buzilgan" in text
+
+
+# ── Kunlar bo'yicha trend ────────────────────────────────────────────────
+
+
+def entries(day: date, count: int, hour: int = 12) -> List[EdgeEvent]:
+    return [
+        EdgeEvent(
+            event_type="line_crossed",
+            camera_id="eshik-01",
+            direction="in",
+            occurred_at=moment(hour, index % 60, day=day),
+        )
+        for index in range(count)
+    ]
+
+
+def test_the_week_shows_which_day_is_strongest(tmp_path: Path) -> None:
+    """Dam olish kunlari savdo ikki barobar bo'lsa xodim jadvali shunga
+    qarab tuziladi."""
+    events: List[EdgeEvent] = []
+    for offset, count in enumerate([210, 190, 205, 230, 310, 420, 380]):
+        events += entries(date(2026, 8, 7) + timedelta(days=offset), count)
+    store = store_with(events, tmp_path)
+
+    trend = store.traffic_trend("site-1", days=7, until=date(2026, 8, 13))
+
+    assert trend["total"] == 1945
+    assert trend["busiest_day"] == {"date": "2026-08-12", "weekday": "Chorshanba", "entered": 420}
+    assert trend["quietest_day"]["entered"] == 190
+    assert trend["average"] == 277.9
+
+
+def test_every_day_appears_even_when_the_shop_was_closed(tmp_path: Path) -> None:
+    """Bo'sh kun grafikda bo'sh ustun bo'lib turishi kerak — yo'qolib
+    ketsa hafta qisqarib ko'rinardi."""
+    store = store_with(entries(date(2026, 8, 13), 5), tmp_path)
+
+    trend = store.traffic_trend("site-1", days=7, until=date(2026, 8, 13))
+
+    assert len(trend["daily"]) == 7
+    assert [item["entered"] for item in trend["daily"]] == [0, 0, 0, 0, 0, 0, 5]
+    assert trend["daily"][-1]["weekday"] == "Payshanba"
+
+
+def test_the_period_is_compared_with_the_previous_one(tmp_path: Path) -> None:
+    """7 kun ↔ oldingi 7 kun.  Aks holda o'sish bayram kuni tufayli ekanini
+    bilib bo'lmasdi."""
+    events = entries(date(2026, 8, 13), 120) + entries(date(2026, 8, 6), 100)
+    store = store_with(events, tmp_path)
+
+    trend = store.traffic_trend("site-1", days=7, until=date(2026, 8, 13))
+
+    assert trend["previous_total"] == 100
+    assert trend["change_percent"] == 20.0
+
+
+def test_a_long_period_is_capped(tmp_path: Path) -> None:
+    store = store_with([], tmp_path)
+
+    assert store.traffic_trend("site-1", days=5000)["days"] == 90
+    assert store.traffic_trend("site-1", days=0)["days"] == 1
+
+
+def test_an_empty_period_has_no_strongest_day(tmp_path: Path) -> None:
+    store = store_with([], tmp_path)
+
+    trend = store.traffic_trend("site-1", days=7, until=DAY)
+
+    assert trend["busiest_day"] is None
+    assert trend["total"] == 0
+    assert trend["change_percent"] is None
+
+
+def test_trend_days_use_tashkent_boundaries(tmp_path: Path) -> None:
+    """Kechki 23:30 dagi mijoz o'sha kunga tegishli, ertangiga emas."""
+    store = store_with(
+        [
+            EdgeEvent(
+                event_type="line_crossed",
+                camera_id="eshik-01",
+                direction="in",
+                occurred_at=moment(23, 30, day=date(2026, 8, 12)),
+            )
+        ],
+        tmp_path,
+    )
+
+    trend = store.traffic_trend("site-1", days=2, until=DAY)
+
+    assert [item["entered"] for item in trend["daily"]] == [1, 0]

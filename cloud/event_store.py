@@ -31,6 +31,18 @@ REPORT_EVENT_TYPES = (
 )
 
 
+#: Hafta kunlari — `date.weekday()` tartibida (0 = dushanba).
+WEEKDAYS = (
+    "Dushanba",
+    "Seshanba",
+    "Chorshanba",
+    "Payshanba",
+    "Juma",
+    "Shanba",
+    "Yakshanba",
+)
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -399,6 +411,86 @@ class EventStore:
             ),
             "security": security,
         }
+
+    def traffic_trend(
+        self, site_id: str, *, days: int = 7, until: Optional[date] = None
+    ) -> Dict[str, Any]:
+        """Kunlar bo'yicha kirish oqimi.
+
+        Kunlik hisobot "bugun 340 kishi kirdi" deydi, lekin do'kon egasining
+        ikkinchi savoli boshqacha: **shu hafta qanday ketdi va qaysi kun
+        kuchli?**  Dam olish kunlari savdo ikki barobar bo'lsa xodim jadvali
+        ham shunga qarab tuziladi.
+
+        Taqqoslash oldingi **shuncha kunlik** oraliq bilan bo'ladi (7 kun ↔
+        oldingi 7 kun), aks holda o'sish bayram kuni tufayli ekanini bilib
+        bo'lmasdi.
+        """
+        timezone_tashkent = ZoneInfo("Asia/Tashkent")
+        days = max(1, min(int(days), 90))
+        until = until or datetime.now(timezone_tashkent).date()
+        start = until - timedelta(days=days - 1)
+
+        counts = self._entered_by_day(site_id, start, until, timezone_tashkent)
+        daily = [
+            {
+                "date": (start + timedelta(days=offset)).isoformat(),
+                "weekday": WEEKDAYS[(start + timedelta(days=offset)).weekday()],
+                "entered": counts.get(start + timedelta(days=offset), 0),
+            }
+            for offset in range(days)
+        ]
+        total = sum(item["entered"] for item in daily)
+        previous_end = start - timedelta(days=1)
+        previous = sum(
+            self._entered_by_day(
+                site_id, previous_end - timedelta(days=days - 1), previous_end, timezone_tashkent
+            ).values()
+        )
+        active = [item for item in daily if item["entered"]]
+        return {
+            "from": start.isoformat(),
+            "to": until.isoformat(),
+            "days": days,
+            "daily": daily,
+            "total": total,
+            "average": round(total / days, 1),
+            "busiest_day": max(active, key=lambda item: item["entered"]) if active else None,
+            "quietest_day": min(active, key=lambda item: item["entered"]) if active else None,
+            "previous_total": previous,
+            "change_percent": _change_percent(total, previous),
+        }
+
+    def _entered_by_day(
+        self, site_id: str, start: date, end: date, zone: ZoneInfo
+    ) -> Dict[date, int]:
+        """Oraliqdagi kunlar bo'yicha kirish soni.
+
+        Faqat `occurred_at` o'qiladi: 30 kunlik oraliqda bu o'n minglab
+        qatorni to'liq yuklashdan ancha yengil.  Kunga bo'lish Python'da,
+        chunki vaqt mintaqasi bo'yicha guruhlash SQLite va PostgreSQL'da
+        har xil yoziladi.
+        """
+        start_utc = datetime.combine(start, datetime.min.time(), tzinfo=zone).astimezone(
+            timezone.utc
+        )
+        end_utc = datetime.combine(
+            end + timedelta(days=1), datetime.min.time(), tzinfo=zone
+        ).astimezone(timezone.utc)
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT occurred_at FROM production_events WHERE site_id=? "
+                    "AND occurred_at>=? AND occurred_at<? AND event_type='line_crossed' "
+                    "AND direction='in'"
+                ),
+                (site_id, start_utc.isoformat(), end_utc.isoformat()),
+            ).fetchall()
+        counts: Dict[date, int] = {}
+        for row in rows:
+            day = self._to_local(dict(row)["occurred_at"], zone).date()
+            counts[day] = counts.get(day, 0) + 1
+        return counts
 
     def _events_of_day(self, site_id: str, day: date, zone: ZoneInfo) -> List[Dict[str, Any]]:
         start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)

@@ -280,3 +280,30 @@ def test_owner_report_needs_authentication(production_client) -> None:
     _provision(client)
 
     assert client.get("/api/v1/owner/report").status_code in {401, 403}
+
+
+def test_owner_trend_returns_a_full_week(production_client) -> None:
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="505")
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-trend",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                }
+            ]
+        },
+    )
+
+    trend = client.get("/api/v1/owner/trend?days=7", headers=owner_headers).json()
+
+    assert len(trend["daily"]) == 7
+    assert trend["total"] == 1
+    # Bugun oxirgi ustun bo'lishi kerak — grafik chapdan o'ngga o'sadi.
+    assert trend["daily"][-1]["entered"] == 1

@@ -1354,6 +1354,14 @@ async def owner_report(
     return get_event_store().retail_report(owner.site_id, day=day)
 
 
+@app.get("/api/v1/owner/trend")
+async def owner_trend(
+    days: int = 7, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Kunlar bo'yicha kirish oqimi: qaysi kun kuchli, hafta qanday ketdi."""
+    return get_event_store().traffic_trend(owner.site_id, days=days)
+
+
 @app.get("/api/v1/owner/stats")
 async def owner_stats(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
     return get_event_store().stats(owner.site_id)

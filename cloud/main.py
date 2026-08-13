@@ -12,6 +12,7 @@ import html
 import os
 import secrets
 from contextlib import asynccontextmanager
+from datetime import date as date_type
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -41,7 +42,7 @@ from cloud import ratelimit
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService
 from cloud.event_store import EventStore, event_store_from_env
-from cloud.notify import build_alert
+from cloud.notify import build_alert, event_label
 from cloud.owner_auth import (
     OwnerPrincipal,
     issue_owner_token,
@@ -1326,14 +1327,31 @@ async def owner_events(
     camera_id: Optional[str] = None,
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
-    return {
-        "events": get_event_store().list_events(
-            owner.site_id,
-            limit=max(1, min(limit, 500)),
-            event_type=event_type,
-            camera_id=camera_id,
-        )
-    }
+    events = get_event_store().list_events(
+        owner.site_id,
+        limit=max(1, min(limit, 500)),
+        event_type=event_type,
+        camera_id=camera_id,
+    )
+    # Mijoz `line_crossed` degan so'zni tushunmaydi.  Tarjima serverda
+    # qo'shiladi — panel va Telegram bitta manbadan foydalanadi.
+    for item in events:
+        item["label"] = event_label(str(item.get("event_type", "")))
+    return {"events": events}
+
+
+@app.get("/api/v1/owner/report")
+async def owner_report(
+    date: Optional[str] = None, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Kunlik do'kon hisoboti: kirish, gavjum soat, navbat, dwell."""
+    day: Optional[date_type] = None
+    if date:
+        try:
+            day = date_type.fromisoformat(date)
+        except ValueError as exc:
+            raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lishi kerak") from exc
+    return get_event_store().retail_report(owner.site_id, day=day)
 
 
 @app.get("/api/v1/owner/stats")

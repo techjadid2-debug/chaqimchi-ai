@@ -12,14 +12,38 @@ import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from chaqimchi_ai.event_models import EdgeEvent
 
+#: Kunlik hisobot uchun o'qiladigan turlar.  `person_detected` ataylab yo'q:
+#: u eng katta hajmli tur va hisobotda ishlatilmaydi — uni ham o'qish
+#: gavjum do'konda so'rovni bir necha barobar og'irlashtirardi.
+REPORT_EVENT_TYPES = (
+    "line_crossed",
+    "dwell_exceeded",
+    "queue_threshold_exceeded",
+    "occupancy_exceeded",
+    "camera_tampered",
+    "after_hours_presence",
+    "zone_entered",
+)
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _change_percent(today: int, yesterday: int) -> Optional[float]:
+    """Kechagiga nisbatan o'zgarish.
+
+    Kecha nol bo'lsa foiz ma'nosiz (cheksizlik) — `None` qaytadi va panelda
+    ko'rsatilmaydi.
+    """
+    if yesterday <= 0:
+        return None
+    return round((today - yesterday) / yesterday * 100, 1)
 
 
 class EventStore:
@@ -289,6 +313,127 @@ class EventStore:
             ).fetchall()
         by_type = {row["event_type"]: int(row["count"]) for row in rows}
         return {"date": day.isoformat(), "total": sum(by_type.values()), "by_type": by_type}
+
+    def retail_report(self, site_id: str, *, day: Optional[date] = None) -> Dict[str, Any]:
+        """Do'kon egasi uchun kunlik hisobot.
+
+        Xom hodisa sanog'i ("line_crossed: 680") mijozga hech narsa aytmaydi:
+        u kirish va chiqishning yig'indisi.  Do'kon egasining savollari
+        boshqacha — nechta odam **kirdi**, qaysi soat gavjum, kassada navbat
+        qancha bo'ldi, qaysi tokcha oldida uzoq turishadi.
+
+        Hisob Python'da yig'iladi, SQL'da emas: vaqt mintaqasi (Asia/Tashkent)
+        bo'yicha soatlarga bo'lish SQLite va PostgreSQL'da har xil yoziladi,
+        kunlik hodisa hajmi esa buni talab qilmaydi.  `person_detected`
+        umuman o'qilmaydi — u eng katta hajmli tur va hisobotga kirmaydi.
+        """
+        timezone_tashkent = ZoneInfo("Asia/Tashkent")
+        day = day or datetime.now(timezone_tashkent).date()
+        rows = self._events_of_day(site_id, day, timezone_tashkent)
+
+        hourly: Dict[int, Dict[str, int]] = {
+            hour: {"hour": hour, "entered": 0, "exited": 0} for hour in range(24)
+        }
+        entered = exited = 0
+        queue_lengths: List[Tuple[int, str]] = []
+        dwell: Dict[str, List[float]] = {}
+        security = {"camera_tampered": 0, "after_hours_presence": 0, "restricted_zone": 0}
+
+        for row in rows:
+            kind = row["event_type"]
+            local = self._to_local(row["occurred_at"], timezone_tashkent)
+            if kind == "line_crossed":
+                if row.get("direction") == "in":
+                    entered += 1
+                    hourly[local.hour]["entered"] += 1
+                elif row.get("direction") == "out":
+                    exited += 1
+                    hourly[local.hour]["exited"] += 1
+            elif kind == "dwell_exceeded" and row.get("dwell_sec") is not None:
+                dwell.setdefault(row.get("zone") or "—", []).append(float(row["dwell_sec"]))
+            elif kind == "queue_threshold_exceeded" and row.get("queue_length") is not None:
+                queue_lengths.append((int(row["queue_length"]), local.strftime("%H:%M")))
+            elif kind in security:
+                security[kind] += 1
+            elif kind == "zone_entered" and (row.get("metadata") or {}).get("restricted"):
+                security["restricted_zone"] += 1
+
+        busiest = max(hourly.values(), key=lambda item: (item["entered"], -item["hour"]))
+        longest = max(queue_lengths, default=None, key=lambda item: item[0])
+        yesterday = self._entered_count(site_id, day - timedelta(days=1), timezone_tashkent)
+
+        return {
+            "date": day.isoformat(),
+            "traffic": {
+                "entered": entered,
+                "exited": exited,
+                # Kirish va chiqish har doim ham teng bo'lmaydi (kamera
+                # ko'rmay qolishi mumkin), shuning uchun bu **taxminiy**.
+                "inside_estimate": max(0, entered - exited),
+                "entered_yesterday": yesterday,
+                "change_percent": _change_percent(entered, yesterday),
+                "busiest_hour": busiest if busiest["entered"] else None,
+                "hourly": [hourly[hour] for hour in range(24)],
+            },
+            "queue": {
+                "alerts": len(queue_lengths),
+                "longest": longest[0] if longest else 0,
+                "longest_at": longest[1] if longest else None,
+                "average": (
+                    round(sum(item[0] for item in queue_lengths) / len(queue_lengths), 1)
+                    if queue_lengths
+                    else 0
+                ),
+            },
+            "dwell": sorted(
+                (
+                    {
+                        "zone": zone,
+                        "count": len(values),
+                        "average_sec": round(sum(values) / len(values), 1),
+                        "longest_sec": round(max(values), 1),
+                    }
+                    for zone, values in dwell.items()
+                ),
+                key=lambda item: (-item["count"], item["zone"]),
+            ),
+            "security": security,
+        }
+
+    def _events_of_day(self, site_id: str, day: date, zone: ZoneInfo) -> List[Dict[str, Any]]:
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+        start = start_local.astimezone(timezone.utc).isoformat()
+        end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        placeholders = ",".join("?" for _ in REPORT_EVENT_TYPES)
+        query = self._sql(
+            "SELECT * FROM production_events WHERE site_id=? AND occurred_at>=? "
+            f"AND occurred_at<? AND event_type IN ({placeholders}) ORDER BY occurred_at"
+        )
+        with self._connect() as conn:
+            rows = conn.execute(query, (site_id, start, end, *REPORT_EVENT_TYPES)).fetchall()
+        return [self._decode_event(row) for row in rows]
+
+    def _entered_count(self, site_id: str, day: date, zone: ZoneInfo) -> int:
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+        start = start_local.astimezone(timezone.utc).isoformat()
+        end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT COUNT(*) AS count FROM production_events WHERE site_id=? "
+                    "AND occurred_at>=? AND occurred_at<? AND event_type='line_crossed' "
+                    "AND direction='in'"
+                ),
+                (site_id, start, end),
+            ).fetchone()
+        return int(dict(row)["count"]) if row else 0
+
+    @staticmethod
+    def _to_local(occurred_at: str, zone: ZoneInfo) -> datetime:
+        moment = datetime.fromisoformat(str(occurred_at))
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.astimezone(zone)
 
     def record_health(self, site_id: str, device_id: str, payload: Dict[str, Any]) -> None:
         with self._connect() as conn:

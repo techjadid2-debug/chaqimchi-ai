@@ -13,6 +13,61 @@ from cloud.event_store import EventStore
 logger = logging.getLogger(__name__)
 
 
+def _duration(seconds: float) -> str:
+    return f"{int(seconds // 60)} daq" if seconds >= 60 else f"{int(seconds)} s"
+
+
+def build_digest(
+    site_name: str, day: str, stats: Dict[str, Any], report: Dict[str, Any]
+) -> str:
+    """Kunlik xabar matni.
+
+    Xom hodisa sanog'i ("person_detected: 412") do'kon egasiga hech narsa
+    aytmaydi.  Xabar uning savollariga javob beradi: nechta odam kirdi, kecha
+    bilan taqqoslaganda qanday, qaysi soat gavjum, navbat qancha bo'ldi.
+
+    Xavfsizlik hodisalari **oxirida va faqat bo'lsa** yoziladi — har kuni
+    "0 ta buzilish" deb yozish xabarni uzaytiradi va o'qilmay qoladi.
+    """
+    traffic = report["traffic"]
+    lines = [f"📊 {site_name} — {day}", f"Kirdi: {traffic['entered']} kishi"]
+
+    change = traffic.get("change_percent")
+    if change is not None:
+        arrow = "▲" if change >= 0 else "▼"
+        lines.append(f"Kechagiga nisbatan: {arrow} {abs(change)}% ({traffic['entered_yesterday']})")
+    busiest = traffic.get("busiest_hour")
+    if busiest:
+        lines.append(f"Gavjum soat: {busiest['hour']:02d}:00 — {busiest['entered']} kishi")
+
+    queue = report["queue"]
+    if queue["alerts"]:
+        lines.append(
+            f"Navbat: {queue['alerts']} marta uzun, eng uzuni {queue['longest']} kishi "
+            f"({queue['longest_at']})"
+        )
+    if report["dwell"]:
+        top = report["dwell"][0]
+        lines.append(
+            f"Ko'p to'xtalgan zona: {top['zone']} — {top['count']} marta, "
+            f"o'rtacha {_duration(top['average_sec'])}"
+        )
+
+    security = report["security"]
+    alarms = []
+    if security["camera_tampered"]:
+        alarms.append(f"{security['camera_tampered']} marta kamera buzilgan")
+    if security["after_hours_presence"]:
+        alarms.append(f"{security['after_hours_presence']} marta ish vaqtidan tashqari harakat")
+    if security["restricted_zone"]:
+        alarms.append(f"{security['restricted_zone']} marta taqiqlangan zona")
+    if alarms:
+        lines.append("⚠️ " + ", ".join(alarms))
+
+    lines.append(f"Jami hodisa: {stats['total']}")
+    return "\n".join(lines)
+
+
 class DailyDigestService:
     def __init__(
         self,
@@ -43,17 +98,8 @@ class DailyDigestService:
             if self.events.digest_was_sent(site_id, digest_date):
                 continue
             stats = self.events.stats(site_id, day=now.date())
-            by_type = stats["by_type"]
-            text = (
-                f"📊 Chaqimchi AI — {site['name']}\n"
-                f"Sana: {digest_date}\n"
-                f"Jami hodisa: {stats['total']}\n"
-                f"Odam: {by_type.get('person_detected', 0)}\n"
-                f"Xodim: {by_type.get('employee_seen', 0)}\n"
-                f"Zona: {by_type.get('zone_entered', 0)}\n"
-                f"Uzoq turish: {by_type.get('loitering', 0)}\n"
-                f"Limit oshishi: {by_type.get('occupancy_exceeded', 0)}"
-            )
+            report = self.events.retail_report(site_id, day=now.date())
+            text = build_digest(str(site["name"]), digest_date, stats, report)
             site_sent = 0
             for member in members:
                 try:

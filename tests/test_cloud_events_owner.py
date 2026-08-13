@@ -195,3 +195,88 @@ def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
     assert invoice.json()["pay_url"].startswith("/pay/")
     assert client.get("/api/v1/owner/invoices", headers=owner_headers).json()[0]["id"] == invoice.json()["id"]
     assert client.get("/owner").status_code == 200
+
+
+def _login_owner(client: TestClient, site_id: str, telegram_id: str = "404") -> dict:
+    client.post(
+        f"/api/v1/admin/sites/{site_id}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": telegram_id, "role": "owner", "display_name": "Owner"},
+    )
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": telegram_id})
+    verified = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": telegram_id, "site_id": site_id, "code": "123456"},
+    )
+    return {"Authorization": f"Bearer {verified.json()['access_token']}"}
+
+
+def test_owner_report_separates_entries_from_exits(production_client) -> None:
+    """Mijoz "line_crossed: 3" emas, "2 kishi kirdi" degan javobni oladi."""
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": f"evt-{index}",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": direction,
+                    "line": "eshik",
+                }
+                for index, direction in enumerate(["in", "in", "out"])
+            ]
+        },
+    )
+
+    report = client.get("/api/v1/owner/report", headers=owner_headers)
+
+    assert report.status_code == 200
+    assert report.json()["traffic"]["entered"] == 2
+    assert report.json()["traffic"]["exited"] == 1
+
+
+def test_owner_report_rejects_a_broken_date(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+
+    answer = client.get("/api/v1/owner/report?date=13-08-2026", headers=owner_headers)
+
+    assert answer.status_code == 422
+
+
+def test_owner_events_carry_uzbek_labels(production_client) -> None:
+    """Panelda `line_crossed` emas, "Kirish/chiqish" ko'rinishi kerak."""
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-label",
+                    "event_type": "camera_tampered",
+                    "severity": "critical",
+                    "camera_id": "camera-01",
+                }
+            ]
+        },
+    )
+
+    events = client.get("/api/v1/owner/events", headers=owner_headers).json()["events"]
+
+    assert events[0]["label"] == "Kamera yopildi yoki burildi"
+
+
+def test_owner_report_needs_authentication(production_client) -> None:
+    client, _messages = production_client
+    _provision(client)
+
+    assert client.get("/api/v1/owner/report").status_code in {401, 403}

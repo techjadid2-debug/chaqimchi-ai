@@ -115,6 +115,7 @@ def build(
     rules: Optional[RuleEngine] = None,
     clips: Any = "default",
     wall: Optional[List[float]] = None,
+    review: Any = None,
 ) -> Tuple[RetailPipeline, FakeAnalyzer, Recorder, Any]:
     broker = FrameBroker(InferenceBudget(target_fps=30.0, min_fps=1.0, max_fps=60.0))
     analyzer = FakeAnalyzer(events)
@@ -126,6 +127,7 @@ def build(
         rules or RuleEngine(),
         on_action=recorder,
         on_clip=recorder.clip,
+        on_review=review,
         clip_dir=tmp_path / "clips",
         pre_sec=10.0,
         post_sec=20.0,
@@ -582,3 +584,114 @@ def test_a_real_walk_through_the_door_produces_an_action(tmp_path: Path) -> None
     crossings = [event for _action, event in recorder.actions if event.event_type == "line_crossed"]
     assert len(crossings) == 1
     assert crossings[0].direction in {"in", "out"}
+
+
+# ── AI ko'rigi (8.3) ─────────────────────────────────────────────────────
+
+
+class ReviewSpy:
+    """`VisionReviewer.submit` o'rniga: qaysi hodisa va kadr kelganini yozadi."""
+
+    def __init__(self, *, queued: bool = True) -> None:
+        self.calls: List[Tuple[EdgeEvent, Any]] = []
+        self.queued = queued
+        self.raises = False
+
+    def __call__(self, event: EdgeEvent, frame: Any) -> bool:
+        if self.raises:
+            raise RuntimeError("AI ko'rikchisi yiqildi")
+        self.calls.append((event, frame))
+        return self.queued
+
+
+def tamper_rules() -> RuleEngine:
+    return RuleEngine(
+        [
+            Rule(
+                name="buzilishni AI ko'rsin",
+                event_type="camera_tampered",
+                actions=("cloud_sync", "ai_review"),
+            )
+        ]
+    )
+
+
+def with_tamper(pipeline: RetailPipeline, analyzer: FakeAnalyzer) -> None:
+    pipeline.add_camera("yopiq-01", analyzer, tamper=FakeTamper(), now=0.0)  # type: ignore[arg-type]
+
+
+def test_rule_can_send_the_frame_to_the_ai(tmp_path: Path) -> None:
+    """Qoida so'ragan hodisada kadr ko'rikchiga uzatiladi."""
+    spy = ReviewSpy()
+    pipeline, analyzer, recorder, _buffer = build(
+        tmp_path, rules=tamper_rules(), review=spy
+    )
+    with_tamper(pipeline, analyzer)
+    analyzer.motion.ratio = 0.0  # yopilgan kamerada harakat yo'q
+
+    pipeline.offer("yopiq-01", FRAME, now=1.0)
+
+    assert len(spy.calls) == 1
+    event, frame = spy.calls[0]
+    assert event.event_type == "camera_tampered"
+    # AI aynan buzilish ko'ringan kadrni ko'rishi kerak, keyingisini emas.
+    assert frame is FRAME
+    # Hodisaning o'zi baribir cloudga ketgan — AI qo'shimcha, shart emas.
+    assert "cloud_sync" in recorder.names
+    assert pipeline.stats()["reviews"]["sent"] == 1
+
+
+def test_analyzed_frame_is_the_one_the_ai_sees(tmp_path: Path) -> None:
+    """Tahlilga tushgan kadr saqlanadi — oqimdagi tasodifiy keyingisi emas."""
+    spy = ReviewSpy()
+    rules = RuleEngine(
+        [Rule(name="AI", event_type="line_crossed", actions=("ai_review",))]
+    )
+    pipeline, _analyzer, _recorder, _buffer = build(
+        tmp_path, events=[line_crossed()], rules=rules, review=spy
+    )
+    analyzed = np.ones((8, 8, 3), dtype=np.uint8)
+
+    pipeline.offer("kassa-01", analyzed, now=1.0)
+    pipeline.step(now=1.0)
+
+    assert spy.calls[0][1] is analyzed
+
+
+def test_review_without_a_reviewer_is_only_counted(tmp_path: Path) -> None:
+    """`vision.enabled: false` bo'lsa qoida yiqilmaydi — hodisa AI'siz ketadi."""
+    pipeline, analyzer, recorder, _buffer = build(tmp_path, rules=tamper_rules())
+    with_tamper(pipeline, analyzer)
+
+    pipeline.offer("yopiq-01", FRAME, now=1.0)
+
+    assert "cloud_sync" in recorder.names
+    assert pipeline.stats()["reviews"] == {"sent": 0, "skipped": 1}
+
+
+def test_refused_review_is_not_counted_as_sent(tmp_path: Path) -> None:
+    """Oraliq yoki limit tufayli o'tkazib yuborilgani alohida ko'rinadi."""
+    spy = ReviewSpy(queued=False)
+    pipeline, analyzer, _recorder, _buffer = build(
+        tmp_path, rules=tamper_rules(), review=spy
+    )
+    with_tamper(pipeline, analyzer)
+
+    pipeline.offer("yopiq-01", FRAME, now=1.0)
+
+    assert pipeline.stats()["reviews"] == {"sent": 0, "skipped": 1}
+
+
+def test_broken_reviewer_does_not_stop_the_pipeline(tmp_path: Path) -> None:
+    """AI tomoni yiqilsa ham navbat, dwell va sanoq ishlashda davom etadi."""
+    spy = ReviewSpy()
+    spy.raises = True
+    pipeline, analyzer, recorder, _buffer = build(
+        tmp_path, rules=tamper_rules(), review=spy
+    )
+    with_tamper(pipeline, analyzer)
+
+    pipeline.offer("yopiq-01", FRAME, now=1.0)
+
+    assert "cloud_sync" in recorder.names
+    assert pipeline.stats()["action_errors"] == 1

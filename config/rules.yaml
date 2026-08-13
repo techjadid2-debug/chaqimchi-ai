@@ -1,0 +1,60 @@
+# Do'kon qoidalari — namuna.
+#
+# Yoqish: `retail.rules_path: config/rules.yaml` (config.yaml da).
+# Qoida o'zgarsa faqat analitika xizmati qayta yuklanadi, yuz tanish tegilmaydi.
+#
+# Harakatlar:
+#   cloud_sync     — hodisa cloudga ketadi (standart)
+#   telegram_alert — cloud mijozga Telegram xabarini yuboradi
+#   save_clip      — hodisa atrofidagi video kesib olinadi
+#   ai_review      — kadrni ko'rish agenti ko'rib, o'zbekcha izoh yozadi
+#   ignore         — hodisa bostiriladi
+#
+# DIQQAT: `ai_review` **pul sarflaydi** (bitta ko'rik ~87 so'm). Uni faqat
+# rostdan izoh kerak bo'lgan hodisaga qo'ying — "odam ko'rindi" ga emas.
+# Uch tomondan tormoz bor: qoida, kamera boshiga 5 daqiqa (`vision.
+# min_interval_sec`) va kunlik limit (`vision.max_calls_per_day`).
+# Batafsil: docs/KORISH_AGENTI.md
+
+schedules:
+  ish-vaqti: {start: "09:00", end: "21:00"}
+
+rules:
+  # Kamera yopilgan yoki burilgan. Eng qimmat hodisa: tizim ko'r bo'lib qoladi,
+  # shuning uchun AI ham ko'radi — "qop bilan yopilgan" va "chiroq o'chgan"
+  # ikki xil muammo va javobi ham boshqacha.
+  - name: Kamera buzilishi
+    event_type: camera_tampered
+    severity: critical
+    cooldown_sec: 600
+    actions: [cloud_sync, telegram_alert, save_clip, ai_review]
+
+  # Do'kon yopiq, lekin ichkarida harakat bor. AI "kim va nima qilyapti"
+  # degan savolga javob beradi — qorovulmi yoki begonami.
+  - name: Ish vaqtidan tashqari harakat
+    event_type: after_hours_presence
+    severity: critical
+    cooldown_sec: 300
+    actions: [cloud_sync, telegram_alert, save_clip, ai_review]
+
+  # Navbat — kundalik ish, AI kerak emas: raqamning o'zi yetarli.
+  - name: Kassada uzun navbat
+    event_type: queue_threshold_exceeded
+    conditions: {min_queue_length: 5}
+    schedule: ish-vaqti
+    severity: warning
+    cooldown_sec: 300
+    actions: [cloud_sync, telegram_alert]
+
+  # Kirish/chiqish sanog'i hisobot uchun kerak, lekin xabar qilinmaydi —
+  # aks holda telefon kun bo'yi jiringlaydi.
+  - name: Kirish-chiqish
+    event_type: line_crossed
+    severity: info
+    actions: [cloud_sync]
+
+  # Har bir ko'ringan odam uchun hodisa yozish arxivni to'ldiradi va hisobotda
+  # ishlatilmaydi.
+  - name: Oddiy odam
+    event_type: person_detected
+    suppress: true

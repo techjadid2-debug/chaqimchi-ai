@@ -44,7 +44,10 @@ from chaqimchi_ai.event_models import EdgeEvent
 
 #: Qoida buyura oladigan harakatlar.  Ro'yxat yopiq: config'dan kelgan
 #: noma'lum harakat jimgina e'tiborsiz qolmasin, xato bersin.
-ACTIONS = frozenset({"save_clip", "telegram_alert", "cloud_sync", "ignore"})
+#: `ai_review` — kadrni ko'rish agentiga yuborish.  **Pul sarflaydi**, shuning
+#: uchun uni faqat qoida so'ragan hodisaga qo'yish mumkin; standart harakatlar
+#: ichida yo'q.
+ACTIONS = frozenset({"save_clip", "telegram_alert", "cloud_sync", "ai_review", "ignore"})
 
 #: Qoida topilmagan hodisa uchun standart xatti-harakat.
 DEFAULT_ACTIONS = ("cloud_sync",)

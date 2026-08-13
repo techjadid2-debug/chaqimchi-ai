@@ -221,6 +221,39 @@ Disk kvotasi (40 GB) yozayotgan kameralar orasida **teng bo'linadi**. Har
 kamera to'liq kvotani o'ziniki deb bilsa 8 kamera 320 GB talab qilardi —
 128 GB disk esa ancha oldin to'lardi.
 
+### AI ko'rigi (`vision_review.py`)
+
+Analitika "kassada 6 kishi" deydi — raqam. Do'kon egasiga esa jumla kerak:
+"kamera oldiga karton quti qo'yilgan". Shu jumlani ko'rish agenti yozadi,
+lekin uni har kadrga qo'yib bo'lmaydi — har chaqiruv pul (~87 so'm).
+
+Shuning uchun ko'rik zanjirning **oxirida**, qoida so'raganda ishlaydi:
+
+```yaml
+actions: [cloud_sync, telegram_alert, save_clip, ai_review]
+```
+
+```
+qoida → ai_review → navbat ─┐
+                            └→ vision-review oqimi → AI → outbox → cloud
+```
+
+Uch narsa ataylab shunday:
+
+1. **Alohida oqim.** AI javobi 3–10 soniya. Uni `step()` ichida kutish o'sha
+   vaqtda hamma kamerani to'xtatib qo'yardi.
+2. **Kadr `submit()` da kodlanadi.** Bir necha millisekund, lekin navbatda
+   turgan havola oqim tomonidan almashtirilib qolmaydi.
+3. **Oraliq navbatga qo'yishda boshlanadi**, javob kelganda emas — aks holda
+   sekin javob paytida o'tgan har bir hodisa yangi chaqiruv bo'lardi.
+
+Navbat to'lsa kadr tashlanadi (`dropped`): kadrni yo'qotgan qurilmani
+yo'qotgandan yaxshi. `vision.enabled: false` bo'lsa `on_review` umuman
+berilmaydi va qoidadagi `ai_review` jimgina hisobga olinadi — hodisa
+baribir cloudga ketadi, faqat izohsiz.
+
+Batafsil: [docs/KORISH_AGENTI.md](../../docs/KORISH_AGENTI.md)
+
 ## Sig'imni o'lchash (`scripts/benchmark_n100.py`)
 
 Sig'im raqamlari (30 inf/s) boshqa modeldan miqyoslangan **taxmin** edi.
@@ -265,6 +298,6 @@ Ochiq bandlar:
 - Bitta kamera ham yuz tanish, ham analitika uchun kerak bo'lsa oqim ikki
   marta ochiladi (ikki jarayon, ikki dekod). Ataylab: xato ajratilishi shu
   narxga arziydi.
-- `config/sotqin.yaml` (`ai_inference: false`) va `docs/SOTQIN.md` ("AI faqat
-  cloud'da") retail yo'lidan oldingi holatni aks ettiradi — yangilanishi
-  kerak.
+- AI ko'rigi **bitta kadr** ko'radi, klipni emas. Video yuborish bir necha
+  barobar qimmat, shuning uchun xulosa "nima bo'lgani" emas, "ayni damda nima
+  ko'rinayotgani" haqida.

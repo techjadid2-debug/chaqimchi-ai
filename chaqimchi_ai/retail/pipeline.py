@@ -73,6 +73,10 @@ class _Camera:
     tamper_alerts: int = 0
     #: Oxirgi "ish vaqtidan tashqari" hodisasi — takror oqimini to'sish uchun.
     after_hours_at: float = float("-inf")
+    #: Oxirgi ko'rilgan kadr — `ai_review` harakati shuni AI ga yuboradi.
+    #: Faqat havola saqlanadi (nusxa emas): kadr allaqachon xotirada va uni
+    #: har kadrda ko'chirish 8 kamerada behuda ish bo'lardi.
+    last_frame: Any = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,8 @@ class _Totals:
     clips_unavailable: int = 0
     tamper_alerts: int = 0
     after_hours: int = 0
+    reviews_sent: int = 0
+    reviews_skipped: int = 0
 
 
 class RetailPipeline:
@@ -142,6 +148,7 @@ class RetailPipeline:
         *,
         on_action: Callable[[str, EdgeEvent], None],
         on_clip: Optional[Callable[[EdgeEvent, Path], None]] = None,
+        on_review: Optional[Callable[[EdgeEvent, Any], bool]] = None,
         clip_dir: Optional[Path] = None,
         pre_sec: float = 10.0,
         post_sec: float = 20.0,
@@ -157,6 +164,11 @@ class RetailPipeline:
         self.rules = rules
         self.on_action = on_action
         self.on_clip = on_clip
+        #: `ai_review` harakatini bajaruvchi.  Berilmasa qoida shu harakatni
+        #: so'rasa hodisa baribir cloudga ketadi — faqat AI izohsiz.
+        #: `True` qaytarsa tahlil navbatga tushdi, `False` — o'tkazib
+        #: yuborildi (oraliq yoki limit).
+        self.on_review = on_review
         self.clip_dir = Path(clip_dir) if clip_dir is not None else None
         self.pre_sec = float(pre_sec)
         self.post_sec = float(post_sec)
@@ -212,6 +224,10 @@ class RetailPipeline:
         har kadrni ko'rgani uchun to'g'ri o'rganadi.
         """
         camera = self._require(camera_id)
+        # Qulfsiz: havolani almashtirish GIL ostida atomar, ya'ni o'quvchi
+        # oqim eski yoki yangi kadrni oladi — ikkalasi ham butun kadr.  Har
+        # kadr uchun qulf olish 8 kamerani navbatga tizib qo'yardi.
+        camera.last_frame = frame
         # Kamera buzilishi **filtrdan oldin** tekshiriladi: yopilgan kamerada
         # harakat yo'q, ya'ni filtr uni o'tkazmasdi va buzilish hech qachon
         # sezilmasdi.
@@ -244,6 +260,10 @@ class RetailPipeline:
             if claim is None:
                 return None
             camera = self._require(claim.camera_id)
+
+        # Tahlilga tushgan kadr — AI ko'radigan ham aynan shu bo'lishi kerak,
+        # oqimdagi keyingi tasodifiy kadr emas.
+        camera.last_frame = claim.frame
 
         # Tahlil qulfdan tashqarida — eng uzun ish shu va u boshqa kameralarning
         # kadr yuborishini to'sib qo'ymasligi kerak.
@@ -360,6 +380,9 @@ class RetailPipeline:
             if action == "save_clip":
                 self._queue_clip(decision.event, camera_id=camera_id)
                 continue
+            if action == "ai_review":
+                self._request_review(decision.event, camera_id=camera_id)
+                continue
             try:
                 self.on_action(action, decision.event)
             except Exception:
@@ -368,6 +391,37 @@ class RetailPipeline:
                 with self._lock:
                     self._totals.action_errors += 1
                 logger.exception("[%s] '%s' harakati bajarilmadi", camera_id, action)
+
+    # ── AI ko'rigi ───────────────────────────────────────────────────────
+
+    def _request_review(self, event: EdgeEvent, *, camera_id: str) -> None:
+        """Hodisani tug'dirgan kadrni ko'rish agentiga uzatadi.
+
+        Bu yerda **hech qanday tarmoq chaqiruvi yo'q**: `on_review` kadrni
+        navbatga qo'yadi va o'z oqimida ishlaydi.  Aks holda inferens halqasi
+        AI javobini kutib turardi (soniyalar) va o'sha vaqtda hech bir kamera
+        tahlilga tushmasdi.
+
+        Kadr topilmasa hodisa baribir yuborilgan — faqat AI izohisiz qoladi.
+        """
+        camera = self._cameras.get(camera_id)
+        frame = camera.last_frame if camera is not None else None
+        if self.on_review is None or frame is None:
+            with self._lock:
+                self._totals.reviews_skipped += 1
+            return
+        try:
+            queued = self.on_review(event, frame)
+        except Exception:
+            with self._lock:
+                self._totals.action_errors += 1
+            logger.exception("[%s] AI ko'rigi so'ralmadi", camera_id)
+            return
+        with self._lock:
+            if queued:
+                self._totals.reviews_sent += 1
+            else:
+                self._totals.reviews_skipped += 1
 
     # ── Klip ─────────────────────────────────────────────────────────────
 
@@ -470,6 +524,10 @@ class RetailPipeline:
             "suppressed": self._totals.suppressed,
             "tamper_alerts": self._totals.tamper_alerts,
             "after_hours": self._totals.after_hours,
+            "reviews": {
+                "sent": self._totals.reviews_sent,
+                "skipped": self._totals.reviews_skipped,
+            },
             "actions": dict(sorted(self._totals.actions.items())),
             "action_errors": self._totals.action_errors,
             "clips": {

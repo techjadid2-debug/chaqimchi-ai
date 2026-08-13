@@ -89,8 +89,8 @@ curl http://127.0.0.1:8742/metrics
 |---|--------|-------|
 | 8.1 | Kadrni AI ko‘rib tushuntirishi | [x] `vision.enabled`, `claude-opus-5` |
 | 8.2 | Xarajat tormozlari (limit + oraliq) | [x] Diskda saqlanadi, restart aylanib o‘tmaydi |
-| 8.3 | Kameraga ulash (avtomatik tahlil) | [ ] Keyingi qadam |
-| 8.4 | Ogohlantirishni Telegramga yuborish | [ ] Keyingi qadam |
+| 8.3 | Kameraga ulash (avtomatik tahlil) | [x] Qoidadagi `ai_review` harakati |
+| 8.4 | Ogohlantirishni Telegramga yuborish | [x] Xulosa matni xabar ichida |
 
 Yuz tanish “bu kim?” degan savolga javob beradi; ko‘rish agenti “nima
 bo‘layapti?” degan savolga: kassada navbat, yiqilgan odam, tutun, ish
@@ -108,6 +108,55 @@ qayta ishga tushsa ham limit nolga qaytmaydi.
 sarflanmaydi.
 
 Batafsil, narx jadvali va chegaralari: [KORISH_AGENTI.md](KORISH_AGENTI.md)
+
+### 8.3 / 8.4 — Kameraga ulash va Telegram
+
+`vision.enabled: true` bungacha faqat qo‘lda yuborilgan rasmni tahlil qilardi
+(`POST /api/vision/analyze`) — ya’ni modul bor edi, lekin uni **hech kim
+chaqirmasdi**. Kameraga to‘g‘ridan-to‘g‘ri ulash esa mumkin emas: 8 kamera
+sutkasiga 24 soat oyiga minglab dollar bo‘lardi.
+
+Chegara shunday qo‘yildi:
+
+> Qurilmadagi arzon model (2.3 GFLOPs) “nimadir bo‘ldi” deb topadi, qimmat
+> model esa faqat o‘sha lahzani ko‘radi.
+
+Ko‘rik do‘kon analitikasi hodisasidan keyin, **qoida so‘raganda** boshlanadi:
+
+```yaml
+- name: Kamera buzilishi
+  event_type: camera_tampered
+  actions: [cloud_sync, telegram_alert, save_clip, ai_review]
+```
+
+`ai_review` standart harakatlar ichida yo‘q — uni ataylab yozish kerak.
+Namuna: [`config/rules.yaml`](../config/rules.yaml).
+
+Chaqiruv **alohida oqimda**: AI javobi 3–10 soniya oladi va uni inferens
+halqasida kutish o‘sha vaqtda hamma kamerani to‘xtatib qo‘yardi. Navbat
+chegaralangan — AI sekinlashsa kadr tashlanadi, qurilma yiqilmaydi.
+
+Xulosa yangi `ai_review` hodisasi bo‘lib outboxga tushadi va oddiy yo‘ldan
+cloudga → Telegramga ketadi (8.4). Mijoz tur nomini emas, **jumla** oladi:
+
+```
+🔴 2 ta ogohlantirish
+• Kamera yopildi yoki burildi — ombor-02
+• AI ko'rdi — ombor-02
+   ↳ Kamera oldiga karton quti qo'yilgan, ko'rinish to'sib qo'yilgan
+```
+
+AI “ogohlantirish emas” desa hodisa `info` bo‘lib arxivda qoladi — telefon
+jiringlamaydi. Lekin manba `critical` bo‘lsa AI uni pasaytira olmaydi:
+model xato qilishi mumkin, buzilgan kamera esa fakt.
+
+Uch qavatli tormoz: qoida → kamera boshiga 5 daqiqa → kunlik/oylik limit.
+Oraliq navbatga qo‘yishda boshlanadi, javob kelganda emas.
+
+**Tartib muhim**: `ai_review` yangi hodisa turi, shuning uchun cloud edge‘dan
+oldin yangilanishi kerak — aks holda eski cloud butun batchni rad etadi.
+
+Batafsil: [KORISH_AGENTI.md](KORISH_AGENTI.md) — “Kameraga ulash” bo‘limi.
 
 ### 7.11 — Kamera nazorati
 
@@ -346,6 +395,7 @@ Batafsil: [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md),
 **Ustuvorlik**: mahsulot barqaror → xizmat modeli → to‘lov avtomatlashtirish.
 
 **Keyingi qadam**: N100 da benchmark o‘tkazish (9.10) — 8 kamera va’dasi shu
-raqamga bog‘liq. Keyin: 8.3/8.4 ko‘rish agentini kameraga ulash, 6.7 gRPC
-mikroservis (ixtiyoriy) va 6.6 anti-spoof modelini kuchaytirish
+raqamga bog‘liq va uni faqat haqiqiy qurilmada o‘lchash mumkin. Keyin: ONVIF
+discovery (SOTQIN 1), soak-testlar (SOTQIN 4), 6.7 gRPC mikroservis
+(ixtiyoriy) va 6.6 anti-spoof modelini kuchaytirish
 (`scripts/validate_antispoof.py`).

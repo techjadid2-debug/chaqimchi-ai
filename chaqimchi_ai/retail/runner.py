@@ -123,10 +123,15 @@ class RetailRunner:
         idle_sleep_sec: float = 0.01,
         pressure: Optional[Callable[[], float]] = None,
         on_stats: Optional[Callable[[Dict[str, Any]], None]] = None,
+        reviewer: Optional[Any] = None,
     ) -> None:
         if housekeeping_sec <= 0:
             raise ValueError("housekeeping_sec musbat bo'lishi kerak")
         self.pipeline = pipeline
+        #: Ko'rish agenti ko'rikchisi (`VisionReviewer`).  O'z oqimi bor,
+        #: shuning uchun runner uni ham ishga tushiradi va to'xtatadi —
+        #: aks holda jarayon tugaganda navbatdagi kadr yo'qolardi.
+        self.reviewer = reviewer
         self.capture_factory = capture_factory
         self.spawn = spawn
         self.housekeeping_sec = float(housekeeping_sec)
@@ -327,6 +332,8 @@ class RetailRunner:
             raise RuntimeError("Kamera qo'shilmagan")
         self._stop.clear()
         self._running = True
+        if self.reviewer is not None:
+            self.reviewer.start()
         self._threads = [
             threading.Thread(
                 target=self._capture_loop, args=(camera_id,), name=f"retail-{camera_id}", daemon=True
@@ -350,6 +357,11 @@ class RetailRunner:
             thread.join(timeout=timeout)
         self._threads = []
         self._running = False
+        if self.reviewer is not None:
+            try:
+                self.reviewer.stop(timeout=timeout)
+            except Exception:
+                logger.exception("AI ko'rikchisi to'xtamadi")
         for stream in self._streams.values():
             self._release(stream.capture)
             stream.capture = None
@@ -382,4 +394,6 @@ class RetailRunner:
             }
             for camera_id, stream in sorted(self._streams.items())
         }
+        if self.reviewer is not None:
+            data["vision"] = self.reviewer.stats()
         return data

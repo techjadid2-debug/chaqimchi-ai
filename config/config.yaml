@@ -74,6 +74,11 @@ antispoof:
 
 # Ko'rish agenti — AI kadrni ko'rib "nima bo'layapti" deb aytadi.
 # DIQQAT: pul sarflaydi. Bitta tahlil ~87 so'm, kuniga 100 ta ≈ 262 000 so'm/oy.
+#
+# Kameraga ulash: `enabled: true` o'zi hech narsa qilmaydi — qaysi hodisadan
+# keyin kadr ko'rilishini qoida belgilaydi (`actions: [ai_review]`, namuna
+# `config/rules.yaml` da). Ya'ni qurilmadagi arzon model "nimadir bo'ldi"
+# deb topadi, qimmat model esa faqat o'sha lahzani ko'radi.
 # Batafsil va narx jadvali: docs/KORISH_AGENTI.md
 vision:
   enabled: false
@@ -102,6 +107,8 @@ retail:
   buffer_max_bytes: 42949672960 # 40 GB — yozayotgan kameralar bo'lishadi
   pre_sec: 10.0                # klip hodisadan necha soniya oldin boshlanadi
   post_sec: 20.0               # va necha soniya keyin tugaydi
+  # Qoidalar: qaysi hodisa xabar qiladi, qaysisi klip saqlaydi, qaysisini AI
+  # ko'radi. Namuna tayyor — yoqish uchun quyidagi qatorni oching.
   # rules_path: config/rules.yaml
   # Kamera yopilgani/burilgani/bo'yalgani sezilsin (harakat filtridan oldin).
   tamper_enabled: true

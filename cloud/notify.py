@@ -44,11 +44,34 @@ EVENT_LABELS: Dict[str, str] = {
     "queue_threshold_exceeded": "Navbat uzun",
     "after_hours_presence": "Ish vaqtidan tashqari harakat",
     "camera_tampered": "Kamera yopildi yoki burildi",
+    "ai_review": "AI ko'rdi",
 }
+
+#: AI izohi shuncha belgidan uzun bo'lsa qisqartiriladi.  Telegram xabari
+#: telefonda bir qarashda o'qiladigan bo'lishi kerak.
+MAX_NOTE_CHARS = 160
 
 
 def event_label(event_type: str) -> str:
     return EVENT_LABELS.get(event_type, event_type)
+
+
+def event_note(event: EdgeEvent) -> Optional[str]:
+    """Hodisaning odam o'qiydigan izohi — hozircha faqat AI xulosasi.
+
+    Qolgan turlar uchun tur nomi va kamera yetarli ("Navbat uzun — kassa-01").
+    `ai_review` esa aynan **matn** uchun mavjud: usiz xabar "AI ko'rdi —
+    kassa-01" bo'lib qolardi va do'kon egasiga hech narsa aytmasdi.
+    """
+    if event.event_type != "ai_review":
+        return None
+    metadata = event.metadata or {}
+    text = str(metadata.get("sabab") or metadata.get("tavsif") or "").strip()
+    if not text:
+        return None
+    if len(text) > MAX_NOTE_CHARS:
+        text = text[: MAX_NOTE_CHARS - 1].rstrip() + "…"
+    return text
 
 
 class AlertThrottle:
@@ -95,12 +118,18 @@ def summarize(events: Sequence[EdgeEvent]) -> str:
     ko'p takrorlangan muammo birinchi turadi.
     """
     groups: Dict[Tuple[str, str], int] = {}
+    notes: Dict[Tuple[str, str], str] = {}
     critical = 0
     for event in events:
         key = (event.event_type, event.camera_id)
         groups[key] = groups.get(key, 0) + 1
         if event.severity == "critical":
             critical += 1
+        # Birinchi izoh saqlanadi: takrorlangan hodisada eng eskisi
+        # muammoning boshlanishini ko'rsatadi.
+        note = event_note(event)
+        if note and key not in notes:
+            notes[key] = note
 
     total = sum(groups.values())
     head = "🔴" if critical else "⚠️"
@@ -109,6 +138,9 @@ def summarize(events: Sequence[EdgeEvent]) -> str:
     for (event_type, camera_id), count in ordered[:MAX_LINES]:
         suffix = f" ×{count}" if count > 1 else ""
         lines.append(f"• {event_label(event_type)} — {camera_id}{suffix}")
+        note = notes.get((event_type, camera_id))
+        if note:
+            lines.append(f"   ↳ {note}")
     if len(ordered) > MAX_LINES:
         lines.append(f"• va yana {len(ordered) - MAX_LINES} ta turdagi hodisa")
     return "\n".join(lines)

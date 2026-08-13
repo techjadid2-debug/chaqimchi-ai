@@ -227,3 +227,20 @@ def test_rule_does_not_mutate_the_original_event() -> None:
 
     assert decision.event.severity == "critical"
     assert original.severity == "info"  # asl nusxa tegilmagan
+
+
+def test_ai_review_is_an_allowed_action() -> None:
+    """Qoida kadrni AI ga yubora olishi kerak (8.3)."""
+    rule = Rule(name="AI", event_type="camera_tampered", actions=("ai_review",))
+    assert "ai_review" in rule.actions
+
+
+def test_ai_review_is_not_a_default_action() -> None:
+    """Pul sarflaydigan harakat o'z-o'zidan yoqilib qolmasin.
+
+    Qoida yozilmagan hodisa standart yo'ldan ketadi; agar `ai_review` shu
+    yerda bo'lsa, har bir hodisa uchun chaqiruv bo'lardi.
+    """
+    from chaqimchi_ai.retail.rules import DEFAULT_ACTIONS
+
+    assert "ai_review" not in DEFAULT_ACTIONS

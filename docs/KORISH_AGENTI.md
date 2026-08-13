@@ -114,6 +114,98 @@ vision:
 
 ---
 
+## Kameraga ulash (avtomatik ko‘rik)
+
+`enabled: true` o‘zi hech narsa qilmaydi — u faqat modulni yoqadi. Kamera
+oldida turgan AI hech qachon “o‘zi qaraydigan” bo‘lmasligi kerak: 8 kamera ×
+sutkasiga 24 soat = oyiga minglab dollar. Shuning uchun chegara boshqacha
+qo‘yilgan:
+
+> **Qurilmadagi arzon model “nimadir bo‘ldi” deb topadi, qimmat model esa
+> faqat o‘sha lahzani ko‘radi.**
+
+Ya’ni ko‘rik do‘kon analitikasi hodisasidan **keyin** boshlanadi va uni
+qoida so‘raydi (`config/rules.yaml`):
+
+```yaml
+rules:
+  - name: Kamera buzilishi
+    event_type: camera_tampered
+    severity: critical
+    cooldown_sec: 600
+    actions: [cloud_sync, telegram_alert, save_clip, ai_review]
+```
+
+`ai_review` — kadrni ko‘rish agentiga yuborish. Yo‘l:
+
+```
+kamera → odam deteksiyasi → qoida → ai_review → AI → outbox → cloud → Telegram
+                                                (alohida oqim)
+```
+
+Nima uchun alohida oqim: AI javobi 3–10 soniya oladi. Uni inferens halqasida
+kutish o‘sha vaqtda **hamma** kamerani to‘xtatib qo‘yardi — navbat, dwell,
+kirish-chiqish sanog‘i, hammasi. Shuning uchun kadr navbatga tushadi va
+analitika ishlashda davom etadi. AI yiqilsa yoki tarmoq uzilsa analitika
+sezmaydi ham.
+
+### Uch qavatli tormoz
+
+| Qavat | Nima cheklaydi | Qayerda |
+|-------|----------------|---------|
+| Qoida | Qaysi hodisa umuman ko‘rikka arziydi | `rules.yaml` — `ai_review` standart harakatlar ichida **yo‘q** |
+| Oraliq | Bitta kamera uchun 5 daqiqada bir marta | `vision.min_interval_sec` |
+| Limit | Kunlik va oylik chaqiruvlar soni | `vision.max_calls_per_day/month`, hisob diskda |
+
+Oraliq **navbatga qo‘yishda** boshlanadi, javob kelganda emas. Sabab: AI sekin
+javob berayotganda o‘nlab hodisa o‘tib ketishi mumkin va ularning har biri
+yangi chaqiruv bo‘lardi.
+
+Qaysi qoidaga `ai_review` qo‘yish kerak — amaliy tavsiya:
+
+| Hodisa | AI kerakmi | Nega |
+|--------|-----------|------|
+| `camera_tampered` | ✅ ha | “Qop bilan yopilgan” va “chiroq o‘chgan” — ikki xil muammo |
+| `after_hours_presence` | ✅ ha | Qorovulmi yoki begonami — raqam aytmaydi |
+| `queue_threshold_exceeded` | ❌ yo‘q | “6 kishi navbatda” — raqamning o‘zi yetarli |
+| `line_crossed`, `person_detected` | ❌ yo‘q | Kuniga minglab marta; hisob bir kunda tugaydi |
+
+### Xulosa qayerga boradi
+
+AI xulosasi yangi `ai_review` hodisasi bo‘lib outboxga tushadi va oddiy yo‘ldan
+cloudga, u yerdan Telegramga ketadi. Mijoz “AI ko‘rdi — kassa-01” emas, aynan
+**jumla** oladi:
+
+```
+🔴 2 ta ogohlantirish
+• Kamera yopildi yoki burildi — ombor-02
+• AI ko'rdi — ombor-02
+   ↳ Kamera oldiga karton quti qo'yilgan, ko'rinish to'sib qo'yilgan
+```
+
+`ogohlantirish: false` bo‘lsa hodisa `info` bo‘lib qoladi: arxivda turadi,
+lekin telefon jiringlamaydi. AI “hammasi joyida” deganini bilish kerak, lekin
+uni xabar qilib yuborish shovqin.
+
+Bitta istisno: manba hodisasi `critical` bo‘lsa (kamera yopilgan), AI uni
+pasaytira olmaydi. Model xato qilishi mumkin, buzilgan kamera esa fakt.
+
+### Kuzatish
+
+Xizmat logida har 30 soniyada:
+
+```
+AI ko'rigi: 4 ta xulosa, $0.0312 | o'tkazib yuborilgan: oraliq=11 limit=0 navbat=0 xato=1
+```
+
+`oraliq` — tormoz ishlayapti (normal holat). `limit` noldan katta bo‘lsa
+kunlik hisob tugagan. `navbat` — AI ulgurmayapti. `xato` — tarmoq yoki kalit.
+
+**Cloud avval yangilansin.** `ai_review` yangi hodisa turi; eski cloud uni
+tanimaydi va butun batchni rad etadi.
+
+---
+
 ## Ishlatish
 
 ```bash
@@ -169,6 +261,10 @@ o‘n birinchisini o‘qimaydi, va o‘sha o‘n birinchisi haqiqiy bo‘lishi m
 
 - **Bu doimiy kuzatuv emas.** 5 daqiqada bir kadr ko‘radi; ular orasida nima
   bo‘lganini bilmaydi. O‘g‘irlik 10 soniyada bo‘lsa — o‘tkazib yuboradi.
+- **Bitta kadr ko‘radi, klipni emas.** Hodisa videosi saqlanadi
+  (`save_clip`), lekin AI ga faqat bitta kadr ketadi — video yuborish bir
+  necha barobar qimmat. Ya’ni “nima bo‘lganini” emas, “ayni damda nima
+  ko‘rinayotganini” aytadi.
 - **Internetga bog‘liq.** Aloqa uzilsa ishlamaydi (yuz tanish ishlaydi —
   u lokal).
 - **Sekin.** 3–10 soniya. Real vaqt qaror uchun emas.

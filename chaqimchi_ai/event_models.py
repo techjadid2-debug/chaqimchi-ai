@@ -29,6 +29,10 @@ EventType = Literal[
     "after_hours_presence",
     #: Kamera yopildi, burildi yoki ko'rinishi buzildi.
     "camera_tampered",
+    #: Ko'rish agenti kadrni ko'rib bergan xulosa.  Boshqa hodisadan **keyin**
+    #: tug'iladi (`metadata.source_event_type`) va uni odam tilida
+    #: tushuntiradi: "kassa oldida ikki kishi janjallashmoqda".
+    "ai_review",
 ]
 Severity = Literal["info", "warning", "critical"]
 

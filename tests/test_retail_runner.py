@@ -337,12 +337,25 @@ def test_camera_cannot_be_added_while_running(tmp_path: Path) -> None:
 
 
 def test_pressure_signal_reaches_the_budget(tmp_path: Path) -> None:
-    runner, _captures, _processes = build(tmp_path)
-    runner._pressure = lambda: 0.9  # CPU/harorat chegarada
+    """CPU/harorat chegarada bo'lsa byudjet o'zi tushishi kerak."""
+    broker = FrameBroker(InferenceBudget(target_fps=30.0, min_fps=1.0, max_fps=60.0))
+    pipeline = RetailPipeline(
+        broker, RuleEngine(), on_action=lambda *_: None, clock=lambda: 0.0, local_time=lambda: None
+    )
+    runner = RetailRunner(
+        pipeline,
+        capture_factory=lambda _url: FakeCapture(),
+        clock=lambda: 0.0,
+        sleep=lambda _s: None,
+        pressure=lambda: 0.9,
+    )
+    runner.add_camera(
+        CameraSource(camera_id="cam", stream_url="rtsp://x"), FakeAnalyzer(), now=0.0  # type: ignore[arg-type]
+    )
 
     runner.housekeeping_once()
 
-    assert runner.pipeline.broker.budget.stats()["pressure"] == 0.9
+    assert broker.budget.stats()["pressure"] == 0.9
 
 
 def test_housekeeping_prunes_old_segments(tmp_path: Path) -> None:

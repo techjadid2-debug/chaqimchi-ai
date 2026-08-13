@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, List, Literal, Optional, Tuple, Union
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class FaceSettings(BaseModel):
@@ -135,6 +135,58 @@ class SceneSettings(BaseModel):
     lines: List[SceneLineSettings] = Field(default_factory=list)
 
 
+class RetailCameraSettings(BaseModel):
+    """Do'kon analitikasi uchun bitta kamera.
+
+    Ikkita manzil ikki xil ish uchun: **substream** tahlil qilinadi (yengil,
+    640×360 atrofida), **main stream** esa klip uchun xom holda yoziladi.
+    Bitta yuqori sifatli oqimni tahlil qilish N100 uchun juda og'ir bo'lardi.
+    """
+
+    id: str
+    stream_url: str
+    #: Berilmasa bu kamerada klip bo'lmaydi — hodisa baribir yuboriladi.
+    record_url: Optional[str] = None
+    #: `security` — taqiqlangan zona va ish vaqtidan tashqari harakat;
+    #: `retail` — sanash, navbat, dwell; `background` — statistika.
+    priority: Literal["security", "retail", "background"] = "retail"
+    #: Sekundiga shuncha kadr dekodlanadi; qolgani dekodlanmasdan tashlanadi.
+    sample_fps: float = Field(default=5.0, gt=0, le=30)
+    #: Kafolatlangan eng past tahlil tezligi.  Berilmasa prioritetdan olinadi.
+    floor_fps: Optional[float] = Field(default=None, gt=0, le=30)
+
+
+class RetailSettings(BaseModel):
+    enabled: bool = False
+    #: Qurilma sekundiga nechta inferens ko'taradi.  Bu **boshlang'ich taxmin**:
+    #: byudjet o'lchangan latency bo'yicha o'zini tuzatadi.
+    target_fps: float = Field(default=30.0, ge=1, le=240)
+    min_fps: float = Field(default=2.0, ge=0.1, le=240)
+    max_fps: float = Field(default=45.0, ge=1, le=480)
+    clip_dir: str = "data/clips"
+    buffer_dir: str = "data/buffer"
+    segment_sec: int = Field(default=4, ge=1, le=60)
+    #: Hodisa buferi: 3 kun / 40 GB (`sotqin_profile`).  Hajm barcha kameralar
+    #: orasida teng bo'linadi.
+    buffer_retention_sec: int = Field(default=3 * 24 * 3600, ge=60)
+    buffer_max_bytes: int = Field(default=40 * 1024**3, ge=100 * 1024**2)
+    pre_sec: float = Field(default=10.0, ge=0, le=300)
+    post_sec: float = Field(default=20.0, ge=0, le=300)
+    #: Qoidalar fayli (YAML yoki JSON).  Berilmasa hamma hodisa cloudga ketadi.
+    rules_path: Optional[str] = None
+    housekeeping_sec: float = Field(default=30.0, gt=0, le=3600)
+    cameras: List[RetailCameraSettings] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_budget(self) -> "RetailSettings":
+        if not (self.min_fps <= self.target_fps <= self.max_fps):
+            raise ValueError("retail: min_fps <= target_fps <= max_fps bo'lishi kerak")
+        names = [camera.id for camera in self.cameras]
+        if len(names) != len(set(names)):
+            raise ValueError("retail: kamera id lari takrorlanmasin")
+        return self
+
+
 class StorageSettings(BaseModel):
     encrypt_embeddings: bool = False
     vector_backend: Literal["numpy", "faiss"] = "numpy"
@@ -257,6 +309,7 @@ class AppSettings(BaseModel):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     cloud_sync: CloudSyncSettings = Field(default_factory=CloudSyncSettings)
     scene: SceneSettings = Field(default_factory=SceneSettings)
+    retail: RetailSettings = Field(default_factory=RetailSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     camera: CameraRuntimeSettings = Field(default_factory=CameraRuntimeSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)

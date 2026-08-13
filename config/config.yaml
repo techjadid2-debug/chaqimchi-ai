@@ -85,6 +85,31 @@ vision:
   effort: low              # low | medium | high
   telegram_alerts: true
 
+# Do'kon analitikasi (Chaqimchi Retail AI) — alohida xizmat sifatida ishlaydi:
+#   python -m chaqimchi_ai.retail.service --config config/config.yaml
+# Yuz tanishdan mustaqil: bittasi yiqilsa ikkinchisi ishlashda davom etadi.
+# Batafsil: chaqimchi_ai/retail/README.md
+retail:
+  enabled: false
+  # Qurilma sekundiga nechta inferens ko'taradi — boshlang'ich taxmin.
+  # Byudjet o'lchangan tezlikka qarab o'zini tuzatadi.
+  target_fps: 30.0
+  min_fps: 2.0
+  max_fps: 45.0
+  clip_dir: data/clips
+  buffer_dir: data/buffer      # hodisa klipi uchun xom segmentlar
+  buffer_retention_sec: 259200 # 3 kun
+  buffer_max_bytes: 42949672960 # 40 GB — yozayotgan kameralar bo'lishadi
+  pre_sec: 10.0                # klip hodisadan necha soniya oldin boshlanadi
+  post_sec: 20.0               # va necha soniya keyin tugaydi
+  # rules_path: config/rules.yaml
+  cameras: []
+  # - id: kassa-01
+  #   stream_url: "rtsp://admin:parol@192.168.1.100:554/sub"   # tahlil uchun
+  #   record_url: "rtsp://admin:parol@192.168.1.100:554/main"  # klip uchun
+  #   priority: security       # security | retail | background
+  #   sample_fps: 5.0          # sekundiga shuncha kadr dekodlanadi
+
 server:
   host: "0.0.0.0" # Barcha tarmoq interfeyslari uchun ochiq
   port: 8742

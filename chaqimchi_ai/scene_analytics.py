@@ -413,11 +413,14 @@ class SceneAnalyzer:
         return events
 
 
-def build_scene_analyzer(
-    camera_id: str, settings: SceneSettings, base_dir: Path
-) -> SceneAnalyzer | None:
-    if not settings.enabled:
-        return None
+def build_person_detector(settings: SceneSettings, base_dir: Path) -> PersonDetector:
+    """Konfigga qarab detektor yaratadi.
+
+    Analizatordan ajratilgani — ko'p kamerali retail yo'li uchun: 8 kamera
+    **bitta** modelni bo'lishadi.  Har kameraga alohida model yuklash xotirani
+    ham, iGPU compile vaqtini ham bekorga sarflardi.  Bir vaqtda faqat bitta
+    inferens oqimi `detect()` chaqiradi, shuning uchun bo'lishish xavfsiz.
+    """
     if not settings.model_path:
         raise RuntimeError("scene.model_path berilishi shart")
     model_path = Path(settings.model_path)
@@ -441,4 +444,12 @@ def build_scene_analyzer(
             confidence=settings.confidence,
             nms_threshold=settings.nms_threshold,
         )
-    return SceneAnalyzer(camera_id, detector, settings)
+    return detector
+
+
+def build_scene_analyzer(
+    camera_id: str, settings: SceneSettings, base_dir: Path
+) -> SceneAnalyzer | None:
+    if not settings.enabled:
+        return None
+    return SceneAnalyzer(camera_id, build_person_detector(settings, base_dir), settings)

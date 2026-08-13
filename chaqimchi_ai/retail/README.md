@@ -128,23 +128,39 @@ Shuning uchun so'rov navbatga tushadi va `post_sec` o'tgach kesiladi.
 **Hodisaning o'zi kutmaydi** — u allaqachon yuborilgan, klip keyin qo'shiladi
 (`metadata.clip_path` + `on_clip`).
 
-### Ishlatish
+## Ishga tushirish (`service.py`)
 
-```python
-pipeline = RetailPipeline(broker, rules, on_action=send, clip_dir=Path("data/clips"))
-runner = RetailRunner(pipeline)
-runner.add_camera(
-    CameraSource("kassa-01", "rtsp://nvr/sub", priority=Priority.SECURITY,
-                 record_url="rtsp://nvr/main", sample_fps=5.0),
-    analyzer,
-    clips=RingBuffer("kassa-01", Path("data/buffer")),
-)
-runner.start()
+Do'kon analitikasi **alohida xizmat**: yuz tanish yiqilsa u ishlashda davom
+etadi, teskarisi ham.
+
+```bash
+python -m chaqimchi_ai.retail.service --config config/config.yaml
+# qurilmada: systemctl start chaqimchi-retail  (deploy/chaqimchi-retail.service)
 ```
 
-`on_action(action, event)` — `cloud_sync` va `telegram_alert` ni chaqiruvchi
-bajaradi (mavjud `EventOutbox` va Telegram moduli). `save_clip` ni zanjirning
-o'zi bajaradi.
+Sozlama `config.yaml` ning `retail:` bo'limida — kameralar, byudjet, buffer
+hajmi va qoidalar fayli.
+
+Har kamerada **ikkita manzil**: `stream_url` (substream) tahlil qilinadi,
+`record_url` (main) esa klip uchun xom holda yoziladi. Yuqori sifatli oqimni
+tahlil qilish N100 uchun juda og'ir bo'lardi. `record_url` berilmasa kamera
+klipsiz ishlaydi — hodisa baribir yuboriladi.
+
+Hamma kamera **bitta modelni** bo'lishadi: 8 kameraga 8 model yuklash
+xotirani ham, iGPU compile vaqtini ham bekorga sarflardi.
+
+### Hodisa qayerga boradi
+
+Xizmat hodisani mavjud outbox'ga (`data/outbox.db`) yozadi, uni allaqachon
+bor cloud sync yuklaydi. Ya'ni bu xizmatga internet, token yoki qayta urinish
+mantig'i kerak emas. Telegram xabarini ham cloud yuboradi
+(`cloud/notify.py`), shuning uchun `telegram_alert` edge tomonda ikkinchi
+Telegram mijozini talab qilmaydi — aks holda mijoz bitta hodisa uchun ikkita
+xabar olardi.
+
+Disk kvotasi (40 GB) yozayotgan kameralar orasida **teng bo'linadi**. Har
+kamera to'liq kvotani o'ziniki deb bilsa 8 kamera 320 GB talab qilardi —
+128 GB disk esa ancha oldin to'lardi.
 
 ## Holat
 
@@ -152,7 +168,14 @@ Sig'im raqamlari (30 inf/s) boshqa modeldan miqyoslangan **taxmin**, o'lchov
 emas. `scripts/benchmark_n100.py` (T1.10) haqiqiy qurilmada tasdiqlamaguncha
 8 kamera sotilmasin.
 
-Zanjir **ishga tushirilmagan**: uni qaysi jarayon boshlashi (alohida xizmatmi
-yoki mavjud webapp ichidami) hal qilinmagan — mavjud `CameraManager` o'sha
-kameralarni yuz tanish uchun allaqachon ochadi va ikkalasi bir vaqtda ishlasa
-oqim ikki marta dekodlanadi.
+Ochiq bandlar:
+
+- `camera_tampered` va `after_hours_presence` hodisa turlari e'lon qilingan,
+  cloud ularni nom bilan biladi, lekin **hech qaysi modul ularni
+  chiqarmaydi**.
+- Bitta kamera ham yuz tanish, ham analitika uchun kerak bo'lsa oqim ikki
+  marta ochiladi (ikki jarayon, ikki dekod). Ataylab: xato ajratilishi shu
+  narxga arziydi.
+- `config/sotqin.yaml` (`ai_inference: false`) va `docs/SOTQIN.md` ("AI faqat
+  cloud'da") retail yo'lidan oldingi holatni aks ettiradi — yangilanishi
+  kerak.

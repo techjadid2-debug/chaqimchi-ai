@@ -1,0 +1,30 @@
+[Unit]
+Description=Chaqimchi Retail AI (do'kon analitikasi)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chaqimchi
+Group=chaqimchi
+WorkingDirectory=/opt/chaqimchi/current
+EnvironmentFile=/etc/chaqimchi/sotqin.env
+ExecStart=/opt/chaqimchi/venv/bin/python -m chaqimchi_ai.retail.service \
+    --config /opt/chaqimchi/shared/config/config.yaml \
+    --base-dir /opt/chaqimchi/shared
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/chaqimchi/shared/data /opt/chaqimchi/shared/logs
+# ffmpeg segment yozuvchilari shu xizmatning bolalari — ular ham to'xtasin.
+KillMode=control-group
+PrivateDevices=no
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

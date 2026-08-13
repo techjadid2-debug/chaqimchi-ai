@@ -317,6 +317,8 @@ maxfiylik yuki.
 | 9.8 | Alohida xizmat (`chaqimchi-retail.service`) | [x] |
 | 9.9 | Kamera buzilishi va ish vaqtidan tashqari harakat | [x] |
 | 9.10 | N100 sig‘imini o‘lchash skripti | [x] skript tayyor, **o‘lchov o‘tkazilmagan** |
+| 9.11 | Kamera ro‘yxati cloud inventaridan | [x] lokal konfig faqat sozlama beradi |
+| 9.12 | Mijoz hisoboti: kirish/chiqish, soat, navbat, dwell, trend | [x] panel + Telegram |
 
 ### Qurilmada AI — chegara o‘zgardi
 
@@ -334,8 +336,8 @@ Sabab oddiy: 8 kamera × 5 FPS = sekundiga 40 kadr. Ularni cloudga yuborish
 oyiga terabaytlab trafik va GPU hisobi degani; qurilmada esa 2.3 GFLOPs model
 shu ishni bajaradi va cloudga faqat **hodisa** ketadi.
 
-**Ochiq**: sig‘im o‘lchanmagan (`scripts/benchmark_n100.py`), kamera ro‘yxati
-cloud inventari bilan ulanmagan, buzilish chegaralari kalibrlanmagan.
+**Ochiq**: sig‘im o‘lchanmagan (`scripts/benchmark_n100.py`), buzilish
+chegaralari kalibrlanmagan, dekodlash QSV emas — dasturiy.
 Batafsil: [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md),
 [SOTQIN.md](SOTQIN.md).
 

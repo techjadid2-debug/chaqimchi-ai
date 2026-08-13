@@ -31,10 +31,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import signal
 import threading
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
@@ -43,6 +44,12 @@ from chaqimchi_ai.outbox import EventOutbox
 from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.budget import InferenceBudget
 from chaqimchi_ai.retail.claims import Priority
+from chaqimchi_ai.retail.inventory import (
+    CameraPlan,
+    describe,
+    merge_cameras,
+    read_sotqin_cache,
+)
 from chaqimchi_ai.retail.pipeline import RetailPipeline
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
 from chaqimchi_ai.retail.rules import RuleEngine, Schedule
@@ -112,6 +119,36 @@ def _resolve(base_dir: Path, value: str) -> Path:
     return path if path.is_absolute() else base_dir / path
 
 
+def sotqin_cache_path(settings: AppSettings, base_dir: Path) -> Path:
+    """Sotqin cloud config keshining yo'li.
+
+    Uch manba, shu tartibda: konfig, muhit o'zgaruvchisi (agent ham shundan
+    o'qiydi), standart yo'l.
+    """
+    if settings.retail.sotqin_config_path:
+        return _resolve(base_dir, settings.retail.sotqin_config_path)
+    return Path(
+        os.environ.get(
+            "CHAQIMCHI_SOTQIN_CONFIG_CACHE",
+            "/opt/chaqimchi/shared/data/sotqin-config.json",
+        )
+    )
+
+
+def plan_cameras(settings: AppSettings, base_dir: Path) -> Tuple[List[CameraPlan], Any]:
+    """Zanjirga tushadigan kameralar va cloud config revisiyasi.
+
+    Manba cloud inventari: o'rnatuvchi kamerani panelda qo'shsa, u shu yerga
+    tushadi.  Lokal konfig faqat qo'shimcha sozlamani beradi (klip manbasi,
+    prioritet, kadr tezligi).
+    """
+    cfg = settings.retail
+    if cfg.cameras_source == "config":
+        return merge_cameras([], cfg.cameras), None
+    cache = read_sotqin_cache(sotqin_cache_path(settings, base_dir))
+    return merge_cameras(cache["cameras"], cfg.cameras), cache["revision"]
+
+
 def build_runner(
     settings: AppSettings,
     base_dir: Path,
@@ -128,8 +165,12 @@ def build_runner(
     cfg = settings.retail
     if not cfg.enabled:
         raise RuntimeError("retail.enabled: false — xizmat ishga tushmaydi")
-    if not cfg.cameras:
-        raise RuntimeError("retail.cameras bo'sh — kamera ro'yxati kerak")
+    cameras, revision = plan_cameras(settings, base_dir)
+    if not cameras:
+        raise RuntimeError(
+            "Kamera topilmadi: cloud inventari ham, retail.cameras ham bo'sh"
+        )
+    logger.info("%s (config revision: %s)", describe(cameras), revision)
 
     if detector is None:
         # Bitta model, hamma kamera uchun: xotira ham, iGPU compile vaqti ham
@@ -171,17 +212,17 @@ def build_runner(
     )
 
     buffer_dir = _resolve(base_dir, cfg.buffer_dir)
-    recording = [camera for camera in cfg.cameras if camera.record_url]
+    recording = [camera for camera in cameras if camera.record_url]
     # Disk kvotasi umumiy: 40 GB ni yozayotgan kameralar teng bo'lishadi.
     # Bo'lmasa har kamera to'liq kvotani o'ziniki deb bilib, 8 kamerada
     # 320 GB talab qilardi — 128 GB disk esa oldin to'lardi.
     per_camera = cfg.buffer_max_bytes // max(1, len(recording))
 
-    for camera in cfg.cameras:
-        analyzer = SceneAnalyzer(camera.id, detector, settings.scene)
+    for camera in cameras:
+        analyzer = SceneAnalyzer(camera.camera_id, detector, settings.scene)
         clips = (
             RingBuffer(
-                camera.id,
+                camera.camera_id,
                 buffer_dir,
                 segment_sec=cfg.segment_sec,
                 retention_sec=cfg.buffer_retention_sec,
@@ -192,7 +233,7 @@ def build_runner(
         )
         runner.add_camera(
             CameraSource(
-                camera_id=camera.id,
+                camera_id=camera.camera_id,
                 stream_url=camera.stream_url,
                 priority=PRIORITIES[camera.priority],
                 record_url=camera.record_url,
@@ -228,6 +269,43 @@ def _log_stats(stats: Dict[str, Any]) -> None:
     )
 
 
+def _watcher(
+    settings: AppSettings, base_dir: Path, stopped: threading.Event
+) -> Callable[[Dict[str, Any]], None]:
+    """Metrikani yozadi va cloud config o'zgarganini kuzatadi.
+
+    Kamera cloud panelida qo'shilganda xizmat o'zini to'xtatadi, systemd esa
+    uni qayta ishga tushiradi (`Restart=always`).  Kamerani ishlab turgan
+    zanjirga qo'shish ancha murakkab bo'lardi: broker, byudjet va ring buffer
+    holati o'zgarishi kerak.  Qayta ishga tushish bir necha soniya oladi va
+    natijasi aniq — yarim qo'llangan config'dan yaxshi.
+    """
+    cache = sotqin_cache_path(settings, base_dir)
+    try:
+        revision = read_sotqin_cache(cache)["revision"]
+    except ValueError:
+        revision = None
+
+    def observe(stats: Dict[str, Any]) -> None:
+        _log_stats(stats)
+        if not settings.retail.restart_on_config_change:
+            return
+        try:
+            current = read_sotqin_cache(cache)["revision"]
+        except ValueError:
+            logger.exception("Sotqin config keshi o'qilmadi — eski ro'yxat qoladi")
+            return
+        if current != revision:
+            logger.warning(
+                "Cloud config o'zgardi (%s → %s) — xizmat qayta ishga tushadi",
+                revision,
+                current,
+            )
+            stopped.set()
+
+    return observe
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Retail AI xizmati")
     parser.add_argument(
@@ -249,10 +327,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logger.info("Konfig: %s", config_path)
     settings = AppSettings.load(config_path, base_dir=base_dir)
 
-    runner = build_runner(settings, base_dir)
-    runner.start()
-
     stopped = threading.Event()
+    runner = build_runner(settings, base_dir, on_stats=_watcher(settings, base_dir, stopped))
+    runner.start()
 
     def _handle(signum, _frame) -> None:
         logger.info("Signal %s — to'xtatilmoqda", signum)

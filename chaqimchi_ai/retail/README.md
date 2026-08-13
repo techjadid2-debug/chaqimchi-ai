@@ -141,10 +141,35 @@ python -m chaqimchi_ai.retail.service --config config/config.yaml
 Sozlama `config.yaml` ning `retail:` bo'limida — kameralar, byudjet, buffer
 hajmi va qoidalar fayli.
 
-Har kamerada **ikkita manzil**: `stream_url` (substream) tahlil qilinadi,
-`record_url` (main) esa klip uchun xom holda yoziladi. Yuqori sifatli oqimni
-tahlil qilish N100 uchun juda og'ir bo'lardi. `record_url` berilmasa kamera
-klipsiz ishlaydi — hodisa baribir yuboriladi.
+### Kamera ro'yxati qayerdan keladi
+
+Manba — **cloud inventari**: o'rnatuvchi kamerani admin panelda qo'shadi,
+Sotqin uni config poll'da olib lokal keshga yozadi (`sotqin-config.json`),
+analitika esa o'sha keshdan o'qiydi. Lokal konfig faqat obyektga xos
+sozlamani beradi:
+
+| Cloud inventaridan | Lokal konfigdan (`retail.cameras`) |
+|---|---|
+| `camera_id`, substream RTSP, `enabled` | `record_url` (klip uchun main stream) |
+| | `priority`, `sample_fps`, `floor_fps` |
+
+Nega bo'lingan: RTSP manzil — **inventar** ma'lumoti, u cloudda boshqariladi
+va shifrlangan holda keladi. Prioritet esa **obyekt sozlamasi** (qaysi kamera
+xavfsizlik uchun, qaysi biri sanoq uchun) — o'rnatuvchi bir marta yozadi.
+
+Bungacha ikkalasi mustaqil edi va mos kelmasa hech qanday xato chiqmasdi:
+yangi kamera oddiygina tahlil qilinmasdi, panelda esa hammasi yashil turardi.
+
+Cloud'da kamera qo'shilsa/o'chirilsa xizmat **o'zini to'xtatadi**, systemd
+uni qayta ishga tushiradi (`Restart=always`). Kamerani ishlab turgan zanjirga
+qo'shish broker, byudjet va ring buffer holatini o'zgartirishni talab qilardi;
+qayta ishga tushish bir necha soniya oladi va natijasi aniq. Cloud'siz
+o'rnatishda `cameras_source: config` — faqat lokal ro'yxat ishlaydi.
+
+Har kamerada **ikkita manzil**: substream tahlil qilinadi, `record_url` (main)
+esa klip uchun xom holda yoziladi. Yuqori sifatli oqimni tahlil qilish N100
+uchun juda og'ir bo'lardi. `record_url` berilmasa kamera klipsiz ishlaydi —
+hodisa baribir yuboriladi.
 
 Hamma kamera **bitta modelni** bo'lishadi: 8 kameraga 8 model yuklash
 xotirani ham, iGPU compile vaqtini ham bekorga sarflardi.

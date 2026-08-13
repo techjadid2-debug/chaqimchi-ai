@@ -70,8 +70,11 @@ retail:
   # open_from: "09:00"
   # open_to: "21:00"
   # rules_path: /opt/chaqimchi/shared/config/rules.yaml
+  # Kamera ro'yxati cloud inventaridan keladi (admin panelda qo'shiladi).
+  # Bu yerda faqat obyektga xos sozlama yoziladi — RTSP manzili kerak emas.
+  # Cloud'da kamera qo'shilsa xizmat o'zini qayta ishga tushiradi.
   cameras: []
-  # - id: kassa-01
-  #   stream_url: "${CAMERA_01_RTSP}"        # substream — tahlil uchun
-  #   record_url: "${CAMERA_01_RTSP_MAIN}"   # main — klip uchun
-  #   priority: security
+  # - id: camera-01
+  #   priority: security                     # security | retail | background
+  #   record_url: "${CAMERA_01_RTSP_MAIN}"   # klip uchun main stream
+  #   sample_fps: 5.0

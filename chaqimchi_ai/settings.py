@@ -144,7 +144,9 @@ class RetailCameraSettings(BaseModel):
     """
 
     id: str
-    stream_url: str
+    #: Substream manzili.  Kamera cloud inventarida bo'lsa bo'sh qoldiriladi:
+    #: manzil o'sha yerdan keladi va bu yozuv faqat sozlama beradi.
+    stream_url: str = ""
     #: Berilmasa bu kamerada klip bo'lmaydi — hodisa baribir yuboriladi.
     record_url: Optional[str] = None
     #: `security` — taqiqlangan zona va ish vaqtidan tashqari harakat;
@@ -185,6 +187,16 @@ class RetailSettings(BaseModel):
     #: shuning uchun bu tekshiruv harakat filtridan oldin ishlaydi.
     tamper_enabled: bool = True
     tamper_min_duration_sec: float = Field(default=10.0, gt=0, le=600)
+    #: Kamera ro'yxati qayerdan olinadi.  `auto` — Sotqin config keshi bo'lsa
+    #: undan (cloud inventari), aks holda quyidagi `cameras` dan.  `config` —
+    #: faqat lokal ro'yxat (cloud'siz o'rnatish uchun).
+    cameras_source: Literal["auto", "config"] = "auto"
+    #: Sotqin cloud config keshi.  Bo'sh bo'lsa `CHAQIMCHI_SOTQIN_CONFIG_CACHE`
+    #: muhit o'zgaruvchisi, keyin standart yo'l ishlatiladi.
+    sotqin_config_path: Optional[str] = None
+    #: Cloud'da kamera qo'shilsa/o'chirilsa xizmat o'zini to'xtatadi va
+    #: systemd uni qayta ishga tushiradi — yangi ro'yxat shunda kuchga kiradi.
+    restart_on_config_change: bool = True
     cameras: List[RetailCameraSettings] = Field(default_factory=list)
 
     @model_validator(mode="after")

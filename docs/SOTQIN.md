@@ -110,12 +110,13 @@ ko'rsatgan faylning `scene:` va `retail:` bo'limlarida.
 | 3 | Hodisa buferi (3 kun / 40 GB) va cloud upload | [x] ring buffer + outbox |
 | 4 | 4/8 kamera, internet/elektr uzilishi, rollback soak-testlari | [ ] |
 
-Ikkita ma'lum bo'shliq:
+Kamera ro'yxati **bitta manbadan**: admin panelda qo'shilgan kamera config
+poll orqali `sotqin-config.json` ga tushadi, do'kon analitikasi xizmati esa
+o'sha keshdan o'qiydi. Lokal konfig faqat prioritet va klip manbasini beradi.
+Ro'yxat o'zgarsa xizmat qayta ishga tushadi va yangi kamera darhol ishlaydi.
 
-- **Kamera ro'yxati ikki joyda.** Cloud inventarida RTSP manzillari bor
-  (`camera-inventory`), lekin do'kon analitikasi xizmati kameralarni lokal
-  YAML dan o'qiydi. Hozircha ikkalasini qo'lda mos qilish kerak; keyingi
-  qadam — xizmat `sotqin-config.json` dan o'qishi.
+Bitta ma'lum bo'shliq:
+
 - **Dekodlash hozircha dasturiy.** Profilda `hardware_decode: qsv` yozilgan,
   lekin retail xizmati OpenCV/FFmpeg orqali oqim ochadi va QSV so'ramaydi.
   Substream (640×360) uchun bu odatda yetarli — narxi

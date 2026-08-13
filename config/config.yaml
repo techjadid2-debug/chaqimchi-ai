@@ -111,6 +111,9 @@ retail:
   # open_from: "09:00"
   # open_to: "21:00"
   after_hours_debounce_sec: 300   # kechasi turgan odam har kadrda xabar bermasin
+  # Kamera ro'yxati: `auto` — Sotqin cloud keshi bo'lsa undan olinadi va
+  # quyidagi ro'yxat faqat sozlama beradi; `config` — faqat quyidagi ro'yxat.
+  cameras_source: auto
   cameras: []
   # - id: kassa-01
   #   stream_url: "rtsp://admin:parol@192.168.1.100:554/sub"   # tahlil uchun

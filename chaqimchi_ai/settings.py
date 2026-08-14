@@ -34,7 +34,6 @@ class PathsSettings(BaseModel):
     snapshots_dir: str = "data/snapshots"
     calibration_dir: str = "data/calibration"
     audit_db: str = "data/audit.db"
-    vision_db: str = "data/vision_usage.db"
 
 
 class TrackingSettings(BaseModel):
@@ -117,8 +116,9 @@ class SceneLineSettings(BaseModel):
 
 class SceneSettings(BaseModel):
     enabled: bool = False
-    #: `openvino` — Sotqin (Intel N100) uchun asosiy yo'l.
-    backend: Literal["onnx", "rknn", "openvino"] = "onnx"
+    #: `openvino` — Sotqin (Intel N100) uchun asosiy yo'l.  `onnx` faqat
+    #: ishlab chiqish mashinasi uchun qoladi.
+    backend: Literal["onnx", "openvino"] = "onnx"
     model_path: Optional[str] = None
     confidence: float = Field(default=0.45, ge=0.05, le=0.99)
     nms_threshold: float = Field(default=0.45, ge=0.05, le=0.99)
@@ -266,24 +266,6 @@ class EventsSettings(BaseModel):
     retention_interval_sec: int = Field(default=21_600, ge=60, le=604_800)
 
 
-class VisionSettings(BaseModel):
-    """Ko‘rish agenti — kadrni AI ko‘rib tushuntiradi (pul sarflaydi)."""
-
-    enabled: bool = False
-    model: str = "claude-opus-5"
-    #: Kadr shu o‘lchamgacha kichraytiriladi — narxni tushirishning asosiy usuli.
-    max_side: int = Field(default=768, ge=256, le=2576)
-    jpeg_quality: int = Field(default=80, ge=40, le=95)
-    #: Bitta kamera uchun ikki tahlil orasidagi eng kam vaqt.
-    min_interval_sec: int = Field(default=300, ge=10, le=86_400)
-    max_calls_per_day: int = Field(default=100, ge=0, le=100_000)
-    max_calls_per_month: int = Field(default=2000, ge=0, le=1_000_000)
-    effort: Literal["low", "medium", "high"] = "low"
-    max_tokens: int = Field(default=2048, ge=256, le=32_000)
-    timeout_sec: float = Field(default=30.0, ge=5.0, le=300.0)
-    telegram_alerts: bool = True
-
-
 class ServerSettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = Field(default=8742, ge=1, le=65535)
@@ -348,7 +330,6 @@ class AppSettings(BaseModel):
     storage: StorageSettings = Field(default_factory=StorageSettings)
     roi: RoiSettings = Field(default_factory=RoiSettings)
     antispoof: AntispoofSettings = Field(default_factory=AntispoofSettings)
-    vision: VisionSettings = Field(default_factory=VisionSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     webcam: WebcamSettings = Field(default_factory=WebcamSettings)
     telegram: TelegramSettings = Field(default_factory=TelegramSettings)

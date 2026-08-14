@@ -68,10 +68,9 @@ def test_paired_device_emits_only_purchased_feature_events(tmp_path: Path) -> No
     assert allowed(EdgeEvent(event_type="person_detected", camera_id="cam")) is False
 
 
-def settings_for(*, vision: Any = None, **retail: Any) -> AppSettings:
+def settings_for(**retail: Any) -> AppSettings:
     payload: Dict[str, Any] = {
         "scene": {"enabled": True, "model_path": "models/person.onnx"},
-        "vision": vision or {"enabled": False},
         "retail": {
             "enabled": True,
             "cameras": [
@@ -89,10 +88,10 @@ def settings_for(*, vision: Any = None, **retail: Any) -> AppSettings:
     return AppSettings.model_validate(payload)
 
 
-def runner_for(tmp_path: Path, *, vision: Any = None, **retail: Any):
+def runner_for(tmp_path: Path, **retail: Any):
     outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10 * 1024**2, retention_days=7)
     runner = build_runner(
-        settings_for(vision=vision, **retail),
+        settings_for(**retail),
         tmp_path,
         detector=FakeDetector(),
         outbox=outbox,
@@ -333,43 +332,6 @@ def test_the_important_event_is_uploaded_first(tmp_path: Path) -> None:
     sink("cloud_sync", tampered)
 
     assert outbox.pending()[0]["event_id"] == tampered.event_id
-
-
-# ── Ko'rish agentiga ulanish (8.3) ───────────────────────────────────────
-
-
-def test_vision_is_off_by_default(tmp_path: Path) -> None:
-    """Pul sarflaydigan modul o'z-o'zidan yoqilib qolmasin."""
-    runner, _outbox = runner_for(tmp_path)
-
-    assert runner.reviewer is None
-    assert runner.pipeline.on_review is None
-    assert "vision" not in runner.stats()
-
-
-def test_enabled_vision_is_wired_into_the_pipeline(tmp_path: Path) -> None:
-    """`vision.enabled: true` — zanjir kadrni ko'rikchiga uzata oladi."""
-    runner, _outbox = runner_for(
-        tmp_path, vision={"enabled": True, "min_interval_sec": 60, "max_calls_per_day": 5}
-    )
-
-    assert runner.reviewer is not None
-    assert runner.pipeline.on_review == runner.reviewer.submit
-    # Sozlama yo'lda yo'qolmagan — narx aynan shu raqamlarga bog'liq.
-    assert runner.reviewer.agent.config.min_interval_sec == 60
-    assert runner.reviewer.agent.config.max_calls_per_day == 5
-    assert runner.stats()["vision"]["completed"] == 0
-
-
-def test_usage_is_shared_with_the_face_service(tmp_path: Path) -> None:
-    """Kunlik limit umumiy: ikkala xizmat bitta hisobga yozadi.
-
-    Alohida bo'lsa "kuniga 100 ta" aslida 200 ta bo'lib chiqardi.
-    """
-    runner, _outbox = runner_for(tmp_path, vision={"enabled": True})
-
-    assert runner.reviewer is not None
-    assert runner.reviewer.agent.usage.db_path == tmp_path / "data" / "vision_usage.db"
 
 
 def test_ai_review_rule_loads(tmp_path: Path) -> None:

@@ -22,6 +22,7 @@ ReadWritePaths=/opt/chaqimchi/shared/data /opt/chaqimchi/shared/logs /opt/chaqim
 PrivateDevices=no
 UMask=0077
 LimitNOFILE=65536
+MemoryMax=3G
 
 [Install]
 WantedBy=multi-user.target

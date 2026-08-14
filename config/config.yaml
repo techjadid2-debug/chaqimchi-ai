@@ -80,16 +80,6 @@ antispoof:
 # `config/rules.yaml` da). Ya'ni qurilmadagi arzon model "nimadir bo'ldi"
 # deb topadi, qimmat model esa faqat o'sha lahzani ko'radi.
 # Batafsil va narx jadvali: docs/KORISH_AGENTI.md
-vision:
-  enabled: false
-  model: claude-opus-5
-  max_side: 768            # kadr o'lchami — narxning asosiy sozlamasi
-  min_interval_sec: 300    # bitta kamera uchun 5 daqiqada bir marta
-  max_calls_per_day: 100   # limit tugasa modul to'xtaydi
-  max_calls_per_month: 2000
-  effort: low              # low | medium | high
-  telegram_alerts: true
-
 # Do'kon analitikasi (Chaqimchi Retail AI) — alohida xizmat sifatida ishlaydi:
 #   python -m chaqimchi_ai.retail.service --config config/config.yaml
 # Yuz tanishdan mustaqil: bittasi yiqilsa ikkinchisi ishlashda davom etadi.

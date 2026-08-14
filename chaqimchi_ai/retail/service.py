@@ -58,7 +58,6 @@ from chaqimchi_ai.retail.ringbuffer import RingBuffer
 from chaqimchi_ai.retail.rules import RuleEngine, Schedule
 from chaqimchi_ai.retail.runner import CameraSource, RetailRunner
 from chaqimchi_ai.retail.tamper import TamperDetector
-from chaqimchi_ai.retail.vision_review import VisionReviewer
 from chaqimchi_ai.scene_analytics import PersonDetector, SceneAnalyzer, build_person_detector
 from chaqimchi_ai.settings import AppSettings, SceneSettings, default_config_path
 
@@ -181,49 +180,6 @@ def prune_event_clips(
         suffixes=frozenset({".mp4"}),
         now=now,
     )
-
-
-def build_reviewer(
-    settings: AppSettings, base_dir: Path, sink: Callable[[str, EdgeEvent], None]
-) -> Optional[VisionReviewer]:
-    """Ko'rish agenti yoqilgan bo'lsa ko'rikchini yig'adi, aks holda `None`.
-
-    `vision.enabled: false` (standart) bo'lsa `anthropic` kutubxonasi ham
-    import qilinmaydi va bir tiyin sarflanmaydi.  Kalit topilmasa xizmat
-    yiqilmaydi — analitika AI'siz ishlashda davom etadi, faqat ogohlantirish
-    izohsiz qoladi.
-    """
-    cfg = settings.vision
-    if not cfg.enabled:
-        return None
-    from chaqimchi_ai.vision_agent import UsageStore, VisionAgent, VisionConfig
-
-    agent = VisionAgent(
-        VisionConfig(
-            enabled=cfg.enabled,
-            model=cfg.model,
-            max_side=cfg.max_side,
-            jpeg_quality=cfg.jpeg_quality,
-            min_interval_sec=cfg.min_interval_sec,
-            max_calls_per_day=cfg.max_calls_per_day,
-            max_calls_per_month=cfg.max_calls_per_month,
-            effort=cfg.effort,
-            max_tokens=cfg.max_tokens,
-            timeout_sec=cfg.timeout_sec,
-            telegram_alerts=cfg.telegram_alerts,
-        ),
-        # Sarf hisobi yuz tanish xizmati bilan **bitta** fayl: ikkalasi ham
-        # shu bazaga yozadi, ya'ni kunlik limit umumiy bo'ladi.
-        UsageStore(_resolve(base_dir, settings.paths.vision_db)),
-    )
-    logger.info(
-        "Ko'rish agenti yoqilgan: %s, kamera boshiga %d soniyada bir marta, "
-        "kuniga %d tagacha",
-        cfg.model,
-        cfg.min_interval_sec,
-        cfg.max_calls_per_day,
-    )
-    return VisionReviewer(agent, sink)
 
 
 def _resolve(base_dir: Path, value: str) -> Path:
@@ -351,7 +307,6 @@ def build_runner(
         )
 
     sink = OutboxSink(outbox)
-    reviewer = build_reviewer(settings, base_dir, sink)
     broker = FrameBroker(
         InferenceBudget(
             target_fps=cfg.target_fps, min_fps=cfg.min_fps, max_fps=cfg.max_fps
@@ -373,7 +328,6 @@ def build_runner(
         rules,
         on_action=sink,
         on_clip=sink.clip_ready,
-        on_review=None if reviewer is None else reviewer.submit,
         clip_dir=clip_dir,
         snapshot_dir=snapshot_dir,
         pre_sec=cfg.pre_sec,
@@ -410,7 +364,6 @@ def build_runner(
         pipeline,
         housekeeping_sec=cfg.housekeeping_sec,
         on_stats=report_stats,
-        reviewer=reviewer,
     )
 
     buffer_dir = _resolve(base_dir, cfg.buffer_dir)
@@ -469,20 +422,6 @@ def _log_stats(stats: Dict[str, Any]) -> None:
         broker["budget"]["p95_latency_ms"],
         broker["budget"]["target_fps"],
     )
-    vision = stats.get("vision")
-    if vision:
-        # Xarajat alohida qatorda: bu yagona **pul yeydigan** raqam va uni
-        # log ichida qidirib yurmaslik kerak.
-        logger.info(
-            "AI ko'rigi: %d ta xulosa, $%.4f | o'tkazib yuborilgan: oraliq=%d "
-            "limit=%d navbat=%d xato=%d",
-            vision["completed"],
-            vision["cost_usd"],
-            vision["throttled"],
-            vision["over_budget"],
-            vision["dropped"],
-            vision["failed"],
-        )
 
 
 def _watcher(

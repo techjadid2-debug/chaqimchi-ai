@@ -1,7 +1,7 @@
 # Chaqimchi AI
 PY ?= python3
 
-.PHONY: install-dev test lint fmt run-web run-sotqin run-edge-control run-cloud run-retail demo calibrate validate-antispoof provision backup restore docker-build cloud-config cloud-deploy benchmark-lite benchmark-set1 verify-models
+.PHONY: install-dev test lint fmt run-web run-sotqin run-cloud run-retail calibrate provision backup restore docker-build cloud-config cloud-deploy benchmark verify-models
 
 install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
@@ -19,9 +19,6 @@ run-web:
 	CHAQIMCHI_SERVICE_MODE=attendance CHAQIMCHI_ATTENDANCE_PILOT=true $(PY) -m uvicorn webapp.main:app --host 127.0.0.1 --port 8743
 
 run-sotqin:
-	$(PY) -m uvicorn chaqimchi_ai.sotqin_agent:app --host 127.0.0.1 --port 8742
-
-run-edge-control:
 	$(PY) -m uvicorn chaqimchi_ai.sotqin_agent:app --host 127.0.0.1 --port 8742
 
 run-cloud:
@@ -46,14 +43,8 @@ restore:
 	@test -n "$(FILE)" || (echo 'Usage: make restore FILE=nusxa.zip' && exit 1)
 	$(PY) scripts/backup_db.py restore "$(FILE)"
 
-demo:
-	$(PY) face_engine_core.py --camera 0 --frame-skip 2
-
 calibrate:
 	$(PY) scripts/calibrate_threshold.py
-
-validate-antispoof:
-	$(PY) scripts/validate_antispoof.py
 
 docker-build:
 	docker build -t chaqimchi-ai .
@@ -64,11 +55,9 @@ cloud-config:
 cloud-deploy:
 	./scripts/deploy_cloud.sh
 
-benchmark-lite:
-	$(PY) scripts/benchmark_streams.py --config config/lite.yaml --duration 300 --output benchmark-lite.json
-
-# Eski avtomatlashtirishlar buzilmasligi uchun vaqtinchalik alias.
-benchmark-set1: benchmark-lite
+# Sotqin R1 qabul o'lchovi (faqat qurilmada ishlaydi).
+benchmark:
+	$(PY) scripts/benchmark_n100.py --seconds 300 --json benchmark-n100.json
 
 verify-models:
-	$(PY) scripts/verify_model_bundle.py models/manifest.json
+	$(PY) scripts/verify_model_bundle.py models/manifest.example.json

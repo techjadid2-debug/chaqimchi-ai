@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.pair_edge import (
+from scripts.pair_sotqin import (
     atomic_write_env,
     default_config_path,
     default_env_file,
@@ -54,14 +54,14 @@ def test_atomic_write_env_uses_private_permissions(tmp_path: Path) -> None:
 
 
 def test_linux_pairing_defaults_are_stable(monkeypatch) -> None:
-    monkeypatch.setattr("scripts.pair_edge.os.name", "posix")
+    monkeypatch.setattr("scripts.pair_sotqin.os.name", "posix")
     assert default_env_file() == "/etc/chaqimchi/sotqin.env"
     assert default_config_path() == "/opt/chaqimchi/current/config/sotqin.yaml"
     assert restart_hint() == "sudo systemctl restart chaqimchi-sotqin"
 
 
 def test_windows_pairing_defaults_use_program_data(monkeypatch) -> None:
-    monkeypatch.setattr("scripts.pair_edge.os.name", "nt")
+    monkeypatch.setattr("scripts.pair_sotqin.os.name", "nt")
     monkeypatch.setenv("PROGRAMDATA", r"D:\ProgramData")
     monkeypatch.setenv("PROGRAMFILES", r"D:\Program Files")
     assert default_env_file().replace("\\", "/").endswith("Chaqimchi/Sotqin/sotqin.env")

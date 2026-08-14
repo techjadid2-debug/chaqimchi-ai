@@ -39,30 +39,6 @@ def test_production_settings_accept_secure_config(monkeypatch) -> None:
     assert cfg.production_errors() == []
 
 
-def test_legacy_orange_pi_profile_remains_parseable_but_is_not_canonical(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_URL", "https://cloud.example.uz")
-    monkeypatch.setenv("CHAQIMCHI_SITE_ID", "site-1")
-    monkeypatch.setenv("CHAQIMCHI_DEVICE_ID", "device-1")
-    monkeypatch.setenv("CHAQIMCHI_DEVICE_TOKEN", "device-token")
-    monkeypatch.setenv("CHAQIMCHI_API_KEY", "a" * 32)
-    monkeypatch.setenv("CHAQIMCHI_JWT_SECRET", "j" * 32)
-    monkeypatch.setenv("CHAQIMCHI_EMBEDDING_KEY", "embedding-key")
-    monkeypatch.setenv("CHAQIMCHI_FACE_MODEL_LICENSED", "false")
-    for number in range(1, 9):
-        monkeypatch.setenv(
-            f"CAMERA_{number:02d}_RTSP",
-            f"rtsp://camera-{number:02d}/sub",
-        )
-
-    root = Path(__file__).resolve().parents[1]
-    cfg = AppSettings.load(root / "config" / "lite.yaml", base_dir=root)
-    assert cfg.environment == "production"
-    assert len(cfg.cameras) == 8
-    assert cfg.license.cloud_url == "https://cloud.example.uz"
-    assert cfg.cloud_sync.device_id == "device-1"
-    assert cfg.scene.backend == "onnx"
-
-
 def test_commercial_face_mode_requires_a_verified_bundle(tmp_path: Path, monkeypatch) -> None:
     model = tmp_path / "licensed.onnx"
     model.write_bytes(b"licensed-model")

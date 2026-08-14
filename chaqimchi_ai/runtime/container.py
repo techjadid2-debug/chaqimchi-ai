@@ -37,7 +37,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from chaqimchi_ai.face_engine import FaceEngine
     from chaqimchi_ai.licensing.client import EdgeLicenseClient
     from chaqimchi_ai.licensing.models import LicenseState
-    from chaqimchi_ai.vision_agent import VisionAgent
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +69,6 @@ class AppContainer:
         self._events = events
         self._audit = audit
         self._outbox: Optional[EventOutbox] = None
-        self._vision: Optional["VisionAgent"] = None
 
         # Lifespan tomonidan boshqariladigan holat.
         self.camera_manager: Optional["CameraManager"] = None
@@ -188,33 +186,6 @@ class AppContainer:
                 retention_days=cfg.queue_days,
             )
         return self._outbox
-
-    @property
-    def vision(self) -> Optional["VisionAgent"]:
-        """Ko'rish agenti — `vision.enabled` bo'lsa quriladi, aks holda None."""
-        cfg = self.settings.vision
-        if not cfg.enabled:
-            return None
-        if self._vision is None:
-            from chaqimchi_ai.vision_agent import UsageStore, VisionAgent, VisionConfig
-
-            self._vision = VisionAgent(
-                VisionConfig(
-                    enabled=cfg.enabled,
-                    model=cfg.model,
-                    max_side=cfg.max_side,
-                    jpeg_quality=cfg.jpeg_quality,
-                    min_interval_sec=cfg.min_interval_sec,
-                    max_calls_per_day=cfg.max_calls_per_day,
-                    max_calls_per_month=cfg.max_calls_per_month,
-                    effort=cfg.effort,
-                    max_tokens=cfg.max_tokens,
-                    timeout_sec=cfg.timeout_sec,
-                    telegram_alerts=cfg.telegram_alerts,
-                ),
-                UsageStore(self.base_dir / self.settings.paths.vision_db),
-            )
-        return self._vision
 
     # ── Hayotiy sikl ──────────────────────────────────────────────────────
 

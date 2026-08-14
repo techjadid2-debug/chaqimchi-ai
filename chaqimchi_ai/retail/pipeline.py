@@ -137,8 +137,6 @@ class _Totals:
     clips_unavailable: int = 0
     tamper_alerts: int = 0
     after_hours: int = 0
-    reviews_sent: int = 0
-    reviews_skipped: int = 0
     snapshots_written: int = 0
     snapshots_missing: int = 0
 
@@ -172,7 +170,6 @@ class RetailPipeline:
         *,
         on_action: Callable[[str, EdgeEvent], None],
         on_clip: Optional[Callable[[EdgeEvent, Path], None]] = None,
-        on_review: Optional[Callable[[EdgeEvent, Any], bool]] = None,
         clip_dir: Optional[Path] = None,
         snapshot_dir: Optional[Path] = None,
         snapshot_writer: Callable[[Path, Any], bool] = write_jpeg,
@@ -191,11 +188,6 @@ class RetailPipeline:
         self.rules = rules
         self.on_action = on_action
         self.on_clip = on_clip
-        #: `ai_review` harakatini bajaruvchi.  Berilmasa qoida shu harakatni
-        #: so'rasa hodisa baribir cloudga ketadi — faqat AI izohsiz.
-        #: `True` qaytarsa tahlil navbatga tushdi, `False` — o'tkazib
-        #: yuborildi (oraliq yoki limit).
-        self.on_review = on_review
         self.clip_dir = Path(clip_dir) if clip_dir is not None else None
         self.snapshot_dir = Path(snapshot_dir) if snapshot_dir is not None else None
         self.snapshot_writer = snapshot_writer
@@ -415,7 +407,9 @@ class RetailPipeline:
                 self._queue_clip(decision.event, camera_id=camera_id)
                 continue
             if action == "ai_review":
-                self._request_review(decision.event, camera_id=camera_id)
+                # Cloud tomonidagi AI ko'rigi uchun ajratilgan nom.  Edge'da
+                # bajarilmaydi, lekin qoidalar faylida uchrasa xato bermasin —
+                # mijozning eski konfigi validatsiyadan o'tsin.
                 continue
             try:
                 self.on_action(action, decision.event)
@@ -455,37 +449,6 @@ class RetailPipeline:
                 self._totals.snapshots_written += 1
             else:
                 self._totals.snapshots_missing += 1
-
-    # ── AI ko'rigi ───────────────────────────────────────────────────────
-
-    def _request_review(self, event: EdgeEvent, *, camera_id: str) -> None:
-        """Hodisani tug'dirgan kadrni ko'rish agentiga uzatadi.
-
-        Bu yerda **hech qanday tarmoq chaqiruvi yo'q**: `on_review` kadrni
-        navbatga qo'yadi va o'z oqimida ishlaydi.  Aks holda inferens halqasi
-        AI javobini kutib turardi (soniyalar) va o'sha vaqtda hech bir kamera
-        tahlilga tushmasdi.
-
-        Kadr topilmasa hodisa baribir yuborilgan — faqat AI izohisiz qoladi.
-        """
-        camera = self._cameras.get(camera_id)
-        frame = camera.last_frame if camera is not None else None
-        if self.on_review is None or frame is None:
-            with self._lock:
-                self._totals.reviews_skipped += 1
-            return
-        try:
-            queued = self.on_review(event, frame)
-        except Exception:
-            with self._lock:
-                self._totals.action_errors += 1
-            logger.exception("[%s] AI ko'rigi so'ralmadi", camera_id)
-            return
-        with self._lock:
-            if queued:
-                self._totals.reviews_sent += 1
-            else:
-                self._totals.reviews_skipped += 1
 
     # ── Klip ─────────────────────────────────────────────────────────────
 
@@ -588,10 +551,6 @@ class RetailPipeline:
             "suppressed": self._totals.suppressed,
             "tamper_alerts": self._totals.tamper_alerts,
             "after_hours": self._totals.after_hours,
-            "reviews": {
-                "sent": self._totals.reviews_sent,
-                "skipped": self._totals.reviews_skipped,
-            },
             "actions": dict(sorted(self._totals.actions.items())),
             "action_errors": self._totals.action_errors,
             "snapshots": {

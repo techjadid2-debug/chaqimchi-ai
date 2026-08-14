@@ -22,11 +22,13 @@ cp \
   "$stage/$name/deploy/"
 for script in \
   accept_n100_pilot.py apply_signed_update.py backup_db.py benchmark_n100.py \
-  calibrate_threshold.py fetch_retail_model.py install_sotqin.sh pair_edge.py \
+  calibrate_threshold.py fetch_retail_model.py install_sotqin.sh \
   pair_sotqin.py soak_n100.py verify_model_bundle.py; do
   cp "$root/scripts/$script" "$stage/$name/scripts/"
 done
-cp "$root/requirements-sotqin.txt" "$stage/$name/"
+# Ikkala requirements ham paketga kiradi; qaysi birini o'rnatishni
+# `install_sotqin.sh` CHAQIMCHI_ATTENDANCE_PILOT bo'yicha hal qiladi.
+cp "$root/requirements-sotqin.txt" "$root/requirements-attendance.txt" "$stage/$name/"
 tar -C "$stage" -czf "$output_dir/${name}.tar.gz" "$name"
 
 if command -v sha256sum >/dev/null 2>&1; then

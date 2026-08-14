@@ -109,52 +109,6 @@ class OpenCVDnnPersonDetector:
         )
 
 
-class RKNNPersonDetector:
-    """RK3588 RKNNLite adapteri; single-output YOLOv8/YOLOX exportini qabul qiladi."""
-
-    def __init__(
-        self,
-        model_path: Path,
-        *,
-        input_size: int = 640,
-        confidence: float = 0.45,
-        nms_threshold: float = 0.45,
-    ) -> None:
-        try:
-            from rknnlite.api import RKNNLite
-        except ImportError as exc:  # pragma: no cover - faqat RK3588 qurilmada
-            raise RuntimeError("RKNNLite2 vendor wheel o'rnatilishi kerak") from exc
-        if not model_path.is_file():
-            raise FileNotFoundError(f"RKNN modeli topilmadi: {model_path}")
-        self._runtime = RKNNLite()
-        if self._runtime.load_rknn(str(model_path)) != 0:
-            raise RuntimeError("RKNN model yuklanmadi")
-        if self._runtime.init_runtime() != 0:
-            raise RuntimeError("RKNN runtime ishga tushmadi")
-        self.input_size = int(input_size)
-        self.confidence = float(confidence)
-        self.nms_threshold = float(nms_threshold)
-
-    def detect(self, frame: np.ndarray) -> List[Dict[str, Any]]:
-        height, width = frame.shape[:2]
-        resized = cv2.resize(frame, (self.input_size, self.input_size))
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        outputs = self._runtime.inference(inputs=[rgb])
-        if not outputs or len(outputs) != 1:
-            raise RuntimeError("RKNN model single-output YOLO eksport bo'lishi kerak")
-        return _decode_person_output(
-            outputs[0],
-            width=width,
-            height=height,
-            input_size=self.input_size,
-            confidence=self.confidence,
-            nms_threshold=self.nms_threshold,
-        )
-
-    def close(self) -> None:
-        self._runtime.release()
-
-
 #: Fon modeli o'rganilguncha o'tadigan kadrlar.  Shu oraliqda hamma narsa
 #: "harakat" deb qaraladi — aks holda tizim endi yoqilganda birinchi hodisani
 #: o'tkazib yuborardi.
@@ -435,10 +389,7 @@ def build_person_detector(settings: SceneSettings, base_dir: Path) -> PersonDete
             model_path, confidence=settings.confidence
         )
     else:
-        detector_class = (
-            RKNNPersonDetector if settings.backend == "rknn" else OpenCVDnnPersonDetector
-        )
-        detector = detector_class(
+        detector = OpenCVDnnPersonDetector(
             model_path,
             input_size=settings.input_size,
             confidence=settings.confidence,

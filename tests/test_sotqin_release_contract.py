@@ -27,14 +27,68 @@ def test_canonical_sotqin_profile_is_a_four_camera_retail_pilot() -> None:
     assert typed.scene.backend == "openvino"
 
 
+def _requirements(name: str) -> list[str]:
+    """Izohsiz, faqat haqiqiy paket qatorlari.
+
+    Izohni ham hisoblash xavfli: "insightface o'rnatilmaydi" degan izoh
+    "insightface bor" degan tekshiruvdan o'tib ketardi.
+    """
+    lines = (ROOT / name).read_text(encoding="utf-8").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+
+
+def test_base_install_has_no_face_recognition_stack() -> None:
+    """Yuz tanish asosiy qutiga tushmaydi — u ~1 GB va sotilmaydi.
+
+    Faqat `CHAQIMCHI_ATTENDANCE_PILOT=true` bo'lganda alohida fayl o'rnatiladi.
+    """
+    base = _requirements("requirements-sotqin.txt")
+    attendance = _requirements("requirements-attendance.txt")
+    installer = (ROOT / "scripts" / "install_sotqin.sh").read_text()
+
+    assert any(item.startswith("openvino") for item in base)
+    for heavy in ("insightface", "onnx", "onnxruntime"):
+        assert not any(item.startswith(heavy) for item in base), heavy
+    for heavy in ("insightface", "onnx", "onnxruntime"):
+        assert any(item.startswith(heavy) for item in attendance), heavy
+    # Davomat fayli asosiy ro'yxatni o'z ichiga oladi — pilot yoqilganda
+    # ikkita pip chaqiruvi kerak bo'lmasin.
+    assert "-r requirements-sotqin.txt" in attendance
+    assert "CHAQIMCHI_ATTENDANCE_PILOT" in installer
+    assert "requirements-attendance.txt" in installer
+
+
+def test_installer_refuses_to_fall_back_to_cpu_silently() -> None:
+    """iGPU'siz o'rnatish jimgina davom etmasin: detektor CPU'ga tushsa
+    tizim 4-8 barobar sekin bo'ladi va buni hech kim sezmaydi."""
+    installer = (ROOT / "scripts" / "install_sotqin.sh").read_text()
+    unit = (ROOT / "deploy" / "chaqimchi-retail.service").read_text()
+
+    assert "intel-opencl-icd" in installer
+    assert "intel-media-va-driver" in installer
+    assert "clinfo" in installer and "vainfo" in installer
+    assert "exit 3" in installer  # tekshiruv yiqilsa o'rnatish to'xtaydi
+    # Drayver bo'lsa ham, guruhsiz /dev/dri ochilmaydi.
+    assert "--groups render,video" in installer
+    assert "SupplementaryGroups=render video" in unit
+
+
+def test_services_declare_a_memory_ceiling() -> None:
+    """RAM shifti cgroup darajasida — talab: butun qurilma <= 6.5 GB."""
+    limits = {
+        "chaqimchi-retail.service": "MemoryMax=2560M",
+        "chaqimchi-sotqin.service": "MemoryMax=512M",
+        "chaqimchi-attendance.service": "MemoryMax=3G",
+    }
+    for unit, expected in limits.items():
+        assert expected in (ROOT / "deploy" / unit).read_text(), unit
+
+
 def test_release_contains_every_runtime_service_and_verified_model() -> None:
-    requirements = (ROOT / "requirements-sotqin.txt").read_text()
     installer = (ROOT / "scripts" / "install_sotqin.sh").read_text()
     builder = (ROOT / "scripts" / "build_sotqin_release.sh").read_text()
     manifest = json.loads((ROOT / "models" / "retail_manifest.json").read_text())
 
-    assert "openvino" in requirements
-    assert "insightface" in requirements
     assert "chaqimchi-retail.service" in installer
     assert "chaqimchi-attendance.service" in installer
     assert "fetch_retail_model.py" in installer
@@ -42,8 +96,7 @@ def test_release_contains_every_runtime_service_and_verified_model() -> None:
     assert '"$root/models/retail_manifest.json"' in builder
     assert '"$root/webapp"' in builder
     assert '"$root/config/sotqin.yaml"' in builder
-    assert '"$root/config/lite.yaml"' not in builder
-    assert "benchmark_streams.py" not in builder
+    assert '"$root/requirements-attendance.txt"' in builder
     assert "install_edge.sh" not in builder
     assert all(len(item["sha256"]) == 64 for item in manifest["files"].values())
 

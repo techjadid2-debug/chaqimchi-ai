@@ -36,7 +36,7 @@ from chaqimchi_ai.runtime.container import AppContainer
 from chaqimchi_ai.scene_analytics import build_scene_analyzer
 from chaqimchi_ai.settings import CameraItem, SceneSettings
 from webapp.errors import register_error_handlers
-from webapp.routers import attendance, auth, backup, calibrate, events, persons, system, vision
+from webapp.routers import attendance, auth, backup, calibrate, events, persons, system
 
 logger = logging.getLogger(__name__)
 
@@ -484,12 +484,11 @@ def create_app(container: Optional[AppContainer] = None) -> FastAPI:
         os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower() == "attendance"
     )
     if not attendance_mode:
-        # Generic Face/vision API tarixiy development rejimida qoladi. Sotqin
+        # Generic Face API tarixiy development rejimida qoladi. Sotqin
         # attendance servisida cloud rozilik oqimini chetlab o'tuvchi shaxs
-        # CRUD yoki pullik vision endpointlari umuman ro'yxatdan o'tmaydi.
+        # CRUD endpointlari umuman ro'yxatdan o'tmaydi.
         app.include_router(persons.router)
         app.include_router(events.router)
-        app.include_router(vision.router)
     return app
 
 

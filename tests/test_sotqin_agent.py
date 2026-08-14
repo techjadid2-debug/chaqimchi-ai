@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import chaqimchi_ai.edge_control as module
+import chaqimchi_ai.sotqin_agent as module
 
 
 def test_control_health_is_fail_closed_before_pairing(monkeypatch) -> None:

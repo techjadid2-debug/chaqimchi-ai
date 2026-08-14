@@ -7,6 +7,9 @@ Wants=network-online.target
 Type=simple
 User=chaqimchi
 Group=chaqimchi
+# OpenVINO iGPU'da ishlashi uchun /dev/dri/renderD128 kerak. Bu guruhlarsiz
+# drayver o'rnatilgan bo'lsa ham detektor jimgina CPU'ga tushadi.
+SupplementaryGroups=render video
 WorkingDirectory=/opt/chaqimchi/current
 EnvironmentFile=/etc/chaqimchi/sotqin.env
 # Konfig yo'li sotqin.env dagi CHAQIMCHI_CONFIG dan olinadi — yuz tanish
@@ -26,6 +29,11 @@ KillMode=control-group
 PrivateDevices=no
 UMask=0077
 LimitNOFILE=65536
+# Xotira shifti cgroup darajasida: `MemoryHigh` OOM-killer'dan oldin siqadi,
+# `MemoryMax` esa o'ldiradi va `Restart=always` tiklaydi. Uch xizmat jami
+# 6.1 GB — 8 GB qurilmada tizimga joy qoladi (talab: <= 6.5 GB).
+MemoryHigh=2G
+MemoryMax=2560M
 
 [Install]
 WantedBy=multi-user.target

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = ["FaceEngine", "FaceCompareResult", "VideoFrameResult", "__version__"]
 
 

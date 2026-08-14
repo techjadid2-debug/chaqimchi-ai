@@ -13,12 +13,14 @@ import html
 import io
 import logging
 import os
+import re
 import secrets
 from contextlib import asynccontextmanager
 from datetime import date as date_type
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Request
@@ -28,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from chaqimchi_ai import __version__
 from chaqimchi_ai.event_models import EdgeEvent
+from chaqimchi_ai.jwt_auth import JwtError
 from chaqimchi_ai.licensing.plans import (
     PLANS,
     PlanTier,
@@ -59,11 +62,19 @@ from cloud.payments import PaymentStore, click_config, payme_config, public_url
 from cloud.payments import click as click_api
 from cloud.payments import payme as payme_api
 from cloud.payments.store import billable_months
+from cloud.portal_auth import (
+    PortalPrincipal,
+    bearer_token,
+    decode_portal_token,
+    issue_portal_token,
+)
 from cloud.snapshots import SnapshotStore, snapshot_store_from_env
 from cloud.store import CloudStore, available_feature_codes
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "data" / "cloud" / "cloud.db"
+DB_PATH = Path(
+    os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db"))
+)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 logger = logging.getLogger(__name__)
 
@@ -101,8 +112,8 @@ def get_event_store() -> EventStore:
     sqlite_path = get_store().db_path.parent / "events.db"
     key = database_url or str(sqlite_path)
     if _event_store is None or _event_store_key != key:
-        _event_store = event_store_from_env(BASE_DIR) if database_url else EventStore(
-            sqlite_path=sqlite_path
+        _event_store = (
+            event_store_from_env(BASE_DIR) if database_url else EventStore(sqlite_path=sqlite_path)
         )
         _event_store_key = key
     return _event_store
@@ -116,13 +127,125 @@ def get_snapshot_store() -> SnapshotStore:
 
 
 def require_admin(
+    authorization: Optional[str] = Header(None),
     x_cloud_admin_key: Optional[str] = Header(None, alias="X-Cloud-Admin-Key"),
-) -> None:
+) -> Optional[PortalPrincipal]:
     expected = os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "").strip()
-    if not expected:
-        raise HTTPException(503, "CHAQIMCHI_CLOUD_ADMIN_KEY sozlanmagan")
-    if not x_cloud_admin_key or not secrets.compare_digest(x_cloud_admin_key.strip(), expected):
-        raise HTTPException(401, "Admin kalit noto‘g‘ri")
+    if (
+        expected
+        and x_cloud_admin_key
+        and secrets.compare_digest(x_cloud_admin_key.strip(), expected)
+    ):
+        return None
+    return _require_portal_principal(authorization, roles={"admin"})
+
+
+def _require_portal_principal(
+    authorization: Optional[str],
+    *,
+    roles: set[str],
+    allow_pending: bool = False,
+) -> PortalPrincipal:
+    try:
+        principal = decode_portal_token(bearer_token(authorization))
+    except JwtError as exc:
+        raise HTTPException(401, "Login talab qilinadi") from exc
+    account = get_store().account_by_id(principal.account_id)
+    if (
+        not account
+        or account["username"] != principal.username
+        or account["role"] != principal.role
+        or int(account["auth_version"]) != principal.auth_version
+        or account["status"] == "disabled"
+    ):
+        raise HTTPException(401, "Session bekor qilingan")
+    if principal.role not in roles:
+        raise HTTPException(403, "Bu bo'lim uchun ruxsat yo'q")
+    if account["status"] == "pending" and not allow_pending:
+        raise HTTPException(403, "Akkaunt admin tasdig'ini kutmoqda")
+    return PortalPrincipal(
+        **{
+            "account_id": account["id"],
+            "username": account["username"],
+            "role": account["role"],
+            "status": account["status"],
+            "site_id": account.get("site_id"),
+            "auth_version": account["auth_version"],
+        }
+    )
+
+
+def require_installer_account(
+    authorization: Optional[str] = Header(None),
+) -> PortalPrincipal:
+    return _require_portal_principal(authorization, roles={"installer"}, allow_pending=True)
+
+
+def require_portal_account(
+    authorization: Optional[str] = Header(None),
+) -> PortalPrincipal:
+    return _require_portal_principal(
+        authorization,
+        roles={"admin", "installer", "customer"},
+        allow_pending=True,
+    )
+
+
+def require_active_installer(
+    authorization: Optional[str] = Header(None),
+) -> PortalPrincipal:
+    return _require_portal_principal(authorization, roles={"installer"})
+
+
+class PortalLoginBody(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class InstallerRegisterBody(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=5, max_length=32)
+    company: Optional[str] = Field(default=None, max_length=160)
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=10, max_length=128)
+    consent: bool = False
+
+
+class PortalAccountCreateBody(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=10, max_length=128)
+    role: Literal["admin", "installer", "customer"]
+    status: Literal["pending", "active", "disabled"] = "active"
+    full_name: str = Field(min_length=2, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=32)
+    company: Optional[str] = Field(default=None, max_length=160)
+    site_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class PortalAccountUpdateBody(BaseModel):
+    role: Optional[Literal["admin", "installer", "customer"]] = None
+    status: Optional[Literal["pending", "active", "disabled"]] = None
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=32)
+    company: Optional[str] = Field(default=None, max_length=160)
+    site_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class PortalPasswordBody(BaseModel):
+    current_password: Optional[str] = Field(default=None, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+class InstallerAssignmentBody(BaseModel):
+    installer_id: str = Field(min_length=1, max_length=64)
+    site_id: str = Field(min_length=1, max_length=64)
+    status: Literal["assigned", "in_progress", "ready", "completed", "cancelled"] = "assigned"
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class InstallerAssignmentUpdateBody(BaseModel):
+    status: Literal["assigned", "in_progress", "ready", "completed", "cancelled"]
+    notes: Optional[str] = Field(default=None, max_length=1000)
 
 
 class CreateSiteBody(BaseModel):
@@ -214,18 +337,18 @@ class ConfigAckBody(BaseModel):
 
 class SiteConfigBody(BaseModel):
     camera_labels: Dict[str, str] = Field(default_factory=dict)
-    camera_roles: Dict[
-        str, Literal["entrance", "checkout", "sales_floor", "storage"]
-    ] = Field(default_factory=dict)
+    camera_roles: Dict[str, Literal["entrance", "checkout", "sales_floor", "storage"]] = Field(
+        default_factory=dict
+    )
     occupancy_limit: int = Field(default=20, ge=1, le=10000)
     loitering_sec: int = Field(default=60, ge=5, le=86400)
     queue_limit: int = Field(default=5, ge=1, le=1000)
     open_from: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     open_to: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     attendance_camera_ids: List[str] = Field(default_factory=list, max_length=2)
-    attendance_camera_roles: Dict[
-        str, Literal["arrival", "departure", "both"]
-    ] = Field(default_factory=dict)
+    attendance_camera_roles: Dict[str, Literal["arrival", "departure", "both"]] = Field(
+        default_factory=dict
+    )
     zones: List[SceneZoneSettings] = Field(default_factory=list, max_length=128)
     lines: List[SceneLineSettings] = Field(default_factory=list, max_length=32)
 
@@ -306,6 +429,17 @@ def require_device(
 def require_active_owner(
     owner: OwnerPrincipal = Depends(require_owner),
 ) -> OwnerPrincipal:
+    if owner.auth_kind == "password":
+        account = get_store().account_by_id(owner.member_id)
+        if (
+            not account
+            or account["role"] != "customer"
+            or account["status"] != "active"
+            or account.get("site_id") != owner.site_id
+            or int(account["auth_version"]) != owner.auth_version
+        ):
+            raise HTTPException(401, "Mijoz sessioni bekor qilingan")
+        return owner
     member = get_event_store().member_for_site(owner.site_id, owner.telegram_id)
     if not member or str(member["id"]) != owner.member_id or member["role"] != owner.role:
         raise HTTPException(401, "Owner session bekor qilingan")
@@ -343,18 +477,27 @@ def require_attendance() -> None:
         )
 
 
-async def _send_owner_telegram(chat_id: str, text: str) -> None:
+async def _send_owner_telegram(
+    chat_id: str,
+    text: str,
+    *,
+    reply_markup: Optional[Dict[str, Any]] = None,
+) -> None:
     import httpx
 
-    token = os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip() or os.environ.get(
-        "CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", ""
-    ).strip()
+    token = (
+        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+    )
     if not token:
         raise HTTPException(503, "Owner Telegram bot tokeni sozlanmagan")
     async with httpx.AsyncClient(timeout=15) as client:
+        payload: Dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         response = await client.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": text},
+            json=payload,
         )
         if response.status_code >= 400:
             raise HTTPException(502, "Telegram OTP yuborilmadi")
@@ -433,6 +576,8 @@ async def lifespan(app: FastAPI):
             errors.append("camera credential encryption key sozlanishi shart")
         if len(os.environ.get("CHAQIMCHI_OWNER_JWT_SECRET", "")) < 32:
             errors.append("owner JWT secret kamida 32 belgi bo'lishi shart")
+        if len(os.environ.get("CHAQIMCHI_PORTAL_JWT_SECRET", "")) < 32:
+            errors.append("portal JWT secret kamida 32 belgi bo'lishi shart")
         if len(os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "")) < 32:
             errors.append("cloud admin key kamida 32 belgi bo'lishi shart")
         try:
@@ -440,10 +585,18 @@ async def lifespan(app: FastAPI):
         except ValueError as exc:
             errors.append(str(exc))
         if errors:
-            raise RuntimeError("Cloud production konfiguratsiyasi xavfsiz emas: " + "; ".join(errors))
+            raise RuntimeError(
+                "Cloud production konfiguratsiyasi xavfsiz emas: " + "; ".join(errors)
+            )
     get_event_store()
     get_snapshot_store()
     get_payments()
+    bootstrap_username = os.environ.get("CHAQIMCHI_BOOTSTRAP_ADMIN_USERNAME", "").strip()
+    bootstrap_password = os.environ.get("CHAQIMCHI_BOOTSTRAP_ADMIN_PASSWORD", "")
+    if bool(bootstrap_username) != bool(bootstrap_password):
+        raise RuntimeError("Bootstrap admin login va paroli birga sozlanishi kerak")
+    if bootstrap_username and bootstrap_password:
+        get_store().ensure_bootstrap_admin(bootstrap_username, bootstrap_password)
     alerts = get_alerts()
     alerts.start()
     _digest = DailyDigestService(get_event_store(), get_store().list_sites, _send_owner_telegram)
@@ -498,7 +651,17 @@ async def public_site(request: Request) -> HTMLResponse:
     if not page.is_file():
         raise HTTPException(404, "Sahifa topilmadi")
     origin = str(request.base_url).rstrip("/")
-    content = page.read_text(encoding="utf-8").replace("__PUBLIC_ORIGIN__", origin)
+    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    register_url = (
+        f"https://t.me/{bot_username}?start=register"
+        if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
+        else f"{origin}/#pilot"
+    )
+    content = (
+        page.read_text(encoding="utf-8")
+        .replace("__PUBLIC_ORIGIN__", origin)
+        .replace("__TELEGRAM_REGISTER_URL__", register_url)
+    )
     return HTMLResponse(content)
 
 
@@ -511,6 +674,18 @@ async def connect_page() -> FileResponse:
 async def install_page() -> FileResponse:
     """Mijozning mustaqil o'rnatish yo'riqnomasi."""
     return _static_page("install.html")
+
+
+@app.get("/installer", include_in_schema=False)
+async def installer_page() -> FileResponse:
+    """O'rnatuvchi ro'yxatdan o'tishi, vazifalari va pairing paneli."""
+    return _static_page("installer.html")
+
+
+@app.get("/installer-guide", include_in_schema=False)
+async def installer_guide_page() -> FileResponse:
+    """Bo'sh mini-kompyuterdan mijozga topshirishgacha rasmli yo'riqnoma."""
+    return _static_page("installer-guide.html")
 
 
 @app.get("/downloads/sotqin-installer.sh", include_in_schema=False)
@@ -670,17 +845,14 @@ def _configured_lead_chat_ids() -> List[str]:
 
 
 def _lead_recipient_ids() -> List[str]:
-    service = get_alerts()
-    recipients = []
-    if service.config.chat_id:
-        recipients.append(service.config.chat_id)
-    recipients.extend(_configured_lead_chat_ids())
-    recipients.extend(item["chat_id"] for item in get_store().telegram_lead_destinations())
-    return list(dict.fromkeys(str(item).strip() for item in recipients if str(item).strip()))
+    """Leadlar faqat maxsus statik shaxsiy qabul qiluvchilarga boradi."""
+    return _configured_lead_chat_ids()
 
 
 def _lead_notification_text(lead: Dict[str, Any], *, duplicate: bool = False) -> str:
-    title = "Takroriy Chaqimchi AI do'kon arizasi" if duplicate else "Yangi Chaqimchi AI do'kon arizasi"
+    title = (
+        "Takroriy Chaqimchi AI do'kon arizasi" if duplicate else "Yangi Chaqimchi AI do'kon arizasi"
+    )
     return (
         f"📥 <b>{title}</b>\n"
         f"Ism: {html.escape(str(lead['full_name']))}\n"
@@ -724,9 +896,7 @@ async def _notify_new_lead(lead: Dict[str, Any], *, duplicate: bool = False) -> 
     if not recipients:
         logger.warning("Lead %s saqlandi, lekin Telegram recipient sozlanmagan", lead["id"])
         return
-    get_store().ensure_lead_notification_deliveries(
-        str(lead["id"]), recipients, reset=duplicate
-    )
+    get_store().ensure_lead_notification_deliveries(str(lead["id"]), recipients, reset=duplicate)
     for chat_id in recipients:
         delivery = get_store().lead_notification_delivery(str(lead["id"]), chat_id)
         if delivery and delivery["state"] == "sent":
@@ -799,6 +969,223 @@ async def public_create_lead(
     }
 
 
+# ── Login/parol portali: admin, o'rnatuvchi va xarid qilgan mijoz ───────
+
+
+@app.post("/api/v1/auth/login")
+async def portal_login(body: PortalLoginBody, request: Request) -> Dict[str, Any]:
+    client_host = request.client.host if request.client else "unknown"
+    ratelimit.check(
+        "portal-login",
+        f"{client_host}:{body.username.strip().lower()}",
+        limit=8,
+        window_sec=900,
+        message="Juda ko'p kirish urinishi. 15 daqiqadan keyin urinib ko'ring.",
+    )
+    try:
+        account = get_store().authenticate_account(body.username, body.password)
+    except ValueError:
+        account = None
+    if not account or account["status"] == "disabled":
+        raise HTTPException(401, "Login yoki parol noto'g'ri")
+    try:
+        token = issue_portal_token(account)
+    except Exception as exc:
+        raise HTTPException(503, "Login sessioni yaratilmadi") from exc
+    redirect = {"admin": "/admin", "installer": "/installer", "customer": "/owner"}[account["role"]]
+    return {
+        "ok": True,
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": 12 * 3600,
+        "account": account,
+        "redirect": redirect,
+    }
+
+
+@app.post("/api/v1/auth/installer/register")
+async def installer_register(
+    body: InstallerRegisterBody,
+    request: Request,
+) -> Dict[str, Any]:
+    if not body.consent:
+        raise HTTPException(422, "Shaxsiy ma'lumotlarni qayta ishlashga rozilik kerak")
+    client_host = request.client.host if request.client else "unknown"
+    ratelimit.check(
+        "installer-register",
+        client_host,
+        limit=4,
+        window_sec=3600,
+        message="Ro'yxatdan o'tish limiti tugadi. Keyinroq urinib ko'ring.",
+    )
+    try:
+        account = get_store().create_account(
+            username=body.username,
+            password=body.password,
+            role="installer",
+            status="pending",
+            full_name=body.full_name,
+            phone=body.phone,
+            company=body.company,
+        )
+        token = issue_portal_token(account)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "installer.register",
+        actor_id=account["id"],
+        target_type="account",
+        target_id=account["id"],
+    )
+    return {
+        "ok": True,
+        "access_token": token,
+        "token_type": "bearer",
+        "account": account,
+        "message": "Ro'yxatdan o'tdingiz. Buyurtmalar admin tasdig'idan keyin ochiladi.",
+    }
+
+
+@app.get("/api/v1/auth/me")
+async def portal_me(
+    principal: PortalPrincipal = Depends(require_portal_account),
+) -> Dict[str, Any]:
+    return {"account": get_store().account_by_id(principal.account_id)}
+
+
+@app.post("/api/v1/auth/password")
+async def portal_change_password(
+    body: PortalPasswordBody,
+    principal: PortalPrincipal = Depends(require_portal_account),
+) -> Dict[str, Any]:
+    if not body.current_password or not get_store().authenticate_account(
+        principal.username, body.current_password
+    ):
+        raise HTTPException(401, "Joriy parol noto'g'ri")
+    try:
+        account = get_store().set_account_password(principal.account_id, body.new_password)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    token = issue_portal_token(account)
+    get_store().audit_portal_action(
+        "account.password.changed",
+        actor_id=principal.account_id,
+        target_type="account",
+        target_id=principal.account_id,
+    )
+    return {"ok": True, "access_token": token, "account": account}
+
+
+@app.get("/api/v1/admin/accounts")
+async def admin_accounts(
+    role: Optional[Literal["admin", "installer", "customer"]] = None,
+    status: Optional[Literal["pending", "active", "disabled"]] = None,
+    _: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    return {"accounts": get_store().list_accounts(role=role, status=status)}
+
+
+@app.post("/api/v1/admin/accounts")
+async def admin_create_account(
+    body: PortalAccountCreateBody,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    try:
+        account = get_store().create_account(
+            **body.model_dump(),
+            created_by=admin.account_id if admin else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "account.created",
+        actor_id=admin.account_id if admin else None,
+        target_type="account",
+        target_id=account["id"],
+        detail={"role": account["role"], "status": account["status"]},
+    )
+    return account
+
+
+@app.put("/api/v1/admin/accounts/{account_id}")
+async def admin_update_account(
+    account_id: str,
+    body: PortalAccountUpdateBody,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    changes = body.model_dump(exclude_unset=True)
+    if admin and admin.account_id == account_id and changes.get("status") == "disabled":
+        raise HTTPException(409, "O'zingizni bloklay olmaysiz")
+    try:
+        account = get_store().update_account(account_id, changes)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "account.updated",
+        actor_id=admin.account_id if admin else None,
+        target_type="account",
+        target_id=account_id,
+        detail={key: value for key, value in changes.items() if key != "phone"},
+    )
+    return account
+
+
+@app.post("/api/v1/admin/accounts/{account_id}/password")
+async def admin_reset_account_password(
+    account_id: str,
+    body: PortalPasswordBody,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    try:
+        account = get_store().set_account_password(account_id, body.new_password)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "account.password.reset",
+        actor_id=admin.account_id if admin else None,
+        target_type="account",
+        target_id=account_id,
+    )
+    return {"ok": True, "account": account}
+
+
+@app.get("/api/v1/admin/installer-assignments")
+async def admin_installer_assignments(
+    _: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    return {"assignments": get_store().list_installer_assignments()}
+
+
+@app.post("/api/v1/admin/installer-assignments")
+async def admin_assign_installer(
+    body: InstallerAssignmentBody,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    try:
+        assignment = get_store().assign_installer(
+            **body.model_dump(),
+            created_by=admin.account_id if admin else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "installer.assigned",
+        actor_id=admin.account_id if admin else None,
+        target_type="site",
+        target_id=body.site_id,
+        detail={"installer_id": body.installer_id, "status": body.status},
+    )
+    return assignment
+
+
+@app.get("/api/v1/admin/portal-audit")
+async def admin_portal_audit(
+    limit: int = 200,
+    _: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    return {"events": get_store().list_portal_audit(limit=limit)}
+
+
 @app.post("/api/v1/admin/sites")
 async def admin_create_site(
     body: CreateSiteBody,
@@ -859,7 +1246,9 @@ async def admin_save_feature_draft(
     _: None = Depends(require_admin),
 ) -> Dict[str, Any]:
     try:
-        return get_store().replace_feature_draft(site_id, [item.model_dump() for item in body.selections])
+        return get_store().replace_feature_draft(
+            site_id, [item.model_dump() for item in body.selections]
+        )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -939,6 +1328,7 @@ async def admin_convert_lead(
 async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
     public = public_url()
     owner_token = os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip()
     webhook_secret = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
     alert_status = get_alerts().status()
     lead_recipients = _lead_recipient_ids()
@@ -961,7 +1351,13 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
         {
             "key": "owner_bot",
             "label": "Mijoz Telegram boti",
-            "ok": bool(owner_token and webhook_secret),
+            "ok": bool(owner_token and bot_username and webhook_secret),
+            "required": True,
+        },
+        {
+            "key": "portal_admin",
+            "label": "Login/parolli portal administratori",
+            "ok": bool(get_store().list_accounts(role="admin", status="active")),
             "required": True,
         },
         {
@@ -1110,6 +1506,206 @@ async def admin_delete_camera_inventory(
         raise HTTPException(404, str(exc)) from exc
 
 
+def _site_onboarding_payload(site_id: str) -> Dict[str, Any]:
+    detail = get_store().site_detail(site_id)
+    members = get_event_store().list_members(site_id)
+    customer_accounts = [
+        account
+        for account in get_store().list_accounts(role="customer", status="active")
+        if account.get("site_id") == site_id
+    ]
+    invoices = get_payments().list_invoices(site_id, limit=100)
+    device_paired = bool(detail["devices"])
+    cameras_configured = bool(get_store().list_cameras(site_id))
+    cameras_seen = int(detail["cameras_expected"] or 0) > 0
+    steps = [
+        {"key": "customer", "label": "Mijoz ochildi", "done": True},
+        {
+            "key": "owner",
+            "label": "Mijoz login yoki Telegram egasi qo'shildi",
+            "done": bool(members or customer_accounts),
+        },
+        {"key": "cameras_config", "label": "RTSP kameralar kiritildi", "done": cameras_configured},
+        {"key": "device", "label": "Sotqin cloudga juftlandi", "done": device_paired},
+        {
+            "key": "online",
+            "label": "Qurilma cloud bilan aloqada",
+            "done": detail["connection"] == "online",
+        },
+        {"key": "cameras", "label": "Kameralar online xabar berdi", "done": cameras_seen},
+        {"key": "invoice", "label": "Hisob-faktura ochildi", "done": bool(invoices)},
+        {
+            "key": "payment",
+            "label": "Birinchi to'lov qabul qilindi",
+            "done": any(invoice["state"] == "paid" for invoice in invoices),
+        },
+    ]
+    completed = sum(1 for step in steps if step["done"])
+    active_code = detail["active_pairing_codes"][0] if detail["active_pairing_codes"] else None
+    origin = public_url() or ""
+    install_command = None
+    if active_code and origin:
+        install_command = (
+            f"curl -fsSL {origin}/downloads/sotqin-installer.sh | "
+            f"sudo bash -s -- --cloud {origin} --code {active_code['code']}"
+        )
+    return {
+        "site_id": site_id,
+        "site": detail,
+        "completed": completed,
+        "total": len(steps),
+        "percent": round(completed * 100 / len(steps)),
+        "steps": steps,
+        "pairing": active_code,
+        "connect_url": f"{origin}/connect",
+        "install_command": install_command,
+    }
+
+
+def _require_installer_site(installer: PortalPrincipal, site_id: str) -> Dict[str, Any]:
+    assignment = get_store().installer_assignment(installer.account_id, site_id)
+    if not assignment or assignment["status"] == "cancelled":
+        raise HTTPException(403, "Bu obyekt sizga biriktirilmagan")
+    return assignment
+
+
+@app.get("/api/v1/installer/assignments")
+async def installer_assignments(
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    rows = get_store().list_installer_assignments(installer_id=installer.account_id)
+    for row in rows:
+        detail = get_store().site_detail(str(row["site_id"]))
+        row["connection"] = detail["connection"]
+        row["cameras_active"] = detail["cameras_active"]
+        row["cameras_expected"] = detail["cameras_expected"]
+    return {"assignments": rows}
+
+
+@app.get("/api/v1/installer/sites/{site_id}/onboarding")
+async def installer_site_onboarding(
+    site_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    _require_installer_site(installer, site_id)
+    try:
+        return _site_onboarding_payload(site_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.post("/api/v1/installer/sites/{site_id}/pairing")
+async def installer_new_pairing(
+    site_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    _require_installer_site(installer, site_id)
+    try:
+        pairing = get_store().new_pairing_code(site_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    get_store().audit_portal_action(
+        "installer.pairing.created",
+        actor_id=installer.account_id,
+        target_type="site",
+        target_id=site_id,
+    )
+    return {**pairing, "onboarding": _site_onboarding_payload(site_id)}
+
+
+@app.get("/api/v1/installer/sites/{site_id}/cameras")
+async def installer_list_cameras(
+    site_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    _require_installer_site(installer, site_id)
+    try:
+        return {"cameras": get_store().list_cameras(site_id)}
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.put("/api/v1/installer/sites/{site_id}/cameras/{camera_id}")
+async def installer_upsert_camera(
+    site_id: str,
+    camera_id: str,
+    body: CameraConfigBody,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    _require_installer_site(installer, site_id)
+    try:
+        camera = get_store().upsert_camera(
+            site_id,
+            camera_id,
+            label=body.label,
+            rtsp_url=body.rtsp_url,
+            enabled=body.enabled,
+        )
+        current = get_event_store().get_site_config(site_id)
+        updated = get_event_store().update_site_config(site_id, current["config"])
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "installer.camera.saved",
+        actor_id=installer.account_id,
+        target_type="camera",
+        target_id=f"{site_id}:{camera_id}",
+        detail={"label": body.label, "enabled": body.enabled},
+    )
+    return {"camera": camera, "config_revision": updated["revision"]}
+
+
+@app.delete("/api/v1/installer/sites/{site_id}/cameras/{camera_id}")
+async def installer_delete_camera(
+    site_id: str,
+    camera_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    _require_installer_site(installer, site_id)
+    try:
+        if not get_store().delete_camera(site_id, camera_id):
+            raise HTTPException(404, "Kamera topilmadi")
+        current = get_event_store().get_site_config(site_id)
+        get_event_store().update_site_config(site_id, current["config"])
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    get_store().audit_portal_action(
+        "installer.camera.deleted",
+        actor_id=installer.account_id,
+        target_type="camera",
+        target_id=f"{site_id}:{camera_id}",
+    )
+    return {"ok": True, "camera_id": camera_id}
+
+
+@app.put("/api/v1/installer/sites/{site_id}/status")
+async def installer_update_assignment(
+    site_id: str,
+    body: InstallerAssignmentUpdateBody,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    current = _require_installer_site(installer, site_id)
+    if body.status not in {"in_progress", "ready", "completed"}:
+        raise HTTPException(403, "O'rnatuvchi faqat ish jarayoni holatini yangilaydi")
+    try:
+        assignment = get_store().assign_installer(
+            installer.account_id,
+            site_id,
+            status=body.status,
+            notes=body.notes if body.notes is not None else current.get("notes"),
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "installer.assignment.status",
+        actor_id=installer.account_id,
+        target_type="site",
+        target_id=site_id,
+        detail={"status": body.status},
+    )
+    return assignment
+
+
 @app.get("/api/v1/admin/alerts")
 async def admin_alerts_status(_: None = Depends(require_admin)) -> Dict[str, Any]:
     """Ogohlantirish sozlamasi va oxirgi tekshiruv natijasi."""
@@ -1156,41 +1752,9 @@ async def admin_site_onboarding(
 ) -> Dict[str, Any]:
     """Pilot obyektning modeldan mustaqil ulanish bosqichlari."""
     try:
-        detail = get_store().site_detail(site_id)
+        return _site_onboarding_payload(site_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-    members = get_event_store().list_members(site_id)
-    invoices = get_payments().list_invoices(site_id, limit=100)
-    device_paired = bool(detail["devices"])
-    cameras_seen = int(detail["cameras_expected"] or 0) > 0
-    steps = [
-        {"key": "customer", "label": "Mijoz ochildi", "done": True},
-        {"key": "owner", "label": "Telegram egasi qo'shildi", "done": bool(members)},
-        {"key": "device", "label": "Sotqin juftlandi", "done": device_paired},
-        {
-            "key": "online",
-            "label": "Qurilma cloud bilan aloqada",
-            "done": detail["connection"] == "online",
-        },
-        {"key": "cameras", "label": "Kameralar xabar berdi", "done": cameras_seen},
-        {"key": "invoice", "label": "Hisob-faktura ochildi", "done": bool(invoices)},
-        {
-            "key": "payment",
-            "label": "Birinchi to'lov qabul qilindi",
-            "done": any(invoice["state"] == "paid" for invoice in invoices),
-        },
-    ]
-    completed = sum(1 for step in steps if step["done"])
-    active_code = detail["active_pairing_codes"][0] if detail["active_pairing_codes"] else None
-    return {
-        "site_id": site_id,
-        "completed": completed,
-        "total": len(steps),
-        "percent": round(completed * 100 / len(steps)),
-        "steps": steps,
-        "pairing": active_code,
-        "connect_url": f"{public_url() or ''}/connect",
-    }
 
 
 @app.post("/api/v1/admin/sites/{site_id}/extend")
@@ -1292,8 +1856,7 @@ async def ingest_event_batch(
     if message:
         if any(event.has_snapshot or event.has_clip for event in new_events):
             message += (
-                "\n🔐 Rasm va klip: "
-                f"{public_url().rstrip('/')}/owner?site={device['site_id']}"
+                f"\n🔐 Rasm va klip: {public_url().rstrip('/')}/owner?site={device['site_id']}"
             )
         background_tasks.add_task(_notify_site_members, device["site_id"], message)
     return {"ok": True, "accepted": accepted}
@@ -1372,9 +1935,7 @@ async def edge_health_heartbeat(
     body: EdgeHeartbeatBody,
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
-    get_event_store().record_health(
-        device["site_id"], device["device_id"], body.model_dump()
-    )
+    get_event_store().record_health(device["site_id"], device["device_id"], body.model_dump())
     # Legacy connection monitoring ham yangi heartbeat bilan yangilanadi.
     get_store().heartbeat(
         device["site_id"],
@@ -1424,8 +1985,7 @@ async def edge_site_config(
         "enabled": _attendance_enabled(),
         "mode": (
             "commercial"
-            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower()
-            in {"1", "true", "yes"}
+            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower() in {"1", "true", "yes"}
             else "closed_pilot"
             if _attendance_enabled()
             else "disabled"
@@ -1433,9 +1993,7 @@ async def edge_site_config(
         # Ism va rozilik holati enrollment uchun kerak; biometrik rasm yoki
         # embedding hech qachon cloud config'iga kirmaydi.
         "employees": (
-            get_event_store().edge_employees(device["site_id"])
-            if _attendance_enabled()
-            else []
+            get_event_store().edge_employees(device["site_id"]) if _attendance_enabled() else []
         ),
     }
     return config
@@ -1654,9 +2212,7 @@ async def owner_update_config(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     require_owner_role(owner, "owner", "service_admin")
-    allowed_cameras = {
-        f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)
-    }
+    allowed_cameras = {f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)}
     configured_ids = (
         set(body.camera_labels)
         | set(body.camera_roles)
@@ -1688,8 +2244,7 @@ async def owner_employees(
     return {
         "mode": (
             "commercial"
-            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower()
-            in {"1", "true", "yes"}
+            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower() in {"1", "true", "yes"}
             else "closed_pilot"
         ),
         "employees": get_event_store().list_employees(
@@ -1752,7 +2307,9 @@ async def owner_replace_employee_schedule(
     require_owner_role(owner, "owner", "service_admin")
     for item in body.schedules:
         if item.enabled and item.end_time <= item.start_time:
-            raise HTTPException(422, "MVP jadvalida tugash vaqti boshlanishdan keyin bo'lishi kerak")
+            raise HTTPException(
+                422, "MVP jadvalida tugash vaqti boshlanishdan keyin bo'lishi kerak"
+            )
     try:
         schedules = get_event_store().replace_employee_schedules(
             owner.site_id,
@@ -1937,10 +2494,17 @@ async def owner_clip(
     return Response(content=content, media_type="video/mp4")
 
 
-@app.post("/api/v1/telegram/webhook/{webhook_secret}")
-async def owner_telegram_webhook(webhook_secret: str, request: Request) -> Dict[str, Any]:
+@app.post("/api/v1/telegram/webhook")
+async def owner_telegram_webhook(
+    request: Request,
+    x_telegram_secret: Optional[str] = Header(
+        None, alias="X-Telegram-Bot-Api-Secret-Token"
+    ),
+) -> Dict[str, Any]:
     expected = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
-    if not expected or not secrets.compare_digest(webhook_secret, expected):
+    if not expected or not x_telegram_secret or not secrets.compare_digest(
+        x_telegram_secret, expected
+    ):
         raise HTTPException(404, "Topilmadi")
     try:
         update = await request.json()
@@ -1949,54 +2513,36 @@ async def owner_telegram_webhook(webhook_secret: str, request: Request) -> Dict[
     membership = update.get("my_chat_member") or {}
     membership_chat = membership.get("chat") or {}
     if membership_chat.get("type") in {"group", "supergroup"}:
-        # Pilotda sales boti ichki guruhga qo'shilishi bilan leadlar shu yerga
-        # ham yuboriladi. Flag o'chirilsa hech bir yangi guruh avtomatik
-        # ro'yxatdan o'tmaydi.
-        auto_groups = os.environ.get("CHAQIMCHI_TELEGRAM_AUTO_GROUP_LEADS", "").strip().lower()
-        if auto_groups in {"1", "true", "yes", "on"}:
-            status = str((membership.get("new_chat_member") or {}).get("status") or "")
-            chat_id = str(membership_chat.get("id") or "")
-            if chat_id and status in {"member", "administrator"}:
-                get_store().upsert_telegram_lead_destination(
-                    chat_id,
-                    chat_type=str(membership_chat["type"]),
-                    title=str(membership_chat.get("title") or "Telegram guruhi"),
-                )
-                await _send_owner_telegram(
-                    chat_id,
-                    "✅ Chaqimchi AI lead xabarlari ushbu guruhga yoqildi.",
-                )
-                await _retry_lead_notifications()
-            elif chat_id and status in {"left", "kicked"}:
-                get_store().remove_telegram_lead_destination(chat_id)
+        # Guruhlar lead qabul qiluvchi sifatida avtomatik ro'yxatdan o'tmaydi.
+        # Leadlar faqat CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS dagi shaxsiy ID'larga boradi.
         return {"ok": True}
 
     message = update.get("message") or {}
     chat = message.get("chat") or {}
     telegram_id = str(chat.get("id") or "")
-    command = str(message.get("text") or "").split()[0].lower().split("@", 1)[0]
-    # Telegram ba'zan bot qo'shilishidagi `my_chat_member` update'ini
-    # yubormaydi (masalan bot guruhga webhook sozlanishidan oldin kiritilgan
-    # bo'lsa). Sales guruhi ichidagi /leads buni qo'lda, lekin bir qadamda
-    # tiklash yo'lidir.
-    auto_groups = os.environ.get("CHAQIMCHI_TELEGRAM_AUTO_GROUP_LEADS", "").strip().lower()
-    if (
-        chat.get("type") in {"group", "supergroup"}
-        and auto_groups in {"1", "true", "yes", "on"}
-        and command in {"/leads", "/start"}
-    ):
-        get_store().upsert_telegram_lead_destination(
-            telegram_id,
-            chat_type=str(chat["type"]),
-            title=str(chat.get("title") or "Telegram guruhi"),
-        )
+    text = str(message.get("text") or "").strip()
+    command = text.split()[0].lower().split("@", 1)[0] if text else ""
+    members = get_event_store().members_for_telegram(telegram_id)
+    if telegram_id and chat.get("type") == "private" and command in {"/start", "/help"}:
+        base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+        customer_url = f"{base}/owner"
+        if members:
+            customer_url += f"?site={quote(str(members[0]['site_id']), safe='')}"
         await _send_owner_telegram(
             telegram_id,
-            "✅ Chaqimchi AI lead xabarlari ushbu guruhga yoqildi.",
+            "<b>Chaqimchi AI platformasiga xush kelibsiz.</b>\n\n"
+            "Yangi Sotqin mini-kompyuterini sozlash uchun o‘rnatuvchi bo‘limini tanlang. "
+            "Agar tizimni harid qilgan bo‘lsangiz, mijoz panelidan kamera va qurilma "
+            "holatini kuzating.",
+            reply_markup={
+                "inline_keyboard": [
+                    [{"text": "🖥 Sotqinni o‘rnatish", "url": f"{base}/installer"}],
+                    [{"text": "🏪 Mijoz panelini ochish", "url": customer_url}],
+                    [{"text": "🛒 Tarif va maslahat", "url": f"{base}/#configurator"}],
+                ]
+            },
         )
-        await _retry_lead_notifications()
         return {"ok": True}
-    members = get_event_store().members_for_telegram(telegram_id)
     if not telegram_id or not members:
         return {"ok": True}
 
@@ -2014,9 +2560,7 @@ async def owner_telegram_webhook(webhook_secret: str, request: Request) -> Dict[
                 f"aloqa {detail['connection']}"
             )
         else:
-            lines.append(
-                f"{site['name']} uchun buyruqlar: /status, /today, /cameras, /help"
-            )
+            lines.append(f"{site['name']} uchun buyruqlar: /status, /today, /cameras, /help")
     if lines:
         await _send_owner_telegram(telegram_id, "\n".join(lines))
     return {"ok": True}

@@ -23,9 +23,11 @@ def secure_env() -> dict[str, str]:
         "CHAQIMCHI_CAMERA_SECRET_KEY": fernet,
         "CHAQIMCHI_CLOUD_ADMIN_KEY": "a" * 64,
         "CHAQIMCHI_OWNER_JWT_SECRET": "j" * 64,
+        "CHAQIMCHI_PORTAL_JWT_SECRET": "q" * 64,
         "CHAQIMCHI_OWNER_TELEGRAM_TOKEN": "123456789:" + "x" * 35,
+        "CHAQIMCHI_TELEGRAM_BOT_USERNAME": "chaqimchi_bot",
         "CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET": "w" * 64,
-        "CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS": "5476913898,-1001234567890",
+        "CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS": "5476913898",
         "CHAQIMCHI_SOTQIN_RELEASE_URL": "https://chaqimchi.uz/releases/sotqin.tar.gz",
         "CHAQIMCHI_SOTQIN_RELEASE_SHA256": "a" * 64,
     }

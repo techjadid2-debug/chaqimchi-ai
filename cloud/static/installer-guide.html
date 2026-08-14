@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="index,follow">
+  <title>Sotqin o‘rnatuvchi yo‘riqnomasi — Chaqimchi AI</title>
+  <link rel="stylesheet" href="/assets/site.css?v=20260815-installer">
+  <style>
+    .guide-hero{padding-bottom:36px}.guide-hero h1{max-width:920px}.guide-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.guide-meta span{padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:var(--paper);font-size:13px;font-weight:750}.guide-step{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:34px;align-items:center;margin:24px 0;padding:24px;border:1px solid var(--line);border-radius:28px;background:var(--paper)}.guide-step:nth-child(even) .guide-photo{order:2}.guide-photo{width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:20px}.guide-copy>span{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:50%;background:var(--lime);font-weight:900}.guide-copy h2{margin:18px 0 10px;font-size:clamp(25px,3vw,38px)}.guide-copy li{margin:9px 0;color:var(--muted);line-height:1.55}.guide-command{display:block;overflow:auto;margin:16px 0;padding:16px;border-radius:14px;background:#161c20;color:#f4f7f1;white-space:pre-wrap;word-break:break-word;font-size:13px}.checklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0}.checklist label{display:flex;gap:9px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--paper-2);font-size:14px}.danger-note{padding:16px;border-left:4px solid var(--orange);border-radius:10px;background:#fff5e8}.guide-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}@media(max-width:780px){.guide-step{grid-template-columns:1fr;padding:16px}.guide-step:nth-child(even) .guide-photo{order:0}.checklist{grid-template-columns:1fr}}
+  </style>
+</head>
+<body class="utility-page">
+  <header class="nav-shell"><nav class="nav"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-black-crop-v1.png" alt=""></span><span>Chaqimchi <b>AI</b></span></a><div class="nav-actions"><a class="text-link" href="/installer">O‘rnatuvchi paneli</a><a class="button button-small" href="/">Asosiy sayt</a></div></nav></header>
+  <main class="utility-main">
+    <section class="guide-hero">
+      <p class="eyebrow"><span></span> Sotqin R1 · o‘rnatuvchi qo‘llanmasi</p>
+      <h1>Bo‘sh mini-kompyuterdan ishlaydigan do‘kongacha.</h1>
+      <p class="hero-text">Uskunani ulang, rasmiy paketni checksum bilan o‘rnating, pairing kod orqali cloudga bog‘lang, kameralarni tekshiring va mijozga topshiring.</p>
+      <div class="guide-meta"><span>Intel N100</span><span>Ubuntu Server 24.04 LTS</span><span>1–4 kamera</span><span>45–90 daqiqa</span></div>
+    </section>
+
+    <section class="guide-step">
+      <img class="guide-photo" src="/assets/installer/connect-hardware-v1.webp" alt="O‘rnatuvchi NVR, router va Sotqin mini-kompyuterini Ethernet orqali ulamoqda">
+      <div class="guide-copy"><span>1</span><h2>Uskuna va tarmoqni ulang</h2><ol><li>NVR, router va N100 mini-kompyuterni uzluksiz elektr manbaiga ulang.</li><li>NVR hamda Sotqinni bir router yoki switch’ga Ethernet kabel bilan ulang.</li><li>NVR monitorida barcha kameralar ishlayotganini tekshiring.</li><li>Router internetga chiqishini va DHCP manzil berayotganini tekshiring.</li></ol><div class="danger-note"><b>Muhim:</b> NVR paroli va RTSP manzilini oddiy chatga yubormang. Ular faqat o‘rnatuvchi panelidagi himoyalangan forma orqali kiritiladi.</div></div>
+    </section>
+
+    <section class="guide-step">
+      <img class="guide-photo" src="/assets/installer/install-software-v1.webp" alt="O‘rnatuvchi Ubuntu terminalida Sotqin dasturini o‘rnatmoqda">
+      <div class="guide-copy"><span>2</span><h2>Ubuntu va rasmiy paketni o‘rnating</h2><ol><li>Mini-kompyuterga Ubuntu Server 24.04 LTS o‘rnating.</li><li>O‘rnatishda kuchli lokal parol yarating va avtomatik vaqt mintaqasini tekshiring.</li><li>Terminalda zarur paketlarni tayyorlang:</li></ol><code class="guide-command">sudo apt update
+sudo apt install -y curl ca-certificates python3 python3-venv</code><p>So‘ng paneldagi obyektni oching. Panel siz uchun cloud manzili va 6 xonali pairing kodi qo‘shilgan tayyor buyruq beradi.</p><code class="guide-command">curl -fsSL https://CLOUD/downloads/sotqin-installer.sh | sudo bash -s -- --cloud https://CLOUD --code ABC123</code></div>
+    </section>
+
+    <section class="guide-step">
+      <img class="guide-photo" src="/assets/installer/handoff-customer-v1.webp" alt="O‘rnatuvchi mijozga to‘rtta kameraning cloud holatini ko‘rsatmoqda">
+      <div class="guide-copy"><span>3</span><h2>Cloud, kameralar va mijozni bog‘lang</h2><ol><li>O‘rnatuvchi panelida kamera-01…kamera-04 nomi va NVR substream RTSP manzilini kiriting.</li><li>Pairing buyrug‘ini bajaring; kod bir marta ishlaydi va 48 soatda eskiradi.</li><li>Panelda Sotqin <b>online</b>, kameralar esa <b>online</b> bo‘lguncha kuting.</li><li>Mijoz loginini admin yaratadi. Mijoz o‘z panelida qurilma, kamera, hodisa va obuna holatini ko‘radi.</li></ol><div class="checklist"><label><input type="checkbox"> Sotqin online</label><label><input type="checkbox"> Barcha kameralar online</label><label><input type="checkbox"> Mijoz login qildi</label><label><input type="checkbox"> Test hodisa ko‘rindi</label><label><input type="checkbox"> Kabel va qurilma mahkamlandi</label><label><input type="checkbox"> Ish “Yakunlandi” qilindi</label></div></div>
+    </section>
+
+    <section class="utility-card">
+      <h2>Nosozlikni tez aniqlash</h2>
+      <div class="install-flow"><article><span>01</span><h3>Installer to‘xtadi</h3><p>Internet, DNS va vaqtni tekshiring. Buyruqni yana ishga tushirish xavfsiz.</p></article><i></i><article><span>02</span><h3>Pairing o‘tmadi</h3><p>Kod ishlatilgan yoki eskirgan. Paneldan yangi kod yarating.</p></article><i></i><article><span>03</span><h3>Kamera offline</h3><p>RTSP substream, NVR IP, login/parol va lokal tarmoqni tekshiring.</p></article><i></i><article><span>04</span><h3>Cloud offline</h3><p>Ethernet, internet va <code>systemctl status chaqimchi-sotqin</code> holatini tekshiring.</p></article></div>
+      <div class="guide-actions"><a class="button" href="/installer">Panelga kirish</a><a class="button button-ghost" href="/install">Mijoz yo‘riqnomasi</a></div>
+    </section>
+  </main>
+</body>
+</html>

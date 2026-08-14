@@ -62,7 +62,9 @@ Pairing javobidagi `site_id`, `device_id` va `device_token` edge env fayliga xav
 Telegram webhook:
 
 ```text
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<DOMAIN>/api/v1/telegram/webhook/<WEBHOOK_SECRET>
+POST https://api.telegram.org/bot<TOKEN>/setWebhook
+url=https://<DOMAIN>/api/v1/telegram/webhook
+secret_token=<WEBHOOK_SECRET>
 ```
 
 ## Edge o‘rnatish

@@ -19,6 +19,7 @@ SECRET_MIN_LENGTHS = {
     "CHAQIMCHI_S3_SECRET_KEY": 32,
     "CHAQIMCHI_CLOUD_ADMIN_KEY": 32,
     "CHAQIMCHI_OWNER_JWT_SECRET": 32,
+    "CHAQIMCHI_PORTAL_JWT_SECRET": 32,
     "CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET": 32,
 }
 
@@ -75,6 +76,7 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
         "CHAQIMCHI_S3_BUCKET",
         "CHAQIMCHI_S3_ENDPOINT",
         "CHAQIMCHI_OWNER_TELEGRAM_TOKEN",
+        "CHAQIMCHI_TELEGRAM_BOT_USERNAME",
     ):
         require(key)
     database_url = require("DATABASE_URL")
@@ -99,15 +101,10 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     )
     if token and not re.fullmatch(r"\d+:[A-Za-z0-9_-]{20,}", token):
         errors.append("Telegram bot tokeni noto'g'ri formatda")
-    recipients = ",".join(
-        filter(
-            None,
-            (
-                values.get("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "").strip(),
-                values.get("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "").strip(),
-            ),
-        )
-    )
+    bot_username = values.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").lstrip("@")
+    if bot_username and not re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username):
+        errors.append("CHAQIMCHI_TELEGRAM_BOT_USERNAME noto'g'ri formatda")
+    recipients = values.get("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "").strip()
     if not recipients:
         errors.append("Lead uchun kamida bitta statik Telegram chat ID berilishi shart")
     elif any(not re.fullmatch(r"-?\d+", item.strip()) for item in recipients.split(",")):

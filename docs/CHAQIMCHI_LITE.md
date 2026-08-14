@@ -89,7 +89,9 @@ curl https://YOUR_DOMAIN/health
 Telegram webhook:
 
 ```text
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<DOMAIN>/api/v1/telegram/webhook/<WEBHOOK_SECRET>
+POST https://api.telegram.org/bot<TOKEN>/setWebhook
+url=https://<DOMAIN>/api/v1/telegram/webhook
+secret_token=<WEBHOOK_SECRET>
 ```
 
 Admin: `https://<DOMAIN>/admin`; mijoz: `https://<DOMAIN>/owner`.

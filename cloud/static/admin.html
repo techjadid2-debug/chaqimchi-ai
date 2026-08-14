@@ -11,12 +11,13 @@
   <div id="loginOverlay" class="overlay">
     <div class="modal" style="max-width: 380px;">
       <div class="logo" style="margin-bottom: 1rem;">Chaqimchi Cloud</div>
-      <p class="muted" style="margin-bottom: 1rem; font-size: 0.82rem;">
-        Admin kalitni kiriting (<span class="mono">CHAQIMCHI_CLOUD_ADMIN_KEY</span>).
-      </p>
+      <p class="muted" style="margin-bottom: 1rem; font-size: 0.82rem;">Admin login va parolini kiriting.</p>
       <form id="loginForm">
-        <label for="adminKey">Admin kalit</label>
-        <input id="adminKey" type="password" autocomplete="current-password" required />
+        <label for="adminUsername">Login</label>
+        <input id="adminUsername" autocomplete="username" />
+        <label for="adminPassword">Parol</label>
+        <input id="adminPassword" type="password" autocomplete="current-password" />
+        <details style="margin-top:.8rem"><summary class="muted">Favqulodda admin kaliti</summary><label for="adminKey">Legacy kalit</label><input id="adminKey" type="password" autocomplete="off" /></details>
         <div id="loginError" class="toast toast-err" style="margin-top: 0.75rem;" hidden></div>
         <button class="btn btn-primary" type="submit" style="width: 100%; margin-top: 1rem; justify-content: center;">
           Kirish
@@ -47,6 +48,20 @@
         <span id="readinessSummary" class="muted" style="font-weight:400;font-size:.8rem"></span>
       </div>
       <div id="readiness" class="readiness-grid"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title"><span>Loginlar va ruxsatlar</span><span id="accountCount" class="muted"></span></div>
+      <form id="accountForm" class="form-grid">
+        <div><label>Ism</label><input id="aName" required></div><div><label>Login</label><input id="aUsername" required></div><div><label>Vaqtinchalik parol</label><input id="aPassword" type="password" minlength="10" required></div><div><label>Rol</label><select id="aRole"><option value="customer">Mijoz</option><option value="installer">O‘rnatuvchi</option><option value="admin">Admin</option></select></div><div><label>Holat</label><select id="aStatus"><option value="active">Faol</option><option value="pending">Tasdiq kutilmoqda</option><option value="disabled">Bloklangan</option></select></div><div><label>Obyekt (mijoz uchun)</label><select id="aSite"><option value="">Tanlang</option></select></div><div><label>Telefon</label><input id="aPhone"></div><div><button class="btn btn-primary" type="submit">Login yaratish</button></div>
+      </form>
+      <div class="table-scroll"><table><thead><tr><th>Foydalanuvchi</th><th>Rol</th><th>Holat</th><th>Obyekt</th><th>Oxirgi kirish</th><th></th></tr></thead><tbody id="accountsBody"></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title"><span>O‘rnatuvchi buyurtmalari</span><a class="btn btn-sm" href="/installer-guide" target="_blank" rel="noopener">Rasmli yo‘riqnoma</a></div>
+      <form id="assignmentForm" class="form-grid"><div><label>O‘rnatuvchi</label><select id="assignInstaller" required></select></div><div><label>Obyekt</label><select id="assignSite" required></select></div><div><label>Izoh</label><input id="assignNotes" placeholder="Muddat yoki aloqa ma’lumoti"></div><div><button class="btn btn-primary" type="submit">Biriktirish</button></div></form>
+      <div class="table-scroll"><table><thead><tr><th>O‘rnatuvchi</th><th>Obyekt</th><th>Holat</th><th>Izoh</th><th>Yangilangan</th></tr></thead><tbody id="assignmentsBody"></tbody></table></div>
     </section>
 
     <section class="card">
@@ -190,13 +205,17 @@
 
   <script>
     // ── Holat ────────────────────────────────────────────────────────────
-    const KEY_STORAGE = "chaqimchi_admin_key";
-    let adminKey = sessionStorage.getItem(KEY_STORAGE) || "";
+    const KEY_STORAGE = "chaqimchi_admin_token";
+    const LEGACY_KEY_STORAGE = "chaqimchi_admin_key";
+    let adminToken = sessionStorage.getItem(KEY_STORAGE) || "";
+    let adminKey = sessionStorage.getItem(LEGACY_KEY_STORAGE) || "";
     let sites = [];
     let featureCatalog = [];
     let businessTemplates = [];
     let leads = [];
     let invoices = [];
+    let accounts = [];
+    let assignments = [];
     let providers = { payme: false, click: false, public_url: "" };
 
     const $ = (id) => document.getElementById(id);
@@ -249,11 +268,13 @@
 
     // ── API ──────────────────────────────────────────────────────────────
     async function api(path, options = {}) {
+      const authHeaders = adminToken ? { Authorization: `Bearer ${adminToken}` } :
+        (adminKey ? { "X-Cloud-Admin-Key": adminKey } : {});
       const res = await fetch(path, {
         ...options,
         headers: {
           "Content-Type": "application/json",
-          "X-Cloud-Admin-Key": adminKey,
+          ...authHeaders,
           ...(options.headers || {}),
         },
       });
@@ -284,8 +305,19 @@
       e.preventDefault();
       adminKey = $("adminKey").value.trim();
       try {
+        if (!adminKey) {
+          const response = await fetch("/api/v1/auth/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("adminUsername").value.trim(),password:$("adminPassword").value})});
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.detail || "Kirish xatosi");
+          if (data.account.role !== "admin") throw new Error("Bu login admin akkaunti emas");
+          adminToken = data.access_token;
+          sessionStorage.setItem(KEY_STORAGE, adminToken);
+          sessionStorage.removeItem(LEGACY_KEY_STORAGE);
+        } else {
+          sessionStorage.setItem(LEGACY_KEY_STORAGE, adminKey);
+          sessionStorage.removeItem(KEY_STORAGE);
+        }
         await api("/api/v1/admin/stats");
-        sessionStorage.setItem(KEY_STORAGE, adminKey);
         $("loginOverlay").hidden = true;
         $("app").hidden = false;
         await refresh();
@@ -297,6 +329,7 @@
 
     $("btnLogout").addEventListener("click", () => {
       sessionStorage.removeItem(KEY_STORAGE);
+      sessionStorage.removeItem(LEGACY_KEY_STORAGE);
       location.reload();
     });
 
@@ -486,9 +519,25 @@
         .join("");
     }
 
+    const ACCOUNT_ROLE = {admin:"Admin", installer:"O‘rnatuvchi", customer:"Mijoz"};
+    const ACCOUNT_STATUS = {pending:"Tasdiq kutilmoqda", active:"Faol", disabled:"Bloklangan"};
+    function renderAccounts() {
+      const siteNames = new Map(sites.map(site => [site.id, site.name]));
+      $("accountCount").textContent = `${accounts.length} ta`;
+      $("accountsBody").innerHTML = accounts.length ? accounts.map(account => `<tr><td><b>${esc(account.full_name)}</b><br><span class="mono muted">${esc(account.username)}</span></td><td>${ACCOUNT_ROLE[account.role]||esc(account.role)}</td><td><span class="badge badge-${account.status==='active'?'active':account.status==='pending'?'grace':'expired'}">${ACCOUNT_STATUS[account.status]||esc(account.status)}</span></td><td>${esc(siteNames.get(account.site_id)||'—')}</td><td class="muted">${esc((account.last_login_at||'—').slice(0,16))}</td><td><div class="row">${account.status!=='active'?`<button class="btn btn-sm" onclick="setAccountStatus('${esc(account.id)}','active')">Faollashtirish</button>`:''}${account.status!=='disabled'?`<button class="btn btn-sm btn-danger" onclick="setAccountStatus('${esc(account.id)}','disabled')">Bloklash</button>`:''}<button class="btn btn-sm" onclick="resetAccountPassword('${esc(account.id)}')">Parol</button></div></td></tr>`).join('') : '<tr><td colspan="6" class="muted">Login yaratilmagan.</td></tr>';
+      const siteOptions = sites.map(site=>`<option value="${esc(site.id)}">${esc(site.name)}</option>`).join('');
+      $("aSite").innerHTML = `<option value="">Tanlang</option>${siteOptions}`;
+      $("assignSite").innerHTML = `<option value="">Obyektni tanlang</option>${siteOptions}`;
+      const installers = accounts.filter(a=>a.role==='installer'&&a.status==='active');
+      $("assignInstaller").innerHTML = `<option value="">O‘rnatuvchini tanlang</option>${installers.map(a=>`<option value="${esc(a.id)}">${esc(a.full_name)} · ${esc(a.username)}</option>`).join('')}`;
+    }
+    function renderAssignments(){$("assignmentsBody").innerHTML=assignments.length?assignments.map(a=>`<tr><td><b>${esc(a.installer_name)}</b><br><span class="mono muted">${esc(a.installer_username)}</span></td><td>${esc(a.site_name)}</td><td><span class="badge badge-${a.status==='completed'?'active':'grace'}">${esc(a.status)}</span></td><td>${esc(a.notes||'—')}</td><td class="muted">${esc((a.updated_at||'').slice(0,16))}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">Biriktirish yo‘q.</td></tr>'}
+    async function setAccountStatus(id,status){try{await api(`/api/v1/admin/accounts/${id}`,{method:'PUT',body:JSON.stringify({status})});await refresh();notify('Akkaunt holati yangilandi')}catch(err){notify(err.message,false)}}
+    async function resetAccountPassword(id){const password=prompt('Yangi vaqtinchalik parol (kamida 10 belgi, harf va raqam):');if(!password)return;try{await api(`/api/v1/admin/accounts/${id}/password`,{method:'POST',body:JSON.stringify({new_password:password})});notify('Parol yangilandi; eski sessionlar bekor qilindi')}catch(err){notify(err.message,false)}}
+
     async function refresh() {
       try {
-        const [stats, list, leadList, invoiceList, provs, alertStatus, readiness, catalog, templates] = await Promise.all([
+        const [stats, list, leadList, invoiceList, provs, alertStatus, readiness, catalog, templates, accountList, assignmentList] = await Promise.all([
           api("/api/v1/admin/stats"),
           api("/api/v1/admin/sites"),
           api("/api/v1/admin/leads?limit=100"),
@@ -498,12 +547,16 @@
           api("/api/v1/admin/readiness"),
           api("/api/v1/admin/features"),
           api("/api/v1/admin/business-templates"),
+          api("/api/v1/admin/accounts"),
+          api("/api/v1/admin/installer-assignments"),
         ]);
         sites = list;
         leads = leadList;
         invoices = invoiceList;
         providers = provs;
         businessTemplates = templates;
+        accounts = accountList.accounts;
+        assignments = assignmentList.assignments;
         renderStats(stats);
         renderReadiness(readiness);
         renderCatalog(catalog);
@@ -512,6 +565,8 @@
         renderProviderInfo();
         renderAlertInfo(alertStatus);
         renderInvoices();
+        renderAccounts();
+        renderAssignments();
       } catch (err) {
         notify(err.message, false);
       }
@@ -563,6 +618,35 @@
       } finally {
         btn.disabled = false;
       }
+    });
+
+    $("accountForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        const role = $("aRole").value;
+        await api("/api/v1/admin/accounts", {method:"POST",body:JSON.stringify({
+          full_name:$("aName").value.trim(),username:$("aUsername").value.trim(),
+          password:$("aPassword").value,role,status:$("aStatus").value,
+          site_id:role==="customer"?$("aSite").value:null,
+          phone:$("aPhone").value.trim()||null,company:null
+        })});
+        e.target.reset();
+        notify("Login yaratildi");
+        await refresh();
+      } catch (err) { notify(err.message, false); }
+    });
+
+    $("assignmentForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await api("/api/v1/admin/installer-assignments", {method:"POST",body:JSON.stringify({
+          installer_id:$("assignInstaller").value,site_id:$("assignSite").value,
+          status:"assigned",notes:$("assignNotes").value.trim()||null
+        })});
+        $("assignNotes").value="";
+        notify("Obyekt o‘rnatuvchiga biriktirildi");
+        await refresh();
+      } catch (err) { notify(err.message, false); }
     });
 
     function showPairing(name, code, expires, siteId) {
@@ -1013,7 +1097,7 @@
 
     // ── Ishga tushirish ──────────────────────────────────────────────────
     (async () => {
-      if (!adminKey) return;
+      if (!adminKey && !adminToken) return;
       try {
         await api("/api/v1/admin/stats");
         $("loginOverlay").hidden = true;
@@ -1021,7 +1105,9 @@
         await refresh();
       } catch (_) {
         sessionStorage.removeItem(KEY_STORAGE);
+        sessionStorage.removeItem(LEGACY_KEY_STORAGE);
         adminKey = "";
+        adminToken = "";
       }
     })();
   </script>

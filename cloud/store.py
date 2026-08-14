@@ -24,6 +24,7 @@ from chaqimchi_ai.licensing.plans import (
 )
 from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
 from chaqimchi_ai.sotqin_profile import GUARANTEED_CAMERAS
+from cloud.portal_auth import hash_password, normalize_username, verify_password
 
 # V1 cloud-AI katalogi. Narxlar sentda saqlanadi: invoice va shartnoma
 # snapshotlari floating-point xatodan holi bo'lishi kerak.
@@ -43,6 +44,7 @@ DEFAULT_FEATURES = (
     ),
 )
 
+
 def available_feature_codes() -> frozenset:
     """Hozir rostdan ishlaydigan cloud-AI funksiyalari.
 
@@ -59,9 +61,7 @@ def available_feature_codes() -> frozenset:
         if not pilot_acceptance_status()["ok"]:
             return frozenset()
     known = {code for code, *_rest in DEFAULT_FEATURES}
-    return frozenset(
-        code.strip() for code in raw.split(",") if code.strip() in known
-    )
+    return frozenset(code.strip() for code in raw.split(",") if code.strip() in known)
 
 
 DEFAULT_TEMPLATES = {
@@ -348,6 +348,52 @@ class CloudStore:
                 FOREIGN KEY(site_id) REFERENCES sites(id),
                 FOREIGN KEY(feature_code) REFERENCES feature_definitions(code)
             );
+            CREATE TABLE IF NOT EXISTS portal_accounts (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('admin', 'installer', 'customer')),
+                status TEXT NOT NULL CHECK(status IN ('pending', 'active', 'disabled')),
+                full_name TEXT NOT NULL,
+                phone TEXT,
+                company TEXT,
+                site_id TEXT,
+                auth_version INTEGER NOT NULL DEFAULT 1,
+                last_login_at TEXT,
+                created_by TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(site_id) REFERENCES sites(id),
+                FOREIGN KEY(created_by) REFERENCES portal_accounts(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_portal_accounts_role_status
+                ON portal_accounts(role, status, created_at DESC);
+            CREATE TABLE IF NOT EXISTS installer_assignments (
+                installer_id TEXT NOT NULL,
+                site_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'assigned'
+                    CHECK(status IN ('assigned', 'in_progress', 'ready', 'completed', 'cancelled')),
+                notes TEXT,
+                created_by TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(installer_id, site_id),
+                FOREIGN KEY(installer_id) REFERENCES portal_accounts(id),
+                FOREIGN KEY(site_id) REFERENCES sites(id),
+                FOREIGN KEY(created_by) REFERENCES portal_accounts(id)
+            );
+            CREATE TABLE IF NOT EXISTS portal_audit_log (
+                id TEXT PRIMARY KEY,
+                actor_id TEXT,
+                action TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT,
+                detail_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(actor_id) REFERENCES portal_accounts(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_portal_audit_created
+                ON portal_audit_log(created_at DESC);
             """
         )
         self._migrate(conn)
@@ -376,9 +422,7 @@ class CloudStore:
 
     @staticmethod
     def _camera_id_is_valid(camera_id: str) -> bool:
-        return camera_id in {
-            f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)
-        }
+        return camera_id in {f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)}
 
     def list_cameras(self, site_id: str, *, include_source: bool = False) -> List[Dict[str, Any]]:
         if not self.get_site(site_id):
@@ -496,8 +540,7 @@ class CloudStore:
                 tuple(sorted(canonical)),
             )
             conn.execute(
-                f"DELETE FROM site_feature_drafts "
-                f"WHERE feature_code NOT IN ({placeholders})",
+                f"DELETE FROM site_feature_drafts WHERE feature_code NOT IN ({placeholders})",
                 tuple(sorted(canonical)),
             )
         for code, name, category, queue_kind, _price in DEFAULT_FEATURES:
@@ -526,7 +569,14 @@ class CloudStore:
         if not published:
             conn.execute(
                 "INSERT OR IGNORE INTO price_books(id,label,status,base_fee_usd_cents,usd_rate_uzs,created_at,published_at) VALUES (?,?, 'published',?,?,?,?)",
-                (book_id, "Do'kon MVP katalogi", DEFAULT_BASE_FEE_USD_CENTS, DEFAULT_USD_RATE_UZS, now, now),
+                (
+                    book_id,
+                    "Do'kon MVP katalogi",
+                    DEFAULT_BASE_FEE_USD_CENTS,
+                    DEFAULT_USD_RATE_UZS,
+                    now,
+                    now,
+                ),
             )
         for code, _name, _category, _queue, price in DEFAULT_FEATURES:
             conn.execute(
@@ -592,8 +642,7 @@ class CloudStore:
             if code not in catalog or not catalog[code]["active"]:
                 raise ValueError(f"Noma'lum yoki o'chirilgan funksiya: {code}")
             if (
-                os.environ.get("CHAQIMCHI_ENV", "development").strip().lower()
-                == "production"
+                os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production"
                 and code not in available_feature_codes()
             ):
                 raise ValueError(f"Funksiya N100 qabul testidan o'tmagan: {code}")
@@ -688,7 +737,9 @@ class CloudStore:
         quote = self._assignment_quote(active)
         return {"assignments": assignments, "drafts": drafts, "active_quote": quote}
 
-    def replace_feature_draft(self, site_id: str, selections: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def replace_feature_draft(
+        self, site_id: str, selections: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         if not self.get_site(site_id):
             raise ValueError("Sayt topilmadi")
         quote = self.feature_quote(selections)
@@ -699,7 +750,16 @@ class CloudStore:
             conn.execute(
                 "INSERT INTO site_feature_drafts(id,site_id,feature_code,camera_count,price_book_id,monthly_usd_cents,cost_usd_cents,created_at) "
                 "VALUES (?,?,?,?,?,?,?,?)",
-                (uuid.uuid4().hex[:12], site_id, item["feature_code"], item["camera_count"], quote["price_book_id"], item["monthly_usd_cents"], item["cost_usd_cents"], now),
+                (
+                    uuid.uuid4().hex[:12],
+                    site_id,
+                    item["feature_code"],
+                    item["camera_count"],
+                    quote["price_book_id"],
+                    item["monthly_usd_cents"],
+                    item["cost_usd_cents"],
+                    now,
+                ),
             )
         conn.commit()
         conn.close()
@@ -717,12 +777,25 @@ class CloudStore:
         if not drafted or not int(drafted["n"]):
             conn.close()
             raise ValueError("Tasdiqlash uchun draft funksiya yo'q")
-        rows = conn.execute("SELECT * FROM site_feature_drafts WHERE site_id=?", (site_id,)).fetchall()
+        rows = conn.execute(
+            "SELECT * FROM site_feature_drafts WHERE site_id=?", (site_id,)
+        ).fetchall()
         conn.execute("DELETE FROM site_feature_assignments WHERE site_id=?", (site_id,))
         for row in rows:
             conn.execute(
                 "INSERT INTO site_feature_assignments(id,site_id,feature_code,camera_count,price_book_id,monthly_usd_cents,cost_usd_cents,status,effective_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'active',?,?,?)",
-                (uuid.uuid4().hex[:12], site_id, row["feature_code"], row["camera_count"], row["price_book_id"], row["monthly_usd_cents"], row["cost_usd_cents"], now, now, now),
+                (
+                    uuid.uuid4().hex[:12],
+                    site_id,
+                    row["feature_code"],
+                    row["camera_count"],
+                    row["price_book_id"],
+                    row["monthly_usd_cents"],
+                    row["cost_usd_cents"],
+                    now,
+                    now,
+                    now,
+                ),
             )
         conn.execute("DELETE FROM site_feature_drafts WHERE site_id=?", (site_id,))
         conn.commit()
@@ -762,9 +835,7 @@ class CloudStore:
 
         # Davomat tariflarida oylik to'lov shu songa bog'liq.
         if "billable_persons" not in columns("sites"):
-            conn.execute(
-                "ALTER TABLE sites ADD COLUMN billable_persons INTEGER NOT NULL DEFAULT 0"
-            )
+            conn.execute("ALTER TABLE sites ADD COLUMN billable_persons INTEGER NOT NULL DEFAULT 0")
 
         # `alert_state` bir turdan (connection) ikki turga (kind) o'tdi.
         if "kind" not in columns("alert_state"):
@@ -784,6 +855,310 @@ class CloudStore:
                 DROP TABLE alert_state_old;
                 """
             )
+
+    # ── Portal loginlari va o'rnatuvchi biriktirish ─────────────────────
+
+    @staticmethod
+    def _public_account(row: sqlite3.Row | Dict[str, Any]) -> Dict[str, Any]:
+        item = dict(row)
+        item.pop("password_hash", None)
+        item["auth_version"] = int(item.get("auth_version") or 1)
+        return item
+
+    def create_account(
+        self,
+        *,
+        username: str,
+        password: str,
+        role: str,
+        full_name: str,
+        status: str = "active",
+        phone: Optional[str] = None,
+        company: Optional[str] = None,
+        site_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if role not in {"admin", "installer", "customer"}:
+            raise ValueError("Akkaunt roli noto'g'ri")
+        if status not in {"pending", "active", "disabled"}:
+            raise ValueError("Akkaunt holati noto'g'ri")
+        clean_name = " ".join(full_name.split())
+        if len(clean_name) < 2 or len(clean_name) > 120:
+            raise ValueError("Ism 2–120 belgi bo'lishi kerak")
+        clean_username = normalize_username(username)
+        if role == "customer":
+            if not site_id or not self.get_site(site_id):
+                raise ValueError("Mijoz akkaunti mavjud obyektga bog'lanishi kerak")
+        else:
+            site_id = None
+        now = _iso(_utc_now())
+        account_id = str(uuid.uuid4())
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO portal_accounts "
+                    "(id,username,password_hash,role,status,full_name,phone,company,site_id,"
+                    "auth_version,created_by,created_at,updated_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?)",
+                    (
+                        account_id,
+                        clean_username,
+                        hash_password(password),
+                        role,
+                        status,
+                        clean_name,
+                        " ".join(phone.split()) if phone else None,
+                        " ".join(company.split()) if company else None,
+                        site_id,
+                        created_by,
+                        now,
+                        now,
+                    ),
+                )
+        except sqlite3.IntegrityError as exc:
+            if "username" in str(exc).lower() or "unique" in str(exc).lower():
+                raise ValueError("Bu login band") from exc
+            raise ValueError("Akkaunt yaratilmadi") from exc
+        account = self.account_by_id(account_id)
+        if account is None:  # pragma: no cover - database invariant
+            raise RuntimeError("Akkaunt yozilmadi")
+        return account
+
+    def ensure_bootstrap_admin(self, username: str, password: str) -> Dict[str, Any]:
+        """Birinchi adminni faqat adminlar hali yo'q bo'lsa yaratadi."""
+        existing = self.list_accounts(role="admin")
+        if existing:
+            return existing[0]
+        return self.create_account(
+            username=username,
+            password=password,
+            role="admin",
+            status="active",
+            full_name="Bosh administrator",
+        )
+
+    def account_by_id(
+        self, account_id: str, *, include_secret: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM portal_accounts WHERE id=?", (account_id,)).fetchone()
+        if not row:
+            return None
+        return dict(row) if include_secret else self._public_account(row)
+
+    def account_by_username(
+        self, username: str, *, include_secret: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            clean_username = normalize_username(username)
+        except ValueError:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM portal_accounts WHERE username=?", (clean_username,)
+            ).fetchone()
+        if not row:
+            return None
+        return dict(row) if include_secret else self._public_account(row)
+
+    def authenticate_account(self, username: str, password: str) -> Optional[Dict[str, Any]]:
+        account = self.account_by_username(username, include_secret=True)
+        if not account:
+            # Login mavjudligini timing orqali ham oshkor qilmaslik uchun bir xil
+            # og'irlikdagi scrypt hisobini bajaramiz.
+            hash_password("invalid0000")
+            return None
+        if not verify_password(password, str(account["password_hash"])):
+            return None
+        now = _iso(_utc_now())
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE portal_accounts SET last_login_at=?,updated_at=? WHERE id=?",
+                (now, now, account["id"]),
+            )
+        return self.account_by_id(str(account["id"]))
+
+    def list_accounts(
+        self, *, role: Optional[str] = None, status: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        clauses: List[str] = []
+        values: List[Any] = []
+        if role:
+            clauses.append("role=?")
+            values.append(role)
+        if status:
+            clauses.append("status=?")
+            values.append(status)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM portal_accounts" + where + " ORDER BY created_at DESC",
+                values,
+            ).fetchall()
+        return [self._public_account(row) for row in rows]
+
+    def update_account(self, account_id: str, changes: Dict[str, Any]) -> Dict[str, Any]:
+        current = self.account_by_id(account_id)
+        if not current:
+            raise ValueError("Akkaunt topilmadi")
+        allowed = {"full_name", "phone", "company", "site_id", "role", "status"}
+        clean = {key: value for key, value in changes.items() if key in allowed}
+        role = str(clean.get("role", current["role"]))
+        status = str(clean.get("status", current["status"]))
+        if role not in {"admin", "installer", "customer"}:
+            raise ValueError("Akkaunt roli noto'g'ri")
+        if status not in {"pending", "active", "disabled"}:
+            raise ValueError("Akkaunt holati noto'g'ri")
+        site_id = clean.get("site_id", current.get("site_id"))
+        if role == "customer":
+            if not site_id or not self.get_site(str(site_id)):
+                raise ValueError("Mijoz akkaunti mavjud obyektga bog'lanishi kerak")
+        else:
+            site_id = None
+        clean["site_id"] = site_id
+        clean["role"] = role
+        clean["status"] = status
+        if "full_name" in clean:
+            clean["full_name"] = " ".join(str(clean["full_name"]).split())
+            if len(clean["full_name"]) < 2:
+                raise ValueError("Ism juda qisqa")
+        for field in ("phone", "company"):
+            if field in clean:
+                clean[field] = " ".join(str(clean[field]).split()) or None
+        # Rol, holat yoki bog'langan obyekt o'zgarsa eski JWT darhol bekor bo'ladi.
+        security_changed = any(
+            clean.get(key) != current.get(key) for key in ("role", "status", "site_id")
+        )
+        assignments = ",".join(f"{key}=?" for key in clean)
+        values = list(clean.values())
+        values.extend([_iso(_utc_now()), account_id])
+        version_sql = ",auth_version=auth_version+1" if security_changed else ""
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE portal_accounts SET {assignments},updated_at=?{version_sql} WHERE id=?",
+                values,
+            )
+        updated = self.account_by_id(account_id)
+        if updated is None:  # pragma: no cover
+            raise RuntimeError("Akkaunt yangilanmadi")
+        return updated
+
+    def set_account_password(self, account_id: str, password: str) -> Dict[str, Any]:
+        if not self.account_by_id(account_id):
+            raise ValueError("Akkaunt topilmadi")
+        now = _iso(_utc_now())
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE portal_accounts SET password_hash=?,auth_version=auth_version+1,"
+                "updated_at=? WHERE id=?",
+                (hash_password(password), now, account_id),
+            )
+        account = self.account_by_id(account_id)
+        if account is None:  # pragma: no cover
+            raise RuntimeError("Akkaunt yangilanmadi")
+        return account
+
+    def assign_installer(
+        self,
+        installer_id: str,
+        site_id: str,
+        *,
+        status: str = "assigned",
+        notes: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        account = self.account_by_id(installer_id)
+        if not account or account["role"] != "installer":
+            raise ValueError("O'rnatuvchi akkaunti topilmadi")
+        if account["status"] != "active":
+            raise ValueError("O'rnatuvchi akkaunti faol emas")
+        if not self.get_site(site_id):
+            raise ValueError("Obyekt topilmadi")
+        if status not in {"assigned", "in_progress", "ready", "completed", "cancelled"}:
+            raise ValueError("Biriktirish holati noto'g'ri")
+        now = _iso(_utc_now())
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO installer_assignments "
+                "(installer_id,site_id,status,notes,created_by,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?) ON CONFLICT(installer_id,site_id) DO UPDATE SET "
+                "status=excluded.status,notes=excluded.notes,updated_at=excluded.updated_at",
+                (installer_id, site_id, status, (notes or "")[:1000] or None, created_by, now, now),
+            )
+        assignment = self.installer_assignment(installer_id, site_id)
+        if assignment is None:  # pragma: no cover
+            raise RuntimeError("Biriktirish yozilmadi")
+        return assignment
+
+    def installer_assignment(self, installer_id: str, site_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT a.*,s.name AS site_name,s.address,s.contact_phone "
+                "FROM installer_assignments a JOIN sites s ON s.id=a.site_id "
+                "WHERE a.installer_id=? AND a.site_id=?",
+                (installer_id, site_id),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_installer_assignments(
+        self, *, installer_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        where = " WHERE a.installer_id=?" if installer_id else ""
+        values: tuple[Any, ...] = (installer_id,) if installer_id else ()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT a.*,s.name AS site_name,s.address,s.contact_phone,"
+                "p.full_name AS installer_name,p.username AS installer_username "
+                "FROM installer_assignments a JOIN sites s ON s.id=a.site_id "
+                "JOIN portal_accounts p ON p.id=a.installer_id" + where + " "
+                "ORDER BY a.updated_at DESC",
+                values,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def installer_has_site(self, installer_id: str, site_id: str) -> bool:
+        assignment = self.installer_assignment(installer_id, site_id)
+        return bool(assignment and assignment["status"] != "cancelled")
+
+    def audit_portal_action(
+        self,
+        action: str,
+        *,
+        actor_id: Optional[str] = None,
+        target_type: str,
+        target_id: Optional[str] = None,
+        detail: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO portal_audit_log "
+                "(id,actor_id,action,target_type,target_id,detail_json,created_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    str(uuid.uuid4()),
+                    actor_id,
+                    action,
+                    target_type,
+                    target_id,
+                    json.dumps(detail or {}, ensure_ascii=False),
+                    _iso(_utc_now()),
+                ),
+            )
+
+    def list_portal_audit(self, *, limit: int = 200) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT l.*,a.username AS actor_username FROM portal_audit_log l "
+                "LEFT JOIN portal_accounts a ON a.id=l.actor_id "
+                "ORDER BY l.created_at DESC LIMIT ?",
+                (max(1, min(limit, 1000)),),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["detail"] = json.loads(item.pop("detail_json") or "{}")
+            result.append(item)
+        return result
 
     def upsert_telegram_lead_destination(
         self, chat_id: str, *, chat_type: str, title: Optional[str] = None
@@ -824,7 +1199,9 @@ class CloudStore:
     ) -> None:
         """Lead xabarini har bir recipient uchun idempotent navbatga qo'yadi."""
         now = _iso(_utc_now())
-        recipients = list(dict.fromkeys(str(item).strip() for item in chat_ids if str(item).strip()))
+        recipients = list(
+            dict.fromkeys(str(item).strip() for item in chat_ids if str(item).strip())
+        )
         if not recipients:
             return
         conn = self._connect()
@@ -1128,9 +1505,7 @@ class CloudStore:
             raise ValueError("Sayt topilmadi")
 
         conn = self._connect()
-        conn.execute(
-            "UPDATE sites SET billable_persons = ? WHERE id = ?", (int(persons), site_id)
-        )
+        conn.execute("UPDATE sites SET billable_persons = ? WHERE id = ?", (int(persons), site_id))
         conn.commit()
         conn.close()
         return self.site_detail(site_id)
@@ -1171,9 +1546,7 @@ class CloudStore:
             site["days_left"] = computed["days_left"]
             site["devices"] = device_counts.get(site["id"], 0)
             site["last_seen"] = last_seen_by_site.get(site["id"])
-            site.update(
-                _connection_state(site["last_seen"], site["devices"], now)
-            )
+            site.update(_connection_state(site["last_seen"], site["devices"], now))
             site["cameras_active"] = int(cameras_by_site.get(site["id"]) or 0)
             site["cameras_expected"] = int(site.get("cameras_expected") or 0)
             site["cameras_ok"] = (
@@ -1261,16 +1634,12 @@ class CloudStore:
             site["limits"]["monthly_price_uzs"] = quote["monthly_uzs"]
             site["limits"]["monthly_price_usd"] = quote["monthly_usd_cents"] / 100
         site["devices"] = devices
-        site["last_seen"] = max(
-            (d["last_seen"] for d in devices if d["last_seen"]), default=None
-        )
+        site["last_seen"] = max((d["last_seen"] for d in devices if d["last_seen"]), default=None)
         site.update(_connection_state(site["last_seen"], len(devices), now))
         site["cameras_active"] = sum(int(d["active_cameras"] or 0) for d in devices)
         site["cameras_expected"] = int(site.get("cameras_expected") or 0)
         site["cameras_ok"] = (
-            site["cameras_active"] >= site["cameras_expected"]
-            if site["cameras_expected"]
-            else True
+            site["cameras_active"] >= site["cameras_expected"] if site["cameras_expected"] else True
         )
         site["active_pairing_codes"] = codes
         return site
@@ -1287,9 +1656,7 @@ class CloudStore:
             raise ValueError("Sayt topilmadi")
 
         conn = self._connect()
-        conn.execute(
-            "UPDATE sites SET cameras_expected = ? WHERE id = ?", (int(expected), site_id)
-        )
+        conn.execute("UPDATE sites SET cameras_expected = ? WHERE id = ?", (int(expected), site_id))
         conn.commit()
         conn.close()
         self.clear_alert_state(site_id, kind="cameras")
@@ -1379,9 +1746,7 @@ class CloudStore:
         if kind is None:
             conn.execute("DELETE FROM alert_state WHERE site_id = ?", (site_id,))
         else:
-            conn.execute(
-                "DELETE FROM alert_state WHERE site_id = ? AND kind = ?", (site_id, kind)
-            )
+            conn.execute("DELETE FROM alert_state WHERE site_id = ? AND kind = ?", (site_id, kind))
         conn.commit()
         conn.close()
 
@@ -1538,9 +1903,7 @@ class CloudStore:
             "status": status,
             "subscription_until": site["subscription_until"],
             "max_cameras": limits.max_cameras,
-            "max_persons": limits.effective_max_persons(
-                int(site.get("billable_persons") or 0)
-            ),
+            "max_persons": limits.effective_max_persons(int(site.get("billable_persons") or 0)),
             "retention_days": limits.retention_days,
             "telegram_allowed": limits.telegram_allowed,
             "active_cameras_reported": active_cameras,

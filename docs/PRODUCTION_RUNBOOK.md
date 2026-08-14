@@ -16,22 +16,43 @@ Cloud env fayli `chmod 600 .env.production` bo‘lishi shart. Deploydan oldin:
 python3 scripts/production_preflight.py --env-file .env.production
 ```
 
+Birinchi login/parolli adminni interaktiv yarating. Parol shell history yoki
+process listga tushmaydi:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.contabo.yml exec cloud \
+  python scripts/create_portal_account.py --username admin --name "Bosh admin" --role admin
+```
+
+Keyingi admin, o‘rnatuvchi va mijoz loginlari `/admin` ichidan yaratiladi.
+O‘rnatuvchi public `/installer` sahifasida ro‘yxatdan o‘tsa `pending` bo‘ladi;
+admin faollashtirib, faqat kerakli obyektni biriktiradi. Xarid qilgan mijoz
+akkaunti obyektga bog‘lanadi va `/owner` panelida Sotqin/kamera holatini ko‘radi.
+
 Public leadlar uchun kamida quyidagilar bo‘lsin:
 
 ```env
 CHAQIMCHI_OWNER_TELEGRAM_TOKEN=BOTFATHER_TOKEN
+CHAQIMCHI_TELEGRAM_BOT_USERNAME=BOT_USERNAME
 CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET=UZUN_RANDOM_SECRET
 CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID=-1003319785064
 CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS=5476913898
-CHAQIMCHI_TELEGRAM_AUTO_GROUP_LEADS=true
 ```
 
-Shaxsiy foydalanuvchi botga avval `/start` yuboradi. Bot ichki guruhga
-qo‘shilgach guruhda `/leads` yuboriladi. Webhook:
+Public ro'yxatdan o'tish havolasi botni `start=register` bilan ochadi. `/start`
+ichida Sotqin o'rnatuvchi va harid qilgan mijoz paneli tugmalari chiqadi.
+Leadlar faqat `CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS` dagi shaxsiy ID'larga boradi.
+Webhook:
 
 ```text
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<DOMAIN>/api/v1/telegram/webhook/<WEBHOOK_SECRET>
+POST https://api.telegram.org/bot<TOKEN>/setWebhook
+url=https://<DOMAIN>/api/v1/telegram/webhook
+secret_token=<WEBHOOK_SECRET>
 ```
+
+Secret URL'ga yozilmaydi: Telegram uni har update'da
+`X-Telegram-Bot-Api-Secret-Token` headerida yuboradi, shu sabab access-logda
+maxfiy qiymat ko'rinmaydi.
 
 Token yoki secretni terminal tarixiga yozmaslik uchun real chaqiruvni vaqtinchalik,
 history o‘chirilgan shell yoki secret manager orqali bajaring.

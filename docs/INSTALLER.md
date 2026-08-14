@@ -8,19 +8,18 @@ export CHAQIMCHI_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
 # Ogohlantirish (tavsiya etiladi): mijoz tizimi o'chsa Telegramga xabar keladi
 export CHAQIMCHI_CLOUD_TELEGRAM_TOKEN="123456:ABC..."   # @BotFather dan
 export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
-# Maslahat arizasini shaxsiy akkauntga ham yuborish (vergul bilan bir nechta ID):
+# Public deep-link uchun BotFather bergan username:
+export CHAQIMCHI_TELEGRAM_BOT_USERNAME="chaqimchi_bot"
+# Maslahat arizasini faqat shaxsiy akkauntga yuborish:
 export CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS="5476913898"
-export CHAQIMCHI_TELEGRAM_AUTO_GROUP_LEADS="true"
 
 make run-cloud
 ```
 
-Bot yaratish: Telegramda **@BotFather** → `/newbot` → token. Keyin botni
-o‘zingiz bilan (yoki xodimlar guruhi bilan) suhbatga qo‘shing va `chat_id` ni
-oling. Shaxsiy xabar kelishi uchun foydalanuvchi botga avval `/start` yuborishi
-shart. Guruhda botni qo‘shib `/leads` yuboring; webhook sozlangan bo‘lsa guruh
-lead qabul qiluvchisi sifatida saqlanadi. Panelda **“Sinov xabari”** tugmasi
-bilan asosiy chatni tekshiring.
+Bot yaratish: Telegramda **@BotFather** → `/newbot` → token. Shaxsiy xabar
+kelishi uchun foydalanuvchi botga avval `/start` yuborishi shart. Leadlar
+guruhdan avtomatik yig‘ilmaydi; faqat `CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS`
+ro‘yxatiga boradi. Panelda **“Sinov xabari”** tugmasi bilan tekshiring.
 
 ## 2. Yangi mijoz
 

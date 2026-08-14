@@ -11,14 +11,17 @@ install_root=/opt/chaqimchi
 version="$(date -u +%Y%m%dT%H%M%SZ)"
 release="$install_root/releases/$version"
 
-for binary in ffmpeg ffprobe; do
+# Canonical qurilma bo'sh Ubuntu Server 24.04 bo'lishi mumkin. Python binari
+# borligi `venv` moduli ham bor degani emas; installer barcha runtime
+# prerequisite'larni bir marta, non-interactive usulda tayyorlaydi.
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    ca-certificates curl ffmpeg python3 python3-venv
+fi
+for binary in curl ffmpeg ffprobe python3; do
   if ! command -v "$binary" >/dev/null 2>&1; then
-    if command -v apt-get >/dev/null 2>&1; then
-      apt-get update
-      DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg
-      break
-    fi
-    echo "$binary topilmadi. Sotqin R1 uchun ffmpeg/ffprobe o'rnating." >&2
+    echo "$binary topilmadi. Sotqin R1 uchun Ubuntu Server 24.04 ishlating." >&2
     exit 2
   fi
 done

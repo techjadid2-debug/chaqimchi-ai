@@ -313,7 +313,7 @@ def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     assert onboarding.json()["pairing"]["code"] == site["pairing_code"]
 
 
-def test_lead_notification_reaches_group_personal_and_retries_duplicates(
+def test_lead_notification_reaches_only_explicit_personal_ids_and_retries_duplicates(
     cloud_client, monkeypatch
 ) -> None:
     import cloud.main as cm
@@ -335,7 +335,7 @@ def test_lead_notification_reaches_group_personal_and_retries_duplicates(
 
     monkeypatch.setenv(
         "CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS",
-        "5476913898,-100222,5476913898",
+        "5476913898,5476913898",
     )
     monkeypatch.setattr(cm, "get_alerts", lambda: Alerts())
     cm.get_store().upsert_telegram_lead_destination(
@@ -353,14 +353,48 @@ def test_lead_notification_reaches_group_personal_and_retries_duplicates(
     assert first.status_code == repeated.status_code == 200
     assert first.json()["duplicate"] is False
     assert repeated.json()["duplicate"] is True
-    assert [chat_id for chat_id, _ in sent] == [
-        "-100111",
-        "5476913898",
-        "-100222",
-        "-100333",
-    ] * 2
+    assert [chat_id for chat_id, _ in sent] == ["5476913898"] * 2
     assert "Yangi Chaqimchi AI" in sent[0][1]
-    assert "Takroriy Chaqimchi AI" in sent[4][1]
+    assert "Takroriy Chaqimchi AI" in sent[1][1]
+
+
+def test_public_registration_opens_bot_and_start_returns_role_buttons(
+    cloud_client, monkeypatch
+) -> None:
+    import cloud.main as cm
+
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
+    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.example")
+    sent = []
+
+    async def fake_send(chat_id, text, *, reply_markup=None):
+        sent.append((chat_id, text, reply_markup))
+
+    monkeypatch.setattr(cm, "_send_owner_telegram", fake_send)
+    page = cloud_client.get("/")
+    assert "https://t.me/chaqimchi_bot?start=register" in page.text
+    assert "__TELEGRAM_REGISTER_URL__" not in page.text
+
+    webhook = cloud_client.post(
+        "/api/v1/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-test"},
+        json={
+            "message": {
+                "chat": {"id": 5476913898, "type": "private"},
+                "text": "/start register",
+            }
+        },
+    )
+    assert webhook.status_code == 200
+    assert sent[0][0] == "5476913898"
+    buttons = sent[0][2]["inline_keyboard"]
+    assert buttons[0][0]["url"] == "https://chaqimchi.example/installer"
+    assert buttons[1][0]["url"] == "https://chaqimchi.example/owner"
+    assert (
+        cloud_client.post("/api/v1/telegram/webhook", json={"message": {}}).status_code
+        == 404
+    )
 
 
 def test_admin_readiness_requires_admin_key(cloud_client) -> None:

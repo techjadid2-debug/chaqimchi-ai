@@ -56,8 +56,11 @@ def decode_access_token(token: str, *, cfg: JwtSettings) -> Dict[str, Any]:
     secret = resolve_jwt_secret(cfg)
     if not secret:
         raise JwtError("JWT secret sozlanmagan")
-    return pyjwt.decode(
-        token,
-        secret,
-        algorithms=[cfg.algorithm],
-    )
+    try:
+        return pyjwt.decode(
+            token,
+            secret,
+            algorithms=[cfg.algorithm],
+        )
+    except pyjwt.PyJWTError as exc:
+        raise JwtError("JWT yaroqsiz yoki muddati tugagan") from exc

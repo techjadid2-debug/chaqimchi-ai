@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from chaqimchi_ai.jwt_auth import JwtError, create_access_token, decode_access_token
 from chaqimchi_ai.settings import JwtSettings
+from cloud.portal_auth import bearer_token, decode_portal_token
 
 
 class OwnerPrincipal(BaseModel):
@@ -17,6 +18,8 @@ class OwnerPrincipal(BaseModel):
     site_id: str
     telegram_id: str
     role: Literal["owner", "manager", "service_admin"]
+    auth_kind: Literal["telegram", "password"] = "telegram"
+    auth_version: int = 0
 
 
 def owner_jwt_config() -> JwtSettings:
@@ -38,13 +41,12 @@ def issue_owner_token(member: dict) -> str:
 
 
 def require_owner(authorization: str | None = Header(None)) -> OwnerPrincipal:
-    if not authorization:
-        raise HTTPException(401, "Owner session talab qilinadi")
-    parts = authorization.split(None, 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(401, "Bearer token talab qilinadi")
     try:
-        payload = decode_access_token(parts[1], cfg=owner_jwt_config())
+        token = bearer_token(authorization)
+    except JwtError as exc:
+        raise HTTPException(401, "Owner session talab qilinadi") from exc
+    try:
+        payload = decode_access_token(token, cfg=owner_jwt_config())
         if payload.get("kind") != "chaqimchi-owner":
             raise JwtError("Token turi noto'g'ri")
         return OwnerPrincipal(
@@ -52,9 +54,25 @@ def require_owner(authorization: str | None = Header(None)) -> OwnerPrincipal:
             site_id=str(payload["site_id"]),
             telegram_id=str(payload["telegram_id"]),
             role=str(payload["role"]),
+            auth_kind="telegram",
         )
-    except (JwtError, KeyError, ValueError) as exc:
-        raise HTTPException(401, "Owner token yaroqsiz") from exc
+    except (JwtError, KeyError, ValueError):
+        # Xarid qilgan mijoz login/parol bilan ham ayni owner API'larini
+        # ishlatadi. Telegram OTP avvalgi mijozlar uchun o'zgarishsiz qoladi.
+        try:
+            portal = decode_portal_token(token)
+            if portal.role != "customer" or not portal.site_id:
+                raise JwtError("Mijoz tokeni emas")
+            return OwnerPrincipal(
+                member_id=portal.account_id,
+                site_id=portal.site_id,
+                telegram_id="",
+                role="owner",
+                auth_kind="password",
+                auth_version=portal.auth_version,
+            )
+        except (JwtError, ValueError) as exc:
+            raise HTTPException(401, "Owner token yaroqsiz") from exc
 
 
 def require_owner_role(principal: OwnerPrincipal, *roles: str) -> None:

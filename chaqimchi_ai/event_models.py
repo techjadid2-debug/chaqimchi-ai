@@ -72,11 +72,16 @@ class EdgeEvent(BaseModel):
     queue_length: Optional[int] = None
     snapshot_path: Optional[str] = None
     has_snapshot: bool = False
+    clip_path: Optional[str] = None
+    has_clip: bool = False
     metadata: Dict[str, Any] = Field(default_factory=dict)
     edge_version: str = __version__
     model_version: Optional[str] = None
 
     def cloud_payload(self) -> Dict[str, Any]:
-        data = self.model_dump(exclude={"snapshot_path"})
+        # Qurilmaning haqiqiy fayl yo'llari cloudga chiqmaydi. Media alohida
+        # autentifikatsiyalangan endpointga yuklanadi.
+        data = self.model_dump(exclude={"snapshot_path", "clip_path"})
         data["has_snapshot"] = bool(self.snapshot_path or self.has_snapshot)
+        data["has_clip"] = bool(self.clip_path or self.has_clip)
         return data

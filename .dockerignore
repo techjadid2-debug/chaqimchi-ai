@@ -12,3 +12,14 @@ scripts/
 test_data_lena.jpg
 .git/
 .gitignore
+.env
+.env.*
+!.env.example
+!.env.production.example
+.deploy_keys/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+releases/

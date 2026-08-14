@@ -27,6 +27,27 @@ def test_outbox_roundtrip_and_idempotency(tmp_path: Path) -> None:
     assert outbox.pending() == []
 
 
+def test_outbox_attaches_clip_after_initial_event(tmp_path: Path) -> None:
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=100_000)
+    event = EdgeEvent(
+        event_id="event-with-late-clip",
+        event_type="after_hours_presence",
+        severity="critical",
+        camera_id="cam",
+    )
+    outbox.enqueue(event)
+    clip = tmp_path / "event.mp4"
+    clip.write_bytes(b"video")
+    event.clip_path = str(clip)
+    outbox.enqueue(event)
+
+    row = outbox.pending()[0]
+    assert row["clip_path"] == str(clip)
+    assert row["payload"]["has_clip"] is True
+    assert "clip_path" not in row["payload"]
+    assert outbox.clip_path(event.event_id) == str(clip)
+
+
 def test_outbox_enforces_size_limit(tmp_path: Path) -> None:
     outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=800)
     for number in range(10):

@@ -212,6 +212,11 @@ class FaceEngine:
         vec = vec / (float(np.linalg.norm(vec)) + 1e-8)
         return vec
 
+    def extract_single_embedding(self, image_bgr: np.ndarray) -> Optional[np.ndarray]:
+        """Enrollment uchun: kadrda aynan bitta yuz bo'lsagina embedding qaytaradi."""
+        embeddings, _keypoints = self.extract_embeddings(image_bgr)
+        return embeddings[0] if len(embeddings) == 1 else None
+
     def compare_faces(
         self,
         source_embedding: np.ndarray,

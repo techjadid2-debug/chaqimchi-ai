@@ -89,6 +89,20 @@ class CloudEventSync:
                     self.outbox.fail(event_id, str(exc))
                     failed += 1
                     continue
+            clip = row.get("clip_path")
+            if clip and Path(clip).is_file():
+                try:
+                    with Path(clip).open("rb") as handle:
+                        upload = await client.put(
+                            f"{base}/api/v1/edge/events/{event_id}/clip",
+                            headers={**self.headers, "Content-Type": "video/mp4"},
+                            content=handle.read(),
+                        )
+                    upload.raise_for_status()
+                except Exception as exc:  # noqa: BLE001
+                    self.outbox.fail(event_id, str(exc))
+                    failed += 1
+                    continue
             completed.append(event_id)
         self.outbox.acknowledge(completed)
         return {"sent": len(completed), "failed": failed}
@@ -114,20 +128,23 @@ class CloudEventSync:
         response.raise_for_status()
         self.config_applier(response.json())
 
-    async def run(self) -> None:
-        while True:
-            try:
-                await self.sync_once()
-                now = time.monotonic()
-                if now - self._last_heartbeat >= self.settings.heartbeat_interval_sec:
-                    await self.heartbeat_once()
-                    await self.config_once()
-                    self._last_heartbeat = now
-            except asyncio.CancelledError:
-                break
-            except Exception:  # pragma: no cover - mustaqil fon sikli
-                logger.exception("Cloud sync siklida kutilmagan xato")
-            await asyncio.sleep(self.settings.interval_sec)
+    async def run(self, stop_requested: Optional[Callable[[], bool]] = None) -> None:
+        try:
+            while not (stop_requested and stop_requested()):
+                try:
+                    await self.sync_once()
+                    now = time.monotonic()
+                    if now - self._last_heartbeat >= self.settings.heartbeat_interval_sec:
+                        await self.heartbeat_once()
+                        await self.config_once()
+                        self._last_heartbeat = now
+                except asyncio.CancelledError:
+                    break
+                except Exception:  # pragma: no cover - mustaqil fon sikli
+                    logger.exception("Cloud sync siklida kutilmagan xato")
+                await asyncio.sleep(self.settings.interval_sec)
+        finally:
+            await self.close()
 
     async def close(self) -> None:
         if self._owns_client and self.client is not None:

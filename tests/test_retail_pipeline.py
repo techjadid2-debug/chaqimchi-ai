@@ -116,6 +116,7 @@ def build(
     clips: Any = "default",
     wall: Optional[List[float]] = None,
     review: Any = None,
+    snapshots: bool = False,
 ) -> Tuple[RetailPipeline, FakeAnalyzer, Recorder, Any]:
     broker = FrameBroker(InferenceBudget(target_fps=30.0, min_fps=1.0, max_fps=60.0))
     analyzer = FakeAnalyzer(events)
@@ -129,6 +130,8 @@ def build(
         on_clip=recorder.clip,
         on_review=review,
         clip_dir=tmp_path / "clips",
+        snapshot_dir=tmp_path / "snapshots" if snapshots else None,
+        snapshot_writer=lambda path, _frame: (path.parent.mkdir(parents=True, exist_ok=True), path.write_bytes(b"jpeg"), True)[2],
         pre_sec=10.0,
         post_sec=20.0,
         clock=Clock(),
@@ -343,8 +346,47 @@ def test_ready_clip_is_attached_to_its_event(tmp_path: Path) -> None:
 
     event, path = recorder.clips[0]
     assert path.is_file()
-    assert event.metadata["clip_path"] == str(path)
+    assert event.clip_path == str(path)
+    assert "clip_path" not in event.cloud_payload()
     assert pipeline.stats()["clips"]["written"] == 1
+
+
+def test_security_event_has_private_snapshot_before_cloud_action(tmp_path: Path) -> None:
+    event = EdgeEvent(
+        event_type="loitering",
+        severity="warning",
+        camera_id="kassa-01",
+    )
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[event], snapshots=True
+    )
+
+    run(pipeline)
+
+    sent = recorder.actions[0][1]
+    assert sent.snapshot_path is not None
+    assert Path(sent.snapshot_path).read_bytes() == b"jpeg"
+    assert sent.cloud_payload()["has_snapshot"] is True
+    assert "snapshot_path" not in sent.cloud_payload()
+    assert pipeline.stats()["snapshots"] == {"written": 1, "missing": 0}
+
+
+def test_normal_zone_event_does_not_capture_a_security_snapshot(tmp_path: Path) -> None:
+    event = EdgeEvent(
+        event_type="zone_entered",
+        camera_id="kassa-01",
+        zone="savdo-zali",
+        metadata={"restricted": False},
+    )
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[event], snapshots=True
+    )
+
+    run(pipeline)
+
+    sent = recorder.actions[0][1]
+    assert sent.snapshot_path is None
+    assert pipeline.stats()["snapshots"] == {"written": 0, "missing": 0}
 
 
 def test_camera_without_a_buffer_still_reports_the_event(tmp_path: Path) -> None:

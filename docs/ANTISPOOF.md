@@ -1,5 +1,8 @@
 # Anti-spoofing — soxta yuzdan himoya
 
+> **REFERENCE / MVP katalogidan tashqarida.** Bu modul yopiq attendance pilotini
+> kalibrlash uchun saqlangan; mustaqil Face mahsuloti yoki sotuv va’dasi emas.
+
 Maqsad: telefon ekranidagi yoki bosma qog‘ozdagi yuzni tirik odamdan ajratish.
 
 ## Qisqacha: nimani kutish mumkin

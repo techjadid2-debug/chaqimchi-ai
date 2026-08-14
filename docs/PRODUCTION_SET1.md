@@ -1,4 +1,7 @@
-# Chaqimchi Lite production qo‘llanmasi
+# [ARXIV] Chaqimchi Lite production qo‘llanmasi
+
+> Bu Orange Pi production set faol emas. Yangi o‘rnatish uchun
+> [Do‘kon MVP](DOKON_MVP.md) va [Sotqin R1](SOTQIN.md) dan foydalaning.
 
 > `Set-1` — mahsulotning eski ichki nomi. 2026-08 dan Orange Pi asosidagi
 > ushbu mahsulot **Chaqimchi Lite** deb ataladi. Yangi canonical konfiguratsiya

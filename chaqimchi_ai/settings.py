@@ -405,8 +405,25 @@ class AppSettings(BaseModel):
         licensed = self.face.commercial_model_licensed or os.environ.get(
             "CHAQIMCHI_FACE_MODEL_LICENSED", ""
         ).lower() in {"1", "true", "yes"}
-        if not licensed:
+        attendance_pilot = os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if not licensed and not attendance_pilot:
             errors.append("commercial Face ID model litsenziyasi tasdiqlanishi shart")
+        if licensed:
+            from chaqimchi_ai.model_bundle import verify_model_manifest
+
+            manifest = os.environ.get("CHAQIMCHI_FACE_MODEL_MANIFEST", "").strip()
+            if not manifest:
+                errors.append("CHAQIMCHI_FACE_MODEL_MANIFEST berilishi shart")
+            else:
+                errors.extend(verify_model_manifest(Path(manifest)))
+            if self.face.model_name in {"buffalo_l", "buffalo_s", "antelopev2"}:
+                errors.append("commercial rejim demo InsightFace model nomidan foydalana olmaydi")
+        if attendance_pilot and self.events.save_snapshots:
+            errors.append("davomat pilotida biometrik snapshot saqlash o'chirilishi shart")
         if self.cloud_sync.enabled:
             if not self.cloud_sync.url.lower().startswith("https://"):
                 errors.append("cloud_sync.url productionda HTTPS bo'lishi shart")

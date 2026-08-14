@@ -7,40 +7,53 @@
 #   cloud_sync     — hodisa cloudga ketadi (standart)
 #   telegram_alert — cloud mijozga Telegram xabarini yuboradi
 #   save_clip      — hodisa atrofidagi video kesib olinadi
-#   ai_review      — kadrni ko'rish agenti ko'rib, o'zbekcha izoh yozadi
 #   ignore         — hodisa bostiriladi
-#
-# DIQQAT: `ai_review` **pul sarflaydi** (bitta ko'rik ~87 so'm). Uni faqat
-# rostdan izoh kerak bo'lgan hodisaga qo'ying — "odam ko'rindi" ga emas.
-# Uch tomondan tormoz bor: qoida, kamera boshiga 5 daqiqa (`vision.
-# min_interval_sec`) va kunlik limit (`vision.max_calls_per_day`).
-# Batafsil: docs/KORISH_AGENTI.md
+# Canonical do'kon MVP taxminiy AI talqinidan foydalanmaydi. `ai_review`
+# mexanizmi repoda tarixiy/future modul sifatida qolgan, bu qoidalarga kirmaydi.
 
 schedules:
   ish-vaqti: {start: "09:00", end: "21:00"}
 
 rules:
-  # Kamera yopilgan yoki burilgan. Eng qimmat hodisa: tizim ko'r bo'lib qoladi,
-  # shuning uchun AI ham ko'radi — "qop bilan yopilgan" va "chiroq o'chgan"
-  # ikki xil muammo va javobi ham boshqacha.
+  # Kamera yopilgan yoki burilgan — aniq, o'lchanadigan security hodisasi.
   - name: Kamera buzilishi
     event_type: camera_tampered
     severity: critical
     cooldown_sec: 600
-    actions: [cloud_sync, telegram_alert, save_clip, ai_review]
+    actions: [cloud_sync, telegram_alert, save_clip]
 
-  # Do'kon yopiq, lekin ichkarida harakat bor. AI "kim va nima qilyapti"
-  # degan savolga javob beradi — qorovulmi yoki begonami.
+  # Do'kon yopiq, lekin kamera odamni aniqladi. Shaxs yoki niyat taxmin qilinmaydi.
   - name: Ish vaqtidan tashqari harakat
     event_type: after_hours_presence
     severity: critical
     cooldown_sec: 300
-    actions: [cloud_sync, telegram_alert, save_clip, ai_review]
+    actions: [cloud_sync, telegram_alert, save_clip]
+
+  - name: Taqiqlangan zonaga kirish
+    event_type: zone_entered
+    conditions: {restricted: true}
+    severity: critical
+    cooldown_sec: 120
+    actions: [cloud_sync, telegram_alert, save_clip]
+
+  # Oddiy savdo zonasi kirishi alohida hisobotda ishlatilmaydi. Dwell/queue
+  # o'z hodisasini chiqaradi, shu sabab bu xom event cloud arxivini to'ldirmasin.
+  - name: Oddiy zona kirishi
+    event_type: zone_entered
+    conditions: {restricted: false}
+    suppress: true
+
+  - name: Uzoq vaqt turish
+    event_type: loitering
+    severity: warning
+    cooldown_sec: 300
+    actions: [cloud_sync, telegram_alert, save_clip]
 
   # Navbat — kundalik ish, AI kerak emas: raqamning o'zi yetarli.
   - name: Kassada uzun navbat
     event_type: queue_threshold_exceeded
-    conditions: {min_queue_length: 5}
+    # Threshold owner config'idagi `queue_limit`; analyzer eventni faqat shu
+    # chegara oshganda chiqaradi. Bu yerda ikkinchi, qotirilgan limit yo'q.
     schedule: ish-vaqti
     severity: warning
     cooldown_sec: 300

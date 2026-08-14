@@ -12,7 +12,7 @@ EnvironmentFile=/etc/chaqimchi/sotqin.env
 # Konfig yo'li sotqin.env dagi CHAQIMCHI_CONFIG dan olinadi — yuz tanish
 # xizmati bilan bitta fayl.
 ExecStart=/opt/chaqimchi/venv/bin/python -m chaqimchi_ai.retail.service \
-    --base-dir /opt/chaqimchi/shared
+    --base-dir /opt/chaqimchi/current
 Restart=always
 RestartSec=5
 TimeoutStopSec=30

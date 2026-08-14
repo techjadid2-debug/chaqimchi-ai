@@ -1,5 +1,9 @@
 # Chaqimchi AI — umumiy reja (boshidan oxirigacha)
 
+> **Tarixiy umumiy backlog.** Faol mahsulot scope'i, bajarilgan/bajarilmagan
+> ro'yxat va qabul darvozasi uchun yagona manba — [DOKON_MVP.md](DOKON_MVP.md).
+> Quyidagi generic Face va Ko'rish agenti bo'limlari faol sotuv katalogi emas.
+
 ## Holat belgilari
 
 - [x] Bajarilgan
@@ -83,7 +87,7 @@ curl http://127.0.0.1:8742/metrics
 
 ---
 
-## 8. Ko‘rish agenti (AI)
+## 8. Ko‘rish agenti (AI) — ARXIV/FUTURE, MVP’da o‘chiq
 
 | # | Vazifa | Holat |
 |---|--------|-------|
@@ -368,6 +372,9 @@ maxfiylik yuki.
 | 9.10 | N100 sig‘imini o‘lchash skripti | [x] skript tayyor, **o‘lchov o‘tkazilmagan** |
 | 9.11 | Kamera ro‘yxati cloud inventaridan | [x] lokal konfig faqat sozlama beradi |
 | 9.12 | Mijoz hisoboti: kirish/chiqish, soat, navbat, dwell, trend | [x] panel + Telegram |
+| 9.13 | Xodim jadvali, lokal enrollment, davomat va CSV | [x] yopiq pilot |
+| 9.14 | Snapshot va MP4 klipni tenant-private cloudga uzatish | [x] |
+| 9.15 | N100 benchmark + 72 soat soak sotuv darvozasi | [x] validator, **real qabul qolgan** |
 
 ### Qurilmada AI — chegara o‘zgardi
 
@@ -378,15 +385,17 @@ cloud GPU narxi ham yetmaydi. Yangi chegara:
 | Qayerda | Nima |
 |---------|------|
 | Qurilma (N100 iGPU) | Odam deteksiyasi (2.3 GFLOPs), tracking, sanoq, dwell, navbat, kamera buzilishi, qoidalar, klip |
-| Cloud | Ko‘rish agenti (Claude), arxiv, panel, Telegram, obuna, ko‘p obyekt hisoboti |
+| Cloud | Event/media arxivi, panel, Telegram, obuna, ko‘p obyekt hisoboti |
 | NVR | To‘liq video arxiv |
 
-Sabab oddiy: 8 kamera × 5 FPS = sekundiga 40 kadr. Ularni cloudga yuborish
+Sabab oddiy: 4 kamera × 5 FPS = sekundiga 20 kadr. Ularni cloudga yuborish
 oyiga terabaytlab trafik va GPU hisobi degani; qurilmada esa 2.3 GFLOPs model
 shu ishni bajaradi va cloudga faqat **hodisa** ketadi.
 
 **Ochiq**: sig‘im o‘lchanmagan (`scripts/benchmark_n100.py`), buzilish
 chegaralari kalibrlanmagan, dekodlash QSV emas — dasturiy.
+Taxminiy `ai_review` kodi tarixiy/future reference sifatida qolgan, lekin
+canonical `config/rules.yaml` va public MVP'da o‘chiq.
 Batafsil: [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md),
 [SOTQIN.md](SOTQIN.md).
 
@@ -394,8 +403,7 @@ Batafsil: [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md),
 
 **Ustuvorlik**: mahsulot barqaror → xizmat modeli → to‘lov avtomatlashtirish.
 
-**Keyingi qadam**: N100 da benchmark o‘tkazish (9.10) — 8 kamera va’dasi shu
-raqamga bog‘liq va uni faqat haqiqiy qurilmada o‘lchash mumkin. Keyin: ONVIF
-discovery (SOTQIN 1), soak-testlar (SOTQIN 4), 6.7 gRPC mikroservis
-(ixtiyoriy) va 6.6 anti-spoof modelini kuchaytirish
-(`scripts/validate_antispoof.py`).
+**Keyingi qadam**: N100’da haqiqiy do‘kon videosi bilan 4 kamera benchmark,
+keyin 72 soat soak va bitta do‘konda E2E qabul. Qabul artefakti o‘tmaguncha
+public feature’lar production’da yopiq qoladi. ONVIF discovery va 8 kamera
+keyingi alohida scope. Faol gap-list: [DOKON_MVP.md](DOKON_MVP.md).

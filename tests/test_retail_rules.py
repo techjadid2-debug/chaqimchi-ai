@@ -99,6 +99,26 @@ def test_conditions_filter_by_measured_value() -> None:
     assert engine.evaluate(queue_event(queue_length=9), now=1.0).rule_name == "juda-uzun"
 
 
+def test_restricted_condition_does_not_alert_for_normal_zone() -> None:
+    engine = RuleEngine(
+        [
+            Rule(
+                name="taqiqlangan",
+                event_type="zone_entered",
+                conditions={"restricted": True},
+                severity="critical",
+            )
+        ]
+    )
+    normal = EdgeEvent(
+        event_type="zone_entered", camera_id="cam", metadata={"restricted": False}
+    )
+    restricted = normal.model_copy(update={"metadata": {"restricted": True}})
+
+    assert engine.evaluate(normal, now=0).rule_name is None
+    assert engine.evaluate(restricted, now=1).rule_name == "taqiqlangan"
+
+
 def test_direction_condition_separates_entry_from_exit() -> None:
     engine = RuleEngine([
         Rule(name="faqat-kirish", event_type="line_crossed",

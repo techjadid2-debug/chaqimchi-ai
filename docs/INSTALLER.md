@@ -8,13 +8,19 @@ export CHAQIMCHI_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
 # Ogohlantirish (tavsiya etiladi): mijoz tizimi o'chsa Telegramga xabar keladi
 export CHAQIMCHI_CLOUD_TELEGRAM_TOKEN="123456:ABC..."   # @BotFather dan
 export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
+# Maslahat arizasini shaxsiy akkauntga ham yuborish (vergul bilan bir nechta ID):
+export CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS="5476913898"
+export CHAQIMCHI_TELEGRAM_AUTO_GROUP_LEADS="true"
 
 make run-cloud
 ```
 
 Bot yaratish: Telegramda **@BotFather** → `/newbot` → token. Keyin botni
 o‘zingiz bilan (yoki xodimlar guruhi bilan) suhbatga qo‘shing va `chat_id` ni
-oling. Panelda **“Sinov xabari”** tugmasi bilan tekshiring.
+oling. Shaxsiy xabar kelishi uchun foydalanuvchi botga avval `/start` yuborishi
+shart. Guruhda botni qo‘shib `/leads` yuboring; webhook sozlangan bo‘lsa guruh
+lead qabul qiluvchisi sifatida saqlanadi. Panelda **“Sinov xabari”** tugmasi
+bilan asosiy chatni tekshiring.
 
 ## 2. Yangi mijoz
 
@@ -27,14 +33,16 @@ Chiqadi: `site_id`, `pairing_code`, narxlar.
 
 ## 3. Sotqin R1 (mijoz joyida)
 
-Canonical profil: `config/lite.yaml`. Hozir AI modelsiz control-only agent
-o‘rnatiladi. Admin paneldagi pairing kod bilan:
+Canonical profil: `config/sotqin.yaml`. Installer control agent, retail AI,
+verifikatsiya qilingan OpenVINO model va ixtiyoriy attendance pilot
+dependencylarini o‘rnatadi. Admin paneldagi pairing kod bilan:
 
 ```bash
 sudo ./scripts/install_sotqin.sh
 sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py \
   --cloud https://YOUR_DOMAIN --code ABC123
 sudo systemctl start chaqimchi-sotqin
+sudo systemctl start chaqimchi-retail
 curl http://127.0.0.1:8742/health
 ```
 
@@ -43,28 +51,22 @@ saqlaydi, cloud identifikatorlarini atomik yangilaydi va fayl huquqini `0600`
 qiladi. Admin onboarding ro‘yxatida Sotqin juftlangan va online bo‘lishi
 kerak.
 
-Development uchun `config/config.yaml`:
+Attendance faqat yozma rozilikli yopiq pilot bo‘lsa
+`CHAQIMCHI_ATTENDANCE_PILOT=true` qilinadi va lokal xizmat yoqiladi:
 
-```yaml
-license:
-  enabled: true
-  cloud_url: "http://YOUR_CLOUD_IP:8750"
-  pairing_code: "ABC123"   # bir martalik
+```bash
+sudo systemctl enable --now chaqimchi-attendance
+# enrollment paneliga servis SSH tunnel orqali ulanadi:
+ssh -L 8743:127.0.0.1:8743 installer@SOTQIN_IP
 ```
+
+Developmentda `make run-web` attendance pilot rejimini va `:8743` portini
+o‘zi qo‘yadi. Cloud inventar/config kerak bo‘lsa avval control agentni pairing
+qiling va `CHAQIMCHI_SOTQIN_CONFIG_CACHE` ni uning kesh fayliga yo‘naltiring.
 
 ```bash
 make install-dev
 make run-web
-```
-
-Logda `device_token` chiqsa — keyingi safar:
-
-```yaml
-license:
-  enabled: true
-  cloud_url: "http://YOUR_CLOUD_IP:8750"
-  site_id: "..."
-  device_token: "..."
 ```
 
 ## 4. Obuna uzaytirish (to‘lovdan keyin)
@@ -76,11 +78,11 @@ curl -X POST "http://127.0.0.1:8750/api/v1/admin/sites/SITE_ID/extend" \
   -d '{"months": 1}'
 ```
 
-## 5. Zaxira nusxa (majburiy odat)
+## 5. Zaxira nusxa (faqat attendance pilotida)
 
-Yuz bazasi eng qimmat narsa: har bir shaxs bir marta kamera oldiga kelib
-ro‘yxatdan o‘tgan. SSD ishdan chiqsa yoki Mini PC almashsa — nusxasiz bu ish
-qaytadan boshlanadi.
+Embeddinglar cloudga chiqmaydi. SSD ishdan chiqsa yoki Sotqin almashsa,
+xodimlarni qayta enrollment qilish kerak bo‘lmasligi uchun shifrlangan lokal
+nusxa olinadi. Retail-only o‘rnatishda biometrik baza yo‘q.
 
 **O‘rnatishdan keyin va har oy** nusxa oling, fleshka yoki o‘z serveringizda
 saqlang:
@@ -128,7 +130,7 @@ takrorlanmaydi).
 | expired | Kameralar ishlamaydi |
 | suspended | Admin to‘xtatgan |
 
-**Kamera**: panelda `2/3` ko‘rinsa — bitta kamera o‘chgan. Telegramga ham xabar
+**Kamera**: panelda `3/4` ko‘rinsa — bitta kamera o‘chgan. Telegramga ham xabar
 ketadi. Kamera ataylab olib tashlangan bo‘lsa kutilgan sonni tushiring:
 
 ```bash

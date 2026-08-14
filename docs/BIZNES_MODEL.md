@@ -1,4 +1,7 @@
-# Chaqimchi — biznes modeli va tariflar
+# [ARXIV] Eski biznes modeli va tariflar
+
+> Quyidagi narxlar tasdiqlangan joriy taklif emas. Faol do‘kon MVP scope’i:
+> [DOKON_MVP.md](DOKON_MVP.md); amaldagi hisobni cloud pricing API beradi.
 
 ## Model
 

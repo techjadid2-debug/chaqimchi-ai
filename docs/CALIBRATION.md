@@ -1,11 +1,14 @@
 # Threshold kalibrlash
 
+> Do‘kon MVP’da bu faqat rozilikli xodim attendance piloti uchun lokal
+> kalibrlash. Lokal servis manzili `127.0.0.1:8743`.
+
 ## 1. Ma’lumotlar bazasi (tez)
 
 Kamida **2 ta** ro‘yxatdan o‘tgan shaxs bo‘lsin. Tizim boshqa shaxslar bilan kosinus ballarini “manfiy” deb hisoblaydi va `p95 + margin` asosida threshold tavsiya qiladi.
 
 ```bash
-curl http://127.0.0.1:8742/api/calibrate/threshold
+curl http://127.0.0.1:8743/api/calibrate/threshold
 ```
 
 yoki:
@@ -36,7 +39,7 @@ data/calibration/
 
 ```bash
 python scripts/calibrate_threshold.py --dir
-curl "http://127.0.0.1:8742/api/calibrate/threshold?use_dir=true"
+curl "http://127.0.0.1:8743/api/calibrate/threshold?use_dir=true"
 ```
 
 Bir papkada bir nechta surat → musbat juftlar; turli papkalar → manfiy juftlar.
@@ -58,7 +61,7 @@ So‘rovlar:
 
 ```bash
 curl -H "X-API-Key: maxfiy-kalit" -F "name=Ali" -F "file=@photo.jpg" \
-  http://127.0.0.1:8742/api/persons/add
+  http://127.0.0.1:8743/api/persons/add
 ```
 
 O‘qish (health, events, calibrate) ochiq qoladi; qo‘shish/o‘chirish himoyalangan.

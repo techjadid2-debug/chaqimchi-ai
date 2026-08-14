@@ -1,5 +1,8 @@
 # Chaqimchi AI — Yuzni Tanish Yadrosi: Tizim Arxitekturasi
 
+> **REFERENCE / MVP katalogidan tashqarida.** Face yadro faqat rozilikli xodim
+> davomatining lokal qismi; mijoz Face ID'i va generic Face platforma sotilmaydi.
+
 Bu hujjat **Face Recognition Core** modulining mantiqiy arxitekturasini o‘zbek tilida qisqa va aniq tasvirlaydi.
 
 ## 1. Maqsad va chegaralar

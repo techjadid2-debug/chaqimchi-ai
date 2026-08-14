@@ -69,7 +69,13 @@ def read_sotqin_cache(path: Path) -> Dict[str, Any]:
     davom etish "kamera yo'qolgan" holatining aynan o'zi bo'lardi.
     """
     if not path.is_file():
-        return {"revision": None, "cameras": []}
+        return {
+            "revision": None,
+            "config": {},
+            "attendance": {},
+            "cloud_features": [],
+            "cameras": [],
+        }
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -78,6 +84,9 @@ def read_sotqin_cache(path: Path) -> Dict[str, Any]:
         raise ValueError(f"Sotqin config keshi noto'g'ri: {path}")
     return {
         "revision": payload.get("revision"),
+        "config": dict(payload.get("config") or {}),
+        "attendance": dict(payload.get("attendance") or {}),
+        "cloud_features": list(payload.get("cloud_features") or []),
         "cameras": [
             InventoryCamera(
                 camera_id=str(item.get("camera_id") or ""),
@@ -118,7 +127,10 @@ def merge_cameras(
                 stream_url=camera.source,
                 origin="cloud",
                 label=camera.label,
-                record_url=getattr(option, "record_url", None),
+                # Cloud inventari hozir bitta RTSP manzil saqlaydi.  Alohida
+                # main stream berilmagan bo'lsa ham xavfsizlik hodisasining
+                # klipi yo'qolmasin: o'sha substream ring-bufferga yoziladi.
+                record_url=getattr(option, "record_url", None) or camera.source,
                 priority=getattr(option, "priority", "retail"),
                 sample_fps=float(getattr(option, "sample_fps", 5.0)),
                 floor_fps=getattr(option, "floor_fps", None),

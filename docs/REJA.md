@@ -1,4 +1,7 @@
-# Chaqimchi AI — Face Core: Rivojlanish Rejasi (Roadmap)
+# [ARXIV] Chaqimchi AI Face Core roadmap’i
+
+> Bu umumiy Face platforma rejasi faol mahsulot scope’i emas. Joriy reja:
+> [Do‘kon MVP](DOKON_MVP.md).
 
 Ushbu reja **qisqa muddat → o‘rta muddat → uzoq muddat** tartibida tuzilgan va loyiha ustuvorliklariga qarab moslashtirilishi mumkin.
 

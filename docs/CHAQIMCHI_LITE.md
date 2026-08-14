@@ -1,4 +1,7 @@
-# Chaqimchi Lite — mahsulot va texnik kontrakt
+# [ARXIV] Chaqimchi Lite — eski mahsulot kontrakti
+
+> Bu Orange Pi/Lite hujjati faol emas. Yangi ish va sotuv uchun faqat
+> [Do‘kon MVP](DOKON_MVP.md) canonical manba hisoblanadi.
 
 ## Mahsulot
 

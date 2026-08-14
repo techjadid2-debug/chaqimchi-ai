@@ -28,6 +28,7 @@ Uchta qaror shu yerda qotirilgan:
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -59,6 +60,27 @@ MIN_LATENCY_SEC = 1e-6
 #: Kesilmagan klip so'rovlari cheklovi.  ffmpeg buzilib qolsa navbat cheksiz
 #: o'smasin — eng eskisi tashlanadi va `dropped` da ko'rinadi.
 MAX_PENDING_CLIPS = 200
+
+SECURITY_MEDIA_EVENTS = frozenset(
+    {"camera_tampered", "after_hours_presence", "zone_entered", "loitering"}
+)
+
+
+def write_jpeg(path: Path, frame: Any) -> bool:
+    """Kadrni atomik JPEG qilib yozadi; partial rasm hech qachon ko'rinmaydi."""
+    import cv2
+
+    ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+    if not ok:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        temporary.write_bytes(encoded.tobytes())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
 
 
 @dataclass
@@ -117,6 +139,8 @@ class _Totals:
     after_hours: int = 0
     reviews_sent: int = 0
     reviews_skipped: int = 0
+    snapshots_written: int = 0
+    snapshots_missing: int = 0
 
 
 class RetailPipeline:
@@ -150,6 +174,8 @@ class RetailPipeline:
         on_clip: Optional[Callable[[EdgeEvent, Path], None]] = None,
         on_review: Optional[Callable[[EdgeEvent, Any], bool]] = None,
         clip_dir: Optional[Path] = None,
+        snapshot_dir: Optional[Path] = None,
+        snapshot_writer: Callable[[Path, Any], bool] = write_jpeg,
         pre_sec: float = 10.0,
         post_sec: float = 20.0,
         clock: Callable[[], float] = time.monotonic,
@@ -157,6 +183,7 @@ class RetailPipeline:
         local_time: Optional[Callable[[], clock_time]] = None,
         business_hours: Optional[Schedule] = None,
         after_hours_debounce_sec: float = 300.0,
+        event_filter: Optional[Callable[[EdgeEvent], bool]] = None,
     ) -> None:
         if pre_sec < 0 or post_sec < 0:
             raise ValueError("pre_sec va post_sec manfiy bo'lmasin")
@@ -170,6 +197,8 @@ class RetailPipeline:
         #: yuborildi (oraliq yoki limit).
         self.on_review = on_review
         self.clip_dir = Path(clip_dir) if clip_dir is not None else None
+        self.snapshot_dir = Path(snapshot_dir) if snapshot_dir is not None else None
+        self.snapshot_writer = snapshot_writer
         self.pre_sec = float(pre_sec)
         self.post_sec = float(post_sec)
         #: `clock` — model qancha ishlaganini o'lchaydi (monoton bo'lishi shart).
@@ -184,6 +213,7 @@ class RetailPipeline:
         #: `after_hours_presence` chiqadi.  Berilmasa bu hodisa umuman yo'q.
         self.business_hours = business_hours
         self.after_hours_debounce_sec = float(after_hours_debounce_sec)
+        self.event_filter = event_filter or (lambda _event: True)
         self._cameras: Dict[str, _Camera] = {}
         self._pending: List[_PendingClip] = []
         self._totals = _Totals()
@@ -310,9 +340,12 @@ class RetailPipeline:
         halqasi (kamera buzilishi).  Ikkalasi ham bir xil yo'ldan o'tishi
         kerak, aks holda buzilish hodisasiga qoida yozib bo'lmasdi.
         """
+        original_count = len(events)
+        events = [event for event in events if self.event_filter(event)]
         local_time = self._local_time()
         with self._lock:
-            self._totals.events += len(events)
+            self._totals.events += original_count
+            self._totals.suppressed += original_count - len(events)
             # Qoida dvigatelida cooldown holati bor — u ham qulf ostida.
             decisions = self.rules.decisions(events, now=now, local_time=local_time)
             self._totals.suppressed += len(events) - len(decisions)
@@ -374,6 +407,7 @@ class RetailPipeline:
         )
 
     def _dispatch(self, decision: Decision, *, camera_id: str) -> None:
+        self._attach_security_snapshot(decision.event, camera_id=camera_id)
         for action in decision.actions:
             with self._lock:
                 self._totals.actions[action] = self._totals.actions.get(action, 0) + 1
@@ -391,6 +425,36 @@ class RetailPipeline:
                 with self._lock:
                     self._totals.action_errors += 1
                 logger.exception("[%s] '%s' harakati bajarilmadi", camera_id, action)
+
+    def _attach_security_snapshot(self, event: EdgeEvent, *, camera_id: str) -> None:
+        # Oddiy zona kirishi retail analitikasi, xavfsizlik hodisasi emas.
+        # Snapshot faqat aniq `restricted` zona uchun olinadi.
+        if event.event_type == "zone_entered" and not event.metadata.get("restricted"):
+            return
+        if (
+            event.event_type not in SECURITY_MEDIA_EVENTS
+            or self.snapshot_dir is None
+            or event.snapshot_path
+        ):
+            return
+        camera = self._cameras.get(camera_id)
+        frame = camera.last_frame if camera is not None else None
+        if frame is None:
+            with self._lock:
+                self._totals.snapshots_missing += 1
+            return
+        path = self.snapshot_dir / f"{camera_id}-{event.event_id}.jpg"
+        try:
+            written = self.snapshot_writer(path, frame)
+        except Exception:
+            written = False
+            logger.exception("[%s] xavfsizlik snapshoti yozilmadi", camera_id)
+        with self._lock:
+            if written:
+                event.snapshot_path = str(path)
+                self._totals.snapshots_written += 1
+            else:
+                self._totals.snapshots_missing += 1
 
     # ── AI ko'rigi ───────────────────────────────────────────────────────
 
@@ -447,9 +511,9 @@ class RetailPipeline:
     def flush_clips(self, *, wall_now: Optional[float] = None) -> List[Path]:
         """Yozilib bo'lgan kliplarni kesadi.  **Sekin halqadan chaqirilsin.**
 
-        Klip tayyor bo'lganda hodisaning `metadata.clip_path` maydoni
-        to'ldiriladi va `on_clip` chaqiriladi — cloud hodisani allaqachon
-        olgan, endi unga video qo'shiladi.
+        Klip tayyor bo'lganda hodisaning edge-only `clip_path` maydoni
+        to'ldiriladi va `on_clip` chaqiriladi. Lokal yo'l cloud payloadiga
+        kirmaydi; sync videoni alohida endpointga uzatadi.
         """
         wall_now = self._wall_clock() if wall_now is None else float(wall_now)
         with self._lock:
@@ -485,7 +549,7 @@ class RetailPipeline:
                 continue
             with self._lock:
                 self._totals.clips_written += 1
-            item.event.metadata["clip_path"] = str(path)
+            item.event.clip_path = str(path)
             written.append(path)
             if self.on_clip is not None:
                 try:
@@ -530,6 +594,10 @@ class RetailPipeline:
             },
             "actions": dict(sorted(self._totals.actions.items())),
             "action_errors": self._totals.action_errors,
+            "snapshots": {
+                "written": self._totals.snapshots_written,
+                "missing": self._totals.snapshots_missing,
+            },
             "clips": {
                 "pending": len(self._pending),
                 "written": self._totals.clips_written,

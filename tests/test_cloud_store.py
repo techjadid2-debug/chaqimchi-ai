@@ -135,11 +135,55 @@ def test_public_lead_pipeline_and_duplicate_guard(tmp_path) -> None:
     assert linked["site_id"] == site["site_id"]
 
 
+def test_lead_notification_delivery_is_persistent_and_retryable(tmp_path) -> None:
+    store = CloudStore(tmp_path / "cloud.db")
+    created = store.create_lead(
+        full_name="Ali Valiyev",
+        phone="+998 90 123 45 67",
+        company="Pilot",
+        city="Toshkent",
+        cameras=4,
+        message="Maslahat",
+        source_hash="ip-hash",
+    )
+    store.ensure_lead_notification_deliveries(
+        created["id"], ["5476913898", "-1001", "5476913898"]
+    )
+
+    assert [item["chat_id"] for item in store.pending_lead_notification_deliveries()] == [
+        "5476913898",
+        "-1001",
+    ]
+    store.mark_lead_notification_delivery(created["id"], "5476913898", sent=True)
+    store.mark_lead_notification_delivery(
+        created["id"], "-1001", sent=False, error="temporary"
+    )
+
+    assert store.lead_notification_delivery(created["id"], "5476913898")["state"] == "sent"
+    failed = store.lead_notification_delivery(created["id"], "-1001")
+    assert failed["state"] == "failed"
+    assert failed["attempts"] == 1
+    assert failed["next_attempt_at"] is not None
+    assert store.recent_leads_without_notifications() == []
+
+
+def test_cloud_sqlite_directory_is_private(tmp_path) -> None:
+    db_dir = tmp_path / "cloud-state"
+    store = CloudStore(db_dir / "cloud.db")
+
+    assert store.db_path.stat().st_mode & 0o777 == 0o600
+    assert db_dir.stat().st_mode & 0o777 == 0o700
+
+
 def test_feature_catalog_quote_and_draft_activation(tmp_path) -> None:
     store = CloudStore(tmp_path / "cloud.db")
     catalog = store.list_feature_catalog()
     assert catalog["price_book"]["base_fee_usd_cents"] == 2_000
-    assert any(item["code"] == "smoke_fire" for item in catalog["features"])
+    assert {item["code"] for item in catalog["features"]} == {
+        "person_count",
+        "queue_length",
+        "store_security",
+    }
     assert any(item["code"] == "retail" for item in store.list_business_templates())
 
     site = store.create_site("Cloud do'kon", "lite")
@@ -151,6 +195,8 @@ def test_feature_catalog_quote_and_draft_activation(tmp_path) -> None:
     )
     assert quote["monthly_usd_cents"] == 3_100  # $20 + 2×$3 + $5
     assert quote["gross_margin_percent"] >= 65
+    with pytest.raises(ValueError, match="1–4"):
+        store.feature_quote([{"feature_code": "person_count", "camera_count": 5}])
 
     draft = store.replace_feature_draft(site["site_id"], quote["features"])
     assert len(draft["drafts"]) == 2

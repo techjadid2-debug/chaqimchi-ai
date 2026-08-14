@@ -126,7 +126,8 @@ Hodisa 14:30:00 da bo'lsa klip [14:29:50, 14:30:20] — oxirgi 20 soniya hali
 yozilmagan. Darhol kesilsa aynan "keyin nima bo'ldi" degan qism yo'qoladi.
 Shuning uchun so'rov navbatga tushadi va `post_sec` o'tgach kesiladi.
 **Hodisaning o'zi kutmaydi** — u allaqachon yuborilgan, klip keyin qo'shiladi
-(`metadata.clip_path` + `on_clip`).
+(`EdgeEvent.clip_path` + `on_clip`); lokal yo‘l payloadga chiqmaydi, MP4
+autentifikatsiyalangan media endpointiga alohida yuklanadi.
 
 ## Ishga tushirish (`service.py`)
 
@@ -210,9 +211,10 @@ berilmasa hodisa umuman chiqmaydi: noto'g'ri vaqt yolg'on signal beradi.
 
 ### Hodisa qayerga boradi
 
-Xizmat hodisani mavjud outbox'ga (`data/outbox.db`) yozadi, uni allaqachon
-bor cloud sync yuklaydi. Ya'ni bu xizmatga internet, token yoki qayta urinish
-mantig'i kerak emas. Telegram xabarini ham cloud yuboradi
+Xizmat hodisani outbox'ga (`data/outbox.db`) yozadi va o'zining mustaqil sync
+workeri HTTPS bilan cloudga qayta urinishli yuboradi. Attendance hodisalari
+parallel servis bilan to'qnashmasligi uchun `data/attendance-outbox.db` da.
+Telegram xabarini cloud yuboradi
 (`cloud/notify.py`), shuning uchun `telegram_alert` edge tomonda ikkinchi
 Telegram mijozini talab qilmaydi — aks holda mijoz bitta hodisa uchun ikkita
 xabar olardi.

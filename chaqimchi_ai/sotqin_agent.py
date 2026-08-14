@@ -11,7 +11,9 @@ import json
 import os
 import platform
 import shutil
+import sqlite3
 import tempfile
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,11 +82,28 @@ class SotqinAgent:
             self.interval = max(30, int(raw_interval))
         except ValueError:
             self.interval = 60
+        raw_probe_interval = os.environ.get("CHAQIMCHI_CAMERA_PROBE_SEC", "300").strip()
+        try:
+            self.probe_interval = max(60, int(raw_probe_interval))
+        except ValueError:
+            self.probe_interval = 300
+        self.last_probe_at = 0.0
+        self.monotonic = time.monotonic
         self.config_path = Path(
             os.environ.get(
                 "CHAQIMCHI_SOTQIN_CONFIG_CACHE",
                 "/opt/chaqimchi/shared/data/sotqin-config.json",
             )
+        )
+        data_root = Path("/opt/chaqimchi/shared/data")
+        self.outbox_paths = (
+            Path(os.environ.get("CHAQIMCHI_RETAIL_OUTBOX", str(data_root / "outbox.db"))),
+            Path(
+                os.environ.get(
+                    "CHAQIMCHI_ATTENDANCE_OUTBOX",
+                    str(data_root / "attendance-outbox.db"),
+                )
+            ),
         )
         self.client: Optional[httpx.AsyncClient] = None
         self.task: Optional[asyncio.Task] = None
@@ -116,12 +135,14 @@ class SotqinAgent:
         if not data_root.exists():
             data_root = Path.cwd()
         disk = shutil.disk_usage(data_root)
+        queue = self._outbox_health()
         return {
             "cameras_active": self.media.health()["online"],
             "temperature_c": temperature,
             "disk_free_bytes": disk.free,
-            "outbox_pending": 0,
-            "outbox_bytes": 0,
+            "outbox_pending": queue["pending"],
+            "outbox_bytes": queue["bytes"],
+            "outbox_critical_pending": queue["critical_pending"],
             "app_version": __version__,
             "model_version": None,
             "product_name": PRODUCT_NAME,
@@ -130,6 +151,38 @@ class SotqinAgent:
             "serial_number": self.serial_number,
             "config_revision": self.remote_config_revision,
         }
+
+    def _outbox_health(self) -> Dict[str, int]:
+        totals = {"pending": 0, "bytes": 0, "critical_pending": 0}
+        for path in self.outbox_paths:
+            if not path.is_file():
+                continue
+            try:
+                with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2) as conn:
+                    columns = {
+                        str(row[1]) for row in conn.execute("PRAGMA table_info(outbox)")
+                    }
+                    size_parts = ["length(payload)"]
+                    if "snapshot_size" in columns:
+                        size_parts.append("snapshot_size")
+                    if "clip_size" in columns:
+                        size_parts.append("clip_size")
+                    critical = (
+                        "COALESCE(SUM(CASE WHEN priority>=30 THEN 1 ELSE 0 END),0)"
+                        if "priority" in columns
+                        else "0"
+                    )
+                    row = conn.execute(
+                        "SELECT COUNT(*),"
+                        f"COALESCE(SUM({'+'.join(size_parts)}),0),"
+                        f"{critical} FROM outbox"
+                    ).fetchone()
+            except (OSError, sqlite3.Error):
+                continue
+            totals["pending"] += int(row[0])
+            totals["bytes"] += int(row[1])
+            totals["critical_pending"] += int(row[2])
+        return totals
 
     def validate_config(self, payload: Dict[str, Any]) -> None:
         revision = payload.get("revision")
@@ -210,6 +263,13 @@ class SotqinAgent:
         )
         response.raise_for_status()
 
+    async def maybe_report_camera_probes(self, *, force: bool = False) -> None:
+        now = self.monotonic()
+        if not force and now - self.last_probe_at < self.probe_interval:
+            return
+        await self.report_camera_probes()
+        self.last_probe_at = now
+
     async def heartbeat_once(self) -> None:
         if not self.configured:
             raise RuntimeError("Sotqin pairing qilinmagan")
@@ -233,6 +293,7 @@ class SotqinAgent:
             and self.config_status == "applied"
             and int(heartbeat.get("config_revision", -1)) == self.remote_config_revision
         ):
+            await self.maybe_report_camera_probes()
             self.last_ok = datetime.now(timezone.utc).isoformat()
             self.last_error = None
             return
@@ -245,7 +306,9 @@ class SotqinAgent:
         revision = int(payload.get("revision", 0))
         if revision != self.remote_config_revision or self.config_status != "applied":
             await self.apply_config(payload)
-            await self.report_camera_probes()
+            await self.maybe_report_camera_probes(force=True)
+        else:
+            await self.maybe_report_camera_probes()
         self.last_ok = datetime.now(timezone.utc).isoformat()
         self.last_error = None
 
@@ -316,6 +379,7 @@ async def health() -> JSONResponse:
             "last_error": control.last_error,
             "remote_config_revision": control.remote_config_revision,
             "config_status": control.config_status,
+            "device_health": control.health_payload(),
             "ai_model": "cloud-only",
             "buffer_policy": {
                 "max_bytes": BUFFER_MAX_BYTES,

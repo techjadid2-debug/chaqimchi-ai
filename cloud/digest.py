@@ -61,8 +61,23 @@ def build_digest(
         alarms.append(f"{security['after_hours_presence']} marta ish vaqtidan tashqari harakat")
     if security["restricted_zone"]:
         alarms.append(f"{security['restricted_zone']} marta taqiqlangan zona")
+    if security.get("loitering"):
+        alarms.append(f"{security['loitering']} marta uzoq turish")
     if alarms:
         lines.append("⚠️ " + ", ".join(alarms))
+
+    attendance = report.get("attendance") or {}
+    if attendance.get("employees"):
+        summary = attendance["summary"]
+        lines.append(
+            "👥 Davomat: "
+            f"{summary['present']} keldi, {summary['absent']} kelmadi, "
+            f"{summary['late']} kechikdi"
+        )
+        if summary.get("checkout_missing"):
+            lines.append(
+                f"Chiqishi aniqlanmagan: {summary['checkout_missing']} xodim"
+            )
 
     lines.append(f"Jami hodisa: {stats['total']}")
     return "\n".join(lines)
@@ -99,6 +114,9 @@ class DailyDigestService:
                 continue
             stats = self.events.stats(site_id, day=now.date())
             report = self.events.retail_report(site_id, day=now.date())
+            report["attendance"] = self.events.attendance_report(
+                site_id, start=now.date(), end=now.date(), now=now
+            )
             text = build_digest(str(site["name"]), digest_date, stats, report)
             site_sent = 0
             for member in members:

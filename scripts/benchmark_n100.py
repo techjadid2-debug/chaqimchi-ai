@@ -6,7 +6,7 @@ Unga suyanib mijozga 8 kamera va'da qilish xavfli: qurilma ulgurmasa navbat
 o'sadi, hodisa kech keladi va tizim ishlayotgandek ko'rinib, aslida foydasiz
 bo'ladi.  Bu skript o'sha raqamni **shu qurilmada** o'lchaydi.
 
-    python scripts/benchmark_n100.py --seconds 60 --cameras 8
+    python scripts/benchmark_n100.py --seconds 60 --cameras 4 --source sample.mp4
 
 Nima o'lchanadi:
 
@@ -48,6 +48,8 @@ from typing import Any, Dict, List, Optional, Sequence
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:  # skript sifatida ishga tushirilganda
     sys.path.insert(0, str(BASE_DIR))
+
+from chaqimchi_ai.sotqin_profile import GUARANTEED_CAMERAS  # noqa: E402
 
 DEFAULT_MODEL = BASE_DIR / "models" / "retail" / "person-detection-retail-0013.xml"
 
@@ -388,7 +390,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--seconds", type=float, default=60.0, help="o'lchov davomiyligi")
     parser.add_argument("--warmup", type=float, default=5.0)
     parser.add_argument("--workers", type=int, default=1, help="parallel inferens oqimlari")
-    parser.add_argument("--cameras", type=int, default=8, help="xulosa uchun kamera soni")
+    parser.add_argument(
+        "--cameras", type=int, default=GUARANTEED_CAMERAS, help="xulosa uchun kamera soni"
+    )
     parser.add_argument("--per-camera-fps", type=float, default=2.0)
     parser.add_argument("--sample-fps", type=float, default=5.0)
     parser.add_argument("--cores", type=int, default=4)

@@ -1,5 +1,10 @@
 # Ko‘rish agenti — AI kadrni ko‘rib tushuntiradi
 
+> **ARXIV / faol MVP emas.** Canonical do‘kon xavfsizligi faqat kamera tamper,
+> after-hours person, restricted zone va loitering hodisalaridan iborat.
+> `vision.enabled: false`; bu modul taxminiy niyat yoki “shubhali xatti-harakat”
+> sifatida sotilmaydi va `config/rules.yaml` undan foydalanmaydi.
+
 Yuz tanish **“bu kim?”** degan savolga javob beradi. Ko‘rish agenti boshqa
 savolga: **“nima bo‘layapti?”**
 

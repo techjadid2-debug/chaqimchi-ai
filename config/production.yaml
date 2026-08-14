@@ -1,4 +1,4 @@
-# Legacy nom: yangi Orange Pi o'rnatishlari `config/lite.yaml` dan foydalanadi.
+# ARXIV: eski generic/Orange Pi profil. Yangi install config/sotqin.yaml ishlatadi.
 environment: production
 
 face:

@@ -21,8 +21,9 @@ Testlar hech qachon qurmasligi uchun `engine_or_none` bor.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from chaqimchi_ai.audit import AuditLog
 from chaqimchi_ai.database import FaceDatabase
@@ -80,6 +81,9 @@ class AppContainer:
         self.cloud_sync: Optional[Any] = None
         self.cloud_sync_task: Optional[Any] = None
         self.remote_config_revision: int = 0
+        #: Cloud'dan kelgan biometrikasiz xodim ro'yxati. Yuz namunalari
+        #: faqat `FaceDatabase` ichida lokal qoladi.
+        self.remote_employees: Dict[str, Dict[str, Any]] = {}
         #: Oxirgi arxiv tozalash natijasi (`chaqimchi_ai.retention.PurgeResult`).
         self.last_purge: Optional[Any] = None
         self.ws_clients: List[Any] = []
@@ -172,8 +176,14 @@ class AppContainer:
     def outbox(self) -> EventOutbox:
         if self._outbox is None:
             cfg = self.settings.cloud_sync
+            filename = (
+                "attendance-outbox.db"
+                if os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower()
+                == "attendance"
+                else "outbox.db"
+            )
             self._outbox = EventOutbox(
-                self.base_dir / "data" / "outbox.db",
+                self.base_dir / "data" / filename,
                 max_bytes=cfg.queue_max_bytes,
                 retention_days=cfg.queue_days,
             )

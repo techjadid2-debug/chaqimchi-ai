@@ -7,14 +7,19 @@ Ishga tushirish: make run-cloud  (port 8750)
 from __future__ import annotations
 
 import asyncio
+import csv
 import hashlib
 import html
+import io
+import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
 from datetime import date as date_type
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -30,11 +35,12 @@ from chaqimchi_ai.licensing.plans import (
     get_plan,
     usd_rate_uzs,
 )
-from chaqimchi_ai.settings import SceneZoneSettings
+from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
+from chaqimchi_ai.settings import SceneLineSettings, SceneZoneSettings
 from chaqimchi_ai.sotqin_profile import (
     BUFFER_MAX_BYTES,
     BUFFER_RETENTION_DAYS,
-    MAX_CAMERAS,
+    GUARANTEED_CAMERAS,
     MIN_FREE_BYTES,
     product_payload,
 )
@@ -59,6 +65,7 @@ from cloud.store import CloudStore, available_feature_codes
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "data" / "cloud" / "cloud.db"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+logger = logging.getLogger(__name__)
 
 _store: Optional[CloudStore] = None
 _payments: Optional[PaymentStore] = None
@@ -69,6 +76,7 @@ _event_store_key: Optional[str] = None
 _digest: Optional[DailyDigestService] = None
 _digest_task: Optional[Any] = None
 _maintenance_task: Optional[Any] = None
+_lead_notification_task: Optional[Any] = None
 
 
 def get_store() -> CloudStore:
@@ -188,6 +196,7 @@ class EdgeHeartbeatBody(BaseModel):
     disk_free_bytes: int = Field(default=0, ge=0)
     outbox_pending: int = Field(default=0, ge=0)
     outbox_bytes: int = Field(default=0, ge=0)
+    outbox_critical_pending: int = Field(default=0, ge=0)
     app_version: str = Field(default="unknown", max_length=64)
     model_version: Optional[str] = Field(default=None, max_length=128)
     product_name: str = Field(default="Sotqin", max_length=64)
@@ -205,14 +214,54 @@ class ConfigAckBody(BaseModel):
 
 class SiteConfigBody(BaseModel):
     camera_labels: Dict[str, str] = Field(default_factory=dict)
+    camera_roles: Dict[
+        str, Literal["entrance", "checkout", "sales_floor", "storage"]
+    ] = Field(default_factory=dict)
     occupancy_limit: int = Field(default=20, ge=1, le=10000)
     loitering_sec: int = Field(default=60, ge=5, le=86400)
+    queue_limit: int = Field(default=5, ge=1, le=1000)
+    open_from: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    open_to: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    attendance_camera_ids: List[str] = Field(default_factory=list, max_length=2)
+    attendance_camera_roles: Dict[
+        str, Literal["arrival", "departure", "both"]
+    ] = Field(default_factory=dict)
     zones: List[SceneZoneSettings] = Field(default_factory=list, max_length=128)
+    lines: List[SceneLineSettings] = Field(default_factory=list, max_length=32)
+
+
+class EmployeeCreateBody(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    external_id: Optional[str] = Field(default=None, max_length=80)
+    consent: bool
+    consent_note: Optional[str] = Field(default=None, max_length=500)
+
+
+class EmployeeUpdateBody(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=160)
+    external_id: Optional[str] = Field(default=None, max_length=80)
+    active: Optional[bool] = None
+
+
+class EmployeeScheduleItem(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    end_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    grace_minutes: int = Field(default=5, ge=0, le=180)
+    enabled: bool = True
+
+
+class EmployeeScheduleBody(BaseModel):
+    schedules: List[EmployeeScheduleItem] = Field(default_factory=list, max_length=7)
+
+
+class EnrollmentStatusBody(BaseModel):
+    status: Literal["enrolled", "failed", "removed"]
 
 
 class FeatureSelectionBody(BaseModel):
     feature_code: str = Field(min_length=2, max_length=64)
-    camera_count: int = Field(ge=1, le=MAX_CAMERAS)
+    camera_count: int = Field(ge=1, le=GUARANTEED_CAMERAS)
 
 
 class FeatureDraftBody(BaseModel):
@@ -270,6 +319,30 @@ def _owner_secret() -> str:
     return secret
 
 
+def _attendance_enabled() -> bool:
+    """Davomat tijoriy model yoki ataylab yoqilgan yopiq pilotda ishlaydi."""
+    commercial = os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    pilot = os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    return commercial or pilot or os.environ.get("CHAQIMCHI_ENV", "development") != "production"
+
+
+def require_attendance() -> None:
+    if not _attendance_enabled():
+        raise HTTPException(
+            403,
+            "Davomat sotuvga ochilmagan: faqat yozma rozilikli yopiq pilot yoki "
+            "tasdiqlangan tijoriy Face ID modeli bilan ishlaydi",
+        )
+
+
 async def _send_owner_telegram(chat_id: str, text: str) -> None:
     import httpx
 
@@ -321,8 +394,19 @@ async def _maintenance_loop() -> None:
         except asyncio.CancelledError:
             break
         except Exception:
-            pass
+            logger.exception("Cloud maintenance bajarilmadi")
         await asyncio.sleep(21_600)
+
+
+async def _lead_notification_loop() -> None:
+    while True:
+        try:
+            await _retry_lead_notifications()
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Lead Telegram retry bajarilmadi")
+        await asyncio.sleep(60)
 
 
 def get_alerts() -> AlertService:
@@ -336,7 +420,7 @@ def get_alerts() -> AlertService:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _digest, _digest_task, _maintenance_task
+    global _digest, _digest_task, _maintenance_task, _lead_notification_task
     if os.environ.get("CHAQIMCHI_ENV", "development") == "production":
         errors = []
         if not os.environ.get("DATABASE_URL", "").startswith("postgresql"):
@@ -365,6 +449,7 @@ async def lifespan(app: FastAPI):
     _digest = DailyDigestService(get_event_store(), get_store().list_sites, _send_owner_telegram)
     _digest_task = asyncio.create_task(_digest.run())
     _maintenance_task = asyncio.create_task(_maintenance_loop())
+    _lead_notification_task = asyncio.create_task(_lead_notification_loop())
     try:
         yield
     finally:
@@ -374,6 +459,9 @@ async def lifespan(app: FastAPI):
         if _maintenance_task is not None:
             _maintenance_task.cancel()
             _maintenance_task = None
+        if _lead_notification_task is not None:
+            _lead_notification_task.cancel()
+            _lead_notification_task = None
         _digest = None
         await alerts.stop()
 
@@ -563,28 +651,101 @@ async def public_pricing() -> Dict[str, Any]:
             for item in catalog["features"]
             if item["active"]
         ],
-        "max_cameras": MAX_CAMERAS,
+        # 8 kamera apparat maksimumi, lekin public sotuv va'dasi 72 soatlik
+        # soak-test tugamaguncha faqat 4 kamera.
+        "max_cameras": GUARANTEED_CAMERAS,
     }
 
 
-async def _notify_new_lead(lead: Dict[str, Any]) -> None:
+def _configured_lead_chat_ids() -> List[str]:
+    """Environmentdagi qo'shimcha lead qabul qiluvchilarini qaytaradi."""
+    raw = os.environ.get("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "")
+    return list(
+        dict.fromkeys(
+            chat_id.strip()
+            for chat_id in raw.replace(";", ",").replace("\n", ",").split(",")
+            if chat_id.strip()
+        )
+    )
+
+
+def _lead_recipient_ids() -> List[str]:
     service = get_alerts()
-    if not service.config.token:
-        return
-    text = (
-        "📥 <b>Yangi Chaqimchi Lite arizasi</b>\n"
+    recipients = []
+    if service.config.chat_id:
+        recipients.append(service.config.chat_id)
+    recipients.extend(_configured_lead_chat_ids())
+    recipients.extend(item["chat_id"] for item in get_store().telegram_lead_destinations())
+    return list(dict.fromkeys(str(item).strip() for item in recipients if str(item).strip()))
+
+
+def _lead_notification_text(lead: Dict[str, Any], *, duplicate: bool = False) -> str:
+    title = "Takroriy Chaqimchi AI do'kon arizasi" if duplicate else "Yangi Chaqimchi AI do'kon arizasi"
+    return (
+        f"📥 <b>{title}</b>\n"
         f"Ism: {html.escape(str(lead['full_name']))}\n"
         f"Telefon: {html.escape(str(lead['phone']))}\n"
         f"Tashkilot: {html.escape(str(lead.get('company') or '—'))}\n"
         f"Hudud: {html.escape(str(lead.get('city') or '—'))}\n"
         f"Kamera: {int(lead.get('cameras') or 1)} ta"
     )
-    recipients = []
-    if service.config.chat_id:
-        recipients.append(service.config.chat_id)
-    recipients.extend(item["chat_id"] for item in get_store().telegram_lead_destinations())
-    for chat_id in dict.fromkeys(recipients):
-        await service.sender.send_to(chat_id, text)
+
+
+async def _deliver_lead_notification(
+    lead: Dict[str, Any], chat_id: str, *, duplicate: bool = False
+) -> bool:
+    try:
+        sent = await get_alerts().sender.send_to(
+            chat_id, _lead_notification_text(lead, duplicate=duplicate)
+        )
+    except Exception as exc:
+        get_store().mark_lead_notification_delivery(
+            str(lead["id"]), chat_id, sent=False, error=str(exc)
+        )
+        logger.warning("Lead %s Telegram %s ga yuborilmadi: %s", lead["id"], chat_id, exc)
+        return False
+    get_store().mark_lead_notification_delivery(
+        str(lead["id"]),
+        chat_id,
+        sent=sent,
+        error=None if sent else "Telegram API xabarni qabul qilmadi",
+    )
+    if not sent:
+        logger.warning("Lead %s Telegram %s ga yuborilmadi", lead["id"], chat_id)
+    return sent
+
+
+async def _notify_new_lead(lead: Dict[str, Any], *, duplicate: bool = False) -> None:
+    service = get_alerts()
+    if not service.config.token:
+        logger.warning("Lead %s saqlandi, lekin Telegram tokeni sozlanmagan", lead["id"])
+        return
+    recipients = _lead_recipient_ids()
+    if not recipients:
+        logger.warning("Lead %s saqlandi, lekin Telegram recipient sozlanmagan", lead["id"])
+        return
+    get_store().ensure_lead_notification_deliveries(
+        str(lead["id"]), recipients, reset=duplicate
+    )
+    for chat_id in recipients:
+        delivery = get_store().lead_notification_delivery(str(lead["id"]), chat_id)
+        if delivery and delivery["state"] == "sent":
+            continue
+        await _deliver_lead_notification(lead, chat_id, duplicate=duplicate)
+
+
+async def _retry_lead_notifications() -> None:
+    if not get_alerts().config.token:
+        return
+    recipients = _lead_recipient_ids()
+    if not recipients:
+        return
+    store = get_store()
+    for lead in store.recent_leads_without_notifications(hours=24):
+        store.ensure_lead_notification_deliveries(str(lead["id"]), recipients)
+    for delivery in store.pending_lead_notification_deliveries(limit=100):
+        lead = {**delivery, "id": delivery["lead_id"]}
+        await _deliver_lead_notification(lead, str(delivery["chat_id"]))
 
 
 @app.post("/api/v1/public/leads")
@@ -624,8 +785,12 @@ async def public_create_lead(
     except ValueError as exc:
         raise HTTPException(429, str(exc)) from exc
     lead = get_store().get_lead(created["id"])
-    if lead and not created["duplicate"]:
-        background_tasks.add_task(_notify_new_lead, lead)
+    if lead:
+        background_tasks.add_task(
+            _notify_new_lead,
+            lead,
+            duplicate=bool(created["duplicate"]),
+        )
     return {
         "ok": True,
         "lead_id": created["id"],
@@ -776,8 +941,17 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
     owner_token = os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
     webhook_secret = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
     alert_status = get_alerts().status()
+    lead_recipients = _lead_recipient_ids()
+    n100_acceptance = pilot_acceptance_status()
     items = [
         {"key": "database", "label": "Mijoz va obuna bazasi", "ok": True, "required": True},
+        {
+            "key": "n100_acceptance",
+            "label": "N100 4 kamera benchmark + 72 soat soak",
+            "ok": bool(n100_acceptance["ok"]),
+            "required": True,
+            "reasons": n100_acceptance["reasons"],
+        },
         {
             "key": "public_url",
             "label": "HTTPS rasmiy domen",
@@ -789,6 +963,13 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
             "label": "Mijoz Telegram boti",
             "ok": bool(owner_token and webhook_secret),
             "required": True,
+        },
+        {
+            "key": "lead_notifications",
+            "label": "Sayt arizalari Telegram yetkazilishi",
+            "ok": bool(get_alerts().config.token and lead_recipients),
+            "required": True,
+            "recipients": len(lead_recipients),
         },
         {
             "key": "service_alerts",
@@ -848,7 +1029,7 @@ async def price_quote(persons: int = 0) -> Dict[str, Any]:
 
 
 class CamerasBody(BaseModel):
-    expected: int = Field(ge=0, le=MAX_CAMERAS)
+    expected: int = Field(ge=0, le=GUARANTEED_CAMERAS)
 
 
 class CameraConfigBody(BaseModel):
@@ -1098,14 +1279,22 @@ async def ingest_event_batch(
         window_sec=3_600,
         message="Event yuborish chegarasi oshdi — keyinroq qayta yuboriladi",
     )
-    accepted = get_event_store().ingest(
-        device["site_id"], device["device_id"], body.events
+    event_store = get_event_store()
+    existing = event_store.existing_event_ids(
+        device["site_id"], [event.event_id for event in body.events]
     )
+    accepted = event_store.ingest(device["site_id"], device["device_id"], body.events)
+    new_events = [event for event in body.events if event.event_id not in existing]
     # Butun batch uchun **bitta** yig'ma xabar. Har event uchun alohida yuborish
     # 500 talik batchda botni Telegram limitiga urib, xabarni butunlay
     # yo'qotardi — batafsili `cloud/notify.py` da.
-    message = build_alert(device["site_id"], body.events)
+    message = build_alert(device["site_id"], new_events)
     if message:
+        if any(event.has_snapshot or event.has_clip for event in new_events):
+            message += (
+                "\n🔐 Rasm va klip: "
+                f"{public_url().rstrip('/')}/owner?site={device['site_id']}"
+            )
         background_tasks.add_task(_notify_site_members, device["site_id"], message)
     return {"ok": True, "accepted": accepted}
 
@@ -1128,6 +1317,11 @@ async def upload_event_snapshot(
     event = get_event_store().event(device["site_id"], event_id)
     if not event or event["device_id"] != device["device_id"]:
         raise HTTPException(404, "Event topilmadi")
+    if event["event_type"] == "employee_seen":
+        raise HTTPException(
+            403,
+            "Davomat biometrik snapshotlari cloudga yuklanmaydi",
+        )
     if request.headers.get("content-type", "").split(";", 1)[0] != "image/jpeg":
         raise HTTPException(415, "Faqat image/jpeg qabul qilinadi")
     content = await request.body()
@@ -1136,8 +1330,39 @@ async def upload_event_snapshot(
     if len(content) > 8 * 1024 * 1024:
         raise HTTPException(413, "Snapshot 8 MB dan katta")
     key = f"{device['site_id']}/{event_id}.jpg"
-    get_snapshot_store().put(key, content)
+    get_snapshot_store().put(key, content, content_type="image/jpeg")
     get_event_store().set_snapshot(device["site_id"], event_id, key)
+    return {"ok": True, "event_id": event_id}
+
+
+@app.put("/api/v1/edge/events/{event_id}/clip")
+async def upload_event_clip(
+    event_id: str,
+    request: Request,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    ratelimit.check(
+        "event-clips",
+        device["site_id"],
+        limit=100,
+        window_sec=86_400,
+        message="Kunlik videoklip chegarasi oshdi",
+    )
+    event = get_event_store().event(device["site_id"], event_id)
+    if not event or event["device_id"] != device["device_id"]:
+        raise HTTPException(404, "Event topilmadi")
+    if event["event_type"] == "employee_seen":
+        raise HTTPException(403, "Davomat biometrik videolari cloudga yuklanmaydi")
+    if request.headers.get("content-type", "").split(";", 1)[0] != "video/mp4":
+        raise HTTPException(415, "Faqat video/mp4 qabul qilinadi")
+    content = await request.body()
+    if not content:
+        raise HTTPException(400, "Videoklip bo'sh")
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(413, "Videoklip 50 MB dan katta")
+    key = f"{device['site_id']}/{event_id}.mp4"
+    get_snapshot_store().put(key, content, content_type="video/mp4")
+    get_event_store().set_clip(device["site_id"], event_id, key)
     return {"ok": True, "event_id": event_id}
 
 
@@ -1195,7 +1420,40 @@ async def edge_site_config(
         for item in features["assignments"]
         if item["status"] == "active"
     ]
+    config["attendance"] = {
+        "enabled": _attendance_enabled(),
+        "mode": (
+            "commercial"
+            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower()
+            in {"1", "true", "yes"}
+            else "closed_pilot"
+            if _attendance_enabled()
+            else "disabled"
+        ),
+        # Ism va rozilik holati enrollment uchun kerak; biometrik rasm yoki
+        # embedding hech qachon cloud config'iga kirmaydi.
+        "employees": (
+            get_event_store().edge_employees(device["site_id"])
+            if _attendance_enabled()
+            else []
+        ),
+    }
     return config
+
+
+@app.post("/api/v1/edge/employees/{employee_id}/enrollment")
+async def edge_employee_enrollment(
+    employee_id: str,
+    body: EnrollmentStatusBody,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    require_attendance()
+    try:
+        return get_event_store().update_employee(
+            device["site_id"], employee_id, enrollment_status=body.status
+        )
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @app.post("/api/v1/sotqin/config/ack")
@@ -1224,7 +1482,7 @@ async def sotqin_config_ack(
 
 @app.post("/api/v1/sotqin/camera-probes")
 async def sotqin_camera_probes(
-    body: List[CameraProbeBody] = Body(max_length=MAX_CAMERAS),
+    body: List[CameraProbeBody] = Body(max_length=GUARANTEED_CAMERAS),
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
     """Sotqin ffprobe natijasini yuboradi; RTSP URL hech qachon qaytib kelmaydi."""
@@ -1377,6 +1635,12 @@ async def owner_health(owner: OwnerPrincipal = Depends(require_active_owner)) ->
     }
 
 
+@app.get("/api/v1/owner/cameras")
+async def owner_cameras(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    # RTSP credentiallari owner brauzeriga qaytmaydi.
+    return {"cameras": get_store().list_cameras(owner.site_id, include_source=False)}
+
+
 @app.get("/api/v1/owner/config")
 async def owner_get_config(
     owner: OwnerPrincipal = Depends(require_active_owner),
@@ -1390,14 +1654,190 @@ async def owner_update_config(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     require_owner_role(owner, "owner", "service_admin")
-    allowed_cameras = {f"camera-{number:02d}" for number in range(1, MAX_CAMERAS + 1)}
-    if any(camera_id not in allowed_cameras for camera_id in body.camera_labels):
+    allowed_cameras = {
+        f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)
+    }
+    configured_ids = (
+        set(body.camera_labels)
+        | set(body.camera_roles)
+        | set(body.attendance_camera_ids)
+        | set(body.attendance_camera_roles)
+    )
+    if any(camera_id not in allowed_cameras for camera_id in configured_ids):
         raise HTTPException(
-            422, f"Sotqin kamera ID camera-01..camera-{MAX_CAMERAS:02d} bo'lishi kerak"
+            422,
+            f"Pilot kamera ID camera-01..camera-{GUARANTEED_CAMERAS:02d} bo'lishi kerak",
         )
     if any(zone.camera_id not in allowed_cameras for zone in body.zones):
         raise HTTPException(422, "Zona noma'lum kameraga bog'langan")
+    if any(line.camera_id not in allowed_cameras for line in body.lines):
+        raise HTTPException(422, "Chiziq noma'lum kameraga bog'langan")
+    if not set(body.attendance_camera_roles).issubset(body.attendance_camera_ids):
+        raise HTTPException(422, "Davomat roli faqat tanlangan davomat kamerasiga beriladi")
+    if bool(body.open_from) != bool(body.open_to):
+        raise HTTPException(422, "Ish boshlanishi va tugashi birga berilishi kerak")
     return get_event_store().update_site_config(owner.site_id, body.model_dump())
+
+
+@app.get("/api/v1/owner/employees")
+async def owner_employees(
+    include_inactive: bool = False,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_attendance()
+    return {
+        "mode": (
+            "commercial"
+            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower()
+            in {"1", "true", "yes"}
+            else "closed_pilot"
+        ),
+        "employees": get_event_store().list_employees(
+            owner.site_id, include_inactive=include_inactive
+        ),
+    }
+
+
+@app.post("/api/v1/owner/employees")
+async def owner_create_employee(
+    body: EmployeeCreateBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_attendance()
+    require_owner_role(owner, "owner", "service_admin")
+    if not body.consent:
+        raise HTTPException(422, "Xodimning yozma roziligi qayd etilishi shart")
+    try:
+        employee = get_event_store().create_employee(
+            owner.site_id,
+            name=body.name,
+            external_id=body.external_id,
+            consent_note=body.consent_note,
+        )
+        get_event_store().touch_site_config(owner.site_id)
+        return employee
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.put("/api/v1/owner/employees/{employee_id}")
+async def owner_update_employee(
+    employee_id: str,
+    body: EmployeeUpdateBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_attendance()
+    require_owner_role(owner, "owner", "service_admin")
+    try:
+        employee = get_event_store().update_employee(
+            owner.site_id,
+            employee_id,
+            name=body.name,
+            external_id=body.external_id,
+            active=body.active,
+        )
+        get_event_store().touch_site_config(owner.site_id)
+        return employee
+    except ValueError as exc:
+        raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
+
+
+@app.put("/api/v1/owner/employees/{employee_id}/schedule")
+async def owner_replace_employee_schedule(
+    employee_id: str,
+    body: EmployeeScheduleBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_attendance()
+    require_owner_role(owner, "owner", "service_admin")
+    for item in body.schedules:
+        if item.enabled and item.end_time <= item.start_time:
+            raise HTTPException(422, "MVP jadvalida tugash vaqti boshlanishdan keyin bo'lishi kerak")
+    try:
+        schedules = get_event_store().replace_employee_schedules(
+            owner.site_id,
+            employee_id,
+            [item.model_dump() for item in body.schedules],
+        )
+        get_event_store().touch_site_config(owner.site_id)
+    except ValueError as exc:
+        raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
+    return {"employee_id": employee_id, "schedules": schedules}
+
+
+def _attendance_dates(start: Optional[str], end: Optional[str]) -> tuple[date_type, date_type]:
+    today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    try:
+        parsed_start = date_type.fromisoformat(start) if start else today
+        parsed_end = date_type.fromisoformat(end) if end else parsed_start
+    except ValueError as exc:
+        raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lishi kerak") from exc
+    if parsed_end < parsed_start or parsed_end - parsed_start > timedelta(days=366):
+        raise HTTPException(422, "Davomat oralig'i noto'g'ri yoki 367 kundan uzun")
+    return parsed_start, parsed_end
+
+
+@app.get("/api/v1/owner/attendance")
+async def owner_attendance(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_attendance()
+    first, last = _attendance_dates(start, end)
+    return get_event_store().attendance_report(owner.site_id, start=first, end=last)
+
+
+@app.get("/api/v1/owner/attendance.csv")
+async def owner_attendance_csv(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Response:
+    require_attendance()
+    first, last = _attendance_dates(start, end)
+    report = get_event_store().attendance_report(owner.site_id, start=first, end=last)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "sana",
+            "xodim_id",
+            "tashqi_id",
+            "xodim",
+            "jadval_kirish",
+            "jadval_chiqish",
+            "keldi",
+            "ketdi",
+            "holat",
+            "kechikish_daq",
+            "erta_ketish_daq",
+            "chiqish_aniqlanmadi",
+        ]
+    )
+    for row in report["rows"]:
+        writer.writerow(
+            [
+                row["date"],
+                row["employee_id"],
+                row.get("external_id") or "",
+                row["employee_name"],
+                row.get("scheduled_start") or "",
+                row.get("scheduled_end") or "",
+                row.get("first_seen") or "",
+                row.get("last_seen") or "",
+                row["status"],
+                row["late_minutes"],
+                row["early_leave_minutes"],
+                "ha" if row["checkout_missing"] else "yo'q",
+            ]
+        )
+    filename = f"davomat-{first.isoformat()}-{last.isoformat()}.csv"
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/v1/owner/features")
@@ -1482,6 +1922,21 @@ async def owner_snapshot(
     return Response(content=content, media_type="image/jpeg")
 
 
+@app.get("/api/v1/owner/events/{event_id}/clip")
+async def owner_clip(
+    event_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Response:
+    event = get_event_store().event(owner.site_id, event_id)
+    if not event or not event.get("clip_key"):
+        raise HTTPException(404, "Videoklip topilmadi")
+    try:
+        content = get_snapshot_store().get(event["clip_key"])
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Videoklip topilmadi") from exc
+    return Response(content=content, media_type="video/mp4")
+
+
 @app.post("/api/v1/telegram/webhook/{webhook_secret}")
 async def owner_telegram_webhook(webhook_secret: str, request: Request) -> Dict[str, Any]:
     expected = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
@@ -1511,6 +1966,7 @@ async def owner_telegram_webhook(webhook_secret: str, request: Request) -> Dict[
                     chat_id,
                     "✅ Chaqimchi AI lead xabarlari ushbu guruhga yoqildi.",
                 )
+                await _retry_lead_notifications()
             elif chat_id and status in {"left", "kicked"}:
                 get_store().remove_telegram_lead_destination(chat_id)
         return {"ok": True}
@@ -1538,6 +1994,7 @@ async def owner_telegram_webhook(webhook_secret: str, request: Request) -> Dict[
             telegram_id,
             "✅ Chaqimchi AI lead xabarlari ushbu guruhga yoqildi.",
         )
+        await _retry_lead_notifications()
         return {"ok": True}
     members = get_event_store().members_for_telegram(telegram_id)
     if not telegram_id or not members:

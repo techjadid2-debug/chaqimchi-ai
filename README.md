@@ -1,138 +1,87 @@
-# Chaqimchi AI
+# Chaqimchi AI — do‘kon MVP
 
-> Lokal qurilma — **Sotqin R1**: Intel N100 mini-kompyuter, NVR/IP kameralar
-> va Chaqimchi Cloud orasidagi xavfsiz ko'prik. Yengil inferens (odam
-> deteksiyasi, do'kon analitikasi) qurilmaning o'zida; qimmat AI — ko'rish
-> agenti va hisobotlar — cloudda. To'liq video arxiv NVR'da qoladi.
+Chaqimchi AI hozir **Intel N100 Sotqin R1 + NVR/IP kamera + Cloud** sifatida
+faqat do‘konlar uchun qurilmoqda. Birinchi qabul profili — bitta do‘kon va
+ko‘pi bilan **4 kamera**. Uzluksiz video NVR’da qoladi; Sotqin lokal tahlil
+qiladi, cloudga esa hodisa, ruxsat etilgan media, hisobot va health yuboriladi.
 
-Mahsulot scope'i, edge/server chegarasi, o‘rnatish va rollout:
-[docs/CHAQIMCHI_LITE.md](docs/CHAQIMCHI_LITE.md). Batafsil apparat, benchmark,
-backup va rollback: [docs/PRODUCTION_SET1.md](docs/PRODUCTION_SET1.md).
+Canonical mahsulot kontrakti va joriy holat:
+[docs/DOKON_MVP.md](docs/DOKON_MVP.md). Qurilma tafsiloti:
+[docs/SOTQIN.md](docs/SOTQIN.md).
 
-Muhim: repository’dagi InsightFace demo modeli commercial mahsulot litsenziyasi degani emas. Litsenziyalangan model manifesti tasdiqlanmaguncha production Face ID fail-closed holatda qoladi. Oddiy mijozlar uchun persistent Face ID V1 scope’ida yo‘q.
+## MVP doirasi
 
-Sotqin control plane pairing, hardware identity, heartbeat, cloud config,
-ACK/NACK va imzolangan update/rollbackni bajaradi. Do‘kon analitikasi (odam
-sanog‘i, dwell, navbat, kamera buzilishi) alohida xizmatda ishlaydi —
-`make run-retail`, batafsil
-[chaqimchi_ai/retail/README.md](chaqimchi_ai/retail/README.md). ONVIF discovery
-keyingi bosqichda.
+- odam kirishi/chiqishi, bandlik, navbat va zonada turish;
+- kamera yopilishi/burilishi, ish vaqtidan tashqari odam, taqiqlangan zona va
+  uzoq turish;
+- owner panel, Telegram alert/digest, CSV, offline outbox va event klip;
+- yozma rozilikli xodimlar uchun lokal davomat Face ID — hozircha faqat
+  **bepul yopiq pilot**.
 
-Real vaqtga yaqin yuzni tanish: SCRFD deteksiya, ArcFace 512 embedding, ko‘p kamera va veb-dashboard.
+Tizim o‘g‘rilik, jinoyat yoki niyatni taxmin qilmaydi. Oddiy mijoz Face ID’i,
+Orange Pi mahsuloti va 8 kamera va’dasi faol MVP scope’ida emas. Commercial yuz
+modelining manifesti tekshirilmaguncha pullik davomat production’da fail-closed.
 
-## Talablar
+## Ishga tushirish
 
-- Python **3.12** — rasmiy qo‘llab-quvvatlanadigan versiya (Docker va CI shu).
-  3.10–3.14 da ham ishlaydi, lekin faqat 3.12 test qilinadi.
-- macOS Apple Silicon yoki Linux (CPU; CoreML Mac da avtomatik)
-
-## Tez boshlash
+Developer muhiti Python 3.12 bilan test qilinadi:
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
+make lint
 make test
-make run-web
 ```
 
-Brauzer: [http://127.0.0.1:8742](http://127.0.0.1:8742)
-
-Birinchi ishga tushirishda `buffalo_l` modellari `~/.insightface` ga yuklanadi.
-
-## Konfiguratsiya
-
-`config/config.yaml` — kamera manbalari, `compare_threshold`, voqea `match_debounce_sec`, snapshot saqlash, arxiv muddati, Telegram va yo‘llar.
-
-Muhit o‘zgaruvchisi: `CHAQIMCHI_CONFIG=/yo'l/config.yaml`
-
-## Buyruqlar
+Asosiy xizmatlar:
 
 | Buyruq | Vazifa |
-|--------|--------|
-| `make install-dev` | Bog‘liqliklar |
-| `make test` | Pytest |
-| `make lint` / `make fmt` | Ruff |
-| `make run-web` | FastAPI server (8742) |
-| `make run-sotqin` | Sotqin R1 control agent (8742) |
-| `make run-retail` | Do‘kon analitikasi xizmati (`retail.enabled: true` kerak) |
-| `make demo` | CLI kamera |
-| `make backup` | Baza zaxira nusxasi (`OUT=/Volumes/USB`) |
-| `make restore FILE=n.zip` | Nusxadan tiklash |
-| `make calibrate` | Threshold tavsiyasi |
-| `make validate-antispoof` | Anti-spoof sifatini o‘lchash |
+|---|---|
+| `make run-cloud` | Admin, owner, billing va event cloud’i (`:8750`) |
+| `make run-sotqin` | Sotqin control agent |
+| `make run-retail` | Lokal do‘kon analitikasi |
+| `make run-web` | Lokal yopiq-pilot davomat/enrollment paneli (`:8743`) |
 
-## API (qisqa)
-
-| Endpoint | Vazifa |
-|----------|--------|
-| `GET /health`, `GET /ready` | Holat |
-| `GET /api/metrics` | Inferens statistikasi |
-| `GET /api/calibrate/threshold` | Threshold tavsiyasi |
-| `POST /api/calibrate/apply` | Tavsiyani qo‘llash (xotira) |
-| `POST /api/identify` | Rasmni bazadan qidirish |
-| `POST /api/analyze` | Yuz deteksiya (bazasiz) |
-| `POST/DELETE /api/persons/...` | Boshqaruv (API kalit) |
-| `GET /api/retention` | Arxiv muddati va oxirgi tozalash |
-| `POST /api/retention/purge` | Arxivni darhol tozalash (API kalit) |
-| `GET /api/backup` | Bazani ZIP qilib yuklab olish (API kalit) |
-| `POST /api/backup/restore` | Nusxadan tiklash (API kalit) |
-| `GET /api/vision/status` | Ko‘rish agenti: sozlama va sarf |
-| `POST /api/vision/analyze` | Kadrni AI ga tahlil qildirish (API kalit) |
-
-## Struktura
-
-- `chaqimchi_ai/` — yadro (face_engine, database, camera_manager)
-- `webapp/` — FastAPI + dashboard
-- `docs/` — arxitektura va roadmap (`REJA.md`)
-
-## Docker
+Production release qurish va N100 ga o‘rnatish:
 
 ```bash
-docker build -t chaqimchi-ai .
-docker run -p 8742:8742 -v "$(pwd)/config:/app/config" chaqimchi-ai
+./scripts/build_sotqin_release.sh
+# release arxivini ochib, uning ichida:
+sudo ./scripts/install_sotqin.sh
 ```
 
-## Xizmat (o‘rnatish + obuna)
+Installer control, retail va ixtiyoriy attendance xizmatlarini, verifikatsiya
+qilingan OpenVINO retail modelini va lokal secretlarni o‘rnatadi. Kameralar
+hozir admin panelda RTSP manzilini qo‘lda kiritish orqali ulanadi; ONVIF
+discovery hali yo‘q.
 
-- Tariflar: [docs/BIZNES_MODEL.md](docs/BIZNES_MODEL.md)
-- O‘rnatuvchi: [docs/INSTALLER.md](docs/INSTALLER.md)
-- Cloud: `make run-cloud` + `CHAQIMCHI_CLOUD_ADMIN_KEY`
-- Admin panel: [http://127.0.0.1:8750/admin](http://127.0.0.1:8750/admin) — mijoz ochish, obunani uzaytirish/to‘xtatish, pairing kod, hisob-fakturalar
-- Rasmiy sayt: [http://127.0.0.1:8750/](http://127.0.0.1:8750/) — Lite mahsuloti va pilot ariza
-- Sotqinni ulash: [http://127.0.0.1:8750/connect](http://127.0.0.1:8750/connect)
-- Lite mijoz ochish (CLI): `make provision NAME="Do'kon nomi" PLAN=lite MONTHS=1`
-- To‘lov (Payme/Click): [docs/TOLOV.md](docs/TOLOV.md) — hisob-faktura ochiladi,
-  to‘lov tushgach obuna avtomatik uzayadi
+## Sotuv darvozasi
 
-## Xavfsizlik va kalibrlash
+Public funksiyani ochish uchun faqat environment flag yetmaydi. Haqiqiy do‘kon
+videosida N100 benchmark va 4 kamera bilan 72 soat soak hisobotidan qabul fayli
+yaratilishi kerak:
 
-- **API kalit**: `CHAQIMCHI_API_KEY` — qo‘shish/o‘chirish.
-- **JWT**: `POST /api/auth/token` → `Authorization: Bearer <token>`.
-- **Embedding shifrlash**: `storage.encrypt_embeddings` + `CHAQIMCHI_EMBEDDING_KEY`.
-- **FAISS**: `pip install -r requirements-optional.txt`, `storage.vector_backend: faiss`.
-- **Prometheus**: `GET /metrics`.
-- **Threshold**: [CALIBRATION.md](docs/CALIBRATION.md).
-- **Zaxira nusxa**: `make backup` — butun yuz bazasi bitta ZIP faylga.
-  Qurilma almashganda `make restore FILE=n.zip`. Nusxa biometrik ma’lumot:
-  himoyalangan joyda saqlang. Batafsil: [INSTALLER.md](docs/INSTALLER.md).
-- **Arxiv muddati**: `events.retention_days` — muddati o‘tgan voqealar va yuz
-  rasmlari avtomatik o‘chadi (6 soatda bir marta). `0` bo‘lsa tarif belgilaydi:
-  Starter 30, Business 90, Enterprise 365 kun. Diskni to‘lib ketishdan saqlaydi
-  va biometrik kadr kerakdan ortiq saqlanmaydi.
-- **Anti-spoofing**: `antispoof.enabled` — ekran/bosma suratni filtrlash.
-  Imkoniyat va chegaralari: [ANTISPOOF.md](docs/ANTISPOOF.md). Kirish nazorati
-  uchun faqat yuzga tayanmang.
+```bash
+python scripts/benchmark_n100.py --seconds 60 --cameras 4 \
+  --source pilot-store.mp4 --json benchmark.json
+sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/soak_n100.py \
+  --hours 72 --output soak-72h.json
+python scripts/accept_n100_pilot.py --benchmark benchmark.json \
+  --soak soak-72h.json --approved-by "Qabul komissiyasi" \
+  --output acceptance/n100-r1.json
+```
 
-## Hujjatlar
+So‘ng production’da `CHAQIMCHI_N100_ACCEPTANCE_FILE` va
+`CHAQIMCHI_AVAILABLE_FEATURES` sozlanadi. Qabul mezonlari va qolgan ishlar
+[docs/DOKON_MVP.md](docs/DOKON_MVP.md) da.
 
-- [Umumiy reja](docs/MASTER_PLAN.md)
-- [Chaqimchi Lite: mahsulot, ulanish va rollout](docs/CHAQIMCHI_LITE.md)
-- [Sotqin R1: apparat va cloud kontrakti](docs/SOTQIN.md)
-- [Do‘kon analitikasi (Retail AI)](chaqimchi_ai/retail/README.md) — inferens
-  byudjeti, zanjir va qurilma sig‘imi
-- [Ko‘rish agenti (AI)](docs/KORISH_AGENTI.md) — narx jadvali bilan
-- [To‘lov integratsiyasi](docs/TOLOV.md)
-- [Arxitektura](docs/ARXITEKTURA.md)
-- [Rivojlanish rejasi](docs/REJA.md)
-- [Threshold kalibrlash](docs/CALIBRATION.md)
+## Asosiy hujjatlar
+
+- [Do‘kon MVP kontrakti va gap-list](docs/DOKON_MVP.md)
+- [Sotqin R1](docs/SOTQIN.md)
+- [Retail pipeline](chaqimchi_ai/retail/README.md)
+- [Installer](docs/INSTALLER.md)
+- [Production runbook](docs/PRODUCTION_RUNBOOK.md)
+- [To‘lov](docs/TOLOV.md)
+- [Eski hujjatlar arxivi](docs/archive/README.md)

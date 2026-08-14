@@ -72,6 +72,12 @@ def test_event_ingestion_is_idempotent_and_snapshot_is_private(production_client
         content=b"jpeg-data",
     )
     assert upload.status_code == 200
+    clip_upload = client.put(
+        "/api/v1/edge/events/evt-1/clip",
+        headers={**headers, "Content-Type": "video/mp4"},
+        content=b"mp4-data",
+    )
+    assert clip_upload.status_code == 200
 
     admin_headers = {"X-Cloud-Admin-Key": "test-admin"}
     member = client.post(
@@ -81,6 +87,49 @@ def test_event_ingestion_is_idempotent_and_snapshot_is_private(production_client
     )
     assert member.status_code == 200
     assert client.get("/api/v1/owner/events/evt-1/snapshot").status_code == 401
+    assert client.get("/api/v1/owner/events/evt-1/clip").status_code == 401
+
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="102")
+    private_snapshot = client.get(
+        "/api/v1/owner/events/evt-1/snapshot", headers=owner_headers
+    )
+    private_clip = client.get(
+        "/api/v1/owner/events/evt-1/clip", headers=owner_headers
+    )
+    assert private_snapshot.content == b"jpeg-data"
+    assert private_snapshot.headers["content-type"] == "image/jpeg"
+    assert private_clip.content == b"mp4-data"
+    assert private_clip.headers["content-type"] == "video/mp4"
+
+
+def test_late_clip_retry_does_not_duplicate_the_telegram_alert(production_client) -> None:
+    client, messages = production_client
+    site, _device, headers = _provision(client)
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": "404", "role": "owner"},
+    )
+    event = {
+        "event_id": "evt-late-clip",
+        "event_type": "camera_tampered",
+        "severity": "critical",
+        "camera_id": "camera-01",
+        "has_snapshot": True,
+    }
+
+    first = client.post(
+        "/api/v1/edge/events/batch", headers=headers, json={"events": [event]}
+    )
+    event["has_clip"] = True
+    second = client.post(
+        "/api/v1/edge/events/batch", headers=headers, json={"events": [event]}
+    )
+
+    assert first.json()["accepted"] == ["evt-late-clip"]
+    assert second.json()["accepted"] == ["evt-late-clip"]
+    assert len(messages) == 1
+    assert "Rasm va klip" in messages[0][1]
 
 
 def test_edge_health_heartbeat_is_visible_to_owner(production_client) -> None:

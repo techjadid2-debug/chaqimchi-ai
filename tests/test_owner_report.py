@@ -201,6 +201,7 @@ def test_security_events_are_summarised(tmp_path: Path) -> None:
         "camera_tampered": 1,
         "after_hours_presence": 1,
         "restricted_zone": 1,
+        "loitering": 0,
     }
 
 

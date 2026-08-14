@@ -6,15 +6,16 @@
   "input": "1x3x320x544 BGR",
   "output": "1x1xNx7 SSD [image_id, label, conf, x_min, y_min, x_max, y_max]",
   "gflops": 2.3,
-  "note": "sha256 bo'sh — birinchi yuklashdan keyin `--print-checksums` chiqargan qiymatni shu yerga yozing va commit qiling. Bo'sh sha256 bilan skript modelni o'rnatmaydi.",
+  "verified_at": "2026-08-13",
+  "note": "Checksumlar OpenVINO Open Model Zoo rasmiy HTTPS fayllaridan hisoblangan. Installer mos kelmagan faylni qabul qilmaydi.",
   "files": {
     "person-detection-retail-0013.xml": {
       "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-detection-retail-0013/FP16/person-detection-retail-0013.xml",
-      "sha256": ""
+      "sha256": "19556695d2b18255fe5593d388ae69ba7f9a2f5c3f986bde8356741d0db26e89"
     },
     "person-detection-retail-0013.bin": {
       "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-detection-retail-0013/FP16/person-detection-retail-0013.bin",
-      "sha256": ""
+      "sha256": "cf4a1f2f252d229966001e15454c5ba02a7ace047b181b235e3a2c4aebcf3ba7"
     }
   }
 }

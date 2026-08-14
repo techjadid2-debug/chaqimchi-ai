@@ -64,15 +64,17 @@ def test_pricing_never_leaks_cost_or_margin(client) -> None:
     assert "gross_margin_percent" not in serialized
 
 
-def test_unavailable_features_are_marked_not_hidden(client, monkeypatch) -> None:
-    # Inferens worker yozilmagan — hech narsa "tayyor" deb ko'rsatilmaydi.
+def test_public_catalog_contains_only_store_mvp_and_keeps_acceptance_gate(client, monkeypatch) -> None:
+    # N100 qabul testi tugamaguncha hech narsa "tayyor" deb sotilmaydi.
     assert all(not item["available"] for item in client.get("/api/v1/public/pricing").json()["features"])
 
     monkeypatch.setenv("CHAQIMCHI_AVAILABLE_FEATURES", "person_count,queue_length")
     features = {item["code"]: item for item in client.get("/api/v1/public/pricing").json()["features"]}
     assert features["person_count"]["available"] is True
     assert features["queue_length"]["available"] is True
-    assert features["watchlist"]["available"] is False
+    assert set(features) == {"person_count", "queue_length", "store_security"}
+    assert features["store_security"]["available"] is False
+    assert client.get("/api/v1/public/pricing").json()["max_cameras"] == 4
 
 
 def test_lead_form_is_rate_limited(client) -> None:

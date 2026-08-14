@@ -6,10 +6,10 @@ import os
 from dataclasses import dataclass
 from typing import Dict, Literal
 
-from chaqimchi_ai.sotqin_profile import MAX_CAMERAS
+from chaqimchi_ai.sotqin_profile import GUARANTEED_CAMERAS, MAX_CAMERAS
 
 PlanTier = Literal[
-    # Dastlabki tijoriy mahsulot — Orange Pi asosidagi Chaqimchi Lite.
+    # Dastlabki tijoriy mahsulot — Intel N100 asosidagi 4 kamerali do'kon MVP.
     "lite",
     # Kamera bo'yicha — do'kon, ombor, ofis xavfsizligi
     "starter",
@@ -97,15 +97,15 @@ class PlanLimits:
 
 PLANS: Dict[PlanTier, PlanLimits] = {
     "lite": PlanLimits(
-        # Sotqin N100 8/128 R1: 4 kamera SLA, 8 kamera qabul testidan keyingi maksimum.
-        max_cameras=MAX_CAMERAS,
+        # 8 kamera apparat maksimumi, ammo sotiladigan SLA hozir 4 kamera.
+        max_cameras=GUARANTEED_CAMERAS,
         max_persons=200,
         retention_days=30,
         telegram_allowed=True,
         # Faqat fallback/display qiymat; amaldagi invoice `monthly_price()`
         # orqali CHAQIMCHI_USD_RATE_UZS bilan hisoblanadi.
         monthly_price_uzs=LITE_MONTHLY_PRICE_USD_CENTS * DEFAULT_USD_RATE_UZS // 100,
-        # Orange Pi, NVR/kameralar va montaj alohida smeta qilinadi.
+        # Sotqin, NVR/kameralar va montaj alohida smeta qilinadi.
         install_price_uzs=0,
         monthly_price_usd_cents=LITE_MONTHLY_PRICE_USD_CENTS,
     ),

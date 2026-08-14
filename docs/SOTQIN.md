@@ -1,8 +1,8 @@
 # Sotqin R1 — lokal qurilma va edge AI
 
-**Sotqin** Chaqimchi AI'ning barcha bizneslar uchun yagona lokal qurilmasi.
-Mijoz NVR va kameralar bilan birga Sotqinni buyurtma qiladi; dastur oldindan
-o'rnatiladi va pairing orqali Chaqimchi Cloud'ga bog'lanadi.
+**Sotqin** hozirgi do‘kon MVP’ning yagona lokal qurilmasi. Mijoz NVR va
+kameralar bilan birga Sotqinni buyurtma qiladi; dastur oldindan o‘rnatiladi va
+pairing orqali Chaqimchi Cloud’ga bog‘lanadi.
 
 ## R1 apparat profili
 
@@ -11,7 +11,9 @@ o'rnatiladi va pairing orqali Chaqimchi Cloud'ga bog'lanadi.
 - kamera/NVR va internet uchun 2 ta Ethernet;
 - TPM 2.0, aktiv sovutish, BIOS auto-power-on va UPS;
 - Ubuntu Server 24.04 LTS;
-- 4 kamera kafolatlangan; 8 kamera 72 soatlik qabul testidan keyin.
+- birinchi pilot profili 4 kamera; real benchmark va 72 soat soak o‘tmaguncha
+  public sotuvga ham ochilmaydi;
+- 8 kamera R1 MVP va’dasi emas.
 
 Ichki profil kodi: `SOTQIN-N100-8-128-R1`. Mijoz uchun nom doim **Sotqin**.
 
@@ -25,21 +27,27 @@ Ichki profil kodi: `SOTQIN-N100-8-128-R1`. Mijoz uchun nom doim **Sotqin**.
 
 **Qurilmada** (`chaqimchi-retail.service`):
 
-- ONVIF/RTSP, hardware decode (QSV), harakat va sifat filtri;
+- qo‘lda kiritilgan RTSP/NVR substream, software decode, harakat va sifat filtri;
 - **odam deteksiyasi** — `person-detection-retail-0013` (OpenVINO, iGPU,
   2.3 GFLOPs, Apache 2.0). Bu N100 ko'taradigan darajadagi yuk;
 - tracking, kirish/chiqish sanog'i, dwell, navbat uzunligi;
 - kamera yopilgani/burilgani, ish vaqtidan tashqari harakat;
+- taqiqlangan zonaga kirish va uzoq turish;
 - qoida dvigateli (severity, cooldown, harakatlar) — qoidalar cloud'dan
   config sifatida keladi;
 - hodisa klipi (`-c copy`, dekodlashsiz) va 3 kun/40 GB event buffer.
 
+Ixtiyoriy yopiq attendance pilotida (`chaqimchi-attendance.service`) yozma
+rozilikli xodim enrollmenti va yuz matching lokal ishlaydi. Foto/embedding
+cloudga chiqmaydi; cloud faqat profil, jadval va first/last seen oladi.
+
 **Cloudda**:
 
-- ko'rish agenti (Claude) — "nima bo'layapti" degan savolga javob. Bu pul
-  sarflaydi, shuning uchun qurilmada emas va tormozlar bilan ishlaydi;
 - hodisa arxivi, admin panel, Telegram xabarlari, obuna va to'lov;
 - ko'p obyekt bo'yicha hisobotlar.
+
+Taxminiy AI kadr talqini canonical MVP'da yo'q: xavfsizlik faqat o'lchanadigan
+tamper, after-hours person, restricted zone va loitering hodisalariga tayanadi.
 
 **NVR'da**: to'liq video arxiv. Sotqin uni takrorlamaydi.
 
@@ -72,6 +80,9 @@ sudo /opt/chaqimchi/venv/bin/python \
   /opt/chaqimchi/current/scripts/pair_sotqin.py \
   --cloud https://YOUR_DOMAIN --code ABC123
 sudo systemctl start chaqimchi-sotqin
+sudo systemctl start chaqimchi-retail
+# faqat tasdiqlangan yopiq attendance pilotida:
+sudo systemctl start chaqimchi-attendance
 ```
 
 Pairingdan so'ng `/etc/chaqimchi/sotqin.env` ichida device token, Intel modeli,
@@ -97,27 +108,27 @@ Qurilmadagi AI alohida jarayonda ishlaydi:
 systemctl start chaqimchi-retail     # deploy/chaqimchi-retail.service
 ```
 
-Alohida bo'lgani ataylab: detektor yoki ffmpeg yiqilsa control plane,
-heartbeat va yuz tanish ishlashda davom etadi. Sozlama `CHAQIMCHI_CONFIG`
+Alohida bo'lgani ataylab: detektor yoki ffmpeg yiqilsa control plane va
+heartbeat ishlashda davom etadi. Sozlama `CHAQIMCHI_CONFIG`
 ko'rsatgan faylning `scene:` va `retail:` bo'limlarida.
 
 ## Qolgan bosqichlar
 
 | # | Vazifa | Holat |
 |---|--------|-------|
-| 1 | ONVIF discovery va NVR kanal ro'yxati | [ ] |
+| 1 | ONVIF discovery va NVR kanal ro'yxati | [ ] MVP’dan tashqari; hozir qo‘lda RTSP |
 | 2 | Frame/clip worker, motion/sifat filtri, sampling | [x] `retail/runner.py` |
-| 3 | Hodisa buferi (3 kun / 40 GB) va cloud upload | [x] ring buffer + outbox |
-| 4 | 4/8 kamera, internet/elektr uzilishi, rollback soak-testlari | [ ] |
+| 3 | Hodisa buferi (3 kun / 40 GB), snapshot/klip cloud upload | [x] |
+| 4 | Xodim jadvali, lokal enrollment va davomat CSV | [x] yopiq pilot |
+| 5 | 4 kamera, internet/elektr uzilishi, rollback soak-testlari | [ ] |
 
 Kamera ro'yxati **bitta manbadan**: admin panelda qo'shilgan kamera config
 poll orqali `sotqin-config.json` ga tushadi, do'kon analitikasi xizmati esa
-o'sha keshdan o'qiydi. Lokal konfig faqat prioritet va klip manbasini beradi.
+o'sha keshdan o'qiydi. Lokal konfig prioritet va ixtiyoriy alohida main-stream
+klip manbasini beradi; u bo'lmasa cloud'dagi substream klip uchun ham ishlatiladi.
 Ro'yxat o'zgarsa xizmat qayta ishga tushadi va yangi kamera darhol ishlaydi.
 
-Bitta ma'lum bo'shliq:
-
-- **Dekodlash hozircha dasturiy.** Profilda `hardware_decode: qsv` yozilgan,
-  lekin retail xizmati OpenCV/FFmpeg orqali oqim ochadi va QSV so'ramaydi.
-  Substream (640×360) uchun bu odatda yetarli — narxi
-  `scripts/benchmark_n100.py` da o'lchanadi.
+Ma’lum bo‘shliq: dekodlash hozir dasturiy (`hardware_decode: software`). QSV
+ulangan deb ko‘rsatilmaydi. Substream (640×360) sig‘imi
+`scripts/benchmark_n100.py` bilan o‘lchanadi va `scripts/accept_n100_pilot.py`
+72 soat soak bilan birga sotuv darvozasini tekshiradi.

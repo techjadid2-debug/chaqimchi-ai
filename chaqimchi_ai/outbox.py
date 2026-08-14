@@ -25,6 +25,8 @@ class EventOutbox:
                     payload TEXT NOT NULL,
                     snapshot_path TEXT,
                     snapshot_size INTEGER NOT NULL DEFAULT 0,
+                    clip_path TEXT,
+                    clip_size INTEGER NOT NULL DEFAULT 0,
                     priority INTEGER NOT NULL DEFAULT 10,
                     created_at TEXT NOT NULL,
                     attempts INTEGER NOT NULL DEFAULT 0,
@@ -38,6 +40,12 @@ class EventOutbox:
             }
             if "priority" not in columns:
                 conn.execute("ALTER TABLE outbox ADD COLUMN priority INTEGER NOT NULL DEFAULT 10")
+            if "clip_path" not in columns:
+                conn.execute("ALTER TABLE outbox ADD COLUMN clip_path TEXT")
+            if "clip_size" not in columns:
+                conn.execute(
+                    "ALTER TABLE outbox ADD COLUMN clip_size INTEGER NOT NULL DEFAULT 0"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30)
@@ -51,19 +59,34 @@ class EventOutbox:
             path = Path(event.snapshot_path)
             if path.is_file():
                 snapshot_size = path.stat().st_size
+        clip_size = 0
+        if event.clip_path:
+            path = Path(event.clip_path)
+            if path.is_file():
+                clip_size = path.stat().st_size
         payload = json.dumps(event.cloud_payload(), ensure_ascii=False, separators=(",", ":"))
         # Internet uzilganda 8/128 disk avval analytics batch emas, xavfsizlik
         # ogohlantirishlarini saqlashi kerak. Critical > warning > normal.
         priority = {"critical": 30, "warning": 20}.get(event.severity, 10)
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO outbox "
-                "(event_id,payload,snapshot_path,snapshot_size,priority,created_at) VALUES (?,?,?,?,?,?)",
+                "INSERT INTO outbox "
+                "(event_id,payload,snapshot_path,snapshot_size,clip_path,clip_size,"
+                "priority,created_at) VALUES (?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(event_id) DO UPDATE SET "
+                "payload=excluded.payload,"
+                "snapshot_path=COALESCE(excluded.snapshot_path,outbox.snapshot_path),"
+                "snapshot_size=MAX(excluded.snapshot_size,outbox.snapshot_size),"
+                "clip_path=COALESCE(excluded.clip_path,outbox.clip_path),"
+                "clip_size=MAX(excluded.clip_size,outbox.clip_size),"
+                "priority=MAX(excluded.priority,outbox.priority)",
                 (
                     event.event_id,
                     payload,
                     event.snapshot_path,
                     snapshot_size,
+                    event.clip_path,
+                    clip_size,
                     priority,
                     datetime.now(timezone.utc).isoformat(),
                 ),
@@ -103,7 +126,8 @@ class EventOutbox:
     def stats(self) -> Dict[str, int]:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) AS count,COALESCE(SUM(snapshot_size+length(payload)),0) AS bytes "
+                "SELECT COUNT(*) AS count,"
+                "COALESCE(SUM(snapshot_size+clip_size+length(payload)),0) AS bytes "
                 "FROM outbox"
             ).fetchone()
         return {"pending": int(row["count"]), "bytes": int(row["bytes"])}
@@ -116,12 +140,14 @@ class EventOutbox:
             removed += int(cursor.rowcount)
             total = int(
                 conn.execute(
-                    "SELECT COALESCE(SUM(snapshot_size+length(payload)),0) FROM outbox"
+                    "SELECT COALESCE(SUM(snapshot_size+clip_size+length(payload)),0) "
+                    "FROM outbox"
                 ).fetchone()[0]
             )
             if total > self.max_bytes:
                 rows = conn.execute(
-                    "SELECT event_id,snapshot_size+length(payload) AS size FROM outbox "
+                    "SELECT event_id,snapshot_size+clip_size+length(payload) AS size "
+                    "FROM outbox "
                     "ORDER BY priority ASC,created_at,event_id"
                 ).fetchall()
                 for row in rows:
@@ -136,5 +162,12 @@ class EventOutbox:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT snapshot_path FROM outbox WHERE event_id=?", (event_id,)
+            ).fetchone()
+        return str(row[0]) if row and row[0] else None
+
+    def clip_path(self, event_id: str) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT clip_path FROM outbox WHERE event_id=?", (event_id,)
             ).fetchone()
         return str(row[0]) if row and row[0] else None

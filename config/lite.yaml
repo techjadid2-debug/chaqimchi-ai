@@ -1,4 +1,5 @@
-# Chaqimchi Lite — Orange Pi 5 Plus production profili.
+# ARXIV: Chaqimchi Lite / Orange Pi profili. Yangi install uchun ishlatmang;
+# canonical profil config/sotqin.yaml.
 # 8 kamera faqat `make benchmark-lite` qabul testidan o'tgan qurilmada yoqiladi.
 environment: production
 

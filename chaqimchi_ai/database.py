@@ -94,13 +94,21 @@ class FaceDatabase:
         name: str,
         embedding: np.ndarray,
         extra_info: Optional[Dict] = None,
+        *,
+        face_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         vec = embedding.flatten().astype(np.float32)
+        if vec.size != 512:
+            raise ValueError("Embedding 512 o'lchamli bo'lishi kerak")
         norm = np.linalg.norm(vec)
         if norm > 0:
             vec = vec / norm
 
-        face_id = str(uuid.uuid4())[:8]
+        face_id = str(face_id or str(uuid.uuid4())[:8]).strip()
+        if not face_id:
+            raise ValueError("Shaxs ID bo'sh bo'lishi mumkin emas")
+        if any(str(item.get("id")) == face_id for item in self.metadata):
+            raise ValueError(f"Shaxs ID allaqachon mavjud: {face_id}")
         entry = {
             "id": face_id,
             "name": name,
@@ -114,6 +122,47 @@ class FaceDatabase:
         else:
             self.embeddings = np.vstack([self.embeddings, vec.reshape(1, 512)])
 
+        self.save()
+        return entry
+
+    def replace_face(
+        self,
+        face_id: str,
+        name: str,
+        embedding: np.ndarray,
+        extra_info: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """Stable cloud ID'li yuzni bitta save bilan qo'shadi yoki yangilaydi."""
+        clean_id = str(face_id).strip()
+        if not clean_id:
+            raise ValueError("Shaxs ID bo'sh bo'lishi mumkin emas")
+        vec = embedding.flatten().astype(np.float32)
+        if vec.size != 512:
+            raise ValueError("Embedding 512 o'lchamli bo'lishi kerak")
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec = vec / norm
+        entry = {
+            "id": clean_id,
+            "name": name,
+            "added_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "extra": extra_info or {},
+        }
+        index = next(
+            (i for i, item in enumerate(self.metadata) if str(item.get("id")) == clean_id),
+            None,
+        )
+        if index is None:
+            self.metadata.append(entry)
+            if self.embeddings is None or self.embeddings.size == 0:
+                self.embeddings = vec.reshape(1, 512)
+            else:
+                self.embeddings = np.vstack([self.embeddings, vec.reshape(1, 512)])
+        else:
+            self.metadata[index] = entry
+            if self.embeddings is None:  # pragma: no cover - load invariant
+                raise RuntimeError("Embedding bazasi yuklanmagan")
+            self.embeddings[index] = vec
         self.save()
         return entry
 

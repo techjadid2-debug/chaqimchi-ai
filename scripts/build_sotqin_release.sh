@@ -10,8 +10,22 @@ stage="$(mktemp -d "${TMPDIR:-/tmp}/chaqimchi-release.XXXXXX")"
 cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
 
-mkdir -p "$output_dir" "$stage/$name"
-cp -R "$root/chaqimchi_ai" "$root/config" "$root/deploy" "$root/scripts" "$stage/$name/"
+mkdir -p "$output_dir" "$stage/$name" "$stage/$name/config" "$stage/$name/models" "$stage/$name/deploy" "$stage/$name/scripts"
+cp -R "$root/chaqimchi_ai" "$root/webapp" "$stage/$name/"
+cp "$root/config/sotqin.yaml" "$root/config/rules.yaml" "$stage/$name/config/"
+cp "$root/models/retail_manifest.json" "$stage/$name/models/"
+cp \
+  "$root/deploy/sotqin.env.example" \
+  "$root/deploy/chaqimchi-sotqin.service" \
+  "$root/deploy/chaqimchi-retail.service" \
+  "$root/deploy/chaqimchi-attendance.service" \
+  "$stage/$name/deploy/"
+for script in \
+  accept_n100_pilot.py apply_signed_update.py backup_db.py benchmark_n100.py \
+  calibrate_threshold.py fetch_retail_model.py install_sotqin.sh pair_edge.py \
+  pair_sotqin.py soak_n100.py verify_model_bundle.py; do
+  cp "$root/scripts/$script" "$stage/$name/scripts/"
+done
 cp "$root/requirements-sotqin.txt" "$stage/$name/"
 tar -C "$stage" -czf "$output_dir/${name}.tar.gz" "$name"
 

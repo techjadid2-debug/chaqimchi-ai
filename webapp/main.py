@@ -34,9 +34,9 @@ from chaqimchi_ai.licensing.enforce import filter_cameras
 from chaqimchi_ai.retention import retention_loop
 from chaqimchi_ai.runtime.container import AppContainer
 from chaqimchi_ai.scene_analytics import build_scene_analyzer
-from chaqimchi_ai.settings import SceneSettings
+from chaqimchi_ai.settings import CameraItem, SceneSettings
 from webapp.errors import register_error_handlers
-from webapp.routers import auth, backup, calibrate, events, persons, system, vision
+from webapp.routers import attendance, auth, backup, calibrate, events, persons, system, vision
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +48,39 @@ def _apply_remote_scene_config(
     container: AppContainer, payload: Dict, *, persist: bool = True
 ) -> None:
     revision = int(payload.get("revision", 0))
-    if revision <= container.remote_config_revision:
+    if revision < container.remote_config_revision:
         return
     remote = payload.get("config") or {}
     current = container.settings.scene.model_dump()
-    for key in ("occupancy_limit", "loitering_sec", "zones"):
+    for key in ("occupancy_limit", "loitering_sec", "queue_limit", "zones", "lines"):
         if key in remote:
             current[key] = remote[key]
     scene = SceneSettings.model_validate(current)
     container.settings.scene = scene
     container.remote_config_revision = revision
+    if "attendance" in payload:
+        attendance = payload.get("attendance") or {}
+        employees = attendance.get("employees") or []
+        container.remote_employees = {
+            str(item["id"]): dict(item)
+            for item in employees
+            if isinstance(item, dict) and item.get("id") and item.get("consent_recorded_at")
+        }
+        _prune_inactive_employee_faces(container)
+
+    desired_cameras = list(container.settings.cameras)
+    cameras_changed = "cameras" in payload
+    if cameras_changed:
+        attendance_ids = set(remote.get("attendance_camera_ids") or [])
+        desired_cameras = [
+            CameraItem(id=str(item["camera_id"]), source=str(item["source"]), enabled=True)
+            for item in (payload.get("cameras") or [])
+            if isinstance(item, dict)
+            and item.get("enabled", True)
+            and item.get("camera_id") in attendance_ids
+            and item.get("source")
+        ]
+        container.settings.cameras = desired_cameras
     if container.camera_manager:
         for camera_id, analyzer in container.camera_manager.scene_analyzers.items():
             analyzer.settings = scene
@@ -66,19 +89,77 @@ def _apply_remote_scene_config(
         cache = container.base_dir / "data" / "remote_scene_config.json"
         cache.parent.mkdir(parents=True, exist_ok=True)
         temporary = cache.with_suffix(".tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        # RTSP credentials control agentning 0600 keshida turadi. Bu ikkinchi
+        # keshga faqat PII-minimal scene/employee metadata yoziladi.
+        safe_payload = dict(payload)
+        safe_payload.pop("cameras", None)
+        temporary.write_text(json.dumps(safe_payload, ensure_ascii=False), encoding="utf-8")
+        os.chmod(temporary, 0o600)
         os.replace(temporary, cache)
+
+    if cameras_changed and container.camera_manager is not None:
+        asyncio.create_task(_reconcile_attendance_cameras(container, desired_cameras))
 
 
 def _load_remote_scene_cache(container: AppContainer) -> None:
-    cache = container.base_dir / "data" / "remote_scene_config.json"
-    if not cache.is_file():
+    caches = (
+        Path(
+            os.environ.get(
+                "CHAQIMCHI_SOTQIN_CONFIG_CACHE",
+                "/opt/chaqimchi/shared/data/sotqin-config.json",
+            )
+        ),
+        container.base_dir / "data" / "remote_scene_config.json",
+    )
+    for cache in caches:
+        if not cache.is_file():
+            continue
+        try:
+            payload = json.loads(cache.read_text(encoding="utf-8"))
+            _apply_remote_scene_config(container, payload, persist=False)
+        except (OSError, ValueError, TypeError):
+            logger.warning("Remote config keshi yaroqsiz: %s", cache, exc_info=True)
+
+
+async def _reconcile_attendance_cameras(
+    container: AppContainer, desired: list[CameraItem]
+) -> None:
+    manager = container.camera_manager
+    if manager is None:
         return
-    try:
-        payload = json.loads(cache.read_text(encoding="utf-8"))
-        _apply_remote_scene_config(container, payload, persist=False)
-    except (OSError, ValueError, TypeError):
-        logger.warning("Remote scene config cache yaroqsiz", exc_info=True)
+    wanted = {camera.id: camera for camera in desired if camera.enabled}
+    for camera_id in list(manager.cameras):
+        current = manager.cameras[camera_id]
+        target = wanted.get(camera_id)
+        if target is None or current.source != target.source:
+            await manager.remove_camera(camera_id)
+    on_match = _make_on_face_match(container)
+    for camera_id, camera in wanted.items():
+        if camera_id not in manager.cameras:
+            await manager.add_camera(camera_id, camera.source, on_match=on_match)
+
+
+def _prune_inactive_employee_faces(container: AppContainer) -> None:
+    db = container.db_or_none
+    if db is None:
+        return
+    allowed = set(container.remote_employees)
+    stale = [
+        str(item["id"])
+        for item in list(db.metadata)
+        if (item.get("extra") or {}).get("cloud_managed") and str(item["id"]) not in allowed
+    ]
+    for employee_id in stale:
+        db.delete_face(employee_id)
+        logger.info("Faol bo'lmagan xodim biometrikasi o'chirildi: %s", employee_id)
+    renamed = False
+    for item in db.metadata:
+        employee = container.remote_employees.get(str(item.get("id")))
+        if employee and item.get("name") != employee.get("name"):
+            item["name"] = str(employee["name"])
+            renamed = True
+    if renamed:
+        db.save()
 
 
 # ── Litsenziya ───────────────────────────────────────────────────────────
@@ -137,6 +218,14 @@ def _make_on_face_match(container: AppContainer):
         face_data: Dict,
         image_path: Optional[str] = None,
     ) -> None:
+        # Davomatda yuz kadri biometrik ma'lumot. Match uchun RAM'da ishlatiladi,
+        # lekin event/sync/snapshot arxiviga kirmaydi. Eski konfiguratsiya
+        # tasodifan snapshot yozgan bo'lsa ham darhol o'chiriladi.
+        if image_path:
+            try:
+                Path(image_path).unlink(missing_ok=True)
+            except OSError:
+                logger.warning("Davomat snapshoti o'chirilmadi: %s", image_path)
         event = EdgeEvent(
             event_type="employee_seen",
             camera_id=camera_id,
@@ -144,7 +233,7 @@ def _make_on_face_match(container: AppContainer):
             person_name=person_meta["name"],
             score=float(person_meta["score"]),
             model_version=container.settings.face.model_version,
-            snapshot_path=image_path,
+            snapshot_path=None,
             track_id=face_data.get("track_id"),
         )
         container.events.log_edge_event(event)
@@ -157,7 +246,7 @@ def _make_on_face_match(container: AppContainer):
             "person_name": person_meta["name"],
             "score": person_meta["score"],
             "timestamp": time.strftime("%H:%M:%S"),
-            "snapshot_url": f"/api/snapshots/{Path(image_path).name}" if image_path else None,
+            "snapshot_url": None,
             "track_id": face_data.get("track_id"),
         }
         # Nusxa bo'yicha yuriladi: yuborish paytida ro'yxat o'zgarishi mumkin.
@@ -241,10 +330,11 @@ async def _start_cameras(container: AppContainer) -> None:
             live_index=cfg.antispoof.live_index,
         )
 
+    attendance_only = os.environ.get("CHAQIMCHI_SERVICE_MODE", "") == "attendance"
     scene_analyzers = {
         cam.id: build_scene_analyzer(cam.id, cfg.scene, container.base_dir)
         for cam in cameras
-        if cam.enabled and cfg.scene.enabled
+        if cam.enabled and cfg.scene.enabled and not attendance_only
     }
     container.camera_manager = CameraManager(
         container.engine,
@@ -285,6 +375,9 @@ async def lifespan(app: FastAPI):
         )
 
     container.warmup()
+    # Remote ro'yxat yuklanmasdan prune qilish barcha cloud-managed
+    # embeddinglarni "inactive" deb o'chirib yuboradi. Faqat haqiqiy cache
+    # qo'llanganda `_apply_remote_scene_config` ichida reconcile qilinadi.
     _load_remote_scene_cache(container)
 
     if cfg.telegram.enabled:
@@ -331,10 +424,16 @@ async def lifespan(app: FastAPI):
                 "model_version": cfg.face.model_version,
             }
 
+        attendance_service = (
+            os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower()
+            == "attendance"
+        )
         container.cloud_sync = CloudEventSync(
             cfg.cloud_sync,
             container.outbox,
-            health_provider=health_payload,
+            # Control agent 4 kamera va ikkala outbox bo'yicha yagona health
+            # yuboradi. Attendance shu device yozuvini 1 kamera bilan bosmasin.
+            health_provider=None if attendance_service else health_payload,
             config_applier=lambda payload: _apply_remote_scene_config(container, payload),
         )
         container.cloud_sync_task = asyncio.create_task(container.cloud_sync.run())
@@ -377,12 +476,20 @@ def create_app(container: Optional[AppContainer] = None) -> FastAPI:
 
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR)), name="assets")
     app.include_router(system.router)
+    app.include_router(attendance.router)
     app.include_router(auth.router)
-    app.include_router(persons.router)
-    app.include_router(events.router)
     app.include_router(calibrate.router)
     app.include_router(backup.router)
-    app.include_router(vision.router)
+    attendance_mode = (
+        os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower() == "attendance"
+    )
+    if not attendance_mode:
+        # Generic Face/vision API tarixiy development rejimida qoladi. Sotqin
+        # attendance servisida cloud rozilik oqimini chetlab o'tuvchi shaxs
+        # CRUD yoki pullik vision endpointlari umuman ro'yxatdan o'tmaydi.
+        app.include_router(persons.router)
+        app.include_router(events.router)
+        app.include_router(vision.router)
     return app
 
 

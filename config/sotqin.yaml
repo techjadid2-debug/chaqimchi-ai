@@ -1,9 +1,11 @@
-# Sotqin R1 — Intel N100, 8 GB RAM, 128 GB NVMe qurilma profili.
+# Sotqin R1 — Intel N100, 8 GB RAM, 128 GB NVMe canonical do'kon profili.
 #
 # Yengil inferens (odam deteksiyasi, do'kon analitikasi) shu qurilmada
 # bajariladi — pastdagi `retail` bo'limi va chaqimchi-retail.service.
-# Qimmat AI (ko'rish agenti, hisobotlar) Chaqimchi Cloud'da qoladi,
-# to'liq video arxiv esa NVR'da.
+# Birinchi pilot 4 kamera bilan qabul qilinadi. 8 kamera faqat alohida 72
+# soatlik benchmark gate'dan keyin. To'liq video arxiv NVR'da qoladi.
+environment: production
+
 product:
   name: Sotqin
   profile: SOTQIN-N100-8-128-R1
@@ -20,7 +22,9 @@ cloud:
   config_poll_sec: 60
 
 media:
-  hardware_decode: qsv
+  # Retail runner hozir OpenCV/FFmpeg software decode ishlatadi. QSV real
+  # zanjirga ulanguncha konfiguratsiya qo'llab-quvvatlamaydigan narsani va'da qilmaydi.
+  hardware_decode: software
   preferred_codec: h264
   preferred_width: 1280
   preferred_height: 720
@@ -44,6 +48,94 @@ update:
   automatic_rollback: true
   rollout_channel: stable
 
+# ── Yopiq davomat piloti ────────────────────────────────────────────────
+# `CHAQIMCHI_ATTENDANCE_PILOT=true` bo'lmasa yoki tijoriy model manifesti
+# tasdiqlanmasa attendance service fail-closed. Biometrika lokal va shifrlangan.
+face:
+  model_name: buffalo_l
+  model_root: /opt/chaqimchi/shared/models/insightface
+  model_version: insightface-pilot-only
+  det_size: [640, 640]
+  preprocess_max_side: 1024
+  compare_threshold: 0.4
+  commercial_model_licensed: false
+
+camera:
+  frame_skip: 5
+
+license:
+  enabled: true
+  cloud_url: "${CHAQIMCHI_CLOUD_URL}"
+  site_id: "${CHAQIMCHI_SITE_ID}"
+  device_token: "${CHAQIMCHI_DEVICE_TOKEN}"
+  heartbeat_interval_sec: 300
+  offline_grace_days: 7
+
+cloud_sync:
+  enabled: true
+  url: "${CHAQIMCHI_CLOUD_URL}"
+  site_id: "${CHAQIMCHI_SITE_ID}"
+  device_id: "${CHAQIMCHI_DEVICE_ID}"
+  device_token: "${CHAQIMCHI_DEVICE_TOKEN}"
+  interval_sec: 5
+  heartbeat_interval_sec: 60
+  batch_size: 50
+  queue_days: 7
+  queue_max_bytes: 2147483648
+
+paths:
+  db_path: data/database
+  events_db: data/events.db
+  snapshots_dir: data/snapshots
+  calibration_dir: data/calibration
+  audit_db: data/audit.db
+  vision_db: data/vision_usage.db
+
+events:
+  match_debounce_sec: 30
+  save_snapshots: false
+  retention_days: 30
+  retention_interval_sec: 21600
+
+tracking:
+  enabled: true
+  iou_threshold: 0.30
+  max_missed_frames: 15
+
+security:
+  api_key_enabled: true
+  jwt:
+    enabled: true
+    expire_hours: 12
+
+rate_limit:
+  enabled: true
+  requests_per_minute: 120
+
+storage:
+  encrypt_embeddings: true
+  vector_backend: numpy
+
+antispoof:
+  enabled: false
+  backend: heuristic
+  min_score: 0.5
+  min_blur_variance: 80
+
+vision:
+  enabled: false
+
+server:
+  host: 127.0.0.1
+  port: 8743
+  cors_origins: []
+
+telegram:
+  enabled: false
+
+# Face ID kameralari cloud `attendance_camera_ids` ro'yxatidan olinadi.
+cameras: []
+
 # ── Qurilmadagi AI (chaqimchi-retail.service) ────────────────────────────
 # Odam deteksiyasi modeli. Yuklash: python scripts/fetch_retail_model.py
 scene:
@@ -58,7 +150,7 @@ scene:
   zones: []
 
 retail:
-  enabled: false        # kameralar yozilgach true qilinadi
+  enabled: true         # inventar bo'sh bo'lsa xizmat fail-closed va qayta urinadi
   target_fps: 30.0      # scripts/benchmark_n100.py o'lchagan songa moslang
   min_fps: 2.0
   max_fps: 45.0
@@ -69,7 +161,7 @@ retail:
   tamper_enabled: true
   # open_from: "09:00"
   # open_to: "21:00"
-  # rules_path: /opt/chaqimchi/shared/config/rules.yaml
+  rules_path: config/rules.yaml
   # Kamera ro'yxati cloud inventaridan keladi (admin panelda qo'shiladi).
   # Bu yerda faqat obyektga xos sozlama yoziladi — RTSP manzili kerak emas.
   # Cloud'da kamera qo'shilsa xizmat o'zini qayta ishga tushiradi.

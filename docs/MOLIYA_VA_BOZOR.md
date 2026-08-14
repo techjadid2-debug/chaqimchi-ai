@@ -1,4 +1,7 @@
-# Moliyaviy tahlil va bozorga chiqish rejasi
+# [ARXIV] Eski moliyaviy tahlil va bozorga chiqish rejasi
+
+> Bu taxminlar joriy mahsulot qarori emas. Faol scope va ochiq savollar:
+> [DOKON_MVP.md](DOKON_MVP.md).
 
 Sana: 2026-08-03. Raqamlar `chaqimchi_ai/licensing/plans.py` dagi haqiqiy
 tariflardan olingan.

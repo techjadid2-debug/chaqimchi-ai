@@ -683,9 +683,9 @@
     }
 
     async function addOrReplaceCamera(siteId) {
-      const cameraId = prompt("Kamera ID (camera-01 ... camera-08):", "camera-01");
+      const cameraId = prompt("Kamera ID (camera-01 ... camera-04):", "camera-01");
       if (cameraId === null) return;
-      if (!/^camera-0[1-8]$/.test(cameraId.trim())) return notify("camera-01 ... camera-08 kiriting", false);
+      if (!/^camera-0[1-4]$/.test(cameraId.trim())) return notify("camera-01 ... camera-04 kiriting", false);
       const label = prompt("Kamera nomi:", "Kirish");
       if (label === null || !label.trim()) return;
       const rtspUrl = prompt("NVR substream RTSP manzili:", "rtsp://user:password@NVR:554/stream/sub");
@@ -867,7 +867,7 @@
           return `<label class="feature-choice">
             <input type="checkbox" data-feature-code="${esc(f.code)}" ${current ? "checked" : ""} />
             <span><b>${esc(f.name)}</b><small>${f.queue_kind === "realtime" ? "Tezkor alert" : "Kunlik analitika · 22:00 gacha"} · $${(Number(f.monthly_usd_cents) / 100).toFixed(0)}/kamera</small></span>
-            <input aria-label="${esc(f.name)} kamera soni" data-feature-count="${esc(f.code)}" type="number" min="1" max="8" value="${current ? esc(current.camera_count) : 1}" />
+            <input aria-label="${esc(f.name)} kamera soni" data-feature-count="${esc(f.code)}" type="number" min="1" max="4" value="${current ? esc(current.camera_count) : 1}" />
           </label>`;
         }).join("");
         const q = summary.active_quote;

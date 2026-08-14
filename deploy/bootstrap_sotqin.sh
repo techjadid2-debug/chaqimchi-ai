@@ -46,4 +46,9 @@ bash "$installer"
 /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py \
   --cloud "$cloud_url" --code "${pairing_code^^}"
 systemctl restart chaqimchi-sotqin
-echo "Sotqin o'rnatildi va Chaqimchi Cloud'ga ulandi."
+systemctl restart chaqimchi-retail
+if systemctl is-enabled --quiet chaqimchi-attendance.service; then
+  systemctl restart chaqimchi-attendance
+fi
+systemctl --no-pager --full status chaqimchi-sotqin chaqimchi-retail >/dev/null
+echo "Sotqin o'rnatildi: cloud control va do'kon analitikasi ishga tushdi."

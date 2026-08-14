@@ -60,7 +60,7 @@
 
     <!-- Sidebar: Management -->
     <aside class="sidebar">
-      <div class="card">
+      <div id="genericManagement" class="card">
         <div class="card-title"><i data-lucide="user-plus"></i> Boshqaruv</div>
         <button id="btnRegister" class="btn btn-primary" style="width: 100%;">
           <i data-lucide="user-plus"></i> Yangi shaxs qo'shish
@@ -79,7 +79,13 @@
         </p>
       </div>
 
-      <div class="card" style="flex: 1;">
+      <div id="attendanceCard" class="card" style="display:none">
+        <div class="card-title"><i data-lucide="badge-check"></i> Xodim enrollment</div>
+        <p style="font-size:.75rem;color:var(--text-secondary)">Faqat cloud’da yozma roziligi qayd etilgan xodimlar. Yuz rasmi va embedding shu qurilmadan chiqmaydi.</p>
+        <div id="attendanceList" class="history-list"><small>Ro‘yxat yuklanmoqda…</small></div>
+      </div>
+
+      <div id="personDatabase" class="card" style="flex: 1;">
         <div class="card-title"><i data-lucide="users"></i> Ma'lumotlar bazasi</div>
         <div id="personList" class="history-list">
           <!-- Person list will be loaded here -->
@@ -101,6 +107,10 @@
     const btnCalibrate = document.getElementById('btnCalibrate');
     const btnApiKey = document.getElementById('btnApiKey');
     const btnBackup = document.getElementById('btnBackup');
+    const attendanceList = document.getElementById('attendanceList');
+    const attendanceCard = document.getElementById('attendanceCard');
+    const genericManagement = document.getElementById('genericManagement');
+    const personDatabase = document.getElementById('personDatabase');
 
     function apiHeaders(extra = {}) {
       const key = sessionStorage.getItem('chaqimchi_api_key');
@@ -122,6 +132,10 @@
           serverStatus.style.color = 'var(--accent-green)';
           camCount.textContent = h.cameras_active;
           btnApiKey.style.display = h.api_key_required ? 'inline-flex' : 'none';
+          const attendanceActive = h.attendance_mode !== 'disabled';
+          attendanceCard.style.display = attendanceActive ? 'block' : 'none';
+          genericManagement.style.display = attendanceActive ? 'none' : 'block';
+          personDatabase.style.display = attendanceActive ? 'none' : 'block';
         }
         
         statUnique.textContent = s.unique_today;
@@ -143,9 +157,56 @@
         `).join('') || '<p style="text-align:center; font-size:0.8rem; opacity:0.5;">Baza bo\'sh</p>';
 
         lucide.createIcons();
+        if (h.attendance_mode !== 'disabled') loadAttendanceEmployees();
       } catch (e) {
         console.error(e);
       }
+    }
+
+    async function loadAttendanceEmployees() {
+      try {
+        const resp = await fetch('/api/attendance/employees', { headers: apiHeaders() });
+        if (!resp.ok) {
+          attendanceList.innerHTML = '<small>Davomat ro‘yxati uchun API kalit kiriting.</small>';
+          return;
+        }
+        const data = await resp.json();
+        attendanceList.innerHTML = data.employees.map(emp => `
+          <div class="history-item">
+            <div class="item-info"><div class="item-name">${escapeHtml(emp.name)}</div><div class="item-meta">${emp.enrolled_local ? 'Lokal yuz namunasi bor' : 'Enrollment kutilmoqda'}</div></div>
+            <button class="btn ${emp.enrolled_local ? 'btn-secondary' : 'btn-primary'}" style="padding:4px 8px;font-size:.7rem" onclick="enrollEmployee('${emp.id}', ${emp.enrolled_local})">${emp.enrolled_local ? 'Yangilash' : 'Yuz qo‘shish'}</button>
+            ${emp.enrolled_local ? `<button class="btn btn-secondary" style="padding:4px 8px;font-size:.7rem" onclick="removeEnrollment('${emp.id}')">O‘chirish</button>` : ''}
+          </div>`).join('') || '<small>Cloud panelda rozilikli xodim yaratilmagan.</small>';
+      } catch (_) {
+        attendanceList.innerHTML = '<small>Cloud xodim ro‘yxati hali sinxronlanmagan.</small>';
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function enrollEmployee(employeeId, replacing) {
+      if (replacing && !confirm('Avvalgi lokal yuz namunasi yangilansinmi?')) return;
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'image/*';
+      input.onchange = async () => {
+        const file = input.files && input.files[0]; if (!file) return;
+        const form = new FormData(); form.append('employee_id', employeeId); form.append('file', file);
+        const resp = await fetch('/api/attendance/enroll', { method:'POST', headers:apiHeaders(), body:form });
+        const body = await resp.json();
+        if (!resp.ok) return alert(body.detail || body.error || 'Enrollment xatosi');
+        alert(body.cloud_status_synced ? 'Yuz namunasi lokal saqlandi.' : 'Lokal saqlandi; cloud holati internet tiklanganda yangilanadi.');
+        loadAttendanceEmployees(); refreshData();
+      };
+      input.click();
+    }
+
+    async function removeEnrollment(employeeId) {
+      if (!confirm('Lokal yuz namunasi butunlay o‘chirilsinmi?')) return;
+      const resp = await fetch(`/api/attendance/employees/${encodeURIComponent(employeeId)}`, { method:'DELETE', headers:apiHeaders() });
+      if (!resp.ok) return alert('O‘chirilmadi');
+      loadAttendanceEmployees(); refreshData();
     }
 
     // Arxiv siyosati ko'rinib tursin: mijoz voqealar qancha saqlanishini bilsin.

@@ -12,6 +12,8 @@ from typing import Any, Dict, List
 
 import pytest
 
+from chaqimchi_ai.event_models import EdgeEvent
+from chaqimchi_ai.outbox import EventOutbox
 from chaqimchi_ai.sotqin_agent import SotqinAgent
 
 
@@ -130,3 +132,49 @@ async def test_unapplied_config_is_retried_even_when_unchanged(agent) -> None:
 
     assert config_calls(client) == 1
     assert agent.config_status == "applied"
+
+
+@pytest.mark.asyncio
+async def test_unchanged_config_still_reprobes_camera_health(agent, monkeypatch) -> None:
+    client = FakeClient(config_payload(4))
+    agent.client = client
+    agent.remote_config_revision = 4
+    agent.config_status = "applied"
+    agent.probe_interval = 60
+    client.heartbeat_reply = {"ok": True, "config_revision": 4, "config_changed": False}
+    moments = iter([100.0, 120.0, 161.0])
+    monkeypatch.setattr(agent, "monotonic", lambda: next(moments))
+    probes = 0
+
+    async def report() -> None:
+        nonlocal probes
+        probes += 1
+
+    monkeypatch.setattr(agent, "report_camera_probes", report)
+
+    await agent.heartbeat_once()
+    await agent.heartbeat_once()
+    await agent.heartbeat_once()
+
+    assert probes == 2
+    assert config_calls(client) == 0
+
+
+def test_control_health_sums_retail_and_attendance_outboxes(agent, tmp_path) -> None:
+    retail = EventOutbox(tmp_path / "retail.db", max_bytes=100_000)
+    attendance = EventOutbox(tmp_path / "attendance.db", max_bytes=100_000)
+    retail.enqueue(
+        EdgeEvent(
+            event_type="camera_tampered",
+            severity="critical",
+            camera_id="camera-01",
+        )
+    )
+    attendance.enqueue(EdgeEvent(event_type="employee_seen", camera_id="camera-02"))
+    agent.outbox_paths = (retail.db_path, attendance.db_path)
+
+    health = agent.health_payload()
+
+    assert health["outbox_pending"] == 2
+    assert health["outbox_bytes"] > 0
+    assert health["outbox_critical_pending"] == 1

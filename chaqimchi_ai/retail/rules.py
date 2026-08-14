@@ -130,6 +130,7 @@ _CONDITIONS = {
     "min_occupancy": lambda event, value: _at_least(event, "occupancy", value),
     "min_score": lambda event, value: _at_least(event, "score", value),
     "direction": lambda event, value: event.direction == value,
+    "restricted": lambda event, value: bool(event.metadata.get("restricted")) is bool(value),
 }
 
 

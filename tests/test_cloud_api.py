@@ -260,7 +260,8 @@ def test_sotqin_bootstrap_is_only_served_for_a_published_hashed_release(
 
 def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     assert cloud_client.get("/").status_code == 200
-    assert "Sotqinni ulang" in cloud_client.get("/").text
+    assert "Do‘koningiz" in cloud_client.get("/").text
+    assert "4 kamera qabul profili" in cloud_client.get("/").text
     assert cloud_client.get("/connect").status_code == 200
     assert cloud_client.get("/privacy").status_code == 200
     assert cloud_client.get("/status").status_code == 200
@@ -312,8 +313,63 @@ def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     assert onboarding.json()["pairing"]["code"] == site["pairing_code"]
 
 
+def test_lead_notification_reaches_group_personal_and_retries_duplicates(
+    cloud_client, monkeypatch
+) -> None:
+    import cloud.main as cm
+
+    sent = []
+
+    class Sender:
+        async def send_to(self, chat_id, text):
+            sent.append((chat_id, text))
+            return True
+
+    class Config:
+        token = "123:test"
+        chat_id = "-100111"
+
+    class Alerts:
+        config = Config()
+        sender = Sender()
+
+    monkeypatch.setenv(
+        "CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS",
+        "5476913898,-100222,5476913898",
+    )
+    monkeypatch.setattr(cm, "get_alerts", lambda: Alerts())
+    cm.get_store().upsert_telegram_lead_destination(
+        "-100333", chat_type="supergroup", title="Sales"
+    )
+    payload = {
+        "full_name": "Vali Valiyev",
+        "phone": "+998909876543",
+        "consent": True,
+    }
+
+    first = cloud_client.post("/api/v1/public/leads", json=payload)
+    repeated = cloud_client.post("/api/v1/public/leads", json=payload)
+
+    assert first.status_code == repeated.status_code == 200
+    assert first.json()["duplicate"] is False
+    assert repeated.json()["duplicate"] is True
+    assert [chat_id for chat_id, _ in sent] == [
+        "-100111",
+        "5476913898",
+        "-100222",
+        "-100333",
+    ] * 2
+    assert "Yangi Chaqimchi AI" in sent[0][1]
+    assert "Takroriy Chaqimchi AI" in sent[4][1]
+
+
 def test_admin_readiness_requires_admin_key(cloud_client) -> None:
     assert cloud_client.get("/api/v1/admin/readiness").status_code == 401
     response = cloud_client.get("/api/v1/admin/readiness", headers=ADMIN)
     assert response.status_code == 200
     assert any(item["key"] == "database" for item in response.json()["items"])
+    lead_item = next(
+        item for item in response.json()["items"] if item["key"] == "lead_notifications"
+    )
+    assert lead_item["ok"] is False
+    assert lead_item["required"] is True

@@ -60,7 +60,13 @@ def test_a_missing_cache_is_normal(tmp_path: Path) -> None:
     """Qurilma hali juftlanmagan yoki analitika cloud'siz ishlatilyapti."""
     cache = read_sotqin_cache(tmp_path / "yo-q.json")
 
-    assert cache == {"revision": None, "cameras": []}
+    assert cache == {
+        "revision": None,
+        "config": {},
+        "attendance": {},
+        "cloud_features": [],
+        "cameras": [],
+    }
 
 
 def test_a_broken_cache_is_an_error(tmp_path: Path) -> None:
@@ -109,7 +115,7 @@ def test_a_cloud_camera_without_local_settings_gets_defaults() -> None:
     plans = merge_cameras([InventoryCamera("zal-01", "rtsp://nvr/sub2")], [])
 
     assert plans[0].priority == "retail"
-    assert plans[0].record_url is None  # klip yo'q, hodisa baribir ketadi
+    assert plans[0].record_url == "rtsp://nvr/sub2"  # xavfsizlik klipi yo'qolmaydi
     assert plans[0].sample_fps == 5.0
 
 

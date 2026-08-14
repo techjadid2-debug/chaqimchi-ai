@@ -12,7 +12,9 @@ from cryptography.fernet import Fernet
 
 
 class SnapshotStore(Protocol):
-    def put(self, key: str, data: bytes) -> None: ...
+    def put(
+        self, key: str, data: bytes, *, content_type: str = "application/octet-stream"
+    ) -> None: ...
     def get(self, key: str) -> bytes: ...
     def delete(self, key: str) -> None: ...
 
@@ -28,7 +30,9 @@ class LocalSnapshotStore:
             raise ValueError("Noto'g'ri snapshot key")
         return path
 
-    def put(self, key: str, data: bytes) -> None:
+    def put(
+        self, key: str, data: bytes, *, content_type: str = "application/octet-stream"
+    ) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
@@ -62,14 +66,16 @@ class S3SnapshotStore:
         if not self.client.bucket_exists(self.bucket):
             self.client.make_bucket(self.bucket)
 
-    def put(self, key: str, data: bytes) -> None:
+    def put(
+        self, key: str, data: bytes, *, content_type: str = "application/octet-stream"
+    ) -> None:
         payload = self.cipher.encrypt(data) if self.cipher else data
         self.client.put_object(
             self.bucket,
             key,
             io.BytesIO(payload),
             len(payload),
-            content_type="application/octet-stream" if self.cipher else "image/jpeg",
+            content_type="application/octet-stream" if self.cipher else content_type,
         )
 
     def get(self, key: str) -> bytes:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
@@ -67,6 +68,16 @@ async def health(container: AppContainer = Depends(get_container)) -> JSONRespon
             "jwt_enabled": sec.jwt.enabled,
             "license_enabled": cfg.license.enabled,
             "license": container.license_state.to_dict() if container.license_state else None,
+            "attendance_mode": (
+                "commercial"
+                if cfg.face.commercial_model_licensed
+                or os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower()
+                in {"1", "true", "yes"}
+                else "closed_pilot"
+                if os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower()
+                in {"1", "true", "yes"}
+                else "disabled"
+            ),
             "ws_clients": len(container.ws_clients),
         }
     )

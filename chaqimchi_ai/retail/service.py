@@ -11,9 +11,9 @@ Nega alohida jarayon:
 * **Qayta ishga tushirish arzon.**  Qoida o'zgarganda faqat shu xizmat
   qayta yuklanadi.
 
-Hodisalar mavjud **outbox**ga yoziladi (`data/outbox.db`, WAL rejimi) va uni
-allaqachon bor cloud sync yuklaydi.  Ya'ni bu xizmatga internet, token yoki
-qayta urinish mantig'i kerak emas — u faqat diskka yozadi.  Telegram xabarini
+Hodisalar **outbox**ga yoziladi (`data/outbox.db`, WAL rejimi) va shu retail
+xizmatidagi mustaqil sync worker HTTPS orqali qayta urinishli yuklaydi.
+Telegram xabarini
 ham cloud yuboradi (`cloud/notify.py`), shuning uchun `telegram_alert` bu
 yerda alohida integratsiya emas: hodisa outboxga tushadi, qolganini cloud
 qiladi.
@@ -29,16 +29,19 @@ tanish xizmati bilan **bitta** fayl bo'ladi — kamera ikki joyda ta'riflanmasin
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import os
 import signal
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
+from chaqimchi_ai.cloud_sync import CloudEventSync
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.outbox import EventOutbox
 from chaqimchi_ai.retail.broker import FrameBroker
@@ -57,7 +60,7 @@ from chaqimchi_ai.retail.runner import CameraSource, RetailRunner
 from chaqimchi_ai.retail.tamper import TamperDetector
 from chaqimchi_ai.retail.vision_review import VisionReviewer
 from chaqimchi_ai.scene_analytics import PersonDetector, SceneAnalyzer, build_person_detector
-from chaqimchi_ai.settings import AppSettings, default_config_path
+from chaqimchi_ai.settings import AppSettings, SceneSettings, default_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -106,13 +109,78 @@ class OutboxSink:
     def clip_ready(self, event: EdgeEvent, path: Path) -> None:
         """Klip tayyor bo'lgach hodisa yangilangan holda qayta yoziladi.
 
-        `enqueue` `INSERT OR IGNORE` ishlatadi, ya'ni hodisa allaqachon
-        yuborilgan bo'lsa bu qator e'tiborsiz qoladi — klip yo'li faqat hali
-        yuborilmagan hodisaga qo'shiladi.  Bu ataylab: hodisani klip uchun
-        ushlab turishdan ko'ra klipsiz, lekin **o'z vaqtida** yuborish afzal.
+        Hodisa oldin yuborilgan bo'lsa ham outbox uni idempotent batch qilib
+        qayta yuboradi va klipni alohida yuklaydi. Tez alert klip tayyor
+        bo'lishini kutib qolmaydi.
         """
         logger.info("[%s] klip tayyor: %s", event.camera_id, path)
+        event.clip_path = str(path)
         self.outbox.enqueue(event)
+
+
+def prune_event_media(
+    root: Path,
+    *,
+    retention_sec: int,
+    max_bytes: int,
+    suffixes: frozenset[str],
+    now: Optional[float] = None,
+) -> Tuple[int, int]:
+    """Yuklangan/yetim event mediasini muddat va kvota bo'yicha tozalaydi."""
+    if not root.is_dir():
+        return 0, 0
+    current = time.time() if now is None else float(now)
+    files = []
+    for path in root.iterdir():
+        if not path.is_file() or path.suffix.lower() not in suffixes:
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        files.append((path, stat.st_mtime, stat.st_size))
+
+    removed = 0
+    freed = 0
+    kept = []
+    for path, modified, size in files:
+        if modified < current - retention_sec:
+            try:
+                path.unlink()
+            except OSError:
+                logger.warning("Eski klip o'chirilmadi: %s", path)
+                kept.append((path, modified, size))
+            else:
+                removed += 1
+                freed += size
+        else:
+            kept.append((path, modified, size))
+
+    total = sum(size for _path, _modified, size in kept)
+    for path, _modified, size in sorted(kept, key=lambda item: item[1]):
+        if total <= max_bytes:
+            break
+        try:
+            path.unlink()
+        except OSError:
+            logger.warning("Kvotadagi klip o'chirilmadi: %s", path)
+            continue
+        total -= size
+        removed += 1
+        freed += size
+    return removed, freed
+
+
+def prune_event_clips(
+    root: Path, *, retention_sec: int, max_bytes: int, now: Optional[float] = None
+) -> Tuple[int, int]:
+    return prune_event_media(
+        root,
+        retention_sec=retention_sec,
+        max_bytes=max_bytes,
+        suffixes=frozenset({".mp4"}),
+        now=now,
+    )
 
 
 def build_reviewer(
@@ -193,6 +261,59 @@ def plan_cameras(settings: AppSettings, base_dir: Path) -> Tuple[List[CameraPlan
     return merge_cameras(cache["cameras"], cfg.cameras), cache["revision"]
 
 
+def apply_remote_site_settings(settings: AppSettings, base_dir: Path) -> None:
+    """Cloud onboardingdagi line/zone/soatlarni retail zanjiriga qo'llaydi."""
+    if settings.retail.cameras_source == "config":
+        return
+    cache = read_sotqin_cache(sotqin_cache_path(settings, base_dir))
+    remote = cache.get("config") or {}
+    scene_payload = settings.scene.model_dump()
+    for key in ("occupancy_limit", "loitering_sec", "queue_limit", "zones", "lines"):
+        if key in remote:
+            scene_payload[key] = remote[key]
+    settings.scene = SceneSettings.model_validate(scene_payload)
+    if remote.get("open_from") and remote.get("open_to"):
+        settings.retail.open_from = str(remote["open_from"])
+        settings.retail.open_to = str(remote["open_to"])
+
+
+def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[EdgeEvent], bool]:
+    """Cloud shartnomasida yoqilmagan paket event/klip/alert chiqarmaydi."""
+    if settings.retail.cameras_source == "config":
+        return lambda _event: True
+    cache = read_sotqin_cache(sotqin_cache_path(settings, base_dir))
+    if cache.get("revision") is None:
+        # Mustaqil/dev konfiguratsiya: cloud shartnomasi yo'q, lokal qoidalar
+        # yagona manba. Haqiqiy paired config revision bilan keladi.
+        return lambda _event: True
+    enabled = {
+        str(item.get("code"))
+        for item in cache.get("cloud_features") or []
+        if isinstance(item, dict) and item.get("code")
+    }
+    traffic = {"line_crossed", "occupancy_exceeded", "dwell_exceeded"}
+    queue = {"queue_threshold_exceeded"}
+    security = {
+        "zone_entered",
+        "loitering",
+        "after_hours_presence",
+        "camera_tampered",
+    }
+
+    def allowed(event: EdgeEvent) -> bool:
+        if event.event_type == "person_detected":
+            return False
+        if event.event_type in traffic:
+            return "person_count" in enabled
+        if event.event_type in queue:
+            return "queue_length" in enabled
+        if event.event_type in security:
+            return "store_security" in enabled
+        return False
+
+    return allowed
+
+
 def build_runner(
     settings: AppSettings,
     base_dir: Path,
@@ -206,6 +327,7 @@ def build_runner(
     `detector` va `outbox` tashqaridan berilishi mumkin — sinovda model fayli
     va cloud kerak bo'lmasin.
     """
+    apply_remote_site_settings(settings, base_dir)
     cfg = settings.retail
     if not cfg.enabled:
         raise RuntimeError("retail.enabled: false — xizmat ishga tushmaydi")
@@ -239,22 +361,55 @@ def build_runner(
     business_hours = (
         Schedule.parse(cfg.open_from, cfg.open_to) if cfg.open_from and cfg.open_to else None
     )
+    rules = load_rules(rules_path)
+    if business_hours is not None and "ish-vaqti" in rules.schedules:
+        # Owner paneldagi ish vaqti queue qoidasiga ham tegishli. YAML dagi
+        # 09:00–21:00 faqat onboarding hali to'ldirilmagan paytdagi default.
+        rules.schedules["ish-vaqti"] = business_hours
+    clip_dir = _resolve(base_dir, cfg.clip_dir)
+    snapshot_dir = _resolve(base_dir, settings.paths.snapshots_dir)
     pipeline = RetailPipeline(
         broker,
-        load_rules(rules_path),
+        rules,
         on_action=sink,
         on_clip=sink.clip_ready,
         on_review=None if reviewer is None else reviewer.submit,
-        clip_dir=_resolve(base_dir, cfg.clip_dir),
+        clip_dir=clip_dir,
+        snapshot_dir=snapshot_dir,
         pre_sec=cfg.pre_sec,
         post_sec=cfg.post_sec,
         business_hours=business_hours,
         after_hours_debounce_sec=cfg.after_hours_debounce_sec,
+        event_filter=retail_event_filter(settings, base_dir),
     )
+    stats_callback = _log_stats if on_stats is None else on_stats
+
+    def report_stats(stats: Dict[str, Any]) -> None:
+        removed, freed = prune_event_clips(
+            clip_dir,
+            retention_sec=cfg.buffer_retention_sec,
+            max_bytes=settings.cloud_sync.queue_max_bytes,
+        )
+        if removed:
+            logger.info("Eski event kliplari tozalandi: %d fayl, %.1f MB", removed, freed / 2**20)
+        snapshot_removed, snapshot_freed = prune_event_media(
+            snapshot_dir,
+            retention_sec=cfg.buffer_retention_sec,
+            max_bytes=max(1, settings.cloud_sync.queue_max_bytes // 4),
+            suffixes=frozenset({".jpg", ".jpeg"}),
+        )
+        if snapshot_removed:
+            logger.info(
+                "Eski event rasmlari tozalandi: %d fayl, %.1f MB",
+                snapshot_removed,
+                snapshot_freed / 2**20,
+            )
+        stats_callback(stats)
+
     runner = RetailRunner(
         pipeline,
         housekeeping_sec=cfg.housekeeping_sec,
-        on_stats=_log_stats if on_stats is None else on_stats,
+        on_stats=report_stats,
         reviewer=reviewer,
     )
 
@@ -389,8 +544,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     settings = AppSettings.load(config_path, base_dir=base_dir)
 
     stopped = threading.Event()
-    runner = build_runner(settings, base_dir, on_stats=_watcher(settings, base_dir, stopped))
+    sync_cfg = settings.cloud_sync
+    outbox = EventOutbox(
+        base_dir / "data" / "outbox.db",
+        max_bytes=sync_cfg.queue_max_bytes,
+        retention_days=sync_cfg.queue_days,
+    )
+    runner = build_runner(
+        settings,
+        base_dir,
+        outbox=outbox,
+        on_stats=_watcher(settings, base_dir, stopped),
+    )
     runner.start()
+    sync_thread: Optional[threading.Thread] = None
+    if sync_cfg.enabled:
+        sync = CloudEventSync(sync_cfg, outbox)
+        sync_thread = threading.Thread(
+            target=lambda: asyncio.run(sync.run(stop_requested=stopped.is_set)),
+            name="retail-cloud-sync",
+            daemon=True,
+        )
+        sync_thread.start()
 
     def _handle(signum, _frame) -> None:
         logger.info("Signal %s — to'xtatilmoqda", signum)
@@ -401,7 +576,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         stopped.wait()
     finally:
+        stopped.set()
         runner.stop()
+        if sync_thread is not None:
+            sync_thread.join(timeout=sync_cfg.interval_sec + 5)
     logger.info("Retail xizmati to'xtadi")
     return 0
 

@@ -6,7 +6,7 @@ def test_lite_is_20_usd_base_and_uses_configured_rate(monkeypatch) -> None:
     lite = PLANS["lite"]
     assert lite.monthly_price_usd == 20
     assert lite.monthly_price() == 250_000
-    assert lite.max_cameras == 8
+    assert lite.max_cameras == 4
     assert lite.retention_days == 30
 
 

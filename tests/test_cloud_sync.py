@@ -12,12 +12,15 @@ from chaqimchi_ai.settings import CloudSyncSettings
 def test_cloud_sync_uploads_snapshot_heartbeat_and_config(tmp_path: Path) -> None:
     snapshot = tmp_path / "snapshot.jpg"
     snapshot.write_bytes(b"jpeg")
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"mp4")
     event = EdgeEvent(
         event_id="evt-sync",
         event_type="zone_entered",
         severity="warning",
         camera_id="camera-01",
         snapshot_path=str(snapshot),
+        clip_path=str(clip),
     )
     outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=100_000)
     outbox.enqueue(event)
@@ -56,5 +59,26 @@ def test_cloud_sync_uploads_snapshot_heartbeat_and_config(tmp_path: Path) -> Non
     asyncio.run(exercise())
     assert outbox.pending() == []
     assert "/api/v1/edge/events/evt-sync/snapshot" in called
+    assert "/api/v1/edge/events/evt-sync/clip" in called
     assert "/api/v1/edge/heartbeat" in called
     assert applied[0]["revision"] == 1
+
+
+def test_sync_worker_can_stop_without_consuming_the_outbox(tmp_path: Path) -> None:
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=100_000)
+    outbox.enqueue(EdgeEvent(event_type="line_crossed", camera_id="camera-01"))
+    sync = CloudEventSync(
+        CloudSyncSettings(
+            enabled=True,
+            url="https://cloud.test",
+            site_id="site",
+            device_id="device",
+            device_token="token",
+        ),
+        outbox,
+    )
+
+    asyncio.run(sync.run(stop_requested=lambda: True))
+
+    assert len(outbox.pending()) == 1
+    assert sync.client is None

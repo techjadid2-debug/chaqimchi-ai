@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import urllib.request
 from pathlib import Path
@@ -59,6 +60,7 @@ def main() -> int:
     files = load_manifest()
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
     failures = []
+    verified: Dict[str, bytes] = {}
 
     for name, entry in files.items():
         print(f"→ {name}", flush=True)
@@ -76,8 +78,8 @@ def main() -> int:
         if digest != expected:
             failures.append(f"{name}: sha256 mos kelmadi\n  kutilgan: {expected}\n  olingan: {digest}")
             continue
-        (TARGET_DIR / name).write_bytes(payload)
-        print(f"   ✓ {len(payload) / 1024:.0f} KB → models/retail/{name}")
+        verified[name] = payload
+        print(f"   ✓ {len(payload) / 1024:.0f} KB tekshirildi")
 
     if failures:
         print("\nXATO:", file=sys.stderr)
@@ -86,6 +88,21 @@ def main() -> int:
         print("\nModel o'rnatilmadi.", file=sys.stderr)
         return 1
     if not args.print_checksums:
+        # Barcha fayl tekshirilmaguncha bittasi ham amaldagi model ustiga
+        # yozilmaydi. XML yangi, BIN eski bo'lgan yarim bundle ishlamasin.
+        temporary: Dict[str, Path] = {}
+        try:
+            for name, payload in verified.items():
+                path = TARGET_DIR / name
+                tmp = path.with_name(f".{path.name}.tmp")
+                tmp.write_bytes(payload)
+                temporary[name] = tmp
+            for name, tmp in temporary.items():
+                os.replace(tmp, TARGET_DIR / name)
+                print(f"   ✓ {len(verified[name]) / 1024:.0f} KB → models/retail/{name}")
+        finally:
+            for tmp in temporary.values():
+                tmp.unlink(missing_ok=True)
         print(f"\nTayyor. config: scene.backend=openvino, scene.model_path=models/retail/{next(iter(files))}")
     return 0
 

@@ -6,6 +6,7 @@ beriladi.
 
 from __future__ import annotations
 
+import os
 from datetime import time as dt_time
 from pathlib import Path
 from typing import Any, Dict, List
@@ -14,13 +15,57 @@ import pytest
 
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.outbox import EventOutbox
-from chaqimchi_ai.retail.service import OutboxSink, build_runner, load_rules
+from chaqimchi_ai.retail.service import (
+    OutboxSink,
+    build_runner,
+    load_rules,
+    prune_event_clips,
+    retail_event_filter,
+)
 from chaqimchi_ai.settings import AppSettings
 
 
 class FakeDetector:
     def detect(self, _frame):
         return []
+
+
+def test_event_clips_are_pruned_by_age_and_quota(tmp_path: Path) -> None:
+    old = tmp_path / "old.mp4"
+    first = tmp_path / "first.mp4"
+    second = tmp_path / "second.mp4"
+    ignored = tmp_path / "note.txt"
+    for path in (old, first, second):
+        path.write_bytes(b"1234")
+    ignored.write_text("keep", encoding="utf-8")
+    os.utime(old, (100, 100))
+    os.utime(first, (800, 800))
+    os.utime(second, (900, 900))
+
+    removed, freed = prune_event_clips(
+        tmp_path, retention_sec=500, max_bytes=5, now=1000
+    )
+
+    assert (removed, freed) == (2, 8)
+    assert not old.exists()
+    assert not first.exists()
+    assert second.exists()
+    assert ignored.exists()
+
+
+def test_paired_device_emits_only_purchased_feature_events(tmp_path: Path) -> None:
+    cache = tmp_path / "sotqin-cache.json"
+    cache.write_text(
+        '{"revision":7,"cloud_features":[{"code":"person_count"}]}',
+        encoding="utf-8",
+    )
+    settings = settings_for(sotqin_config_path="sotqin-cache.json")
+    allowed = retail_event_filter(settings, tmp_path)
+
+    assert allowed(EdgeEvent(event_type="line_crossed", camera_id="cam")) is True
+    assert allowed(EdgeEvent(event_type="queue_threshold_exceeded", camera_id="cam")) is False
+    assert allowed(EdgeEvent(event_type="camera_tampered", camera_id="cam")) is False
+    assert allowed(EdgeEvent(event_type="person_detected", camera_id="cam")) is False
 
 
 def settings_for(*, vision: Any = None, **retail: Any) -> AppSettings:
@@ -141,6 +186,26 @@ def test_business_hours_reach_the_pipeline(tmp_path: Path) -> None:
     assert hours is not None
     assert hours.contains(dt_time(hour=12)) is True
     assert hours.contains(dt_time(hour=23)) is False
+
+
+def test_owner_business_hours_replace_the_queue_rule_schedule(tmp_path: Path) -> None:
+    path = tmp_path / "rules.yaml"
+    path.write_text(
+        "schedules:\n"
+        "  ish-vaqti: {start: '09:00', end: '21:00'}\n"
+        "rules:\n"
+        "  - name: Navbat\n"
+        "    event_type: queue_threshold_exceeded\n"
+        "    schedule: ish-vaqti\n",
+        encoding="utf-8",
+    )
+    runner, _outbox = runner_for(
+        tmp_path, open_from="08:00", open_to="20:00", rules_path=str(path)
+    )
+
+    hours = runner.pipeline.rules.schedules["ish-vaqti"]
+    assert hours.contains(dt_time(hour=8)) is True
+    assert hours.contains(dt_time(hour=20)) is False
 
 
 def test_without_business_hours_the_night_event_is_off(tmp_path: Path) -> None:

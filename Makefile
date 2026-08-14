@@ -16,7 +16,7 @@ fmt:
 	$(PY) -m ruff format chaqimchi_ai webapp cloud tests scripts
 
 run-web:
-	$(PY) -m uvicorn webapp.main:app --host 127.0.0.1 --port 8742
+	CHAQIMCHI_SERVICE_MODE=attendance CHAQIMCHI_ATTENDANCE_PILOT=true $(PY) -m uvicorn webapp.main:app --host 127.0.0.1 --port 8743
 
 run-sotqin:
 	$(PY) -m uvicorn chaqimchi_ai.sotqin_agent:app --host 127.0.0.1 --port 8742

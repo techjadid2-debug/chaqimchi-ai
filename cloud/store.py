@@ -22,7 +22,8 @@ from chaqimchi_ai.licensing.plans import (
     get_plan,
     usd_rate_uzs,
 )
-from chaqimchi_ai.sotqin_profile import MAX_CAMERAS
+from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
+from chaqimchi_ai.sotqin_profile import GUARANTEED_CAMERAS
 
 # V1 cloud-AI katalogi. Narxlar sentda saqlanadi: invoice va shartnoma
 # snapshotlari floating-point xatodan holi bo'lishi kerak.
@@ -31,38 +32,22 @@ from chaqimchi_ai.sotqin_profile import MAX_CAMERAS
 # sekin-asta ajralib ketadi va mijoz saytdagidan boshqa summa to'laydi.
 DEFAULT_BASE_FEE_USD_CENTS = LITE_MONTHLY_PRICE_USD_CENTS
 DEFAULT_FEATURES = (
-    ("person_count", "Odam sanash", "analytics", "batch", 300),
-    ("line_crossing", "Kirish-chiqish", "security", "batch", 300),
-    ("occupancy", "Occupancy", "analytics", "batch", 300),
-    ("heatmap", "Heatmap", "analytics", "batch", 300),
-    ("crowd_density", "Crowd density", "security", "batch", 400),
-    ("staff_presence", "Xodim mavjudligi", "retail", "batch", 400),
-    ("opening_closing", "Ochilish-yopilish", "security", "batch", 400),
-    ("vehicle_count", "Avtomobil sanash", "parking", "batch", 400),
-    ("parking_occupancy", "Parking bandligi", "parking", "batch", 400),
-    ("queue_length", "Navbat uzunligi", "retail", "batch", 500),
-    ("wait_time", "Kutish vaqti", "retail", "batch", 500),
-    ("loitering", "Uzoq turish", "security", "realtime", 500),
-    ("restricted_zone", "Taqiqlangan zona", "security", "realtime", 600),
-    ("after_hours", "Ish vaqtidan tashqari kirish", "security", "realtime", 600),
-    ("wrong_direction", "Noto'g'ri yo'nalish", "security", "realtime", 600),
-    ("empty_shelf", "Bo'sh tokcha", "retail", "batch", 700),
-    ("attendance", "Yuz orqali davomat", "office", "batch", 700),
-    ("ppe", "PPE nazorati", "safety", "realtime", 800),
-    ("abandoned_object", "Tashlab ketilgan buyum", "security", "realtime", 800),
-    ("removed_object", "Buyum olib ketilishi", "security", "realtime", 800),
-    ("watchlist", "Ruxsatli/begona shaxs", "security", "realtime", 800),
-    ("fall_detection", "Yiqilish", "safety", "realtime", 1_000),
-    ("smoke_fire", "Tutun/yong'in", "safety", "realtime", 1_000),
-    ("anpr", "Avtomobil raqami", "parking", "batch", 1_000),
+    ("person_count", "Odam oqimi va bandlik", "retail", "batch", 300),
+    ("queue_length", "Navbat va kutish tahlili", "retail", "batch", 500),
+    (
+        "store_security",
+        "Zona, tungi harakat va kamera nazorati",
+        "security",
+        "realtime",
+        600,
+    ),
 )
 
 def available_feature_codes() -> frozenset:
     """Hozir rostdan ishlaydigan cloud-AI funksiyalari.
 
-    Katalogda 24 ta funksiya bor, lekin inferens worker'i hali yozilmagan.
-    Rasmiy sayt shu ro'yxatga qarab "sotib olish" yoki "tez orada" ko'rsatadi —
-    tayyor bo'lmagan narsani sotib qo'yish eng qimmat xato bo'lardi.
+    Public katalog faqat do'kon MVP paketlarini biladi. Ular ham real N100
+    qabul testi tugamaguncha environment gate orqali sotuvga ochilmaydi.
 
     Funksiya ishga tushgach `CHAQIMCHI_AVAILABLE_FEATURES=person_count,...`
     qo'yiladi; deploy kutish shart emas.
@@ -70,15 +55,20 @@ def available_feature_codes() -> frozenset:
     raw = os.environ.get("CHAQIMCHI_AVAILABLE_FEATURES", "").strip()
     if not raw:
         return frozenset()
-    return frozenset(code.strip() for code in raw.split(",") if code.strip())
+    if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production":
+        if not pilot_acceptance_status()["ok"]:
+            return frozenset()
+    known = {code for code, *_rest in DEFAULT_FEATURES}
+    return frozenset(
+        code.strip() for code in raw.split(",") if code.strip() in known
+    )
 
 
 DEFAULT_TEMPLATES = {
-    "retail": ("Retail/do'kon", ("person_count", "heatmap", "queue_length", "wait_time", "staff_presence", "empty_shelf", "after_hours")),
-    "office": ("Ofis", ("attendance", "watchlist", "line_crossing", "occupancy", "restricted_zone")),
-    "warehouse": ("Ombor/logistika", ("person_count", "vehicle_count", "ppe", "restricted_zone", "removed_object", "wrong_direction")),
-    "manufacturing": ("Ishlab chiqarish", ("ppe", "fall_detection", "smoke_fire", "crowd_density", "restricted_zone")),
-    "parking": ("Parking", ("vehicle_count", "anpr", "parking_occupancy", "wrong_direction")),
+    "retail": (
+        "Retail/do'kon MVP",
+        ("person_count", "queue_length", "store_security"),
+    ),
 }
 
 
@@ -165,7 +155,18 @@ class CloudStore:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Lead, pairing tokeni va shifrlangan kamera credentiallari shu yerda.
+        # Fayl 0600 bo'lsa ham parent katalog ochiq qolsa SQLite WAL/SHM fayllari
+        # boshqa lokal userlarga ko'rinishi mumkin.
+        try:
+            self.db_path.parent.chmod(0o700)
+        except OSError:
+            pass
         self._init_db()
+        try:
+            self.db_path.chmod(0o600)
+        except OSError:
+            pass
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -267,6 +268,22 @@ class CloudStore:
                 title TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS lead_notification_deliveries (
+                lead_id TEXT NOT NULL,
+                chat_id TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(state IN ('pending', 'sent', 'failed')),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                next_attempt_at TEXT,
+                sent_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (lead_id, chat_id),
+                FOREIGN KEY (lead_id) REFERENCES leads(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_lead_delivery_retry
+                ON lead_notification_deliveries(state, next_attempt_at, updated_at);
             CREATE TABLE IF NOT EXISTS feature_definitions (
                 code TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -359,7 +376,9 @@ class CloudStore:
 
     @staticmethod
     def _camera_id_is_valid(camera_id: str) -> bool:
-        return camera_id in {f"camera-{number:02d}" for number in range(1, MAX_CAMERAS + 1)}
+        return camera_id in {
+            f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)
+        }
 
     def list_cameras(self, site_id: str, *, include_source: bool = False) -> List[Dict[str, Any]]:
         if not self.get_site(site_id):
@@ -390,7 +409,9 @@ class CloudStore:
         if not self.get_site(site_id):
             raise ValueError("Sayt topilmadi")
         if not self._camera_id_is_valid(camera_id):
-            raise ValueError(f"Kamera ID camera-01..camera-{MAX_CAMERAS:02d} bo'lishi kerak")
+            raise ValueError(
+                f"Pilot kamera ID camera-01..camera-{GUARANTEED_CAMERAS:02d} bo'lishi kerak"
+            )
         source = rtsp_url.strip()
         if not source.startswith(("rtsp://", "rtsps://")):
             raise ValueError("Kamera manzili rtsp:// yoki rtsps:// bilan boshlanishi kerak")
@@ -459,24 +480,54 @@ class CloudStore:
     def _seed_feature_catalog(self, conn: sqlite3.Connection) -> None:
         """Bo'sh bazaga sotiladigan katalogning birinchi nashrini yozadi."""
         now = _iso(_utc_now())
+        canonical = {item[0] for item in DEFAULT_FEATURES}
+        placeholders = ",".join("?" for _ in canonical)
+        if canonical:
+            conn.execute(
+                f"UPDATE feature_definitions SET active=0 WHERE code NOT IN ({placeholders})",
+                tuple(sorted(canonical)),
+            )
+            # Eski katalog funksiyasi edge config va invoice hisobida faol
+            # qolmasin. Tarixiy assignment audit uchun `disabled` bo'lib
+            # saqlanadi, hali tasdiqlanmagan draft esa tashlanadi.
+            conn.execute(
+                f"UPDATE site_feature_assignments SET status='disabled' "
+                f"WHERE feature_code NOT IN ({placeholders})",
+                tuple(sorted(canonical)),
+            )
+            conn.execute(
+                f"DELETE FROM site_feature_drafts "
+                f"WHERE feature_code NOT IN ({placeholders})",
+                tuple(sorted(canonical)),
+            )
         for code, name, category, queue_kind, _price in DEFAULT_FEATURES:
             conn.execute(
                 "INSERT OR IGNORE INTO feature_definitions(code,name,category,queue_kind,active,created_at) VALUES (?,?,?,?,1,?)",
                 (code, name, category, queue_kind, now),
             )
+            conn.execute(
+                "UPDATE feature_definitions SET name=?,category=?,queue_kind=?,active=1 WHERE code=?",
+                (name, category, queue_kind, code),
+            )
+        conn.execute("UPDATE business_templates SET active=0")
         for code, (name, features) in DEFAULT_TEMPLATES.items():
             conn.execute(
                 "INSERT OR IGNORE INTO business_templates(code,name,feature_codes_json,active,created_at) VALUES (?,?,?,?,?)",
                 (code, name, json.dumps(features), 1, now),
             )
-        exists = conn.execute("SELECT id FROM price_books WHERE status='published' LIMIT 1").fetchone()
-        if exists:
-            return
-        book_id = "v1-default"
-        conn.execute(
-            "INSERT OR IGNORE INTO price_books(id,label,status,base_fee_usd_cents,usd_rate_uzs,created_at,published_at) VALUES (?,?, 'published',?,?,?,?)",
-            (book_id, "V1 boshlang'ich katalog", DEFAULT_BASE_FEE_USD_CENTS, DEFAULT_USD_RATE_UZS, now, now),
-        )
+            conn.execute(
+                "UPDATE business_templates SET name=?,feature_codes_json=?,active=1 WHERE code=?",
+                (name, json.dumps(features), code),
+            )
+        published = conn.execute(
+            "SELECT id FROM price_books WHERE status='published' ORDER BY published_at DESC LIMIT 1"
+        ).fetchone()
+        book_id = str(published["id"]) if published else "v1-default"
+        if not published:
+            conn.execute(
+                "INSERT OR IGNORE INTO price_books(id,label,status,base_fee_usd_cents,usd_rate_uzs,created_at,published_at) VALUES (?,?, 'published',?,?,?,?)",
+                (book_id, "Do'kon MVP katalogi", DEFAULT_BASE_FEE_USD_CENTS, DEFAULT_USD_RATE_UZS, now, now),
+            )
         for code, _name, _category, _queue, price in DEFAULT_FEATURES:
             conn.execute(
                 "INSERT OR IGNORE INTO feature_prices(price_book_id,feature_code,monthly_usd_cents,cost_usd_cents) VALUES (?,?,?,?)",
@@ -540,8 +591,16 @@ class CloudStore:
                 raise ValueError(f"Funksiya takrorlangan: {code}")
             if code not in catalog or not catalog[code]["active"]:
                 raise ValueError(f"Noma'lum yoki o'chirilgan funksiya: {code}")
-            if not 1 <= count <= MAX_CAMERAS:
-                raise ValueError(f"Har funksiya uchun kamera soni 1–{MAX_CAMERAS} bo'lishi kerak")
+            if (
+                os.environ.get("CHAQIMCHI_ENV", "development").strip().lower()
+                == "production"
+                and code not in available_feature_codes()
+            ):
+                raise ValueError(f"Funksiya N100 qabul testidan o'tmagan: {code}")
+            if not 1 <= count <= GUARANTEED_CAMERAS:
+                raise ValueError(
+                    f"Har funksiya uchun kamera soni 1–{GUARANTEED_CAMERAS} bo'lishi kerak"
+                )
             seen.add(code)
             feature = catalog[code]
             normalized.append(
@@ -755,6 +814,120 @@ class CloudStore:
         ).fetchall()
         conn.close()
         return [dict(row) for row in rows]
+
+    def ensure_lead_notification_deliveries(
+        self,
+        lead_id: str,
+        chat_ids: List[str],
+        *,
+        reset: bool = False,
+    ) -> None:
+        """Lead xabarini har bir recipient uchun idempotent navbatga qo'yadi."""
+        now = _iso(_utc_now())
+        recipients = list(dict.fromkeys(str(item).strip() for item in chat_ids if str(item).strip()))
+        if not recipients:
+            return
+        conn = self._connect()
+        for chat_id in recipients:
+            if reset:
+                conn.execute(
+                    "INSERT INTO lead_notification_deliveries "
+                    "(lead_id,chat_id,state,attempts,created_at,updated_at) "
+                    "VALUES (?,?,'pending',0,?,?) ON CONFLICT(lead_id,chat_id) DO UPDATE SET "
+                    "state='pending',attempts=0,last_error=NULL,next_attempt_at=NULL,"
+                    "sent_at=NULL,updated_at=excluded.updated_at",
+                    (lead_id, chat_id, now, now),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO lead_notification_deliveries "
+                    "(lead_id,chat_id,state,attempts,created_at,updated_at) "
+                    "VALUES (?,?,'pending',0,?,?) ON CONFLICT(lead_id,chat_id) DO NOTHING",
+                    (lead_id, chat_id, now, now),
+                )
+        conn.commit()
+        conn.close()
+
+    def lead_notification_delivery(self, lead_id: str, chat_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT * FROM lead_notification_deliveries WHERE lead_id=? AND chat_id=?",
+            (lead_id, str(chat_id)),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def pending_lead_notification_deliveries(self, *, limit: int = 100) -> List[Dict[str, Any]]:
+        now = _iso(_utc_now())
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT d.lead_id,d.chat_id,d.attempts,l.full_name,l.phone,l.company,l.city,"
+            "l.cameras,l.message,l.created_at FROM lead_notification_deliveries d "
+            "JOIN leads l ON l.id=d.lead_id "
+            "WHERE d.state IN ('pending','failed') "
+            "AND (d.next_attempt_at IS NULL OR d.next_attempt_at<=?) "
+            "ORDER BY d.updated_at ASC LIMIT ?",
+            (now, max(1, min(int(limit), 500))),
+        ).fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    def recent_leads_without_notifications(
+        self, *, hours: int = 24, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        cutoff = _iso(_utc_now() - timedelta(hours=max(1, min(int(hours), 168))))
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT l.* FROM leads l WHERE l.created_at>=? AND NOT EXISTS ("
+            "SELECT 1 FROM lead_notification_deliveries d WHERE d.lead_id=l.id) "
+            "ORDER BY l.created_at ASC LIMIT ?",
+            (cutoff, max(1, min(int(limit), 200))),
+        ).fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            lead = dict(row)
+            lead.pop("source_hash", None)
+            result.append(lead)
+        return result
+
+    def mark_lead_notification_delivery(
+        self,
+        lead_id: str,
+        chat_id: str,
+        *,
+        sent: bool,
+        error: Optional[str] = None,
+    ) -> None:
+        current = self.lead_notification_delivery(lead_id, chat_id)
+        if current is None:
+            return
+        attempts = int(current["attempts"]) + 1
+        now = _utc_now()
+        conn = self._connect()
+        if sent:
+            conn.execute(
+                "UPDATE lead_notification_deliveries SET state='sent',attempts=?,"
+                "last_error=NULL,next_attempt_at=NULL,sent_at=?,updated_at=? "
+                "WHERE lead_id=? AND chat_id=?",
+                (attempts, _iso(now), _iso(now), lead_id, str(chat_id)),
+            )
+        else:
+            delay_seconds = min(3600, 60 * (2 ** min(attempts - 1, 6)))
+            conn.execute(
+                "UPDATE lead_notification_deliveries SET state='failed',attempts=?,"
+                "last_error=?,next_attempt_at=?,updated_at=? WHERE lead_id=? AND chat_id=?",
+                (
+                    attempts,
+                    (error or "Telegram yuborilmadi")[:500],
+                    _iso(now + timedelta(seconds=delay_seconds)),
+                    _iso(now),
+                    lead_id,
+                    str(chat_id),
+                ),
+            )
+        conn.commit()
+        conn.close()
 
     def create_site(
         self,

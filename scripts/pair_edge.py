@@ -10,7 +10,7 @@ import argparse
 import os
 import platform
 import tempfile
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlparse
 
 import httpx
@@ -25,6 +25,26 @@ MANAGED_KEYS = (
     "CHAQIMCHI_SOTQIN_REVISION",
     "CHAQIMCHI_SOTQIN_SERIAL",
 )
+
+
+def default_env_file() -> str:
+    """Platformaga mos, secret saqlanadigan env fayl yo'lini qaytaradi."""
+    if os.name == "nt":
+        program_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+        return str(PureWindowsPath(program_data) / "Chaqimchi" / "Sotqin" / "sotqin.env")
+    return "/etc/chaqimchi/sotqin.env"
+
+
+def default_config_path() -> str:
+    """O'rnatilgan release config yo'li; Linux va Windows installer shu nomdan foydalanadi."""
+    if os.name == "nt":
+        program_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+        return str(PureWindowsPath(program_files) / "Chaqimchi" / "Sotqin" / "current" / "config" / "sotqin.yaml")
+    return "/opt/chaqimchi/current/config/sotqin.yaml"
+
+
+def restart_hint() -> str:
+    return "Restart-Service ChaqimchiSotqin" if os.name == "nt" else "sudo systemctl restart chaqimchi-sotqin"
 
 
 def hardware_id() -> str:
@@ -120,7 +140,7 @@ def main() -> int:
     parser.add_argument("--model", default=hardware_model())
     parser.add_argument("--revision", default="R1")
     parser.add_argument("--serial", default=serial_number())
-    parser.add_argument("--env-file", type=Path, default=Path("/etc/chaqimchi/sotqin.env"))
+    parser.add_argument("--env-file", type=Path, default=default_env_file())
     parser.add_argument("--allow-http", action="store_true", help="Faqat lokal test uchun")
     args = parser.parse_args()
 
@@ -167,7 +187,7 @@ def main() -> int:
     content = render_env(
         existing,
         {
-            "CHAQIMCHI_CONFIG": "/opt/chaqimchi/current/config/sotqin.yaml",
+            "CHAQIMCHI_CONFIG": default_config_path(),
             "CHAQIMCHI_CLOUD_URL": cloud,
             "CHAQIMCHI_SITE_ID": str(device["site_id"]),
             "CHAQIMCHI_DEVICE_ID": str(device["device_id"]),
@@ -179,7 +199,7 @@ def main() -> int:
     )
     atomic_write_env(args.env_file, content)
     print(f"Sotqin ulandi: site={device['site_id']} device={device['device_id']}")
-    print("Keyingi qadam: sudo systemctl restart chaqimchi-sotqin")
+    print(f"Keyingi qadam: {restart_hint()}")
     return 0
 
 

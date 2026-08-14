@@ -1,6 +1,13 @@
 from pathlib import Path
 
-from scripts.pair_edge import atomic_write_env, render_env, validate_cloud_url
+from scripts.pair_edge import (
+    atomic_write_env,
+    default_config_path,
+    default_env_file,
+    render_env,
+    restart_hint,
+    validate_cloud_url,
+)
 
 
 def test_render_env_preserves_local_secrets_and_replaces_pairing() -> None:
@@ -44,3 +51,21 @@ def test_atomic_write_env_uses_private_permissions(tmp_path: Path) -> None:
     atomic_write_env(target, "SECRET=value\n")
     assert target.read_text(encoding="utf-8") == "SECRET=value\n"
     assert target.stat().st_mode & 0o777 == 0o600
+
+
+def test_linux_pairing_defaults_are_stable(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.pair_edge.os.name", "posix")
+    assert default_env_file() == "/etc/chaqimchi/sotqin.env"
+    assert default_config_path() == "/opt/chaqimchi/current/config/sotqin.yaml"
+    assert restart_hint() == "sudo systemctl restart chaqimchi-sotqin"
+
+
+def test_windows_pairing_defaults_use_program_data(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.pair_edge.os.name", "nt")
+    monkeypatch.setenv("PROGRAMDATA", r"D:\ProgramData")
+    monkeypatch.setenv("PROGRAMFILES", r"D:\Program Files")
+    assert default_env_file().replace("\\", "/").endswith("Chaqimchi/Sotqin/sotqin.env")
+    assert default_config_path().replace("\\", "/").endswith(
+        "Chaqimchi/Sotqin/current/config/sotqin.yaml"
+    )
+    assert restart_hint() == "Restart-Service ChaqimchiSotqin"

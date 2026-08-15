@@ -738,19 +738,39 @@ async def sotqin_bootstrap(request: Request) -> Response:
     )
 
 
+#: Nashr qilingan reliz fayllari: arxiv va uning imzolangan manifesti.
+#:
+#: Ataylab **ochiq** (autentifikatsiyasiz): `bootstrap_sotqin.sh` arxivni
+#: qurilmada hech qanday hisob ma'lumotisiz oladi — pairing hali bo'lmagan.
+#: Manifestda sir yo'q, xavfsizlik esa kirish nazoratidan emas, **Ed25519
+#: imzosidan** keladi: buzilgan cloud istalgan faylni bera oladi, lekin
+#: imzo yasay olmaydi va qurilma uni rad etadi.
+RELEASE_FILE_PATTERN = re.compile(r"^chaqimchi-(?:sotqin|lite)-[A-Za-z0-9.\-_]+\.(?:tar\.gz|json)$")
+
+RELEASE_MEDIA_TYPES = {".gz": "application/gzip", ".json": "application/json"}
+
+
 @app.get("/releases/{release_name}", include_in_schema=False)
 async def sotqin_release(release_name: str) -> FileResponse:
-    """Serve only a named, locally published Sotqin release archive."""
-    if Path(release_name).name != release_name or not release_name.endswith(".tar.gz"):
+    """Nashr qilingan reliz arxivi yoki manifesti."""
+    if Path(release_name).name != release_name or not RELEASE_FILE_PATTERN.match(release_name):
         raise HTTPException(404, "Release topilmadi")
     archive = BASE_DIR / "releases" / release_name
     if not archive.is_file():
         raise HTTPException(404, "Release topilmadi")
+    media_type = RELEASE_MEDIA_TYPES[Path(release_name).suffix]
+    # Manifest keshlanmaydi: bir xil versiya qayta imzolanishi mumkin
+    # (kalit almashtirilganda), arxiv esa o'zgarmas.
+    cache = (
+        "public, max-age=31536000, immutable"
+        if release_name.endswith(".tar.gz")
+        else "no-cache"
+    )
     return FileResponse(
         archive,
-        media_type="application/gzip",
+        media_type=media_type,
         filename=release_name,
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        headers={"Cache-Control": cache},
     )
 
 

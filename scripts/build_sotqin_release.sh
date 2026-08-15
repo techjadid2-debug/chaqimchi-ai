@@ -3,9 +3,30 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+
+allow_dirty=false
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --allow-dirty) allow_dirty=true ;;
+    *) args+=("$arg") ;;
+  esac
+done
+
+# Commit qilinmagan o'zgarish bilan qurilgan paket qaysi kod ekanini hech kim
+# ayta olmaydi — va u mijoz qurilmasiga tushadi. Diskda aynan shunday eskirgan
+# tarball topilgan: nomi 0.5.0, ichi esa boshqa kod.
+if [[ "$allow_dirty" != true ]] && command -v git >/dev/null 2>&1; then
+  if ! git -C "$root" diff --quiet HEAD 2>/dev/null; then
+    echo "XATO: worktree iflos — avval commit qiling yoki --allow-dirty bering" >&2
+    git -C "$root" status --short >&2
+    exit 1
+  fi
+fi
+
 version="$(awk -F '"' '/^version = / { print $2; exit }' "$root/pyproject.toml")"
 name="chaqimchi-sotqin-${version}"
-output_dir="${1:-$root/releases}"
+output_dir="${args[0]:-$root/releases}"
 stage="$(mktemp -d "${TMPDIR:-/tmp}/chaqimchi-release.XXXXXX")"
 cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT

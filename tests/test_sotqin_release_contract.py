@@ -175,3 +175,34 @@ def test_installer_and_release_ship_the_preflight_script() -> None:
     # Tekshiruv yiqilsa o'rnatish bekor qilinmasin — qurilma o'rnatilgan,
     # faqat kamera yoki chiziq hali sozlanmagan bo'lishi mumkin.
     assert "sotqin_preflight.py || true" in bootstrap
+
+
+def test_version_is_declared_in_exactly_one_place() -> None:
+    """Ikkita versiya raqami bir-biridan ajralib ketmasin.
+
+    `build_sotqin_release.sh:6` tarball nomini `pyproject.toml` dan oladi,
+    qurilma esa heartbeat'da `chaqimchi_ai.__version__` ni yuboradi. Ular
+    farq qilsa panelda bitta versiya, faylda boshqasi ko'rinardi — va
+    `apply_signed_update.py` "bu versiya allaqachon o'rnatilgan" deb
+    to'g'ri relizni rad etardi.
+    """
+    import tomllib
+
+    from chaqimchi_ai import __version__
+
+    declared = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert declared["project"]["version"] == __version__
+
+
+def test_version_passes_the_updaters_charset_guard() -> None:
+    """Qurilma rad etadigan versiya nomi bilan reliz chiqarib bo'lmasin.
+
+    `signed_update.py` versiyani papka nomi sifatida ishlatadi, shuning
+    uchun belgilar ro'yxati qat'iy. Mos kelmasa xato faqat qurilmada,
+    o'rnatish paytida chiqardi.
+    """
+    import re
+
+    from chaqimchi_ai import __version__
+
+    assert re.fullmatch(r"[A-Za-z0-9.\-_]+", __version__), __version__

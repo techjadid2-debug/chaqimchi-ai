@@ -427,4 +427,3 @@ def test_quick_trial_and_dynamic_installer_download(cloud_client) -> None:
     assert "Chaqimchi_AI_Setup" in dl.headers.get("content-disposition", "")
     assert code in dl.text
     assert site_id in dl.text
-

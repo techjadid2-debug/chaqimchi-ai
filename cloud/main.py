@@ -1143,7 +1143,6 @@ pause
     )
 
 
-
 # ── Login/parol portali: admin, o'rnatuvchi va xarid qilgan mijoz ───────
 
 

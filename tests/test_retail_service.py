@@ -348,3 +348,22 @@ def test_ai_review_rule_loads(tmp_path: Path) -> None:
     engine = load_rules(path)
 
     assert engine.rules[0].actions == ("cloud_sync", "ai_review")
+
+
+def test_build_runner_wires_the_pressure_signal(tmp_path: Path) -> None:
+    """Aynan shu regressiya bir marta sodir bo'lgan.
+
+    `budget.set_pressure()` yozilgan, `RetailRunner` uni har housekeeping
+    tikida chaqiradigan qilib qurilgan, lekin `build_runner()` argumentni
+    uzatmasdi — natijada `budget.py` dagi `pressure >= 0.85` tarmog'i
+    yozilganidan beri bir marta ham ishlamagan.
+    """
+    from chaqimchi_ai.retail.pressure import SystemPressure
+
+    runner, _outbox = runner_for(tmp_path)
+
+    assert isinstance(runner._pressure, SystemPressure)
+    # Va u rostdan byudjetga yetadi.
+    runner._pressure = lambda: 0.93
+    runner.housekeeping_once()
+    assert runner.pipeline.broker.budget.stats()["pressure"] == 0.93

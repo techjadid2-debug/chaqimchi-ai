@@ -444,4 +444,12 @@ class RetailRunner:
             }
             for camera_id, stream in sorted(self._streams.items())
         }
+        # Bosim tafsiloti: "bosim 0.9" nima qilishni aytmaydi, "xotira 0.9"
+        # esa aytadi.  Faqat o'lchagich buni bera olsa.
+        breakdown = getattr(self._pressure, "stats", None)
+        if callable(breakdown):
+            try:
+                data["pressure"] = breakdown()
+            except Exception:
+                logger.debug("Bosim tafsiloti o'qilmadi", exc_info=True)
         return data

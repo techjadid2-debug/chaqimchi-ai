@@ -54,6 +54,7 @@ from chaqimchi_ai.retail.inventory import (
     read_sotqin_cache,
 )
 from chaqimchi_ai.retail.pipeline import RetailPipeline
+from chaqimchi_ai.retail.pressure import SystemPressure
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
 from chaqimchi_ai.retail.rules import RuleEngine, Schedule
 from chaqimchi_ai.retail.runner import CameraSource, RetailRunner
@@ -374,6 +375,10 @@ def build_runner(
         pipeline,
         housekeeping_sec=cfg.housekeeping_sec,
         on_stats=report_stats,
+        # Bu argumentsiz `budget.py` dagi `pressure >= 0.85` tarmog'i o'lik
+        # kod bo'lib turadi: byudjet faqat latency bo'yicha sozlanadi va
+        # qurilma qizib ketganini kech biladi.
+        pressure=SystemPressure(),
     )
 
     buffer_dir = _resolve(base_dir, cfg.buffer_dir)
@@ -424,14 +429,26 @@ def _log_stats(stats: Dict[str, Any]) -> None:
     """
     broker = stats["broker"]
     logger.info(
-        "tahlil=%d hodisa=%d klip=%d | kafolat buzilishi=%d p95=%.0f ms target=%.1f FPS",
+        "tahlil=%d hodisa=%d klip=%d | kafolat buzilishi=%d p95=%.0f ms "
+        "target=%.1f FPS bosim=%.2f",
         stats["analyzed"],
         stats["events"],
         stats["clips"]["written"],
         broker["floor_violations"],
         broker["budget"]["p95_latency_ms"],
         broker["budget"]["target_fps"],
+        broker["budget"]["pressure"],
     )
+    # Bosim yuqori bo'lsa qaysi manba sababchi ekani aytiladi: "bosim 0.9"
+    # nima qilishni aytmaydi, "xotira 0.9" esa aytadi.
+    breakdown = stats.get("pressure")
+    if breakdown and broker["budget"]["pressure"] >= 0.7:
+        logger.warning(
+            "Qurilma bosim ostida: CPU=%.2f xotira=%.2f harorat=%.2f",
+            breakdown.get("cpu", 0.0),
+            breakdown.get("memory", 0.0),
+            breakdown.get("temperature", 0.0),
+        )
 
 
 def _watcher(

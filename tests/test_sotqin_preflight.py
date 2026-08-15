@@ -68,9 +68,7 @@ def _healthy(tmp_path: Path) -> Preflight:
     cache.write_text(
         json.dumps(
             {
-                "cameras": [
-                    {"camera_id": "camera-01", "source": "rtsp://nvr/1", "enabled": True}
-                ],
+                "cameras": [{"camera_id": "camera-01", "source": "rtsp://nvr/1", "enabled": True}],
                 "config": {
                     "lines": [{"name": "kirish", "camera_id": "camera-01"}],
                     "zones": [{"name": "kassa", "camera_id": "camera-01"}],

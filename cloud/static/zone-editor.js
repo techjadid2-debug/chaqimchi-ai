@@ -1,24 +1,24 @@
-/* Chiziq va zona chizish vositasi.
+/* Chiziq va zona chizish vositasi (Sensorli / Mobil va Desktop moslashgan).
  *
  * Nega kerak: `scene.lines` va `scene.zones` har bir profilda bo'sh, va ularni
  * kiritishning yagona yo'li owner panelidagi "Texnik line/zone sozlamalari"
  * yopiq bo'limidagi xom JSON maydoni edi — normallashtirilgan 0..1
- * koordinatalar bilan. Amalda buni na do'kon egasi, na o'rnatuvchi to'ldirardi,
- * ya'ni `line_crossed`, `dwell_exceeded` va `queue_threshold_exceeded`
- * hech qachon chiqmasdi. Sotiladigan uchta funksiyadan ikkitasi shu sababdan
- * ishlamay turardi.
+ * koordinatalar bilan.
+ *
+ * Ushbu yangilanishda:
+ * 1. To'liq sensorli ekran (Touch events: touchstart, touchmove, touchend) qo'llab-quvvatlanadi.
+ * 2. Barmoq bilan ushlash radiusi (Hit radius) 24px ga oshirilgan.
+ * 3. 1-bosishda tayyor shablonlar (Kassa navbati, Kirish eshigi, Taqiqlangan zona) qo'shish imkoni.
  *
  * Chiqish formati o'zgarmadi: aynan `SceneLineSettings` va
- * `SceneZoneSettings` (0..1 koordinatalar), shuning uchun cloud validatsiyasi
- * va edge tomonidagi o'qish qismi tegilmadi.
- *
- * Freymvorksiz: bu sahifalar build qadamisiz, bitta fayl bo'lib turadi.
+ * `SceneZoneSettings` (0..1 koordinatalar).
  */
 (function (global) {
   "use strict";
 
   var MIN_POLYGON = 3;
-  var HIT_RADIUS = 10; // px — nuqtani "ushlash" masofasi
+  var MOUSE_HIT_RADIUS = 12;
+  var TOUCH_HIT_RADIUS = 26; // Barmoq bilan oson ushlash uchun
 
   function clamp01(value) {
     return Math.max(0, Math.min(1, value));
@@ -28,8 +28,6 @@
     return Math.round(value * 1000) / 1000;
   }
 
-  /* Zona rangi nomi bo'yicha barqaror bo'lsin: sahifa qayta yuklanganda
-   * zonalar rangini almashtirib yubormasin. */
   function colorFor(name) {
     var hash = 0;
     for (var i = 0; i < name.length; i += 1) {
@@ -47,10 +45,14 @@
     this.mode = "zone"; // zone | line
     this.zones = [];
     this.lines = [];
-    this.draft = []; // tugallanmagan poligon yoki chiziq nuqtalari
+    this.draft = [];
     this.dragging = null;
+    this.touchStartTime = 0;
+    this.touchMoved = false;
+    this.isTouch = false;
     this.onChange = this.options.onChange || function () {};
 
+    // Sichqoncha hodisalari
     canvas.addEventListener("click", this._click.bind(this));
     canvas.addEventListener("dblclick", this._finish.bind(this));
     canvas.addEventListener("contextmenu", this._remove.bind(this));
@@ -58,6 +60,12 @@
     canvas.addEventListener("mousemove", this._move.bind(this));
     canvas.addEventListener("mouseup", this._drop.bind(this));
     canvas.addEventListener("mouseleave", this._drop.bind(this));
+
+    // Sensorli ekran (Mobil / Planshet) hodisalari
+    canvas.addEventListener("touchstart", this._touchStart.bind(this), { passive: false });
+    canvas.addEventListener("touchmove", this._touchMove.bind(this), { passive: false });
+    canvas.addEventListener("touchend", this._touchEnd.bind(this), { passive: false });
+    canvas.addEventListener("touchcancel", this._drop.bind(this), { passive: false });
   }
 
   /* ── Holat ─────────────────────────────────────────────────────────── */
@@ -106,8 +114,6 @@
     this.draw();
   };
 
-  /* Faqat shu kameraga tegishlilari — boshqa kameraning chizig'i bu kadr
-   * ustida ma'nosiz bo'lardi. */
   ZoneEditor.prototype.visibleZones = function () {
     var cameraId = this.cameraId;
     return this.zones.filter(function (zone) {
@@ -126,7 +132,7 @@
     return { zones: this.zones, lines: this.lines };
   };
 
-  /* ── Sichqoncha ────────────────────────────────────────────────────── */
+  /* ── Koordinatalar hisoblash ───────────────────────────────────────── */
 
   ZoneEditor.prototype._point = function (event) {
     var box = this.canvas.getBoundingClientRect();
@@ -136,13 +142,31 @@
     ];
   };
 
+  ZoneEditor.prototype._touchPoint = function (touch) {
+    var box = this.canvas.getBoundingClientRect();
+    return [
+      clamp01((touch.clientX - box.left) / box.width),
+      clamp01((touch.clientY - box.top) / box.height),
+    ];
+  };
+
+  /* ── Sichqoncha boshqaruvi ─────────────────────────────────────────── */
+
   ZoneEditor.prototype._click = function (event) {
+    if (this.isTouch) {
+      this.isTouch = false;
+      return;
+    }
     if (this.dragging || !this.cameraId) return;
     if (this.movedWhileDown) {
       this.movedWhileDown = false;
       return;
     }
     var point = this._point(event);
+    this._addDraftPoint(point);
+  };
+
+  ZoneEditor.prototype._addDraftPoint = function (point) {
     if (this.mode === "line") {
       this.draft.push(point);
       if (this.draft.length === 2) {
@@ -155,7 +179,7 @@
   };
 
   ZoneEditor.prototype._finish = function (event) {
-    event.preventDefault();
+    if (event && event.preventDefault) event.preventDefault();
     if (this.mode === "zone" && this.draft.length >= MIN_POLYGON) {
       this._commitZone();
     }
@@ -199,15 +223,16 @@
     this.onChange();
   };
 
-  /* O'ng tugma — eng yaqin shaklni o'chiradi. */
   ZoneEditor.prototype._remove = function (event) {
-    event.preventDefault();
+    if (event && event.preventDefault) event.preventDefault();
     if (this.draft.length) {
       this.draft.pop();
       this.draw();
       return;
     }
-    var hit = this._hit(this._point(event));
+    var pt = event ? this._point(event) : null;
+    if (!pt) return;
+    var hit = this._hit(pt);
     if (!hit) return;
     var list = hit.kind === "zone" ? this.zones : this.lines;
     var label = hit.kind === "zone" ? "Zona" : "Chiziq";
@@ -222,10 +247,10 @@
 
   ZoneEditor.prototype._grab = function (event) {
     this.movedWhileDown = false;
-    var hit = this._hitVertex(this._point(event));
+    var hit = this._hitVertex(this._point(event), MOUSE_HIT_RADIUS);
     if (hit) {
       this.dragging = hit;
-      event.preventDefault();
+      if (event.preventDefault) event.preventDefault();
     }
   };
 
@@ -233,7 +258,16 @@
     if (!this.dragging) return;
     this.movedWhileDown = true;
     var point = this._point(event);
-    var target = this.dragging;
+    this._updateVertex(this.dragging, point);
+  };
+
+  ZoneEditor.prototype._drop = function () {
+    if (!this.dragging) return;
+    this.dragging = null;
+    this.onChange();
+  };
+
+  ZoneEditor.prototype._updateVertex = function (target, point) {
     if (target.kind === "zone") {
       this.zones[target.index].polygon[target.vertex] = point;
     } else if (target.vertex === 0) {
@@ -244,42 +278,142 @@
     this.draw();
   };
 
-  ZoneEditor.prototype._drop = function () {
+  /* ── Sensorli Ekran (Touch) Boshqaruvi ──────────────────────────────── */
+
+  ZoneEditor.prototype._touchStart = function (event) {
+    if (event.touches.length !== 1) return;
+    this.isTouch = true;
+    var touch = event.touches[0];
+    var point = this._touchPoint(touch);
+    this.touchStartTime = Date.now();
+    this.touchMoved = false;
+
+    var hit = this._hitVertex(point, TOUCH_HIT_RADIUS);
+    if (hit) {
+      this.dragging = hit;
+      event.preventDefault();
+    }
+  };
+
+  ZoneEditor.prototype._touchMove = function (event) {
+    if (event.touches.length !== 1) return;
+    this.touchMoved = true;
     if (!this.dragging) return;
-    this.dragging = null;
+    event.preventDefault();
+    var touch = event.touches[0];
+    var point = this._touchPoint(touch);
+    this._updateVertex(this.dragging, point);
+  };
+
+  ZoneEditor.prototype._touchEnd = function (event) {
+    if (!this.touchMoved && !this.dragging && this.cameraId) {
+      // Tez teginish (Tap) — yangi nuqta qo'shish
+      if (event.changedTouches && event.changedTouches.length > 0) {
+        var touch = event.changedTouches[0];
+        var point = this._touchPoint(touch);
+        this._addDraftPoint(point);
+      }
+    }
+    this._drop();
+  };
+
+  /* ── 1-Bosishda Tayyor Shablonlar (Presets) ─────────────────────────── */
+
+  ZoneEditor.prototype.addPreset = function (type, customName) {
+    if (!this.cameraId) return false;
+    var name = customName;
+
+    if (type === "queue") {
+      name = name || "kassa_navbati";
+      this.zones.push({
+        name: name,
+        camera_id: this.cameraId,
+        polygon: [
+          [0.25, 0.45],
+          [0.65, 0.45],
+          [0.65, 0.85],
+          [0.25, 0.85],
+        ],
+        restricted: false,
+        queue: true,
+        dwell_sec: 180,
+      });
+    } else if (type === "restricted") {
+      name = name || "taqiqlangan_zona";
+      this.zones.push({
+        name: name,
+        camera_id: this.cameraId,
+        polygon: [
+          [0.60, 0.15],
+          [0.95, 0.15],
+          [0.95, 0.70],
+          [0.60, 0.70],
+        ],
+        restricted: true,
+        queue: false,
+        dwell_sec: null,
+      });
+    } else if (type === "entrance") {
+      name = name || "kirish_eshigi";
+      this.lines.push({
+        name: name,
+        camera_id: this.cameraId,
+        start: [0.15, 0.65],
+        end: [0.85, 0.65],
+        swap_direction: false,
+      });
+    }
+
     this.onChange();
+    this.draw();
+    return true;
+  };
+
+  ZoneEditor.prototype.finishDraft = function () {
+    if (this.mode === "zone" && this.draft.length >= MIN_POLYGON) {
+      this._commitZone();
+      this.draw();
+      return true;
+    }
+    return false;
+  };
+
+  ZoneEditor.prototype.cancelDraft = function () {
+    this.draft = [];
+    this.draw();
   };
 
   /* ── Urish testi ───────────────────────────────────────────────────── */
 
-  ZoneEditor.prototype._near = function (a, b) {
+  ZoneEditor.prototype._near = function (a, b, radius) {
     var box = this.canvas.getBoundingClientRect();
     var dx = (a[0] - b[0]) * box.width;
     var dy = (a[1] - b[1]) * box.height;
-    return Math.sqrt(dx * dx + dy * dy) <= HIT_RADIUS;
+    return Math.sqrt(dx * dx + dy * dy) <= (radius || MOUSE_HIT_RADIUS);
   };
 
-  ZoneEditor.prototype._hitVertex = function (point) {
+  ZoneEditor.prototype._hitVertex = function (point, radius) {
     var self = this;
+    var r = radius || MOUSE_HIT_RADIUS;
     var found = null;
     this.zones.forEach(function (zone, index) {
       if (zone.camera_id !== self.cameraId || found) return;
       zone.polygon.forEach(function (vertex, order) {
-        if (!found && self._near(point, vertex)) {
+        if (!found && self._near(point, vertex, r)) {
           found = { kind: "zone", index: index, vertex: order };
         }
       });
     });
     this.lines.forEach(function (line, index) {
       if (line.camera_id !== self.cameraId || found) return;
-      if (self._near(point, line.start)) found = { kind: "line", index: index, vertex: 0 };
-      else if (self._near(point, line.end)) found = { kind: "line", index: index, vertex: 1 };
+      if (self._near(point, line.start, r)) found = { kind: "line", index: index, vertex: 0 };
+      else if (self._near(point, line.end, r)) found = { kind: "line", index: index, vertex: 1 };
     });
     return found;
   };
 
   ZoneEditor.prototype._hit = function (point) {
-    var vertex = this._hitVertex(point);
+    var vertex = this._hitVertex(point, TOUCH_HIT_RADIUS);
     if (vertex) return vertex;
     var self = this;
     var found = null;
@@ -291,7 +425,6 @@
     return found;
   };
 
-  /* Ray casting — nuqta poligon ichidami. */
   function inside(point, polygon) {
     var result = false;
     for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
@@ -338,7 +471,7 @@
       ctx.closePath();
       ctx.fillStyle = "hsla(" + hue + ",70%,50%,0.25)";
       ctx.strokeStyle = "hsl(" + hue + ",70%,55%)";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.fill();
       ctx.stroke();
       zone.polygon.forEach(function (point) {
@@ -363,7 +496,7 @@
       ctx.save();
       ctx.setLineDash([6, 4]);
       ctx.strokeStyle = "#d8f14a";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       this.draft.forEach(function (point, index) {
         var x = point[0] * width;
@@ -382,30 +515,24 @@
   ZoneEditor.prototype._dot = function (point, color) {
     var ctx = this.ctx;
     ctx.beginPath();
-    ctx.arc(point[0] * this.canvas.width, point[1] * this.canvas.height, 5, 0, Math.PI * 2);
+    ctx.arc(point[0] * this.canvas.width, point[1] * this.canvas.height, 7, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = "#111820";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   };
 
   ZoneEditor.prototype._label = function (text, x, y) {
     var ctx = this.ctx;
-    ctx.font = "12px sans-serif";
-    var width = ctx.measureText(text).width + 10;
-    ctx.fillStyle = "rgba(17,24,32,0.85)";
+    ctx.font = "bold 12px sans-serif";
+    var width = ctx.measureText(text).width + 12;
+    ctx.fillStyle = "rgba(17,24,32,0.90)";
     ctx.fillRect(x - 4, y - 14, width, 18);
     ctx.fillStyle = "#f4f7f1";
-    ctx.fillText(text, x + 1, y - 1);
+    ctx.fillText(text, x + 2, y);
   };
 
-  /* Chiziq + "ichkari" tomonini ko'rsatuvchi o'q.
-   *
-   * `SceneLineSettings` shartnomasi: start->end yo'nalishining **chap**
-   * tomoni ichkari. `swap_direction` uni teskarisiga o'giradi. O'q aynan
-   * shuni ko'rsatadi, aks holda o'rnatuvchi chiziqni teskari chizib qo'yadi
-   * va kirish/chiqish o'rin almashadi. */
   ZoneEditor.prototype._line = function (line, width, height) {
     var ctx = this.ctx;
     var x1 = line.start[0] * width;
@@ -417,7 +544,7 @@
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.strokeStyle = "#4fc3f7";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5;
     ctx.stroke();
 
     var midX = (x1 + x2) / 2;
@@ -425,7 +552,6 @@
     var dx = x2 - x1;
     var dy = y2 - y1;
     var length = Math.sqrt(dx * dx + dy * dy) || 1;
-    // Chap tomon normali; swap_direction bo'lsa teskari.
     var sign = line.swap_direction ? -1 : 1;
     var nx = (dy / length) * sign;
     var ny = (-dx / length) * sign;
@@ -439,7 +565,7 @@
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(tipX, tipY, 5, 0, Math.PI * 2);
+    ctx.arc(tipX, tipY, 6, 0, Math.PI * 2);
     ctx.fillStyle = "#96c11f";
     ctx.fill();
 
@@ -448,8 +574,6 @@
     this._dot(line.end, "#4fc3f7");
   };
 
-  /* Saqlashdan oldin koordinatalarni qisqartiramiz: uch xona 640 px kadrda
-   * yarim pikseldan aniq va JSON ancha kichik bo'ladi. */
   ZoneEditor.prototype.serialise = function () {
     return {
       zones: this.zones.map(function (zone) {

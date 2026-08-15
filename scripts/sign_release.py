@@ -154,9 +154,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         private_key=private_key,
     )
     output = args.output or args.archive.with_suffix("").with_suffix(".json")
-    output.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    output.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     # O'z-o'zini tekshirish: aynan qurilmadagi ochiq kalit bilan.
     try:

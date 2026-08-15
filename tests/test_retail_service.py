@@ -42,9 +42,7 @@ def test_event_clips_are_pruned_by_age_and_quota(tmp_path: Path) -> None:
     os.utime(first, (800, 800))
     os.utime(second, (900, 900))
 
-    removed, freed = prune_event_clips(
-        tmp_path, retention_sec=500, max_bytes=5, now=1000
-    )
+    removed, freed = prune_event_clips(tmp_path, retention_sec=500, max_bytes=5, now=1000)
 
     assert (removed, freed) == (2, 8)
     assert not old.exists()
@@ -198,9 +196,7 @@ def test_owner_business_hours_replace_the_queue_rule_schedule(tmp_path: Path) ->
         "    schedule: ish-vaqti\n",
         encoding="utf-8",
     )
-    runner, _outbox = runner_for(
-        tmp_path, open_from="08:00", open_to="20:00", rules_path=str(path)
-    )
+    runner, _outbox = runner_for(tmp_path, open_from="08:00", open_to="20:00", rules_path=str(path))
 
     hours = runner.pipeline.rules.schedules["ish-vaqti"]
     assert hours.contains(dt_time(hour=8)) is True
@@ -326,9 +322,7 @@ def test_the_important_event_is_uploaded_first(tmp_path: Path) -> None:
     sink = OutboxSink(outbox)
 
     sink("cloud_sync", EdgeEvent(event_type="person_detected", camera_id="cam"))
-    tampered = EdgeEvent(
-        event_type="camera_tampered", camera_id="cam", severity="critical"
-    )
+    tampered = EdgeEvent(event_type="camera_tampered", camera_id="cam", severity="critical")
     sink("cloud_sync", tampered)
 
     assert outbox.pending()[0]["event_id"] == tampered.event_id

@@ -82,9 +82,7 @@ async def restore(
         return JSONResponse({"ok": False, "error": "Fayl juda katta"}, status_code=413)
 
     try:
-        result = restore_backup(
-            db, data, encryption_key=resolve_embedding_key(), mode=mode
-        )
+        result = restore_backup(db, data, encryption_key=resolve_embedding_key(), mode=mode)
     except BackupError as e:
         # Baza o'zgarmagan: `restore_backup` avval to'liq tekshiradi.
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)

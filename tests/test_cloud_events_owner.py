@@ -90,12 +90,8 @@ def test_event_ingestion_is_idempotent_and_snapshot_is_private(production_client
     assert client.get("/api/v1/owner/events/evt-1/clip").status_code == 401
 
     owner_headers = _login_owner(client, site["site_id"], telegram_id="102")
-    private_snapshot = client.get(
-        "/api/v1/owner/events/evt-1/snapshot", headers=owner_headers
-    )
-    private_clip = client.get(
-        "/api/v1/owner/events/evt-1/clip", headers=owner_headers
-    )
+    private_snapshot = client.get("/api/v1/owner/events/evt-1/snapshot", headers=owner_headers)
+    private_clip = client.get("/api/v1/owner/events/evt-1/clip", headers=owner_headers)
     assert private_snapshot.content == b"jpeg-data"
     assert private_snapshot.headers["content-type"] == "image/jpeg"
     assert private_clip.content == b"mp4-data"
@@ -118,13 +114,9 @@ def test_late_clip_retry_does_not_duplicate_the_telegram_alert(production_client
         "has_snapshot": True,
     }
 
-    first = client.post(
-        "/api/v1/edge/events/batch", headers=headers, json={"events": [event]}
-    )
+    first = client.post("/api/v1/edge/events/batch", headers=headers, json={"events": [event]})
     event["has_clip"] = True
-    second = client.post(
-        "/api/v1/edge/events/batch", headers=headers, json={"events": [event]}
-    )
+    second = client.post("/api/v1/edge/events/batch", headers=headers, json={"events": [event]})
 
     assert first.json()["accepted"] == ["evt-late-clip"]
     assert second.json()["accepted"] == ["evt-late-clip"]
@@ -158,9 +150,7 @@ def test_edge_health_heartbeat_is_visible_to_owner(production_client) -> None:
         },
     )
     assert heartbeat.status_code == 200
-    health = client.get(
-        "/api/v1/owner/health", headers={"Authorization": f"Bearer {token}"}
-    ).json()
+    health = client.get("/api/v1/owner/health", headers={"Authorization": f"Bearer {token}"}).json()
     assert health["devices"][0]["health"]["cameras_active"] == 8
     assert health["cameras_expected"] == 8
 
@@ -173,9 +163,7 @@ def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
         headers={"X-Cloud-Admin-Key": "test-admin"},
         json={"telegram_id": "202", "role": "owner", "display_name": "Owner"},
     )
-    requested = client.post(
-        "/api/v1/owner/auth/request", json={"telegram_id": "202"}
-    )
+    requested = client.post("/api/v1/owner/auth/request", json={"telegram_id": "202"})
     assert requested.status_code == 200
     assert requested.json()["debug_code"] == "123456"
     assert messages and messages[-1][0] == "202"
@@ -242,7 +230,10 @@ def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
     invoice = client.post("/api/v1/owner/invoices", headers=owner_headers, json={"months": 1})
     assert invoice.status_code == 200
     assert invoice.json()["pay_url"].startswith("/pay/")
-    assert client.get("/api/v1/owner/invoices", headers=owner_headers).json()[0]["id"] == invoice.json()["id"]
+    assert (
+        client.get("/api/v1/owner/invoices", headers=owner_headers).json()[0]["id"]
+        == invoice.json()["id"]
+    )
     assert client.get("/owner").status_code == 200
 
 

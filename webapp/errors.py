@@ -71,9 +71,7 @@ def register_error_handlers(app: FastAPI) -> None:
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:
         # `jsonable_encoder` shart: pydantic v2 xato ob'ektlari `ctx` ichida
         # JSON'ga aylanmaydigan qiymatlar (masalan, istisno) olib yurishi mumkin.
-        return _fail(
-            422, "So'rov parametrlari noto'g'ri", errors=jsonable_encoder(exc.errors())
-        )
+        return _fail(422, "So'rov parametrlari noto'g'ri", errors=jsonable_encoder(exc.errors()))
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:

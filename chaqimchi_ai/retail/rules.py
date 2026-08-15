@@ -196,9 +196,7 @@ class RuleEngine:
             return Decision(event=decided, actions=tuple(rule.actions), rule_name=rule.name)
         return Decision(event=event, actions=DEFAULT_ACTIONS, rule_name=None)
 
-    def _matches(
-        self, rule: Rule, event: EdgeEvent, local_time: Optional[clock_time]
-    ) -> bool:
+    def _matches(self, rule: Rule, event: EdgeEvent, local_time: Optional[clock_time]) -> bool:
         if rule.event_type != event.event_type:
             return False
         if rule.camera_id is not None and rule.camera_id != event.camera_id:
@@ -237,7 +235,5 @@ class RuleEngine:
         local_time: Optional[clock_time] = None,
     ) -> List[Decision]:
         """Bir nechta hodisani baholaydi va bostirilganlarini tashlaydi."""
-        results = [
-            self.evaluate(event, now=now, local_time=local_time) for event in events
-        ]
+        results = [self.evaluate(event, now=now, local_time=local_time) for event in events]
         return [decision for decision in results if not decision.suppressed]

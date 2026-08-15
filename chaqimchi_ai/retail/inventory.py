@@ -100,9 +100,7 @@ def read_sotqin_cache(path: Path) -> Dict[str, Any]:
     }
 
 
-def merge_cameras(
-    inventory: Sequence[InventoryCamera], local: Sequence[Any]
-) -> List[CameraPlan]:
+def merge_cameras(inventory: Sequence[InventoryCamera], local: Sequence[Any]) -> List[CameraPlan]:
     """Inventar va lokal sozlamani birlashtiradi.
 
     Tartib inventardan boshlanadi — panelda ko'ringan kamera zanjirda ham

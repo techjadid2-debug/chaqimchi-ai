@@ -123,15 +123,90 @@ def _sweep_orphans(root: Path, cutoff_ts: float) -> tuple[int, int]:
     return deleted, freed
 
 
+def purge_emergency_if_disk_low(
+    directories: Iterable[Path],
+    *,
+    min_free_bytes: int = 2 * 1024 * 1024 * 1024,  # 2 GB
+    target_free_bytes: int = 4 * 1024 * 1024 * 1024,  # 4 GB
+) -> tuple[int, int]:
+    """Disk bo'sh joyi `min_free_bytes` dan kamayib ketsa, eng eski media fayllarni o'chiradi.
+
+    Qaytaradi: (o'chirilgan_fayllar_soni, bo'shatilgan_baytlar)
+    """
+
+    import shutil
+
+    dirs = [d for d in directories if d.is_dir()]
+    if not dirs:
+        return 0, 0
+
+    first_dir = dirs[0]
+    try:
+        usage = shutil.disk_usage(str(first_dir))
+    except Exception:
+        return 0, 0
+
+    if usage.free >= min_free_bytes:
+        return 0, 0
+
+    logger.warning(
+        "Diskda joy kam qoldi (%.1f MB). Favqulodda FIFO tozalash boshlandi...",
+        usage.free / 1_048_576,
+    )
+
+    # Barcha papkalardan media fayllarni to'plab, eng eskisidan boshlab o'chirish
+    all_files: List[tuple[float, int, Path]] = []
+    for d in dirs:
+        for p in d.glob("**/*"):
+            if p.is_file() and p.suffix.lower() in (".jpg", ".jpeg", ".png", ".mp4", ".ts"):
+                try:
+                    st = p.stat()
+                    all_files.append((st.st_mtime, st.st_size, p))
+                except OSError:
+                    continue
+
+    all_files.sort(key=lambda x: x[0])  # Eng eski fayllar oldinda
+
+    files_deleted = 0
+    bytes_freed = 0
+
+    for _mtime, size, file_path in all_files:
+        try:
+            file_path.unlink()
+            files_deleted += 1
+            bytes_freed += size
+            if usage.free + bytes_freed >= target_free_bytes:
+                break
+        except OSError:
+            continue
+
+    if files_deleted:
+        logger.info(
+            "Favqulodda tozalash yakunlandi: %d fayl o'chirildi, %.1f MB bo'shatildi",
+            files_deleted,
+            bytes_freed / 1_048_576,
+        )
+
+    return files_deleted, bytes_freed
+
+
 def purge_once(
     events: EventLog,
     snapshots_dir: Path,
     retention_days: int,
     *,
     now: Optional[float] = None,
+    media_dirs: Optional[Iterable[Path]] = None,
 ) -> PurgeResult:
     """Muddati o‘tgan voqealarni va ularning rasmlarini o‘chiradi."""
     result = PurgeResult(retention_days=retention_days)
+
+    # 1. Favqulodda disk bo'shatish (agar disk to'lib qolayotgan bo'lsa)
+    all_media_dirs = [snapshots_dir] + list(media_dirs or [])
+    emerg_files, emerg_freed = purge_emergency_if_disk_low(all_media_dirs)
+    result.files_deleted += emerg_files
+    result.bytes_freed += emerg_freed
+
     if retention_days <= 0:
         return result
 
@@ -143,8 +218,8 @@ def purge_once(
     cutoff_ts = (now if now is not None else time.time()) - retention_days * 86400
     orphan_files, orphan_freed = _sweep_orphans(snapshots_dir, cutoff_ts)
 
-    result.files_deleted = files + orphan_files
-    result.bytes_freed = freed + orphan_freed
+    result.files_deleted += files + orphan_files
+    result.bytes_freed += freed + orphan_freed
     return result
 
 

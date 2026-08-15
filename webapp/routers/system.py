@@ -74,8 +74,7 @@ async def health(container: AppContainer = Depends(get_container)) -> JSONRespon
                 or os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower()
                 in {"1", "true", "yes"}
                 else "closed_pilot"
-                if os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower()
-                in {"1", "true", "yes"}
+                if os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower() in {"1", "true", "yes"}
                 else "disabled"
             ),
             "ws_clients": len(container.ws_clients),
@@ -144,6 +143,4 @@ async def prometheus_metrics(
 ) -> PlainTextResponse:
     snap = get_metrics().snapshot()
     snap["ws_clients"] = len(container.ws_clients)
-    return PlainTextResponse(
-        format_prometheus(snap), media_type="text/plain; version=0.0.4"
-    )
+    return PlainTextResponse(format_prometheus(snap), media_type="text/plain; version=0.0.4")

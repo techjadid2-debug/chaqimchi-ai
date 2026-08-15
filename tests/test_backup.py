@@ -378,9 +378,7 @@ def test_api_restore_rejects_garbage(client) -> None:
 
 
 def test_api_restore_rejects_empty_file(client) -> None:
-    r = client.post(
-        "/api/backup/restore", files={"file": ("n.zip", b"", "application/zip")}
-    )
+    r = client.post("/api/backup/restore", files={"file": ("n.zip", b"", "application/zip")})
     assert r.status_code == 400
 
 

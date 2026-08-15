@@ -71,10 +71,13 @@ def test_every_event_type_has_an_uzbek_label() -> None:
 
 def test_alert_summary_uses_the_uzbek_labels() -> None:
     events = [
-        EdgeEvent(event_type="queue_threshold_exceeded", camera_id="kassa-01",
-                  severity="warning", queue_length=7),
-        EdgeEvent(event_type="camera_tampered", camera_id="ombor",
-                  severity="critical"),
+        EdgeEvent(
+            event_type="queue_threshold_exceeded",
+            camera_id="kassa-01",
+            severity="warning",
+            queue_length=7,
+        ),
+        EdgeEvent(event_type="camera_tampered", camera_id="ombor", severity="critical"),
     ]
     message = summarize(events)
     assert "Navbat uzun — kassa-01" in message
@@ -91,12 +94,26 @@ def test_event_store_persists_and_returns_retail_fields(tmp_path: Path) -> None:
         "site-1",
         "device-1",
         [
-            EdgeEvent(event_id="e1", event_type="line_crossed", camera_id="kirish",
-                      direction="in", line="eshik"),
-            EdgeEvent(event_id="e2", event_type="dwell_exceeded", camera_id="zal",
-                      zone="tokcha-3", dwell_sec=185.5),
-            EdgeEvent(event_id="e3", event_type="queue_threshold_exceeded",
-                      camera_id="kassa-01", queue_length=6),
+            EdgeEvent(
+                event_id="e1",
+                event_type="line_crossed",
+                camera_id="kirish",
+                direction="in",
+                line="eshik",
+            ),
+            EdgeEvent(
+                event_id="e2",
+                event_type="dwell_exceeded",
+                camera_id="zal",
+                zone="tokcha-3",
+                dwell_sec=185.5,
+            ),
+            EdgeEvent(
+                event_id="e3",
+                event_type="queue_threshold_exceeded",
+                camera_id="kassa-01",
+                queue_length=6,
+            ),
         ],
     )
 
@@ -111,14 +128,21 @@ def test_existing_database_gains_retail_columns(tmp_path: Path) -> None:
     """Yangilanish eski bazani buzmasin va ma'lumotni yo'qotmasin."""
     path = tmp_path / "events.db"
     old = EventStore(sqlite_path=path)
-    old.ingest("site-1", "device-1",
-               [EdgeEvent(event_id="eski", event_type="loitering", camera_id="zal")])
+    old.ingest(
+        "site-1", "device-1", [EdgeEvent(event_id="eski", event_type="loitering", camera_id="zal")]
+    )
 
     # Ikkinchi marta ochilishi migratsiyani qayta ishga tushiradi.
     fresh = EventStore(sqlite_path=path)
-    fresh.ingest("site-1", "device-1",
-                 [EdgeEvent(event_id="yangi", event_type="line_crossed",
-                            camera_id="kirish", direction="out")])
+    fresh.ingest(
+        "site-1",
+        "device-1",
+        [
+            EdgeEvent(
+                event_id="yangi", event_type="line_crossed", camera_id="kirish", direction="out"
+            )
+        ],
+    )
 
     rows = {row["event_id"]: row for row in fresh.list_events("site-1", limit=10)}
     assert rows["eski"]["direction"] is None  # eski yozuv saqlandi
@@ -156,10 +180,12 @@ def cloud(tmp_path: Path, monkeypatch):
 
 def test_edge_can_send_retail_events_to_cloud(cloud) -> None:
     main, client = cloud
-    site = client.post("/api/v1/admin/sites", headers=ADMIN,
-                       json={"name": "Do'kon", "plan": "lite"}).json()
-    device = client.post("/api/v1/devices/claim",
-                         json={"pairing_code": site["pairing_code"]}).json()
+    site = client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Do'kon", "plan": "lite"}
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
     headers = {
         "X-Site-Id": device["site_id"],
         "X-Device-Id": device["device_id"],
@@ -169,12 +195,24 @@ def test_edge_can_send_retail_events_to_cloud(cloud) -> None:
     response = client.post(
         "/api/v1/edge/events/batch",
         headers=headers,
-        json={"events": [
-            EdgeEvent(event_id="in-1", event_type="line_crossed", camera_id="kirish",
-                      direction="in", line="eshik").cloud_payload(),
-            EdgeEvent(event_id="out-1", event_type="line_crossed", camera_id="kirish",
-                      direction="out", line="eshik").cloud_payload(),
-        ]},
+        json={
+            "events": [
+                EdgeEvent(
+                    event_id="in-1",
+                    event_type="line_crossed",
+                    camera_id="kirish",
+                    direction="in",
+                    line="eshik",
+                ).cloud_payload(),
+                EdgeEvent(
+                    event_id="out-1",
+                    event_type="line_crossed",
+                    camera_id="kirish",
+                    direction="out",
+                    line="eshik",
+                ).cloud_payload(),
+            ]
+        },
     )
 
     assert response.status_code == 200
@@ -191,10 +229,12 @@ def test_camera_health_events_reach_the_cloud(cloud) -> None:
     yuborib turardi.
     """
     main, client = cloud
-    site = client.post("/api/v1/admin/sites", headers=ADMIN,
-                       json={"name": "Do'kon", "plan": "lite"}).json()
-    device = client.post("/api/v1/devices/claim",
-                         json={"pairing_code": site["pairing_code"]}).json()
+    site = client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Do'kon", "plan": "lite"}
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
     headers = {
         "X-Site-Id": device["site_id"],
         "X-Device-Id": device["device_id"],
@@ -204,14 +244,30 @@ def test_camera_health_events_reach_the_cloud(cloud) -> None:
     response = client.post(
         "/api/v1/edge/events/batch",
         headers=headers,
-        json={"events": [
-            EdgeEvent(event_id="off-1", event_type="camera_offline", severity="warning",
-                      camera_id="camera-01", metadata={"attempts": 3}).cloud_payload(),
-            EdgeEvent(event_id="frozen-1", event_type="stream_frozen", severity="critical",
-                      camera_id="camera-02", metadata={"duration_sec": 25.0}).cloud_payload(),
-            EdgeEvent(event_id="back-1", event_type="camera_recovered",
-                      camera_id="camera-01", metadata={"downtime_sec": 300.0}).cloud_payload(),
-        ]},
+        json={
+            "events": [
+                EdgeEvent(
+                    event_id="off-1",
+                    event_type="camera_offline",
+                    severity="warning",
+                    camera_id="camera-01",
+                    metadata={"attempts": 3},
+                ).cloud_payload(),
+                EdgeEvent(
+                    event_id="frozen-1",
+                    event_type="stream_frozen",
+                    severity="critical",
+                    camera_id="camera-02",
+                    metadata={"duration_sec": 25.0},
+                ).cloud_payload(),
+                EdgeEvent(
+                    event_id="back-1",
+                    event_type="camera_recovered",
+                    camera_id="camera-01",
+                    metadata={"downtime_sec": 300.0},
+                ).cloud_payload(),
+            ]
+        },
     )
 
     assert response.status_code == 200

@@ -43,9 +43,7 @@ def _employee_view(container: AppContainer, db: FaceDatabase) -> list[Dict[str, 
     ]
 
 
-async def _report_status(
-    container: AppContainer, employee_id: str, status: str
-) -> bool:
+async def _report_status(container: AppContainer, employee_id: str, status: str) -> bool:
     sync = container.settings.cloud_sync
     if not sync.enabled or not all((sync.site_id, sync.device_id, sync.device_token)):
         return False

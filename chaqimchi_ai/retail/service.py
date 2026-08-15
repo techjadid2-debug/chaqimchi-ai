@@ -300,9 +300,7 @@ def build_runner(
         raise RuntimeError("retail.enabled: false — xizmat ishga tushmaydi")
     cameras, revision = plan_cameras(settings, base_dir)
     if not cameras:
-        raise RuntimeError(
-            "Kamera topilmadi: cloud inventari ham, retail.cameras ham bo'sh"
-        )
+        raise RuntimeError("Kamera topilmadi: cloud inventari ham, retail.cameras ham bo'sh")
     logger.info("%s (config revision: %s)", describe(cameras), revision)
 
     if detector is None:
@@ -319,9 +317,7 @@ def build_runner(
 
     sink = OutboxSink(outbox)
     broker = FrameBroker(
-        InferenceBudget(
-            target_fps=cfg.target_fps, min_fps=cfg.min_fps, max_fps=cfg.max_fps
-        )
+        InferenceBudget(target_fps=cfg.target_fps, min_fps=cfg.min_fps, max_fps=cfg.max_fps)
     )
     rules_path = _resolve(base_dir, cfg.rules_path) if cfg.rules_path else None
     business_hours = (
@@ -429,8 +425,7 @@ def _log_stats(stats: Dict[str, Any]) -> None:
     """
     broker = stats["broker"]
     logger.info(
-        "tahlil=%d hodisa=%d klip=%d | kafolat buzilishi=%d p95=%.0f ms "
-        "target=%.1f FPS bosim=%.2f",
+        "tahlil=%d hodisa=%d klip=%d | kafolat buzilishi=%d p95=%.0f ms target=%.1f FPS bosim=%.2f",
         stats["analyzed"],
         stats["events"],
         stats["clips"]["written"],
@@ -557,9 +552,7 @@ def _watcher(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Retail AI xizmati")
-    parser.add_argument(
-        "--config", default=None, help="config yo'li (standart: $CHAQIMCHI_CONFIG)"
-    )
+    parser.add_argument("--config", default=None, help="config yo'li (standart: $CHAQIMCHI_CONFIG)")
     parser.add_argument("--base-dir", default=".", help="loyiha ildizi")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args(argv)

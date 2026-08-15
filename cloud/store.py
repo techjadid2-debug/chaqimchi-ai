@@ -169,8 +169,13 @@ class CloudStore:
             pass
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            pass
         return conn
 
     def _init_db(self) -> None:
@@ -506,9 +511,7 @@ class CloudStore:
         conn.close()
         if not cursor.rowcount:
             raise ValueError("Kamera topilmadi")
-        return next(
-            item for item in self.list_cameras(site_id) if item["camera_id"] == camera_id
-        )
+        return next(item for item in self.list_cameras(site_id) if item["camera_id"] == camera_id)
 
     def pending_preview_cameras(self, site_id: str) -> List[str]:
         conn = self._connect()

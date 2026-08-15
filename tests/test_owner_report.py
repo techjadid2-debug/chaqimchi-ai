@@ -84,7 +84,7 @@ def test_hourly_breakdown_covers_the_whole_day(tmp_path: Path) -> None:
 
 
 def test_yesterday_is_compared(tmp_path: Path) -> None:
-    """"Bugun 12 kishi kirdi" — bu ko'pmi yoki kammi?"""
+    """ "Bugun 12 kishi kirdi" — bu ko'pmi yoki kammi?"""
     store = store_with(
         [crossing(12, "in", index) for index in range(12)]
         + [crossing(12, "in", index, day=date(2026, 8, 12)) for index in range(10)],
@@ -140,7 +140,7 @@ def test_the_longest_queue_and_its_time_are_reported(tmp_path: Path) -> None:
 
 
 def test_dwell_is_grouped_by_zone_and_ranked(tmp_path: Path) -> None:
-    """"Qaysi tokcha oldida ko'p turishadi" — javon joylashuvi uchun."""
+    """ "Qaysi tokcha oldida ko'p turishadi" — javon joylashuvi uchun."""
     events = [
         EdgeEvent(
             event_type="dwell_exceeded",

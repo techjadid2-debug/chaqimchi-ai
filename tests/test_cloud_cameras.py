@@ -144,9 +144,7 @@ def test_camera_recovery_alert() -> None:
 
 def test_offline_site_skips_camera_alert() -> None:
     """Tizim butunlay o‘chgan — aloqa ogohlantirishi allaqachon ketgan."""
-    alerts, _ = plan_camera_alerts(
-        [_site_row(cameras_active=0, connection="offline")], {}
-    )
+    alerts, _ = plan_camera_alerts([_site_row(cameras_active=0, connection="offline")], {})
     assert alerts == []
 
 
@@ -159,9 +157,7 @@ def test_suspended_site_skips_camera_alert() -> None:
 
 
 def test_site_without_expectation_is_skipped() -> None:
-    alerts, _ = plan_camera_alerts(
-        [_site_row(cameras_active=0, cameras_expected=0)], {}
-    )
+    alerts, _ = plan_camera_alerts([_site_row(cameras_active=0, cameras_expected=0)], {})
     assert alerts == []
 
 

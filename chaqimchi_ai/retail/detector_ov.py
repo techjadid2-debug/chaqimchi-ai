@@ -131,7 +131,5 @@ class OpenVINOPersonDetector:
         """
         import cv2
 
-        resized = cv2.resize(
-            frame, (INPUT_WIDTH, INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR
-        )
+        resized = cv2.resize(frame, (INPUT_WIDTH, INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR)
         return np.expand_dims(resized.transpose(2, 0, 1), axis=0).astype(np.float32)

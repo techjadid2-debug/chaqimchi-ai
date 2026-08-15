@@ -180,11 +180,7 @@ class SceneAnalyzer:
             ]
         )
         self.dwell = DwellTracker(
-            {
-                zone.name: float(zone.dwell_sec)
-                for zone in self.zones
-                if zone.dwell_sec is not None
-            }
+            {zone.name: float(zone.dwell_sec) for zone in self.zones if zone.dwell_sec is not None}
         )
         self._queue_alerted = False
         self._last_analysis = 0.0
@@ -253,9 +249,7 @@ class SceneAnalyzer:
 
             x1, y1, x2, y2 = detection["bbox"]
             center = ((x1 + x2) / 2 / width, y2 / height)
-            current_zones = {
-                zone.name for zone in self.zones if _inside(center, zone.polygon)
-            }
+            current_zones = {zone.name for zone in self.zones if _inside(center, zone.polygon)}
             for zone_name in current_zones:
                 zone_counts[zone_name] = zone_counts.get(zone_name, 0) + 1
             previous_zones = self._track_zones.setdefault(track_id, set())

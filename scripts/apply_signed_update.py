@@ -165,8 +165,10 @@ class Updater:
         if not base.startswith("https://") and "127.0.0.1" not in base and "localhost" not in base:
             raise UpdateVerificationError("Cloud manzili HTTPS bo'lishi kerak")
         name = f"chaqimchi-sotqin-{version}"
-        pairs = ((f"{base}/releases/{name}.json", target / f"{name}.json"),
-                 (f"{base}/releases/{name}.tar.gz", target / f"{name}.tar.gz"))
+        pairs = (
+            (f"{base}/releases/{name}.json", target / f"{name}.json"),
+            (f"{base}/releases/{name}.tar.gz", target / f"{name}.tar.gz"),
+        )
         for url, path in pairs:
             status, payload = self.http_get(url, 120.0)
             if status != 200:
@@ -209,7 +211,9 @@ class Updater:
             return
 
         self.note(f"Model yuklab olinmoqda: {', '.join(missing)}")
-        result = self._run([str(self.venv_python), str(destination / "scripts" / "fetch_retail_model.py")])
+        result = self._run(
+            [str(self.venv_python), str(destination / "scripts" / "fetch_retail_model.py")]
+        )
         if result.returncode != 0:
             raise UpdateVerificationError(
                 "Model yuklab olinmadi — yangilanish to'xtatildi (eski versiya joyida qoldi)"
@@ -404,7 +408,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--cloud", default=None, help="cloud manzili (--fetch-version bilan)")
     parser.add_argument("--public-key", type=Path, default=Path("/etc/chaqimchi/update-public.pem"))
     parser.add_argument("--root", type=Path, default=Path("/opt/chaqimchi"))
-    parser.add_argument("--pip", action="store_true", help="yangi bog'liqliklarni o'rnatishga ruxsat")
+    parser.add_argument(
+        "--pip", action="store_true", help="yangi bog'liqliklarni o'rnatishga ruxsat"
+    )
     args = parser.parse_args(argv)
 
     if args.fetch_version and not args.cloud:

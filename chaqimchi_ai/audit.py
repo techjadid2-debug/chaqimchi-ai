@@ -12,9 +12,18 @@ class AuditLog:
         self.db_path = db_path
         self._init_db()
 
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            pass
+        return conn
+
     def _init_db(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS audit (
@@ -30,7 +39,7 @@ class AuditLog:
         conn.close()
 
     def log(self, action: str, actor: Optional[str] = None, detail: Optional[str] = None) -> None:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         conn.execute(
             "INSERT INTO audit (action, actor, detail) VALUES (?, ?, ?)",
             (action, actor, detail),
@@ -39,7 +48,7 @@ class AuditLog:
         conn.close()
 
     def recent(self, limit: int = 50) -> List[Dict[str, Any]]:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             "SELECT * FROM audit ORDER BY timestamp DESC LIMIT ?", (limit,)

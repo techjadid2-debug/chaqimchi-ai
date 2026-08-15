@@ -30,9 +30,7 @@ class LocalSnapshotStore:
             raise ValueError("Noto'g'ri snapshot key")
         return path
 
-    def put(
-        self, key: str, data: bytes, *, content_type: str = "application/octet-stream"
-    ) -> None:
+    def put(self, key: str, data: bytes, *, content_type: str = "application/octet-stream") -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
@@ -66,9 +64,7 @@ class S3SnapshotStore:
         if not self.client.bucket_exists(self.bucket):
             self.client.make_bucket(self.bucket)
 
-    def put(
-        self, key: str, data: bytes, *, content_type: str = "application/octet-stream"
-    ) -> None:
+    def put(self, key: str, data: bytes, *, content_type: str = "application/octet-stream") -> None:
         payload = self.cipher.encrypt(data) if self.cipher else data
         self.client.put_object(
             self.bucket,

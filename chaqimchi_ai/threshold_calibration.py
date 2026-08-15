@@ -31,7 +31,9 @@ class CalibrationReport:
                 "count": len(self.negative_scores),
                 "min": round(float(min(self.negative_scores)), 4) if self.negative_scores else None,
                 "max": round(float(max(self.negative_scores)), 4) if self.negative_scores else None,
-                "mean": round(float(np.mean(self.negative_scores)), 4) if self.negative_scores else None,
+                "mean": round(float(np.mean(self.negative_scores)), 4)
+                if self.negative_scores
+                else None,
                 "p95": round(float(np.percentile(self.negative_scores, 95)), 4)
                 if self.negative_scores
                 else None,
@@ -40,7 +42,9 @@ class CalibrationReport:
                 "count": len(self.positive_scores),
                 "min": round(float(min(self.positive_scores)), 4) if self.positive_scores else None,
                 "max": round(float(max(self.positive_scores)), 4) if self.positive_scores else None,
-                "mean": round(float(np.mean(self.positive_scores)), 4) if self.positive_scores else None,
+                "mean": round(float(np.mean(self.positive_scores)), 4)
+                if self.positive_scores
+                else None,
             },
             "method": self.method,
             "notes": self.notes,

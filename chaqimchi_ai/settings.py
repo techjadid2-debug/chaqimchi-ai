@@ -294,11 +294,13 @@ class WebcamSettings(BaseModel):
     client_interval_ms: int = Field(default=140, ge=30, le=2000)
     jpeg_quality: float = Field(default=0.82, ge=0.1, le=1.0)
 
+
 class TelegramSettings(BaseModel):
     token: Optional[str] = None
     chat_id: Optional[str] = None
     enabled: bool = False
     alert_interval_sec: int = 60
+
 
 class CameraItem(BaseModel):
     id: str
@@ -318,6 +320,7 @@ class CameraItem(BaseModel):
                 return int(s)
             return s
         raise ValueError("source RTSP URL (str) yoki kamera indeksi (int) bo‘lishi kerak")
+
 
 class LicenseSettings(BaseModel):
     enabled: bool = False
@@ -358,6 +361,7 @@ class AppSettings(BaseModel):
                 raw = yaml.safe_load(f) or {}
         else:
             raw = {}
+
         def expand(value: Any) -> Any:
             if isinstance(value, str):
                 return os.path.expandvars(value)
@@ -394,9 +398,10 @@ class AppSettings(BaseModel):
             errors.append("rate_limit productionda yoqilishi shart")
         if not self.storage.encrypt_embeddings:
             errors.append("embedding shifrlash productionda yoqilishi shart")
-        if self.storage.encrypt_embeddings and not os.environ.get(
-            "CHAQIMCHI_EMBEDDING_KEY", ""
-        ).strip():
+        if (
+            self.storage.encrypt_embeddings
+            and not os.environ.get("CHAQIMCHI_EMBEDDING_KEY", "").strip()
+        ):
             errors.append("CHAQIMCHI_EMBEDDING_KEY berilishi shart")
         licensed = self.face.commercial_model_licensed or os.environ.get(
             "CHAQIMCHI_FACE_MODEL_LICENSED", ""

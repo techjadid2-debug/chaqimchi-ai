@@ -28,7 +28,16 @@ def test_media_probe_reports_stream_without_leaking_rtsp_url() -> None:
             args=[],
             returncode=0,
             stdout=json.dumps(
-                {"streams": [{"codec_name": "h264", "width": 1280, "height": 720, "avg_frame_rate": "10/1"}]}
+                {
+                    "streams": [
+                        {
+                            "codec_name": "h264",
+                            "width": 1280,
+                            "height": 720,
+                            "avg_frame_rate": "10/1",
+                        }
+                    ]
+                }
             ),
             stderr="",
         )
@@ -67,7 +76,9 @@ JPEG = b"\xff\xd8\xff\xe0" + b"soxta-jpeg" * 20
 
 def _media_with(stdout: bytes, *, returncode: int = 0) -> SotqinMediaRuntime:
     def runner(*_args, **_kwargs):
-        return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=b"")
+        return subprocess.CompletedProcess(
+            args=[], returncode=returncode, stdout=stdout, stderr=b""
+        )
 
     media = SotqinMediaRuntime(runner=runner)
     media.apply_config({"cameras": [_camera()]})

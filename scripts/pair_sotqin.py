@@ -36,12 +36,23 @@ def default_config_path() -> str:
     """O'rnatilgan release config yo'li; Linux va Windows installer shu nomdan foydalanadi."""
     if os.name == "nt":
         program_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
-        return str(PureWindowsPath(program_files) / "Chaqimchi" / "Sotqin" / "current" / "config" / "sotqin.yaml")
+        return str(
+            PureWindowsPath(program_files)
+            / "Chaqimchi"
+            / "Sotqin"
+            / "current"
+            / "config"
+            / "sotqin.yaml"
+        )
     return "/opt/chaqimchi/current/config/sotqin.yaml"
 
 
 def restart_hint() -> str:
-    return "Restart-Service ChaqimchiSotqin" if os.name == "nt" else "sudo systemctl restart chaqimchi-sotqin"
+    return (
+        "Restart-Service ChaqimchiSotqin"
+        if os.name == "nt"
+        else "sudo systemctl restart chaqimchi-sotqin"
+    )
 
 
 def hardware_id() -> str:
@@ -101,7 +112,11 @@ def render_env(existing: str, updates: dict[str, str]) -> str:
     remaining = dict(updates)
     rendered: list[str] = []
     for line in existing.splitlines():
-        key = line.split("=", 1)[0].strip() if "=" in line and not line.lstrip().startswith("#") else ""
+        key = (
+            line.split("=", 1)[0].strip()
+            if "=" in line and not line.lstrip().startswith("#")
+            else ""
+        )
         if key in remaining:
             rendered.append(f"{key}={remaining.pop(key)}")
         else:

@@ -36,9 +36,7 @@ def _node(script: str) -> dict:
     const ZoneEditor = window.ZoneEditor;
     {script}
     """
-    result = subprocess.run(
-        ["node", "-e", harness], capture_output=True, text=True, timeout=30
-    )
+    result = subprocess.run(["node", "-e", harness], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -100,9 +98,7 @@ def test_coordinates_stay_inside_the_frame() -> None:
     )
 
     assert payload == [[0, 0], [1, 1], [0.5, 0.5]]
-    SceneZoneSettings.model_validate(
-        {"name": "z", "camera_id": "camera-01", "polygon": payload}
-    )
+    SceneZoneSettings.model_validate({"name": "z", "camera_id": "camera-01", "polygon": payload})
 
 
 def test_only_the_selected_cameras_shapes_are_shown() -> None:

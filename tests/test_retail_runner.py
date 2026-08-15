@@ -89,7 +89,9 @@ class FakeAnalyzer:
         return []
 
 
-def build(tmp_path: Path, **source_kwargs) -> Tuple[RetailRunner, List[FakeCapture], List[FakeProcess]]:
+def build(
+    tmp_path: Path, **source_kwargs
+) -> Tuple[RetailRunner, List[FakeCapture], List[FakeProcess]]:
     captures: List[FakeCapture] = []
     processes: List[FakeProcess] = []
 
@@ -124,11 +126,7 @@ def build(tmp_path: Path, **source_kwargs) -> Tuple[RetailRunner, List[FakeCaptu
         sample_fps=5.0,
         **source_kwargs,
     )
-    clips = (
-        RingBuffer("kassa-01", tmp_path / "buffer")
-        if source.record_url
-        else None
-    )
+    clips = RingBuffer("kassa-01", tmp_path / "buffer") if source.record_url else None
     runner.add_camera(source, FakeAnalyzer(), clips=clips, now=0.0)  # type: ignore[arg-type]
     return runner, captures, processes
 
@@ -202,7 +200,9 @@ def test_backoff_never_grows_past_the_ceiling(tmp_path: Path) -> None:
         sleep=lambda _s: None,
     )
     runner.add_camera(
-        CameraSource(camera_id="cam", stream_url="rtsp://x"), FakeAnalyzer(), now=0.0  # type: ignore[arg-type]
+        CameraSource(camera_id="cam", stream_url="rtsp://x"),
+        FakeAnalyzer(),
+        now=0.0,  # type: ignore[arg-type]
     )
 
     now = 0.0
@@ -233,7 +233,9 @@ def test_a_camera_that_will_not_open_does_not_leak(tmp_path: Path) -> None:
         pipeline, capture_factory=capture_factory, clock=lambda: 0.0, sleep=lambda _s: None
     )
     runner.add_camera(
-        CameraSource(camera_id="cam", stream_url="rtsp://x"), FakeAnalyzer(), now=0.0  # type: ignore[arg-type]
+        CameraSource(camera_id="cam", stream_url="rtsp://x"),
+        FakeAnalyzer(),
+        now=0.0,  # type: ignore[arg-type]
     )
 
     assert runner.capture_once("cam", now=1.0) is False
@@ -350,7 +352,9 @@ def test_pressure_signal_reaches_the_budget(tmp_path: Path) -> None:
         pressure=lambda: 0.9,
     )
     runner.add_camera(
-        CameraSource(camera_id="cam", stream_url="rtsp://x"), FakeAnalyzer(), now=0.0  # type: ignore[arg-type]
+        CameraSource(camera_id="cam", stream_url="rtsp://x"),
+        FakeAnalyzer(),
+        now=0.0,  # type: ignore[arg-type]
     )
 
     runner.housekeeping_once()

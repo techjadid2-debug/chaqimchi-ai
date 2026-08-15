@@ -5,6 +5,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+
 class TelegramBot:
     def __init__(self, token: str, chat_id: str):
         self.token = token
@@ -18,11 +19,7 @@ class TelegramBot:
 
         try:
             url = f"{self.api_url}/sendMessage"
-            payload = {
-                "chat_id": self.chat_id,
-                "text": text,
-                "parse_mode": "HTML"
-            }
+            payload = {"chat_id": self.chat_id, "text": text, "parse_mode": "HTML"}
             await self.client.post(url, json=payload)
         except Exception as e:
             logger.error(f"Telegram xabar yuborishda xato: {e}")
@@ -42,9 +39,11 @@ class TelegramBot:
     async def close(self):
         await self.client.aclose()
 
+
 # Singleton-like helper
 _bot_instance: Optional[TelegramBot] = None
 _last_alerts: Dict[str, float] = {}
+
 
 async def init_bot(token: Optional[str], chat_id: Optional[str]):
     global _bot_instance
@@ -69,15 +68,19 @@ async def close_bot() -> None:
             _bot_instance = None
     _last_alerts.clear()
 
-async def send_alert(name: str, score: float, photo_bytes: Optional[bytes] = None, interval: int = 60):
+
+async def send_alert(
+    name: str, score: float, photo_bytes: Optional[bytes] = None, interval: int = 60
+):
     global _bot_instance, _last_alerts
     if _bot_instance is None:
         return
 
     import time
+
     now = time.time()
     if name in _last_alerts and (now - _last_alerts[name]) < interval:
-        return # Juda tez-tez xabar yubormaslik uchun
+        return  # Juda tez-tez xabar yubormaslik uchun
 
     _last_alerts[name] = now
 

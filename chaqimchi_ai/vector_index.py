@@ -55,7 +55,9 @@ class VectorIndex:
         vec = vec / (float(np.linalg.norm(vec)) + 1e-8)
 
         if self.backend == "faiss" and self._faiss_index is not None:
-            scores, indices = self._faiss_index.search(vec.reshape(1, -1), min(top_k, len(self._matrix)))
+            scores, indices = self._faiss_index.search(
+                vec.reshape(1, -1), min(top_k, len(self._matrix))
+            )
             out: List[Tuple[int, float]] = []
             for idx, score in zip(indices[0].tolist(), scores[0].tolist()):
                 if idx < 0:

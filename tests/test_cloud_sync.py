@@ -35,9 +35,7 @@ def sync_for(
 ) -> tuple[CloudEventSync, EventOutbox, Clock]:
     outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=100_000)
     clock = clock or Clock()
-    client = (
-        httpx.AsyncClient(transport=httpx.MockTransport(handler)) if handler else None
-    )
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler)) if handler else None
     sync = CloudEventSync(
         CloudSyncSettings(
             enabled=True,

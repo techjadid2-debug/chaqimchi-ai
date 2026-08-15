@@ -97,7 +97,9 @@ class LiveCapture:
         self.released = True
 
 
-def build(tmp_path: Path, *, rules: Optional[RuleEngine] = None) -> Tuple[RetailRunner, Recorder, Any]:
+def build(
+    tmp_path: Path, *, rules: Optional[RuleEngine] = None
+) -> Tuple[RetailRunner, Recorder, Any]:
     """Runner + pipeline; kamera fabrikasi testda almashtiriladi."""
     recorder = Recorder()
     pipeline = RetailPipeline(

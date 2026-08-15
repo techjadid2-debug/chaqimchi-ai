@@ -176,8 +176,7 @@ class AppContainer:
             cfg = self.settings.cloud_sync
             filename = (
                 "attendance-outbox.db"
-                if os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower()
-                == "attendance"
+                if os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower() == "attendance"
                 else "outbox.db"
             )
             self._outbox = EventOutbox(

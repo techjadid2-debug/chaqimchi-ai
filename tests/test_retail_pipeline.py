@@ -129,7 +129,11 @@ def build(
         on_clip=recorder.clip,
         clip_dir=tmp_path / "clips",
         snapshot_dir=tmp_path / "snapshots" if snapshots else None,
-        snapshot_writer=lambda path, _frame: (path.parent.mkdir(parents=True, exist_ok=True), path.write_bytes(b"jpeg"), True)[2],
+        snapshot_writer=lambda path, _frame: (
+            path.parent.mkdir(parents=True, exist_ok=True),
+            path.write_bytes(b"jpeg"),
+            True,
+        )[2],
         pre_sec=10.0,
         post_sec=20.0,
         clock=Clock(),
@@ -215,9 +219,7 @@ def test_event_reaches_the_action(tmp_path: Path) -> None:
 
 def test_a_rule_can_suppress_an_event(tmp_path: Path) -> None:
     rules = RuleEngine([Rule(name="xodimlar", event_type="line_crossed", suppress=True)])
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[line_crossed()], rules=rules
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[line_crossed()], rules=rules)
 
     run(pipeline)
 
@@ -235,9 +237,7 @@ def test_rule_actions_replace_the_default(tmp_path: Path) -> None:
             )
         ]
     )
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[line_crossed()], rules=rules
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[line_crossed()], rules=rules)
 
     run(pipeline)
 
@@ -355,9 +355,7 @@ def test_security_event_has_private_snapshot_before_cloud_action(tmp_path: Path)
         severity="warning",
         camera_id="kassa-01",
     )
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[event], snapshots=True
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[event], snapshots=True)
 
     run(pipeline)
 
@@ -376,9 +374,7 @@ def test_normal_zone_event_does_not_capture_a_security_snapshot(tmp_path: Path) 
         zone="savdo-zali",
         metadata={"restricted": False},
     )
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[event], snapshots=True
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[event], snapshots=True)
 
     run(pipeline)
 
@@ -539,7 +535,9 @@ def test_a_person_at_night_becomes_an_alert(tmp_path: Path) -> None:
 
     kinds = [event.event_type for _action, event in recorder.actions]
     assert "after_hours_presence" in kinds
-    alert = next(event for _a, event in recorder.actions if event.event_type == "after_hours_presence")
+    alert = next(
+        event for _a, event in recorder.actions if event.event_type == "after_hours_presence"
+    )
     assert alert.severity == "warning"
     assert alert.track_id == 7
     assert alert.metadata["local_time"] == "23:00"

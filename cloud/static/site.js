@@ -136,13 +136,19 @@
         : "Yillik to‘lovda 2 oy bepul.";
     }
 
+    const setupModeInput = purchaseForm.querySelector("input[name=setup_mode]:checked");
+    const setupModeText = setupModeInput && setupModeInput.value === "turnkey"
+      ? "Qurilma va Usta bilan o‘rnatish"
+      : "Mustaqil (O‘z kompyuteriga) o‘rnatish";
+
     output.message.value = [
-      "Sotib olish so‘rovi",
+      `Sotib olish so‘rovi (${setupModeText})`,
       `To‘lov: ${isYearly ? "yillik" : "oylik"}`,
       `Funksiyalar: ${selected.length ? selected.map((item) => `${item.name} (${item.cameras} kamera)`).join(", ") : "yo‘q"}`,
       `Hisob: $${(monthlyCents * months) / 100}${isYearly ? "/yil" : "/oy"} · ${groups(toUzs(monthlyCents * months))} so‘m`,
     ].join(" | ");
   }
+
 
   purchaseForm.querySelectorAll("[data-billing]").forEach((button) => button.addEventListener("click", () => {
     billing = button.dataset.billing;

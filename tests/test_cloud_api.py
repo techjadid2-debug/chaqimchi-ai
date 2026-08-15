@@ -1,4 +1,3 @@
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -102,15 +101,15 @@ def test_feature_catalog_draft_quote_and_approval(cloud_client) -> None:
         json={"revision": edge_config.json()["revision"], "status": "applied"},
     )
     assert ack.status_code == 200
-    detail = cloud_client.get(
-        f"/api/v1/admin/sites/{site['site_id']}", headers=ADMIN
-    ).json()
+    detail = cloud_client.get(f"/api/v1/admin/sites/{site['site_id']}", headers=ADMIN).json()
     assert detail["devices"][0]["product_name"] == "Sotqin"
     assert detail["devices"][0]["hardware_model"] == "Intel N100"
     assert detail["devices"][0]["config_status"] == "applied"
 
 
-def test_camera_inventory_is_encrypted_for_admin_and_sent_only_to_paired_sotqin(cloud_client) -> None:
+def test_camera_inventory_is_encrypted_for_admin_and_sent_only_to_paired_sotqin(
+    cloud_client,
+) -> None:
     site = _make_site(cloud_client, "Camera inventory", "lite")
     saved = cloud_client.put(
         f"/api/v1/admin/sites/{site['site_id']}/camera-inventory/camera-01",
@@ -391,10 +390,7 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
     buttons = sent[0][2]["inline_keyboard"]
     assert buttons[0][0]["url"] == "https://chaqimchi.example/installer"
     assert buttons[1][0]["url"] == "https://chaqimchi.example/owner"
-    assert (
-        cloud_client.post("/api/v1/telegram/webhook", json={"message": {}}).status_code
-        == 404
-    )
+    assert cloud_client.post("/api/v1/telegram/webhook", json={"message": {}}).status_code == 404
 
 
 def test_admin_readiness_requires_admin_key(cloud_client) -> None:

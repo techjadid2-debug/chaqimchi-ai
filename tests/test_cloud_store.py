@@ -146,18 +146,14 @@ def test_lead_notification_delivery_is_persistent_and_retryable(tmp_path) -> Non
         message="Maslahat",
         source_hash="ip-hash",
     )
-    store.ensure_lead_notification_deliveries(
-        created["id"], ["5476913898", "-1001", "5476913898"]
-    )
+    store.ensure_lead_notification_deliveries(created["id"], ["5476913898", "-1001", "5476913898"])
 
     assert [item["chat_id"] for item in store.pending_lead_notification_deliveries()] == [
         "5476913898",
         "-1001",
     ]
     store.mark_lead_notification_delivery(created["id"], "5476913898", sent=True)
-    store.mark_lead_notification_delivery(
-        created["id"], "-1001", sent=False, error="temporary"
-    )
+    store.mark_lead_notification_delivery(created["id"], "-1001", sent=False, error="temporary")
 
     assert store.lead_notification_delivery(created["id"], "5476913898")["state"] == "sent"
     failed = store.lead_notification_delivery(created["id"], "-1001")

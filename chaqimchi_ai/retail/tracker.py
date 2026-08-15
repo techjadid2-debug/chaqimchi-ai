@@ -51,10 +51,25 @@ class _Track:
     missed: int = 0
     hits: int = 1
     history: List[Bbox] = field(default_factory=list)
+    initial_center: Tuple[float, float] = (0.0, 0.0)
+    total_displacement: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.initial_center == (0.0, 0.0) and self.bbox:
+            self.initial_center = _center(self.bbox)
 
     def predict(self) -> Bbox:
         """Keyingi kadrda ramka qayerda bo'lishi kerak."""
         return _shift(self.bbox, *self.velocity)
+
+    def is_static(self, min_hits: int = 40, max_net_movement: float = 8.0) -> bool:
+        """Track ko'p kadrlardan beri harakatlanmay turgan bo'lsa (maneken, plakat)."""
+        if self.hits < min_hits:
+            return False
+        curr_cx, curr_cy = _center(self.bbox)
+        init_cx, init_cy = self.initial_center
+        net_dist = ((curr_cx - init_cx) ** 2 + (curr_cy - init_cy) ** 2) ** 0.5
+        return net_dist <= max_net_movement
 
 
 class MotionTracker:
@@ -92,9 +107,7 @@ class MotionTracker:
         self._next_id = 1
 
     def update(self, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        predictions = {
-            track_id: track.predict() for track_id, track in self._tracks.items()
-        }
+        predictions = {track_id: track.predict() for track_id, track in self._tracks.items()}
         used_detections: set = set()
         used_tracks: set = set()
 
@@ -206,6 +219,13 @@ class MotionTracker:
                 # Uzoq ko'rinmasa bashoratni to'xtatamiz: aks holda ramka
                 # kadrdan uchib chiqib, begona odamga yopishishi mumkin.
                 track.velocity = (0.0, 0.0)
+
+    def is_static(self, track_id: int, min_hits: int = 40, max_net_movement: float = 8.0) -> bool:
+        """Berilgan track_id statik obyekt (maneken/plakat) ekanligini aytadi."""
+        track = self._tracks.get(track_id)
+        if track is None:
+            return False
+        return track.is_static(min_hits=min_hits, max_net_movement=max_net_movement)
 
     @property
     def active(self) -> int:

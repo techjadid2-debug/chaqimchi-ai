@@ -30,9 +30,7 @@ def test_sotqin_config_is_validated_and_saved_atomically(tmp_path, monkeypatch) 
         "revision": 3,
         "product": {"name": "Sotqin", "max_cameras": 8},
         "buffer_policy": {"max_days": 3, "max_bytes": 40 * 1024**3},
-        "cloud_features": [
-            {"code": "person_count", "camera_count": 2, "queue_kind": "batch"}
-        ],
+        "cloud_features": [{"code": "person_count", "camera_count": 2, "queue_kind": "batch"}],
     }
     monkeypatch.setattr(module.control, "config_path", tmp_path / "config.json")
     module.control.validate_config(payload)

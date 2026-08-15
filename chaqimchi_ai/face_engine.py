@@ -162,14 +162,18 @@ class FaceEngine:
         out = image_util.resize_bgr_max_side(work, limit)
         if out is not image_bgr:
             nh, nw = out.shape[:2]
-            logger.debug("preprocess_image: %sx%s -> %sx%s", image_bgr.shape[1], image_bgr.shape[0], nw, nh)
+            logger.debug(
+                "preprocess_image: %sx%s -> %sx%s", image_bgr.shape[1], image_bgr.shape[0], nw, nh
+            )
         return out
 
     def _aligned_crop(self, image_bgr: np.ndarray, kps: np.ndarray) -> np.ndarray:
         """ArcFace uchun standart 112x112 norm_crop (alignment)."""
         return face_align.norm_crop(image_bgr, landmark=kps, image_size=112, mode="arcface")
 
-    def extract_embeddings(self, image_bgr: np.ndarray) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+    def extract_embeddings(
+        self, image_bgr: np.ndarray
+    ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """
         Tasvirdan barcha yuzlar uchun 512-o‘lchamli embeddinglar.
 

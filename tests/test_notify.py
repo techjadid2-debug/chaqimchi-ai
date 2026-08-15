@@ -48,7 +48,9 @@ def test_repeat_within_window_is_suppressed() -> None:
     throttle = AlertThrottle(window_sec=600)
     assert build_alert("site-1", [event("loitering", "camera-01")], throttle_service=throttle)
     # Xuddi shu kamera, xuddi shu tur — mijoz telefonini o'chirib qo'ymasin.
-    assert build_alert("site-1", [event("loitering", "camera-01")], throttle_service=throttle) is None
+    assert (
+        build_alert("site-1", [event("loitering", "camera-01")], throttle_service=throttle) is None
+    )
     # Boshqa kamera yoki boshqa obyekt mustaqil.
     assert build_alert("site-1", [event("loitering", "camera-02")], throttle_service=throttle)
     assert build_alert("site-2", [event("loitering", "camera-01")], throttle_service=throttle)

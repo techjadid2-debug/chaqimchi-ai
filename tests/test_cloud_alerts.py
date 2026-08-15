@@ -242,9 +242,7 @@ def test_recovery_clears_state(store: CloudStore) -> None:
 
     # Qurilma yana xabar berdi.
     conn = store._connect()
-    conn.execute(
-        "UPDATE devices SET last_seen = ? WHERE site_id = ?", (_stamp(0), site_id)
-    )
+    conn.execute("UPDATE devices SET last_seen = ? WHERE site_id = ?", (_stamp(0), site_id))
     conn.commit()
     conn.close()
 

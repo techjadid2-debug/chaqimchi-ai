@@ -17,9 +17,7 @@ def _duration(seconds: float) -> str:
     return f"{int(seconds // 60)} daq" if seconds >= 60 else f"{int(seconds)} s"
 
 
-def build_digest(
-    site_name: str, day: str, stats: Dict[str, Any], report: Dict[str, Any]
-) -> str:
+def build_digest(site_name: str, day: str, stats: Dict[str, Any], report: Dict[str, Any]) -> str:
     """Kunlik xabar matni.
 
     Xom hodisa sanog'i ("person_detected: 412") do'kon egasiga hech narsa
@@ -75,9 +73,7 @@ def build_digest(
             f"{summary['late']} kechikdi"
         )
         if summary.get("checkout_missing"):
-            lines.append(
-                f"Chiqishi aniqlanmagan: {summary['checkout_missing']} xodim"
-            )
+            lines.append(f"Chiqishi aniqlanmagan: {summary['checkout_missing']} xodim")
 
     lines.append(f"Jami hodisa: {stats['total']}")
     return "\n".join(lines)

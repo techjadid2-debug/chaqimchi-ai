@@ -310,15 +310,12 @@ def capacity_verdict(
             "tushadi va kafolat buziladi"
         )
     if capture_load > cores * 0.5:
-        warnings.append(
-            f"Kadr yuki {capture_load:.1f} yadro — {cores} yadroli qurilmada juda ko'p"
-        )
+        warnings.append(f"Kadr yuki {capture_load:.1f} yadro — {cores} yadroli qurilmada juda ko'p")
     # Broker kafolati: har kamera hech bo'lmasa shu tezlikda ko'rilishi kerak.
     floors = cameras * 0.5
     if budget_target_fps < floors:
         warnings.append(
-            f"Kafolatlangan minimum ({floors:.1f} FPS) byudjetdan katta — "
-            "kamera soni tushirilsin"
+            f"Kafolatlangan minimum ({floors:.1f} FPS) byudjetdan katta — kamera soni tushirilsin"
         )
     return {
         "cameras": cameras,
@@ -405,8 +402,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     model_path = Path(args.model)
     if not model_path.is_file():
         raise SystemExit(
-            f"Model topilmadi: {model_path}\n"
-            "Avval: python scripts/fetch_retail_model.py"
+            f"Model topilmadi: {model_path}\nAvval: python scripts/fetch_retail_model.py"
         )
 
     warnings: List[str] = []
@@ -428,9 +424,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "drayver o'rnatilganini tekshiring, aks holda bu raqam boshqa narsa"
         )
     if args.seconds < 60:
-        warnings.append(
-            "60 soniyadan qisqa o'lchov issiqlik cheklovini ko'rsatmaydi"
-        )
+        warnings.append("60 soniyadan qisqa o'lchov issiqlik cheklovini ko'rsatmaydi")
 
     print(f"O'lchov ketmoqda: {args.seconds:.0f} soniya ({detector.device_in_use})...")
     detector_result = measure_detector(

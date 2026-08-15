@@ -35,9 +35,7 @@ class FaceDatabase:
         self._encrypt = encrypt_embeddings
         self._key = embedding_key if embedding_key is not None else resolve_embedding_key()
         if self._encrypt and not self._key:
-            raise ValueError(
-                "encrypt_embeddings=true uchun CHAQIMCHI_EMBEDDING_KEY (Fernet) kerak"
-            )
+            raise ValueError("encrypt_embeddings=true uchun CHAQIMCHI_EMBEDDING_KEY (Fernet) kerak")
 
         self.db_path.mkdir(parents=True, exist_ok=True)
         self.metadata: List[Dict[str, Any]] = []

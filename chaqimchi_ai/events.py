@@ -13,13 +13,22 @@ class EventLog:
         self.db_path = db_path
         self._init_db()
 
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            pass
+        return conn
+
     def _init_db(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
 
         # Voqealar jadvali
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 person_id TEXT,
@@ -29,7 +38,7 @@ class EventLog:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 image_path TEXT
             )
-        ''')
+        """)
 
         self._migrate(conn)
         conn.commit()
@@ -52,9 +61,7 @@ class EventLog:
         for name, definition in additions.items():
             if name not in cols:
                 cursor.execute(f"ALTER TABLE events ADD COLUMN {name} {definition}")
-        cursor.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_uuid ON events(event_uuid)"
-        )
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_events_uuid ON events(event_uuid)")
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_type_time ON events(event_type,timestamp)"
         )
@@ -69,13 +76,16 @@ class EventLog:
         track_id: Optional[int] = None,
     ) -> str:
         event_uuid = str(uuid.uuid4())
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO events (event_uuid,event_type,severity,person_id,person_name,
                                 camera_id,score,image_path,track_id)
             VALUES (?,'employee_seen','info',?,?,?,?,?,?)
-        ''', (event_uuid, person_id, person_name, camera_id, score, image_path, track_id))
+        """,
+            (event_uuid, person_id, person_name, camera_id, score, image_path, track_id),
+        )
         conn.commit()
         conn.close()
         return event_uuid
@@ -85,7 +95,7 @@ class EventLog:
 
         if not isinstance(event, EdgeEvent):
             raise TypeError("event EdgeEvent bo'lishi kerak")
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             conn.execute(
                 """
@@ -129,7 +139,7 @@ class EventLog:
             return 0, []
 
         cutoff = f"-{int(days)} days"
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             cursor = conn.cursor()
             cursor.execute(
@@ -146,7 +156,7 @@ class EventLog:
         return deleted, paths
 
     def count_all(self) -> int:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             return int(conn.execute("SELECT COUNT(*) FROM events").fetchone()[0])
         finally:
@@ -154,7 +164,7 @@ class EventLog:
 
     def oldest_timestamp(self) -> Optional[str]:
         """Arxivdagi eng eski voqea vaqti (UTC) yoki bo‘sh bo‘lsa None."""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             row = conn.execute("SELECT MIN(timestamp) FROM events").fetchone()
         finally:
@@ -162,10 +172,10 @@ class EventLog:
         return row[0] if row and row[0] else None
 
     def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM events ORDER BY timestamp DESC LIMIT ?', (limit,))
+        cursor.execute("SELECT * FROM events ORDER BY timestamp DESC LIMIT ?", (limit,))
         rows = cursor.fetchall()
         conn.close()
         output: List[Dict[str, Any]] = []
@@ -180,10 +190,12 @@ class EventLog:
         return output
 
     def get_stats_today(self) -> Dict[str, Any]:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         # Bugungi noyob shaxslar soni
-        cursor.execute("SELECT COUNT(DISTINCT person_id) FROM events WHERE date(timestamp) = date('now')")
+        cursor.execute(
+            "SELECT COUNT(DISTINCT person_id) FROM events WHERE date(timestamp) = date('now')"
+        )
         unique_today = cursor.fetchone()[0]
 
         # Jami aniqlashlar soni
@@ -191,7 +203,4 @@ class EventLog:
         total_today = cursor.fetchone()[0]
 
         conn.close()
-        return {
-            "unique_today": unique_today,
-            "total_today": total_today
-        }
+        return {"unique_today": unique_today, "total_today": total_today}

@@ -232,4 +232,4 @@ def test_the_release_builder_refuses_a_dirty_worktree() -> None:
     builder = (ROOT / "scripts" / "build_sotqin_release.sh").read_text()
 
     assert "--allow-dirty" in builder
-    assert "git -C \"$root\" diff --quiet HEAD" in builder
+    assert 'git -C "$root" diff --quiet HEAD' in builder

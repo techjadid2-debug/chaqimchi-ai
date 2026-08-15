@@ -77,9 +77,7 @@ def test_soak_measures_the_chain_not_ffprobe(tmp_path) -> None:
     import urllib.request
 
     original = urllib.request.urlopen
-    urllib.request.urlopen = lambda *_a, **_k: _Response(
-        json.dumps({"device_health": payload})
-    )
+    urllib.request.urlopen = lambda *_a, **_k: _Response(json.dumps({"device_health": payload}))
     try:
         assert read_health("http://127.0.0.1:8742/health")["cameras_active"] == 2
     finally:

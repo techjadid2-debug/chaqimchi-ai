@@ -122,7 +122,9 @@ class SotqinMediaRuntime:
     def apply_config(self, payload: Mapping[str, Any]) -> None:
         self.cameras = validate_cameras(payload.get("cameras", []))
         active = {camera["camera_id"] for camera in self.cameras if camera["enabled"]}
-        self.probes = {camera_id: probe for camera_id, probe in self.probes.items() if camera_id in active}
+        self.probes = {
+            camera_id: probe for camera_id, probe in self.probes.items() if camera_id in active
+        }
 
     def probe_camera(self, camera: Mapping[str, Any]) -> StreamProbe:
         camera_id = str(camera["camera_id"])

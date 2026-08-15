@@ -215,9 +215,7 @@ def test_preview_does_not_bump_the_config_revision(client: TestClient) -> None:
         "/api/v1/sotqin/heartbeat", headers=device_headers, json={"config_revision": 0}
     ).json()["config_revision"]
 
-    client.post(
-        f"/api/v1/installer/sites/{site_id}/cameras/camera-01/preview", headers=installer
-    )
+    client.post(f"/api/v1/installer/sites/{site_id}/cameras/camera-01/preview", headers=installer)
     client.put(
         "/api/v1/sotqin/cameras/camera-01/preview",
         headers={**device_headers, "Content-Type": "image/jpeg"},
@@ -284,9 +282,7 @@ def test_upload_to_an_unknown_camera_is_rejected(client: TestClient) -> None:
 def test_an_installer_cannot_read_another_sites_camera(client: TestClient) -> None:
     first, first_device = _site_with_camera(client)
     installer = _installer(client, first["site_id"])
-    other = client.post(
-        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Boshqa do'kon"}
-    ).json()
+    other = client.post("/api/v1/admin/sites", headers=ADMIN, json={"name": "Boshqa do'kon"}).json()
 
     client.put(
         "/api/v1/sotqin/cameras/camera-01/preview",
@@ -303,7 +299,9 @@ def test_an_installer_cannot_read_another_sites_camera(client: TestClient) -> No
 # ── Chizilgan chiziq qurilmagacha yetadimi ───────────────────────────────
 
 
-def test_a_line_drawn_by_the_installer_reaches_the_device(client: TestClient, tmp_path: Path) -> None:
+def test_a_line_drawn_by_the_installer_reaches_the_device(
+    client: TestClient, tmp_path: Path
+) -> None:
     """Butun zanjirning ma'nosi shu.
 
     O'rnatuvchi kadr ustida chiziq chizadi -> cloud saqlaydi -> qurilma
@@ -322,9 +320,9 @@ def test_a_line_drawn_by_the_installer_reaches_the_device(client: TestClient, tm
     site_id = site["site_id"]
     installer = _installer(client, site_id)
 
-    current = client.get(
-        f"/api/v1/installer/sites/{site_id}/config", headers=installer
-    ).json()["config"]
+    current = client.get(f"/api/v1/installer/sites/{site_id}/config", headers=installer).json()[
+        "config"
+    ]
     saved = client.put(
         f"/api/v1/installer/sites/{site_id}/config",
         headers=installer,
@@ -381,9 +379,9 @@ def test_a_line_on_an_unknown_camera_is_rejected(client: TestClient) -> None:
     site, _device = _site_with_camera(client)
     site_id = site["site_id"]
     installer = _installer(client, site_id)
-    current = client.get(
-        f"/api/v1/installer/sites/{site_id}/config", headers=installer
-    ).json()["config"]
+    current = client.get(f"/api/v1/installer/sites/{site_id}/config", headers=installer).json()[
+        "config"
+    ]
 
     rejected = client.put(
         f"/api/v1/installer/sites/{site_id}/config",
@@ -429,9 +427,9 @@ def test_onboarding_cannot_reach_100_percent_without_a_drawn_line(client: TestCl
     )
     assert steps()["preview"] is True
 
-    current = client.get(
-        f"/api/v1/installer/sites/{site_id}/config", headers=installer
-    ).json()["config"]
+    current = client.get(f"/api/v1/installer/sites/{site_id}/config", headers=installer).json()[
+        "config"
+    ]
     client.put(
         f"/api/v1/installer/sites/{site_id}/config",
         headers=installer,

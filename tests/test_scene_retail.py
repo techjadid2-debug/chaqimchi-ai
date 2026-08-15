@@ -41,11 +41,7 @@ def analyzer_for(**scene) -> tuple[SceneAnalyzer, ScriptedDetector]:
 
 # ── Kirish/chiqish ───────────────────────────────────────────────────────
 
-DOOR = {
-    "lines": [
-        {"name": "eshik", "camera_id": "cam-1", "start": [0.5, 0.0], "end": [0.5, 1.0]}
-    ]
-}
+DOOR = {"lines": [{"name": "eshik", "camera_id": "cam-1", "start": [0.5, 0.0], "end": [0.5, 1.0]}]}
 
 
 def walk(analyzer, detector, *, start: float, stop: float, step: float, now: float = 1.0):
@@ -76,10 +72,16 @@ def test_walking_through_the_door_emits_line_crossed_with_direction() -> None:
 def test_walking_back_produces_the_opposite_direction() -> None:
     analyzer, detector = analyzer_for(**DOOR)
 
-    first = [e for e in walk(analyzer, detector, start=0.30, stop=0.70, step=0.04)
-             if e.event_type == "line_crossed"][0]
-    second = [e for e in walk(analyzer, detector, start=0.70, stop=0.30, step=0.04, now=20.0)
-              if e.event_type == "line_crossed"][0]
+    first = [
+        e
+        for e in walk(analyzer, detector, start=0.30, stop=0.70, step=0.04)
+        if e.event_type == "line_crossed"
+    ][0]
+    second = [
+        e
+        for e in walk(analyzer, detector, start=0.70, stop=0.30, step=0.04, now=20.0)
+        if e.event_type == "line_crossed"
+    ][0]
 
     assert {first.direction, second.direction} == {"in", "out"}
 
@@ -107,9 +109,7 @@ def test_moving_without_crossing_emits_nothing() -> None:
 
 def test_lines_of_other_cameras_are_ignored() -> None:
     analyzer, detector = analyzer_for(
-        lines=[
-            {"name": "boshqa", "camera_id": "cam-2", "start": [0.5, 0.0], "end": [0.5, 1.0]}
-        ]
+        lines=[{"name": "boshqa", "camera_id": "cam-2", "start": [0.5, 0.0], "end": [0.5, 1.0]}]
     )
     events = walk(analyzer, detector, start=0.30, stop=0.70, step=0.04)
     assert [e for e in events if e.event_type == "line_crossed"] == []
@@ -157,7 +157,9 @@ def test_zone_without_dwell_setting_never_alerts() -> None:
     )
     detector.people = [(0.5, 0.5)]
     analyzer.process(FRAME, now=0.0)
-    assert [e for e in analyzer.process(FRAME, now=9999.0) if e.event_type == "dwell_exceeded"] == []
+    assert [
+        e for e in analyzer.process(FRAME, now=9999.0) if e.event_type == "dwell_exceeded"
+    ] == []
 
 
 # ── Navbat ───────────────────────────────────────────────────────────────
@@ -181,17 +183,23 @@ def test_queue_alert_fires_at_the_limit_and_latches() -> None:
     analyzer, detector = analyzer_for(**QUEUE_ZONE)
 
     detector.people = [(0.2, 0.5), (0.4, 0.5)]
-    assert [e for e in analyzer.process(FRAME, now=1.0) if e.event_type == "queue_threshold_exceeded"] == []
+    assert [
+        e for e in analyzer.process(FRAME, now=1.0) if e.event_type == "queue_threshold_exceeded"
+    ] == []
 
     detector.people = [(0.2, 0.5), (0.4, 0.5), (0.6, 0.5)]
-    alerts = [e for e in analyzer.process(FRAME, now=2.0) if e.event_type == "queue_threshold_exceeded"]
+    alerts = [
+        e for e in analyzer.process(FRAME, now=2.0) if e.event_type == "queue_threshold_exceeded"
+    ]
     assert len(alerts) == 1
     assert alerts[0].queue_length == 3
     assert alerts[0].zone == "kassa"
     assert alerts[0].severity == "warning"
 
     # Navbat turaversa qayta ogohlantirmaydi — mijoz xabardan charchamasin.
-    assert [e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"] == []
+    assert [
+        e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"
+    ] == []
 
 
 def test_queue_alert_rearms_after_the_queue_clears() -> None:
@@ -203,7 +211,9 @@ def test_queue_alert_rearms_after_the_queue_clears() -> None:
     analyzer.process(FRAME, now=2.0)
 
     detector.people = [(0.2, 0.5), (0.4, 0.5), (0.6, 0.5), (0.8, 0.5)]
-    alerts = [e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"]
+    alerts = [
+        e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"
+    ]
     assert len(alerts) == 1
 
 

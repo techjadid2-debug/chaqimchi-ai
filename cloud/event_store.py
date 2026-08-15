@@ -221,8 +221,7 @@ class EventStore:
             "ON production_events(site_id,occurred_at)",
             "CREATE INDEX IF NOT EXISTS idx_owner_members_telegram "
             "ON owner_members(telegram_id,active)",
-            "CREATE INDEX IF NOT EXISTS idx_employees_site_active "
-            "ON employees(site_id,active)",
+            "CREATE INDEX IF NOT EXISTS idx_employees_site_active ON employees(site_id,active)",
             "CREATE INDEX IF NOT EXISTS idx_attendance_site_date "
             "ON attendance_daily(site_id,work_date)",
         ]
@@ -349,9 +348,7 @@ class EventStore:
     def event(self, site_id: str, event_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(
-                self._sql(
-                    "SELECT * FROM production_events WHERE site_id=? AND event_id=?"
-                ),
+                self._sql("SELECT * FROM production_events WHERE site_id=? AND event_id=?"),
                 (site_id, event_id),
             ).fetchone()
         return self._decode_event(row) if row else None
@@ -657,9 +654,7 @@ class EventStore:
     def health(self, site_id: str) -> List[Dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                self._sql(
-                    "SELECT * FROM device_health WHERE site_id=? ORDER BY received_at DESC"
-                ),
+                self._sql("SELECT * FROM device_health WHERE site_id=? ORDER BY received_at DESC"),
                 (site_id,),
             ).fetchall()
         result = []
@@ -793,7 +788,9 @@ class EventStore:
             ).fetchone()
         return self._decode_employee(row) if row else None
 
-    def list_employees(self, site_id: str, *, include_inactive: bool = False) -> List[Dict[str, Any]]:
+    def list_employees(
+        self, site_id: str, *, include_inactive: bool = False
+    ) -> List[Dict[str, Any]]:
         where = "site_id=?" if include_inactive else "site_id=? AND active=1"
         with self._connect() as conn:
             rows = conn.execute(
@@ -825,7 +822,9 @@ class EventStore:
         clean_name = current["name"] if name is None else name.strip()
         if not clean_name:
             raise ValueError("Xodim ismi bo'sh bo'lishi mumkin emas")
-        clean_external = current.get("external_id") if external_id is None else external_id.strip() or None
+        clean_external = (
+            current.get("external_id") if external_id is None else external_id.strip() or None
+        )
         clean_status = enrollment_status or str(current.get("enrollment_status") or "pending")
         if clean_status not in {"pending", "enrolled", "failed", "removed"}:
             raise ValueError("Enrollment holati noto'g'ri")
@@ -1088,16 +1087,14 @@ class EventStore:
         else:
             start_hour, start_minute = map(int, str(schedule["start_time"]).split(":"))
             end_hour, end_minute = map(int, str(schedule["end_time"]).split(":"))
-            scheduled_start = datetime.combine(
-                day, datetime.min.time(), tzinfo=zone
-            ).replace(hour=start_hour, minute=start_minute)
-            scheduled_end = datetime.combine(
-                day, datetime.min.time(), tzinfo=zone
-            ).replace(hour=end_hour, minute=end_minute)
+            scheduled_start = datetime.combine(day, datetime.min.time(), tzinfo=zone).replace(
+                hour=start_hour, minute=start_minute
+            )
+            scheduled_end = datetime.combine(day, datetime.min.time(), tzinfo=zone).replace(
+                hour=end_hour, minute=end_minute
+            )
             if not moments:
-                absent_after = scheduled_start + timedelta(
-                    minutes=int(schedule["grace_minutes"])
-                )
+                absent_after = scheduled_start + timedelta(minutes=int(schedule["grace_minutes"]))
                 status = "absent" if now >= absent_after else "pending"
             else:
                 allowed = scheduled_start + timedelta(minutes=int(schedule["grace_minutes"]))
@@ -1108,13 +1105,10 @@ class EventStore:
                 )
                 shift_finished = now >= scheduled_end or day < now.date()
                 checkout_missing = bool(
-                    shift_finished
-                    and (last is None if explicit_roles else first == last)
+                    shift_finished and (last is None if explicit_roles else first == last)
                 )
                 if shift_finished and not checkout_missing and last is not None:
-                    early_minutes = max(
-                        0, int((scheduled_end - last).total_seconds() // 60)
-                    )
+                    early_minutes = max(0, int((scheduled_end - last).total_seconds() // 60))
                 status = "late" if late_minutes else "present"
 
         return {
@@ -1239,9 +1233,7 @@ class EventStore:
         now = _now()
         with self._connect() as conn:
             conn.execute(
-                self._sql(
-                    "UPDATE owner_otps SET used=1 WHERE telegram_id=? AND used=0"
-                ),
+                self._sql("UPDATE owner_otps SET used=1 WHERE telegram_id=? AND used=0"),
                 (str(telegram_id),),
             )
             conn.execute(
@@ -1282,9 +1274,7 @@ class EventStore:
             ).hexdigest()
             if not hmac.compare_digest(digest, row["code_hash"]):
                 return False
-            conn.execute(
-                self._sql("UPDATE owner_otps SET used=1 WHERE id=?"), (row["id"],)
-            )
+            conn.execute(self._sql("UPDATE owner_otps SET used=1 WHERE id=?"), (row["id"],))
             return True
 
     def mark_digest_sent(self, site_id: str, digest_date: str) -> bool:
@@ -1301,9 +1291,7 @@ class EventStore:
     def digest_was_sent(self, site_id: str, digest_date: str) -> bool:
         with self._connect() as conn:
             row = conn.execute(
-                self._sql(
-                    "SELECT 1 FROM daily_digests WHERE site_id=? AND digest_date=?"
-                ),
+                self._sql("SELECT 1 FROM daily_digests WHERE site_id=? AND digest_date=?"),
                 (site_id, digest_date),
             ).fetchone()
         return row is not None
@@ -1319,15 +1307,8 @@ class EventStore:
                 ),
                 (cutoff,),
             ).fetchall()
-            conn.execute(
-                self._sql("DELETE FROM production_events WHERE occurred_at<?"), (cutoff,)
-            )
-        return [
-            str(key)
-            for row in rows
-            for key in (row["snapshot_key"], row["clip_key"])
-            if key
-        ]
+            conn.execute(self._sql("DELETE FROM production_events WHERE occurred_at<?"), (cutoff,))
+        return [str(key) for row in rows for key in (row["snapshot_key"], row["clip_key"]) if key]
 
     def purge_site(self, site_id: str, retention_days: int) -> List[str]:
         """Bitta obyektni **o'z tarifi** muddati bo'yicha tozalaydi.
@@ -1349,12 +1330,7 @@ class EventStore:
                 self._sql("DELETE FROM production_events WHERE site_id=? AND occurred_at<?"),
                 (site_id, cutoff),
             )
-        return [
-            str(key)
-            for row in rows
-            for key in (row["snapshot_key"], row["clip_key"])
-            if key
-        ]
+        return [str(key) for row in rows for key in (row["snapshot_key"], row["clip_key"]) if key]
 
 
 def event_store_from_env(base_dir: Path) -> EventStore:

@@ -60,9 +60,7 @@ def cmd_save(args: argparse.Namespace) -> int:
 def cmd_info(args: argparse.Namespace) -> int:
     data = Path(args.file).read_bytes()
     try:
-        metadata, embeddings, manifest = read_backup(
-            data, encryption_key=resolve_embedding_key()
-        )
+        metadata, embeddings, manifest = read_backup(data, encryption_key=resolve_embedding_key())
     except BackupError as e:
         print(f"✗ {e}", file=sys.stderr)
         return 1
@@ -92,9 +90,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
             return 1
 
     try:
-        result = restore_backup(
-            db, data, encryption_key=resolve_embedding_key(), mode=mode
-        )
+        result = restore_backup(db, data, encryption_key=resolve_embedding_key(), mode=mode)
     except BackupError as e:
         print(f"✗ {e}", file=sys.stderr)
         print("  Baza o‘zgarmadi.", file=sys.stderr)

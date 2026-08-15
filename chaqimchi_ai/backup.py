@@ -86,8 +86,7 @@ def create_backup(
 
     if len(db.metadata) != embeddings.shape[0]:
         raise BackupError(
-            f"Baza buzuq: {len(db.metadata)} shaxs, {embeddings.shape[0]} vektor. "
-            "Nusxa olinmadi."
+            f"Baza buzuq: {len(db.metadata)} shaxs, {embeddings.shape[0]} vektor. Nusxa olinmadi."
         )
 
     meta_bytes = json.dumps(db.metadata, ensure_ascii=False, indent=2).encode("utf-8")
@@ -114,9 +113,7 @@ def create_backup(
 
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
-            MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2)
-        )
+        zf.writestr(MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
         zf.writestr(METADATA_NAME, meta_bytes)
         zf.writestr(emb_name, emb_bytes)
     return out.getvalue()
@@ -149,9 +146,7 @@ def read_backup(
 
         version = manifest.get("version")
         if version != BACKUP_VERSION:
-            raise BackupError(
-                f"Nusxa versiyasi mos emas: {version} (kutilgani {BACKUP_VERSION})"
-            )
+            raise BackupError(f"Nusxa versiyasi mos emas: {version} (kutilgani {BACKUP_VERSION})")
 
         if METADATA_NAME not in names:
             raise BackupError("metadata.json topilmadi")
@@ -198,9 +193,7 @@ def read_backup(
     if embeddings.ndim != 2 or (embeddings.size and embeddings.shape[1] != EMBED_DIM):
         raise BackupError(f"Vektor o‘lchami noto‘g‘ri: {embeddings.shape}")
     if len(metadata) != embeddings.shape[0]:
-        raise BackupError(
-            f"Nusxa buzuq: {len(metadata)} shaxs, {embeddings.shape[0]} vektor"
-        )
+        raise BackupError(f"Nusxa buzuq: {len(metadata)} shaxs, {embeddings.shape[0]} vektor")
 
     return metadata, embeddings, manifest
 
@@ -258,9 +251,7 @@ def restore_backup(
         "backup_created_at": manifest.get("created_at"),
         "backup_site_id": manifest.get("site_id"),
     }
-    logger.info(
-        "Baza tiklandi (%s): %d → %d shaxs", mode, before, db.count
-    )
+    logger.info("Baza tiklandi (%s): %d → %d shaxs", mode, before, db.count)
     return result
 
 

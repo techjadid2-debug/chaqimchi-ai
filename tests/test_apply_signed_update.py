@@ -53,7 +53,9 @@ class Systemctl:
     def __call__(self, command, **_kwargs) -> subprocess.CompletedProcess:
         self.calls.append(list(command))
         if command[0] == "systemctl" and command[1] == "is-active":
-            return subprocess.CompletedProcess(command, 0, self.states.get(command[2], "inactive"), "")
+            return subprocess.CompletedProcess(
+                command, 0, self.states.get(command[2], "inactive"), ""
+            )
         if self.fail and self.fail in " ".join(map(str, command)):
             return subprocess.CompletedProcess(command, 1, "", "yiqildi")
         return subprocess.CompletedProcess(command, 0, "", "")

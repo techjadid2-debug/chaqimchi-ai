@@ -85,18 +85,13 @@ class EventOutbox:
                 )
                 """
             )
-            columns = {
-                str(row[1])
-                for row in conn.execute("PRAGMA table_info(outbox)").fetchall()
-            }
+            columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(outbox)").fetchall()}
             if "priority" not in columns:
                 conn.execute("ALTER TABLE outbox ADD COLUMN priority INTEGER NOT NULL DEFAULT 10")
             if "clip_path" not in columns:
                 conn.execute("ALTER TABLE outbox ADD COLUMN clip_path TEXT")
             if "clip_size" not in columns:
-                conn.execute(
-                    "ALTER TABLE outbox ADD COLUMN clip_size INTEGER NOT NULL DEFAULT 0"
-                )
+                conn.execute("ALTER TABLE outbox ADD COLUMN clip_size INTEGER NOT NULL DEFAULT 0")
             if "next_attempt_at" not in columns:
                 conn.execute("ALTER TABLE outbox ADD COLUMN next_attempt_at TEXT")
 
@@ -228,9 +223,7 @@ class EventOutbox:
                 "FROM outbox",
                 (moment,),
             ).fetchone()
-            poisoned = int(
-                conn.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0]
-            )
+            poisoned = int(conn.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0])
         return {
             "pending": int(row["count"]),
             "bytes": int(row["bytes"]),
@@ -260,8 +253,7 @@ class EventOutbox:
             conn.execute("DELETE FROM dead_letter WHERE failed_at < ?", (cutoff,))
             total = int(
                 conn.execute(
-                    "SELECT COALESCE(SUM(snapshot_size+clip_size+length(payload)),0) "
-                    "FROM outbox"
+                    "SELECT COALESCE(SUM(snapshot_size+clip_size+length(payload)),0) FROM outbox"
                 ).fetchone()[0]
             )
             if total > self.max_bytes:

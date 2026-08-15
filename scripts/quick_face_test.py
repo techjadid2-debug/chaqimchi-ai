@@ -62,11 +62,15 @@ def main() -> int:
 
     logging.info("Embedding: %s", emb.shape)
     res = eng.compare_faces(emb, [emb], threshold=0.4)
-    logging.info("O‘z-o‘ziga cosine: %.4f | mos: %s", float(res.scores[0]), bool(res.matched_mask[0]))
+    logging.info(
+        "O‘z-o‘ziga cosine: %.4f | mos: %s", float(res.scores[0]), bool(res.matched_mask[0])
+    )
     rng = np.random.randn(512).astype(np.float32)
     rng /= np.linalg.norm(rng) + 1e-8
     res2 = eng.compare_faces(emb, [rng], threshold=0.4)
-    logging.info("Tasodifiy vektor cosine: %.4f | mos: %s", float(res2.scores[0]), bool(res2.matched_mask[0]))
+    logging.info(
+        "Tasodifiy vektor cosine: %.4f | mos: %s", float(res2.scores[0]), bool(res2.matched_mask[0])
+    )
     logging.info("OK — yuz tanish yadrosi ishlayapti.")
     return 0
 

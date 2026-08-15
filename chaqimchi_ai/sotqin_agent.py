@@ -73,9 +73,7 @@ class SotqinAgent:
         self.site_id = os.environ.get("CHAQIMCHI_SITE_ID", "").strip()
         self.device_id = os.environ.get("CHAQIMCHI_DEVICE_ID", "").strip()
         self.device_token = os.environ.get("CHAQIMCHI_DEVICE_TOKEN", "").strip()
-        self.hardware_model = os.environ.get(
-            "CHAQIMCHI_SOTQIN_MODEL", HARDWARE_MODEL
-        ).strip()
+        self.hardware_model = os.environ.get("CHAQIMCHI_SOTQIN_MODEL", HARDWARE_MODEL).strip()
         self.hardware_revision = os.environ.get(
             "CHAQIMCHI_SOTQIN_REVISION", HARDWARE_REVISION
         ).strip()
@@ -215,9 +213,7 @@ class SotqinAgent:
                 continue
             try:
                 with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2) as conn:
-                    columns = {
-                        str(row[1]) for row in conn.execute("PRAGMA table_info(outbox)")
-                    }
+                    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(outbox)")}
                     size_parts = ["length(payload)"]
                     if "snapshot_size" in columns:
                         size_parts.append("snapshot_size")
@@ -523,3 +519,22 @@ async def preflight() -> JSONResponse:
         )
     payload = await asyncio.to_thread(Preflight().payload)
     return JSONResponse(status_code=200 if payload["ready"] else 503, content=payload)
+
+
+@app.get("/api/v1/discover-cameras")
+async def discover_cameras() -> JSONResponse:
+    """Lokal tarmoqdagi barcha IP kameralarni avtomatik qidirish va substream takliflarini olish."""
+    from chaqimchi_ai.discovery import discover_cameras_all
+
+    try:
+        devices = await discover_cameras_all(timeout_sec=3.0)
+        return JSONResponse(
+            status_code=200,
+            content={"ok": True, "count": len(devices), "devices": devices},
+        )
+    except Exception as exc:
+        logger.warning("Kamerani skanerlashda xatolik: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(exc), "devices": []},
+        )

@@ -60,7 +60,9 @@ def warm(detector: TamperDetector, frame: np.ndarray, *, count: int = 31) -> Non
         assert detector.update(live(frame), now=float(index) * 0.2) is None
 
 
-def feed(detector: TamperDetector, frame: np.ndarray, *, start: float, stop: float, step: float = 0.2):
+def feed(
+    detector: TamperDetector, frame: np.ndarray, *, start: float, stop: float, step: float = 0.2
+):
     alert = None
     moment = start
     while moment <= stop:
@@ -211,7 +213,9 @@ def test_invalid_configuration_is_rejected() -> None:
 # ── Qotib qolgan oqim ────────────────────────────────────────────────────
 
 
-def frozen_feed(detector: TamperDetector, frame: np.ndarray, *, start: float, stop: float, step: float = 0.2):
+def frozen_feed(
+    detector: TamperDetector, frame: np.ndarray, *, start: float, stop: float, step: float = 0.2
+):
     """Aynan bitta kadr qayta-qayta — dekoder yoki NVR qotib qolgani."""
     alert = None
     moment = start

@@ -55,9 +55,7 @@ def test_synthetic_or_short_measurement_is_rejected() -> None:
     assert any("72" in reason for reason in result["reasons"])
 
 
-def test_production_feature_gate_requires_valid_acceptance(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_production_feature_gate_requires_valid_acceptance(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CHAQIMCHI_ENV", "production")
     monkeypatch.setenv("CHAQIMCHI_AVAILABLE_FEATURES", "person_count,unknown")
     monkeypatch.delenv("CHAQIMCHI_N100_ACCEPTANCE_FILE", raising=False)

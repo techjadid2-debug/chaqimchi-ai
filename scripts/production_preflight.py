@@ -121,7 +121,9 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
         warnings.append("N100 qabul fayli yo'q: public AI funksiyalari sotuvga ochilmaydi")
     if not values.get("CHAQIMCHI_AVAILABLE_FEATURES", "").strip():
         warnings.append("Public AI funksiyalari environmentda yoqilmagan")
-    if not any(values.get(key, "").strip() for key in ("CHAQIMCHI_PAYME_KEY", "CHAQIMCHI_CLICK_SECRET")):
+    if not any(
+        values.get(key, "").strip() for key in ("CHAQIMCHI_PAYME_KEY", "CHAQIMCHI_CLICK_SECRET")
+    ):
         warnings.append("Payme/Click ulanmagan: faqat qo'lda to'lov ishlaydi")
     return errors, warnings
 

@@ -74,9 +74,7 @@ from cloud.snapshots import SnapshotStore, snapshot_store_from_env
 from cloud.store import CloudStore, available_feature_codes
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = Path(
-    os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db"))
-)
+DB_PATH = Path(os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 #: Bitta qurilma soatiga shuncha event batch yubora oladi.
@@ -762,9 +760,7 @@ async def sotqin_release(release_name: str) -> FileResponse:
     # Manifest keshlanmaydi: bir xil versiya qayta imzolanishi mumkin
     # (kalit almashtirilganda), arxiv esa o'zgarmas.
     cache = (
-        "public, max-age=31536000, immutable"
-        if release_name.endswith(".tar.gz")
-        else "no-cache"
+        "public, max-age=31536000, immutable" if release_name.endswith(".tar.gz") else "no-cache"
     )
     return FileResponse(
         archive,
@@ -1515,6 +1511,19 @@ async def admin_list_camera_inventory(
         raise HTTPException(404, str(exc)) from exc
 
 
+@app.get("/api/v1/admin/sites/{site_id}/discover-cameras")
+async def admin_discover_cameras(site_id: str, _: None = Depends(require_admin)) -> Dict[str, Any]:
+    """Lokal tarmoqdagi kameralarni avtomatik qidirish (ONVIF + Port scan)."""
+    from chaqimchi_ai.discovery import discover_cameras_all
+
+    try:
+        devices = await discover_cameras_all(timeout_sec=2.5)
+        return {"ok": True, "count": len(devices), "devices": devices}
+    except Exception as exc:
+        logger.warning("Camera discovery failed: %s", exc)
+        return {"ok": False, "error": str(exc), "devices": []}
+
+
 @app.put("/api/v1/admin/sites/{site_id}/camera-inventory/{camera_id}")
 async def admin_upsert_camera_inventory(
     site_id: str,
@@ -1711,6 +1720,23 @@ async def installer_list_cameras(
         raise HTTPException(404, str(exc)) from exc
 
 
+@app.get("/api/v1/installer/sites/{site_id}/discover-cameras")
+async def installer_discover_cameras(
+    site_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    """O'rnatuvchi uchun lokal tarmoqdagi kameralarni avtomatik skanerlash."""
+    _require_installer_site(installer, site_id)
+    from chaqimchi_ai.discovery import discover_cameras_all
+
+    try:
+        devices = await discover_cameras_all(timeout_sec=2.5)
+        return {"ok": True, "count": len(devices), "devices": devices}
+    except Exception as exc:
+        logger.warning("Installer camera discovery failed: %s", exc)
+        return {"ok": False, "error": str(exc), "devices": []}
+
+
 @app.put("/api/v1/installer/sites/{site_id}/cameras/{camera_id}")
 async def installer_upsert_camera(
     site_id: str,
@@ -1747,7 +1773,7 @@ async def installer_request_camera_preview(
     camera_id: str,
     installer: PortalPrincipal = Depends(require_active_installer),
 ) -> Dict[str, Any]:
-    """"Rasmni ko'rsat" — qurilma keyingi heartbeat'da bitta kadr yuboradi."""
+    """ "Rasmni ko'rsat" — qurilma keyingi heartbeat'da bitta kadr yuboradi."""
     _require_installer_site(installer, site_id)
     try:
         camera = get_store().request_camera_preview(site_id, camera_id)
@@ -2699,13 +2725,13 @@ async def owner_clip(
 @app.post("/api/v1/telegram/webhook")
 async def owner_telegram_webhook(
     request: Request,
-    x_telegram_secret: Optional[str] = Header(
-        None, alias="X-Telegram-Bot-Api-Secret-Token"
-    ),
+    x_telegram_secret: Optional[str] = Header(None, alias="X-Telegram-Bot-Api-Secret-Token"),
 ) -> Dict[str, Any]:
     expected = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
-    if not expected or not x_telegram_secret or not secrets.compare_digest(
-        x_telegram_secret, expected
+    if (
+        not expected
+        or not x_telegram_secret
+        or not secrets.compare_digest(x_telegram_secret, expected)
     ):
         raise HTTPException(404, "Topilmadi")
     try:

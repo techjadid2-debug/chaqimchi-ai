@@ -112,9 +112,7 @@ class CloudEventSync:
                 # va oxir-oqibat dead-letter'ga o'tib ketardi.
                 wait = parse_retry_after(response.headers.get("Retry-After"))
                 self._blocked_until = self._clock() + wait
-                logger.warning(
-                    "Cloud chegarasi oshdi (429) — %.0f soniyaga to'xtaymiz", wait
-                )
+                logger.warning("Cloud chegarasi oshdi (429) — %.0f soniyaga to'xtaymiz", wait)
                 return {"sent": 0, "failed": 0, "pending": len(rows), "throttled": 1}
             response.raise_for_status()
             accepted = set(response.json().get("accepted", []))

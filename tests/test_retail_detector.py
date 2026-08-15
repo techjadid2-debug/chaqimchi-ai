@@ -58,20 +58,26 @@ def test_boxes_are_clipped_to_the_frame() -> None:
 
 def test_degenerate_boxes_are_dropped() -> None:
     raw = ssd(
-        row(0.9, [0.5, 0.5, 0.5, 0.8]),   # nol kenglik
-        row(0.9, [0.2, 0.9, 0.4, 0.2]),   # teskari koordinata
-        row(0.9, [1.2, 0.1, 1.4, 0.4]),   # kadrdan tashqarida
+        row(0.9, [0.5, 0.5, 0.5, 0.8]),  # nol kenglik
+        row(0.9, [0.2, 0.9, 0.4, 0.2]),  # teskari koordinata
+        row(0.9, [1.2, 0.1, 1.4, 0.4]),  # kadrdan tashqarida
     )
     assert decode_ssd_output(raw, width=640, height=360, confidence=0.5) == []
 
 
 def test_empty_and_malformed_output_is_safe() -> None:
-    assert decode_ssd_output(np.zeros((1, 1, 0, 7), dtype=np.float32),
-                             width=640, height=360, confidence=0.5) == []
+    assert (
+        decode_ssd_output(
+            np.zeros((1, 1, 0, 7), dtype=np.float32), width=640, height=360, confidence=0.5
+        )
+        == []
+    )
     # 7 ga bo'linmaydigan shakl — model almashib ketgan bo'lsa jim
     # ishlamasdan bo'sh qaytaradi (crash emas, noto'g'ri natija ham emas).
-    assert decode_ssd_output(np.zeros((5,), dtype=np.float32),
-                             width=640, height=360, confidence=0.5) == []
+    assert (
+        decode_ssd_output(np.zeros((5,), dtype=np.float32), width=640, height=360, confidence=0.5)
+        == []
+    )
 
 
 def test_flat_output_shape_is_accepted() -> None:

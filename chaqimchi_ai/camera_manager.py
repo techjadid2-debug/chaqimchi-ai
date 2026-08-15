@@ -175,11 +175,7 @@ class CameraTask:
                         if not self._debouncer.should_emit(self.camera_id, person_id):
                             continue
 
-                        if (
-                            self.antispoof_enabled
-                            and result.frame is not None
-                            and face.get("bbox")
-                        ):
+                        if self.antispoof_enabled and result.frame is not None and face.get("bbox"):
                             crop = self._crop_bbox(result.frame, face["bbox"])
                             live = check_liveness(
                                 crop,
@@ -199,14 +195,8 @@ class CameraTask:
                         get_metrics().record_match(self.camera_id)
 
                         image_path: Optional[str] = None
-                        if (
-                            self.save_snapshots
-                            and result.frame is not None
-                            and face.get("bbox")
-                        ):
-                            image_path = self._save_face_snapshot(
-                                result.frame, face["bbox"]
-                            )
+                        if self.save_snapshots and result.frame is not None and face.get("bbox"):
+                            image_path = self._save_face_snapshot(result.frame, face["bbox"])
 
                         logger.info(
                             f"[{self.camera_id}] MOS KELDI: {best['name']} ({best['score']:.2f})"

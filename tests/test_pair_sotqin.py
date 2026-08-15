@@ -65,7 +65,9 @@ def test_windows_pairing_defaults_use_program_data(monkeypatch) -> None:
     monkeypatch.setenv("PROGRAMDATA", r"D:\ProgramData")
     monkeypatch.setenv("PROGRAMFILES", r"D:\Program Files")
     assert default_env_file().replace("\\", "/").endswith("Chaqimchi/Sotqin/sotqin.env")
-    assert default_config_path().replace("\\", "/").endswith(
-        "Chaqimchi/Sotqin/current/config/sotqin.yaml"
+    assert (
+        default_config_path()
+        .replace("\\", "/")
+        .endswith("Chaqimchi/Sotqin/current/config/sotqin.yaml")
     )
     assert restart_hint() == "Restart-Service ChaqimchiSotqin"

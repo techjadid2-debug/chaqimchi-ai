@@ -64,7 +64,10 @@ def verify_release_manifest(
         schema = int(manifest.get("schema_version", 1))
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise UpdateVerificationError("Release manifest noto'g'ri") from exc
-    if not version or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_" for char in version):
+    if not version or any(
+        char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_"
+        for char in version
+    ):
         raise UpdateVerificationError("Release version xavfsiz formatda emas")
     if schema not in SUPPORTED_MANIFEST_SCHEMAS:
         raise UpdateVerificationError("Release manifest schema qo'llab-quvvatlanmaydi")

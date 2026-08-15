@@ -255,8 +255,7 @@ class Preflight:
                     f"Xizmat {service}",
                     FAIL,
                     "ishlamayapti",
-                    f"sudo systemctl restart {service} && "
-                    f"journalctl -u {service} -n 50 --no-pager",
+                    f"sudo systemctl restart {service} && journalctl -u {service} -n 50 --no-pager",
                 )
             else:
                 self.add(f"Xizmat {service}", OK, "ishlayapti")
@@ -324,9 +323,7 @@ class Preflight:
 
         media = SotqinMediaRuntime(runner=self.runner)
         media.apply_config(payload)
-        offline = [
-            probe["camera_id"] for probe in media.probe_all() if probe["status"] != "online"
-        ]
+        offline = [probe["camera_id"] for probe in media.probe_all() if probe["status"] != "online"]
         if offline:
             self.add(
                 "Kameralar",

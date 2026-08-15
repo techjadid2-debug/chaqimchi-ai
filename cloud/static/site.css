@@ -100,7 +100,38 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 34px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; } footer p { margin: 0; } footer > div { display: flex; gap: 20px; } footer > div a { text-decoration: none; }
 .mobile-lead-cta { display: none; }
 
+.two-paths-section { background: #fdfbf7; }
+.paths-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; }
+.path-card { position: relative; display: flex; flex-direction: column; padding: 40px 36px; border: 1px solid var(--line); border-radius: 28px; background: var(--paper); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.path-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+.path-self { border-color: rgba(23, 61, 45, 0.22); }
+.path-managed { background: var(--green); color: white; border-color: var(--green); }
+.path-badge { display: inline-block; align-self: flex-start; padding: 6px 12px; margin-bottom: 20px; border-radius: 999px; background: var(--lime); color: var(--ink); font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.managed-badge { background: #ffffff; color: var(--green); }
+.path-card h3 { margin: 0 0 12px; font-size: 28px; }
+.path-desc { margin: 0 0 24px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.path-managed .path-desc { color: #c3d0ca; }
+.path-benefits { margin: 0 0 32px; padding: 0; list-style: none; display: grid; gap: 12px; font-size: 14px; font-weight: 600; }
+.path-benefits li::before { content: "✓ "; margin-right: 8px; color: var(--orange); font-weight: 900; }
+.path-managed .path-benefits li::before { color: var(--lime); }
+.path-managed .path-benefits { color: #f4f7f1; }
+.path-cta { margin-top: auto; }
+.path-cta .button { width: 100%; }
+.dark-ghost { background: transparent !important; color: white !important; border-color: rgba(255,255,255,0.4) !important; }
+.dark-ghost:hover { background: rgba(255,255,255,0.1) !important; }
+
+.download-section { background: var(--paper-2); }
+.download-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.download-card { padding: 36px; border: 1px solid var(--line); border-radius: 26px; background: var(--paper); display: flex; flex-direction: column; }
+.os-icon { font-size: 42px; margin-bottom: 16px; }
+.download-card h3 { margin: 0 0 10px; font-size: 24px; }
+.download-card p { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+.code-box { padding: 14px 18px; margin-bottom: 24px; border-radius: 12px; background: var(--ink); color: var(--lime); font-family: monospace; font-size: 13px; word-break: break-all; }
+.download-action { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.download-action small { color: var(--muted); font-size: 12px; }
+
 .utility-page { min-height: 100vh; }.utility-main { max-width: 900px; margin: auto; padding: 90px 24px; }.utility-main h1 { font-size: clamp(48px, 7vw, 80px); }.utility-card { margin-top: 32px; padding: 32px; border: 1px solid var(--line); border-radius: var(--radius); background: #faf8f2; }.connect-form { display: grid; grid-template-columns: 1fr auto; gap: 12px; }.connect-form input { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; text-transform: uppercase; }.command { display: block; margin-top: 18px; padding: 18px; overflow: auto; border-radius: 14px; background: var(--ink); color: var(--lime); white-space: pre-wrap; word-break: break-all; }.status-panel { display: flex; gap: 14px; align-items: center; }.status-light { width: 16px; height: 16px; border-radius: 50%; background: #9aa8a0; }.status-light.online { background: #2ac976; box-shadow: 0 0 0 8px rgba(42,201,118,.12); }
+
 
 @media (max-width: 1100px) and (min-width: 901px) {
   .hero { gap: 40px; }.hero h1 { font-size: clamp(50px, 5.2vw, 62px); }.hero-photo, .hero-photo img { min-height: 440px; height: 440px; }.sales-visual, .store-proof { gap: 48px; }

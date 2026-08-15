@@ -26,7 +26,9 @@ def cosine_compare_arrays(
         empty_b = np.array([], dtype=bool)
         return empty, empty_f, empty_b
 
-    tgt = np.stack([np.asarray(x, dtype=np.float32).reshape(-1) for x in target_embeddings_list], axis=0)
+    tgt = np.stack(
+        [np.asarray(x, dtype=np.float32).reshape(-1) for x in target_embeddings_list], axis=0
+    )
     if tgt.shape[1] != src.shape[0]:
         raise ValueError(f"O‘lcham mos emas: src={src.shape[0]}, tgt={tgt.shape[1]}")
 

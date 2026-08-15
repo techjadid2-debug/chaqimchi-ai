@@ -51,9 +51,7 @@ def validate_n100_acceptance(payload: Dict[str, Any]) -> Dict[str, Any]:
     if int(soak.get("unexpected_restarts") or 0) != 0:
         reasons.append("soak testda kutilmagan restart bo'lgan")
     if float(soak.get("camera_uptime_percent") or 0) < MIN_CAMERA_UPTIME_PERCENT:
-        reasons.append(
-            f"kamera uptime kamida {MIN_CAMERA_UPTIME_PERCENT:.1f}% bo'lishi kerak"
-        )
+        reasons.append(f"kamera uptime kamida {MIN_CAMERA_UPTIME_PERCENT:.1f}% bo'lishi kerak")
     if float(soak.get("max_temperature_c") or 999) > MAX_TEMPERATURE_C:
         reasons.append(f"maksimal harorat {MAX_TEMPERATURE_C:.0f}°C dan oshgan")
     if int(soak.get("undelivered_critical_events") or 0) != 0:
@@ -67,9 +65,11 @@ def validate_n100_acceptance(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def pilot_acceptance_status(path: Optional[Path] = None) -> Dict[str, Any]:
-    raw_path = str(path) if path is not None else os.environ.get(
-        "CHAQIMCHI_N100_ACCEPTANCE_FILE", ""
-    ).strip()
+    raw_path = (
+        str(path)
+        if path is not None
+        else os.environ.get("CHAQIMCHI_N100_ACCEPTANCE_FILE", "").strip()
+    )
     if not raw_path:
         return {"ok": False, "path": None, "reasons": ["qabul fayli sozlanmagan"]}
     configured = Path(raw_path)

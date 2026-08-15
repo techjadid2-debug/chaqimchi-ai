@@ -22,9 +22,7 @@ def resolve_embedding_key() -> Optional[bytes]:
 
 def _fernet(key: bytes) -> "Fernet":
     if Fernet is None:
-        raise ImportError(
-            "cryptography kerak: pip install cryptography"
-        )
+        raise ImportError("cryptography kerak: pip install cryptography")
     return Fernet(key)
 
 

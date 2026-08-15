@@ -154,10 +154,7 @@ def _problem_text(site: Dict[str, Any]) -> str:
 
 
 def _recovery_text(site: Dict[str, Any]) -> str:
-    return (
-        f"✅ <b>{site.get('name', '?')}</b> — qayta ishga tushdi\n"
-        f"Aloqa tiklandi."
-    )
+    return f"✅ <b>{site.get('name', '?')}</b> — qayta ishga tushdi\nAloqa tiklandi."
 
 
 def _camera_text(site: Dict[str, Any]) -> str:
@@ -200,9 +197,10 @@ def plan_camera_alerts(
         site_id = site["id"]
         prev = previous.get(site_id)
 
-        watched = site.get("license_status") in ("active", "grace") and site.get(
-            "connection"
-        ) in ("online", "stale")
+        watched = site.get("license_status") in ("active", "grace") and site.get("connection") in (
+            "online",
+            "stale",
+        )
         if not watched:
             if prev is not None:
                 forget.append(site_id)
@@ -271,9 +269,7 @@ def plan_alerts(
 
         if state in PROBLEM_STATES:
             if prev != state:
-                alerts.append(
-                    Alert(site_id, state, _problem_text(site), remember=state)
-                )
+                alerts.append(Alert(site_id, state, _problem_text(site), remember=state))
         elif prev in PROBLEM_STATES:
             # Muammo hal bo'ldi. `stale` ham tiklanish deb qaraladi: tizim
             # yana xabar bera boshlagan.
@@ -291,12 +287,14 @@ class TelegramSender:
         self.config = config
         self._client: Optional[httpx.AsyncClient] = None
 
-    async def send(self, text: str) -> bool:
+    async def send(self, text: str, reply_markup: Optional[Dict[str, Any]] = None) -> bool:
         if not self.config.chat_id:
             return False
-        return await self.send_to(self.config.chat_id, text)
+        return await self.send_to(self.config.chat_id, text, reply_markup=reply_markup)
 
-    async def send_to(self, chat_id: str, text: str) -> bool:
+    async def send_to(
+        self, chat_id: str, text: str, reply_markup: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """Bitta ishonchli chatga xabar yuboradi.
 
         Leadlar uchun bir nechta ichki sales guruhini qo'llash kerak bo'lishi
@@ -307,16 +305,16 @@ class TelegramSender:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=15.0)
         url = f"https://api.telegram.org/bot{self.config.token}/sendMessage"
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         try:
-            resp = await self._client.post(
-                url,
-                json={
-                    "chat_id": chat_id,
-                    "text": text,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": True,
-                },
-            )
+            resp = await self._client.post(url, json=payload)
             if resp.status_code != 200:
                 logger.warning("Telegram javobi %s: %s", resp.status_code, resp.text[:200])
                 return False
@@ -341,9 +339,7 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
     sites = store.list_sites()
     run.checked = len(sites)
 
-    conn_alerts, conn_forget = plan_alerts(
-        sites, store.alert_states("connection"), now=now
-    )
+    conn_alerts, conn_forget = plan_alerts(sites, store.alert_states("connection"), now=now)
     cam_alerts, cam_forget = plan_camera_alerts(sites, store.alert_states("cameras"))
 
     for site_id in conn_forget:
@@ -366,9 +362,7 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
             run.failed += 1
 
     if run.sent or run.failed:
-        logger.info(
-            "Aloqa ogohlantirishi: %d yuborildi, %d xato", run.sent, run.failed
-        )
+        logger.info("Aloqa ogohlantirishi: %d yuborildi, %d xato", run.sent, run.failed)
     return run
 
 
@@ -405,9 +399,7 @@ class AlertService:
             return
         if self._task is None:
             self._task = asyncio.create_task(self._loop())
-            logger.info(
-                "Aloqa nazorati yoqildi — har %d soniyada", self.config.interval_sec
-            )
+            logger.info("Aloqa nazorati yoqildi — har %d soniyada", self.config.interval_sec)
 
     async def stop(self) -> None:
         if self._task is not None:

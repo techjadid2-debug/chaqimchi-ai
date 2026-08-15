@@ -108,9 +108,7 @@ def test_unknown_employee_event_is_not_counted_or_allowed_to_inject_a_name(
     )
     event = store.list_events("site-1")[0]
     assert event["person_name"] is None
-    report = store.attendance_report(
-        "site-1", start=date(2026, 8, 13), end=date(2026, 8, 13)
-    )
+    report = store.attendance_report("site-1", start=date(2026, 8, 13), end=date(2026, 8, 13))
     assert report["rows"] == []
 
 
@@ -313,9 +311,7 @@ def test_reenrollment_atomically_replaces_the_same_cloud_employee(tmp_path: Path
     assert db.embeddings[0].tolist()[:2] == [0.0, 1.0]
 
 
-def test_missing_remote_cache_does_not_erase_local_enrollment(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_missing_remote_cache_does_not_erase_local_enrollment(tmp_path: Path, monkeypatch) -> None:
     from webapp.main import _load_remote_scene_cache
 
     db = FaceDatabase(tmp_path / "faces")
@@ -361,9 +357,7 @@ def test_attendance_service_does_not_mount_generic_person_or_vision_routes(
     assert "/api/vision/analyze" not in paths
 
 
-def test_owner_employee_flow_and_csv_never_return_biometrics(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_owner_employee_flow_and_csv_never_return_biometrics(tmp_path: Path, monkeypatch) -> None:
     import cloud.main as main
 
     monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")

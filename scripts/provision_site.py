@@ -62,8 +62,8 @@ def main() -> int:
         print("\nEdge config.yaml:")
         print("license:")
         print("  enabled: true")
-        print(f"  cloud_url: \"{url}\"")
-        print(f"  pairing_code: \"{data['pairing_code']}\"")
+        print(f'  cloud_url: "{url}"')
+        print(f'  pairing_code: "{data["pairing_code"]}"')
 
     return 0
 

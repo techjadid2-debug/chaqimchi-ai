@@ -262,7 +262,7 @@ class RetailRunner:
         self._release(stream.capture)
         stream.capture = None
         stream.failures += 1
-        wait = min(MAX_BACKOFF_SEC, float(2**min(stream.failures, 5)))
+        wait = min(MAX_BACKOFF_SEC, float(2 ** min(stream.failures, 5)))
         stream.retry_at = now + wait
         logger.warning(
             "[%s] %s — %.0f soniyadan keyin qayta urinamiz",
@@ -390,7 +390,10 @@ class RetailRunner:
         self._running = True
         self._threads = [
             threading.Thread(
-                target=self._capture_loop, args=(camera_id,), name=f"retail-{camera_id}", daemon=True
+                target=self._capture_loop,
+                args=(camera_id,),
+                name=f"retail-{camera_id}",
+                daemon=True,
             )
             for camera_id in self._streams
         ]

@@ -42,17 +42,21 @@ def format_prometheus(snapshot: Dict[str, Any]) -> str:
 
     infer = snapshot.get("inference_ms") or {}
     if infer.get("avg") is not None:
-        lines.extend([
-            "# HELP chaqimchi_inference_ms_avg O‘rtacha inferens (ms)",
-            "# TYPE chaqimchi_inference_ms_avg gauge",
-            _line("chaqimchi_inference_ms_avg", infer["avg"]),
-        ])
+        lines.extend(
+            [
+                "# HELP chaqimchi_inference_ms_avg O‘rtacha inferens (ms)",
+                "# TYPE chaqimchi_inference_ms_avg gauge",
+                _line("chaqimchi_inference_ms_avg", infer["avg"]),
+            ]
+        )
     if infer.get("p95") is not None:
-        lines.extend([
-            "# HELP chaqimchi_inference_ms_p95 95-percentil inferens (ms)",
-            "# TYPE chaqimchi_inference_ms_p95 gauge",
-            _line("chaqimchi_inference_ms_p95", infer["p95"]),
-        ])
+        lines.extend(
+            [
+                "# HELP chaqimchi_inference_ms_p95 95-percentil inferens (ms)",
+                "# TYPE chaqimchi_inference_ms_p95 gauge",
+                _line("chaqimchi_inference_ms_p95", infer["p95"]),
+            ]
+        )
 
     for cam_id, cam in (snapshot.get("cameras") or {}).items():
         lines.append(

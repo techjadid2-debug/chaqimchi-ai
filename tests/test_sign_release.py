@@ -100,7 +100,12 @@ def test_a_signed_manifest_verifies_on_the_device(tmp_path: Path, keys) -> None:
     private, public = keys
     archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz")
 
-    assert sign_release.main([str(archive), "--private-key", str(private), "--public-key", str(public)]) == 0
+    assert (
+        sign_release.main(
+            [str(archive), "--private-key", str(private), "--public-key", str(public)]
+        )
+        == 0
+    )
 
     manifest_path = tmp_path / "chaqimchi-sotqin-0.6.0.json"
     verified = verify_release_manifest(archive, manifest_path, public)

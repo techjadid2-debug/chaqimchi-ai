@@ -121,9 +121,7 @@ def _load_remote_scene_cache(container: AppContainer) -> None:
             logger.warning("Remote config keshi yaroqsiz: %s", cache, exc_info=True)
 
 
-async def _reconcile_attendance_cameras(
-    container: AppContainer, desired: list[CameraItem]
-) -> None:
+async def _reconcile_attendance_cameras(container: AppContainer, desired: list[CameraItem]) -> None:
     manager = container.camera_manager
     if manager is None:
         return
@@ -192,9 +190,7 @@ async def _license_heartbeat_loop(container: AppContainer) -> None:
             if not cfg.license.enabled or container.license_client is None:
                 break
             active = len(container.camera_manager.cameras) if container.camera_manager else 0
-            container.license_state = await container.license_client.refresh(
-                active_cameras=active
-            )
+            container.license_state = await container.license_client.refresh(active_cameras=active)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -286,9 +282,7 @@ def _make_on_scene_event(container: AppContainer):
             "type": "event",
             **event.cloud_payload(),
             "snapshot_url": (
-                f"/api/snapshots/{Path(event.snapshot_path).name}"
-                if event.snapshot_path
-                else None
+                f"/api/snapshots/{Path(event.snapshot_path).name}" if event.snapshot_path else None
             ),
         }
         for client in list(container.ws_clients):
@@ -321,9 +315,7 @@ async def _start_cameras(container: AppContainer) -> None:
         antispoof_checker = build_checker(
             backend=cfg.antispoof.backend,
             model_path=(
-                container.base_dir / cfg.antispoof.model_path
-                if cfg.antispoof.model_path
-                else None
+                container.base_dir / cfg.antispoof.model_path if cfg.antispoof.model_path else None
             ),
             min_score=cfg.antispoof.min_score,
             min_blur_variance=cfg.antispoof.min_blur_variance,
@@ -404,6 +396,7 @@ async def lifespan(app: FastAPI):
     container.retention_task = asyncio.create_task(retention_loop(container))
 
     if cfg.cloud_sync.enabled:
+
         def health_payload():
             thermal = Path("/sys/class/thermal/thermal_zone0/temp")
             try:
@@ -425,8 +418,7 @@ async def lifespan(app: FastAPI):
             }
 
         attendance_service = (
-            os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower()
-            == "attendance"
+            os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower() == "attendance"
         )
         container.cloud_sync = CloudEventSync(
             cfg.cloud_sync,
@@ -480,9 +472,7 @@ def create_app(container: Optional[AppContainer] = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(calibrate.router)
     app.include_router(backup.router)
-    attendance_mode = (
-        os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower() == "attendance"
-    )
+    attendance_mode = os.environ.get("CHAQIMCHI_SERVICE_MODE", "").strip().lower() == "attendance"
     if not attendance_mode:
         # Generic Face API tarixiy development rejimida qoladi. Sotqin
         # attendance servisida cloud rozilik oqimini chetlab o'tuvchi shaxs

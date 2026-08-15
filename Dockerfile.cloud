@@ -11,8 +11,10 @@ COPY --from=builder /install /usr/local
 COPY chaqimchi_ai ./chaqimchi_ai
 COPY cloud ./cloud
 COPY deploy ./deploy
-COPY scripts/create_portal_account.py ./scripts/create_portal_account.py
+COPY releases ./releases
+COPY scripts ./scripts
 RUN mkdir -p /app/data/cloud && chown -R chaqimchi:chaqimchi /app/data
+
 USER 10001:10001
 EXPOSE 8750
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

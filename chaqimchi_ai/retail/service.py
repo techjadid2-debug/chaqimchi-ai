@@ -451,6 +451,71 @@ def _log_stats(stats: Dict[str, Any]) -> None:
         )
 
 
+def retail_status_path(settings: AppSettings, base_dir: Path) -> Path:
+    """Zanjir holati yoziladigan fayl.
+
+    Sotqin agenti bilan aloqa uchun eng sodda kanal: ikkalasi ham alohida
+    jarayon, lekin bitta diskda.  Soket yoki IPC qo'shish faqat ishlamay
+    qolishi mumkin bo'lgan yana bitta narsa bo'lardi.
+    """
+    if settings.retail.status_path:
+        return _resolve(base_dir, settings.retail.status_path)
+    return Path(
+        os.environ.get(
+            "CHAQIMCHI_RETAIL_STATUS",
+            "/opt/chaqimchi/shared/data/retail-status.json",
+        )
+    )
+
+
+def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = None) -> None:
+    """Kameralarning haqiqiy ulanish holatini diskka yozadi.
+
+    Nima uchun kerak: agent `cameras_active` ni `ffprobe` natijasidan
+    olardi, ya'ni "RTSP manzil javob beryaptimi" degan savolga javob
+    berardi.  Lekin kamera ffprobe uchun ochiq bo'lib, retail zanjiri
+    bir soat backoff'da turishi mumkin — 72 soatlik soak testi esa aynan
+    shu farqni sezmasdan "4 kamera ishlayapti" deb sertifikatlab qo'yardi.
+    """
+    streams = stats.get("streams") or {}
+    payload = {
+        "updated_at": time.time() if now is None else float(now),
+        "cameras_configured": len(streams),
+        "cameras_active": sum(
+            1 for item in streams.values() if item.get("connected") and not item.get("offline")
+        ),
+        "cameras": {
+            camera_id: {
+                "connected": bool(item.get("connected")),
+                "offline": bool(item.get("offline")),
+                "frames": int(item.get("frames") or 0),
+                "reconnects": int(item.get("reconnects") or 0),
+            }
+            for camera_id, item in streams.items()
+        },
+        "analyzed": stats.get("analyzed", 0),
+        "events": stats.get("events", 0),
+        "pressure": stats.get("pressure") or {},
+    }
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        # `mkdir` ham `try` ichida: yo'l band bo'lsa (fayl turgan bo'lsa)
+        # u ham xato beradi, va holat fayli yozilmagani uchun butun
+        # zanjirni to'xtatish noto'g'ri bo'lardi.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
+        os.replace(temporary, path)
+    except OSError:
+        logger.warning("Holat fayli yozilmadi: %s", path)
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            # Yo'lning o'zi yaroqsiz bo'lsa tozalash ham imkonsiz.
+            pass
+
+
 def _watcher(
     settings: AppSettings, base_dir: Path, stopped: threading.Event
 ) -> Callable[[Dict[str, Any]], None]:
@@ -463,6 +528,7 @@ def _watcher(
     natijasi aniq — yarim qo'llangan config'dan yaxshi.
     """
     cache = sotqin_cache_path(settings, base_dir)
+    status = retail_status_path(settings, base_dir)
     try:
         revision = read_sotqin_cache(cache)["revision"]
     except ValueError:
@@ -470,6 +536,7 @@ def _watcher(
 
     def observe(stats: Dict[str, Any]) -> None:
         _log_stats(stats)
+        write_status(status, stats)
         if not settings.retail.restart_on_config_change:
             return
         try:

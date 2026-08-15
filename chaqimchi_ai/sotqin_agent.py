@@ -108,6 +108,21 @@ class SotqinAgent:
                 )
             ),
         )
+        #: Retail zanjiri yozadigan holat fayli.  `ffprobe` "RTSP manzil
+        #: javob beryaptimi" degan savolga javob beradi; bu esa "zanjir
+        #: rostdan kadr olyaptimi" degan savolga.  Ikkalasi bir xil emas:
+        #: kamera ffprobe uchun ochiq bo'lib, zanjir bir soat backoff'da
+        #: turishi mumkin.
+        self.retail_status_path = Path(
+            os.environ.get(
+                "CHAQIMCHI_RETAIL_STATUS",
+                str(data_root / "retail-status.json"),
+            )
+        )
+        #: Holat fayli shuncha vaqtdan eski bo'lsa ishonilmaydi — retail
+        #: xizmati o'lgan bo'lishi mumkin.  Housekeeping 30 soniyada bir
+        #: marta yozadi, ya'ni uch tsikl o'tkazib yuborilgani muammo.
+        self.retail_status_max_age_sec = 120.0
         self.client: Optional[httpx.AsyncClient] = None
         self.task: Optional[asyncio.Task] = None
         self.last_ok: Optional[str] = None
@@ -140,7 +155,7 @@ class SotqinAgent:
         disk = shutil.disk_usage(data_root)
         queue = self._outbox_health()
         return {
-            "cameras_active": self.media.health()["online"],
+            "cameras_active": self._cameras_active(),
             "temperature_c": temperature,
             "disk_free_bytes": disk.free,
             "outbox_pending": queue["pending"],
@@ -156,6 +171,42 @@ class SotqinAgent:
             "serial_number": self.serial_number,
             "config_revision": self.remote_config_revision,
         }
+
+    def retail_status(self) -> Optional[Dict[str, Any]]:
+        """Retail zanjirining oxirgi holati.  Yo'q yoki eskirgan bo'lsa `None`."""
+        try:
+            payload = json.loads(self.retail_status_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        updated_at = payload.get("updated_at")
+        if not isinstance(updated_at, (int, float)):
+            return None
+        if time.time() - float(updated_at) > self.retail_status_max_age_sec:
+            # Retail xizmati o'lgan bo'lishi mumkin — eski raqamni
+            # "hozirgi holat" deb yuborish yolg'on bo'lardi.
+            return None
+        return payload
+
+    def _cameras_active(self) -> int:
+        """Nechta kamera **rostdan** kadr berayotgani.
+
+        Asosiy manba — retail zanjiri.  `ffprobe` faqat "RTSP manzil javob
+        beryaptimi" degan savolga javob beradi va zanjir backoff'da
+        turganini sezmaydi; 72 soatlik soak testi aynan shu farqni
+        ko'rmasdan "4 kamera ishlayapti" deb sertifikatlab qo'yardi.
+
+        Zanjir hali yozmagan bo'lsa (yangi o'rnatish, davomat-only rejim)
+        ffprobe natijasiga qaytamiz — hech narsadan yaxshi.
+        """
+        status = self.retail_status()
+        if status is not None:
+            try:
+                return int(status.get("cameras_active", 0))
+            except (TypeError, ValueError):
+                return 0
+        return int(self.media.health()["online"])
 
     def _outbox_health(self) -> Dict[str, int]:
         totals = {"pending": 0, "bytes": 0, "critical_pending": 0, "poisoned": 0}

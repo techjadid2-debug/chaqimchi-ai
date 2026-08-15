@@ -204,3 +204,79 @@ def test_health_survives_an_old_database_without_the_dead_letter_table(tmp_path)
     payload = control.health_payload()
     assert payload["outbox_pending"] == 1
     assert payload["outbox_poisoned"] == 0
+
+
+# ── Kameralarning haqiqiy holati ─────────────────────────────────────────
+
+
+def _status_file(tmp_path, payload: dict):
+    import json
+
+    path = tmp_path / "retail-status.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def test_camera_count_comes_from_the_chain_not_from_ffprobe(tmp_path) -> None:
+    """Butun tuzatishning sababi.
+
+    `ffprobe` "RTSP manzil javob beryaptimi" deydi; kamera javob berib
+    turib, retail zanjiri bir soat backoff'da bo'lishi mumkin. 72 soatlik
+    soak testi aynan shu farqni ko'rmasdan "4 kamera ishlayapti" deb
+    sertifikatlab qo'yardi.
+    """
+    import time
+
+    control = module.SotqinAgent()
+    control.retail_status_path = _status_file(
+        tmp_path, {"updated_at": time.time(), "cameras_active": 2, "cameras_configured": 4}
+    )
+    # ffprobe esa to'rttasi ham joyida deb turibdi.
+    from chaqimchi_ai.sotqin_media import StreamProbe
+
+    control.media.apply_config(
+        {
+            "cameras": [
+                {"camera_id": f"camera-0{n}", "source": f"rtsp://nvr/{n}", "enabled": True}
+                for n in range(1, 5)
+            ]
+        }
+    )
+    control.media.probes = {
+        f"camera-0{n}": StreamProbe(f"camera-0{n}", "online") for n in range(1, 5)
+    }
+    assert control.media.health()["online"] == 4
+
+    # Zanjir haqiqatni biladi.
+    assert control.health_payload()["cameras_active"] == 2
+
+
+def test_a_stale_status_file_is_not_trusted(tmp_path) -> None:
+    """Retail xizmati o'lgan bo'lishi mumkin — eski raqamni "hozirgi holat"
+    deb yuborish yolg'on bo'lardi."""
+    import time
+
+    control = module.SotqinAgent()
+    control.retail_status_path = _status_file(
+        tmp_path, {"updated_at": time.time() - 3600, "cameras_active": 4}
+    )
+
+    assert control.retail_status() is None
+    # ffprobe zaxirasiga tushadi (kamera sozlanmagan → 0).
+    assert control.health_payload()["cameras_active"] == 0
+
+
+def test_a_missing_or_broken_status_file_falls_back(tmp_path) -> None:
+    control = module.SotqinAgent()
+
+    control.retail_status_path = tmp_path / "yo-q.json"
+    assert control.retail_status() is None
+
+    broken = tmp_path / "buzuq.json"
+    broken.write_text("{ bu json emas", encoding="utf-8")
+    control.retail_status_path = broken
+    assert control.retail_status() is None
+
+    without_timestamp = _status_file(tmp_path, {"cameras_active": 4})
+    control.retail_status_path = without_timestamp
+    assert control.retail_status() is None

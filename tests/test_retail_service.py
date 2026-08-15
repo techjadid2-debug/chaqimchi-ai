@@ -367,3 +367,59 @@ def test_build_runner_wires_the_pressure_signal(tmp_path: Path) -> None:
     runner._pressure = lambda: 0.93
     runner.housekeeping_once()
     assert runner.pipeline.broker.budget.stats()["pressure"] == 0.93
+
+
+# ── Zanjir holati (soak testi shundan o'qiydi) ───────────────────────────
+
+
+def test_status_file_reports_the_real_camera_state(tmp_path: Path) -> None:
+    """`ffprobe` "RTSP javob beryaptimi" deydi, bu esa "zanjir kadr
+    olyaptimi" deydi.  Farqi: kamera ffprobe uchun ochiq bo'lib, zanjir
+    bir soat backoff'da turishi mumkin."""
+    import json
+
+    from chaqimchi_ai.retail.service import write_status
+
+    path = tmp_path / "retail-status.json"
+    write_status(
+        path,
+        {
+            "analyzed": 120,
+            "events": 4,
+            "streams": {
+                "camera-01": {"connected": True, "offline": False, "frames": 900, "reconnects": 1},
+                "camera-02": {"connected": False, "offline": True, "frames": 12, "reconnects": 7},
+                "camera-03": {"connected": True, "offline": False, "frames": 880, "reconnects": 1},
+            },
+            "pressure": {"cpu": 0.4, "memory": 0.5, "temperature": 0.1},
+        },
+        now=1_800_000_000.0,
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["cameras_configured"] == 3
+    assert payload["cameras_active"] == 2
+    assert payload["cameras"]["camera-02"]["offline"] is True
+    assert payload["updated_at"] == 1_800_000_000.0
+    assert payload["pressure"]["cpu"] == 0.4
+
+
+def test_status_file_is_written_atomically(tmp_path: Path) -> None:
+    """Agent uni istalgan vaqtda o'qiydi — yarim yozilgan JSON ko'rmasin."""
+    from chaqimchi_ai.retail.service import write_status
+
+    path = tmp_path / "retail-status.json"
+    write_status(path, {"streams": {}}, now=1.0)
+    write_status(path, {"streams": {}}, now=2.0)
+
+    assert list(tmp_path.iterdir()) == [path]  # vaqtinchalik fayl qolmadi
+
+
+def test_an_unwritable_status_path_does_not_crash_the_service(tmp_path: Path) -> None:
+    """Holat fayli yozilmasa ham zanjir ishlashda davom etsin."""
+    from chaqimchi_ai.retail.service import write_status
+
+    blocked = tmp_path / "fayl"
+    blocked.write_text("men papka emasman", encoding="utf-8")
+
+    write_status(blocked / "status.json", {"streams": {}}, now=1.0)

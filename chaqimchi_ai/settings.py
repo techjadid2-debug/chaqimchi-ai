@@ -205,6 +205,10 @@ class RetailSettings(BaseModel):
     #: Sotqin cloud config keshi.  Bo'sh bo'lsa `CHAQIMCHI_SOTQIN_CONFIG_CACHE`
     #: muhit o'zgaruvchisi, keyin standart yo'l ishlatiladi.
     sotqin_config_path: Optional[str] = None
+    #: Zanjir holati yoziladigan fayl (kameralarning **haqiqiy** ulanish
+    #: holati).  Sotqin agenti uni heartbeat uchun o'qiydi.  Bo'sh bo'lsa
+    #: `CHAQIMCHI_RETAIL_STATUS`, keyin standart yo'l.
+    status_path: Optional[str] = None
     #: Cloud'da kamera qo'shilsa/o'chirilsa xizmat o'zini to'xtatadi va
     #: systemd uni qayta ishga tushiradi — yangi ro'yxat shunda kuchga kiradi.
     restart_on_config_change: bool = True

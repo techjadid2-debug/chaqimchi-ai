@@ -82,6 +82,7 @@ So‘ng production’da `CHAQIMCHI_N100_ACCEPTANCE_FILE` va
 - [Sotqin R1](docs/SOTQIN.md)
 - [Retail pipeline](chaqimchi_ai/retail/README.md)
 - [Installer](docs/INSTALLER.md)
+- [Reliz chiqarish va OTA](docs/RELIZ_VA_OTA.md)
 - [Production runbook](docs/PRODUCTION_RUNBOOK.md)
 - [To‘lov](docs/TOLOV.md)
 - [Eski hujjatlar arxivi](docs/archive/README.md)

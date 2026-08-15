@@ -37,28 +37,32 @@
     <!-- WINDOWS SECTION -->
     <section id="sectionWindows" class="utility-card">
       <h2>Windows 10 / 11 uchun o‘rnatish</h2>
+      <p><b>Dastur hozir yakuniy sinovdan o‘tmoqda.</b> Tayyor bo‘lganda oddiy
+      o‘rnatuvchi (<code>Chaqimchi_AI_Setup.exe</code>) shu yerdan yuklab olinadi:
+      Keyingi → Keyingi → Tayyor. <a href="/#download">Raqamingizni qoldiring</a> —
+      chiqqan kuni sizga yuboramiz.</p>
       <div class="install-flow">
         <article>
           <span>1</span>
-          <h3>1-qadam: Paketni oling</h3>
-          <p>Loyiha fayllari ichidagi <code>scripts/install_windows.bat</code> faylini bosing.</p>
+          <h3>1-qadam: O‘rnatuvchini ishga tushiring</h3>
+          <p>Windows ruxsat so‘raydi — “Ha” ni bosing. Keyin Keyingi → Keyingi → Tayyor.</p>
         </article>
         <i></i>
         <article>
           <span>2</span>
-          <h3>2-qadam: Pairing kod</h3>
-          <p>Admin yoki Telegram botdan olingan 6 xonali kodni kiriting.</p>
+          <h3>2-qadam: Kamerani ulang</h3>
+          <p>Sozlash ustasi tarmoqdagi kameralarni qidiradi yoki NVR manzilini qo‘lda kiritasiz.</p>
         </article>
         <i></i>
         <article>
           <span>3</span>
-          <h3>3-qadam: Ishga tushiring</h3>
-          <p><code>scripts/run_windows.bat</code> ni bosib, do‘kon panelini oching.</p>
+          <h3>3-qadam: Chiziqni chizing</h3>
+          <p>Kirish eshigi ustidan chiziq chizasiz — shundan keyin odam sanash boshlanadi.</p>
         </article>
       </div>
 
       <div style="margin-top: 24px;">
-        <label style="font-weight: 700; display: block; margin-bottom: 8px;">Windows uchun tezkor buyruq:</label>
+        <label style="font-weight: 700; display: block; margin-bottom: 8px;">Qurilmani cloudga ulash buyrug‘i (mutaxassis uchun):</label>
         <div class="connect-form">
           <input id="pairCodeWin" maxlength="6" pattern="[A-Fa-f0-9]{6}" placeholder="ABC123" aria-label="6 xonali pairing kod">
           <button class="button" type="button" onclick="makeWin()">Buyruq yaratish</button>
@@ -139,7 +143,7 @@
         status.className = 'form-status error';
         return;
       }
-      out.textContent = `python -m chaqimchi_ai.pair_sotqin --cloud ${location.origin} --code ${val}`;
+      out.textContent = `python scripts\\pair_sotqin.py --cloud ${location.origin} --code ${val}`;
       copy.hidden = false;
       status.textContent = 'Buyruq tayyor!';
       status.className = 'form-status ok';

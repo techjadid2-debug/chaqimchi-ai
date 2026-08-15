@@ -7,7 +7,13 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# Reliz artefaktlari git'da saqlanmaydi — ular CI'da quriladi va GitHub
+# Releases'ga yuklanadi.  O'rnatuvchi .exe ichida Python va AI modellari bor,
+# ya'ni ~150 MB: bunday binarni har build'da commit qilish repo tarixini
+# qaytarib bo'lmas darajada shishiradi.
 releases/*.tar.gz
+releases/*.zip
+releases/*.exe
 
 # Ma'lumotlar va modellar
 data/

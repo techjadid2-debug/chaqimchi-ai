@@ -23,7 +23,10 @@ import pytest
 from chaqimchi_ai.settings import SceneLineSettings, SceneZoneSettings
 
 ROOT = Path(__file__).resolve().parents[1]
-EDITOR = ROOT / "cloud" / "static" / "zone-editor.js"
+#: Muharrir cloud'dan tashqarida turadi: uni ham o'rnatuvchi paneli, ham
+#: mijozning lokal sozlash ustasi ishlatadi va Windows paketiga `cloud/`
+#: ko'chirilmaydi.
+EDITOR = ROOT / "chaqimchi_ai" / "local" / "static" / "zone-editor.js"
 
 
 def _node(script: str) -> dict:

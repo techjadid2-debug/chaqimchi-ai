@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Chaqimchi AI — do‘kon paneli</title>
+  <link rel="stylesheet" href="/assets/local.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Chaqimchi <b>AI</b></a>
+    <div class="topbar-actions">
+      <span id="serviceDot" class="dot"></span>
+      <span id="serviceText" class="hint" style="margin:0">Tekshirilmoqda…</span>
+      <a class="button ghost small" href="/setup">Sozlamalar</a>
+    </div>
+  </header>
+
+  <main class="shell">
+    <div id="alertArea"></div>
+
+    <h1>Bugungi holat</h1>
+    <p class="lead" id="reportDate">—</p>
+
+    <div class="stats">
+      <div class="stat">
+        <small>Kirdi</small>
+        <strong id="entered">0</strong>
+        <span>bugun eshikdan kirgan</span>
+      </div>
+      <div class="stat">
+        <small>Chiqdi</small>
+        <strong id="exited">0</strong>
+        <span id="inside">—</span>
+      </div>
+      <div class="stat">
+        <small>Gavjum soat</small>
+        <strong id="busiest">—</strong>
+        <span id="busiestCount">—</span>
+      </div>
+      <div class="stat">
+        <small>Ogohlantirish</small>
+        <strong id="alertCount">0</strong>
+        <span>bugun qayd etilgan</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Soat bo‘yicha kirish</h2>
+      <div id="hourly" class="bars"></div>
+      <p class="hint">Xodim jadvalini shu grafikka qarab tuzing: gavjum soatda kassada odam ko‘proq bo‘lsin.</p>
+    </div>
+
+    <div class="card">
+      <h2>Kameralar</h2>
+      <div id="cameraStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Oxirgi hodisalar</h2>
+      <div class="scroll-x">
+        <table class="events">
+          <thead><tr><th>Vaqt</th><th>Kamera</th><th>Hodisa</th><th>Tafsilot</th></tr></thead>
+          <tbody id="eventRows"><tr><td colspan="4"><span class="hint">Yuklanmoqda…</span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card quiet">
+      <h2>Xizmat boshqaruvi</h2>
+      <p class="hint" id="uptimeText">—</p>
+      <div class="actions">
+        <button class="button primary" id="startBtn" type="button">Ishga tushirish</button>
+        <button class="button ghost" id="restartBtn" type="button">Qayta ishga tushirish</button>
+        <button class="button danger" id="stopBtn" type="button">To‘xtatish</button>
+        <button class="button ghost" id="logBtn" type="button">Nima bo‘ldi? (jurnal)</button>
+      </div>
+      <pre class="log hidden" id="logBox"></pre>
+    </div>
+  </main>
+
+  <script src="/assets/panel.js" defer></script>
+</body>
+</html>

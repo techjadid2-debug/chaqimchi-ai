@@ -405,24 +405,99 @@ def test_admin_readiness_requires_admin_key(cloud_client) -> None:
     assert lead_item["required"] is True
 
 
-def test_quick_trial_and_dynamic_installer_download(cloud_client) -> None:
-    # 1. Quick trial yaratish
+def test_quick_trial_creates_a_site(cloud_client) -> None:
     res = cloud_client.post(
         "/api/v1/public/quick-trial",
-        json={"phone": "+998 90 123 45 67", "company": "Test Market"},
+        json={"phone": "+998 90 123 45 67", "company": "Test Market", "consent": True},
     )
     assert res.status_code == 200
     data = res.json()
     assert data["ok"] is True
-    assert "site_id" in data
-    assert "pairing_code" in data
-    assert "download_windows_url" in data
-    assert "owner_url" in data
+    assert data["site_id"]
+    assert data["pairing_code"]
+    assert data["owner_url"]
 
-    # 2. Dinamik .bat faylni yuklab olish
-    code = data["pairing_code"]
-    site_id = data["site_id"]
-    dl = cloud_client.get(f"/api/v1/public/download-installer?code={code}&site_id={site_id}")
-    assert dl.status_code == 200
-    assert "Chaqimchi_AI_Setup" in dl.headers.get("content-disposition", "")
-    assert dl.content.startswith(b"MZ") or code.encode() in dl.content
+
+def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch) -> None:
+    """Sayt tugmani shu javobga qarab ko'rsatadi.
+
+    Ilgari sahifada "115 MB bundle yuklab olish" tugmasi turardi, endpoint
+    esa fayl yo'qligi uchun 503 qaytarardi.  Endi mavjudlik bitta joydan
+    o'qiladi va hajm o'lchanadi.
+    """
+    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+
+    body = cloud_client.get("/api/v1/public/windows-release").json()
+    assert body["available"] is False
+    assert body["size_mb"] is None
+    assert cloud_client.get("/api/v1/public/download-installer").status_code == 503
+
+
+def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_path) -> None:
+    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer.write_bytes(b"MZ" + b"\0" * 2_000_000)
+    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
+
+    body = cloud_client.get("/api/v1/public/windows-release").json()
+    assert body["available"] is True
+    assert body["size_mb"] == 2
+
+    response = cloud_client.get("/api/v1/public/download-installer")
+    assert response.status_code == 200
+    assert response.content.startswith(b"MZ")
+    assert "Chaqimchi_AI_Setup.exe" in response.headers.get("content-disposition", "")
+
+
+def test_windows_installer_redirects_when_published_externally(cloud_client, monkeypatch) -> None:
+    """~70 MB binarni Docker image ichida tashish shart emas — u GitHub
+    Releases'da turadi va cloud faqat yo'naltiradi."""
+    monkeypatch.setenv(
+        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
+    )
+    monkeypatch.setenv("CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB", "71")
+
+    body = cloud_client.get("/api/v1/public/windows-release").json()
+    assert body["available"] is True
+    assert body["size_mb"] == 71
+
+    response = cloud_client.get("/api/v1/public/download-installer", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("https://github.com/")
+
+
+def test_windows_installer_url_must_be_https(cloud_client, monkeypatch) -> None:
+    """HTTP havola o'rnatuvchini yo'lda almashtirishga imkon berardi."""
+    monkeypatch.setenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", "http://example.com/setup.exe")
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+    assert cloud_client.get("/api/v1/public/windows-release").json()["available"] is False
+
+
+def test_quick_trial_requires_consent(cloud_client) -> None:
+    """Rozilik katagisiz do'kon yozuvi va telefon raqami saqlanmasin.
+
+    Oldin `consent` maydonining standart qiymati `True` edi — ya'ni forma
+    katagi belgilanmasa ham ma'lumot bazaga tushardi.  `/public/leads` esa
+    doim rozilik talab qilgan; ikki endpoint bir xil qoidada bo'lishi kerak.
+    """
+    res = cloud_client.post(
+        "/api/v1/public/quick-trial",
+        json={"phone": "+998 90 123 45 67", "company": "Rozilik yo'q"},
+    )
+    assert res.status_code == 422
+
+
+def test_quick_trial_is_rate_limited(cloud_client) -> None:
+    """Bu endpoint har chaqiruvda haqiqiy `site` yaratadi — cheksiz bo'lmasin."""
+    from cloud import ratelimit
+
+    ratelimit.limiter().reset()
+    payload = {"phone": "+998 90 111 22 33", "consent": True}
+    codes = [
+        cloud_client.post("/api/v1/public/quick-trial", json=payload).status_code
+        for _ in range(5)
+    ]
+    assert codes.count(200) == 3, codes
+    assert codes[-1] == 429

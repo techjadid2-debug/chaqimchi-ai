@@ -1,0 +1,47 @@
+# Chaqimchi AI — mijozning Windows kompyuteri uchun aniq paket ro'yxati.
+#
+# Nega alohida fayl: `requirements.txt` yuz tanish (insightface, onnxruntime)
+# va production cloud (psycopg, minio) uchun ham paketlarni o'z ichiga oladi.
+# Ular do'kon kompyuterida **kerak emas**:
+#
+#   * insightface — Windows'da C++ kompilyator talab qiladi va tayyor wheel
+#     yo'q, ya'ni oflayn o'rnatish shu yerda yiqilardi;
+#   * psycopg/minio — faqat cloud serverda ishlaydi.
+#
+# Versiyalar qat'iy qotirilgan (`==`).  Oflayn paketda diapazon ma'nosiz:
+# mijoz kompyuterida internet yo'q, wheel esa qurish paytida tanlangan.
+# Qat'iy versiya bir marta tekshirilgan to'plamni takrorlanadigan qiladi.
+
+# ── Odam deteksiyasi ─────────────────────────────────────────────────────
+openvino==2024.6.0
+numpy==1.26.4
+# `headless`: mijoz kompyuterida oyna ochilmaydi, GUI kutubxonalari esa
+# paketni ~40 MB og'irlashtiradi va Windows'da qo'shimcha DLL talab qiladi.
+opencv-python-headless==4.10.0.84
+
+# ── Lokal sozlash ustasi va panel ────────────────────────────────────────
+fastapi==0.115.0
+uvicorn==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+starlette==0.38.6
+anyio==4.6.0
+sniffio==1.3.1
+idna==3.10
+click==8.1.7
+h11==0.14.0
+typing-extensions==4.12.2
+annotated-types==0.7.0
+pydantic-core==2.23.4
+
+# ── Konfiguratsiya va cloudga hodisa yuborish ────────────────────────────
+PyYAML==6.0.2
+httpx==0.27.2
+httpcore==1.0.6
+certifi==2024.8.30
+PyJWT==2.9.0
+cryptography==43.0.1
+cffi==1.17.1
+pycparser==2.22
+python-multipart==0.0.12
+colorama==0.4.6

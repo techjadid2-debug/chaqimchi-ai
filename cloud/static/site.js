@@ -1,5 +1,10 @@
 (() => {
-  async function submitLead(form, status, button, message, cameras = 1) {
+  // `message` — adminga ketadigan texnik izoh; `successText` — mijozga
+  // ko'rinadigan javob.  Ilgari ikkalasi bitta bo'lgani uchun har qanday
+  // `message` berilgan forma "To'lov havolasi bo'yicha bog'lanamiz" degan
+  // javobni ko'rsatardi — bu tarif konfiguratori uchun to'g'ri, "xabar
+  // bering" formasi uchun esa chalg'ituvchi.
+  async function submitLead(form, status, button, message, successText, cameras = 1) {
     if (!form.reportValidity()) return;
     button.disabled = true;
     status.className = "form-status";
@@ -22,7 +27,7 @@
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail || "So‘rov yuborilmadi");
       status.className = "form-status ok";
-      status.textContent = message ? "Tanlovingiz qabul qilindi. To‘lov havolasi va dasturiy paket bo‘yicha jamoamiz bog‘lanadi." : body.message;
+      status.textContent = successText || body.message;
       form.reset();
     } catch (error) {
       status.className = "form-status error";
@@ -38,70 +43,52 @@
     });
   }
 
-  window.startQuickTrial = async function() {
-    const phoneInput = document.getElementById("trialPhone");
-    const companyInput = document.getElementById("trialCompany");
-    const btn = document.getElementById("trialBtn");
-    const status = document.getElementById("trialStatus");
+  // Yuklab olish bo'limi serverdan so'raladi: dastur nashr qilinganmi va
+  // hajmi qancha.  Sahifaga qo'lda "115 MB" deb yozib qo'yish aynan shu
+  // yerda xatoga olib kelgan edi — matn turardi, fayl esa yo'q edi va
+  // tugma 503 qaytarardi.
+  const notifyForm = document.getElementById("notifyForm");
+  const downloadReady = document.getElementById("downloadReady");
 
-    const phone = phoneInput ? phoneInput.value.trim() : "";
-    const company = companyInput ? companyInput.value.trim() : "";
-    if (!phone) {
-      if (status) {
-        status.className = "form-status error";
-        status.textContent = "Iltimos, telefon raqamingizni kiriting.";
-      }
-      return;
-    }
-
-    if (btn) btn.disabled = true;
-    if (status) {
-      status.className = "form-status";
-      status.textContent = "14 kunlik bepul sinov tayyorlanmoqda…";
-    }
-
-    try {
-      const res = await fetch("/api/v1/public/quick-trial", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, company }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Xatolik yuz berdi");
-
-      if (status) {
-        status.className = "form-status ok";
-        status.innerHTML = `✅ <b>Tayyor!</b> O‘rnatuvchi yuklab olinmoqda…<br><small>Yuklangan faylni 1 marta bosing, u avtomatik ulanadi.</small>`;
-      }
-
-      const downloadLink = document.createElement("a");
-      downloadLink.href = data.download_windows_url;
-      downloadLink.download = "Chaqimchi_AI_Setup.exe";
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-
-
-      setTimeout(() => {
-        try { document.body.removeChild(downloadLink); } catch(_) {}
-      }, 500);
-    } catch (err) {
-      if (status) {
-        status.className = "form-status error";
-        status.textContent = err.message || "Xatolik yuz berdi";
-      }
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  };
-
-  const quickTrialForm = document.getElementById("quickTrialForm");
-  if (quickTrialForm) {
-    quickTrialForm.addEventListener("submit", (event) => {
+  if (notifyForm) {
+    notifyForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      window.startQuickTrial();
+      submitLead(
+        notifyForm,
+        document.getElementById("notifyStatus"),
+        notifyForm.querySelector("button[type=submit]"),
+        "Windows dasturi tayyor bo‘lganda xabar berilsin",
+        "Raqamingiz qabul qilindi. Dastur tayyor bo‘lgan kuni birinchilardan bo‘lib sizga yuboramiz.",
+      );
     });
   }
 
+  if (notifyForm && downloadReady) {
+    fetch("/api/v1/public/windows-release")
+      .then((response) => response.json())
+      .then((release) => {
+        if (!release.available) throw new Error("hali nashr qilinmagan");
+        const size = release.size_mb ? ` (${release.size_mb} MB)` : "";
+        const button = document.getElementById("downloadBtn");
+        if (button) button.textContent = `⬇️ Windows uchun yuklab olish${size}`;
+        downloadReady.hidden = false;
+        notifyForm.hidden = true;
+      })
+      .catch(() => {
+        // Nashr qilinmagan yoki server javob bermadi — mijozga buzuq
+        // tugma emas, "xabar bering" formasi ko'rsatiladi.
+        downloadReady.hidden = true;
+        notifyForm.hidden = false;
+        const heading = document.getElementById("downloadHeading");
+        const lead = document.getElementById("downloadLead");
+        if (heading) heading.textContent = "Windows dasturi tayyorlanmoqda";
+        if (lead) {
+          lead.textContent =
+            "Mustaqil o‘rnatiladigan Windows dasturi hozir yakuniy sinovdan o‘tmoqda. " +
+            "Kutishni istamasangiz, mutaxassisimiz bugunoq kelib o‘rnatib beradi.";
+        }
+      });
+  }
 
   const purchaseForm = document.getElementById("purchaseForm");
 
@@ -240,7 +227,14 @@
     if (!pricing) return;
     updateQuote();
     const cameras = selection().reduce((most, item) => Math.max(most, item.cameras), 1);
-    submitLead(purchaseForm, output.status, output.buy, output.message.value, cameras);
+    submitLead(
+      purchaseForm,
+      output.status,
+      output.buy,
+      output.message.value,
+      "Tanlovingiz qabul qilindi. To‘lov havolasi va o‘rnatish bo‘yicha jamoamiz bog‘lanadi.",
+      cameras,
+    );
   });
 
   fetch("/api/v1/public/pricing")

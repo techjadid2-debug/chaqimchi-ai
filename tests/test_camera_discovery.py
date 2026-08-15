@@ -110,3 +110,66 @@ async def test_discover_cameras_all():
             assert devices[0]["ip"] == "192.168.1.55"
             assert "suggested_urls" in devices[0]
             assert len(devices[0]["suggested_urls"]) > 0
+
+
+# ── Endpoint haqiqatan qidiruvni chaqiradimi ─────────────────────────────
+#
+# Tarixiy xato: cloud'dagi `/api/v1/agent/discovery/scan` mavjud bo'lmagan
+# `discover_network_cameras` nomini import qilardi, `except Exception` esa
+# `ImportError` ni yutib **doim** bo'sh ro'yxat qaytarardi.  O'sha paytdagi
+# test faqat `ok is True` va ro'yxat turini tekshirgani uchun yashil turardi,
+# saytda esa "kameralarni 2 daqiqada avtomatik topadi" deb yozilgan edi.
+#
+# Shuning uchun endi ikki narsa tekshiriladi: (1) endpoint haqiqiy funksiyani
+# chaqiradi, (2) xato bo'lsa uni **yutmaydi**.
+
+
+@pytest.fixture
+def local_client(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    import importlib
+
+    from fastapi.testclient import TestClient
+
+    from chaqimchi_ai.local import app as app_module
+    from chaqimchi_ai.local import config_store, paths, supervisor
+
+    importlib.reload(paths)
+    importlib.reload(config_store)
+    importlib.reload(supervisor)
+    importlib.reload(app_module)
+    return TestClient(app_module.app)
+
+
+def test_scan_endpoint_calls_the_real_discovery(local_client):
+    with patch(
+        "chaqimchi_ai.discovery.discover_cameras_all", new_callable=AsyncMock
+    ) as mock_discover:
+        mock_discover.return_value = [
+            {
+                "ip": "192.168.1.64",
+                "vendor_hint": "Hikvision",
+                "has_rtsp": True,
+                "has_onvif": True,
+                "rtsp_port": 554,
+                "suggested_urls": [{"name": "Hikvision Substream", "url": "rtsp://…", "path": "/x"}],
+            }
+        ]
+        response = local_client.post("/api/setup/scan")
+
+    assert mock_discover.await_count == 1, "endpoint haqiqiy qidiruvni chaqirishi shart"
+    body = response.json()
+    assert body["count"] == 1
+    assert body["devices"][0]["ip"] == "192.168.1.64"
+    assert body["devices"][0]["vendor"] == "Hikvision"
+
+
+def test_scan_endpoint_does_not_swallow_failures(local_client):
+    """Xato yutilsa mijoz "kamera yo'q" deb o'ylaydi va qo'lda kiritishga
+    ham o'tmaydi — eng yomon holat."""
+    with patch(
+        "chaqimchi_ai.discovery.discover_cameras_all", new_callable=AsyncMock
+    ) as mock_discover:
+        mock_discover.side_effect = OSError("tarmoq yopiq")
+        with pytest.raises(OSError):
+            local_client.post("/api/setup/scan")

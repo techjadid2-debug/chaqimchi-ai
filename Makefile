@@ -1,7 +1,7 @@
 # Chaqimchi AI
 PY ?= python3
 
-.PHONY: install-dev test lint fmt run-web run-sotqin run-cloud run-retail calibrate provision backup restore docker-build cloud-config cloud-deploy benchmark verify-models
+.PHONY: install-dev test lint fmt run-web run-sotqin run-cloud run-local run-retail calibrate provision backup restore docker-build cloud-config cloud-deploy benchmark verify-models windows-installer
 
 install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
@@ -23,6 +23,11 @@ run-sotqin:
 
 run-cloud:
 	$(PY) -m uvicorn cloud.main:app --host 127.0.0.1 --port 8750
+
+# Mijozning o'z kompyuteridagi dastur: sozlash ustasi + do'kon paneli.
+# Windows o'rnatuvchisi aynan shuni ishga tushiradi.
+run-local:
+	$(PY) -m chaqimchi_ai.local.app
 
 run-retail:
 	$(PY) -m chaqimchi_ai.retail.service
@@ -61,3 +66,10 @@ benchmark:
 
 verify-models:
 	$(PY) scripts/verify_model_bundle.py models/manifest.example.json
+
+# Windows o'rnatuvchisi: payload (Python + kutubxona + AI modeli) yig'iladi,
+# keyin NSIS uni bitta .exe ga kompilyatsiya qiladi.  `makensis` kerak:
+#   macOS: brew install makensis   ·   Ubuntu: sudo apt install nsis
+windows-installer:
+	$(PY) scripts/build_windows_payload.py
+	makensis -V2 scripts/windows_installer.nsi

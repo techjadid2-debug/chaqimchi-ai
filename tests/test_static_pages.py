@@ -51,3 +51,66 @@ def test_every_page_has_a_language_and_charset() -> None:
         content = page.read_text(encoding="utf-8").lower()
         assert 'lang="uz"' in content or 'lang="en"' in content, page.name
         assert 'charset="utf-8"' in content, page.name
+
+
+# ── Va'da qo'riqchisi ────────────────────────────────────────────────────
+#
+# Sayt matni bir necha marta koddan oldinga o'tib ketgan: "kameralarni 2
+# daqiqada avtomatik topadi" deb yozilganda qidiruv funksiyasi umuman
+# mavjud emas edi; "barcha IP kamera mos" degani esa loyihaning o'z hujjati
+# (`docs/CROSS_PLATFORM_INSTALLER_PLAN.md`) aynan taqiqlagan gap edi.
+#
+# Bu tekshiruvlar sotuv matnini emas, **isbotlanmagan kafolatni** ushlaydi.
+
+#: Sayt bermasligi kerak bo'lgan kafolatlar.
+FORBIDDEN_CLAIMS = (
+    "barcha ip kamera",
+    "barcha standart ip kamera",
+    "barcha kamera mos",
+    "har qanday kamera",
+    "100% aniqlik",
+    "o'g'rini aniqlaydi",
+    "o‘g‘rini aniqlaydi",
+)
+
+
+def test_public_pages_make_no_unproven_guarantees() -> None:
+    for page in pages():
+        if page.name in {"admin.html", "installer.html", "owner.html"}:
+            continue  # ichki panellar, mijozga sotuv va'dasi bermaydi
+        text = page.read_text(encoding="utf-8").lower()
+        for claim in FORBIDDEN_CLAIMS:
+            assert claim not in text, (
+                f"{page.name}: isbotlanmagan kafolat — «{claim}». "
+                "Qo'llab-quvvatlanadigan NVR ro'yxatini yozing."
+            )
+
+
+def test_attendance_is_marked_as_a_closed_pilot() -> None:
+    """`docs/DOKON_MVP.md`: davomat Face ID — yozma rozilikli **bepul yopiq
+    pilot**, production'da fail-closed.  Uni oddiy funksiya sifatida sotish
+    huquqiy risk."""
+    site = (STATIC / "site.html").read_text(encoding="utf-8").lower()
+    if "face id" in site:
+        assert "pilot" in site, "Face ID yopiq pilot ekani ko'rsatilmagan"
+
+
+def test_download_section_does_not_hardcode_a_file_size() -> None:
+    """Ilgari sahifada "115 MB bundle" deb turardi, fayl esa umuman mavjud
+    emas edi va tugma 503 qaytarardi.  Hajm serverdan olinadi."""
+    site = (STATIC / "site.html").read_text(encoding="utf-8")
+    assert not re.search(r"\d{2,4}\s*MB", site), "hajm sahifaga qo'lda yozilmasin"
+    assert "windows-release" in (STATIC / "site.js").read_text(encoding="utf-8"), (
+        "yuklab olish holati serverdan so'ralishi kerak"
+    )
+
+
+def test_pages_do_not_reference_removed_scripts() -> None:
+    """`run_windows.bat`, `install_windows.bat` va maket onboarding
+    o'chirildi — ularga ishora qilgan yo'riqnoma mijozni yo'qolgan faylga
+    yuborardi."""
+    removed = ("run_windows.bat", "install_windows.bat", "local-onboarding", "chaqimchi_ai.pair_sotqin")
+    for page in pages():
+        text = page.read_text(encoding="utf-8")
+        for name in removed:
+            assert name not in text, f"{page.name}: o'chirilgan faylga ishora — {name}"

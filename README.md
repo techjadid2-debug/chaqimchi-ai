@@ -39,9 +39,24 @@ Asosiy xizmatlar:
 | Buyruq | Vazifa |
 |---|---|
 | `make run-cloud` | Admin, owner, billing va event cloud’i (`:8750`) |
+| `make run-local` | Mijoz kompyuteridagi sozlash ustasi va panel (`:8760`) |
 | `make run-sotqin` | Sotqin control agent |
 | `make run-retail` | Lokal do‘kon analitikasi |
 | `make run-web` | Lokal yopiq-pilot davomat/enrollment paneli (`:8743`) |
+
+## Windows lokal o‘rnatish
+
+Do‘kon egasi mavjud Windows kompyuteriga o‘zi o‘rnatadi: `Chaqimchi_AI_Setup.exe`
+→ Keyingi → Keyingi → Tayyor → brauzerda sozlash ustasi ochiladi. Python va AI
+modeli o‘rnatuvchi ichida, internet talab qilinmaydi. Kamera ro‘yxati lokal
+konfigda turadi, ya’ni cloud ulanmasa ham tahlil ishlaydi.
+
+```bash
+python scripts/build_windows_payload.py     # → build/payload
+makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.exe
+```
+
+Tafsilot: [docs/INSTALLER.md](docs/INSTALLER.md) 0-bo‘lim.
 
 Production release qurish va N100 ga o‘rnatish:
 

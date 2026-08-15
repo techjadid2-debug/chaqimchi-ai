@@ -1,4 +1,57 @@
-# Chaqimchi Sotqin o‘rnatuvchi qo‘llanmasi
+# Chaqimchi o‘rnatuvchi qo‘llanmasi
+
+Ikkita yo‘l bor va ular bir-biridan mustaqil:
+
+| Yo‘l | Kim uchun | Qurilma | Cloud kerakmi |
+|---|---|---|---|
+| **Windows lokal** (0-bo‘lim) | do‘kon egasi o‘zi o‘rnatadi | mavjud Windows 10/11 | yo‘q |
+| **Sotqin R1** (1–3-bo‘limlar) | o‘rnatuvchi mutaxassis | Intel N100 mini-PC | ha |
+
+---
+
+## 0. Windows lokal o‘rnatish (mijoz o‘zi)
+
+Mijoz `Chaqimchi_AI_Setup.exe` ni saytdan yuklab oladi. Ichida Python, AI
+modeli va barcha kutubxonalar bor — **internet ham, `pip` ham kerak emas**.
+
+1. Faylni ishga tushiradi → Windows ruxsat so‘raydi (UAC) → “Ha”.
+2. Keyingi → Keyingi → O‘rnatish → Tayyor.
+3. Brauzerda sozlash ustasi ochiladi: `http://localhost:8760`.
+4. Kamera qo‘shadi → kadr ko‘rinadi → kirish chizig‘ini chizadi → ishga tushiradi.
+
+Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
+**“Qo‘shimcha ma’lumot” → “Baribir ishga tushirish”**.
+
+| Nima | Qayerda |
+|---|---|
+| Dastur | `C:\Program Files\Chaqimchi AI` (faqat o‘qish) |
+| Sozlama, log, hodisalar | `C:\ProgramData\Chaqimchi` |
+| Panel | `http://localhost:8760` (faqat shu kompyuterda) |
+
+Bu rejimda kamera ro‘yxati lokal `config.yaml` da turadi
+(`retail.cameras_source: config`) va cloud ulanmasa ham tahlil ishlaydi.
+Cloudga ulash keyinroq, pairing kod bilan bajariladi (3-bo‘lim).
+
+### O‘rnatuvchini qurish
+
+```bash
+python scripts/build_windows_payload.py     # Python + wheel + model → build/payload
+makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.exe
+```
+
+CI ham shuni qiladi (`.github/workflows/windows-installer.yml`) va faylni
+GitHub Releases’ga yuklaydi. Cloud uni git ichida tashimaydi — deployda
+shu ikki o‘zgaruvchi beriladi:
+
+```bash
+export CHAQIMCHI_WINDOWS_INSTALLER_URL="https://github.com/.../Chaqimchi_AI_Setup.exe"
+export CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB=68
+```
+
+Berilmasa sayt yuklab olish tugmasi o‘rniga “tayyor bo‘lganda xabar bering”
+formasini ko‘rsatadi — buzuq tugma chiqmaydi.
+
+---
 
 ## 1. Cloud (markaz)
 

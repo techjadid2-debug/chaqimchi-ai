@@ -9,7 +9,7 @@
   <meta property="og:type" content="website">
   <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og.png">
   <title>Chaqimchi AI — Do‘koningiz nazorati va sun’iy intellekt tahlili</title>
-  <link rel="stylesheet" href="/assets/site.css?v=20260815-v2">
+  <link rel="stylesheet" href="/assets/site.css?v=20260816-v3">
 </head>
 <body>
   <header class="nav-shell">
@@ -43,14 +43,14 @@
           Yangi qimmat kameralar shart emas. Do‘koningizdagi mavjud <b>Windows kompyuter</b>, <b>NVR</b> yoki tayyor <b>Chaqimchi Box</b> mini-PC orqali mijozlar soni, kassa navbati, xavfsizlik va xodimlar davomatini Telegram va Cloud orqali kuzating.
         </p>
         <div class="hero-actions">
-          <a class="button button-light" href="#download">📥 Windows / Linux yuklab olish</a>
-          <a class="button button-ghost" href="#pilot">🛠️ Tayyor qilib o‘rnatib bering</a>
+          <a class="button button-light" href="#pilot">🛠️ Tayyor qilib o‘rnatib bering</a>
+          <a class="button button-ghost" href="#download">💻 O‘zim o‘rnataman</a>
           <a class="text-cta" href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">Telegram orqali ulanish →</a>
         </div>
         <div class="hero-trust">
           <span>4 kamera qabul profili</span>
-          <span>Barcha IP kamera va NVR mos</span>
-          <span>Windows 10/11 & Linux</span>
+          <span>Hikvision · Dahua · Uniview NVR</span>
+          <span>Windows 10/11 &amp; Linux</span>
           <span>Video NVR’da qoladi</span>
         </div>
       </div>
@@ -65,8 +65,8 @@
 
     <!-- ── FACTS BAR ── -->
     <section class="facts">
-      <div><strong>2 daqiqa</strong><span>kameralarni avtomatik topish</span></div>
-      <div><strong>Windows & NVR</strong><span>mavjud tizimga mos</span></div>
+      <div><strong>4 kamera</strong><span>bitta do‘kon uchun qabul profili</span></div>
+      <div><strong>Windows &amp; NVR</strong><span>mavjud tizimga mos</span></div>
       <div><strong>Telegram Bot</strong><span>tezkor video alert va hisobot</span></div>
       <div><strong>24/7</strong><span>qurilma va tarmoq nazorati</span></div>
     </section>
@@ -82,17 +82,17 @@
       <div class="paths-grid">
         <!-- Variant 1: O'zida kompyuteri borlar uchun -->
         <article class="path-card path-self">
-          <div class="path-badge">Eng tezkor · 5 daqiqada</div>
+          <div class="path-badge">O‘zingiz o‘rnatasiz · Bepul</div>
           <h3>💻 Menda Windows / Kompyuter bor</h3>
-          <p class="path-desc">Do‘koningizdagi mavjud Windows 10/11 yoki Linux kompyuteringizga dasturni yuklab oling va darhol ishga tushiring.</p>
+          <p class="path-desc">Do‘koningizdagi mavjud Windows 10/11 kompyuteringizga o‘zingiz o‘rnatasiz — usta chaqirish shart emas.</p>
           <ul class="path-benefits">
             <li>Qo‘shimcha qurilma sotib olish shart emas</li>
-            <li>Dastur tarmoqdagi kameralarni o‘zi avtomatik topadi</li>
-            <li>1-bosishda kassa va kirish zonalarini chizasiz</li>
-            <li>14 kunlik bepul to‘liq sinov davri</li>
+            <li>Oddiy o‘rnatuvchi: Keyingi → Keyingi → Tayyor</li>
+            <li>Kamera manzilini bir marta kiritasiz, keyin kassa va kirish chizig‘ini chizasiz</li>
+            <li>Video kompyuteringizda va NVR’da qoladi</li>
           </ul>
           <div class="path-cta">
-            <a class="button button-light" href="#download">Dasturni yuklab olish →</a>
+            <a class="button button-light" href="#download">Yuklab olish →</a>
           </div>
         </article>
 
@@ -117,44 +117,63 @@
     <!-- ── DOWNLOAD & QUICK SETUP SECTION ── -->
     <section id="download" class="download-section section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> 1-Bosishda O'rnatish</p>
-        <h2>14 kunlik bepul sinab ko'ring</h2>
-        <p>Hech qanday kod kiritish shart emas. Telefoningizni yozing va avtomatik sozlangan o'rnatuvchini yuklab oling.</p>
+        <p class="eyebrow"><span></span> O‘zim O‘rnataman</p>
+        <h2 id="downloadHeading">Windows uchun yuklab oling</h2>
+        <p id="downloadLead">Oddiy o‘rnatuvchi: Keyingi → Keyingi → Tayyor. Python va AI modeli ichida — internet talab qilinmaydi. Kutishni istamasangiz, mutaxassisimiz kelib o‘rnatib beradi.</p>
       </div>
 
       <div class="download-grid">
         <div class="download-card">
           <div class="os-icon">🪟</div>
-          <h3>Windows (10 / 11) — To'liq Oflayn Bundle</h3>
-          <p>Python, AI modellar va barcha kutubxonalar ichida. Internet kerak emas — ZIP ni oching, <code>run_windows.bat</code> ni ishga tushiring.</p>
-          <div style="display: grid; gap: 10px; margin-top: 14px;">
-            <a class="button button-light" id="bundleDownloadBtn" href="/api/v1/public/download-bundle" download="Chaqimchi_AI_win64.zip">
-              📦 To'liq Oflayn Bundle yuklab olish (115 MB)
+          <h3>Windows 10 / 11</h3>
+          <p>O‘rnatgach brauzerda sozlash oynasi ochiladi: kamerangizni ulaysiz va kirish chizig‘ini chizasiz. Video kompyuteringizda qoladi.</p>
+
+          <!-- Dastur nashr qilingan bo'lsa shu blok, aks holda pastdagi
+               forma ko'rinadi.  Qaysi biri — serverdan so'raladi, sahifaga
+               qo'lda yozilmaydi. -->
+          <div id="downloadReady" class="download-action" hidden>
+            <a class="button button-light" id="downloadBtn" href="/api/v1/public/download-installer">
+              ⬇️ Windows uchun yuklab olish
             </a>
-            <p style="font-size: 12px; color: var(--muted, #888); margin: 0;">
-              ✅ Python 3.12 Embed &nbsp;|&nbsp; ✅ OpenVINO AI modeli &nbsp;|&nbsp; ✅ Barcha kutubxonalar
-            </p>
+            <details style="margin-top: 12px;">
+              <summary style="cursor: pointer; font-size: 13px; color: var(--muted);">Windows “bu faylni bloklab qo‘ydi” desa nima qilaman?</summary>
+              <p style="font-size: 13px; margin: 10px 0 0;">
+                Bu normal holat: dasturimiz yangi va hali Microsoft sertifikati olinmagan.
+                Ko‘k oynada <b>“Qo‘shimcha ma’lumot”</b> (More info) ni bosing, so‘ng
+                <b>“Baribir ishga tushirish”</b> (Run anyway) ni tanlang.
+                Ishonchingiz komil bo‘lishi uchun faylni faqat shu rasmiy saytdan yuklab oling.
+              </p>
+            </details>
           </div>
-          <details style="margin-top: 12px;">
-            <summary style="cursor: pointer; font-size: 13px; color: var(--muted, #888);">Kichik o'rnatuvchi kerakmi? (.exe 3 MB)</summary>
-            <form id="quickTrialForm" class="quick-download-form" action="javascript:void(0)" onsubmit="event.preventDefault(); window.startQuickTrial(); return false;" style="display: grid; gap: 10px; margin-top: 10px;">
-              <input type="tel" id="trialPhone" name="phone" required placeholder="Telefoningiz: +998 90 000 00 00" style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; outline: none;">
-              <input type="text" id="trialCompany" name="company" placeholder="Do'kon nomi (ixtiyoriy)" style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; outline: none;">
-              <button class="button button-ghost" type="button" id="trialBtn" onclick="window.startQuickTrial()">📥 Kichik o'rnatuvchi (.exe 3 MB)</button>
-              <p id="trialStatus" class="form-status" style="font-size: 13px; margin: 4px 0 0;"></p>
-            </form>
-          </details>
+
+          <form id="notifyForm" class="quick-download-form" style="display: grid; gap: 10px;" hidden>
+            <p style="margin: 0; font-size: 14px; color: var(--muted);">Dastur hozir yakuniy sinovdan o‘tmoqda. Raqamingizni qoldiring — tayyor bo‘lgan kuni yuboramiz.</p>
+            <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel"
+                   placeholder="Telefoningiz: +998 90 000 00 00"
+                   style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8;">
+            <input type="text" id="notifyCompany" name="company" autocomplete="organization"
+                   placeholder="Do‘kon nomi (ixtiyoriy)"
+                   style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8;">
+            <label class="consent" style="font-size: 13px;">
+              <input name="consent" type="checkbox" required>
+              <span>Bog‘lanish uchun ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
+            </label>
+            <input name="full_name" type="hidden" value="Windows dasturi kutmoqda">
+            <input name="website" type="hidden" value="">
+            <button class="button button-light" type="submit">Tayyor bo‘lganda xabar bering</button>
+            <p id="notifyStatus" class="form-status" role="status" aria-live="polite" style="font-size: 13px; margin: 4px 0 0;"></p>
+          </form>
         </div>
 
         <div class="download-card">
           <div class="os-icon">🐧</div>
           <h3>Linux / Mini-PC / Ubuntu Server</h3>
-          <p>Ubuntu 22.04 / 24.04 yoki Debian serverlar uchun 1 qatorli tezkor o'rnatish buyrug'i.</p>
+          <p>Ubuntu 22.04 / 24.04 uchun 1 qatorli o‘rnatish buyrug‘i. Bu yo‘l texnik mutaxassislar uchun — pairing kod kerak bo‘ladi.</p>
           <div class="code-box">
-            <code>curl -fsSL https://chaqimchi.uz/downloads/sotqin-installer.sh | sudo bash</code>
+            <code>curl -fsSL __PUBLIC_ORIGIN__/downloads/sotqin-installer.sh | sudo bash</code>
           </div>
           <div class="download-action">
-            <a class="button button-ghost" href="/install">O'rnatish yo'riqnomasi →</a>
+            <a class="button button-ghost" href="/install">O‘rnatish yo‘riqnomasi →</a>
           </div>
         </div>
       </div>
@@ -179,9 +198,9 @@
           <p>Kamera yopilishi yoki burilishi, do‘kon yopilgandan keyingi harakat va taqiqlangan orqa xonaga begona kirishi nazorati.</p>
         </article>
         <article class="feature-pilot">
-          <span class="feature-tag">DAVOMAT</span>
+          <span class="feature-tag">DAVOMAT · BEPUL YOPIQ PILOT</span>
           <h3>👤 Xodimlar Davomati (Face ID)</h3>
-          <p>Xodimlar qachon keldi, qachon ketdi va kechikishlar hisoboti. Biometrik ma’lumotlar maxfiy saqlanadi.</p>
+          <p>Xodimlar qachon keldi, qachon ketdi va kechikishlar hisoboti. <b>Hozircha sotuvda emas</b> — faqat xodimlarning yozma roziligi bilan bepul yopiq pilotda ishlaydi. Yuz namunasi do‘kondagi qurilmadan chiqmaydi.</p>
         </article>
       </div>
       <div style="text-align: center; margin-top: 24px;">
@@ -257,7 +276,7 @@
             <strong id="totalPrice">—</strong>
             <small id="savingNote">Istalgan payt funksiyalar qo‘shiladi yoki o‘chiriladi.</small>
           </div>
-          <a href="#download" class="summary-install">Dasturni yuklab olish →</a>
+          <a href="#pilot" class="summary-install">Usta chaqirib o‘rnatib olish →</a>
         </aside>
       </div>
     </section>
@@ -313,7 +332,7 @@
       <div class="faq-grid">
         <details>
           <summary>Mavjud kompyuterimga o‘rnatsam bo‘ladimi?</summary>
-          <p>Ha! Agar do‘koningizda Windows 10/11 yoki Linux ishlayotgan kompyuter bo‘lsa, saytdan dasturni yuklab olib, 5 daqiqada mustaqil ishga tushirishingiz mumkin.</p>
+          <p>Ha. Windows 10/11 ishlayotgan kompyuter bo‘lsa yetarli. Mustaqil o‘rnatiladigan dastur hozir yakuniy sinovdan o‘tmoqda — <a href="#download">raqamingizni qoldiring</a>, tayyor bo‘lganda yuboramiz. Shu paytgacha mutaxassisimiz kelib o‘rnatib bera oladi.</p>
         </details>
         <details>
           <summary>Agar kompyuterim bo‘lmasa-chi?</summary>
@@ -321,7 +340,7 @@
         </details>
         <details>
           <summary>Kameralarni almashtirish shartmi?</summary>
-          <p>Yo‘q! Do‘koningizda o‘rnatilgan barcha standart IP kameralar va NVR (Hikvision, Dahua, Uniview, Xiongmai, Tapo va b.) mos keladi.</p>
+          <p>Odatda yo‘q. Kamerangiz yoki NVR’ingiz lokal tarmoqda RTSP oqim bersa, tizim shu oqim bilan ishlaydi. Hozirgacha sinovdan o‘tgan va kafolat beriladigan qurilmalar: <b>Hikvision, HiLook, Dahua va Uniview</b> NVR’lari. Boshqa brendlar ham ishlashi mumkin — mutaxassisimiz ulanishdan oldin bepul tekshirib beradi.</p>
         </details>
         <details>
           <summary>Video yozuvlar qayerda saqlanadi?</summary>
@@ -351,7 +370,7 @@
     </div>
   </footer>
 
-  <script src="/assets/site.js?v=20260815-v7" defer></script>
+  <script src="/assets/site.js?v=20260816-v9" defer></script>
 </body>
 </html>
 

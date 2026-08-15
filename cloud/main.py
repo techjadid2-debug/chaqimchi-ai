@@ -24,7 +24,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -685,6 +685,21 @@ async def public_site(request: Request) -> HTMLResponse:
     return HTMLResponse(content)
 
 
+#: Chiziq/zona muharriri **ikkala** panelga kerak: cloud'dagi o'rnatuvchi
+#: paneliga va mijozning lokal sozlash ustasiga.  Ikki nusxa saqlash bittasini
+#: jimgina eskirtirardi, shuning uchun manba bitta — `chaqimchi_ai/local/static/`.
+#: U yerda turgani ham ataylab: Windows o'rnatuvchisi `cloud/` ni ko'chirmaydi.
+ZONE_EDITOR = Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "static"
+
+
+@app.get("/vendor/zone-editor.js", include_in_schema=False)
+async def zone_editor_script() -> FileResponse:
+    script = ZONE_EDITOR / "zone-editor.js"
+    if not script.is_file():
+        raise HTTPException(404, "Muharrir topilmadi")
+    return FileResponse(script, media_type="application/javascript")
+
+
 @app.get("/connect", include_in_schema=False)
 async def connect_page() -> FileResponse:
     return _static_page("connect.html")
@@ -708,23 +723,19 @@ async def installer_guide_page() -> FileResponse:
     return _static_page("installer-guide.html")
 
 
-@app.get("/onboarding", include_in_schema=False)
-async def onboarding_page() -> FileResponse:
-    """Lokal dastlabki o'rnatish va sozlash ustasi (Webcam AI, NVR sxemalari)."""
-    return _static_page("local-onboarding.html")
-
-
-@app.post("/api/v1/agent/discovery/scan")
-async def agent_discovery_scan() -> Dict[str, Any]:
-    """Lokal tarmoqdagi barcha NVR va IP kameralarni qidirish."""
-    try:
-        from chaqimchi_ai.discovery import discover_network_cameras
-
-        cameras = await discover_network_cameras()
-        return {"ok": True, "cameras": cameras}
-    except Exception as e:
-        logger.warning(f"Kamera qidiruvida ogohlantirish: {e}")
-        return {"ok": True, "cameras": []}
+# Eslatma: bu yerda `/onboarding` sahifasi va `/api/v1/agent/discovery/scan`
+# endpointi turardi.  Ikkalasi ham o'chirildi:
+#
+# * sahifa maket edi — haqiqiy web-kamera ustiga oldindan yozilgan "Mijoz #1
+#   [98%]" ramkalari chizilardi, pairing kod HTML ichida qotirilgan edi va
+#   tanlangan kamera hech qayerga saqlanmasdi;
+# * endpoint mavjud bo'lmagan `discover_network_cameras` funksiyasini
+#   chaqirardi, `except` esa `ImportError` ni yutib doim bo'sh ro'yxat
+#   qaytarardi — ya'ni "kameralarni avtomatik topadi" va'dasi hech qachon
+#   ishlamagan, test esa yashil turgan.
+#
+# Ikkalasining o'rnini mijoz kompyuterida ishlaydigan haqiqiy sozlash ustasi
+# egalladi: `chaqimchi_ai/local/app.py`.  Qidiruv u yerda xatoni yutmaydi.
 
 
 @app.get("/downloads/sotqin-installer.sh", include_in_schema=False)
@@ -1035,7 +1046,11 @@ class QuickTrialBody(BaseModel):
     phone: str = Field(min_length=5, max_length=40)
     full_name: Optional[str] = "Do'kondor"
     company: Optional[str] = "Mening Do'konim"
-    consent: bool = True
+    #: Standart qiymat **yo'q**: bu endpoint haqiqiy `site` yozuvi yaratadi va
+    #: telefon raqamini saqlaydi, ya'ni `/public/leads` bilan bir xil roziliq
+    #: talab qiladi. Oldin `True` turardi — forma katagi belgilanmasa ham
+    #: ma'lumot yozilaverardi.
+    consent: bool = False
     website: Optional[str] = ""
 
 
@@ -1045,9 +1060,23 @@ async def public_quick_trial(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> Dict[str, Any]:
-    """1-bosishda 14 kunlik bepul sinov do'koni va avtomatik o'rnatuvchini yaratish."""
+    """1-bosishda bepul sinov do'koni ochish.
+
+    Bu endpoint `/public/leads` dan **qimmatroq**: u bazada haqiqiy `site` va
+    pairing kod yaratadi. Shuning uchun cheklov ham qattiqroq — soatiga 3 ta.
+    Cheklovsiz oddiy skript bilan cheksiz do'kon yozuvi yaratish mumkin edi.
+    """
     if body.website:
         return {"ok": True, "message": "Qabul qilindi"}
+    ratelimit.check(
+        "quick-trial",
+        request.client.host if request.client else "unknown",
+        limit=3,
+        window_sec=3_600,
+        message="Juda ko'p so'rov yuborildi. Bir soatdan keyin urinib ko'ring.",
+    )
+    if not body.consent:
+        raise HTTPException(422, "Bog'lanish uchun rozilik talab qilinadi")
     phone = " ".join(body.phone.split())
     if sum(char.isdigit() for char in phone) < 5:
         raise HTTPException(422, "Telefon raqami noto'g'ri")
@@ -1089,97 +1118,86 @@ async def public_quick_trial(
     }
 
 
-@app.get("/api/v1/public/download-bundle")
-async def public_download_bundle() -> Response:
-    """Windows uchun to'liq oflayn bundle (Python Embed + modellar + kutubxonalar)."""
-    bundle_candidates = [
-        Path("releases/Chaqimchi_AI_win64.zip"),
-        Path("/app/releases/Chaqimchi_AI_win64.zip"),
-    ]
-    for bundle_path in bundle_candidates:
-        if bundle_path.is_file():
-            return FileResponse(
-                path=bundle_path,
-                filename="Chaqimchi_AI_win64.zip",
-                media_type="application/zip",
-            )
-    raise HTTPException(
-        status_code=503,
-        detail="Oflayn bundle hali tayyorlanmagan. Iltimos, keyinroq urinib ko'ring.",
-    )
+#: Windows o'rnatuvchisi ~70 MB.  Uni Docker image ichiga solish image'ni
+#: shuncha shishiradi va har deployda qayta yuklashga majbur qiladi, shuning
+#: uchun production'da fayl GitHub Releases'da turadi va cloud faqat
+#: yo'naltiradi.  Bu Linux relizi bilan bir xil naqsh
+#: (`CHAQIMCHI_SOTQIN_RELEASE_URL`).
+ENV_WINDOWS_INSTALLER_URL = "CHAQIMCHI_WINDOWS_INSTALLER_URL"
+ENV_WINDOWS_INSTALLER_SIZE = "CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB"
+
+#: Ishlab chiqishda va lokal sinovda fayl repo ichida bo'ladi.
+WINDOWS_INSTALLER_PATHS = (
+    BASE_DIR / "releases" / "Chaqimchi_AI_Setup.exe",
+    Path("/app/releases/Chaqimchi_AI_Setup.exe"),
+)
+
+
+def _windows_installer_url() -> str:
+    url = os.environ.get(ENV_WINDOWS_INSTALLER_URL, "").strip()
+    return url if url.startswith("https://") else ""
+
+
+def _windows_installer_file() -> Optional[Path]:
+    return next((path for path in WINDOWS_INSTALLER_PATHS if path.is_file()), None)
+
+
+@app.get("/api/v1/public/windows-release")
+async def public_windows_release() -> Dict[str, Any]:
+    """Windows o'rnatuvchisi tayyormi va hajmi qancha.
+
+    Sayt shu javobga qarab tugmani ko'rsatadi: tayyor bo'lmasa yuklab olish
+    o'rniga "xabar bering" formasi chiqadi.  Hajm **o'lchanadi** yoki
+    deployda beriladi, sahifaga qo'lda yozilmaydi — ilgari saytda "115 MB"
+    deb turardi, fayl esa umuman mavjud emas edi va tugma 503 qaytarardi.
+    """
+    if _windows_installer_url():
+        size = os.environ.get(ENV_WINDOWS_INSTALLER_SIZE, "").strip()
+        return {
+            "available": True,
+            "size_mb": int(size) if size.isdigit() else None,
+            "version": __version__,
+            "url": "/api/v1/public/download-installer",
+        }
+    installer = _windows_installer_file()
+    if installer is None:
+        return {"available": False, "size_mb": None, "version": __version__}
+    return {
+        "available": True,
+        "size_mb": round(installer.stat().st_size / 1024 / 1024),
+        "version": __version__,
+        "url": "/api/v1/public/download-installer",
+    }
 
 
 @app.get("/api/v1/public/download-installer")
+async def public_download_installer() -> Response:
+    """Windows o'rnatuvchisi (.exe).
 
-async def public_download_installer(
-    request: Request,
-    format: str = "exe",
-    code: str = "",
-    site_id: str = "",
-) -> Response:
-    """Windows uchun .exe o'rnatuvchi yoki sozlangan setup skriptini beradi."""
-    safe_code = re.sub(r"[^A-Za-z0-9]", "", code).upper()
-    safe_site = re.sub(r"[^A-Za-z0-9\-]", "", site_id)
-    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
-
-    # Agar serverda tayyor kompilyatsiya qilingan .exe bo'lsa, to'g'ridan-to'g'ri .exe ni uzatamiz
-    exe_candidates = [
-        Path("releases/Chaqimchi_AI_Setup.exe"),
-        Path("dist/Chaqimchi_AI_Setup.exe"),
-        Path("/app/releases/Chaqimchi_AI_Setup.exe"),
-    ]
-    for exe_path in exe_candidates:
-        if exe_path.is_file():
-            return FileResponse(
-                path=exe_path,
-                filename="Chaqimchi_AI_Setup.exe",
-                media_type="application/vnd.microsoft.portable-executable",
-            )
-
-    bat_script = f"""@echo off
-chcp 65001 > nul
-title Chaqimchi AI - 1-Bosishda O'rnatuvchi
-
-echo ======================================================
-echo    Chaqimchi AI - Avtomatik O'rnatish va Ulanish
-echo    Do'koningiz Cloud tizimiga ulanmoqda...
-echo ======================================================
-echo.
-
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [OGOHLANTIRISH] Python o'rnatilmagan.
-    echo Iltimos, https://www.python.org dan Python 3.11/3.12 ni yuklab o'rnating.
-    pause
-    exit /b 1
-)
-
-if not exist ".venv" (
-    echo [1/3] Muhit yaratilmoqda...
-    python -m venv .venv
-)
-
-call .venv\\Scripts\\activate.bat
-echo [2/3] Kerakli kutubxonalar yuklanmoqda...
-pip install -r requirements.txt >nul 2>&1
-
-echo [3/3] Cloud serverga avtomatik bog'lanmoqda...
-python -m chaqimchi_ai.pair_sotqin --cloud {base} --code {safe_code}
-
-echo.
-echo ======================================================
-echo    Muvaffaqiyatli ulandi! Do'kon monitoringi faol.
-echo ======================================================
-echo.
-
-start {base}/owner?site={safe_site}
-python -m cloud.main
-pause
-"""
-    return Response(
-        content=bat_script,
-        media_type="application/x-bat",
-        headers={"Content-Disposition": 'attachment; filename="Chaqimchi_AI_Setup.bat"'},
+    Ataylab **hech qanday parametr yo'q**.  Ilgari bu endpoint `code` va
+    `site_id` ni qabul qilardi, saytda esa "yuklangan faylni bosing, u
+    avtomatik ulanadi" deb yozilardi — aslida esa kod e'tiborsiz qolib,
+    hammaga bir xil fayl berilardi.  Dastur endi mijoz kompyuterida
+    mustaqil ishlaydi; cloudga ulanish keyinroq, pairing kod bilan
+    bajariladi.
+    """
+    url = _windows_installer_url()
+    if url:
+        return RedirectResponse(url, status_code=307)
+    installer = _windows_installer_file()
+    if installer is None:
+        raise HTTPException(
+            503,
+            "Windows dasturi hali nashr qilinmagan. Saytda raqamingizni "
+            "qoldiring — tayyor bo'lganda xabar beramiz.",
+        )
+    return FileResponse(
+        path=installer,
+        filename="Chaqimchi_AI_Setup.exe",
+        media_type="application/vnd.microsoft.portable-executable",
+        # O'rnatuvchi versiya bilan almashadi — brauzer eskisini keshda
+        # ushlab qolmasin.
+        headers={"Cache-Control": "no-cache"},
     )
 
 

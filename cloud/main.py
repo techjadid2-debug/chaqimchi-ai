@@ -1089,7 +1089,28 @@ async def public_quick_trial(
     }
 
 
+@app.get("/api/v1/public/download-bundle")
+async def public_download_bundle() -> Response:
+    """Windows uchun to'liq oflayn bundle (Python Embed + modellar + kutubxonalar)."""
+    bundle_candidates = [
+        Path("releases/Chaqimchi_AI_win64.zip"),
+        Path("/app/releases/Chaqimchi_AI_win64.zip"),
+    ]
+    for bundle_path in bundle_candidates:
+        if bundle_path.is_file():
+            return FileResponse(
+                path=bundle_path,
+                filename="Chaqimchi_AI_win64.zip",
+                media_type="application/zip",
+            )
+    raise HTTPException(
+        status_code=503,
+        detail="Oflayn bundle hali tayyorlanmagan. Iltimos, keyinroq urinib ko'ring.",
+    )
+
+
 @app.get("/api/v1/public/download-installer")
+
 async def public_download_installer(
     request: Request,
     format: str = "exe",

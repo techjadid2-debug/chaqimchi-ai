@@ -2,26 +2,46 @@
 chcp 65001 > nul
 title Chaqimchi AI - Ishga Tushirish
 
+cd /d "%~dp0\.."
+
+echo ======================================================
+echo    Chaqimchi AI - Do'kon Analitikasi
+echo ======================================================
+echo.
+
+:: 1. Agar .venv bo'lmasa, avtomatik yaratish
 if not exist ".venv" (
-    echo [OGOHLANTIRISH] Tizim hali o'rnatilmagan.
-    echo Avval "install_windows.bat" faylini ishga tushiring.
-    pause
-    exit /b 1
+    echo [*] Muhit dastlabki sozlanmoqda (bir martalik jarayon)...
+    python --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [OGOHLANTIRISH] Python o'rnatilmagan.
+        echo Iltimos, https://www.python.org dan Python 3.11/3.12 ni yuklab o'rnating.
+        echo O'rnatishda "Add python.exe to PATH" ni belgilang.
+        pause
+        exit /b 1
+    )
+    python -m venv .venv
+    call .venv\Scripts\activate.bat
+    echo [*] Kutubxonalar o'rnatilmoqda...
+    pip install -r requirements.txt >nul 2>&1
+) else (
+    call .venv\Scripts\activate.bat
 )
 
+:: 2. Papkalarni hozirlash
+if not exist "data" mkdir data
+if not exist "data\snapshots" mkdir data\snapshots
+
+echo.
 echo ======================================================
-echo    Chaqimchi AI ishga tushirilmoqda...
+echo    🟢 Chaqimchi AI muvaffaqiyatli ishga tushdi!
+echo    Boshqaruv paneli: http://localhost:8750
 echo ======================================================
 echo.
 
-call .venv\Scripts\activate.bat
+:: Brauzerda avtomatik ochish
+start http://localhost:8750
 
-:: Asosiy Cloud / Web paneli ishga tushirish (Port: 8750)
-echo Lokal Web Server: http://localhost:8750
-echo Xodimlar Davomat Paneli: http://localhost:8743
-echo.
-echo Tizimni to'xtatish uchun: Ctrl + C bosing.
-echo.
-
+:: Asosiy serverni ishga tushirish
 python -m cloud.main
 pause

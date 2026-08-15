@@ -127,12 +127,13 @@
           <div class="os-icon">🪟</div>
           <h3>Windows (10 / 11) Avtomatik O‘rnatuvchi</h3>
           <p>Faylni yuklab olib 1 marta bosing — u kameralarni o‘zi topadi va shaxsiy do‘kon kabinetingizga avtomatik bog‘lanadi.</p>
-          <form id="quickTrialForm" class="quick-download-form" style="display: grid; gap: 10px; margin-top: 14px;">
+          <form id="quickTrialForm" class="quick-download-form" action="javascript:void(0)" onsubmit="event.preventDefault(); window.startQuickTrial(); return false;" style="display: grid; gap: 10px; margin-top: 14px;">
             <input type="tel" id="trialPhone" name="phone" required placeholder="Telefoningiz: +998 90 000 00 00" style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; outline: none;">
             <input type="text" id="trialCompany" name="company" placeholder="Do‘kon nomi (ixtiyoriy)" style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; outline: none;">
-            <button class="button button-light" type="submit" id="trialBtn">📥 Windows uchun yuklab olish (.bat)</button>
+            <button class="button button-light" type="button" id="trialBtn" onclick="window.startQuickTrial()">📥 Windows uchun yuklab olish (.bat)</button>
             <p id="trialStatus" class="form-status" style="font-size: 13px; margin: 4px 0 0;"></p>
           </form>
+
         </div>
 
         <div class="download-card">
@@ -341,6 +342,7 @@
     </div>
   </footer>
 
-  <script src="/assets/site.js?v=20260815-v2" defer></script>
+  <script src="/assets/site.js?v=20260815-v5" defer></script>
 </body>
 </html>
+

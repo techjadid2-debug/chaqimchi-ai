@@ -36,49 +36,70 @@
       event.preventDefault();
       submitLead(leadForm, document.getElementById("formStatus"), leadForm.querySelector("button[type=submit]"));
     });
-  const quickTrialForm = document.getElementById("quickTrialForm");
-  if (quickTrialForm) {
-    quickTrialForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const phoneInput = document.getElementById("trialPhone");
-      const companyInput = document.getElementById("trialCompany");
-      const btn = document.getElementById("trialBtn");
-      const status = document.getElementById("trialStatus");
+  }
 
-      const phone = phoneInput.value.trim();
-      const company = companyInput.value.trim();
-      if (!phone) return;
+  window.startQuickTrial = async function() {
+    const phoneInput = document.getElementById("trialPhone");
+    const companyInput = document.getElementById("trialCompany");
+    const btn = document.getElementById("trialBtn");
+    const status = document.getElementById("trialStatus");
 
-      btn.disabled = true;
+    const phone = phoneInput ? phoneInput.value.trim() : "";
+    const company = companyInput ? companyInput.value.trim() : "";
+    if (!phone) {
+      if (status) {
+        status.className = "form-status error";
+        status.textContent = "Iltimos, telefon raqamingizni kiriting.";
+      }
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (status) {
       status.className = "form-status";
       status.textContent = "14 kunlik bepul sinov tayyorlanmoqda…";
+    }
 
-      try {
-        const res = await fetch("/api/v1/public/quick-trial", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone, company }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Xatolik yuz berdi");
+    try {
+      const res = await fetch("/api/v1/public/quick-trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, company }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Xatolik yuz berdi");
 
+      if (status) {
         status.className = "form-status ok";
         status.innerHTML = `✅ <b>Tayyor!</b> O‘rnatuvchi yuklab olinmoqda…<br><small>Yuklangan faylni 1 marta bosing, u avtomatik ulanadi.</small>`;
+      }
 
-        const downloadLink = document.createElement("a");
-        downloadLink.href = data.download_windows_url;
-        downloadLink.download = "Chaqimchi_AI_Ornatish.bat";
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-      } catch (err) {
+      const downloadLink = document.createElement("a");
+      downloadLink.href = data.download_windows_url;
+      downloadLink.download = "Chaqimchi_AI_Ornatish.bat";
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      setTimeout(() => {
+        try { document.body.removeChild(downloadLink); } catch(_) {}
+      }, 500);
+    } catch (err) {
+      if (status) {
         status.className = "form-status error";
         status.textContent = err.message || "Xatolik yuz berdi";
-      } finally {
-        btn.disabled = false;
       }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+
+  const quickTrialForm = document.getElementById("quickTrialForm");
+  if (quickTrialForm) {
+    quickTrialForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      window.startQuickTrial();
     });
   }
+
 
   const purchaseForm = document.getElementById("purchaseForm");
 

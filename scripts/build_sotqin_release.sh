@@ -23,7 +23,7 @@ cp \
 for script in \
   accept_n100_pilot.py apply_signed_update.py backup_db.py benchmark_n100.py \
   calibrate_threshold.py fetch_retail_model.py install_sotqin.sh \
-  pair_sotqin.py soak_n100.py verify_model_bundle.py; do
+  pair_sotqin.py soak_n100.py sotqin_preflight.py verify_model_bundle.py; do
   cp "$root/scripts/$script" "$stage/$name/scripts/"
 done
 # Ikkala requirements ham paketga kiradi; qaysi birini o'rnatishni

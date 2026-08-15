@@ -51,4 +51,12 @@ if systemctl is-enabled --quiet chaqimchi-attendance.service; then
   systemctl restart chaqimchi-attendance
 fi
 systemctl --no-pager --full status chaqimchi-sotqin chaqimchi-retail >/dev/null
-echo "Sotqin o'rnatildi: cloud control va do'kon analitikasi ishga tushdi."
+echo
+echo "── Tekshiruv ro'yxati ─────────────────────────────────────────────"
+# Xizmatlar ko'tarilishi va birinchi config kelishi uchun biroz vaqt kerak.
+sleep 10
+# Tekshiruv yiqilsa ham o'rnatish bekor qilinmaydi: qurilma o'rnatilgan,
+# faqat kamera yoki chiziq hali sozlanmagan bo'lishi mumkin.
+/opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/sotqin_preflight.py || true
+echo
+echo "Sotqin o'rnatildi. Yuqoridagi ro'yxatda ✗ bo'lmasa obyektni topshirish mumkin."

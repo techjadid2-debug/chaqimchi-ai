@@ -430,3 +430,33 @@ async def health() -> JSONResponse:
 @app.get("/ready")
 async def ready() -> JSONResponse:
     return await health()
+
+
+@app.get("/preflight")
+async def preflight() -> JSONResponse:
+    """O'rnatuvchi uchun tekshiruv ro'yxati.
+
+    `/health` "men tirikman" deydi; bu esa "obyektni topshirsa bo'ladimi"
+    degan savolga javob beradi va har muammo uchun nima qilish kerakligini
+    aytadi.
+
+    Asosiy yo'l — skript (`sotqin_preflight.py`), chunki u xizmat
+    ishlamayotganda ham ishlaydi.  Bu marshrut faqat qulaylik uchun, shuning
+    uchun import muvaffaqiyatsiz bo'lsa ham xizmat yiqilmaydi.
+    """
+    try:
+        from scripts.sotqin_preflight import Preflight
+    except ImportError:
+        return JSONResponse(
+            status_code=501,
+            content={
+                "ready": False,
+                "detail": "Tekshiruvni buyruq satridan ishga tushiring",
+                "command": (
+                    "/opt/chaqimchi/venv/bin/python "
+                    "/opt/chaqimchi/current/scripts/sotqin_preflight.py"
+                ),
+            },
+        )
+    payload = await asyncio.to_thread(Preflight().payload)
+    return JSONResponse(status_code=200 if payload["ready"] else 503, content=payload)

@@ -160,3 +160,18 @@ def test_retail_bundle_is_not_partially_replaced_on_checksum_error(
     assert fetch_retail_model.main() == 1
     assert (target / "model.xml").read_bytes() == b"old-xml"
     assert (target / "model.bin").read_bytes() == b"old-bin"
+
+
+def test_installer_and_release_ship_the_preflight_script() -> None:
+    """O'rnatuvchi obyektda "ishladimi?" savoliga javob bera olsin."""
+    installer = (ROOT / "scripts" / "install_sotqin.sh").read_text()
+    builder = (ROOT / "scripts" / "build_sotqin_release.sh").read_text()
+    bootstrap = (ROOT / "deploy" / "bootstrap_sotqin.sh").read_text()
+
+    assert "sotqin_preflight.py" in installer
+    assert "sotqin_preflight.py" in builder
+    # Bir buyruqli o'rnatish oxirida ro'yxat chiqadi.
+    assert "sotqin_preflight.py" in bootstrap
+    # Tekshiruv yiqilsa o'rnatish bekor qilinmasin — qurilma o'rnatilgan,
+    # faqat kamera yoki chiziq hali sozlanmagan bo'lishi mumkin.
+    assert "sotqin_preflight.py || true" in bootstrap

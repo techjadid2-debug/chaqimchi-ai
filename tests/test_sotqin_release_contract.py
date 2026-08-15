@@ -206,3 +206,30 @@ def test_version_passes_the_updaters_charset_guard() -> None:
     from chaqimchi_ai import __version__
 
     assert re.fullmatch(r"[A-Za-z0-9.\-_]+", __version__), __version__
+
+
+def test_the_update_key_ships_and_is_never_silently_replaced() -> None:
+    """OTA ishonch langari.
+
+    Ochiq kalit reliz paketi ichida qurilmaga boradi va o'rnatishda bir
+    marta qotiriladi. Har o'rnatishda ustiga yozilsa, zararli paket o'z
+    kalitini qo'yib qo'ya olardi va butun imzo qatlami ma'nosiz bo'lardi.
+    """
+    installer = (ROOT / "scripts" / "install_sotqin.sh").read_text()
+    builder = (ROOT / "scripts" / "build_sotqin_release.sh").read_text()
+
+    assert (ROOT / "deploy" / "update-public.pem").is_file()
+    assert '"$root/deploy/update-public.pem"' in builder
+    assert "/etc/chaqimchi/update-public.pem" in installer
+    # Mavjud kalit faqat ataylab almashtiriladi.
+    assert "CHAQIMCHI_ROTATE_UPDATE_KEY" in installer
+    assert "cmp -s" in installer
+
+
+def test_the_release_builder_refuses_a_dirty_worktree() -> None:
+    """Commit qilinmagan kod bilan qurilgan paket qaysi kod ekanini hech
+    kim ayta olmaydi — va u mijoz qurilmasiga tushadi."""
+    builder = (ROOT / "scripts" / "build_sotqin_release.sh").read_text()
+
+    assert "--allow-dirty" in builder
+    assert "git -C \"$root\" diff --quiet HEAD" in builder

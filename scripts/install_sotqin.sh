@@ -145,6 +145,34 @@ if grep -Eq '^CHAQIMCHI_EMBEDDING_KEY=(GENERATE.*|)$' "$env_file"; then
 fi
 chmod 0600 "$env_file"
 
+# ── OTA ishonch langari ───────────────────────────────────────────────────
+# Ochiq kalit shu yerda bir marta qotiriladi va **almashtirilmaydi**.
+#
+# Birinchi o'rnatishda ishonch baribir cloudga tayanadi: arxiv HTTPS bilan
+# olinadi va SHA-256 tekshiriladi.  Lekin kalit qotirilgach, keyinchalik
+# cloud buzilsa ham hujumchi imzo yasay olmaydi va qurilma eski kodda
+# qolaveradi.  Agar bu yerda har o'rnatishda ustiga yozilsa, zararli paket
+# o'z kalitini qo'yib qo'ya olardi va butun imzo qatlami ma'nosiz bo'lardi.
+update_key=/etc/chaqimchi/update-public.pem
+new_key="$source_dir/deploy/update-public.pem"
+if [[ -f "$new_key" ]]; then
+  if [[ ! -f "$update_key" ]]; then
+    install -m 0644 "$new_key" "$update_key"
+    echo "OTA ochiq kaliti o'rnatildi: $update_key"
+  elif ! cmp -s "$new_key" "$update_key"; then
+    if [[ "${CHAQIMCHI_ROTATE_UPDATE_KEY:-false}" =~ ^(1|true|yes)$ ]]; then
+      install -m 0644 "$new_key" "$update_key"
+      echo "OGOHLANTIRISH: OTA kaliti ataylab almashtirildi" >&2
+    else
+      echo "OGOHLANTIRISH: paketdagi OTA kaliti qurilmadagidan farq qiladi." >&2
+      echo "Mavjud kalit saqlab qolindi. Ataylab almashtirish uchun:" >&2
+      echo "  CHAQIMCHI_ROTATE_UPDATE_KEY=true" >&2
+    fi
+  fi
+else
+  echo "OGOHLANTIRISH: paketda OTA ochiq kaliti yo'q — bu qurilma masofadan yangilanmaydi" >&2
+fi
+
 install -m 0644 "$source_dir/deploy/chaqimchi-sotqin.service" /etc/systemd/system/chaqimchi-sotqin.service
 install -m 0644 "$source_dir/deploy/chaqimchi-retail.service" /etc/systemd/system/chaqimchi-retail.service
 systemctl daemon-reload

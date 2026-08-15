@@ -37,6 +37,7 @@ cp "$root/config/sotqin.yaml" "$root/config/rules.yaml" "$stage/$name/config/"
 cp "$root/models/retail_manifest.json" "$stage/$name/models/"
 cp \
   "$root/deploy/sotqin.env.example" \
+  "$root/deploy/update-public.pem" \
   "$root/deploy/chaqimchi-sotqin.service" \
   "$root/deploy/chaqimchi-retail.service" \
   "$root/deploy/chaqimchi-attendance.service" \

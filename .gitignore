@@ -24,6 +24,10 @@ data/
 .deploy_keys/
 secrets/
 *.pem
+# OTA ochiq kaliti — ataylab commit qilinadi: u reliz paketi ichida
+# qurilmaga boradi va o'rnatishda qotiriladi.  Maxfiy kalit esa repo
+# daraxtidan tashqarida (~/.chaqimchi/), ya'ni bu yerga tushishi mumkin emas.
+!deploy/update-public.pem
 *.key
 *.p12
 *.pfx

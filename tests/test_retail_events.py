@@ -181,3 +181,42 @@ def test_edge_can_send_retail_events_to_cloud(cloud) -> None:
     assert response.json()["accepted"] == ["in-1", "out-1"]
     stored = main.get_event_store().list_events(device["site_id"], limit=10)
     assert sorted(row["direction"] for row in stored) == ["in", "out"]
+
+
+def test_camera_health_events_reach_the_cloud(cloud) -> None:
+    """Yangi hodisa turlari cloud sxemasidan o'tishi kerak.
+
+    `EventBatchBody` `EdgeEvent` ni ishlatadi, ya'ni `EventType` Literal'iga
+    qo'shilmagan tur 422 bilan rad etilardi va qurilma uni abadiy qayta
+    yuborib turardi.
+    """
+    main, client = cloud
+    site = client.post("/api/v1/admin/sites", headers=ADMIN,
+                       json={"name": "Do'kon", "plan": "lite"}).json()
+    device = client.post("/api/v1/devices/claim",
+                         json={"pairing_code": site["pairing_code"]}).json()
+    headers = {
+        "X-Site-Id": device["site_id"],
+        "X-Device-Id": device["device_id"],
+        "X-Device-Token": device["device_token"],
+    }
+
+    response = client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={"events": [
+            EdgeEvent(event_id="off-1", event_type="camera_offline", severity="warning",
+                      camera_id="camera-01", metadata={"attempts": 3}).cloud_payload(),
+            EdgeEvent(event_id="frozen-1", event_type="stream_frozen", severity="critical",
+                      camera_id="camera-02", metadata={"duration_sec": 25.0}).cloud_payload(),
+            EdgeEvent(event_id="back-1", event_type="camera_recovered",
+                      camera_id="camera-01", metadata={"downtime_sec": 300.0}).cloud_payload(),
+        ]},
+    )
+
+    assert response.status_code == 200
+    assert sorted(response.json()["accepted"]) == ["back-1", "frozen-1", "off-1"]
+    stored = {
+        row["event_type"] for row in main.get_event_store().list_events(device["site_id"], limit=10)
+    }
+    assert stored == {"camera_offline", "stream_frozen", "camera_recovered"}

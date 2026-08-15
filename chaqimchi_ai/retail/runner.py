@@ -34,6 +34,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
+from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.pipeline import RetailPipeline
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
@@ -49,6 +50,13 @@ MAX_BACKOFF_SEC = 30.0
 
 #: Kamera yopiq turganda oqim shuncha uxlaydi — bo'sh aylanish CPU yemasin.
 CLOSED_SLEEP_SEC = 0.2
+
+#: Shuncha ketma-ket muvaffaqiyatsiz urinishdan keyin kamera "o'chgan"
+#: deb e'lon qilinadi.  Backoff 2, 4, 8 soniya bo'lgani uchun bu ~14
+#: soniya: bitta tarmoq uzilishi yoki NVR qayta yuklanishi shovqin
+#: bermaydi, lekin haqiqiy uzilish ikki daqiqada emas, yarim daqiqada
+#: bilinadi.
+OFFLINE_AFTER_FAILURES = 3
 
 
 def open_stream(url: str) -> Any:
@@ -104,6 +112,9 @@ class _Stream:
     frames: int = 0
     reconnects: int = 0
     recorder_starts: int = 0
+    #: Kamera qachondan beri javob bermayapti.  `None` — hodisa hali
+    #: e'lon qilinmagan (yo ishlayapti, yo urinishlar soni yetmagan).
+    offline_since: Optional[float] = None
 
     @property
     def interval(self) -> float:
@@ -189,7 +200,11 @@ class RetailRunner:
                 return False
             stream.capture = capture
             stream.reconnects += 1
-            stream.failures = 0
+            # `failures` bu yerda **nolga tushmaydi**.  Ochilish oqim sog'lom
+            # degani emas: NVR TCP ulanishni qabul qilib, keyin hech qanday
+            # kadr bermasligi mumkin.  Shunday kamera har siklda qayta
+            # ochilib, hisobni nolga tushirib yuborardi va hech qachon
+            # "o'chgan" deb e'lon qilinmasdi.
 
         capture = stream.capture
         # `grab()` dekodlamaydi — oqimni yangi holatda ushlab turishning eng
@@ -197,6 +212,9 @@ class RetailRunner:
         if not capture.grab():
             self._backoff(stream, now, "oqim uzildi")
             return False
+        # Kadr keldi — mana shu oqim tirikligining yagona haqiqiy isboti.
+        stream.failures = 0
+        self._recovered(stream, now)
         if now - stream.last_sample < stream.interval:
             return False
 
@@ -252,6 +270,49 @@ class RetailRunner:
             reason,
             wait,
         )
+        # Uzilish hodisaga aylanadi.  Bungacha kamera holati faqat
+        # `stats()` ichida yashardi va do'kon egasi kamera o'chganini
+        # hisobotdagi bo'shliqdan — bir necha kundan keyin — bilardi.
+        if stream.offline_since is None and stream.failures >= OFFLINE_AFTER_FAILURES:
+            stream.offline_since = now
+            self._emit(
+                EdgeEvent(
+                    event_type="camera_offline",
+                    severity="warning",
+                    camera_id=stream.source.camera_id,
+                    metadata={"reason": reason, "attempts": stream.failures},
+                ),
+                now=now,
+            )
+
+    def _recovered(self, stream: _Stream, now: float) -> None:
+        if stream.offline_since is None:
+            return
+        downtime = round(max(0.0, now - stream.offline_since), 1)
+        stream.offline_since = None
+        logger.info("[%s] kamera tiklandi (%.0f soniya)", stream.source.camera_id, downtime)
+        self._emit(
+            EdgeEvent(
+                event_type="camera_recovered",
+                severity="info",
+                camera_id=stream.source.camera_id,
+                metadata={"downtime_sec": downtime},
+            ),
+            now=now,
+        )
+
+    def _emit(self, event: EdgeEvent, *, now: float) -> None:
+        """Sog'liq hodisasini zanjirga uzatadi.
+
+        Outboxga to'g'ridan-to'g'ri yozish mumkin edi, lekin u holda qoida
+        dvigateli chetlab o'tilardi — cooldown ham, `telegram_alert` ham
+        ishlamasdi.  Xato bo'lsa kadr halqasi to'xtamaydi: kamera o'qishdan
+        muhimroq narsa yo'q.
+        """
+        try:
+            self.pipeline.emit_system_event(event, now=now)
+        except Exception:
+            logger.exception("[%s] sog'liq hodisasi yuborilmadi", event.camera_id)
 
     @staticmethod
     def _release(capture: Any) -> None:
@@ -377,6 +438,7 @@ class RetailRunner:
                 "connected": stream.capture is not None,
                 "reconnects": stream.reconnects,
                 "failures": stream.failures,
+                "offline": stream.offline_since is not None,
                 "recorder": stream.recorder is not None,
                 "recorder_starts": stream.recorder_starts,
             }

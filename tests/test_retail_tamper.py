@@ -11,7 +11,15 @@ import cv2
 import numpy as np
 import pytest
 
-from chaqimchi_ai.retail.tamper import BLURRED, DARK, MOVED, TamperDetector
+from chaqimchi_ai.retail.tamper import (
+    BLURRED,
+    DARK,
+    FREEZE,
+    FROZEN,
+    MOVED,
+    TAMPER,
+    TamperDetector,
+)
 
 
 def scene(seed: int = 1) -> np.ndarray:
@@ -32,16 +40,31 @@ def moved_scene() -> np.ndarray:
     return frame
 
 
+#: Har kadrga qo'shiladigan sensor shovqini.
+#
+# Haqiqiy kamera hech qachon bayt-bayt bir xil kadr bermaydi — matritsa
+# shovqini har kadrda bir-ikki birlikka o'zgaradi.  Testlar ham shuni
+# taqlid qilishi kerak, aks holda ular "qotib qolgan oqim" ni tekshirib
+# qo'yadi va buzilish mantig'i sinalmay qoladi.
+_noise = np.random.default_rng(7)
+
+
+def live(frame: np.ndarray) -> np.ndarray:
+    """Kadrni sensor shovqini bilan — tirik kameradagidek."""
+    jitter = _noise.integers(-1, 2, size=frame.shape, dtype=np.int16)
+    return np.clip(frame.astype(np.int16) + jitter, 0, 255).astype(np.uint8)
+
+
 def warm(detector: TamperDetector, frame: np.ndarray, *, count: int = 31) -> None:
     for index in range(count):
-        assert detector.update(frame, now=float(index) * 0.2) is None
+        assert detector.update(live(frame), now=float(index) * 0.2) is None
 
 
 def feed(detector: TamperDetector, frame: np.ndarray, *, start: float, stop: float, step: float = 0.2):
     alert = None
     moment = start
     while moment <= stop:
-        result = detector.update(frame, now=moment)
+        result = detector.update(live(frame), now=moment)
         alert = alert or result
         moment += step
     return alert
@@ -183,3 +206,94 @@ def test_invalid_configuration_is_rejected() -> None:
         TamperDetector(min_duration_sec=10.0, accept_after_sec=5.0)
     with pytest.raises(ValueError):
         TamperDetector(adapt=0)
+
+
+# ── Qotib qolgan oqim ────────────────────────────────────────────────────
+
+
+def frozen_feed(detector: TamperDetector, frame: np.ndarray, *, start: float, stop: float, step: float = 0.2):
+    """Aynan bitta kadr qayta-qayta — dekoder yoki NVR qotib qolgani."""
+    alert = None
+    moment = start
+    while moment <= stop:
+        result = detector.update(frame, now=moment)
+        alert = alert or result
+        moment += step
+    return alert
+
+
+def test_a_stalled_stream_is_reported() -> None:
+    """Eng jimgina buziladigan holat.
+
+    RTSP ochiq, `grab()` va `retrieve()` muvaffaqiyatli qaytadi, lekin kadr
+    o'zgarmaydi. Harakat yo'q degani filtr uni to'sadi, buzilish imzosi ham
+    o'zgarmaydi — tizim butunlay sog'lom ko'rinadi.
+    """
+    detector = TamperDetector(frozen_sec=20.0)
+    still = scene()
+
+    alert = frozen_feed(detector, still, start=0.0, stop=30.0)
+
+    assert alert is not None
+    assert alert.kind == FREEZE
+    assert alert.reason == FROZEN
+    assert alert.duration_sec >= 20.0
+    assert detector.frozen is True
+    assert detector.stats()["freezes"] == 1
+
+
+def test_a_live_camera_is_never_called_frozen() -> None:
+    """Sensor shovqini tufayli haqiqiy kadr hech qachon bayt-bayt bir xil
+    bo'lmaydi — shu sabab bu tekshiruv chegara sozlashni talab qilmaydi."""
+    detector = TamperDetector(frozen_sec=5.0)
+
+    assert feed(detector, scene(), start=0.0, stop=120.0) is None
+    assert detector.frozen is False
+
+
+def test_the_freeze_alert_fires_once_not_every_frame() -> None:
+    detector = TamperDetector(frozen_sec=10.0)
+    still = scene()
+
+    first = frozen_feed(detector, still, start=0.0, stop=20.0)
+    second = frozen_feed(detector, still, start=20.2, stop=90.0)
+
+    assert first is not None
+    assert second is None
+    assert detector.stats()["freezes"] == 1
+
+
+def test_a_recovered_stream_can_freeze_again() -> None:
+    """NVR bir marta qotib, tuzalib, keyin yana qotishi mumkin."""
+    detector = TamperDetector(frozen_sec=10.0)
+    still = scene()
+
+    assert frozen_feed(detector, still, start=0.0, stop=20.0) is not None
+    # Oqim tiklandi.
+    assert feed(detector, still, start=20.2, stop=40.0) is None
+    assert detector.frozen is False
+    # Va yana qotdi.
+    assert frozen_feed(detector, still, start=40.2, stop=60.0) is not None
+    assert detector.stats()["freezes"] == 2
+
+
+def test_a_stream_frozen_from_the_first_frame_is_still_caught() -> None:
+    """NVR qayta yuklangan bo'lsa oqim boshidanoq qotgan bo'ladi —
+    me'yorni "o'rganish" davri buni yashirib qo'ymasligi kerak."""
+    detector = TamperDetector(frozen_sec=15.0, warmup_frames=200)
+
+    assert frozen_feed(detector, scene(), start=0.0, stop=25.0) is not None
+
+
+def test_freeze_and_tamper_are_reported_separately() -> None:
+    """Ikkalasi bir xil yo'ldan chiqadi, lekin hodisa turi boshqa:
+    qotgan oqimni "kamera yopilgan" deb aytish o'rnatuvchini noto'g'ri
+    joyga yuboradi."""
+    detector = TamperDetector(min_duration_sec=10.0, frozen_sec=1000.0)
+    warm(detector, scene())
+
+    alert = feed(detector, np.zeros((180, 320, 3), dtype=np.uint8), start=10.0, stop=25.0)
+
+    assert alert is not None
+    assert alert.kind == TAMPER
+    assert alert.reason == DARK

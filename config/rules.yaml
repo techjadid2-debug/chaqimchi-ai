@@ -15,6 +15,35 @@ schedules:
   ish-vaqti: {start: "09:00", end: "21:00"}
 
 rules:
+  # ── Kamera sog'ligi ───────────────────────────────────────────────────
+  #
+  # Bular jadvalga bog'lanmagan: kamera kechasi o'chsa ham ertalab emas,
+  # o'sha zahoti aytilishi kerak.  Klip ham olinmaydi — uzilgan kameradan
+  # kesib olinadigan video yo'q.
+
+  - name: Kamera javob bermayapti
+    event_type: camera_offline
+    severity: warning
+    # 15 daqiqa: NVR o'chib-yonib turgan bo'lsa telefon jiringlab ketmasin.
+    cooldown_sec: 900
+    actions: [cloud_sync, telegram_alert]
+
+  - name: Kamera tiklandi
+    event_type: camera_recovered
+    severity: info
+    cooldown_sec: 900
+    actions: [cloud_sync, telegram_alert]
+
+  # Eng jimgina buziladigan holat: oqim ochiq, lekin tasvir o'zgarmaydi.
+  # Buzilish tekshiruvi ham, harakat filtri ham buni sezmaydi.
+  - name: Tasvir qotib qoldi
+    event_type: stream_frozen
+    severity: critical
+    cooldown_sec: 900
+    actions: [cloud_sync, telegram_alert]
+
+  # ── Xavfsizlik ────────────────────────────────────────────────────────
+
   # Kamera yopilgan yoki burilgan — aniq, o'lchanadigan security hodisasi.
   - name: Kamera buzilishi
     event_type: camera_tampered

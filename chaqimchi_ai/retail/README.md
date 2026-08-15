@@ -223,6 +223,39 @@ Disk kvotasi (40 GB) yozayotgan kameralar orasida **teng bo'linadi**. Har
 kamera to'liq kvotani o'ziniki deb bilsa 8 kamera 320 GB talab qilardi —
 128 GB disk esa ancha oldin to'lardi.
 
+### Kamera sog'ligi (`camera_offline`, `camera_recovered`, `stream_frozen`)
+
+Kamera holati ilgari faqat `runner.stats()` ichida yashardi. Kabel uzilsa
+yoki NVR o'chsa do'kon egasi buni hisobotdagi bo'shliqdan — bir necha
+kundan keyin — bilardi.
+
+Uchta narsa ataylab shunday:
+
+1. **Uch marta urinishdan keyin** (`OFFLINE_AFTER_FAILURES`). Backoff
+   2, 4, 8 soniya bo'lgani uchun bu ~14 soniya: bitta tarmoq uzilishi
+   shovqin bermaydi, haqiqiy uzilish esa yarim daqiqada bilinadi.
+2. **`failures` faqat kadr kelganda nolga tushadi**, ulanish ochilganda
+   emas. NVR TCP ulanishni qabul qilib, keyin hech qanday kadr bermasligi
+   mumkin — bunday kamera har siklda qayta ochilib, hisobni nolga
+   tushirib yuborardi va hech qachon "o'chgan" deb e'lon qilinmasdi.
+3. **Qoida dvigatelidan o'tadi** (`emit_system_event`). To'g'ridan-to'g'ri
+   outboxga yozish mumkin edi, lekin u holda cooldown ham, `telegram_alert`
+   ham ishlamasdi va sog'liqni `config/rules.yaml` bilan boshqarib
+   bo'lmasdi.
+
+**Qotib qolgan oqim** eng jimgina buziladigan holat: RTSP ochiq,
+`grab()` va `retrieve()` muvaffaqiyatli qaytadi, lekin kadr o'zgarmaydi.
+Harakat yo'q degani filtr uni to'sadi, buzilish imzosi ham o'zgarmaydi —
+tizim butunlay sog'lom ko'rinadi. Aniqlash arzon: 160×90 kulrang kadrning
+hash'i 20 soniya davomida bir xil bo'lsa oqim qotgan. Haqiqiy kamera
+sensor shovqini tufayli hech qachon bayt-bayt bir xil kadr bermaydi,
+shuning uchun bu tekshiruv chegara sozlashni talab qilmaydi.
+
+Sog'liq hodisalari **litsenziyadan mustaqil** (`HEALTH_EVENTS`): mijoz
+qaysi paketni olganidan qat'i nazar, kamerasi ishlamayotganini bilishi
+kerak — aks holda u ishlamayotgan tizim uchun pul to'lab yuraveradi.
+
+
 ### `ai_review` — cloud uchun ajratilgan nom
 
 Ilgari bu yerda qurilmadan turib Claude'ga kadr yuboradigan ko'rik oqimi
@@ -281,14 +314,9 @@ Ochiq bandlar:
 - Bitta kamera ham yuz tanish, ham analitika uchun kerak bo'lsa oqim ikki
   marta ochiladi (ikki jarayon, ikki dekod). Ataylab: xato ajratilishi shu
   narxga arziydi.
-- **Chiziq va zona hech qayerda chizilmagan.** `scene.lines` va `scene.zones`
-  har profilda bo'sh, ularni kiritishning yagona yo'li — owner panelidagi
-  xom JSON maydoni. Ularsiz `line_crossed`, `dwell_exceeded` va
-  `queue_threshold_exceeded` umuman chiqmaydi.
 - **Yuk signali ulanmagan.** `service.build_runner()` `RetailRunner` ni
   `pressure=` argumentisiz quradi, shuning uchun `budget.py` dagi
   `pressure >= 0.85` tarmog'i hech qachon ishlamaydi va RAM umuman
   kuzatilmaydi (cgroup `MemoryMax` bor, lekin u faqat oxirgi chora).
-- **Kamera o'chgani hodisaga aylanmaydi.** Holat faqat `runner.stats()`
-  ichida ko'rinadi; qotib qolgan oqim esa umuman aniqlanmaydi (harakat yo'q →
-  filtr to'sadi, buzilish signaturasi o'zgarmaydi → "normal").
+- **Outbox'da backoff yo'q.** `attempts` yoziladi, lekin uni hech kim
+  o'qimaydi: rad etilgan hodisa navbat boshini to'sib turaveradi.

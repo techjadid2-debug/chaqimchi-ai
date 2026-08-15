@@ -29,6 +29,19 @@ EventType = Literal[
     "after_hours_presence",
     #: Kamera yopildi, burildi yoki ko'rinishi buzildi.
     "camera_tampered",
+    # ── Kamera sog'ligi ───────────────────────────────────────────────────
+    #
+    # Bulargacha kamera holati faqat `runner.stats()` ichida yashardi va
+    # hech qachon hodisaga aylanmasdi: kamera o'chsa do'kon egasi buni
+    # hisobotdagi bo'shliqdan, ya'ni bir necha kundan keyin bilardi.
+    #: Kamera ketma-ket bir necha marta ulanmadi (kabel, quvvat, NVR).
+    "camera_offline",
+    #: Uzilishdan keyin qayta ulandi.  `metadata.downtime_sec` bilan keladi.
+    "camera_recovered",
+    #: Oqim ochiq, lekin kadr o'zgarmayapti — dekoder yoki NVR qotib qolgan.
+    #: Bu eng xavflisi: harakat yo'q degani filtr uni to'sadi va buzilish
+    #: tekshiruvi ham "normal" deydi, ya'ni tizim sog'lom ko'rinadi.
+    "stream_frozen",
     #: Ko'rish agenti kadrni ko'rib bergan xulosa.  Boshqa hodisadan **keyin**
     #: tug'iladi (`metadata.source_event_type`) va uni odam tilida
     #: tushuntiradi: "kassa oldida ikki kishi janjallashmoqda".

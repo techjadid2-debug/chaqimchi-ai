@@ -42,7 +42,7 @@ from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
 from chaqimchi_ai.retail.rules import Decision, RuleEngine, Schedule
-from chaqimchi_ai.retail.tamper import TamperDetector
+from chaqimchi_ai.retail.tamper import FREEZE, TAMPER, TamperDetector
 from chaqimchi_ai.scene_analytics import SceneAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,7 @@ class _Camera:
     analyzed: int = 0
     errors: int = 0
     tamper_alerts: int = 0
+    freezes: int = 0
     #: Oxirgi "ish vaqtidan tashqari" hodisasi — takror oqimini to'sish uchun.
     after_hours_at: float = float("-inf")
     #: Oxirgi ko'rilgan kadr — `ai_review` harakati shuni AI ga yuboradi.
@@ -136,6 +137,7 @@ class _Totals:
     clips_dropped: int = 0
     clips_unavailable: int = 0
     tamper_alerts: int = 0
+    freezes: int = 0
     after_hours: int = 0
     snapshots_written: int = 0
     snapshots_missing: int = 0
@@ -346,16 +348,32 @@ class RetailPipeline:
         return decisions
 
     def _report_tamper(self, camera_id: str, alert: Any, *, now: float) -> None:
+        """Buzilish yoki qotib qolgan oqim.
+
+        Ikkalasi ham bir xil o'lchovdan chiqadi, lekin hodisa turi boshqa:
+        qotgan oqimni "kamera yopilgan" deb aytish o'rnatuvchini noto'g'ri
+        joyga — linzani artishga — yuboradi, aslida esa NVR qayta
+        yuklanishi kerak.
+        """
+        frozen = getattr(alert, "kind", TAMPER) == FREEZE
         logger.warning(
-            "[%s] kamera buzilgan: %s (%.0f soniya)", camera_id, alert.reason, alert.duration_sec
+            "[%s] %s: %s (%.0f soniya)",
+            camera_id,
+            "oqim qotib qoldi" if frozen else "kamera buzilgan",
+            alert.reason,
+            alert.duration_sec,
         )
         with self._lock:
-            self._cameras[camera_id].tamper_alerts += 1
-            self._totals.tamper_alerts += 1
+            if frozen:
+                self._cameras[camera_id].freezes += 1
+                self._totals.freezes += 1
+            else:
+                self._cameras[camera_id].tamper_alerts += 1
+                self._totals.tamper_alerts += 1
         self._report(
             [
                 EdgeEvent(
-                    event_type="camera_tampered",
+                    event_type="stream_frozen" if frozen else "camera_tampered",
                     severity="critical",
                     camera_id=camera_id,
                     score=alert.score,
@@ -365,6 +383,16 @@ class RetailPipeline:
             camera_id=camera_id,
             now=now,
         )
+
+    def emit_system_event(self, event: EdgeEvent, *, now: float) -> None:
+        """Zanjirdan tashqarida tug'ilgan hodisa (kamera uzilishi, tiklanishi).
+
+        `runner` uni to'g'ridan-to'g'ri outboxga yozishi ham mumkin edi, lekin
+        u holda qoida dvigateli chetlab o'tilardi: cooldown, jadval va
+        `telegram_alert` ishlamasdi.  Shu yo'ldan o'tgani uchun kamera
+        sog'ligi hodisalari ham `config/rules.yaml` bilan boshqariladi.
+        """
+        self._report([event], camera_id=event.camera_id, now=now)
 
     def _after_hours_event(
         self, events: List[EdgeEvent], camera_id: str, *, now: float
@@ -550,6 +578,7 @@ class RetailPipeline:
             "events": self._totals.events,
             "suppressed": self._totals.suppressed,
             "tamper_alerts": self._totals.tamper_alerts,
+            "freezes": self._totals.freezes,
             "after_hours": self._totals.after_hours,
             "actions": dict(sorted(self._totals.actions.items())),
             "action_errors": self._totals.action_errors,
@@ -571,6 +600,7 @@ class RetailPipeline:
                     "analyzed": camera.analyzed,
                     "errors": camera.errors,
                     "tamper_alerts": camera.tamper_alerts,
+                    "freezes": camera.freezes,
                     "tampered": camera.tamper is not None and camera.tamper.alerted,
                 }
                 for camera_id, camera in sorted(self._cameras.items())

@@ -44,6 +44,11 @@ EVENT_LABELS: Dict[str, str] = {
     "queue_threshold_exceeded": "Navbat uzun",
     "after_hours_presence": "Ish vaqtidan tashqari harakat",
     "camera_tampered": "Kamera yopildi yoki burildi",
+    # Sog'liq hodisalari do'kon egasi uchun aniq tilda: u nima buzilganini
+    # emas, **nima qilish kerakligini** bilishi kerak.
+    "camera_offline": "Kamera javob bermayapti",
+    "camera_recovered": "Kamera tiklandi",
+    "stream_frozen": "Kamera tasviri qotib qoldi",
     "ai_review": "AI ko'rdi",
 }
 

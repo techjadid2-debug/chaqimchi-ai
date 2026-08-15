@@ -69,6 +69,11 @@ PRIORITIES: Dict[str, Priority] = {
     "background": Priority.BACKGROUND,
 }
 
+#: Qurilma sog'ligi haqidagi hodisalar hech qanday paketga bog'lanmaydi.
+#: Mijoz qaysi funksiyani sotib olganidan qat'i nazar, kamerasi
+#: ishlamayotganini bilishi shart.
+HEALTH_EVENTS = frozenset({"camera_offline", "camera_recovered", "stream_frozen"})
+
 
 def load_rules(path: Optional[Path]) -> RuleEngine:
     """Qoidalarni YAML yoki JSON dan o'qiydi.
@@ -259,6 +264,11 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
     def allowed(event: EdgeEvent) -> bool:
         if event.event_type == "person_detected":
             return False
+        # Kamera sog'ligi litsenziyalanadigan funksiya emas.  Mijoz qaysi
+        # paketni olganidan qat'i nazar, kamerasi o'chganini bilishi kerak —
+        # aks holda u ishlamayotgan tizim uchun pul to'lab yuraveradi.
+        if event.event_type in HEALTH_EVENTS:
+            return True
         if event.event_type in traffic:
             return "person_count" in enabled
         if event.event_type in queue:

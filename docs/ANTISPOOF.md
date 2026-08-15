@@ -31,8 +31,8 @@ antispoof:
 Rad etilgan urinishlar logda ko‘rinadi va metrikaga yoziladi:
 
 ```bash
-curl http://127.0.0.1:8742/api/metrics | grep spoofs
-curl http://127.0.0.1:8742/metrics | grep chaqimchi_spoofs_total
+curl http://127.0.0.1:8743/api/metrics | grep spoofs
+curl http://127.0.0.1:8743/metrics | grep chaqimchi_spoofs_total
 ```
 
 ## Heuristika qanday ishlaydi

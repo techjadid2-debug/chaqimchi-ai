@@ -8,7 +8,7 @@ Nima uchun kerak:
 2. **Disk.** Mini PC da har mos kelish uchun bitta JPEG saqlanadi. Kuniga 500
    voqea ≈ 15 MB; bir yilda ~5 GB va u hech qachon kamaymaydi.
 3. **Ma’lumot minimallashtirish.** Biometrik kadrni kerakli muddatdan ortiq
-   saqlamaslik — `docs/REJA.md` dagi talab.
+   saqlamaslik — `docs/archive/REJA.md` dagi talab.
 
 Muddat ikki manbadan keladi: litsenziya (tarif) va `config.yaml`. Ikkalasi ham
 bo‘lsa **qisqarog‘i** ishlatiladi — mijoz o‘z xohishi bilan kamroq saqlashi

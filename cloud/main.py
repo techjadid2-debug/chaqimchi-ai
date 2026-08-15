@@ -33,9 +33,11 @@ from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.jwt_auth import JwtError
 from chaqimchi_ai.licensing.plans import (
     PLANS,
+    SELLABLE_PLANS,
     PlanTier,
     cheapest_plan_for,
     get_plan,
+    is_sellable,
     usd_rate_uzs,
 )
 from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
@@ -784,9 +786,14 @@ async def list_plans() -> Dict[str, Any]:
                 "install_price_uzs": v.install_price_uzs,
                 "per_person_uzs": v.price_per_person_uzs,
                 "billing": "per_person" if v.is_per_person else "flat",
+                # Eski tariflar hisob-kitob uchun qoladi (mavjud obyektlar va
+                # hisob-fakturalar ular orqali hisoblanadi), lekin yangi
+                # obyektga taklif qilinmaydi.
+                "sellable": is_sellable(k),
             }
             for k, v in PLANS.items()
-        }
+        },
+        "sellable": sorted(SELLABLE_PLANS),
     }
 
 

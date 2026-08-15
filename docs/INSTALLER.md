@@ -95,7 +95,7 @@ python scripts/backup_db.py info nusxa.zip   # ichida nima bor
 Yoki serverdan (API kalit bilan):
 
 ```bash
-curl -H "X-API-Key: $CHAQIMCHI_API_KEY" http://MINI_PC:8742/api/backup -O -J
+curl -H "X-API-Key: $CHAQIMCHI_API_KEY" http://MINI_PC:8743/api/backup -O -J
 ```
 
 ### Qurilma almashganda

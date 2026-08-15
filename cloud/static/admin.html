@@ -104,22 +104,7 @@
             <optgroup label="Asosiy mahsulot">
               <option value="lite" selected>Sotqin Base — $20/oy + AI funksiyalar</option>
             </optgroup>
-            <optgroup label="Legacy tariflar">
-              <option value="starter">Starter</option>
-              <option value="business">Business</option>
-              <option value="enterprise">Enterprise</option>
-            </optgroup>
-            <optgroup label="Xodim bo'yicha (davomat)">
-              <option value="staff_starter">Davomat S</option>
-              <option value="staff_business">Davomat M</option>
-              <option value="staff_enterprise">Davomat L</option>
-            </optgroup>
           </select>
-        </div>
-        <div>
-          <label for="cPersons">Xodim soni <span class="muted">(davomat uchun)</span></label>
-          <input id="cPersons" type="number" min="0" max="100000" value="0" />
-          <div id="cQuote" class="muted" style="font-size: 0.72rem; margin-top: 0.3rem;"></div>
         </div>
         <div>
           <label for="cMonths">Obuna (oy)</label>
@@ -573,26 +558,6 @@
     }
 
     // ── Yangi mijoz ──────────────────────────────────────────────────────
-    // Narxni sotuvchi qo'lda hisoblamasin — xodim sonini yozganda o'zi chiqadi.
-    async function refreshQuote() {
-      const persons = Number($("cPersons").value) || 0;
-      const el = $("cQuote");
-      if (!persons) { el.textContent = ""; return; }
-      try {
-        const q = await api(`/api/v1/quote?persons=${persons}`);
-        const plan = PLAN_LABEL[q.plan] || q.plan;
-        el.innerHTML =
-          `Eng arzon: <b>${esc(plan)}</b> — ${uzs(q.monthly_uzs)}/oy<br>` +
-          `Yillik ${uzs(q.yearly_uzs)} · shartnoma kuni ${uzs(q.first_payment_uzs)}`;
-        // Tavsiya etilgan tarifni o'zi tanlaydi.
-        if ($("cPlan").value.startsWith("staff_")) $("cPlan").value = q.plan;
-      } catch (err) {
-        el.textContent = "";
-      }
-    }
-    $("cPersons").addEventListener("change", refreshQuote);
-    $("cPersons").addEventListener("blur", refreshQuote);
-
     $("createForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const btn = e.target.querySelector("button[type=submit]");
@@ -606,7 +571,7 @@
             subscription_months: Number($("cMonths").value) || 1,
             contact_phone: $("cPhone").value.trim() || null,
             address: $("cAddress").value.trim() || null,
-            billable_persons: Number($("cPersons").value) || 0,
+            billable_persons: 0,
           }),
         });
         e.target.reset();

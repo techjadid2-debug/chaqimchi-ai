@@ -79,7 +79,6 @@ antispoof:
 # keyin kadr ko'rilishini qoida belgilaydi (`actions: [ai_review]`, namuna
 # `config/rules.yaml` da). Ya'ni qurilmadagi arzon model "nimadir bo'ldi"
 # deb topadi, qimmat model esa faqat o'sha lahzani ko'radi.
-# Batafsil va narx jadvali: docs/KORISH_AGENTI.md
 # Do'kon analitikasi (Chaqimchi Retail AI) — alohida xizmat sifatida ishlaydi:
 #   python -m chaqimchi_ai.retail.service --config config/config.yaml
 # Yuz tanishdan mustaqil: bittasi yiqilsa ikkinchisi ishlashda davom etadi.

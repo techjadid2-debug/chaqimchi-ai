@@ -110,5 +110,5 @@ Batafsil: [INSTALLER.md](INSTALLER.md)
 ## Texnik
 
 - Cloud: `make run-cloud` (8750)  
-- Edge: `make run-web` (8742)  
+- Edge: `make run-web` (8743)  
 - Admin: `CHAQIMCHI_CLOUD_ADMIN_KEY`

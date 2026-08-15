@@ -22,7 +22,7 @@ CANCELLED = "cancelled"
 def billable_months(months: int) -> int:
     """To'lanadigan oylar: har to'liq yil uchun 2 oy tekin (yillik = oylik × 10).
 
-    `docs/BIZNES_MODEL.md` dagi narx qoidasi shu yerda — bitta joyda.
+    `docs/archive/BIZNES_MODEL.md` dagi narx qoidasi shu yerda — bitta joyda.
     """
     years, rest = divmod(max(1, int(months)), 12)
     return years * 10 + rest

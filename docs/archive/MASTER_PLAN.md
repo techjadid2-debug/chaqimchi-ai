@@ -60,11 +60,11 @@ security:
 
 ```bash
 # JWT
-curl -H "X-API-Key: $CHAQIMCHI_API_KEY" -X POST http://127.0.0.1:8742/api/auth/token
+curl -H "X-API-Key: $CHAQIMCHI_API_KEY" -X POST http://127.0.0.1:8743/api/auth/token
 curl -H "Authorization: Bearer <token>" ...
 
 # Prometheus
-curl http://127.0.0.1:8742/metrics
+curl http://127.0.0.1:8743/metrics
 ```
 
 ---

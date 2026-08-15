@@ -30,7 +30,7 @@ DEFAULT_USD_RATE_UZS = 13_000
 def usd_rate_uzs() -> int:
     """Hisob-faktura uchun USD/UZS kursi.
 
-    Lite narxi USD'da qat'iy ($30), Payme/Click esa UZS qabul qiladi. Kurs
+    Lite narxi USD'da qat'iy ($20), Payme/Click esa UZS qabul qiladi. Kurs
     serverda boshqariladi va hisob ochilgan paytdagi UZS summa invoice ichida
     saqlanib qoladi. Tashqi kurs servisiga runtime bog'liqlik ataylab yo'q.
     """
@@ -180,6 +180,21 @@ def cheapest_plan_for(persons: int) -> tuple[str, int]:
     if not options:
         return "staff_enterprise", PLANS["staff_enterprise"].monthly_price(persons)
     return min(options, key=lambda x: x[1])
+
+
+#: Hozir **sotiladigan** tariflar.
+#:
+#: `PLANS` dagi qolganlari (kamera bo'yicha starter/business/enterprise va
+#: xodim bo'yicha staff_*) `docs/DOKON_MVP.md` bo'yicha sotilmaydi, lekin
+#: kod va hisob-kitob mantiqidan olib tashlanmagan: mavjud yozuvlar va
+#: hisob-fakturalar ular orqali hisoblanadi.  Yangi obyekt yaratishda
+#: sotuvchiga faqat shu ro'yxat ko'rsatiladi — aks holda panelda sotilmaydigan
+#: tarifni tanlash mumkin bo'lib qolardi.
+SELLABLE_PLANS: frozenset[str] = frozenset({"lite"})
+
+
+def is_sellable(plan: str) -> bool:
+    return plan.lower().strip() in SELLABLE_PLANS
 
 
 def get_plan(plan: str) -> PlanLimits:

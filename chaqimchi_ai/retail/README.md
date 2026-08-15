@@ -223,38 +223,19 @@ Disk kvotasi (40 GB) yozayotgan kameralar orasida **teng bo'linadi**. Har
 kamera to'liq kvotani o'ziniki deb bilsa 8 kamera 320 GB talab qilardi —
 128 GB disk esa ancha oldin to'lardi.
 
-### AI ko'rigi (`vision_review.py`)
+### `ai_review` — cloud uchun ajratilgan nom
 
-Analitika "kassada 6 kishi" deydi — raqam. Do'kon egasiga esa jumla kerak:
-"kamera oldiga karton quti qo'yilgan". Shu jumlani ko'rish agenti yozadi,
-lekin uni har kadrga qo'yib bo'lmaydi — har chaqiruv pul (~87 so'm).
+Ilgari bu yerda qurilmadan turib Claude'ga kadr yuboradigan ko'rik oqimi
+bor edi (`vision_review.py` + `vision_agent.py`).  U olib tashlandi: og'ir
+AI faqat cloudda ishlashi kerak, va modul har profilda `enabled: false`
+holatida turardi — ya'ni hech qachon ishlamagan ~2 000 qator kod.
 
-Shuning uchun ko'rik zanjirning **oxirida**, qoida so'raganda ishlaydi:
+`ai_review` harakati `rules.py` da **qabul qilinadigan no-op** bo'lib
+qoladi: mijozning eski qoidalar fayli validatsiyadan o'taversin va hodisa
+baribir cloudga ketsin, faqat AI izohisiz.  Cloud tarafida ko'rik qayta
+tiklanganda shu nom ishlatiladi.
 
-```yaml
-actions: [cloud_sync, telegram_alert, save_clip, ai_review]
-```
-
-```
-qoida → ai_review → navbat ─┐
-                            └→ vision-review oqimi → AI → outbox → cloud
-```
-
-Uch narsa ataylab shunday:
-
-1. **Alohida oqim.** AI javobi 3–10 soniya. Uni `step()` ichida kutish o'sha
-   vaqtda hamma kamerani to'xtatib qo'yardi.
-2. **Kadr `submit()` da kodlanadi.** Bir necha millisekund, lekin navbatda
-   turgan havola oqim tomonidan almashtirilib qolmaydi.
-3. **Oraliq navbatga qo'yishda boshlanadi**, javob kelganda emas — aks holda
-   sekin javob paytida o'tgan har bir hodisa yangi chaqiruv bo'lardi.
-
-Navbat to'lsa kadr tashlanadi (`dropped`): kadrni yo'qotgan qurilmani
-yo'qotgandan yaxshi. `vision.enabled: false` bo'lsa `on_review` umuman
-berilmaydi va qoidadagi `ai_review` jimgina hisobga olinadi — hodisa
-baribir cloudga ketadi, faqat izohsiz.
-
-Batafsil: [docs/KORISH_AGENTI.md](../../docs/KORISH_AGENTI.md)
+Eski kod: `git show archive/vision-agent`.
 
 ## Sig'imni o'lchash (`scripts/benchmark_n100.py`)
 
@@ -300,6 +281,14 @@ Ochiq bandlar:
 - Bitta kamera ham yuz tanish, ham analitika uchun kerak bo'lsa oqim ikki
   marta ochiladi (ikki jarayon, ikki dekod). Ataylab: xato ajratilishi shu
   narxga arziydi.
-- AI ko'rigi **bitta kadr** ko'radi, klipni emas. Video yuborish bir necha
-  barobar qimmat, shuning uchun xulosa "nima bo'lgani" emas, "ayni damda nima
-  ko'rinayotgani" haqida.
+- **Chiziq va zona hech qayerda chizilmagan.** `scene.lines` va `scene.zones`
+  har profilda bo'sh, ularni kiritishning yagona yo'li — owner panelidagi
+  xom JSON maydoni. Ularsiz `line_crossed`, `dwell_exceeded` va
+  `queue_threshold_exceeded` umuman chiqmaydi.
+- **Yuk signali ulanmagan.** `service.build_runner()` `RetailRunner` ni
+  `pressure=` argumentisiz quradi, shuning uchun `budget.py` dagi
+  `pressure >= 0.85` tarmog'i hech qachon ishlamaydi va RAM umuman
+  kuzatilmaydi (cgroup `MemoryMax` bor, lekin u faqat oxirgi chora).
+- **Kamera o'chgani hodisaga aylanmaydi.** Holat faqat `runner.stats()`
+  ichida ko'rinadi; qotib qolgan oqim esa umuman aniqlanmaydi (harakat yo'q →
+  filtr to'sadi, buzilish signaturasi o'zgarmaydi → "normal").

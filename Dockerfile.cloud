@@ -11,9 +11,9 @@ COPY --from=builder /install /usr/local
 COPY chaqimchi_ai ./chaqimchi_ai
 COPY cloud ./cloud
 COPY deploy ./deploy
-COPY releases ./releases
 COPY scripts ./scripts
 RUN mkdir -p /app/data/cloud && chown -R chaqimchi:chaqimchi /app/data
+
 
 USER 10001:10001
 EXPOSE 8750

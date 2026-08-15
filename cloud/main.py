@@ -708,6 +708,25 @@ async def installer_guide_page() -> FileResponse:
     return _static_page("installer-guide.html")
 
 
+@app.get("/onboarding", include_in_schema=False)
+async def onboarding_page() -> FileResponse:
+    """Lokal dastlabki o'rnatish va sozlash ustasi (Webcam AI, NVR sxemalari)."""
+    return _static_page("local-onboarding.html")
+
+
+@app.post("/api/v1/agent/discovery/scan")
+async def agent_discovery_scan() -> Dict[str, Any]:
+    """Lokal tarmoqdagi barcha NVR va IP kameralarni qidirish."""
+    try:
+        from chaqimchi_ai.discovery import discover_network_cameras
+
+        cameras = await discover_network_cameras()
+        return {"ok": True, "cameras": cameras}
+    except Exception as e:
+        logger.warning(f"Kamera qidiruvida ogohlantirish: {e}")
+        return {"ok": True, "cameras": []}
+
+
 @app.get("/downloads/sotqin-installer.sh", include_in_schema=False)
 async def sotqin_bootstrap(request: Request) -> Response:
     """Rasmiy saytdan Sotqin first-install bootstrap.

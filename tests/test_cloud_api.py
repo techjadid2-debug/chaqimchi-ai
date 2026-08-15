@@ -426,4 +426,3 @@ def test_quick_trial_and_dynamic_installer_download(cloud_client) -> None:
     assert dl.status_code == 200
     assert "Chaqimchi_AI_Setup" in dl.headers.get("content-disposition", "")
     assert dl.content.startswith(b"MZ") or code.encode() in dl.content
-

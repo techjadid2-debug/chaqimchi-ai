@@ -39,8 +39,9 @@ echo    Boshqaruv paneli: http://localhost:8750
 echo ======================================================
 echo.
 
-:: Brauzerda avtomatik ochish
-start http://localhost:8750
+:: Brauzerda avtomatik ochish (Onboarding Usta)
+start http://localhost:8750/onboarding
+
 
 :: Asosiy serverni ishga tushirish
 python -m cloud.main

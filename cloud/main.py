@@ -1073,13 +1073,28 @@ async def public_quick_trial(
 @app.get("/api/v1/public/download-installer")
 async def public_download_installer(
     request: Request,
+    format: str = "exe",
     code: str = "",
     site_id: str = "",
 ) -> Response:
-    """Oldindan sozlangan 1-bosishda ishga tushuvchi .bat skriptini beradi."""
+    """Windows uchun .exe o'rnatuvchi yoki sozlangan setup skriptini beradi."""
     safe_code = re.sub(r"[^A-Za-z0-9]", "", code).upper()
     safe_site = re.sub(r"[^A-Za-z0-9\-]", "", site_id)
     base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+
+    # Agar serverda tayyor kompilyatsiya qilingan .exe bo'lsa, to'g'ridan-to'g'ri .exe ni uzatamiz
+    exe_candidates = [
+        Path("releases/Chaqimchi_AI_Setup.exe"),
+        Path("dist/Chaqimchi_AI_Setup.exe"),
+        Path("/app/releases/Chaqimchi_AI_Setup.exe"),
+    ]
+    for exe_path in exe_candidates:
+        if exe_path.is_file():
+            return FileResponse(
+                path=exe_path,
+                filename="Chaqimchi_AI_Setup.exe",
+                media_type="application/vnd.microsoft.portable-executable",
+            )
 
     bat_script = f"""@echo off
 chcp 65001 > nul
@@ -1124,8 +1139,9 @@ pause
     return Response(
         content=bat_script,
         media_type="application/x-bat",
-        headers={"Content-Disposition": 'attachment; filename="Chaqimchi_AI_Ornatish.bat"'},
+        headers={"Content-Disposition": 'attachment; filename="Chaqimchi_AI_Setup.bat"'},
     )
+
 
 
 # ── Login/parol portali: admin, o'rnatuvchi va xarid qilgan mijoz ───────

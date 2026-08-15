@@ -76,9 +76,10 @@
 
       const downloadLink = document.createElement("a");
       downloadLink.href = data.download_windows_url;
-      downloadLink.download = "Chaqimchi_AI_Ornatish.bat";
+      downloadLink.download = "Chaqimchi_AI_Setup.bat";
       document.body.appendChild(downloadLink);
       downloadLink.click();
+
       setTimeout(() => {
         try { document.body.removeChild(downloadLink); } catch(_) {}
       }, 500);

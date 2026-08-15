@@ -1,12 +1,57 @@
 import asyncio
 from pathlib import Path
+from typing import Optional
 
 import httpx
+import pytest
 
-from chaqimchi_ai.cloud_sync import CloudEventSync
+from chaqimchi_ai.cloud_sync import (
+    DEFAULT_RETRY_AFTER_SEC,
+    MAX_RETRY_AFTER_SEC,
+    CloudEventSync,
+    parse_retry_after,
+)
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.outbox import EventOutbox
 from chaqimchi_ai.settings import CloudSyncSettings
+
+
+class Clock:
+    """Qo'lda suriladigan monoton soat."""
+
+    def __init__(self) -> None:
+        self.value = 1000.0
+
+    def __call__(self) -> float:
+        return self.value
+
+
+def sync_for(
+    tmp_path: Path,
+    *,
+    handler=None,
+    clock: Optional[Clock] = None,
+    **settings,
+) -> tuple[CloudEventSync, EventOutbox, Clock]:
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=100_000)
+    clock = clock or Clock()
+    client = (
+        httpx.AsyncClient(transport=httpx.MockTransport(handler)) if handler else None
+    )
+    sync = CloudEventSync(
+        CloudSyncSettings(
+            enabled=True,
+            url="https://cloud.test",
+            site_id="site",
+            device_id="device",
+            device_token="token",
+            **settings,
+        ),
+        outbox,
+        client=client,
+        clock=clock,
+    )
+    return sync, outbox, clock
 
 
 def test_cloud_sync_uploads_snapshot_heartbeat_and_config(tmp_path: Path) -> None:
@@ -51,7 +96,7 @@ def test_cloud_sync_uploads_snapshot_heartbeat_and_config(tmp_path: Path) -> Non
     )
 
     async def exercise() -> None:
-        assert await sync.sync_once() == {"sent": 1, "failed": 0}
+        assert await sync.sync_once() == {"sent": 1, "failed": 0, "pending": 1}
         await sync.heartbeat_once()
         await sync.config_once()
         await client.aclose()
@@ -82,3 +127,126 @@ def test_sync_worker_can_stop_without_consuming_the_outbox(tmp_path: Path) -> No
 
     assert len(outbox.pending()) == 1
     assert sync.client is None
+
+
+# ── 429: cloud "sekinla" desa ────────────────────────────────────────────
+
+
+def test_rate_limit_does_not_blame_the_events(tmp_path: Path) -> None:
+    """Butun tuzatishning sababi shu.
+
+    Cloud chegarani oshirdi desa, eski kod har bir eventni "muvaffaqiyatsiz"
+    deb belgilardi va 5 soniyadan keyin yana urinardi — abadiy sikl.  Endi
+    eventlar tegilmaydi va sikl `Retry-After` gacha to'xtaydi.
+    """
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(429, headers={"Retry-After": "120"}, json={"detail": "ko'p"})
+
+    sync, outbox, clock = sync_for(tmp_path, handler=handler)
+    outbox.enqueue(EdgeEvent(event_id="evt-1", event_type="line_crossed", camera_id="camera-01"))
+
+    async def exercise() -> None:
+        result = await sync.sync_once()
+        assert result["throttled"] == 1
+        assert result["sent"] == 0 and result["failed"] == 0
+        # Blok davomida umuman so'rov yubormaydi.
+        assert await sync.sync_once() == {"sent": 0, "failed": 0, "pending": 1}
+        await sync.close()
+
+    asyncio.run(exercise())
+
+    assert calls == ["/api/v1/edge/events/batch"]  # ikkinchi urinish bo'lmadi
+    assert sync.blocked_for == 120.0
+    # Eng muhimi: hodisa hali navbatda va urinishlar hisobiga tegilmagan.
+    pending = outbox.pending()
+    assert len(pending) == 1
+    assert pending[0]["attempts"] == 0
+    assert pending[0]["last_error"] is None
+
+
+def test_sync_resumes_after_the_block_expires(tmp_path: Path) -> None:
+    responses = [httpx.Response(429, headers={"Retry-After": "30"})]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if responses:
+            return responses.pop(0)
+        return httpx.Response(200, json={"accepted": ["evt-1"]})
+
+    sync, outbox, clock = sync_for(tmp_path, handler=handler)
+    outbox.enqueue(EdgeEvent(event_id="evt-1", event_type="line_crossed", camera_id="camera-01"))
+
+    async def exercise() -> None:
+        await sync.sync_once()
+        clock.value += 31.0
+        assert (await sync.sync_once())["sent"] == 1
+        await sync.close()
+
+    asyncio.run(exercise())
+    assert outbox.pending() == []
+
+
+def test_a_real_failure_still_counts_against_the_event(tmp_path: Path) -> None:
+    """429 istisno; 500 esa eventning muammosi bo'lishi mumkin va sanaladi."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="server xatosi")
+
+    sync, outbox, _clock = sync_for(tmp_path, handler=handler)
+    outbox.enqueue(EdgeEvent(event_id="evt-1", event_type="line_crossed", camera_id="camera-01"))
+
+    async def exercise() -> None:
+        assert (await sync.sync_once())["failed"] == 1
+        await sync.close()
+
+    asyncio.run(exercise())
+    assert outbox.pending()[0]["attempts"] == 1
+
+
+@pytest.mark.parametrize(
+    "header,expected",
+    [
+        ("120", 120.0),
+        ("  45  ", 45.0),
+        (None, DEFAULT_RETRY_AFTER_SEC),
+        ("", DEFAULT_RETRY_AFTER_SEC),
+        ("0", DEFAULT_RETRY_AFTER_SEC),
+        ("-5", DEFAULT_RETRY_AFTER_SEC),
+        ("Wed, 21 Oct 2026 07:28:00 GMT", DEFAULT_RETRY_AFTER_SEC),
+        ("999999", MAX_RETRY_AFTER_SEC),  # noto'g'ri sarlavha qurilmani jim qilmasin
+    ],
+)
+def test_retry_after_is_parsed_defensively(header, expected) -> None:
+    assert parse_retry_after(header) == expected
+
+
+# ── Adaptiv oraliq ───────────────────────────────────────────────────────
+
+
+def test_idle_queue_backs_off_but_busy_queue_stays_fast(tmp_path: Path) -> None:
+    """Tinch do'kon cloudni har 5 soniyada bezovta qilmasin, lekin
+    birinchi hodisada darhol tez oraliqqa qaytsin."""
+    sync, _outbox, _clock = sync_for(tmp_path, interval_sec=5, max_interval_sec=60)
+
+    empty = {"sent": 0, "failed": 0, "pending": 0}
+    assert sync.next_interval(empty) == 10.0
+    assert sync.next_interval(empty) == 20.0
+    assert sync.next_interval(empty) == 40.0
+    assert sync.next_interval(empty) == 60.0
+    assert sync.next_interval(empty) == 60.0  # shiftda to'xtaydi
+
+    assert sync.next_interval({"sent": 1, "failed": 0, "pending": 1}) == 5.0
+
+
+def test_block_wins_over_the_idle_interval(tmp_path: Path) -> None:
+    sync, _outbox, clock = sync_for(tmp_path, interval_sec=5, max_interval_sec=60)
+    sync._blocked_until = clock.value + 300.0
+
+    assert sync.next_interval({"sent": 0, "failed": 0, "pending": 3}) == 300.0
+
+
+def test_max_interval_cannot_be_below_the_floor() -> None:
+    with pytest.raises(ValueError, match="max_interval_sec"):
+        CloudSyncSettings(interval_sec=30, max_interval_sec=10)

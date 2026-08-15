@@ -76,6 +76,18 @@ DB_PATH = Path(
     os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db"))
 )
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+#: Bitta qurilma soatiga shuncha event batch yubora oladi.
+#:
+#: 600 x `batch_size` (50) = soatiga 30 000 hodisa — har qanday haqiqiy
+#: do'kondan ancha yuqori, lekin nazoratdan chiqqan qurilmani hali ham
+#: to'xtatadi.  Oldingi 120 chegarasi edge'ning 5 soniyalik sikli (soatiga
+#: 720 so'rov) bilan birga ~10 daqiqada 429 berardi, edge esa 429 ni
+#: tutmasdi va abadiy siklga tushardi.  Edge tarafi ham tuzatildi:
+#: `chaqimchi_ai/cloud_sync.py` endi `Retry-After` ni hurmat qiladi va
+#: navbat bo'sh bo'lganda oraliqni 60 soniyagacha ko'taradi.
+EVENT_BATCH_HOURLY_LIMIT = 600
+
 logger = logging.getLogger(__name__)
 
 _store: Optional[CloudStore] = None
@@ -1839,7 +1851,7 @@ async def ingest_event_batch(
     ratelimit.check(
         "events",
         device["device_id"],
-        limit=120,
+        limit=EVENT_BATCH_HOURLY_LIMIT,
         window_sec=3_600,
         message="Event yuborish chegarasi oshdi — keyinroq qayta yuboriladi",
     )

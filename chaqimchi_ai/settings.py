@@ -61,11 +61,22 @@ class CloudSyncSettings(BaseModel):
     site_id: Optional[str] = None
     device_id: Optional[str] = None
     device_token: Optional[str] = None
+    #: Navbatda ish bo'lganda eng tez oraliq.
     interval_sec: int = Field(default=5, ge=1, le=3600)
+    #: Navbat bo'sh bo'lganda oraliq shu qiymatgacha ikkilanib boradi.
+    #: Har 5 soniyada so'rov yuborish soatiga 720 chaqiruv demak — bu
+    #: cloud chegarasini (429) tinch do'konda ham urib yuborardi.
+    max_interval_sec: int = Field(default=60, ge=1, le=3600)
     heartbeat_interval_sec: int = Field(default=60, ge=10, le=3600)
     batch_size: int = Field(default=50, ge=1, le=500)
     queue_days: int = Field(default=7, ge=1, le=30)
     queue_max_bytes: int = Field(default=20 * 1024**3, ge=1024**2)
+
+    @model_validator(mode="after")
+    def _intervals(self) -> "CloudSyncSettings":
+        if self.max_interval_sec < self.interval_sec:
+            raise ValueError("max_interval_sec interval_sec dan kichik bo'lmasin")
+        return self
 
 
 class SceneZoneSettings(BaseModel):

@@ -110,20 +110,42 @@ def test_same_alert_is_not_repeated_every_batch(cloud) -> None:
 # ── Tezlik cheklovi ──────────────────────────────────────────────────────
 
 
-def test_event_ingestion_is_rate_limited_per_device(cloud) -> None:
-    _main, client, _sent = cloud
-    _site_row, headers = _site(client, "Do'kon")
+def test_event_ingestion_is_rate_limited_per_device(cloud, monkeypatch) -> None:
+    """Chegara rostdan ishlaydi.
 
-    codes = {
+    Haqiqiy chegara (600) bilan sinash 600 ta HTTP so'rov demak — test
+    o'n daqiqalab ishlardi.  Shuning uchun chegara vaqtincha kichraytiriladi;
+    haqiqiy qiymatning yetarliligi quyidagi alohida testda tekshiriladi.
+    """
+    main, client, _sent = cloud
+    _site_row, headers = _site(client, "Do'kon")
+    monkeypatch.setattr(main, "EVENT_BATCH_HOURLY_LIMIT", 5)
+
+    codes = [
         client.post(
             "/api/v1/edge/events/batch",
             headers=headers,
             json={"events": _events(1, prefix=f"r{index}")},
         ).status_code
-        for index in range(125)
-    }
+        for index in range(8)
+    ]
 
-    assert codes == {200, 429}
+    assert codes == [200] * 5 + [429] * 3
+
+
+def test_the_hourly_limit_leaves_room_for_a_real_shop(cloud) -> None:
+    """Chegara pilotni buzmasin.
+
+    Bu 1.2-tuzatishning sababi: chegara 120 edi, edge esa har 5 soniyada
+    so'rov yubordi (soatiga 720) — ~10 daqiqada 429 va abadiy sikl.
+    """
+    main, _client, _sent = cloud
+
+    # `cloud_sync.batch_size` standarti 50 ta hodisa.
+    assert main.EVENT_BATCH_HOURLY_LIMIT * 50 >= 25_000
+    # Edge eng tez rejimda ham (5 soniyada bir) soatiga 720 so'rov qiladi;
+    # chegara bundan past bo'lsa navbat to'lgan paytda 429 muqarrar.
+    assert main.EVENT_BATCH_HOURLY_LIMIT >= 720 * 0.8
 
 
 # ── Config polling ───────────────────────────────────────────────────────

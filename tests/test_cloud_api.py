@@ -403,3 +403,27 @@ def test_admin_readiness_requires_admin_key(cloud_client) -> None:
     )
     assert lead_item["ok"] is False
     assert lead_item["required"] is True
+
+
+def test_quick_trial_and_dynamic_installer_download(cloud_client) -> None:
+    # 1. Quick trial yaratish
+    res = cloud_client.post(
+        "/api/v1/public/quick-trial",
+        json={"phone": "+998 90 123 45 67", "company": "Test Market"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True
+    assert "site_id" in data
+    assert "pairing_code" in data
+    assert "download_windows_url" in data
+    assert "owner_url" in data
+
+    # 2. Dinamik .bat faylni yuklab olish
+    code = data["pairing_code"]
+    site_id = data["site_id"]
+    dl = cloud_client.get(f"/api/v1/public/download-installer?code={code}&site_id={site_id}")
+    assert dl.status_code == 200
+    assert "Chaqimchi_AI_Ornatish.bat" in dl.headers.get("content-disposition", "")
+    assert code in dl.text
+    assert site_id in dl.text

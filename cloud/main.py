@@ -1012,6 +1012,122 @@ async def public_create_lead(
     }
 
 
+class QuickTrialBody(BaseModel):
+    phone: str = Field(min_length=5, max_length=40)
+    full_name: Optional[str] = "Do'kondor"
+    company: Optional[str] = "Mening Do'konim"
+    consent: bool = True
+    website: Optional[str] = ""
+
+
+@app.post("/api/v1/public/quick-trial")
+async def public_quick_trial(
+    body: QuickTrialBody,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> Dict[str, Any]:
+    """1-bosishda 14 kunlik bepul sinov do'koni va avtomatik o'rnatuvchini yaratish."""
+    if body.website:
+        return {"ok": True, "message": "Qabul qilindi"}
+    phone = " ".join(body.phone.split())
+    if sum(char.isdigit() for char in phone) < 5:
+        raise HTTPException(422, "Telefon raqami noto'g'ri")
+    name = (body.company or "Do'kon").strip()
+    full_name = (body.full_name or "Mijoz").strip()
+
+    site = get_store().create_site(
+        name=f"{name} ({phone[-4:] if len(phone) >= 4 else phone})",
+        plan="starter",
+        contact_phone=phone,
+        subscription_months=1,
+    )
+
+    site_id = site["site_id"]
+    code = site["pairing_code"]
+
+    try:
+        created = get_store().create_lead(
+            full_name=full_name,
+            phone=phone,
+            company=name,
+            message=f"[1-Bosishda Bepul Sinov] Sayt ID: {site_id}, Kod: {code}",
+        )
+        lead = get_store().get_lead(created["id"])
+        if lead:
+            background_tasks.add_task(_notify_new_lead, lead, duplicate=False)
+    except Exception:
+        pass
+
+    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+    return {
+        "ok": True,
+        "site_id": site_id,
+        "pairing_code": code,
+        "download_windows_url": f"/api/v1/public/download-installer?os=windows&code={code}&site_id={site_id}",
+        "linux_command": f"curl -fsSL {base}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud {base} --code {code}",
+        "owner_url": f"{base}/owner?site={site_id}",
+        "message": "14 kunlik bepul sinov do'koningiz ochildi!",
+    }
+
+
+@app.get("/api/v1/public/download-installer")
+async def public_download_installer(
+    request: Request,
+    code: str = "",
+    site_id: str = "",
+) -> Response:
+    """Oldindan sozlangan 1-bosishda ishga tushuvchi .bat skriptini beradi."""
+    safe_code = re.sub(r"[^A-Za-z0-9]", "", code).upper()
+    safe_site = re.sub(r"[^A-Za-z0-9\-]", "", site_id)
+    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+
+    bat_script = f"""@echo off
+chcp 65001 > nul
+title Chaqimchi AI - 1-Bosishda O'rnatuvchi
+
+echo ======================================================
+echo    Chaqimchi AI - Avtomatik O'rnatish va Ulanish
+echo    Do'koningiz Cloud tizimiga ulanmoqda...
+echo ======================================================
+echo.
+
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [OGOHLANTIRISH] Python o'rnatilmagan.
+    echo Iltimos, https://www.python.org dan Python 3.11/3.12 ni yuklab o'rnating.
+    pause
+    exit /b 1
+)
+
+if not exist ".venv" (
+    echo [1/3] Muhit yaratilmoqda...
+    python -m venv .venv
+)
+
+call .venv\\Scripts\\activate.bat
+echo [2/3] Kerakli kutubxonalar yuklanmoqda...
+pip install -r requirements.txt >nul 2>&1
+
+echo [3/3] Cloud serverga avtomatik bog'lanmoqda...
+python -m chaqimchi_ai.pair_sotqin --cloud {base} --code {safe_code}
+
+echo.
+echo ======================================================
+echo    Muvaffaqiyatli ulandi! Do'kon monitoringi faol.
+echo ======================================================
+echo.
+
+start {base}/owner?site={safe_site}
+python -m cloud.main
+pause
+"""
+    return Response(
+        content=bat_script,
+        media_type="application/x-bat",
+        headers={"Content-Disposition": 'attachment; filename="Chaqimchi_AI_Ornatish.bat"'},
+    )
+
+
 # ── Login/parol portali: admin, o'rnatuvchi va xarid qilgan mijoz ───────
 
 

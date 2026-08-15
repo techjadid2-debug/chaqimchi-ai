@@ -117,35 +117,38 @@
     <!-- ── DOWNLOAD & QUICK SETUP SECTION ── -->
     <section id="download" class="download-section section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> Dasturni Yuklab Olish</p>
-        <h2>O‘z kompyuteringizga o‘rnating</h2>
-        <p>Windows 10/11 yoki Linux tizimingizga mos versiyani tanlang va 1 daqiqada ishga tushiring.</p>
+        <p class="eyebrow"><span></span> 1-Bosishda O‘rnatish</p>
+        <h2>14 kunlik bepul sinab ko‘ring</h2>
+        <p>Hech qanday kod kiritish shart emas. Telefoningizni yozing va avtomatik sozlangan o‘rnatuvchini yuklab oling.</p>
       </div>
 
       <div class="download-grid">
         <div class="download-card">
           <div class="os-icon">🪟</div>
-          <h3>Windows uchun Chaqimchi AI</h3>
-          <p>Windows 10 / 11 (64-bit) uchun tayyor o‘rnatuvchi dastur. NVR yoki IP kameralarga avtomatik ulanadi.</p>
-          <div class="download-action">
-            <a class="button button-light" href="/install">📥 Windows Installer (.exe)</a>
-            <small>Hajmi: ~65 MB · Intel / AMD x64</small>
-          </div>
+          <h3>Windows (10 / 11) Avtomatik O‘rnatuvchi</h3>
+          <p>Faylni yuklab olib 1 marta bosing — u kameralarni o‘zi topadi va shaxsiy do‘kon kabinetingizga avtomatik bog‘lanadi.</p>
+          <form id="quickTrialForm" class="quick-download-form" style="display: grid; gap: 10px; margin-top: 14px;">
+            <input type="tel" id="trialPhone" name="phone" required placeholder="Telefoningiz: +998 90 000 00 00" style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; outline: none;">
+            <input type="text" id="trialCompany" name="company" placeholder="Do‘kon nomi (ixtiyoriy)" style="padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; outline: none;">
+            <button class="button button-light" type="submit" id="trialBtn">📥 Windows uchun yuklab olish (.bat)</button>
+            <p id="trialStatus" class="form-status" style="font-size: 13px; margin: 4px 0 0;"></p>
+          </form>
         </div>
 
         <div class="download-card">
           <div class="os-icon">🐧</div>
-          <h3>Linux / Mini-PC / Sotqin</h3>
+          <h3>Linux / Mini-PC / Ubuntu Server</h3>
           <p>Ubuntu 22.04 / 24.04 yoki Debian serverlar uchun 1 qatorli tezkor o‘rnatish buyrug‘i.</p>
           <div class="code-box">
-            <code>curl -fsSL https://chaqimchi.uz/install.sh | sudo bash</code>
+            <code>curl -fsSL https://chaqimchi.uz/downloads/sotqin-installer.sh | sudo bash</code>
           </div>
           <div class="download-action">
-            <a class="button button-ghost" href="/install">O‘rnatish qo‘llanmasi →</a>
+            <a class="button button-ghost" href="/install">O‘rnatish yo‘riqnomasi →</a>
           </div>
         </div>
       </div>
     </section>
+
 
     <!-- ── FEATURES SECTION ── -->
     <section id="features" class="features-section section-pad">

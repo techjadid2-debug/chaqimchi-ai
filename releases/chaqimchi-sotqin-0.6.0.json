@@ -1,0 +1,8 @@
+{
+  "schema_version": 2,
+  "product": "chaqimchi-sotqin",
+  "target_arch": "x86_64",
+  "version": "0.6.0",
+  "sha256": "c142b0242c87677e1c860bc60e9297db517c481e3bddb090ed5b9e87fe56031f",
+  "signature": "nKrOJhpVeNm+/RssHXK6QN3+tcdpaR99o8zS7JcOHaaS9bSDJGmfpFSyHvAa4Y2sg5lOBTdJ6CpQ8BEURTwnBw=="
+}

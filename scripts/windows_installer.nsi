@@ -13,10 +13,10 @@ RequestExecutionLevel admin
 InstallDir "$PROGRAMFILES64\Chaqimchi AI"
 InstallDirRegKey HKLM "Software\Chaqimchi AI" "Install_Dir"
 
-; Modern UI Sozlamalari
+; Modern UI Sozlamalari & Chaqimchi Logotipi
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON "app.ico"
+!define MUI_UNICON "app.ico"
 !define MUI_HEADERIMAGE
 !define MUI_WELCOMEFINISHPAGE_BITMAP "${NSISDIR}\Contrib\Graphics\Wizard\win.bmp"
 
@@ -42,7 +42,8 @@ InstallDirRegKey HKLM "Software\Chaqimchi AI" "Install_Dir"
 Section "Chaqimchi AI Asosiy Fayllar" SecMain
     SetOutPath "$INSTDIR"
 
-; Asosiy skriptlar va konfiguratsiyalar
+    ; Asosiy skriptlar, ikonkalar va konfiguratsiyalar
+    File "app.ico"
     File "..\requirements.txt"
     File "..\requirements-cloud.txt"
 
@@ -68,17 +69,24 @@ Section "Chaqimchi AI Asosiy Fayllar" SecMain
     ; Uninstaller yaratish
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-    ; Ish stoli va Pusk yorliqlari
+    ; 1. Barcha foydalanuvchilar (All Users) ish stoliga yorliq
+    SetShellVarContext all
     CreateDirectory "$SMPROGRAMS\Chaqimchi AI"
-    CreateShortcut "$SMPROGRAMS\Chaqimchi AI\Chaqimchi AI.lnk" "$INSTDIR\scripts\run_windows.bat" "" "$INSTDIR\scripts\run_windows.bat" 0
+    CreateShortcut "$SMPROGRAMS\Chaqimchi AI\Chaqimchi AI.lnk" "$WINDIR\System32\wscript.exe" '"$INSTDIR\scripts\ChaqimchiAI.vbs"' "$INSTDIR\app.ico" 0
     CreateShortcut "$SMPROGRAMS\Chaqimchi AI\O'chirish (Uninstall).lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
-    CreateShortcut "$DESKTOP\Chaqimchi AI.lnk" "$INSTDIR\scripts\run_windows.bat" "" "$INSTDIR\scripts\run_windows.bat" 0
+    CreateShortcut "$DESKTOP\Chaqimchi AI.lnk" "$WINDIR\System32\wscript.exe" '"$INSTDIR\scripts\ChaqimchiAI.vbs"' "$INSTDIR\app.ico" 0
 
+    ; 2. Joriy foydalanuvchi (Current User) ish stoliga ham kafolatlangan yorliq
+    SetShellVarContext current
+    CreateDirectory "$SMPROGRAMS\Chaqimchi AI"
+    CreateShortcut "$SMPROGRAMS\Chaqimchi AI\Chaqimchi AI.lnk" "$WINDIR\System32\wscript.exe" '"$INSTDIR\scripts\ChaqimchiAI.vbs"' "$INSTDIR\app.ico" 0
+    CreateShortcut "$DESKTOP\Chaqimchi AI.lnk" "$WINDIR\System32\wscript.exe" '"$INSTDIR\scripts\ChaqimchiAI.vbs"' "$INSTDIR\app.ico" 0
 
     ; Windows Registry
     WriteRegStr HKLM "Software\Chaqimchi AI" "Install_Dir" "$INSTDIR"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Chaqimchi AI" "DisplayName" "Chaqimchi AI - Do'kon Analitikasi"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Chaqimchi AI" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Chaqimchi AI" "DisplayIcon" "$INSTDIR\app.ico"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Chaqimchi AI" "DisplayVersion" "0.7.0"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Chaqimchi AI" "Publisher" "Chaqimchi AI"
 SectionEnd
@@ -89,9 +97,15 @@ Section "Uninstall"
     ExecWait 'netsh advfirewall firewall delete rule name="Chaqimchi AI"'
 
     ; Yorliqlarni o'chirish
+    SetShellVarContext all
     Delete "$DESKTOP\Chaqimchi AI.lnk"
     Delete "$SMPROGRAMS\Chaqimchi AI\Chaqimchi AI.lnk"
     Delete "$SMPROGRAMS\Chaqimchi AI\O'chirish (Uninstall).lnk"
+    RMDir "$SMPROGRAMS\Chaqimchi AI"
+
+    SetShellVarContext current
+    Delete "$DESKTOP\Chaqimchi AI.lnk"
+    Delete "$SMPROGRAMS\Chaqimchi AI\Chaqimchi AI.lnk"
     RMDir "$SMPROGRAMS\Chaqimchi AI"
 
     ; Fayllarni o'chirish
@@ -100,7 +114,7 @@ Section "Uninstall"
     RMDir /r "$INSTDIR\config"
     RMDir /r "$INSTDIR\scripts"
     RMDir /r "$INSTDIR\webapp"
-    Delete "$INSTDIR\run_windows.bat"
+    Delete "$INSTDIR\app.ico"
     Delete "$INSTDIR\requirements.txt"
     Delete "$INSTDIR\requirements-cloud.txt"
     Delete "$INSTDIR\Uninstall.exe"

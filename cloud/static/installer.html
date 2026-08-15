@@ -6,8 +6,9 @@
   <meta name="robots" content="noindex">
   <title>O‘rnatuvchi paneli — Chaqimchi AI</title>
   <link rel="stylesheet" href="/assets/admin.css?v=20260815-installer">
+  <script src="/assets/zone-editor.js?v=1" defer></script>
   <style>
-    .auth-shell{max-width:980px;margin:42px auto;padding:20px}.auth-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px}.auth-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.auth-card,.job{background:var(--card-bg);border:1px solid var(--glass-border);border-radius:18px;padding:22px}.auth-card h2{margin:0 0 8px}.auth-card input{margin-bottom:10px}.guide-banner{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;margin-bottom:18px;padding:18px;border-radius:16px;background:linear-gradient(120deg,#d8f14a,#f2ffaf);color:#182014}.job-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}.job h3{margin:0 0 6px}.progress{height:9px;background:var(--glass-border);border-radius:999px;overflow:hidden;margin:12px 0}.progress i{display:block;height:100%;background:#96c11f}.step-list{display:grid;gap:8px;margin:14px 0}.step{padding:10px;border:1px solid var(--glass-border);border-radius:10px}.step.done{background:#edf9e5;color:#182014}.command{display:block;overflow:auto;padding:14px;background:#111820;color:#f4f7f1;border-radius:10px;white-space:pre-wrap;word-break:break-word}.camera-builder{margin:12px 0;padding:16px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass-bg)}.camera-builder h4{margin:0 0 12px}.camera-builder-grid{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:9px;align-items:end}.camera-form{display:grid;grid-template-columns:120px 1fr 2fr auto;gap:8px;align-items:end;margin:12px 0}.preview{margin-top:10px}.preview img{max-width:100%;border-radius:10px;display:block}.pending{padding:20px;border-radius:16px;background:#fff3d7;border:1px solid #efcf80;color:#182014}.hidden{display:none!important}@media(max-width:720px){.auth-grid,.camera-builder-grid{grid-template-columns:1fr}.camera-form{grid-template-columns:1fr}.guide-banner{grid-template-columns:1fr}}
+    .auth-shell{max-width:980px;margin:42px auto;padding:20px}.auth-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px}.auth-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.auth-card,.job{background:var(--card-bg);border:1px solid var(--glass-border);border-radius:18px;padding:22px}.auth-card h2{margin:0 0 8px}.auth-card input{margin-bottom:10px}.guide-banner{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;margin-bottom:18px;padding:18px;border-radius:16px;background:linear-gradient(120deg,#d8f14a,#f2ffaf);color:#182014}.job-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}.job h3{margin:0 0 6px}.progress{height:9px;background:var(--glass-border);border-radius:999px;overflow:hidden;margin:12px 0}.progress i{display:block;height:100%;background:#96c11f}.step-list{display:grid;gap:8px;margin:14px 0}.step{padding:10px;border:1px solid var(--glass-border);border-radius:10px}.step.done{background:#edf9e5;color:#182014}.command{display:block;overflow:auto;padding:14px;background:#111820;color:#f4f7f1;border-radius:10px;white-space:pre-wrap;word-break:break-word}.camera-builder{margin:12px 0;padding:16px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass-bg)}.camera-builder h4{margin:0 0 12px}.camera-builder-grid{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:9px;align-items:end}.camera-form{display:grid;grid-template-columns:120px 1fr 2fr auto;gap:8px;align-items:end;margin:12px 0}.preview{margin-top:10px}.geometry{margin:18px 0;padding:16px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass-bg)}.geometry canvas{width:100%;max-width:640px;border-radius:10px;cursor:crosshair;display:block;background:#111820}.geometry .hint{font-size:.75rem;line-height:1.6;margin:10px 0}.shape-list{display:grid;gap:6px;margin:10px 0}.shape{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px;border:1px solid var(--glass-border);border-radius:9px;font-size:.8rem}.shape label{display:flex;gap:4px;align-items:center;margin:0}.shape input[type=checkbox]{width:auto}.shape input[type=number]{width:80px}.preview img{max-width:100%;border-radius:10px;display:block}.pending{padding:20px;border-radius:16px;background:#fff3d7;border:1px solid #efcf80;color:#182014}.hidden{display:none!important}@media(max-width:720px){.auth-grid,.camera-builder-grid{grid-template-columns:1fr}.camera-form{grid-template-columns:1fr}.guide-banner{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -38,8 +39,23 @@
     async function loadJobs(){const data=await api('/api/v1/installer/assignments');$('jobs').innerHTML=data.assignments.length?data.assignments.map(a=>`<article class="job"><small>${esc(a.status)}</small><h3>${esc(a.site_name)}</h3><p class="muted">${esc(a.address||'Manzil kiritilmagan')}</p><p>Aloqa: <b>${esc(a.connection)}</b> · Kamera: <b>${a.cameras_active}/${a.cameras_expected||'?'}</b></p><button class="btn btn-primary" onclick="openSite('${esc(a.site_id)}')">Ishni ochish</button></article>`).join(''):'<div class="pending">Hozircha obyekt biriktirilmagan.</div>'}
     async function openSite(siteId){activeSite=siteId;try{const data=await api(`/api/v1/installer/sites/${siteId}/onboarding`);$('detailTitle').textContent=data.site.name;renderDetail(data);$('detailOverlay').hidden=false}catch(err){alert(err.message)}}
     function renderDetail(data){
-      $('detailBody').innerHTML=`<div class="progress"><i style="width:${data.percent}%"></i></div><p><b>${data.completed}/${data.total}</b> bosqich · ${data.percent}%</p><div class="step-list">${data.steps.map(s=>`<div class="step ${s.done?'done':''}">${s.done?'✓':'○'} ${esc(s.label)}</div>`).join('')}</div><h3>O‘rnatish buyrug‘i</h3>${data.install_command?`<code class="command">${esc(data.install_command)}</code><button class="btn" onclick="copyCommand(this)">Nusxalash</button>`:'<p class="muted">Faol pairing kodi yo‘q.</p>'}<button class="btn" onclick="newPairing()">Yangi pairing kodi</button><h3 style="margin-top:22px">Kameralarni sozlash</h3><div class="camera-builder"><h4>Hikvision / Dahua RTSP shabloni</h4><div class="camera-builder-grid"><div><label>Brend</label><select id="cameraBrand"><option value="hikvision">Hikvision / HiLook</option><option value="dahua">Dahua</option><option value="manual">Boshqa / qo‘lda</option></select></div><div><label>NVR IP</label><input id="cameraHost" inputmode="decimal" placeholder="192.168.1.64"></div><div><label>RTSP port</label><input id="cameraPort" inputmode="numeric" value="554"></div><div><label>NVR foydalanuvchi</label><input id="cameraUser" autocomplete="off" placeholder="chaqimchi-view"></div><div><label>NVR parol</label><input id="cameraPass" type="password" autocomplete="new-password"></div><div><label>NVR kanal</label><input id="cameraChannel" type="number" min="1" max="64" value="1"></div></div><button class="btn" type="button" onclick="buildRtsp()">Substream RTSP yaratish</button><p class="muted">Alohida faqat live-view huquqidagi NVR akkauntidan foydalaning. Parol saqlangach forma tozalanadi.</p></div><form class="camera-form" onsubmit="saveCamera(event)"><div><label>ID</label><select id="cameraId">${[1,2,3,4].map(n=>`<option value="camera-0${n}">camera-0${n}</option>`).join('')}</select></div><div><label>Nomi</label><input id="cameraLabel" required placeholder="Asosiy kirish"></div><div><label>RTSP substream</label><input id="cameraRtsp" required placeholder="rtsp://user:password@NVR/..." type="password"></div><button class="btn btn-primary" type="submit">Saqlash</button></form><div id="cameraList"></div><div class="row" style="margin-top:18px"><button class="btn" onclick="setStatus('in_progress')">Ish boshlandi</button><button class="btn" onclick="setStatus('ready')">Tekshiruvga tayyor</button><button class="btn btn-primary" onclick="setStatus('completed')">Yakunlandi</button></div>`;
+      $('detailBody').innerHTML=`<div class="progress"><i style="width:${data.percent}%"></i></div><p><b>${data.completed}/${data.total}</b> bosqich · ${data.percent}%</p><div class="step-list">${data.steps.map(s=>`<div class="step ${s.done?'done':''}">${s.done?'✓':'○'} ${esc(s.label)}</div>`).join('')}</div><h3>O‘rnatish buyrug‘i</h3>${data.install_command?`<code class="command">${esc(data.install_command)}</code><button class="btn" onclick="copyCommand(this)">Nusxalash</button>`:'<p class="muted">Faol pairing kodi yo‘q.</p>'}<button class="btn" onclick="newPairing()">Yangi pairing kodi</button><h3 style="margin-top:22px">Kameralarni sozlash</h3><div class="camera-builder"><h4>Hikvision / Dahua RTSP shabloni</h4><div class="camera-builder-grid"><div><label>Brend</label><select id="cameraBrand"><option value="hikvision">Hikvision / HiLook</option><option value="dahua">Dahua</option><option value="manual">Boshqa / qo‘lda</option></select></div><div><label>NVR IP</label><input id="cameraHost" inputmode="decimal" placeholder="192.168.1.64"></div><div><label>RTSP port</label><input id="cameraPort" inputmode="numeric" value="554"></div><div><label>NVR foydalanuvchi</label><input id="cameraUser" autocomplete="off" placeholder="chaqimchi-view"></div><div><label>NVR parol</label><input id="cameraPass" type="password" autocomplete="new-password"></div><div><label>NVR kanal</label><input id="cameraChannel" type="number" min="1" max="64" value="1"></div></div><button class="btn" type="button" onclick="buildRtsp()">Substream RTSP yaratish</button><p class="muted">Alohida faqat live-view huquqidagi NVR akkauntidan foydalaning. Parol saqlangach forma tozalanadi.</p></div><form class="camera-form" onsubmit="saveCamera(event)"><div><label>ID</label><select id="cameraId">${[1,2,3,4].map(n=>`<option value="camera-0${n}">camera-0${n}</option>`).join('')}</select></div><div><label>Nomi</label><input id="cameraLabel" required placeholder="Asosiy kirish"></div><div><label>RTSP substream</label><input id="cameraRtsp" required placeholder="rtsp://user:password@NVR/..." type="password"></div><button class="btn btn-primary" type="submit">Saqlash</button></form><div id="cameraList"></div>
+      <div class="geometry">
+        <h3 style="margin-top:0">Chiziq va zona</h3>
+        <p class="hint muted">Kadr ustida chizing. <b>Chiziq</b> — kirganlarni sanaydi (2 marta bosing). <b>Zona</b> — navbat, taqiqlangan joy yoki uzoq turishni kuzatadi (nuqta qo‘yib, oxirida ikki marta bosing). O‘ng tugma — o‘chiradi. Nuqtani sudrab ko‘chirish mumkin.<br>Yashil o‘q <b>ichkari</b> tomonni ko‘rsatadi — teskari bo‘lsa “Yo‘nalishni almashtirish”ni bosing.</p>
+        <div class="row" style="gap:8px;margin-bottom:10px">
+          <select id="geoCamera"></select>
+          <select id="geoMode"><option value="line">Chiziq (kirish/chiqish)</option><option value="zone">Zona</option></select>
+          <button class="btn" type="button" onclick="reloadPreview()">Rasmni yangilash</button>
+        </div>
+        <canvas id="geoCanvas" width="640" height="360"></canvas>
+        <div id="shapeList" class="shape-list"></div>
+        <button class="btn btn-primary" type="button" onclick="saveGeometry()">Chiziq va zonani saqlash</button>
+        <span id="geoStatus" class="muted" style="margin-left:10px"></span>
+      </div>
+      <div class="row" style="margin-top:18px"><button class="btn" onclick="setStatus('in_progress')">Ish boshlandi</button><button class="btn" onclick="setStatus('ready')">Tekshiruvga tayyor</button><button class="btn btn-primary" onclick="setStatus('completed')">Yakunlandi</button></div>`;
       loadCameras();
+      setupGeometry();
     }
     function buildRtsp(silent=false){
       const brand=$('cameraBrand').value;
@@ -68,6 +84,91 @@
     async function newPairing(){if(!confirm('Yangi bir martalik pairing kodi yaratilsinmi?'))return;try{const data=await api(`/api/v1/installer/sites/${activeSite}/pairing`,{method:'POST'});renderDetail(data.onboarding)}catch(err){alert(err.message)}}
     async function setStatus(status){try{await api(`/api/v1/installer/sites/${activeSite}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});await loadJobs();alert('Holat yangilandi')}catch(err){alert(err.message)}}
     async function copyCommand(button){const code=button.previousElementSibling.textContent;await navigator.clipboard.writeText(code);button.textContent='Nusxalandi'}
+
+    // ── Chiziq va zona ─────────────────────────────────────────────────
+    // Butun plumbing allaqachon bor edi: cloud saqlaydi va validatsiya
+    // qiladi, Sotqin uni o'qiydi. Yetishmayotgani — chizish vositasi.
+    let editor=null,geoConfig=null;
+    function setupGeometry(){
+      const canvas=$('geoCanvas');
+      if(!canvas||typeof ZoneEditor==='undefined')return;
+      editor=new ZoneEditor(canvas,{
+        askName:(title,fallback)=>{const value=prompt(title,fallback);return value===null?null:(value.trim()||fallback)},
+        confirm:message=>confirm(message),
+        onChange:renderShapes,
+      });
+      $('geoMode').onchange=()=>{editor.setMode($('geoMode').value);renderShapes()};
+      $('geoCamera').onchange=()=>{editor.setCamera($('geoCamera').value);loadPreviewImage();renderShapes()};
+      editor.setMode($('geoMode').value);
+      loadGeometry();
+    }
+    async function loadGeometry(){
+      try{
+        const [config,cameras]=await Promise.all([
+          api(`/api/v1/installer/sites/${activeSite}/config`),
+          api(`/api/v1/installer/sites/${activeSite}/cameras`),
+        ]);
+        geoConfig=config.config;
+        const list=cameras.cameras;
+        $('geoCamera').innerHTML=list.length?list.map(c=>`<option value="${esc(c.camera_id)}">${esc(c.camera_id)} · ${esc(c.label)}</option>`).join(''):'<option value="">Kamera yo‘q</option>';
+        const first=list.length?list[0].camera_id:'';
+        editor.load(geoConfig,first);
+        $('geoCamera').value=first;
+        loadPreviewImage();
+        renderShapes();
+      }catch(err){$('geoStatus').textContent=err.message}
+    }
+    function loadPreviewImage(){
+      const cameraId=$('geoCamera').value;
+      if(!cameraId){editor.setImage(null);return}
+      const image=new Image();
+      image.onload=()=>editor.setImage(image);
+      image.onerror=()=>editor.setImage(null);
+      image.src=`/api/v1/installer/sites/${activeSite}/cameras/${cameraId}/preview?t=${Date.now()}`;
+    }
+    async function reloadPreview(){
+      const cameraId=$('geoCamera').value;
+      if(!cameraId)return;
+      await askPreview(cameraId);
+      loadPreviewImage();
+    }
+    // Zona belgilari (taqiqlangan/navbat/uzoq turish) va chiziq yo'nalishi
+    // kadr ustida emas, ro'yxatda o'zgartiriladi — kichik tugmalarni kadr
+    // ichiga sig'dirish mumkin emas.
+    function renderShapes(){
+      if(!editor)return;
+      const zones=editor.visibleZones(),lines=editor.visibleLines();
+      const rows=[];
+      lines.forEach(line=>{
+        const index=editor.lines.indexOf(line);
+        rows.push(`<div class="shape"><b>Chiziq:</b> ${esc(line.name)} <button class="btn btn-sm" onclick="swapLine(${index})">Yo‘nalishni almashtirish</button> <button class="btn btn-sm" onclick="dropShape('line',${index})">O‘chirish</button></div>`);
+      });
+      zones.forEach(zone=>{
+        const index=editor.zones.indexOf(zone);
+        rows.push(`<div class="shape"><b>Zona:</b> ${esc(zone.name)}
+          <label><input type="checkbox" ${zone.restricted?'checked':''} onchange="setZone(${index},'restricted',this.checked)"> taqiqlangan</label>
+          <label><input type="checkbox" ${zone.queue?'checked':''} onchange="setZone(${index},'queue',this.checked)"> navbat</label>
+          <label>uzoq turish (s) <input type="number" min="5" max="86400" value="${zone.dwell_sec||''}" onchange="setZone(${index},'dwell_sec',this.value?Number(this.value):null)"></label>
+          <button class="btn btn-sm" onclick="dropShape('zone',${index})">O‘chirish</button></div>`);
+      });
+      $('shapeList').innerHTML=rows.length?rows.join(''):'<p class="muted" style="font-size:.8rem">Bu kamerada hali chiziq/zona yo‘q. Kirish kamerasida kamida bitta chiziq bo‘lishi shart — aks holda kirganlar sanalmaydi.</p>';
+    }
+    function setZone(index,field,value){editor.zones[index][field]=value;renderShapes();editor.draw()}
+    function swapLine(index){editor.lines[index].swap_direction=!editor.lines[index].swap_direction;editor.draw()}
+    function dropShape(kind,index){(kind==='zone'?editor.zones:editor.lines).splice(index,1);editor.draw();renderShapes()}
+    async function saveGeometry(){
+      if(!editor||!geoConfig)return;
+      const shapes=editor.serialise();
+      try{
+        const saved=await api(`/api/v1/installer/sites/${activeSite}/config`,{
+          method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...geoConfig,zones:shapes.zones,lines:shapes.lines}),
+        });
+        geoConfig=saved.config;
+        $('geoStatus').textContent=`Saqlandi: ${shapes.lines.length} chiziq, ${shapes.zones.length} zona. Sotqin bir daqiqada qabul qiladi.`;
+        await openSite(activeSite);
+      }catch(err){$('geoStatus').textContent=err.message}
+    }
     $('closeDetail').onclick=()=>{$('detailOverlay').hidden=true};$('refresh').onclick=loadJobs;$('logout').onclick=()=>{localStorage.removeItem(KEY);location.reload()};boot();
   </script>
 </body>

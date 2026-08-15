@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from cloud import ratelimit
 from cloud.snapshots import LocalSnapshotStore
 from cloud.store import CloudStore
 
@@ -38,8 +39,12 @@ def client(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(main, "_event_store", None)
     monkeypatch.setattr(main, "_event_store_key", None)
     monkeypatch.setattr(main, "_snapshots", LocalSnapshotStore(tmp_path / "snapshots"))
+    # Chegaralagich jarayon ichida global (`cloud/ratelimit.py`) — tozalanmasa
+    # bir faylda ketma-ket ishlaydigan testlar bir-birining kvotasini yeydi.
+    ratelimit.limiter().reset()
     with TestClient(main.app) as test_client:
         yield test_client
+    ratelimit.limiter().reset()
 
 
 ADMIN = {"X-Cloud-Admin-Key": "test-admin"}
@@ -293,3 +298,153 @@ def test_an_installer_cannot_read_another_sites_camera(client: TestClient) -> No
         f"/api/v1/installer/sites/{other['site_id']}/cameras/camera-01/preview", headers=installer
     )
     assert denied.status_code == 403
+
+
+# ── Chizilgan chiziq qurilmagacha yetadimi ───────────────────────────────
+
+
+def test_a_line_drawn_by_the_installer_reaches_the_device(client: TestClient, tmp_path: Path) -> None:
+    """Butun zanjirning ma'nosi shu.
+
+    O'rnatuvchi kadr ustida chiziq chizadi -> cloud saqlaydi -> qurilma
+    config'da oladi -> `apply_remote_site_settings` uni `scene.lines` ga
+    qo'yadi -> `SceneAnalyzer` kirganlarni sanay boshlaydi.
+
+    Shu zanjirning oxirgi bo'g'ini uzilgan bo'lsa, chizish vositasi
+    chiroyli ishlab turadi-yu, hisob hech qachon o'smaydi.
+    """
+    import json
+
+    from chaqimchi_ai.retail.service import apply_remote_site_settings
+    from chaqimchi_ai.settings import AppSettings
+
+    site, device_headers = _site_with_camera(client)
+    site_id = site["site_id"]
+    installer = _installer(client, site_id)
+
+    current = client.get(
+        f"/api/v1/installer/sites/{site_id}/config", headers=installer
+    ).json()["config"]
+    saved = client.put(
+        f"/api/v1/installer/sites/{site_id}/config",
+        headers=installer,
+        json={
+            **current,
+            "lines": [
+                {
+                    "name": "kirish",
+                    "camera_id": "camera-01",
+                    "start": [0.1, 0.6],
+                    "end": [0.9, 0.6],
+                    "swap_direction": True,
+                }
+            ],
+            "zones": [
+                {
+                    "name": "kassa",
+                    "camera_id": "camera-01",
+                    "polygon": [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]],
+                    "queue": True,
+                    "dwell_sec": 120,
+                }
+            ],
+        },
+    )
+    assert saved.status_code == 200
+
+    # Qurilma config'ni oladi.
+    payload = client.get("/api/v1/sotqin/config", headers=device_headers).json()
+    assert payload["config"]["lines"][0]["name"] == "kirish"
+
+    # Qurilma uni keshga yozadi (`sotqin_agent.persist_config` shuni qiladi).
+    cache = tmp_path / "sotqin-config.json"
+    cache.write_text(json.dumps(payload), encoding="utf-8")
+
+    settings = AppSettings.model_validate(
+        {
+            "retail": {"enabled": True, "cameras_source": "auto", "sotqin_config_path": str(cache)},
+            "scene": {"enabled": True},
+        }
+    )
+    apply_remote_site_settings(settings, tmp_path)
+
+    # Chiziq analizatorga yetdi.
+    assert len(settings.scene.lines) == 1
+    line = settings.scene.lines[0]
+    assert line.name == "kirish" and line.camera_id == "camera-01"
+    assert line.start == (0.1, 0.6) and line.swap_direction is True
+    zone = settings.scene.zones[0]
+    assert zone.queue is True and zone.dwell_sec == 120
+
+
+def test_a_line_on_an_unknown_camera_is_rejected(client: TestClient) -> None:
+    site, _device = _site_with_camera(client)
+    site_id = site["site_id"]
+    installer = _installer(client, site_id)
+    current = client.get(
+        f"/api/v1/installer/sites/{site_id}/config", headers=installer
+    ).json()["config"]
+
+    rejected = client.put(
+        f"/api/v1/installer/sites/{site_id}/config",
+        headers=installer,
+        json={
+            **current,
+            "lines": [
+                {
+                    "name": "kirish",
+                    "camera_id": "camera-99",
+                    "start": [0.1, 0.6],
+                    "end": [0.9, 0.6],
+                }
+            ],
+        },
+    )
+    assert rejected.status_code == 422
+
+
+def test_onboarding_cannot_reach_100_percent_without_a_drawn_line(client: TestClient) -> None:
+    """O'rnatuvchi ishni chiziqsiz "yakunlandi" deb belgilay olmasin.
+
+    Chiziqsiz `line_crossed` chiqmaydi — mijoz to'lovni boshlaydi-yu,
+    panelda "Bugun kirdi: 0" turaveradi.
+    """
+    site, device_headers = _site_with_camera(client)
+    site_id = site["site_id"]
+    installer = _installer(client, site_id)
+
+    def steps() -> dict:
+        payload = client.get(
+            f"/api/v1/installer/sites/{site_id}/onboarding", headers=installer
+        ).json()
+        return {step["key"]: step["done"] for step in payload["steps"]}
+
+    assert steps()["geometry"] is False
+    assert steps()["preview"] is False
+
+    client.put(
+        "/api/v1/sotqin/cameras/camera-01/preview",
+        headers={**device_headers, "Content-Type": "image/jpeg"},
+        content=JPEG,
+    )
+    assert steps()["preview"] is True
+
+    current = client.get(
+        f"/api/v1/installer/sites/{site_id}/config", headers=installer
+    ).json()["config"]
+    client.put(
+        f"/api/v1/installer/sites/{site_id}/config",
+        headers=installer,
+        json={
+            **current,
+            "lines": [
+                {
+                    "name": "kirish",
+                    "camera_id": "camera-01",
+                    "start": [0.1, 0.6],
+                    "end": [0.9, 0.6],
+                }
+            ],
+        },
+    )
+    assert steps()["geometry"] is True

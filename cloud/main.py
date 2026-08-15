@@ -1540,8 +1540,15 @@ def _site_onboarding_payload(site_id: str) -> Dict[str, Any]:
     ]
     invoices = get_payments().list_invoices(site_id, limit=100)
     device_paired = bool(detail["devices"])
-    cameras_configured = bool(get_store().list_cameras(site_id))
+    cameras = get_store().list_cameras(site_id)
+    cameras_configured = bool(cameras)
     cameras_seen = int(detail["cameras_expected"] or 0) > 0
+    previews_confirmed = bool(cameras) and all(camera["has_preview"] for camera in cameras)
+    # Chiziqsiz `line_crossed` chiqmaydi, ya'ni kirganlar sanalmaydi va
+    # konversiya hisoblanmaydi.  Shu sabab bu ham qadam: progress bar
+    # chiziq chizilmasdan 100% ga yetmasin.
+    site_config = get_event_store().get_site_config(site_id)["config"]
+    geometry_drawn = bool(site_config.get("lines")) or bool(site_config.get("zones"))
     steps = [
         {"key": "customer", "label": "Mijoz ochildi", "done": True},
         {
@@ -1557,6 +1564,16 @@ def _site_onboarding_payload(site_id: str) -> Dict[str, Any]:
             "done": detail["connection"] == "online",
         },
         {"key": "cameras", "label": "Kameralar online xabar berdi", "done": cameras_seen},
+        {
+            "key": "preview",
+            "label": "Har kameraning rasmi tekshirildi",
+            "done": previews_confirmed,
+        },
+        {
+            "key": "geometry",
+            "label": "Chiziq va zona chizildi",
+            "done": geometry_drawn,
+        },
         {"key": "invoice", "label": "Hisob-faktura ochildi", "done": bool(invoices)},
         {
             "key": "payment",
@@ -1714,6 +1731,41 @@ async def installer_request_camera_preview(
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"camera": camera, "wait_sec": PREVIEW_WAIT_HINT_SEC}
+
+
+@app.get("/api/v1/installer/sites/{site_id}/config")
+async def installer_get_config(
+    site_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    _require_installer_site(installer, site_id)
+    return get_event_store().get_site_config(site_id)
+
+
+@app.put("/api/v1/installer/sites/{site_id}/config")
+async def installer_update_config(
+    site_id: str,
+    body: SiteConfigBody,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    """Chiziq va zonani obyektda o'rnatuvchi chizadi.
+
+    Bu ish do'kon egasiga tushmasligi kerak: chiziq kadr ustida, kamera
+    o'rnatilgan joydan turib chiziladi.  Ilgari uni kiritishning yagona yo'li
+    owner panelidagi xom JSON maydoni edi — ya'ni amalda hech kim chizmasdi
+    va `line_crossed` hech qachon chiqmasdi.
+    """
+    _require_installer_site(installer, site_id)
+    _validate_site_config(body)
+    updated = get_event_store().update_site_config(site_id, body.model_dump())
+    get_store().audit_portal_action(
+        "installer.config.saved",
+        actor_id=installer.account_id,
+        target_type="site",
+        target_id=site_id,
+        detail={"zones": len(body.zones), "lines": len(body.lines)},
+    )
+    return updated
 
 
 @app.get("/api/v1/installer/sites/{site_id}/cameras/{camera_id}/preview")
@@ -2324,12 +2376,12 @@ async def owner_get_config(
     return get_event_store().get_site_config(owner.site_id)
 
 
-@app.put("/api/v1/owner/config")
-async def owner_update_config(
-    body: SiteConfigBody,
-    owner: OwnerPrincipal = Depends(require_active_owner),
-) -> Dict[str, Any]:
-    require_owner_role(owner, "owner", "service_admin")
+def _validate_site_config(body: SiteConfigBody) -> None:
+    """Do'kon sozlamasining umumiy tekshiruvi.
+
+    Ega ham, o'rnatuvchi ham shu bitta yo'ldan o'tadi — aks holda ikkita
+    tekshiruv vaqt o'tib bir-biridan ajralib ketardi.
+    """
     allowed_cameras = {f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)}
     configured_ids = (
         set(body.camera_labels)
@@ -2350,6 +2402,15 @@ async def owner_update_config(
         raise HTTPException(422, "Davomat roli faqat tanlangan davomat kamerasiga beriladi")
     if bool(body.open_from) != bool(body.open_to):
         raise HTTPException(422, "Ish boshlanishi va tugashi birga berilishi kerak")
+
+
+@app.put("/api/v1/owner/config")
+async def owner_update_config(
+    body: SiteConfigBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_owner_role(owner, "owner", "service_admin")
+    _validate_site_config(body)
     return get_event_store().update_site_config(owner.site_id, body.model_dump())
 
 

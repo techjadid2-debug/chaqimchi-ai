@@ -146,6 +146,8 @@ class SotqinAgent:
             "outbox_pending": queue["pending"],
             "outbox_bytes": queue["bytes"],
             "outbox_critical_pending": queue["critical_pending"],
+            #: Nolga teng bo'lmasa cloud biror hodisani doimiy rad etyapti.
+            "outbox_poisoned": queue["poisoned"],
             "app_version": __version__,
             "model_version": None,
             "product_name": PRODUCT_NAME,
@@ -156,7 +158,7 @@ class SotqinAgent:
         }
 
     def _outbox_health(self) -> Dict[str, int]:
-        totals = {"pending": 0, "bytes": 0, "critical_pending": 0}
+        totals = {"pending": 0, "bytes": 0, "critical_pending": 0, "poisoned": 0}
         for path in self.outbox_paths:
             if not path.is_file():
                 continue
@@ -180,11 +182,21 @@ class SotqinAgent:
                         f"COALESCE(SUM({'+'.join(size_parts)}),0),"
                         f"{critical} FROM outbox"
                     ).fetchone()
+                    # Tashlangan hodisalar soni — bu nolga teng bo'lmasa
+                    # cloud biror narsani doimiy rad etyapti va buni admin
+                    # bilishi kerak.  Jadval eski bazada bo'lmasligi mumkin.
+                    try:
+                        poisoned = int(
+                            conn.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0]
+                        )
+                    except sqlite3.Error:
+                        poisoned = 0
             except (OSError, sqlite3.Error):
                 continue
             totals["pending"] += int(row[0])
             totals["bytes"] += int(row[1])
             totals["critical_pending"] += int(row[2])
+            totals["poisoned"] += poisoned
         return totals
 
     def validate_config(self, payload: Dict[str, Any]) -> None:

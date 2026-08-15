@@ -159,3 +159,48 @@ def test_a_missing_request_list_is_ignored(monkeypatch) -> None:
     assert asyncio.run(control.upload_previews(None)) == 0
     assert asyncio.run(control.upload_previews("camera-01")) == 0
     assert sent.calls == []
+
+
+def test_health_reports_poisoned_events(tmp_path) -> None:
+    """Tashlangan hodisalar soni cloudga yetsin.
+
+    Nolga teng bo'lmasa cloud biror narsani doimiy rad etyapti — bu kod
+    xatosi, tarmoq emas, va uni admin ko'rishi kerak.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from chaqimchi_ai.event_models import EdgeEvent
+    from chaqimchi_ai.outbox import MAX_ATTEMPTS, EventOutbox
+
+    path = tmp_path / "outbox.db"
+    outbox = EventOutbox(path, max_bytes=10**7)
+    outbox.enqueue(EdgeEvent(event_id="umidsiz", event_type="line_crossed", camera_id="camera-01"))
+    moment = datetime.now(timezone.utc)
+    for _ in range(MAX_ATTEMPTS):
+        outbox.fail("umidsiz", "rad etildi", now=moment)
+        moment += timedelta(seconds=600)
+
+    control = module.SotqinAgent()
+    control.outbox_paths = [path]
+
+    assert control.health_payload()["outbox_poisoned"] == 1
+
+
+def test_health_survives_an_old_database_without_the_dead_letter_table(tmp_path) -> None:
+    """Yangilanmagan qurilmada jadval hali yo'q — heartbeat yiqilmasin."""
+    import sqlite3
+
+    path = tmp_path / "outbox.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE outbox (event_id TEXT PRIMARY KEY, payload TEXT NOT NULL,"
+            "created_at TEXT NOT NULL)"
+        )
+        conn.execute("INSERT INTO outbox VALUES('a','{}','2026-01-01T00:00:00+00:00')")
+
+    control = module.SotqinAgent()
+    control.outbox_paths = [path]
+
+    payload = control.health_payload()
+    assert payload["outbox_pending"] == 1
+    assert payload["outbox_poisoned"] == 0

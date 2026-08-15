@@ -190,6 +190,7 @@ def test_sync_resumes_after_the_block_expires(tmp_path: Path) -> None:
 
 def test_a_real_failure_still_counts_against_the_event(tmp_path: Path) -> None:
     """429 istisno; 500 esa eventning muammosi bo'lishi mumkin va sanaladi."""
+    from datetime import datetime, timedelta, timezone
 
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="server xatosi")
@@ -202,7 +203,13 @@ def test_a_real_failure_still_counts_against_the_event(tmp_path: Path) -> None:
         await sync.close()
 
     asyncio.run(exercise())
-    assert outbox.pending()[0]["attempts"] == 1
+
+    # Hodisa navbatda qoladi, lekin darhol qayta yuborilmaydi — aks holda
+    # doimiy rad etiladigan hodisa batch o'rnini egallab turardi.
+    assert outbox.pending() == []
+    assert outbox.stats()["waiting"] == 1
+    later = datetime.now(timezone.utc) + timedelta(seconds=30)
+    assert outbox.pending(now=later)[0]["attempts"] == 1
 
 
 @pytest.mark.parametrize(

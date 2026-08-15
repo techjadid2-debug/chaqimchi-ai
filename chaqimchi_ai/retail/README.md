@@ -314,9 +314,6 @@ Ochiq bandlar:
 - Bitta kamera ham yuz tanish, ham analitika uchun kerak bo'lsa oqim ikki
   marta ochiladi (ikki jarayon, ikki dekod). Ataylab: xato ajratilishi shu
   narxga arziydi.
-- **Yuk signali ulanmagan.** `service.build_runner()` `RetailRunner` ni
-  `pressure=` argumentisiz quradi, shuning uchun `budget.py` dagi
-  `pressure >= 0.85` tarmog'i hech qachon ishlamaydi va RAM umuman
-  kuzatilmaydi (cgroup `MemoryMax` bor, lekin u faqat oxirgi chora).
-- **Outbox'da backoff yo'q.** `attempts` yoziladi, lekin uni hech kim
-  o'qimaydi: rad etilgan hodisa navbat boshini to'sib turaveradi.
+- **Sig'im hali haqiqiy qurilmada o'lchanmagan.** Bosim signali va
+  cgroup xotira shifti bor, lekin 4 kamerada CPU rostdan 80% dan past
+  qoladimi — `scripts/benchmark_n100.py` javob beradi.

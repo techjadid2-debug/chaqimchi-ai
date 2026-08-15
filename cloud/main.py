@@ -339,6 +339,9 @@ class EdgeHeartbeatBody(BaseModel):
     outbox_pending: int = Field(default=0, ge=0)
     outbox_bytes: int = Field(default=0, ge=0)
     outbox_critical_pending: int = Field(default=0, ge=0)
+    #: Qurilma umidsiz deb tashlagan hodisalar.  Nolga teng bo'lmasa cloud
+    #: biror narsani doimiy rad etyapti — bu kod xatosi, tarmoq emas.
+    outbox_poisoned: int = Field(default=0, ge=0)
     app_version: str = Field(default="unknown", max_length=64)
     model_version: Optional[str] = Field(default=None, max_length=128)
     product_name: str = Field(default="Sotqin", max_length=64)

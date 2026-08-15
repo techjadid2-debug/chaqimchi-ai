@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import platform
 import shutil
@@ -36,6 +37,8 @@ from chaqimchi_ai.sotqin_profile import (
     PRODUCT_NAME,
     product_payload,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _read_first(paths: tuple[Path, ...]) -> Optional[str]:
@@ -270,6 +273,39 @@ class SotqinAgent:
         await self.report_camera_probes()
         self.last_probe_at = now
 
+    async def upload_previews(self, camera_ids: Any) -> int:
+        """O'rnatuvchi so'ragan kameralardan bittadan kadr yuboradi.
+
+        Bitta kamera yiqilsa qolganlari yuborilaveradi — o'rnatuvchi to'rt
+        kameradan uchtasini ko'rib, to'rtinchisi ishlamayotganini bilsin.
+        """
+        if self.client is None or not isinstance(camera_ids, list):
+            return 0
+        sent = 0
+        for raw in camera_ids[:MAX_CAMERAS]:
+            camera = self.media.camera(str(raw))
+            if camera is None or not camera.get("enabled"):
+                continue
+            try:
+                image = await asyncio.to_thread(self.media.grab_preview, camera)
+            except Exception:
+                logger.exception("[%s] kadr olinmadi", camera["camera_id"])
+                continue
+            if not image:
+                logger.warning("[%s] kadr olinmadi (RTSP javob bermadi)", camera["camera_id"])
+                continue
+            try:
+                response = await self.client.put(
+                    f"{self.cloud_url}/api/v1/sotqin/cameras/{camera['camera_id']}/preview",
+                    headers={**self.headers, "Content-Type": "image/jpeg"},
+                    content=image,
+                )
+                response.raise_for_status()
+                sent += 1
+            except Exception:
+                logger.exception("[%s] kadr yuborilmadi", camera["camera_id"])
+        return sent
+
     async def heartbeat_once(self) -> None:
         if not self.configured:
             raise RuntimeError("Sotqin pairing qilinmagan")
@@ -288,6 +324,7 @@ class SotqinAgent:
             heartbeat = response.json()
         except ValueError:
             heartbeat = {}
+        await self.upload_previews(heartbeat.get("preview_requested"))
         if (
             heartbeat.get("config_changed") is False
             and self.config_status == "applied"

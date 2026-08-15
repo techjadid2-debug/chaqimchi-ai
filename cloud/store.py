@@ -225,6 +225,13 @@ class CloudStore:
                 height INTEGER,
                 fps REAL,
                 last_probed_at TEXT,
+                -- O'rnatuvchi "rasmni ko'rsat" desa shu bayroq qo'yiladi va
+                -- qurilma keyingi heartbeat'da bitta kadr yuboradi.  Config
+                -- revizyasi orqali so'rash mumkin emas edi: uning o'zgarishi
+                -- retail xizmatini qayta ishga tushiradi.
+                preview_requested INTEGER NOT NULL DEFAULT 0,
+                preview_key TEXT,
+                preview_at TEXT,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (site_id, camera_id),
                 FOREIGN KEY (site_id) REFERENCES sites(id)
@@ -437,6 +444,8 @@ class CloudStore:
         for row in rows:
             item = dict(row)
             item["enabled"] = bool(item["enabled"])
+            item["preview_requested"] = bool(item.get("preview_requested"))
+            item["has_preview"] = bool(item.get("preview_key"))
             item.pop("rtsp_ciphertext", None)
             if cipher is not None:
                 try:
@@ -484,6 +493,55 @@ class CloudStore:
         conn.commit()
         conn.close()
         return bool(cursor.rowcount)
+
+    def request_camera_preview(self, site_id: str, camera_id: str) -> Dict[str, Any]:
+        """O'rnatuvchi rasm so'radi — qurilma keyingi heartbeat'da yuboradi."""
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET preview_requested=1,updated_at=? "
+            "WHERE site_id=? AND camera_id=?",
+            (_iso(_utc_now()), site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+        return next(
+            item for item in self.list_cameras(site_id) if item["camera_id"] == camera_id
+        )
+
+    def pending_preview_cameras(self, site_id: str) -> List[str]:
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT camera_id FROM site_cameras "
+            "WHERE site_id=? AND preview_requested=1 AND enabled=1 ORDER BY camera_id",
+            (site_id,),
+        ).fetchall()
+        conn.close()
+        return [str(row[0]) for row in rows]
+
+    def set_camera_preview(self, site_id: str, camera_id: str, key: str) -> None:
+        """Rasm keldi: so'rov bayrog'i o'chadi, kalit saqlanadi."""
+        now = _iso(_utc_now())
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET preview_requested=0,preview_key=?,preview_at=?,"
+            "updated_at=? WHERE site_id=? AND camera_id=?",
+            (key, now, now, site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+
+    def camera_preview_key(self, site_id: str, camera_id: str) -> Optional[str]:
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT preview_key FROM site_cameras WHERE site_id=? AND camera_id=?",
+            (site_id, camera_id),
+        ).fetchone()
+        conn.close()
+        return str(row[0]) if row and row[0] else None
 
     def record_camera_probe(
         self,
@@ -832,6 +890,16 @@ class CloudStore:
 
         if "cameras_expected" not in columns("sites"):
             conn.execute("ALTER TABLE sites ADD COLUMN cameras_expected INTEGER")
+
+        camera_columns = columns("site_cameras")
+        camera_additions = {
+            "preview_requested": "INTEGER NOT NULL DEFAULT 0",
+            "preview_key": "TEXT",
+            "preview_at": "TEXT",
+        }
+        for name, definition in camera_additions.items():
+            if name not in camera_columns:
+                conn.execute(f"ALTER TABLE site_cameras ADD COLUMN {name} {definition}")
 
         # Davomat tariflarida oylik to'lov shu songa bog'liq.
         if "billable_persons" not in columns("sites"):

@@ -90,6 +90,11 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 #: navbat bo'sh bo'lganda oraliqni 60 soniyagacha ko'taradi.
 EVENT_BATCH_HOURLY_LIMIT = 600
 
+#: Qurilma heartbeat oralig'i 60 s, shuning uchun rasm so'ralgach panel
+#: taxminan shuncha kutadi.  Panelga aniq raqam beriladi — "biroz kuting"
+#: degan matn o'rnatuvchini ishlamayapti deb o'ylashga majbur qiladi.
+PREVIEW_WAIT_HINT_SEC = 60
+
 logger = logging.getLogger(__name__)
 
 _store: Optional[CloudStore] = None
@@ -1588,6 +1593,28 @@ def _require_installer_site(installer: PortalPrincipal, site_id: str) -> Dict[st
     return assignment
 
 
+def _camera_preview_response(site_id: str, camera_id: str) -> Response:
+    """Kameraning oxirgi kadri.  Hali kelmagan bo'lsa 404.
+
+    Rasm hech qachon to'g'ridan-to'g'ri obyekt saqlagichdan berilmaydi —
+    faqat autentifikatsiyadan o'tgan so'rov orqali, `site_id` esa
+    chaqiruvchining o'z tokenidan olinadi.
+    """
+    key = get_store().camera_preview_key(site_id, camera_id)
+    if not key:
+        raise HTTPException(404, "Kamera rasmi hali yuborilmagan")
+    try:
+        content = get_snapshot_store().get(key)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Kamera rasmi topilmadi") from exc
+    # Kamera qayta qaratilganda eski rasm ko'rinib qolmasin.
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/api/v1/installer/assignments")
 async def installer_assignments(
     installer: PortalPrincipal = Depends(require_active_installer),
@@ -1672,6 +1699,39 @@ async def installer_upsert_camera(
         detail={"label": body.label, "enabled": body.enabled},
     )
     return {"camera": camera, "config_revision": updated["revision"]}
+
+
+@app.post("/api/v1/installer/sites/{site_id}/cameras/{camera_id}/preview")
+async def installer_request_camera_preview(
+    site_id: str,
+    camera_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Dict[str, Any]:
+    """"Rasmni ko'rsat" — qurilma keyingi heartbeat'da bitta kadr yuboradi."""
+    _require_installer_site(installer, site_id)
+    try:
+        camera = get_store().request_camera_preview(site_id, camera_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"camera": camera, "wait_sec": PREVIEW_WAIT_HINT_SEC}
+
+
+@app.get("/api/v1/installer/sites/{site_id}/cameras/{camera_id}/preview")
+async def installer_camera_preview(
+    site_id: str,
+    camera_id: str,
+    installer: PortalPrincipal = Depends(require_active_installer),
+) -> Response:
+    _require_installer_site(installer, site_id)
+    return _camera_preview_response(site_id, camera_id)
+
+
+@app.get("/api/v1/owner/cameras/{camera_id}/preview")
+async def owner_camera_preview(
+    camera_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Response:
+    return _camera_preview_response(owner.site_id, camera_id)
 
 
 @app.delete("/api/v1/installer/sites/{site_id}/cameras/{camera_id}")
@@ -1969,8 +2029,47 @@ async def edge_health_heartbeat(
         "ok": True,
         "config_revision": revision,
         "config_changed": body.config_revision != revision,
+        # O'rnatuvchi rasm so'ragan kameralar. Bu ataylab config revizyasi
+        # orqali kelmaydi: revizya o'zgarsa retail xizmati o'zini qayta ishga
+        # tushiradi (`restart_on_config_change`), ya'ni har "rasmni ko'rsat"
+        # bosilganda do'kon analitikasi bir necha soniyaga uzilardi.
+        "preview_requested": get_store().pending_preview_cameras(device["site_id"]),
         "received": body.model_dump(),
     }
+
+
+@app.put("/api/v1/edge/cameras/{camera_id}/preview")
+@app.put("/api/v1/sotqin/cameras/{camera_id}/preview")
+async def upload_camera_preview(
+    camera_id: str,
+    request: Request,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Qurilma o'rnatuvchi so'ragan bitta kadrni yuboradi.
+
+    Bu jonli video emas: faqat so'ralganda, kamera boshiga kuniga 24 martagacha.
+    """
+    ratelimit.check(
+        "camera-preview",
+        device["site_id"],
+        limit=24 * GUARANTEED_CAMERAS,
+        window_sec=86_400,
+        message="Kunlik kamera rasmi chegarasi oshdi",
+    )
+    if request.headers.get("content-type", "").split(";", 1)[0] != "image/jpeg":
+        raise HTTPException(415, "Faqat image/jpeg qabul qilinadi")
+    content = await request.body()
+    if not content:
+        raise HTTPException(400, "Rasm bo'sh")
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(413, "Rasm 2 MB dan katta")
+    key = f"{device['site_id']}/preview/{camera_id}.jpg"
+    get_snapshot_store().put(key, content, content_type="image/jpeg")
+    try:
+        get_store().set_camera_preview(device["site_id"], camera_id, key)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return {"ok": True, "camera_id": camera_id}
 
 
 @app.get("/api/v1/edge/config")

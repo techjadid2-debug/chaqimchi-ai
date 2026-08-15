@@ -65,3 +65,97 @@ def test_sotqin_rejects_profile_over_8_cameras_or_40gb_buffer() -> None:
                 "cloud_features": [],
             }
         )
+
+
+# ── Heartbeat orqali kelgan rasm so'rovi ─────────────────────────────────
+
+
+class _Sent:
+    """Yuborilgan PUT so'rovlarini yozadi."""
+
+    def __init__(self, *, fails: bool = False) -> None:
+        self.calls: list = []
+        self.fails = fails
+
+    async def put(self, url, *, headers=None, content=None):
+        self.calls.append((url, headers or {}, content))
+        if self.fails:
+            raise RuntimeError("tarmoq yo'q")
+
+        class _Response:
+            @staticmethod
+            def raise_for_status() -> None:
+                return None
+
+        return _Response()
+
+
+def _agent_with_cameras(monkeypatch, media_frames: dict, *, fails: bool = False):
+    control = module.SotqinAgent()
+    control.cloud_url = "https://cloud.test"
+    control.site_id, control.device_id, control.device_token = "s", "d", "t"
+    control.media.apply_config(
+        {
+            "cameras": [
+                {"camera_id": "camera-01", "source": "rtsp://nvr/1", "enabled": True},
+                {"camera_id": "camera-02", "source": "rtsp://nvr/2", "enabled": True},
+                {"camera_id": "camera-03", "source": "rtsp://nvr/3", "enabled": False},
+            ]
+        }
+    )
+    monkeypatch.setattr(
+        control.media, "grab_preview", lambda camera: media_frames.get(camera["camera_id"])
+    )
+    sent = _Sent(fails=fails)
+    control.client = sent
+    return control, sent
+
+
+def test_only_requested_cameras_send_a_frame(monkeypatch) -> None:
+    import asyncio
+
+    control, sent = _agent_with_cameras(monkeypatch, {"camera-01": b"a", "camera-02": b"b"})
+
+    assert asyncio.run(control.upload_previews(["camera-01"])) == 1
+    assert len(sent.calls) == 1
+    assert sent.calls[0][0].endswith("/api/v1/sotqin/cameras/camera-01/preview")
+    assert sent.calls[0][1]["Content-Type"] == "image/jpeg"
+    assert sent.calls[0][2] == b"a"
+
+
+def test_disabled_and_unknown_cameras_are_skipped(monkeypatch) -> None:
+    import asyncio
+
+    control, sent = _agent_with_cameras(monkeypatch, {"camera-03": b"c"})
+
+    assert asyncio.run(control.upload_previews(["camera-03", "camera-09"])) == 0
+    assert sent.calls == []
+
+
+def test_one_broken_camera_does_not_stop_the_others(monkeypatch) -> None:
+    """O'rnatuvchi to'rttadan uchtasini ko'rib, to'rtinchisi ishlamayotganini
+    bilsin — bitta xato butun so'rovni yiqitmasin."""
+    import asyncio
+
+    control, sent = _agent_with_cameras(monkeypatch, {"camera-02": b"b"})  # camera-01 -> None
+
+    assert asyncio.run(control.upload_previews(["camera-01", "camera-02"])) == 1
+    assert len(sent.calls) == 1
+
+
+def test_upload_failure_is_swallowed(monkeypatch) -> None:
+    import asyncio
+
+    control, _sent = _agent_with_cameras(monkeypatch, {"camera-01": b"a"}, fails=True)
+
+    assert asyncio.run(control.upload_previews(["camera-01"])) == 0
+
+
+def test_a_missing_request_list_is_ignored(monkeypatch) -> None:
+    import asyncio
+
+    control, sent = _agent_with_cameras(monkeypatch, {"camera-01": b"a"})
+
+    assert asyncio.run(control.upload_previews(None)) == 0
+    assert asyncio.run(control.upload_previews("camera-01")) == 0
+    assert sent.calls == []

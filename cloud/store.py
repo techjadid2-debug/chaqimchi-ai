@@ -886,6 +886,10 @@ class CloudStore:
             "config_status": "TEXT NOT NULL DEFAULT 'pending'",
             "config_error": "TEXT",
             "config_reported_at": "TEXT",
+            # Qurilmada ishlab turgan dastur versiyasi.  Heartbeat'da
+            # allaqachon kelardi, lekin hech qayerda saqlanmasdi — ya'ni
+            # yangilanish qaysi do'konga yetganini bilishning iloji yo'q edi.
+            "app_version": "TEXT",
         }
         for name, definition in device_additions.items():
             if name not in device_columns:
@@ -893,6 +897,19 @@ class CloudStore:
 
         if "cameras_expected" not in columns("sites"):
             conn.execute("ALTER TABLE sites ADD COLUMN cameras_expected INTEGER")
+
+        site_columns = columns("sites")
+        site_additions = {
+            # Yangilanish siyosati.  `auto` — eng yangi imzolangan reliz
+            # o'zi o'rnatiladi.  `hold` — obyekt joriy versiyada qoladi
+            # (masalan mijozda muhim tadbir bor, yoki yangi versiya shu
+            # do'konda muammo bergan).  `pin` — aynan `update_version`.
+            "update_channel": "TEXT NOT NULL DEFAULT 'auto'",
+            "update_version": "TEXT",
+        }
+        for name, definition in site_additions.items():
+            if name not in site_columns:
+                conn.execute(f"ALTER TABLE sites ADD COLUMN {name} {definition}")
 
         camera_columns = columns("site_cameras")
         camera_additions = {
@@ -1665,6 +1682,7 @@ class CloudStore:
                 "last_seen": r["last_seen"],
                 "created_at": r["created_at"],
                 "active_cameras": r["active_cameras"],
+                "app_version": r["app_version"],
                 **_connection_state(r["last_seen"], 1, now),
             }
             for r in conn.execute(
@@ -1714,6 +1732,52 @@ class CloudStore:
         )
         site["active_pairing_codes"] = codes
         return site
+
+    def record_device_version(self, device_id: str, app_version: Optional[str]) -> None:
+        """Qurilma o'z versiyasini heartbeat'da aytadi.
+
+        Yozib qo'yilmasa masofadan yangilash "ko'r" bo'lardi: reliz
+        chiqariladi-yu, u qaysi do'konga yetganini bilib bo'lmasdi.
+        """
+        version = (app_version or "").strip()[:64]
+        if not version or version == "unknown":
+            return
+        conn = self._connect()
+        conn.execute("UPDATE devices SET app_version = ? WHERE id = ?", (version, device_id))
+        conn.commit()
+        conn.close()
+
+    def set_update_policy(
+        self, site_id: str, *, channel: str, version: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Obyektning yangilanish siyosatini belgilaydi.
+
+        Nega kerak: bitta buzuq reliz barcha do'konni birdan yiqitmasligi
+        kerak.  Yangi versiya avval bitta obyektda sinaladi (`pin`),
+        muammo chiqsa qolganlari `hold` ga o'tkaziladi.
+        """
+        if channel not in {"auto", "hold", "pin"}:
+            raise ValueError("update_channel: auto, hold yoki pin bo'lishi kerak")
+        if channel == "pin" and not version:
+            raise ValueError("pin uchun versiya ko'rsatilishi shart")
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+
+        conn = self._connect()
+        conn.execute(
+            "UPDATE sites SET update_channel = ?, update_version = ? WHERE id = ?",
+            (channel, version if channel == "pin" else None, site_id),
+        )
+        conn.commit()
+        conn.close()
+        return self.site_detail(site_id)
+
+    def update_policy(self, site_id: str) -> Dict[str, Any]:
+        site = self.get_site(site_id) or {}
+        return {
+            "channel": site.get("update_channel") or "auto",
+            "version": site.get("update_version"),
+        }
 
     def set_cameras_expected(self, site_id: str, expected: int) -> Dict[str, Any]:
         """O‘rnatilgan kamera sonini qo‘lda belgilash.

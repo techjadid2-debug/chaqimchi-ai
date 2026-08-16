@@ -20,7 +20,8 @@
       <div class="step-chip active" data-step="1">1. Kamerani ulash</div>
       <div class="step-chip" data-step="2">2. Tasvirni tekshirish</div>
       <div class="step-chip" data-step="3">3. Chiziq chizish</div>
-      <div class="step-chip" data-step="4">4. Ishga tushirish</div>
+      <div class="step-chip" data-step="4">4. Sozlamalar</div>
+      <div class="step-chip" data-step="5">5. Cloudga ulash</div>
     </div>
 
     <!-- ── 1-QADAM ── -->
@@ -190,6 +191,53 @@
       <div class="actions spread">
         <button class="button ghost" id="backToStep3" type="button">← Chiziqqa qaytish</button>
         <button class="button primary" id="finishBtn" type="button">Saqlash va ishga tushirish</button>
+      </div>
+    </section>
+
+    <!-- ── 5-QADAM: cloud (ixtiyoriy) ── -->
+    <section class="step hidden" data-step="5">
+      <h1>Cloudga ulash</h1>
+      <p class="lead">
+        Bu qadam <b>ixtiyoriy</b>. Ulanmasangiz ham tizim to‘liq ishlaydi —
+        hisobot shu kompyuterda ko‘rinadi. Ulasangiz uch narsa qo‘shiladi.
+      </p>
+
+      <div class="card">
+        <ul class="cloud-benefits">
+          <li><b>Mijoz o‘z telefonidan ko‘radi</b> — istalgan joydan, brauzer orqali</li>
+          <li><b>Telegramga ogohlantirish</b> — kamera yopilsa, navbat uzaysa</li>
+          <li><b>Masofadan yangilash</b> — yangi versiyalar o‘zi o‘rnatiladi</li>
+        </ul>
+
+        <div id="cloudConnected" class="hidden">
+          <div class="note ok">
+            <b>Ulangan</b>
+            <span id="cloudSite"></span>
+          </div>
+          <p class="hint">Mijoz paneli: <a id="cloudOwnerLink" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+          <div class="actions">
+            <button class="button ghost small" id="unpairBtn" type="button">Ulanishni uzish</button>
+          </div>
+        </div>
+
+        <div id="cloudForm">
+          <label class="field">Cloud manzili
+            <input type="text" id="cloudUrl" placeholder="https://chaqimchi.uz" autocomplete="off">
+          </label>
+          <label class="field">Pairing kod <small>admin paneldan olinadi, 6 ta belgi</small>
+            <input type="text" id="pairCode" placeholder="A1B2C3" maxlength="6" autocomplete="off"
+                   style="text-transform:uppercase; letter-spacing:.2em; font-size:20px; font-weight:800">
+          </label>
+          <div class="actions">
+            <button class="button primary" id="pairBtn" type="button">Ulash</button>
+          </div>
+        </div>
+        <div id="pairResult"></div>
+      </div>
+
+      <div class="actions spread">
+        <button class="button ghost" id="backToStep4" type="button">← Sozlamalarga qaytish</button>
+        <button class="button" id="skipCloud" type="button">Panelga o‘tish</button>
       </div>
     </section>
   </main>

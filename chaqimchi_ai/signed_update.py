@@ -18,6 +18,14 @@ class UpdateVerificationError(ValueError):
 
 SUPPORTED_MANIFEST_SCHEMAS = {1, 2}
 
+#: Qurilma qabul qiladigan mahsulotlar.  Ro'yxat **yopiq**: noma'lum
+#: `product` bilan imzolangan paket rad etiladi, ya'ni bir mahsulot uchun
+#: chiqarilgan reliz boshqasiga tasodifan o'rnatilib ketmaydi.
+#:
+#: `chaqimchi-windows` — mijozning o'z kompyuteriga o'rnatiladigan
+#: `.exe` paketi (`scripts/build_windows_payload.py`).
+KNOWN_PRODUCTS = frozenset({"chaqimchi-sotqin", "chaqimchi-lite", "chaqimchi-windows"})
+
 
 def canonical_manifest_payload(manifest: Dict[str, Any]) -> bytes:
     """Imzolanadigan manifest baytlari.
@@ -72,8 +80,10 @@ def verify_release_manifest(
     if schema not in SUPPORTED_MANIFEST_SCHEMAS:
         raise UpdateVerificationError("Release manifest schema qo'llab-quvvatlanmaydi")
     if schema >= 2:
-        if manifest.get("product") not in {"chaqimchi-sotqin", "chaqimchi-lite"}:
-            raise UpdateVerificationError("Release product Sotqin/Lite emas")
+        if manifest.get("product") not in KNOWN_PRODUCTS:
+            raise UpdateVerificationError(
+                f"Release product noma'lum: {manifest.get('product')!r}"
+            )
         if not str(manifest.get("target_arch", "")).strip():
             raise UpdateVerificationError("Release target_arch berilmagan")
     actual_hash = sha256_file(archive)

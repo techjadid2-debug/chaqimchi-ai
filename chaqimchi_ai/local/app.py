@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from chaqimchi_ai.local import camera_probe, config_store, paths
+from chaqimchi_ai.local import camera_probe, cloud_link, config_store, paths
 from chaqimchi_ai.local.supervisor import RetailSupervisor
 
 logger = logging.getLogger(__name__)
@@ -369,6 +369,54 @@ class TelegramBody(BaseModel):
 async def put_telegram(body: TelegramBody) -> Dict[str, Any]:
     config_store.save_telegram(body.token.strip() or None, body.chat_id.strip() or None)
     return {"ok": True, **config_store.summary()}
+
+
+# ── Cloudga ulanish ──────────────────────────────────────────────────────
+
+
+class PairBody(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+    cloud_url: str = Field(min_length=3, max_length=200)
+
+
+@app.get("/api/setup/cloud-status")
+async def cloud_status() -> Dict[str, Any]:
+    return {**cloud_link.status(), "pending_events": cloud_link.pending_events()}
+
+
+@app.post("/api/setup/pair")
+async def pair(body: PairBody) -> Dict[str, Any]:
+    """Pairing kod bilan cloudga ulaydi.
+
+    Ulangandan keyin zanjir **qayta ishga tushiriladi**: `cloud_sync`
+    sozlamasi faqat startda o'qiladi, ya'ni qayta ishga tushirmasak
+    hodisalar hamon lokal navbatda qolib ketardi va mijoz "ulandi" degan
+    yozuvni ko'rib turib, panelida hech nima ko'rmasdi.
+    """
+    import anyio
+
+    try:
+        site = await anyio.to_thread.run_sync(cloud_link.claim, body.code, body.cloud_url)
+    except cloud_link.PairingError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    if supervisor.status()["running"]:
+        supervisor.restart()
+
+    return {
+        "ok": True,
+        "site_id": site.site_id,
+        "owner_url": f"{site.cloud_url}/owner",
+        **cloud_link.status(),
+    }
+
+
+@app.post("/api/setup/unpair")
+async def unpair() -> Dict[str, Any]:
+    cloud_link.unlink()
+    if supervisor.status()["running"]:
+        supervisor.restart()
+    return {"ok": True, **cloud_link.status()}
 
 
 # ── Xizmat boshqaruvi ────────────────────────────────────────────────────

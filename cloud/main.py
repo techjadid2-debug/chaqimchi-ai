@@ -773,9 +773,15 @@ async def sotqin_bootstrap(request: Request) -> Response:
 #: Manifestda sir yo'q, xavfsizlik esa kirish nazoratidan emas, **Ed25519
 #: imzosidan** keladi: buzilgan cloud istalgan faylni bera oladi, lekin
 #: imzo yasay olmaydi va qurilma uni rad etadi.
-RELEASE_FILE_PATTERN = re.compile(r"^chaqimchi-(?:sotqin|lite)-[A-Za-z0-9.\-_]+\.(?:tar\.gz|json)$")
+RELEASE_FILE_PATTERN = re.compile(
+    r"^chaqimchi-(?:sotqin|lite|windows)-[A-Za-z0-9.\-_]+\.(?:tar\.gz|exe|json)$"
+)
 
-RELEASE_MEDIA_TYPES = {".gz": "application/gzip", ".json": "application/json"}
+RELEASE_MEDIA_TYPES = {
+    ".gz": "application/gzip",
+    ".json": "application/json",
+    ".exe": "application/vnd.microsoft.portable-executable",
+}
 
 
 @app.get("/releases/{release_name}", include_in_schema=False)
@@ -790,7 +796,9 @@ async def sotqin_release(release_name: str) -> FileResponse:
     # Manifest keshlanmaydi: bir xil versiya qayta imzolanishi mumkin
     # (kalit almashtirilganda), arxiv esa o'zgarmas.
     cache = (
-        "public, max-age=31536000, immutable" if release_name.endswith(".tar.gz") else "no-cache"
+        "public, max-age=31536000, immutable"
+        if release_name.endswith((".tar.gz", ".exe"))
+        else "no-cache"
     )
     return FileResponse(
         archive,
@@ -1132,6 +1140,57 @@ WINDOWS_INSTALLER_PATHS = (
     Path("/app/releases/Chaqimchi_AI_Setup.exe"),
 )
 
+#: Imzolangan Windows relizi: `chaqimchi-windows-<versiya>.exe` va yonida
+#: `.json` manifest.  Qurilma yangilanishni aynan shu juftlikdan oladi.
+WINDOWS_RELEASE_PATTERN = re.compile(r"^chaqimchi-windows-(?P<version>[A-Za-z0-9.\-_]+)\.exe$")
+
+
+def _release_dirs() -> List[Path]:
+    return [BASE_DIR / "releases", Path("/app/releases")]
+
+
+def _version_key(version: str) -> tuple:
+    """`0.10.0` `0.9.0` dan katta bo'lishi uchun raqamlar bo'yicha taqqoslash.
+
+    Matn sifatida taqqoslansa `"0.10" < "0.9"` chiqardi va qurilma yangi
+    versiyani eski deb hisoblab, hech qachon yangilanmasdi.
+    """
+    parts = []
+    for chunk in re.split(r"[.\-_]", version):
+        parts.append((0, int(chunk)) if chunk.isdigit() else (1, 0, chunk))
+    return tuple(parts)
+
+
+def latest_windows_release() -> Optional[Dict[str, Any]]:
+    """Eng yangi imzolangan Windows relizi (manifest bilan birga).
+
+    Manifestsiz `.exe` **e'tiborsiz qoldiriladi**: imzosiz faylni qurilma
+    baribir rad etadi, uni yangilanish deb e'lon qilish esa faqat
+    chalkashlik keltirardi.
+    """
+    best: Optional[Dict[str, Any]] = None
+    for directory in _release_dirs():
+        if not directory.is_dir():
+            continue
+        for exe in directory.glob("chaqimchi-windows-*.exe"):
+            match = WINDOWS_RELEASE_PATTERN.match(exe.name)
+            if not match:
+                continue
+            manifest = exe.with_name(f"{exe.name[: -len('.exe')]}.json")
+            if not manifest.is_file():
+                logger.warning("Manifestsiz Windows relizi e'tiborsiz: %s", exe.name)
+                continue
+            version = match.group("version")
+            candidate = {
+                "version": version,
+                "exe": exe,
+                "manifest": manifest,
+                "size_bytes": exe.stat().st_size,
+            }
+            if best is None or _version_key(version) > _version_key(best["version"]):
+                best = candidate
+    return best
+
 
 def _windows_installer_url() -> str:
     url = os.environ.get(ENV_WINDOWS_INSTALLER_URL, "").strip()
@@ -1139,6 +1198,9 @@ def _windows_installer_url() -> str:
 
 
 def _windows_installer_file() -> Optional[Path]:
+    release = latest_windows_release()
+    if release is not None:
+        return release["exe"]
     return next((path for path in WINDOWS_INSTALLER_PATHS if path.is_file()), None)
 
 
@@ -2311,6 +2373,10 @@ async def edge_health_heartbeat(
         device["device_token"],
         active_cameras=body.cameras_active,
     )
+    # Qurilmadagi versiya saqlanadi: masofadan yangilash chiqarilgach
+    # admin panelda "qaysi do'kon qaysi versiyada" ko'rinishi kerak,
+    # aks holda rolloutni kuzatib bo'lmaydi.
+    get_store().record_device_version(device["device_id"], body.app_version)
     # Qurilma har daqiqada `/config` ni to'liq tortib olardi — kuniga 1440 ta
     # og'ir so'rov, javob esa deyarli har doim bir xil. Endi javobdagi shu
     # bitta son qurilmaga o'zgarish bor-yo'qligini aytadi.
@@ -2360,6 +2426,61 @@ async def upload_camera_preview(
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return {"ok": True, "camera_id": camera_id}
+
+
+@app.get("/api/v1/edge/update")
+async def edge_update(
+    request: Request,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Qurilma uchun mavjud yangilanish.
+
+    Qurilma o'z versiyasini `current` da yuboradi va javobdagi
+    `available` ni ko'radi.  Qaror **qurilmada** qabul qilinadi: u
+    manifestni Ed25519 bilan tekshiradi va faqat shundan keyin o'rnatadi.
+    Cloud buzilgan taqdirda ham imzosiz paket qabul qilinmaydi.
+    """
+    release = latest_windows_release()
+    policy = get_store().update_policy(device["site_id"])
+    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+
+    if release is None:
+        return {"available": False, "reason": "nashr qilingan reliz yo'q", "policy": policy}
+    if policy["channel"] == "hold":
+        return {"available": False, "reason": "obyekt uchun yangilanish to'xtatilgan", "policy": policy}
+    if policy["channel"] == "pin" and policy["version"] != release["version"]:
+        pinned = _windows_release_by_version(str(policy["version"]))
+        if pinned is None:
+            return {
+                "available": False,
+                "reason": f"qotirilgan versiya topilmadi: {policy['version']}",
+                "policy": policy,
+            }
+        release = pinned
+
+    name = release["exe"].name
+    return {
+        "available": True,
+        "version": release["version"],
+        "size_bytes": release["size_bytes"],
+        "download_url": f"{base}/releases/{name}",
+        "manifest_url": f"{base}/releases/{release['manifest'].name}",
+        "policy": policy,
+    }
+
+
+def _windows_release_by_version(version: str) -> Optional[Dict[str, Any]]:
+    for directory in _release_dirs():
+        exe = directory / f"chaqimchi-windows-{version}.exe"
+        manifest = directory / f"chaqimchi-windows-{version}.json"
+        if exe.is_file() and manifest.is_file():
+            return {
+                "version": version,
+                "exe": exe,
+                "manifest": manifest,
+                "size_bytes": exe.stat().st_size,
+            }
+    return None
 
 
 @app.get("/api/v1/edge/config")
@@ -2463,6 +2584,54 @@ async def sotqin_camera_probes(
 
 
 # ── Owner/manager Telegram OTP va panel API ──────────────────────────────
+
+
+class UpdatePolicyBody(BaseModel):
+    channel: Literal["auto", "hold", "pin"] = "auto"
+    version: Optional[str] = Field(default=None, max_length=64)
+
+
+@app.put("/api/v1/admin/sites/{site_id}/update-policy")
+async def admin_set_update_policy(
+    site_id: str,
+    body: UpdatePolicyBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Obyektning yangilanish siyosati.
+
+    Bitta buzuq reliz hamma do'konni birdan yiqitmasligi uchun: yangi
+    versiya avval bitta obyektda sinaladi, muammo chiqsa qolganlari
+    `hold` ga o'tkaziladi.
+    """
+    try:
+        return get_store().set_update_policy(site_id, channel=body.channel, version=body.version)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/api/v1/admin/windows-releases")
+async def admin_windows_releases(_: None = Depends(require_admin)) -> Dict[str, Any]:
+    """Nashr qilingan Windows relizlari — admin panel ro'yxati uchun."""
+    releases = []
+    seen = set()
+    for directory in _release_dirs():
+        if not directory.is_dir():
+            continue
+        for exe in sorted(directory.glob("chaqimchi-windows-*.exe")):
+            match = WINDOWS_RELEASE_PATTERN.match(exe.name)
+            manifest = exe.with_name(f"{exe.name[: -len('.exe')]}.json")
+            if not match or match.group("version") in seen:
+                continue
+            seen.add(match.group("version"))
+            releases.append(
+                {
+                    "version": match.group("version"),
+                    "size_mb": round(exe.stat().st_size / 1024 / 1024),
+                    "signed": manifest.is_file(),
+                }
+            )
+    releases.sort(key=lambda item: _version_key(item["version"]), reverse=True)
+    return {"releases": releases, "latest": releases[0]["version"] if releases else None}
 
 
 @app.post("/api/v1/admin/sites/{site_id}/members")

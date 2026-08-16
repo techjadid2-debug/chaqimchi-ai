@@ -49,7 +49,13 @@ DEFAULT_PUBLIC = BASE_DIR / "deploy" / "update-public.pem"
 #: `signed_update.verify_release_manifest` qabul qiladigan belgilar.
 VERSION_PATTERN = re.compile(r"^[A-Za-z0-9.\-_]+$")
 
-ARCHIVE_PATTERN = re.compile(r"^chaqimchi-(sotqin|lite)-(?P<version>.+)\.tar\.gz$")
+#: `chaqimchi-sotqin-0.6.0.tar.gz` va `chaqimchi-windows-0.7.0.exe`.
+#: Windows o'rnatuvchisi ham xuddi shu imzo yo'lidan o'tadi: u mijoz
+#: kompyuterida **administrator huquqi** bilan bajariladi, ya'ni
+#: tekshirilmagan fayl qurilmani butunlay topshirish demak.
+ARCHIVE_PATTERN = re.compile(
+    r"^chaqimchi-(sotqin|lite|windows)-(?P<version>.+)\.(?:tar\.gz|exe)$"
+)
 
 VERSION_IN_SOURCE = re.compile(r"^__version__\s*=\s*[\"'](?P<version>[^\"']+)[\"']", re.M)
 
@@ -65,8 +71,12 @@ def version_inside(archive: Path) -> Optional[str]:
     """Arxiv ichidagi `chaqimchi_ai/__init__.py` dagi versiya.
 
     Topilmasa `None` — bu xato emas, `chaqimchi-lite` paketida boshqacha
-    tuzilma bo'lishi mumkin.
+    tuzilma bo'lishi mumkin.  `.exe` ham `None` qaytaradi: u tar arxiv
+    emas, ichini ochib bo'lmaydi.  Bunday holda nomdagi versiyaga
+    ishoniladi va uni `build_windows_payload.py` `__version__` dan qo'yadi.
     """
+    if archive.suffix.lower() == ".exe":
+        return None
     with tarfile.open(archive, "r:gz") as package:
         for member in package.getmembers():
             if not member.isfile():
@@ -153,7 +163,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         target_arch=args.target_arch,
         private_key=private_key,
     )
-    output = args.output or args.archive.with_suffix("").with_suffix(".json")
+    # `with_suffix()` ishlatib bo'lmaydi: `chaqimchi-windows-0.7.0.exe` da
+    # oxirgi "suffix" — `.0`, ya'ni natija `chaqimchi-windows-0.7.json`
+    # bo'lib ketardi va qurilma manifestni topolmasdi.  Kengaytmani
+    # nomdan aniq kesamiz.
+    output = args.output
+    if output is None:
+        stem = re.sub(r"\.(?:tar\.gz|exe)$", "", args.archive.name)
+        output = args.archive.with_name(f"{stem}.json")
     output.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     # O'z-o'zini tekshirish: aynan qurilmadagi ochiq kalit bilan.

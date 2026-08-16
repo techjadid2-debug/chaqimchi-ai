@@ -55,6 +55,7 @@
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (step === 3) setupGeometry();
+    if (step === 5) loadCloud();
   }
 
   /* ── 1-qadam: kamera ────────────────────────────────────────────────── */
@@ -429,15 +430,76 @@
         );
         return;
       }
-      note("finishResult", "ok", "Tayyor! Nazorat ishlamoqda.", " Panelga o‘tilmoqda…");
-      setTimeout(() => {
-        window.location.href = "/panel";
-      }, 1200);
+      note("finishResult", "ok", "Tayyor! Nazorat ishlamoqda.", " Endi ixtiyoriy oxirgi qadam.");
+      setTimeout(() => goToStep(5), 900);
     } catch (error) {
       note("finishResult", "err", "Saqlanmadi.", " " + error.message);
     } finally {
       button.disabled = false;
     }
+  });
+
+  /* ── 5-qadam: cloudga ulash (ixtiyoriy) ─────────────────────────────── */
+
+  function renderCloud(state) {
+    const connected = Boolean(state.connected);
+    $("cloudConnected").classList.toggle("hidden", !connected);
+    $("cloudForm").classList.toggle("hidden", connected);
+    if (connected) {
+      $("cloudSite").textContent = `Obyekt: ${state.site_id}`;
+      const link = $("cloudOwnerLink");
+      link.href = state.owner_url || "#";
+      link.textContent = state.owner_url || "";
+    }
+  }
+
+  async function loadCloud() {
+    try {
+      renderCloud(await api("/api/setup/cloud-status"));
+    } catch (_) {
+      /* Holat olinmasa forma ko'rinib turaveradi — mijoz baribir ulay oladi. */
+    }
+  }
+
+  $("pairBtn").addEventListener("click", async () => {
+    const button = $("pairBtn");
+    button.disabled = true;
+    note("pairResult", "warn", "Cloudga ulanmoqda…", "");
+    try {
+      const result = await api("/api/setup/pair", {
+        method: "POST",
+        body: JSON.stringify({
+          code: $("pairCode").value,
+          cloud_url: $("cloudUrl").value,
+        }),
+      });
+      renderCloud(result);
+      note(
+        "pairResult",
+        "ok",
+        "Ulandi!",
+        " Endi hodisalar cloudga yuboriladi va Telegram ogohlantirishlari ishlaydi.",
+      );
+    } catch (error) {
+      note("pairResult", "err", "Ulanmadi.", " " + error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("unpairBtn").addEventListener("click", async () => {
+    if (!confirm("Cloud ulanishi uzilsinmi? Mijoz paneli va Telegram xabarlari to‘xtaydi.")) return;
+    try {
+      renderCloud(await api("/api/setup/unpair", { method: "POST" }));
+      note("pairResult", "warn", "Ulanish uzildi.", " Tizim lokal rejimda ishlashda davom etadi.");
+    } catch (error) {
+      note("pairResult", "err", "Uzilmadi.", " " + error.message);
+    }
+  });
+
+  $("backToStep4").addEventListener("click", () => goToStep(4));
+  $("skipCloud").addEventListener("click", () => {
+    window.location.href = "/panel";
   });
 
   /* ── Boshlash ───────────────────────────────────────────────────────── */

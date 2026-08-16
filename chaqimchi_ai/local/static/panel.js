@@ -175,17 +175,39 @@
 
   /* ── Boshqaruv ───────────────────────────────────────────────────────── */
 
+  function drawCloud(cloud) {
+    const bar = $("cloudBar");
+    if (!cloud.connected) {
+      bar.innerHTML =
+        "<b>Faqat shu kompyuterda</b>Hisobot va hodisalar shu yerda saqlanadi. " +
+        'Mijoz o‘z telefonidan ko‘rishi va Telegram xabarlari uchun ' +
+        '<a href="/setup">cloudga ulang</a>.';
+      return;
+    }
+    // Navbat o'sib borsa "ulangan" yozuvi yolg'on bo'lib qoladi — aloqa
+    // uzilgan bo'lsa hodisalar to'planaveradi.
+    const pending = cloud.pending_events;
+    const queue =
+      pending > 20
+        ? ` · <b>${pending} hodisa yuborilmagan</b> — internetni tekshiring`
+        : "";
+    bar.innerHTML =
+      `<b>Cloudga ulangan</b>Mijoz paneli: <a href="${esc(cloud.owner_url)}" target="_blank" rel="noopener noreferrer">${esc(cloud.owner_url)}</a>${queue}`;
+  }
+
   async function refresh() {
     try {
-      const [status, report, events, cameraList] = await Promise.all([
+      const [status, report, events, cameraList, cloud] = await Promise.all([
         api("/api/status"),
         api("/api/report"),
         api("/api/events?limit=50"),
         api("/api/setup/cameras"),
+        api("/api/setup/cloud-status"),
       ]);
       drawStatus({ ...status, cameras_list: cameraList.cameras });
       drawReport(report);
       drawEvents(events.events);
+      drawCloud(cloud);
     } catch (error) {
       banner("err", "Dastur bilan aloqa yo‘q.", error.message);
     }

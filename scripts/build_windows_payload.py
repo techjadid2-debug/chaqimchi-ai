@@ -201,6 +201,19 @@ def step_code() -> None:
         if source.is_file():
             shutil.copy2(source, config_dst / name)
 
+    # Yangilanish imzosini tekshiradigan ochiq kalit.  Usiz masofadan
+    # yangilash **umuman bajarilmaydi** (`chaqimchi_ai/local/updater.py`):
+    # imzosiz `.exe` ni administrator huquqi bilan ishga tushirishdan
+    # ko'ra eski versiyada qolgan yaxshiroq.
+    public_key = ROOT / "deploy" / "update-public.pem"
+    if not public_key.is_file():
+        raise SystemExit(
+            f"Imzo kaliti topilmadi: {public_key}\n"
+            "Avval: python scripts/generate_update_key.py"
+        )
+    (PAYLOAD / "deploy").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(public_key, PAYLOAD / "deploy" / "update-public.pem")
+
     for name in ("LICENSE", "README.md"):
         source = ROOT / name
         if source.is_file():

@@ -427,6 +427,7 @@ def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch)
     """
     monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+    monkeypatch.setattr("cloud.main._release_dirs", list)
 
     body = cloud_client.get("/api/v1/public/windows-release").json()
     assert body["available"] is False
@@ -439,6 +440,7 @@ def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_pa
     installer.write_bytes(b"MZ" + b"\0" * 2_000_000)
     monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
+    monkeypatch.setattr("cloud.main._release_dirs", list)
 
     body = cloud_client.get("/api/v1/public/windows-release").json()
     assert body["available"] is True
@@ -472,6 +474,7 @@ def test_windows_installer_url_must_be_https(cloud_client, monkeypatch) -> None:
     """HTTP havola o'rnatuvchini yo'lda almashtirishga imkon berardi."""
     monkeypatch.setenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", "http://example.com/setup.exe")
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+    monkeypatch.setattr("cloud.main._release_dirs", list)
     assert cloud_client.get("/api/v1/public/windows-release").json()["available"] is False
 
 

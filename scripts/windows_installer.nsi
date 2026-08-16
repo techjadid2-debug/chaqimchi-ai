@@ -146,11 +146,36 @@ Section "Kompyuter yonganda avtomatik ishga tushsin" SecAutostart
   WriteRegStr HKLM "${REG_RUN}" "ChaqimchiAI" '"$INSTDIR\Chaqimchi_AI.bat"'
 SectionEnd
 
+Section "Yangilanishlarni o'zi olsin" SecUpdater
+  ; Nega rejalashtirilgan vazifa, oddiy avtostart emas: yangilash
+  ; `Program Files` ga yozadi va administrator huquqini talab qiladi.
+  ; Dastur esa oddiy foydalanuvchi huquqi bilan ishlaydi va o'zini
+  ; eleva qila olmaydi — har safar ruxsat oynasi chiqardi.
+  ;
+  ; Vazifa hozir (o'rnatuvchi administrator bo'lgan paytda) SYSTEM
+  ; nomiga yoziladi, keyin esa hech qanday oyna chiqarmasdan ishlaydi.
+  ; Bu o'rnatuvchi do'kondan ketgandan keyin ham yangilash imkonini beradi.
+  ;
+  ; Xavfsizlik: yangilovchi paketni Ed25519 imzosi bilan tekshiradi
+  ; (`chaqimchi_ai/local/updater.py`).  Imzo mos kelmasa paket tashlanadi.
+  DetailPrint "Yangilanish vazifasi qo'shilmoqda..."
+  nsExec::ExecToLog 'schtasks /Create /F /TN "Chaqimchi AI Update" \
+    /TR "\"$INSTDIR\python\python.exe\" -m chaqimchi_ai.local.updater" \
+    /SC HOURLY /MO 6 /RU SYSTEM /RL HIGHEST'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Ogohlantirish: avtomatik yangilanish sozlanmadi (kod $0)."
+    DetailPrint "Dastur ishlaydi; yangilanishni qo'lda o'rnatasiz."
+  ${EndIf}
+SectionEnd
+
 ; ── Bo'lim izohlari ─────────────────────────────────────────────────────
 
 LangString DESC_SecMain ${LANG_UZBEK} "Dastur, Python muhiti va AI modeli. Internet talab qilinmaydi."
 LangString DESC_SecDesktop ${LANG_UZBEK} "Ish stolida ${APP_NAME} yorlig'i bo'ladi."
 LangString DESC_SecAutostart ${LANG_UZBEK} "Kompyuter yoqilganda nazorat o'zi ishga tushadi. Tavsiya etiladi."
+LangString DESC_SecUpdater ${LANG_UZBEK} "Yangi versiyalar o'zi yuklanadi va o'rnatiladi. Faqat imzosi tekshirilgan paketlar qabul qilinadi."
+LangString DESC_SecUpdater ${LANG_ENGLISH} "Downloads and installs new versions automatically. Only signature-verified packages are accepted."
 LangString DESC_SecMain ${LANG_ENGLISH} "Application, Python runtime and AI model. No internet required."
 LangString DESC_SecDesktop ${LANG_ENGLISH} "Adds a ${APP_NAME} shortcut to the desktop."
 LangString DESC_SecAutostart ${LANG_ENGLISH} "Starts monitoring automatically when the computer boots."
@@ -159,6 +184,7 @@ LangString DESC_SecAutostart ${LANG_ENGLISH} "Starts monitoring automatically wh
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} $(DESC_SecMain)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} $(DESC_SecDesktop)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} $(DESC_SecAutostart)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecUpdater} $(DESC_SecUpdater)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Function .onInit
@@ -182,6 +208,11 @@ Section "Uninstall"
   ; Ishlab turgan dasturni to'xtatamiz, aks holda fayllar band bo'lib
   ; o'chmay qoladi va papka "yarim o'chirilgan" holatda qolardi.
   ExecWait 'taskkill /F /IM python.exe /FI "WINDOWTITLE eq Chaqimchi*"'
+
+  ; Yangilanish vazifasi ham olib tashlanadi: qolib ketsa o'chirilgan
+  ; dasturni har olti soatda qayta o'rnatishga urinardi.
+  nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI Update"'
+  Pop $0
 
   DeleteRegValue HKLM "${REG_RUN}" "ChaqimchiAI"
   DeleteRegKey HKLM "${REG_UNINSTALL}"

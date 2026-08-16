@@ -655,8 +655,49 @@
       if (btn.dataset.invoiceCancel) return cancelInvoice(btn.dataset.invoiceCancel);
       if (btn.dataset.leadStatus) return updateLead(btn.dataset.leadStatus, btn.dataset.leadTo);
       if (btn.dataset.leadConvert) return convertLead(btn.dataset.leadConvert);
+      if (btn.dataset.updatePolicy) return setUpdatePolicy(btn.dataset.updatePolicy);
       if (btn.dataset.copy) return copyText(btn.dataset.copy);
     });
+
+    // Yangilanish siyosati.  Nega kerak: bitta buzuq reliz barcha do'konni
+    // birdan yiqitmasligi kerak — yangi versiya avval bitta obyektda
+    // sinaladi, muammo chiqsa qolganlari "hold" ga o'tkaziladi.
+    async function setUpdatePolicy(siteId) {
+      let latest = "";
+      try {
+        const info = await api("/api/v1/admin/windows-releases");
+        latest = info.latest || "";
+        if (!info.releases.length) {
+          return notify("Nashr qilingan Windows relizi yo'q", false);
+        }
+      } catch (err) { return notify(err.message, false); }
+
+      const answer = prompt(
+        `Yangilanish siyosati (eng yangi reliz: ${latest || "yo'q"}):\n\n` +
+          "auto  — eng yangi versiya o'zi o'rnatiladi\n" +
+          "hold  — bu do'kon joriy versiyada qoladi\n" +
+          "<versiya> — aynan shu versiyaga qotiriladi (masalan 0.6.0)",
+        "auto",
+      );
+      if (answer === null) return;
+      const value = answer.trim();
+      const body =
+        value === "auto" || value === "hold"
+          ? { channel: value }
+          : { channel: "pin", version: value };
+      try {
+        await api(`/api/v1/admin/sites/${siteId}/update-policy`, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        });
+        notify(
+          value === "hold"
+            ? "Yangilanish to'xtatildi"
+            : "Yangilanish siyosati saqlandi. Qurilma 6 soat ichida qo'llaydi.",
+        );
+        await openDetail(siteId);
+      } catch (err) { notify(err.message, false); }
+    }
 
     async function updateLead(leadId, status) {
       try {
@@ -989,6 +1030,7 @@
                       <span class="badge badge-${esc(dev.connection)}">${CONN_LABEL[dev.connection] || esc(dev.connection)}</span>
                       <span class="muted" style="font-size: 0.7rem;">${esc(sinceLabel(dev.minutes_since_seen))}</span>
                       <div class="muted" style="font-size:.68rem">Config r${esc(dev.config_revision)} · ${esc(dev.config_status)}</div>
+                      <div class="muted" style="font-size:.68rem">Versiya: ${dev.app_version ? esc(dev.app_version) : "noma'lum"}</div>
                     </td>
                   </tr>`
               )
@@ -1033,6 +1075,7 @@
             <button class="btn btn-primary" data-features="${esc(d.id)}">AI funksiyalar</button>
             <button class="btn" data-extend="${esc(d.id)}">To'lovsiz uzaytirish</button>
             <button class="btn" data-pairing="${esc(d.id)}">Yangi juftlash kodi</button>
+            <button class="btn" data-update-policy="${esc(d.id)}">Yangilanish</button>
             <button class="btn ${d.status === "suspended" ? "" : "btn-danger"}"
                     data-status="${esc(d.id)}" data-to="${d.status === "suspended" ? "active" : "suspended"}">
               ${d.status === "suspended" ? "Qayta yoqish" : "Obunani to'xtatish"}

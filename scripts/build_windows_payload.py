@@ -62,6 +62,19 @@ PIP_PLATFORM = ["--platform", "win_amd64", "--python-version", "3.12", "--implem
 
 REQUIREMENTS = ROOT / "requirements-windows-local.txt"
 
+# ── ffmpeg (klip yozish uchun) ───────────────────────────────────────────
+#
+# Hodisa kliplari `RingBuffer` orqali ffmpeg bilan yoziladi.  Bungacha
+# ffmpeg payloadga umuman kirmagan — Windows'da kliplar hech qachon
+# ishlamaganining uchta sababidan biri shu edi.  Essentials build (GPL)
+# yetadi: bizga faqat `-c copy` bilan segment yozish kerak.
+FFMPEG_VERSION = "9.0.1"
+FFMPEG_URL = (
+    "https://www.gyan.dev/ffmpeg/builds/packages/"
+    f"ffmpeg-{FFMPEG_VERSION}-essentials_build.zip"
+)
+FFMPEG_SHA256 = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9"
+
 # ── OpenVINO odam detektori (Apache 2.0) ─────────────────────────────────
 MODEL_BASE = (
     "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/"
@@ -110,7 +123,7 @@ def download(url: str, dest: Path, expected_sha256: str) -> None:
 
 
 def step_python(cache: Path) -> Path:
-    log.info("[1/5] Python %s embed", PYTHON_VERSION)
+    log.info("[1/6] Python %s embed", PYTHON_VERSION)
     archive = cache / f"python-{PYTHON_VERSION}-embed-amd64.zip"
     download(PYTHON_EMBED_URL, archive, PYTHON_EMBED_SHA256)
 
@@ -136,7 +149,7 @@ def step_python(cache: Path) -> Path:
 
 
 def step_packages(python_dir: Path, cache: Path) -> None:
-    log.info("[2/5] Windows paketlari")
+    log.info("[2/6] Windows paketlari")
     wheels = cache / "wheels"
     wheels.mkdir(parents=True, exist_ok=True)
 
@@ -174,7 +187,7 @@ def step_packages(python_dir: Path, cache: Path) -> None:
 
 
 def step_models(cache: Path) -> None:
-    log.info("[3/5] AI modeli")
+    log.info("[3/6] AI modeli")
     models_dir = PAYLOAD / "models" / "retail"
     models_dir.mkdir(parents=True, exist_ok=True)
     for name, digest in MODELS:
@@ -186,8 +199,29 @@ def step_models(cache: Path) -> None:
         shutil.copy2(manifest, PAYLOAD / "models" / "retail_manifest.json")
 
 
+def step_ffmpeg(cache: Path) -> None:
+    log.info("[4/6] ffmpeg %s (klip yozish)", FFMPEG_VERSION)
+    archive = cache / f"ffmpeg-{FFMPEG_VERSION}-essentials_build.zip"
+    download(FFMPEG_URL, archive, FFMPEG_SHA256)
+
+    target = PAYLOAD / "bin" / "ffmpeg.exe"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive) as bundle:
+        # Zipda ffplay/ffprobe ham bor — bizga faqat ffmpeg.exe kerak,
+        # qolgani o'rnatuvchini bekorga kattalashtiradi.
+        member = next(
+            (name for name in bundle.namelist() if name.endswith("/bin/ffmpeg.exe")),
+            None,
+        )
+        if member is None:
+            raise SystemExit("ffmpeg arxividan bin/ffmpeg.exe topilmadi")
+        with bundle.open(member) as src, target.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+    log.info("  ✓ bin/ffmpeg.exe (%.0f MB)", target.stat().st_size / 1024 / 1024)
+
+
 def step_code() -> None:
-    log.info("[4/5] Dastur kodi")
+    log.info("[5/6] Dastur kodi")
     for name in CODE_DIRS:
         source = ROOT / name
         if not source.is_dir():
@@ -289,7 +323,7 @@ Telegram: @fibotai
 
 
 def step_launcher() -> None:
-    log.info("[5/5] Ishga tushirish fayllari")
+    log.info("[6/6] Ishga tushirish fayllari")
     if not DEFAULT_CLOUD_URL:
         log.warning(
             "CHAQIMCHI_DEFAULT_CLOUD_URL berilmadi — dastur cloudga o'zi "
@@ -369,6 +403,7 @@ def main() -> int:
     python_dir = step_python(cache)
     step_packages(python_dir, cache)
     step_models(cache)
+    step_ffmpeg(cache)
     step_code()
     step_launcher()
     step_version()

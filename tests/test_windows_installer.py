@@ -308,3 +308,18 @@ def test_update_check_is_free_when_not_paired() -> None:
     body = updater[updater.index("def _cloud("): updater.index("def check(")]
     assert "raise UpdateError" in body, "ulanmagan qurilma darhol to'xtashi kerak"
     assert "httpx" not in body, "ulanmasdan turib tarmoqqa so'rov yuborilmasin"
+
+
+def test_ffmpeg_is_bundled_with_a_pinned_hash() -> None:
+    """Kliplar ffmpeg'siz yozilmaydi — u payloadga kirishi SHART.
+
+    Bungacha ffmpeg umuman yo'q edi va Windows'da hodisa kliplari hech
+    qachon ishlamagan.  SHA256 ham majburiy: payload admin huquqi bilan
+    ishlaydi, tekshirilmagan fayl unga kirmasligi kerak.
+    """
+    source = BUILDER.read_text(encoding="utf-8")
+    digest = re.search(r'FFMPEG_SHA256 = "([0-9a-f]{64})"', source)
+    assert digest, "ffmpeg uchun haqiqiy SHA256 yo'q"
+    assert "download(FFMPEG_URL, archive, FFMPEG_SHA256)" in source
+    assert "step_ffmpeg(cache)" in source, "qadam main() da chaqirilmagan"
+    assert 'bin/ffmpeg.exe' in source, "faqat ffmpeg.exe ajratib olinadi"

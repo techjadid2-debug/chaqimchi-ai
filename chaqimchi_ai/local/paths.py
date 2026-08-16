@@ -80,6 +80,15 @@ def app_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def rules_path() -> Path:
+    """Do'kon qoidalari fayli (suppression, sovutish, save_clip).
+
+    O'rnatuvchi uni dastur papkasiga qo'yadi (`config/rules.yaml`).
+    Ishlab chiqishda repo ildizidagi o'sha fayl ishlatiladi.
+    """
+    return app_root() / "config" / "rules.yaml"
+
+
 def model_path() -> Path:
     """OpenVINO odam detektori modeli.
 

@@ -230,8 +230,18 @@ def apply_remote_site_settings(settings: AppSettings, base_dir: Path) -> None:
     cache = read_sotqin_cache(sotqin_cache_path(settings, base_dir))
     remote = cache.get("config") or {}
     scene_payload = settings.scene.model_dump()
-    for key in ("occupancy_limit", "loitering_sec", "queue_limit", "zones", "lines"):
-        if key in remote:
+    for key in ("occupancy_limit", "loitering_sec", "queue_limit"):
+        if key in remote and remote[key] is not None:
+            scene_payload[key] = remote[key]
+    # Geometriya faqat cloud'da HAQIQATAN chizilgan bo'lsa olinadi.
+    # Ilgari shart `key in remote` edi — cloud `get_site_config()` esa har
+    # doim bo'sh `"lines": []` qaytaradi, ya'ni ulanish bilanoq sehrgarda
+    # chizilgan chiziq runtime'da o'chib, kirish-chiqish sanash jimgina
+    # to'xtardi (config.yaml va panel esa chiziq bor deb ko'rsatib
+    # turardi).  `cloud_config.apply()` xuddi shu sababdan `if lines or
+    # zones:` bilan ishlaydi — bu yerda ham o'sha qoida.
+    for key in ("zones", "lines"):
+        if remote.get(key):
             scene_payload[key] = remote[key]
     settings.scene = SceneSettings.model_validate(scene_payload)
     if remote.get("open_from") and remote.get("open_to"):
@@ -490,6 +500,9 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         },
         "analyzed": stats.get("analyzed", 0),
         "events": stats.get("events", 0),
+        # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel buni
+        # ko'rsatishi shart: "hodisa bor, lekin cloudga bormayapti".
+        "plan_filtered": stats.get("plan_filtered", 0),
         "pressure": stats.get("pressure") or {},
     }
     temporary = path.with_name(f".{path.name}.tmp")

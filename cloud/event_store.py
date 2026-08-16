@@ -748,7 +748,10 @@ class EventStore:
                     "camera_labels": {},
                     "camera_roles": {},
                     "occupancy_limit": 20,
-                    "loitering_sec": 60,
+                    # 60 s juda tajovuzkor edi: band do'konda deyarli har
+                    # xaridor "uzoq turish" bo'lib chiqar va shovqin
+                    # yaratar edi.  5 daqiqa — haqiqatan g'ayrioddiy holat.
+                    "loitering_sec": 300,
                     "queue_limit": 5,
                     "open_from": None,
                     "open_to": None,

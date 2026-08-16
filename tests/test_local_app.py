@@ -410,3 +410,150 @@ def test_supervisor_strips_the_probe_options() -> None:
         Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "supervisor.py"
     ).read_text(encoding="utf-8")
     assert 'env.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS"' in source
+
+
+# ── Qoidalar fayli (rules.yaml) ulanishi ─────────────────────────────────
+#
+# Bag tarixi: `rules_path` hech qayerda o'rnatilmasdi, `RuleEngine()` bo'sh
+# ishlar edi — `person_detected` bosilmasdan cloudga oqdi (jonli qurilmada
+# bir kunda 394 ta), sovutishlar va `save_clip` o'lik edi.
+
+
+def test_fresh_config_wires_the_rules_file(client: TestClient, tmp_path: Path) -> None:
+    client.get("/api/status")  # config yaratilsin
+    config = _config(tmp_path)
+    rules_path = config["retail"].get("rules_path") or ""
+    assert rules_path.endswith("rules.yaml"), "yangi config qoidalarsiz qolmasin"
+    assert Path(rules_path).is_file(), "ko'rsatilgan qoidalar fayli mavjud bo'lsin"
+
+
+def test_old_config_without_rules_is_healed(tmp_path: Path, monkeypatch) -> None:
+    """Ishlab turgan eski qurilmalar yangilanishdan keyin o'zi tuzalsin."""
+    import importlib
+
+    from chaqimchi_ai.local import config_store, paths
+
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    importlib.reload(paths)
+    importlib.reload(config_store)
+
+    old = config_store.default_config()
+    del old["retail"]["rules_path"]  # eski versiya configi
+    config_store._write_raw_unlocked(old)
+
+    healed = config_store.read_raw()
+
+    assert str(healed["retail"].get("rules_path", "")).endswith("rules.yaml")
+    saved = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
+    assert str(saved["retail"].get("rules_path", "")).endswith("rules.yaml"), (
+        "davolash faylga ham yozilsin — keyingi restartda ham tursin"
+    )
+
+
+# ── Klip uchun asosiy oqim (record_url) ──────────────────────────────────
+#
+# Bag tarixi: `record_url` hech qachon to'ldirilmasdi — kliplar Windows'da
+# umuman ishlamaganining uchta sababidan biri.  Endi substream saqlanganda
+# asosiy oqim avto-taklif qilinadi va tekshirib yoziladi.
+
+
+def test_saving_a_camera_autofills_the_record_url(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    from chaqimchi_ai.local import app as app_module
+
+    monkeypatch.setattr(
+        app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (200, "OK")
+    )
+    response = client.post(
+        "/api/setup/cameras",
+        json={"label": "Kirish", "rtsp_url": "rtsp://admin:pw@10.0.0.5:554/Streaming/Channels/102"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["record_url_found"] is True
+    saved = _config(tmp_path)["retail"]["cameras"][0]
+    assert saved["record_url"] == "rtsp://admin:pw@10.0.0.5:554/Streaming/Channels/101"
+
+
+def test_unreachable_main_stream_is_not_stored(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Ishlamaydigan taxmin yozilsa ffmpeg abadiy xato aylanardi."""
+    from chaqimchi_ai.local import app as app_module
+
+    monkeypatch.setattr(
+        app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (404, "Not Found")
+    )
+    response = client.post(
+        "/api/setup/cameras",
+        json={"label": "Kirish", "rtsp_url": "rtsp://admin:pw@10.0.0.5:554/Streaming/Channels/102"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["record_url_found"] is False
+    assert _config(tmp_path)["retail"]["cameras"][0].get("record_url") is None
+
+
+def test_explicit_record_url_wins_over_the_suggestion(
+    client: TestClient, tmp_path: Path
+) -> None:
+    response = client.post(
+        "/api/setup/cameras",
+        json={
+            "label": "Kassa",
+            "rtsp_url": "rtsp://admin:pw@10.0.0.5:554/Streaming/Channels/202",
+            "record_url": "rtsp://admin:pw@10.0.0.5:554/maxsus/asosiy",
+        },
+    )
+
+    assert response.status_code == 200
+    saved = _config(tmp_path)["retail"]["cameras"][0]
+    assert saved["record_url"] == "rtsp://admin:pw@10.0.0.5:554/maxsus/asosiy"
+
+
+# ── Funksiyalar holati ro'yxati ──────────────────────────────────────────
+#
+# "Yashil chiroq yolg'oni"ga qarshi: xizmat ishlayotgani hamma funksiya
+# ishlayotganini bildirmaydi.  Panel va sehrgar shu ro'yxatni ko'rsatadi.
+
+
+def test_status_lists_every_feature_with_a_reason(client: TestClient) -> None:
+    data = client.get("/api/status").json()
+    features = {item["code"]: item for item in data["features"]}
+
+    expected = {"line_count", "queue", "restricted", "dwell", "after_hours", "tamper", "clips"}
+    assert expected <= set(features), "har funksiya ro'yxatda bo'lsin"
+    # Yangi o'rnatishda geometriya yo'q — sabab aniq matnda aytiladi.
+    assert features["line_count"]["active"] is False
+    assert "chiz" in (features["line_count"]["reason"] or "")
+    assert features["queue"]["active"] is False
+    # Tamper standart yoqilgan.
+    assert features["tamper"]["active"] is True and features["tamper"]["reason"] is None
+
+
+def test_feature_status_turns_green_after_configuration(client: TestClient) -> None:
+    client.put(
+        "/api/setup/geometry",
+        json={
+            "lines": [
+                {"name": "kirish", "camera_id": "camera-01",
+                 "start": [0.1, 0.6], "end": [0.9, 0.6]}
+            ],
+            "zones": [
+                {"name": "kassa", "camera_id": "camera-01", "queue": True,
+                 "polygon": [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]}
+            ],
+        },
+    )
+    client.put(
+        "/api/setup/settings",
+        json={"open_from": "09:00", "open_to": "21:00"},
+    )
+
+    features = {item["code"]: item for item in client.get("/api/status").json()["features"]}
+
+    assert features["line_count"]["active"] is True
+    assert features["queue"]["active"] is True
+    assert features["after_hours"]["active"] is True
+    assert features["restricted"]["active"] is False, "taqiqlangan zona hali yo'q"

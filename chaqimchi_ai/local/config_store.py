@@ -31,7 +31,10 @@ _LOCK = threading.Lock()
 
 #: Do'kon uchun oqilona boshlang'ich qiymatlar.  Mijoz sehrgarda ularni
 #: o'zgartira oladi, lekin hech nima kiritmasa ham tizim ishlashi kerak.
-DEFAULT_OCCUPANCY_LIMIT = 30
+#: 20 — cloud standarti bilan bir xil (`cloud/event_store.py`); 30 bitta
+#: 640x360 kadrda deyarli hech qachon yig'ilmaydi va hodisa umuman
+#: chiqmay qolar edi.
+DEFAULT_OCCUPANCY_LIMIT = 20
 DEFAULT_QUEUE_LIMIT = 5
 DEFAULT_LOITERING_SEC = 300
 
@@ -81,6 +84,11 @@ def default_config() -> Dict[str, Any]:
             # "config o'qilmadi" deb log to'ldirardi.
             "restart_on_config_change": False,
             "tamper_enabled": True,
+            # Qoidalar fayli MAJBURIY ulanadi: usiz RuleEngine bo'sh bo'lib,
+            # `person_detected` bosilmasdan cloudga oqar, sovutishlar va
+            # `save_clip` umuman ishlamas edi (jonli qurilmada bir kunda
+            # 394 ta person_detected yig'ilgani shundan).
+            "rules_path": str(paths.rules_path()),
             "cameras": [],
         },
         # Cloud ixtiyoriy: mijoz keyin pairing kod bilan ulanishi mumkin.
@@ -99,7 +107,25 @@ def read_raw() -> Dict[str, Any]:
         _write_raw_unlocked(raw)
         return raw
     with path.open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle) or {}
+        raw = yaml.safe_load(handle) or {}
+    return _heal(raw)
+
+
+def _heal(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Eski o'rnatishlardagi config'ni yangi majburiy maydonlar bilan to'ldiradi.
+
+    `rules_path` keyin qo'shildi: usiz ishlab turgan qurilmalarda qoidalar
+    (suppression, sovutish, save_clip) o'lik edi.  Yangilanish o'rnatilgach
+    dastur birinchi o'qishdayoq yo'lni to'ldirib qo'yadi — mijozdan hech
+    narsa talab qilinmaydi.
+    """
+    retail = raw.get("retail")
+    if isinstance(retail, dict) and not retail.get("rules_path"):
+        rules = paths.rules_path()
+        if rules.is_file():
+            retail["rules_path"] = str(rules)
+            _write_raw_unlocked(raw)
+    return raw
 
 
 def _write_raw_unlocked(raw: Dict[str, Any]) -> None:
@@ -289,6 +315,62 @@ def summary() -> Dict[str, Any]:
         "config_path": str(paths.config_path()),
         "data_dir": str(paths.data_dir()),
     }
+
+
+def feature_status() -> List[Dict[str, Any]]:
+    """Har funksiya: yoqilganmi va bo'lmasa — NIMA yetishmayapti.
+
+    "Yashil chiroq yolg'oni"ga qarshi asosiy qurol: ilgari zona-only yoki
+    soatlari kiritilmagan o'rnatish panelda yashil ko'rinar, mijoz esa
+    "navbat funksiyasi ishlayapti" deb yurar edi — aslida u hech qachon
+    hodisa chiqarmagan.  Bu ro'yxat panel va sehrgar yakunida ko'rinadi.
+    """
+    raw = read_raw()
+    scene = raw.get("scene") or {}
+    retail = raw.get("retail") or {}
+    lines = list(scene.get("lines") or [])
+    zones = list(scene.get("zones") or [])
+    cameras = list(retail.get("cameras") or [])
+    queue_zones = [zone for zone in zones if zone.get("queue")]
+    restricted_zones = [zone for zone in zones if zone.get("restricted")]
+    dwell_zones = [zone for zone in zones if zone.get("dwell_sec")]
+    hours_set = bool(retail.get("open_from") and retail.get("open_to"))
+    clip_source = any(camera.get("record_url") for camera in cameras)
+
+    def item(code: str, name: str, active: bool, reason: str) -> Dict[str, Any]:
+        return {"code": code, "name": name, "active": active, "reason": None if active else reason}
+
+    return [
+        item(
+            "line_count", "Kirish-chiqish sanash", bool(lines),
+            "Kirish chizig'i chizilmagan — sozlamalarda eshik ustiga chizing",
+        ),
+        item(
+            "queue", "Kassa navbati", bool(queue_zones),
+            "Navbat zonasi belgilanmagan — kassa oldiga zona chizib, «navbat» ni belgilang",
+        ),
+        item(
+            "restricted", "Taqiqlangan zona", bool(restricted_zones),
+            "Taqiqlangan zona chizilmagan (masalan ombor eshigi)",
+        ),
+        item(
+            "dwell", "Zonada uzoq turish", bool(dwell_zones),
+            "Hech bir zonada «uzoq turish» vaqti kiritilmagan",
+        ),
+        item(
+            "after_hours", "Ish vaqtidan tashqari nazorat", hours_set,
+            "Ochilish va yopilish soatlari kiritilmagan",
+        ),
+        item(
+            "tamper", "Kamera buzilishi nazorati",
+            bool(retail.get("tamper_enabled", True)),
+            "Sozlamada o'chirilgan",
+        ),
+        item(
+            "clips", "Hodisa videosi (klip)", clip_source,
+            "Asosiy oqim manzili topilmadi — kamera sozlamasida kiriting",
+        ),
+    ]
 
 
 def config_file() -> Path:

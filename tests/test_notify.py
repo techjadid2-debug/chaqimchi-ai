@@ -16,13 +16,59 @@ from cloud.notify import (
 )
 
 
-def event(event_type: str, camera: str, severity: str = "warning") -> EdgeEvent:
+# MINIMAL rejim: botga faqat critical boradi, shuning uchun mexanika
+# testlari critical hodisalar bilan yoziladi.
+def event(event_type: str, camera: str, severity: str = "critical") -> EdgeEvent:
     return EdgeEvent(event_type=event_type, camera_id=camera, severity=severity)
 
 
 def test_info_events_never_alert() -> None:
     events = [event("person_detected", "camera-01", severity="info") for _ in range(50)]
     assert build_alert("site-1", events, throttle_service=AlertThrottle()) is None
+
+
+# ── Minimal rejim siyosati ───────────────────────────────────────────────
+
+
+def test_warning_events_stay_in_the_panel() -> None:
+    """Foydalanuvchi qarori (2026-08-16): navbat/loitering botga bormaydi."""
+    events = [event("loitering", "camera-01", severity="warning") for _ in range(20)]
+    assert build_alert("site-1", events, throttle_service=AlertThrottle()) is None
+
+
+def test_device_rule_flag_is_authoritative() -> None:
+    """Qoida `telegram_alert` demagan bo'lsa — critical ham yuborilmaydi.
+
+    Bungacha bayroq dekorativ edi: cloud faqat severity'ga qarar, qurilma
+    qoidalaridagi tanlov hech narsani boshqarmas edi.
+    """
+    silent = EdgeEvent(
+        event_type="camera_tampered",
+        camera_id="camera-01",
+        severity="critical",
+        metadata={"alert": False},
+    )
+    assert build_alert("site-1", [silent], throttle_service=AlertThrottle()) is None
+
+    flagged = EdgeEvent(
+        event_type="camera_tampered",
+        camera_id="camera-01",
+        severity="critical",
+        metadata={"alert": True},
+    )
+    assert build_alert("site-1", [flagged], throttle_service=AlertThrottle())
+
+
+def test_recovery_reaches_the_owner_despite_low_severity() -> None:
+    """"Buzildi"ning "tiklandi" jufti — usiz tizim doim buzuq ko'rinadi."""
+    recovered = EdgeEvent(
+        event_type="camera_recovered",
+        camera_id="camera-01",
+        severity="info",
+        metadata={"alert": True, "downtime_sec": 42},
+    )
+    message = build_alert("site-1", [recovered], throttle_service=AlertThrottle())
+    assert message is not None and "Kamera tiklandi" in message
 
 
 def test_batch_becomes_one_grouped_message() -> None:
@@ -40,7 +86,7 @@ def test_batch_becomes_one_grouped_message() -> None:
 
 
 def test_critical_event_changes_the_marker() -> None:
-    assert summarize([event("loitering", "camera-01")]).startswith("⚠️")
+    assert summarize([event("loitering", "camera-01", severity="warning")]).startswith("⚠️")
     assert summarize([event("loitering", "camera-01", severity="critical")]).startswith("🔴")
 
 

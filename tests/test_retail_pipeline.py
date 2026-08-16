@@ -148,6 +148,10 @@ def line_crossed() -> EdgeEvent:
     return EdgeEvent(event_type="line_crossed", camera_id="kassa-01", direction="in")
 
 
+def loitering() -> EdgeEvent:
+    return EdgeEvent(event_type="loitering", camera_id="kassa-01", severity="warning")
+
+
 def run(pipeline: RetailPipeline, *, now: float = 1.0, frame=FRAME) -> Any:
     pipeline.offer("kassa-01", frame, now=now)
     return pipeline.step(now=now)
@@ -242,6 +246,30 @@ def test_rule_actions_replace_the_default(tmp_path: Path) -> None:
     run(pipeline)
 
     assert recorder.names == ["telegram_alert", "cloud_sync"]
+
+
+def test_telegram_choice_travels_inside_the_event(tmp_path: Path) -> None:
+    """Qoidaning Telegram tanlovi hodisaning o'zida cloudga boradi.
+
+    `metadata.alert` bayrog'i — `cloud/notify.py wants_telegram()` uchun
+    yakuniy so'z.  Usiz `telegram_alert` harakati dekorativ edi: cloud
+    faqat severity'ga qarab yuborar edi.
+    """
+    rules = RuleEngine(
+        [
+            Rule(name="alertli", event_type="line_crossed", actions=("telegram_alert", "cloud_sync")),
+            Rule(name="jim", event_type="loitering", actions=("cloud_sync",)),
+        ]
+    )
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[line_crossed(), loitering()], rules=rules
+    )
+
+    run(pipeline)
+
+    by_type = {event.event_type: event for _name, event in recorder.actions}
+    assert by_type["line_crossed"].metadata.get("alert") is True
+    assert by_type["loitering"].metadata.get("alert") is False
 
 
 # ── Xatolar zanjirni to'xtatmasligi ──────────────────────────────────────

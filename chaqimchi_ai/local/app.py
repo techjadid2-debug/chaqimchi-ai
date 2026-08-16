@@ -539,14 +539,43 @@ async def save_camera(body: CameraSaveBody) -> Dict[str, Any]:
     if is_new and len(existing) >= MAX_CAMERAS:
         raise HTTPException(422, f"Ko'pi bilan {MAX_CAMERAS} kamera qo'shish mumkin")
 
+    # Klip yozish uchun asosiy oqim: mijoz bermagan bo'lsa substream
+    # manzilidan o'zimiz chiqaramiz va tezgina tekshiramiz.  Bungacha
+    # `record_url` hech qachon to'ldirilmasdi — kliplar Windows'da umuman
+    # ishlamaganining sabablaridan biri shu edi.
+    record_url = (body.record_url or "").strip() or None
+    if record_url is None:
+        record_url = _verified_record_url(body.rtsp_url.strip())
+
     config_store.save_camera(
         camera_id=camera_id,
         stream_url=body.rtsp_url.strip(),
         label=body.label.strip(),
-        record_url=(body.record_url or "").strip() or None,
+        record_url=record_url,
         priority=body.priority,
     )
-    return {"ok": True, "camera_id": camera_id, **config_store.summary()}
+    return {
+        "ok": True,
+        "camera_id": camera_id,
+        "record_url_found": bool(record_url),
+        **config_store.summary(),
+    }
+
+
+def _verified_record_url(stream_url: str) -> Optional[str]:
+    """Asosiy oqim taklifini tekshirib qaytaradi; ishlamasa None.
+
+    401 ham qabul qilinadi: yo'l mavjud, faqat digest autentifikatsiya
+    kerak — ffmpeg uni o'zi bajaradi.  404/454 esa "bunday yo'l yo'q".
+    """
+    suggested = camera_probe.suggest_record_url(stream_url)
+    if not suggested:
+        return None
+    try:
+        code, _response = camera_probe.rtsp_describe(suggested, timeout_sec=4.0)
+    except OSError:
+        return None
+    return suggested if code in (200, 401) else None
 
 
 def _next_camera_id(existing: List[Dict[str, Any]]) -> str:
@@ -694,7 +723,13 @@ async def pull_config() -> Dict[str, Any]:
 
 @app.get("/api/status")
 async def status() -> Dict[str, Any]:
-    return {**supervisor.status(), **config_store.summary()}
+    return {
+        **supervisor.status(),
+        **config_store.summary(),
+        # Har funksiya holati va sababi — panelda "yashil chiroq yolg'oni"
+        # o'rniga aniq ro'yxat ko'rinadi.
+        "features": config_store.feature_status(),
+    }
 
 
 @app.post("/api/service/start")

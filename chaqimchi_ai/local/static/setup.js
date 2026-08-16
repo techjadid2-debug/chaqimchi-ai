@@ -55,7 +55,36 @@
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (step === 3) setupGeometry();
-    if (step === 5) loadCloud();
+    if (step === 5) {
+      loadCloud();
+      loadFeatureChecklist();
+    }
+  }
+
+  /** Yakuniy funksiya-holati ro'yxati (panel bilan bitta manba: /api/status). */
+  async function loadFeatureChecklist() {
+    const box = $("wizardFeatureList");
+    if (!box) return;
+    try {
+      const status = await api("/api/status");
+      const features = status.features || [];
+      box.innerHTML = features.length
+        ? features
+            .map(
+              (f) => `
+        <div class="camera-row">
+          <span class="dot ${f.active ? "on" : "off"}"></span>
+          <div class="meta">
+            <b>${esc(f.name)}</b>
+            <code>${f.active ? "ishlaydi" : esc(f.reason || "sozlanmagan")}</code>
+          </div>
+        </div>`,
+            )
+            .join("")
+        : '<p class="hint">Ma’lumot kelmadi.</p>';
+    } catch (error) {
+      box.innerHTML = `<p class="hint">Holat o‘qilmadi: ${esc(error.message)}</p>`;
+    }
   }
 
   /* ── 1-qadam: kamera ────────────────────────────────────────────────── */
@@ -666,7 +695,7 @@
         body: JSON.stringify({
           open_from: from || null,
           open_to: to || null,
-          occupancy_limit: Number($("occupancy").value || 30),
+          occupancy_limit: Number($("occupancy").value || 20),
           queue_limit: Number($("queueLimit").value || 5),
           loitering_sec: Number($("loitering").value || 300),
         }),

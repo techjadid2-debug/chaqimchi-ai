@@ -69,7 +69,9 @@ def _events(count: int, *, days_ago: int = 0, prefix: str = "evt"):
         {
             "event_id": f"{prefix}-{index}",
             "event_type": "zone_entered",
-            "severity": "warning",
+            # Minimal rejimda botga faqat critical boradi — bu testlar
+            # yuborish MEXANIKASINI tekshiradi, siyosatni emas.
+            "severity": "critical",
             "camera_id": "camera-01",
             "occurred_at": occurred,
         }

@@ -130,6 +130,11 @@ class _Totals:
     errors: int = 0
     events: int = 0
     suppressed: int = 0
+    #: Cloud shartnomasida yoqilmagan paket sabab tashlab yuborilganlar.
+    #: `suppressed` dan alohida: u — qoidalarning ongli qarori, bu esa
+    #: "tarif faollashtirilmagan" belgisi va panelda ogohlantirish bo'lib
+    #: chiqishi kerak (ilgari jimgina yutilardi).
+    plan_filtered: int = 0
     action_errors: int = 0
     actions: Dict[str, int] = field(default_factory=dict)
     clips_written: int = 0
@@ -339,7 +344,7 @@ class RetailPipeline:
         local_time = self._local_time()
         with self._lock:
             self._totals.events += original_count
-            self._totals.suppressed += original_count - len(events)
+            self._totals.plan_filtered += original_count - len(events)
             # Qoida dvigatelida cooldown holati bor — u ham qulf ostida.
             decisions = self.rules.decisions(events, now=now, local_time=local_time)
             self._totals.suppressed += len(events) - len(decisions)
@@ -428,6 +433,15 @@ class RetailPipeline:
 
     def _dispatch(self, decision: Decision, *, camera_id: str) -> None:
         self._attach_security_snapshot(decision.event, camera_id=camera_id)
+        # Qoida Telegram so'raganmi — hodisaning o'zida yozib qo'yiladi.
+        # Bungacha `telegram_alert` harakati dekorativ edi: cloud faqat
+        # severity'ga qarab yuborar, ya'ni qoidalardagi tanlov va
+        # sovutishlar hech narsani boshqarmasdi.  Endi cloud/notify.py shu
+        # bayroqqa bo'ysunadi (eski versiya hodisalarida bayroq bo'lmaydi —
+        # u holda severity fallback ishlaydi).
+        if decision.event.metadata is None:
+            decision.event.metadata = {}
+        decision.event.metadata["alert"] = "telegram_alert" in decision.actions
         for action in decision.actions:
             with self._lock:
                 self._totals.actions[action] = self._totals.actions.get(action, 0) + 1
@@ -577,6 +591,7 @@ class RetailPipeline:
             "errors": self._totals.errors,
             "events": self._totals.events,
             "suppressed": self._totals.suppressed,
+            "plan_filtered": self._totals.plan_filtered,
             "tamper_alerts": self._totals.tamper_alerts,
             "freezes": self._totals.freezes,
             "after_hours": self._totals.after_hours,

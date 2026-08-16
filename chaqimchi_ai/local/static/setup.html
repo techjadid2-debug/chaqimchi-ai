@@ -177,7 +177,7 @@
           <label class="field">Yopilish<input type="time" id="openTo"></label>
         </div>
         <div class="grid-3">
-          <label class="field">Do‘konda odam limiti<input type="number" id="occupancy" min="1" max="10000" value="30"></label>
+          <label class="field">Do‘konda odam limiti<input type="number" id="occupancy" min="1" max="10000" value="20"></label>
           <label class="field">Navbat limiti <small>kassada</small><input type="number" id="queueLimit" min="1" max="1000" value="5"></label>
           <label class="field">Uzoq turish <small>soniya</small><input type="number" id="loitering" min="5" max="86400" value="300"></label>
         </div>
@@ -255,6 +255,14 @@
           </div>
         </div>
         <div id="pairResult"></div>
+      </div>
+
+      <!-- Yakuniy tekshiruv: sehrgar tugadi degani hamma funksiya ishlayapti
+           degani emas.  Nima yoqilgan, nima yetishmayotgani shu yerda aniq
+           ko'rinadi — mijoz "keyin nega ishlamadi" deb yurmasin. -->
+      <div class="card">
+        <h2>Funksiyalar holati</h2>
+        <div id="wizardFeatureList"><span class="hint">Yuklanmoqda…</span></div>
       </div>
 
       <div class="actions spread">

@@ -30,7 +30,17 @@ DEFAULT_THROTTLE_SEC = 600
 #: Xabarga sig'adigan tur soni — qolgani "va yana N ta" bo'lib qisqaradi.
 MAX_LINES = 6
 
-ALERT_SEVERITIES = frozenset({"warning", "critical"})
+#: MINIMAL rejim (foydalanuvchi qarori, 2026-08-16): botga faqat KRITIK
+#: hodisalar boradi — kamera buzilishi/o'chishi, tungi harakat, taqiqlangan
+#: zona.  Navbat va loitering kabi `warning` hodisalar faqat panelda
+#: ko'rinadi; ular botga oqsa mijoz botni o'chirib qo'yadi va keyin haqiqiy
+#: xavfni ham o'tkazib yuboradi.
+ALERT_SEVERITIES = frozenset({"critical"})
+
+#: "Buzildi" xabarining "tiklandi" jufti — severity past bo'lsa ham boradi.
+#: Usiz mijoz faqat muammolarni ko'rar, tizim o'zini "doim buzuq" qilib
+#: ko'rsatar edi.
+RECOVERY_EVENTS = frozenset({"camera_recovered"})
 
 #: Mijoz `zone_entered` ni tushunmaydi; xabar odam tilida bo'lishi kerak.
 EVENT_LABELS: Dict[str, str] = {
@@ -151,6 +161,29 @@ def summarize(events: Sequence[EdgeEvent]) -> str:
     return "\n".join(lines)
 
 
+def wants_telegram(event: EdgeEvent) -> bool:
+    """Hodisa botga yuborilsinmi.
+
+    Ikki qatlam:
+
+    1. Qurilma qoidasi (`rules.yaml` dagi `telegram_alert` harakati) —
+       hodisa `metadata.alert` bayrog'i bilan keladi va bayroq yakuniy
+       so'zga ega: qoida Telegram so'ramagan bo'lsa, severity qanday
+       bo'lmasin xabar ketmaydi.
+    2. Minimal rejim: bayroq bilan ham faqat `critical` (va "tiklandi"
+       juftlari) boradi — `warning` hodisalar panelda qoladi.
+
+    Eski qurilma versiyalari bayroq yubormaydi — ular uchun faqat
+    severity qaraladi (o'sha ham minimal: critical).
+    """
+    metadata = event.metadata or {}
+    if "alert" in metadata:
+        if not metadata.get("alert"):
+            return False
+        return event.severity in ALERT_SEVERITIES or event.event_type in RECOVERY_EVENTS
+    return event.severity in ALERT_SEVERITIES
+
+
 def build_alert(
     site_id: str,
     events: Iterable[EdgeEvent],
@@ -163,7 +196,7 @@ def build_alert(
     allaqachon yuborilgan bo'lsa, uning **hamma** eventlari xabardan tushadi.
     """
     limiter = throttle_service or _throttle
-    alerts = [event for event in events if event.severity in ALERT_SEVERITIES]
+    alerts = [event for event in events if wants_telegram(event)]
     if not alerts:
         return None
 

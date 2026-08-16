@@ -21,7 +21,8 @@ rules:
 
   - name: Kamera javob bermayapti
     event_type: camera_offline
-    severity: warning
+    # Kamera o'chgan do'kon — ko'r do'kon; bu kritik va botga boradi.
+    severity: critical
     # 15 daqiqa: NVR o'chib-yonib turgan bo'lsa telefon jiringlab ketmasin.
     cooldown_sec: 900
     actions: [cloud_sync, telegram_alert]
@@ -70,11 +71,15 @@ rules:
     conditions: {restricted: false}
     suppress: true
 
+  # MINIMAL rejim (2026-08-16): loitering va navbat botga BORMAYDI —
+  # ular kundalik holat, mijoz ularni panelda ko'radi.  Botga faqat
+  # kritik xavfsizlik hodisalari boradi, aks holda bot shovqinga aylanib,
+  # haqiqiy xavf ham o'qilmay qoladi.
   - name: Uzoq vaqt turish
     event_type: loitering
     severity: warning
     cooldown_sec: 300
-    actions: [cloud_sync, telegram_alert, save_clip]
+    actions: [cloud_sync, save_clip]
 
   # Navbat — kundalik ish, AI kerak emas: raqamning o'zi yetarli.
   - name: Kassada uzun navbat
@@ -84,7 +89,7 @@ rules:
     schedule: ish-vaqti
     severity: warning
     cooldown_sec: 300
-    actions: [cloud_sync, telegram_alert]
+    actions: [cloud_sync]
 
   # Kirish/chiqish sanog'i hisobot uchun kerak, lekin xabar qilinmaydi —
   # aks holda telefon kun bo'yi jiringlaydi.

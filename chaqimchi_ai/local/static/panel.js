@@ -119,6 +119,44 @@
           })
           .join("")
       : '<p class="hint">Kameralar holati hali kelmadi. Xizmat ishga tushgach bir daqiqada paydo bo‘ladi.</p>';
+
+    drawFeatures(status);
+  }
+
+  /* ── Funksiyalar holati ──────────────────────────────────────────────── */
+  //
+  // "Yashil chiroq yolg'oni"ga qarshi: xizmat ishlayotgani hali hamma
+  // funksiya ishlayotganini bildirmaydi.  Har biri alohida ko'rsatiladi,
+  // ishlamayotganiga esa aniq sabab yoziladi.
+
+  function drawFeatures(status) {
+    const box = $("featureList");
+    if (!box) return;
+    const features = status.features || [];
+    if (!features.length) {
+      box.innerHTML = '<p class="hint">Ma’lumot kelmadi.</p>';
+      return;
+    }
+    let html = features
+      .map(
+        (f) => `
+      <div class="camera-row">
+        <span class="dot ${f.active ? "on" : "off"}"></span>
+        <div class="meta">
+          <b>${esc(f.name)}</b>
+          <code>${f.active ? "ishlayapti" : esc(f.reason || "sozlanmagan")}</code>
+        </div>
+      </div>`,
+      )
+      .join("");
+    // Tarif filtri hodisalarni tashlayotgan bo'lsa — bu alohida, jiddiy
+    // ogohlantirish: qurilma ishlayapti, lekin hisobot cloudga bormayapti.
+    if (status.plan_filtered) {
+      html += `<div class="note warn" style="margin-top:10px"><b>Diqqat:</b> ${Number(
+        status.plan_filtered,
+      )} ta hodisa tarif faollashtirilmagani uchun cloudga yuborilmadi. Administrator bilan bog‘laning.</div>`;
+    }
+    box.innerHTML = html;
   }
 
   /* ── Hisobot ─────────────────────────────────────────────────────────── */

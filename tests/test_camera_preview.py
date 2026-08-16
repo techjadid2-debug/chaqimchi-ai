@@ -375,6 +375,66 @@ def test_a_line_drawn_by_the_installer_reaches_the_device(
     assert zone.queue is True and zone.dwell_sec == 120
 
 
+def test_empty_cloud_geometry_keeps_the_wizard_drawn_line(tmp_path: Path) -> None:
+    """Ulanish sehrgarda chizilgan chiziqni o'chirmasligi KERAK.
+
+    Haqiqiy bag: cloud `get_site_config()` har doim bo'sh `"lines": []`
+    qaytaradi, `apply_remote_site_settings` esa `key in remote` sharti
+    bilan uni yangi qiymat deb olib, lokal chizilgan chiziqni runtime'da
+    o'chirardi.  Kirish-chiqish sanash jimgina to'xtar, config.yaml va
+    panel esa "chiziq bor" deb ko'rsatib turardi — jonli qurilmada aynan
+    shu kuzatilgan (kuniga 2 ta line_crossed).
+    """
+    import json
+
+    from chaqimchi_ai.retail.service import apply_remote_site_settings
+    from chaqimchi_ai.settings import AppSettings
+
+    cache = tmp_path / "sotqin-config.json"
+    cache.write_text(
+        json.dumps(
+            {
+                "revision": 3,
+                "cameras": [],
+                "config": {"lines": [], "zones": [], "queue_limit": 5},
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = AppSettings.model_validate(
+        {
+            "retail": {"enabled": True, "cameras_source": "auto", "sotqin_config_path": str(cache)},
+            "scene": {
+                "enabled": True,
+                "lines": [
+                    {
+                        "name": "kirish",
+                        "camera_id": "camera-01",
+                        "start": [0.1, 0.6],
+                        "end": [0.9, 0.6],
+                    }
+                ],
+                "zones": [
+                    {
+                        "name": "kassa",
+                        "camera_id": "camera-01",
+                        "polygon": [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]],
+                        "queue": True,
+                    }
+                ],
+            },
+        }
+    )
+
+    apply_remote_site_settings(settings, tmp_path)
+
+    assert len(settings.scene.lines) == 1, "bo'sh cloud lokal chiziqni o'chirmasin"
+    assert settings.scene.lines[0].name == "kirish"
+    assert len(settings.scene.zones) == 1, "bo'sh cloud lokal zonani o'chirmasin"
+    # Skalyar limitlar esa cloud'dan olinaveradi.
+    assert settings.scene.queue_limit == 5
+
+
 def test_a_line_on_an_unknown_camera_is_rejected(client: TestClient) -> None:
     site, _device = _site_with_camera(client)
     site_id = site["site_id"]

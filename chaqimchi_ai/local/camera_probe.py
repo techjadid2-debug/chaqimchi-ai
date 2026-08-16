@@ -257,6 +257,31 @@ KNOWN_PATHS: Tuple[Tuple[str, str], ...] = (
 )
 
 
+#: Substream manzilidan ASOSIY oqim manzilini chiqarish qoidalari.
+#:
+#: Klip yozish (`record_url`) asosiy oqimdan bo'ladi: substream 640x360
+#: da klip mijozga "buzuq video"day ko'rinadi.  Brendlar substream va
+#: main stream'ni bitta naqsh bilan farqlaydi — shu naqshni teskari
+#: qo'llasak, mijozdan ikkinchi manzil so'ramaymiz.
+MAIN_STREAM_REWRITES: Tuple[Tuple[str, str], ...] = (
+    (r"(/Streaming/Channels/\d*?)02(?=$|\?)", r"\g<1>01"),  # Hikvision / HiLook
+    (r"subtype=1\b", "subtype=0"),  # Dahua / IMOU
+    (r"/s1/", "/s0/"),  # Uniview unicast
+    (r"/stream2(?=$|\?)", "/stream1"),  # TP-Link Tapo / Vigi
+    (r"_sub(?=$|\?)", "_main"),  # Xiongmai / Besder
+    (r"/ch0_1(?=$|\?)", "/ch0_0"),  # Umumiy
+)
+
+
+def suggest_record_url(stream_url: str) -> Optional[str]:
+    """Substream URL'idan asosiy oqim taklifi — topilmasa None."""
+    for pattern, replacement in MAIN_STREAM_REWRITES:
+        rewritten, count = re.subn(pattern, replacement, stream_url, count=1)
+        if count and rewritten != stream_url:
+            return rewritten
+    return None
+
+
 def candidate_urls(
     host: str,
     *,

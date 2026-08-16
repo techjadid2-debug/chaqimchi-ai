@@ -196,3 +196,21 @@ def test_scan_endpoint_does_not_swallow_failures(local_client):
         mock_discover.side_effect = OSError("tarmoq yopiq")
         with pytest.raises(OSError):
             local_client.post("/api/setup/scan")
+
+
+def test_main_stream_is_suggested_for_known_brands() -> None:
+    """Klip uchun asosiy oqim substream manzilidan chiqariladi."""
+    from chaqimchi_ai.local.camera_probe import suggest_record_url
+
+    cases = {
+        "rtsp://u:p@h:554/Streaming/Channels/102": "rtsp://u:p@h:554/Streaming/Channels/101",
+        "rtsp://u:p@h:554/cam/realmonitor?channel=1&subtype=1":
+            "rtsp://u:p@h:554/cam/realmonitor?channel=1&subtype=0",
+        "rtsp://u:p@h:554/unicast/c2/s1/live": "rtsp://u:p@h:554/unicast/c2/s0/live",
+        "rtsp://u:p@h:554/stream2": "rtsp://u:p@h:554/stream1",
+    }
+    for sub, main in cases.items():
+        assert suggest_record_url(sub) == main, sub
+    # Notanish yo'l uchun taxmin qilinmaydi — noto'g'ri taxmin ffmpeg'ni
+    # abadiy xatoga aylantirardi.
+    assert suggest_record_url("rtsp://u:p@h:554/qandaydir/yol") is None

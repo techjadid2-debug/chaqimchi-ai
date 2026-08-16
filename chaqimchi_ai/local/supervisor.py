@@ -256,6 +256,9 @@ class RetailSupervisor:
             "cameras_configured": status_file.get("cameras_configured", 0),
             "cameras_active": status_file.get("cameras_active", 0),
             "cameras": status_file.get("cameras", {}),
+            # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel
+            # "hisobot cloudga bormayapti" ogohlantirishini shundan chiqaradi.
+            "plan_filtered": status_file.get("plan_filtered", 0),
             # Zanjir ishlayapti-yu holat fayli eskirgan bo'lsa — u qotib
             # qolgan.  Mijoz uchun bu "ishlamayapti" bilan bir xil, shuning
             # uchun panel buni alohida ko'rsatishi kerak.

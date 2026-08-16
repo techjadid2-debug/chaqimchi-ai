@@ -596,6 +596,34 @@
     }
   });
 
+  $("pullConfigBtn").addEventListener("click", async () => {
+    const button = $("pullConfigBtn");
+    button.disabled = true;
+    note("pairResult", "warn", "Cloud sozlamasi so‘ralmoqda…", "");
+    try {
+      const result = await api("/api/setup/pull-config", { method: "POST" });
+      if (!result.applied) {
+        return note(
+          "pairResult",
+          "warn",
+          "Cloudda yangi sozlama yo‘q.",
+          " Kamera va chiziqlarni avval cloud panelida kiriting.",
+        );
+      }
+      note(
+        "pairResult",
+        "ok",
+        "Cloud sozlamasi qo‘llandi.",
+        ` ${result.cameras} kamera, ${result.lines} chiziq, ${result.zones} zona.`,
+      );
+      await loadCameras();
+    } catch (error) {
+      note("pairResult", "err", "Olib tushilmadi.", " " + error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   $("unpairBtn").addEventListener("click", async () => {
     if (!confirm("Cloud ulanishi uzilsinmi? Mijoz paneli va Telegram xabarlari to‘xtaydi.")) return;
     try {

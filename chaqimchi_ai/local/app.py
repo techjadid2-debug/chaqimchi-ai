@@ -32,7 +32,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from chaqimchi_ai.local import camera_probe, cloud_link, config_store, paths
+from chaqimchi_ai.local import camera_probe, cloud_config, cloud_link, config_store, paths
 from chaqimchi_ai.local.supervisor import RetailSupervisor
 
 logger = logging.getLogger(__name__)
@@ -449,7 +449,11 @@ class PairBody(BaseModel):
 
 @app.get("/api/setup/cloud-status")
 async def cloud_status() -> Dict[str, Any]:
-    return {**cloud_link.status(), "pending_events": cloud_link.pending_events()}
+    return {
+        **cloud_link.status(),
+        **cloud_config.status(),
+        "pending_events": cloud_link.pending_events(),
+    }
 
 
 @app.post("/api/setup/pair")
@@ -485,6 +489,21 @@ async def unpair() -> Dict[str, Any]:
     if supervisor.status()["running"]:
         supervisor.restart()
     return {"ok": True, **cloud_link.status()}
+
+
+@app.post("/api/setup/pull-config")
+async def pull_config() -> Dict[str, Any]:
+    """Cloudda kiritilgan kamera va chiziqlarni darhol olib tushadi.
+
+    Fon sinxronizatsiyasi buni har daqiqada o'zi qiladi; bu tugma
+    o'rnatuvchi uchun — u cloudda sozlab bo'lgach kutib turmaydi.
+    """
+    import anyio
+
+    applied = await anyio.to_thread.run_sync(cloud_config.sync_once)
+    if applied is None:
+        return {"ok": True, "applied": False, "message": "Cloudda yangi sozlama yo'q"}
+    return {"ok": True, "applied": True, **applied, **config_store.summary()}
 
 
 # ── Xizmat boshqaruvi ────────────────────────────────────────────────────
@@ -662,6 +681,34 @@ def _auto_pair_if_handed_off() -> None:
         logger.exception("Avtomatik ulanishda kutilmagan xato")
 
 
+def _start_config_sync() -> None:
+    """Cloud sozlamasini fonda kuzatib boradi.
+
+    O'rnatuvchi cloud panelida kamera qo'shsa yoki chiziqni o'zgartirsa,
+    do'kondagi kompyuterga borish shart emas: o'zgarish bir daqiqada
+    tushadi.
+
+    Ip `daemon`: dastur yopilganda uni alohida to'xtatish shart emas.
+    """
+
+    def _loop() -> None:
+        while True:
+            try:
+                applied = cloud_config.sync_once()
+                if applied and applied.get("cameras"):
+                    # Kamera ro'yxati o'zgardi — zanjir uni faqat startda
+                    # o'qiydi, shuning uchun qayta ishga tushiramiz.
+                    if supervisor.status()["running"]:
+                        supervisor.restart()
+                    else:
+                        _autostart_if_ready()
+            except Exception:  # noqa: BLE001 — sinxronizatsiya dasturni to'xtatmasin
+                logger.exception("Cloud sozlamasini olishda kutilmagan xato")
+            time.sleep(cloud_config.POLL_INTERVAL_SEC)
+
+    threading.Thread(target=_loop, name="cloud-config-sync", daemon=True).start()
+
+
 def _autostart_if_ready() -> None:
     """Sozlangan bo'lsa AI zanjirini o'zi ko'taradi.
 
@@ -693,7 +740,15 @@ def main() -> None:
     print("=" * 62)
 
     _auto_pair_if_handed_off()
+    # Cloudda sozlangan bo'lsa, zanjir ishga tushishidan **oldin** olib
+    # tushamiz — aks holda birinchi daqiqada kamerasiz ishga tushib,
+    # keyin qayta start bo'lardi.
+    try:
+        cloud_config.sync_once()
+    except Exception:  # noqa: BLE001
+        logger.exception("Boshlang'ich cloud sozlamasi olinmadi")
     _autostart_if_ready()
+    _start_config_sync()
     if os.environ.get("CHAQIMCHI_LOCAL_NO_BROWSER", "").lower() not in {"1", "true", "yes"}:
         _open_browser(url)
 

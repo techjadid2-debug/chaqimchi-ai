@@ -191,8 +191,14 @@
       pending > 20
         ? ` · <b>${pending} hodisa yuborilmagan</b> — internetni tekshiring`
         : "";
+    // Sozlama masofadan kelgan bo'lsa buni aytish kerak: mijoz kamerani
+    // shu yerdan o'zgartirmoqchi bo'lsa, o'zgarishi keyingi sinxronda
+    // qaytib ketishini bilishi lozim.
+    const source = cloud.remote_config
+      ? " · <b>Kameralar cloud’dan boshqariladi</b>"
+      : "";
     bar.innerHTML =
-      `<b>Cloudga ulangan</b>Mijoz paneli: <a href="${esc(cloud.owner_url)}" target="_blank" rel="noopener noreferrer">${esc(cloud.owner_url)}</a>${queue}`;
+      `<b>Cloudga ulangan</b>Mijoz paneli: <a href="${esc(cloud.owner_url)}" target="_blank" rel="noopener noreferrer">${esc(cloud.owner_url)}</a>${queue}${source}`;
   }
 
   async function refresh() {

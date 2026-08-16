@@ -255,28 +255,36 @@ def test_cache_token_matches_the_file_contents(asset: str) -> None:
 #
 # Do'kon egasiga "Telegram ID ingizni kiriting, keyin kodni kutib
 # turing" deyish — u qilmaydigan ish.  Havola bosilishi bilan panel
-# ochilishi kerak.
+# ochilishi kerak.  Havoladagi qiymat — uzun tasodifiy token (`?key=`);
+# Telegram ID emas, chunki ID sir emas.
 
 
 def test_owner_panel_logs_in_from_the_link() -> None:
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     assert "loginFromLink" in html
-    assert "params.get('tg')" in html, "havoladagi Telegram ID o'qilmayapti"
+    assert "params.get('key')" in html, "havoladagi token o'qilmayapti"
     assert "loginFromLink()" in html, "sahifa ochilganda chaqirilmayapti"
 
 
-def test_link_login_reuses_the_server_check() -> None:
-    """Havola **yangi ruxsat emas**: server ayni ro'yxatni tekshiradi.
+def test_link_login_uses_the_token_endpoint() -> None:
+    """Havola server tomonda tekshiriladi va Telegram ID ishlatilmaydi.
 
-    Agar sahifa tokenni o'zi yasasa yoki boshqa endpointga borsa,
-    ro'yxatni bo'shatish havolani to'xtatmasdi — va vaqtincha imtiyoz
-    abadiy qolib ketardi.
+    `?tg=<id>` oqimi ataylab olib tashlangan: ID ochiq ma'lumot, u bilan
+    kirish mumkin bo'lsa istalgan odam panelga kirardi.  Bu test o'sha
+    oqim qaytib kelmasligini qo'riqlaydi.
     """
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     block = html[html.index("async function loginFromLink"):]
     block = block[: block.index("if(token)")]
-    assert "/api/v1/owner/auth/request" in block, "server tekshiruvidan o'tsin"
+    assert "/api/v1/owner/auth/link" in block, "token server tekshiruvidan o'tsin"
     assert "d.access_token" in block, "token faqat serverdan olinsin"
+    assert "params.get('tg')" not in html, "Telegram ID bilan kirish qaytmasin"
+
+
+def test_link_token_is_scrubbed_from_the_address_bar() -> None:
+    """Token — credential; kirilgach manzil qatorida qolmasin."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "history.replaceState" in html
 
 
 def test_stored_session_wins_over_the_link() -> None:

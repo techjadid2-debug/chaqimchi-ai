@@ -84,6 +84,49 @@ Backup fayli va uning paroli bir joyda saqlanmasin. Kamida oyiga bir marta
 alohida staging hostda restore drill o‘tkazing. Restore drill bajarilmaguncha
 “backup bor” production tayyor degani emas.
 
+### 2.1 Kunlik avtomatik backup (majburiy)
+
+Deploy paytidagi backup yetarli emas: deploy bo‘lmagan har kun — backup
+bo‘lmagan kun. VPS’da bir marta o‘rnatiladi:
+
+```bash
+sudo mkdir -p /etc/chaqimchi
+sudo cp deploy/backup.env.example /etc/chaqimchi/backup.env
+sudo nano /etc/chaqimchi/backup.env         # parol va yo'llarni kiriting
+sudo chmod 600 /etc/chaqimchi/backup.env
+sudo cp deploy/chaqimchi-backup.service deploy/chaqimchi-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chaqimchi-backup.timer
+sudo systemctl start chaqimchi-backup.service   # birinchi sinov darhol
+systemctl list-timers chaqimchi-backup.timer    # keyingi ishga tushish vaqti
+```
+
+Har kuni 03:30 da backup olinadi, 14 kundan eskilari o‘chiriladi.
+Holatni tekshirish: `journalctl -u chaqimchi-backup.service -n 20`.
+
+### 2.2 Restore mashqi (oyiga 1 marta)
+
+```bash
+# 1. Oxirgi arxivni oching
+openssl enc -d -aes-256-cbc -pbkdf2 -pass env:CHAQIMCHI_BACKUP_PASSWORD \
+  -in chaqimchi-<sana>.tar.gz.enc | tar -xz -C /tmp/restore-drill
+
+# 2. Ichida uchtasi ham borligini tekshiring:
+#    postgres.dump (pg_restore --list bilan ochiladimi),
+#    cloud-state/cloud.db (sqlite3 "PRAGMA integrity_check"),
+#    minio/ (snapshot fayllari bor)
+pg_restore --list /tmp/restore-drill/postgres.dump | head
+sqlite3 /tmp/restore-drill/cloud-state/cloud.db "PRAGMA integrity_check;"
+
+# 3. Natijani sana bilan shu faylning ostiga yozib qo'ying.
+```
+
+Restore mashqlari jurnali:
+
+| Sana | Kim | Natija |
+|---|---|---|
+| _hali o‘tkazilmagan_ | | |
+
 ## 3. Deploydan keyingi tekshiruv
 
 ```bash

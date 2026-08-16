@@ -120,6 +120,8 @@ class EventStore:
                 snapshot_key TEXT,
                 has_clip INTEGER NOT NULL DEFAULT 0,
                 clip_key TEXT,
+                snapshot_bytes INTEGER NOT NULL DEFAULT 0,
+                clip_bytes INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )
             """,
@@ -144,6 +146,18 @@ class EventStore:
                 attempts INTEGER NOT NULL DEFAULT 0,
                 used INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS owner_login_links (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                telegram_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT
             )
             """,
             """
@@ -221,6 +235,8 @@ class EventStore:
             "ON production_events(site_id,occurred_at)",
             "CREATE INDEX IF NOT EXISTS idx_owner_members_telegram "
             "ON owner_members(telegram_id,active)",
+            "CREATE INDEX IF NOT EXISTS idx_owner_login_links_hash "
+            "ON owner_login_links(token_hash,revoked)",
             "CREATE INDEX IF NOT EXISTS idx_employees_site_active ON employees(site_id,active)",
             "CREATE INDEX IF NOT EXISTS idx_attendance_site_date "
             "ON attendance_daily(site_id,work_date)",
@@ -256,6 +272,9 @@ class EventStore:
             ("queue_length", "INTEGER"),
             ("has_clip", "INTEGER NOT NULL DEFAULT 0"),
             ("clip_key", "TEXT"),
+            # Hajm kvotasi uchun: qaysi hodisa qancha media saqlayotgani.
+            ("snapshot_bytes", "INTEGER NOT NULL DEFAULT 0"),
+            ("clip_bytes", "INTEGER NOT NULL DEFAULT 0"),
         )
         for name, column_type in retail_columns:
             if name not in existing:
@@ -353,27 +372,79 @@ class EventStore:
             ).fetchone()
         return self._decode_event(row) if row else None
 
-    def set_snapshot(self, site_id: str, event_id: str, key: str) -> bool:
+    def set_snapshot(self, site_id: str, event_id: str, key: str, *, size_bytes: int = 0) -> bool:
         with self._connect() as conn:
             cursor = conn.execute(
                 self._sql(
-                    "UPDATE production_events SET snapshot_key=?,has_snapshot=1 "
-                    "WHERE site_id=? AND event_id=?"
+                    "UPDATE production_events SET snapshot_key=?,has_snapshot=1,"
+                    "snapshot_bytes=? WHERE site_id=? AND event_id=?"
                 ),
-                (key, site_id, event_id),
+                (key, int(size_bytes), site_id, event_id),
             )
             return bool(cursor.rowcount)
 
-    def set_clip(self, site_id: str, event_id: str, key: str) -> bool:
+    def set_clip(self, site_id: str, event_id: str, key: str, *, size_bytes: int = 0) -> bool:
         with self._connect() as conn:
             cursor = conn.execute(
                 self._sql(
-                    "UPDATE production_events SET clip_key=?,has_clip=1 "
-                    "WHERE site_id=? AND event_id=?"
+                    "UPDATE production_events SET clip_key=?,has_clip=1,"
+                    "clip_bytes=? WHERE site_id=? AND event_id=?"
                 ),
-                (key, site_id, event_id),
+                (key, int(size_bytes), site_id, event_id),
             )
             return bool(cursor.rowcount)
+
+    def media_usage_bytes(self, site_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT COALESCE(SUM(COALESCE(snapshot_bytes,0)+COALESCE(clip_bytes,0)),0) "
+                    "AS total FROM production_events WHERE site_id=?"
+                ),
+                (site_id,),
+            ).fetchone()
+        return int(self._dict(row)["total"] or 0)
+
+    def purge_site_media_over_quota(self, site_id: str, max_bytes: int) -> List[str]:
+        """Obyekt media hajmi kvotadan oshsa **eng eski** medialarni bo'shatadi.
+
+        Muddat bo'yicha tozalash (`purge_site`) yetarli emas: kuniga 500
+        snapshot + 100 klip ruxsat etilgan, ya'ni bitta shovqinli sayt 30
+        kunlik tarifda ham VPS diskini to'ldira oladi.  Hodisa yozuvining
+        o'zi qoladi (statistika buzilmaydi) — faqat media o'chadi, xuddi
+        edge'dagi `outbox.prune` kabi.
+        """
+        usage = self.media_usage_bytes(site_id)
+        if usage <= max_bytes:
+            return []
+        keys: List[str] = []
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT event_id,snapshot_key,clip_key,"
+                    "COALESCE(snapshot_bytes,0)+COALESCE(clip_bytes,0) AS media_bytes "
+                    "FROM production_events WHERE site_id=? AND "
+                    "(snapshot_key IS NOT NULL OR clip_key IS NOT NULL) "
+                    "ORDER BY occurred_at"
+                ),
+                (site_id,),
+            ).fetchall()
+            freed = 0
+            for raw in rows:
+                if usage - freed <= max_bytes:
+                    break
+                row = self._dict(raw)
+                keys.extend(key for key in (row["snapshot_key"], row["clip_key"]) if key)
+                freed += int(row["media_bytes"] or 0)
+                conn.execute(
+                    self._sql(
+                        "UPDATE production_events SET snapshot_key=NULL,has_snapshot=0,"
+                        "snapshot_bytes=0,clip_key=NULL,has_clip=0,clip_bytes=0 "
+                        "WHERE site_id=? AND event_id=?"
+                    ),
+                    (site_id, row["event_id"]),
+                )
+        return keys
 
     def list_events(
         self,
@@ -1276,6 +1347,81 @@ class EventStore:
                 return False
             conn.execute(self._sql("UPDATE owner_otps SET used=1 WHERE id=?"), (row["id"],))
             return True
+
+    # ── Kirish havolalari ────────────────────────────────────────────────
+    #
+    # `?key=<token>` havolasi — OTP o'rnini bosadigan qulaylik.  Token
+    # `secrets.token_urlsafe(32)` (taxmin qilib bo'lmaydi), bazada faqat
+    # HMAC hash turadi (baza sizib chiqsa ham havola tiklanmaydi), va har
+    # a'zoda bitta faol havola bo'ladi: yangisini yaratish eskisini bekor
+    # qiladi — "havola tarqalib ketdi" muammosi bitta tugma bilan yopiladi.
+
+    def _login_link_digest(self, token: str, secret: str) -> str:
+        # "login-link:" prefiksi — OTP hash'lari bilan domen ajratish.
+        return hmac.new(secret.encode(), f"login-link:{token}".encode(), hashlib.sha256).hexdigest()
+
+    def create_login_link(
+        self, site_id: str, telegram_id: str, *, secret: str, ttl_days: int = 30
+    ) -> str:
+        token = secrets.token_urlsafe(32)
+        now = _now()
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "UPDATE owner_login_links SET revoked=1 "
+                    "WHERE site_id=? AND telegram_id=? AND revoked=0"
+                ),
+                (site_id, str(telegram_id)),
+            )
+            conn.execute(
+                self._sql(
+                    "INSERT INTO owner_login_links "
+                    "(id,site_id,telegram_id,token_hash,expires_at,revoked,created_at) "
+                    "VALUES (?,?,?,?,?,0,?)"
+                ),
+                (
+                    str(uuid.uuid4()),
+                    site_id,
+                    str(telegram_id),
+                    self._login_link_digest(token, secret),
+                    (now + timedelta(days=ttl_days)).isoformat(),
+                    now.isoformat(),
+                ),
+            )
+        return token
+
+    def member_for_login_token(self, token: str, *, secret: str) -> Optional[Dict[str, Any]]:
+        """Havola tokeni → faol a'zo, yoki None.
+
+        A'zolik har safar qayta tekshiriladi: a'zo o'chirilsa uning eski
+        havolasi ham darhol ishlamay qoladi.
+        """
+        digest = self._login_link_digest(token, secret)
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT * FROM owner_login_links WHERE token_hash=? AND revoked=0"),
+                (digest,),
+            ).fetchone()
+            if not row:
+                return None
+            data = self._dict(row)
+            if data["expires_at"] < _now().isoformat():
+                return None
+            conn.execute(
+                self._sql("UPDATE owner_login_links SET last_used_at=? WHERE id=?"),
+                (_now().isoformat(), data["id"]),
+            )
+        return self.member_for_site(data["site_id"], data["telegram_id"])
+
+    def revoke_login_links(self, site_id: str, telegram_id: Optional[str] = None) -> int:
+        query = "UPDATE owner_login_links SET revoked=1 WHERE site_id=? AND revoked=0"
+        params: List[Any] = [site_id]
+        if telegram_id is not None:
+            query += " AND telegram_id=?"
+            params.append(str(telegram_id))
+        with self._connect() as conn:
+            cursor = conn.execute(self._sql(query), tuple(params))
+            return int(cursor.rowcount or 0)
 
     def mark_digest_sent(self, site_id: str, digest_date: str) -> bool:
         with self._connect() as conn:

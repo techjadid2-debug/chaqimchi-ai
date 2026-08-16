@@ -657,6 +657,7 @@
       if (btn.dataset.pairing) return newPairing(btn.dataset.pairing);
       if (btn.dataset.onboarding) return openOnboarding(btn.dataset.onboarding);
       if (btn.dataset.owner) return addOwner(btn.dataset.owner);
+      if (btn.dataset.ownerLink) return ownerLink(btn.dataset.ownerLink);
       if (btn.dataset.cameras) return setExpectedCameras(btn.dataset.cameras);
       if (btn.dataset.cameraInventory) return openCameraInventory(btn.dataset.cameraInventory);
       if (btn.dataset.addCamera) return addOrReplaceCamera(btn.dataset.addCamera);
@@ -747,6 +748,23 @@
         });
         notify("Telegram egasi qo'shildi");
         await openOnboarding(siteId);
+      } catch (err) { notify(err.message, false); }
+    }
+
+    async function ownerLink(siteId) {
+      // Kirish havolasi: mijoz kod termasdan panelga kiradi.  Token uzun
+      // va tasodifiy; yangi havola yaratish eskisini bekor qiladi, shuning
+      // uchun "havola tarqalib ketdi" muammosi shu tugmaning o'zi bilan
+      // hal bo'ladi.
+      const telegramId = prompt("Mijozning Telegram ID raqami (a'zo bo'lishi shart):");
+      if (telegramId === null) return;
+      if (!/^[-0-9]{3,32}$/.test(telegramId.trim())) return notify("Telegram ID noto'g'ri", false);
+      try {
+        const link = await api(
+          `/api/v1/admin/sites/${siteId}/members/${encodeURIComponent(telegramId.trim())}/login-link`,
+          { method: "POST" },
+        );
+        prompt(`Havolani nusxalab mijozga yuboring (${link.expires_days} kun amal qiladi):`, link.url);
       } catch (err) { notify(err.message, false); }
     }
 
@@ -1084,6 +1102,7 @@
             <button class="btn btn-primary" data-invoice="${esc(d.id)}">Hisob ochish</button>
             <button class="btn" data-onboarding="${esc(d.id)}">Onboarding</button>
             <button class="btn" data-owner="${esc(d.id)}">Telegram egasi</button>
+            <button class="btn" data-owner-link="${esc(d.id)}">Kirish havolasi</button>
             <button class="btn" data-cameras="${esc(d.id)}">Kamera soni</button>
             <button class="btn" data-camera-inventory="${esc(d.id)}">Kamera/NVR</button>
             <button class="btn btn-primary" data-features="${esc(d.id)}">AI funksiyalar</button>

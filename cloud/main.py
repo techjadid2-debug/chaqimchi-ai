@@ -93,6 +93,14 @@ EVENT_BATCH_HOURLY_LIMIT = 600
 #: degan matn o'rnatuvchini ishlamayapti deb o'ylashga majbur qiladi.
 PREVIEW_WAIT_HINT_SEC = 60
 
+#: Media yuklash limitlari.  Bular deploy/Caddyfile `max_size` dan KICHIK
+#: bo'lishi shart, aks holda proxy so'rovni app'gacha yetkazmay 413 qaytaradi
+#: va edge kliplari jimgina dead_letter'ga tushadi (bir marta shunday
+#: bo'lgan: Caddy 10MB, klip 15-22MB edi).  Moslikni
+#: tests/test_proxy_limits.py qattiq tekshiradi.
+SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024
+CLIP_MAX_BYTES = 50 * 1024 * 1024
+
 logger = logging.getLogger(__name__)
 
 _store: Optional[CloudStore] = None
@@ -335,6 +343,11 @@ class OtpVerifyBody(BaseModel):
     code: str = Field(min_length=6, max_length=6)
 
 
+class LinkLoginBody(BaseModel):
+    #: `?key=` havoladagi token — `secrets.token_urlsafe(32)` chiqishi.
+    key: str = Field(min_length=20, max_length=128)
+
+
 class EdgeHeartbeatBody(BaseModel):
     cameras_active: int = Field(default=0, ge=0, le=64)
     temperature_c: Optional[float] = Field(default=None, ge=-40, le=150)
@@ -478,33 +491,20 @@ def _owner_secret() -> str:
     return secret
 
 
-#: Sinov davrida kodsiz kiradigan Telegram ID lari.
+#: Kirish havolasining amal qilish muddati.
 #:
-#: Bu **ataylab qo'yilgan zaiflik** va faqat sinov uchun.  Ro'yxatdagi
-#: odam panelga kod terib o'tirmasdan kiradi — ya'ni uning Telegram ID
-#: sini bilgan har kim ham kira oladi (ID esa maxfiy ma'lumot emas).
-#:
-#: Shuning uchun uchta cheklov birga ishlaydi:
-#:
-#: 1. Ro'yxat **muhit o'zgaruvchisida**, kodda emas — serverni qayta
-#:    ishga tushirmasdan o'chirish mumkin va reliz ichida tarqalmaydi;
-#: 2. Bo'sh bo'lsa (standart holat) hech kimga imtiyoz yo'q;
-#: 3. Har ishlatilishi `WARNING` bo'lib logga tushadi — kim, qachon.
-#:
-#: Ro'yxatdagi ID baribir haqiqiy a'zo bo'lishi shart: bu tekshiruv
-#: aylanib o'tilmaydi, faqat **kod** bosqichi tashlab ketiladi.
-ENV_OTP_BYPASS_IDS = "CHAQIMCHI_OTP_BYPASS_IDS"
-
-
-def _otp_bypass_ids() -> set:
-    raw = os.environ.get(ENV_OTP_BYPASS_IDS, "")
-    return {item.strip() for item in raw.split(",") if item.strip()}
+#: Ilgari bu o'rinda `CHAQIMCHI_OTP_BYPASS_IDS` — Telegram ID bo'yicha
+#: kodsiz kirish bor edi.  U olib tashlandi: Telegram ID sir emas, uni
+#: bilgan har kim panelga kira olardi.  O'rnini `?key=<token>` havolasi
+#: bosdi — token uzun va tasodifiy, admin uni istalgan payt bekor qiladi
+#: (yangi havola yaratish eskisini o'chiradi).
+LOGIN_LINK_TTL_DAYS = 30
 
 
 def _pick_member(members: List[Dict[str, Any]], site_id: Optional[str]) -> Dict[str, Any]:
     """A'zolikdan qaysi obyektga kirishni tanlaydi.
 
-    Ikkala kirish yo'li (kod bilan va sinov rejimida) shu funksiyani
+    Ikkala kirish yo'li (kod bilan va havola bilan) shu funksiyani
     ishlatadi — mantiq ikki joyda takrorlansa, biri o'zgarib ikkinchisi
     boshqacha ishlab qolardi.
     """
@@ -593,6 +593,25 @@ async def _notify_site_members(site_id: str, text: str) -> None:
             continue
 
 
+#: Bitta obyekt media (snapshot + klip) uchun ko'pi bilan shuncha joy oladi.
+#:
+#: Muddat bo'yicha tozalashning o'zi diskni himoya qilmaydi: kunlik
+#: limitlar (500 snapshot × 8 MB + 100 klip × 50 MB) bilan bitta shovqinli
+#: sayt 30 kunda ~270 GB yig'ishi mumkin edi.  Kvotadan oshsa **eng eski**
+#: media o'chadi (hodisa statistikasi qoladi) — edge'dagi `outbox.prune`
+#: qanday ishlasa, cloud ham shunday.
+SITE_MEDIA_MAX_BYTES_DEFAULT = 10 * 1024**3
+
+
+def _site_media_quota_bytes() -> int:
+    raw = os.environ.get("CHAQIMCHI_SITE_MEDIA_MAX_BYTES", "").strip()
+    try:
+        return int(raw) if raw else SITE_MEDIA_MAX_BYTES_DEFAULT
+    except ValueError:
+        logger.warning("CHAQIMCHI_SITE_MEDIA_MAX_BYTES son emas — standart qiymat")
+        return SITE_MEDIA_MAX_BYTES_DEFAULT
+
+
 def _purge_expired_events() -> int:
     """Har obyektni **o'z tarifi** muddati bo'yicha tozalaydi.
 
@@ -600,12 +619,17 @@ def _purge_expired_events() -> int:
     to'lagan mijoz to'lagan narsasini olmasdi.
     """
     removed = 0
+    quota = _site_media_quota_bytes()
     for site in get_store().list_sites():
         try:
             retention = get_plan(str(site["plan"])).retention_days
         except ValueError:
             retention = 30
-        for key in get_event_store().purge_site(str(site["id"]), retention_days=retention):
+        site_id = str(site["id"])
+        for key in get_event_store().purge_site(site_id, retention_days=retention):
+            get_snapshot_store().delete(key)
+            removed += 1
+        for key in get_event_store().purge_site_media_over_quota(site_id, quota):
             get_snapshot_store().delete(key)
             removed += 1
     return removed
@@ -661,6 +685,19 @@ async def lifespan(app: FastAPI):
             errors.append("portal JWT secret kamida 32 belgi bo'lishi shart")
         if len(os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "")) < 32:
             errors.append("cloud admin key kamida 32 belgi bo'lishi shart")
+        # Sinov eshiklari production'da qat'iyan taqiqlanadi.  Bular env
+        # o'zgaruvchisi bo'lgani uchun "unutib qoldirish" eng real xavf:
+        # OTP_TEST_CODE hamma mijozning kodini bitta doimiy qiymatga
+        # aylantiradi, BYPASS_IDS esa eski kodsiz-kirish ro'yxati (kod
+        # olib tashlangan, lekin o'zgaruvchi qolib ketgan bo'lsa ham
+        # server yonmasin — sozlama tozalanishi shart).
+        if os.environ.get("CHAQIMCHI_OTP_TEST_CODE", "").strip():
+            errors.append("CHAQIMCHI_OTP_TEST_CODE production'da taqiqlanadi")
+        if os.environ.get("CHAQIMCHI_OTP_BYPASS_IDS", "").strip():
+            errors.append(
+                "CHAQIMCHI_OTP_BYPASS_IDS olib tashlangan — o'rniga "
+                "admin panel orqali kirish havolasi (login-link) ishlating"
+            )
         try:
             usd_rate_uzs()
         except ValueError as exc:
@@ -2315,7 +2352,21 @@ async def admin_new_pairing_code(
 
 @app.post("/api/v1/devices/claim")
 @app.post("/api/v1/sotqin/claim")
-async def claim_device(body: ClaimDeviceBody) -> Dict[str, str]:
+async def claim_device(body: ClaimDeviceBody, request: Request) -> Dict[str, str]:
+    # Bu endpoint ataylab autentifikatsiyasiz (qurilmada hali token yo'q),
+    # shuning uchun IP bo'yicha cheklov shart: pairing kod 6 hex belgi va
+    # 48 soat yashaydi — cheklovsiz uni qo'pol kuch bilan topish mumkin,
+    # topilgan kod esa begona do'kon uchun doimiy qurilma tokenini (va u
+    # orqali kamera RTSP parollarini) beradi.  Halol qurilma bitta-ikkita
+    # so'rov qiladi, limitga hech qachon urilmaydi.
+    client_host = request.client.host if request.client else "unknown"
+    ratelimit.check(
+        "device-claim",
+        client_host,
+        limit=10,
+        window_sec=600,
+        message="Juda ko'p urinish. 10 daqiqadan keyin qayta urinib ko'ring.",
+    )
     try:
         return get_store().claim_device(
             body.pairing_code,
@@ -2409,11 +2460,11 @@ async def upload_event_snapshot(
     content = await request.body()
     if not content:
         raise HTTPException(400, "Snapshot bo'sh")
-    if len(content) > 8 * 1024 * 1024:
+    if len(content) > SNAPSHOT_MAX_BYTES:
         raise HTTPException(413, "Snapshot 8 MB dan katta")
     key = f"{device['site_id']}/{event_id}.jpg"
     get_snapshot_store().put(key, content, content_type="image/jpeg")
-    get_event_store().set_snapshot(device["site_id"], event_id, key)
+    get_event_store().set_snapshot(device["site_id"], event_id, key, size_bytes=len(content))
     return {"ok": True, "event_id": event_id}
 
 
@@ -2440,11 +2491,11 @@ async def upload_event_clip(
     content = await request.body()
     if not content:
         raise HTTPException(400, "Videoklip bo'sh")
-    if len(content) > 50 * 1024 * 1024:
+    if len(content) > CLIP_MAX_BYTES:
         raise HTTPException(413, "Videoklip 50 MB dan katta")
     key = f"{device['site_id']}/{event_id}.mp4"
     get_snapshot_store().put(key, content, content_type="video/mp4")
-    get_event_store().set_clip(device["site_id"], event_id, key)
+    get_event_store().set_clip(device["site_id"], event_id, key, size_bytes=len(content))
     return {"ok": True, "event_id": event_id}
 
 
@@ -2738,6 +2789,46 @@ async def admin_add_member(
     )
 
 
+@app.post("/api/v1/admin/sites/{site_id}/members/{telegram_id}/login-link")
+async def admin_create_owner_login_link(
+    site_id: str,
+    telegram_id: str,
+    request: Request,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """A'zo uchun kirish havolasi.
+
+    Havola o'zi credential, shuning uchun faqat admin yaratadi va faqat
+    haqiqiy a'zoga.  Yangi havola eskisini bekor qiladi — "havolani
+    almashtirish" = "eskisini o'chirish".
+    """
+    member = get_event_store().member_for_site(site_id, telegram_id)
+    if not member:
+        raise HTTPException(404, "A'zo topilmadi")
+    token = get_event_store().create_login_link(
+        site_id,
+        telegram_id,
+        secret=_owner_secret(),
+        ttl_days=LOGIN_LINK_TTL_DAYS,
+    )
+    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+    return {
+        "ok": True,
+        "url": f"{base}/owner?key={token}",
+        "expires_days": LOGIN_LINK_TTL_DAYS,
+    }
+
+
+@app.delete("/api/v1/admin/sites/{site_id}/members/{telegram_id}/login-link")
+async def admin_revoke_owner_login_link(
+    site_id: str,
+    telegram_id: str,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    revoked = get_event_store().revoke_login_links(site_id, telegram_id)
+    return {"ok": True, "revoked": revoked}
+
+
 @app.post("/api/v1/owner/auth/request")
 async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
     # Har chaqiruv Telegramga xabar yuboradi — cheklovsiz bu mijozning
@@ -2754,27 +2845,14 @@ async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
     if not members:
         return {"ok": True, "message": "Agar akkaunt mavjud bo'lsa, kod yuborildi"}
 
-    # Sinov ro'yxatidagilar kod terib o'tirmaydi — token darhol beriladi.
-    # A'zolik tekshiruvi (yuqorida) baribir o'tadi: imtiyoz faqat **kod**
-    # bosqichini olib tashlaydi, begona odamni ichkariga kiritmaydi.
-    if str(body.telegram_id) in _otp_bypass_ids():
-        member = _pick_member(members, body.site_id)
-        logger.warning(
-            "OTP CHETLAB O'TILDI (sinov rejimi): telegram_id=%s site_id=%s. "
-            "Ishlab chiqarishda %s bo'sh bo'lishi kerak.",
-            body.telegram_id,
-            member["site_id"],
-            ENV_OTP_BYPASS_IDS,
-        )
-        return {
-            "ok": True,
-            "message": "Sinov rejimi: kod so'ralmadi",
-            "bypass": True,
-            **_owner_session(member),
-        }
-
     secret = _owner_secret()
-    test_code = os.environ.get("CHAQIMCHI_OTP_TEST_CODE", "").strip()
+    # Qat'iy test kodi FAQAT test muhitida ishlaydi.  Ilgari bu shart
+    # yo'q edi: production'da unutilib qolgan bitta env o'zgaruvchisi
+    # hamma mijozning OTP'sini bitta doimiy kodga aylantirardi.  Lifespan
+    # ham production'da bu o'zgaruvchi qo'yilgan bo'lsa serverni yoqmaydi.
+    test_code = ""
+    if os.environ.get("CHAQIMCHI_ENV", "development") != "production":
+        test_code = os.environ.get("CHAQIMCHI_OTP_TEST_CODE", "").strip()
     code = get_event_store().create_otp(
         body.telegram_id,
         secret=secret,
@@ -2800,6 +2878,28 @@ async def owner_verify_otp(body: OtpVerifyBody) -> Dict[str, Any]:
         raise HTTPException(401, "Kod noto'g'ri yoki muddati tugagan")
     members = get_event_store().members_for_telegram(body.telegram_id)
     member = _pick_member(members, body.site_id)
+    return {"ok": True, **_owner_session(member)}
+
+
+@app.post("/api/v1/owner/auth/link")
+async def owner_login_with_link(body: LinkLoginBody, request: Request) -> Dict[str, Any]:
+    """`?key=<token>` havolasi orqali kirish.
+
+    Token taxmin qilib topilmaydigan darajada uzun, lekin baribir IP
+    bo'yicha cheklaymiz — aks holda bu endpoint hash'ni sinab ko'rish
+    uchun bepul oracle bo'lib qolardi.
+    """
+    client_host = request.client.host if request.client else "unknown"
+    ratelimit.check(
+        "owner-link",
+        client_host,
+        limit=10,
+        window_sec=600,
+        message="Juda ko'p urinish. 10 daqiqadan keyin qayta urinib ko'ring.",
+    )
+    member = get_event_store().member_for_login_token(body.key, secret=_owner_secret())
+    if not member:
+        raise HTTPException(401, "Havola eskirgan yoki bekor qilingan")
     return {"ok": True, **_owner_session(member)}
 
 
@@ -3203,7 +3303,21 @@ async def owner_telegram_webhook(
         base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
         customer_url = f"{base}/owner"
         if members:
-            customer_url += f"?site={quote(str(members[0]['site_id']), safe='')}"
+            # A'zoga shaxsiy kirish havolasi — bot orqali yetkaziladi,
+            # ya'ni faqat o'sha Telegram akkaunt egasi ko'radi.  Bu eski
+            # "kodsiz kirish ro'yxati"ning xavfsiz o'rnini bosadi: havola
+            # uzun tasodifiy token, Telegram ID emas.
+            try:
+                token = get_event_store().create_login_link(
+                    str(members[0]["site_id"]),
+                    telegram_id,
+                    secret=_owner_secret(),
+                    ttl_days=LOGIN_LINK_TTL_DAYS,
+                )
+                customer_url += f"?key={quote(token, safe='')}"
+            except HTTPException:
+                # Owner JWT secret sozlanmagan (dev muhit) — oddiy havola.
+                customer_url += f"?site={quote(str(members[0]['site_id']), safe='')}"
         await _send_owner_telegram(
             telegram_id,
             "<b>Chaqimchi AI platformasiga xush kelibsiz.</b>\n\n"

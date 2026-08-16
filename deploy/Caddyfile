@@ -9,8 +9,12 @@
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server
     }
+    # Klip limiti (cloud/main.py CLIP_MAX_BYTES = 50MB) dan katta bo'lishi
+    # shart: 10MB paytida 15-22MB'lik hodisa kliplari proxy'da 413 bilan
+    # qaytib, jimgina dead_letter'ga tushardi. tests/test_proxy_limits.py
+    # bu ikkovi mosligini tekshiradi.
     request_body {
-        max_size 10MB
+        max_size 60MB
     }
     log {
         output stdout

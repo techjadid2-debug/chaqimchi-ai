@@ -28,11 +28,13 @@ Ishga tushirish (odatda rejalashtirilgan vazifa chaqiradi):
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -49,6 +51,12 @@ DOWNLOAD_TIMEOUT_SEC = 900
 
 #: Cloud so'rovi: tez javob bermasa keyingi safar urinamiz.
 QUERY_TIMEOUT_SEC = 30
+
+#: Yangilashdan keyin dastur ishga tushishga urinib (`phase="starting"`),
+#: shuncha vaqt ichida `running` ga yetmasa — reliz buzuq deb topiladi va
+#: oldingi versiya qaytariladi.  Hech kim dasturni ishga tushirmagan
+#: bo'lsa (kompyuterga kirilmagan tun) hukm chiqarilmaydi — kutamiz.
+ROLLBACK_GRACE_SEC = 30 * 60
 
 
 class UpdateError(Exception):
@@ -75,6 +83,63 @@ def _cloud() -> Dict[str, Any]:
     return raw
 
 
+def _version_key(version: str) -> tuple:
+    """"0.10.0 > 0.9.0" to'g'ri chiqishi uchun sonli taqqoslash."""
+    parts = []
+    for piece in str(version).split("."):
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
+def _keep_dir() -> Path:
+    path = paths.data_dir() / "update"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _state_path() -> Path:
+    return _keep_dir() / "update-state.json"
+
+
+def _read_state() -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads(_state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _write_state(state: Dict[str, Any]) -> None:
+    _state_path().write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def _clear_state() -> None:
+    _state_path().unlink(missing_ok=True)
+
+
+def _read_alive() -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads(paths.alive_marker_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_at(value: Any) -> Optional[datetime]:
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def check(cloud: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """Cloudda yangi versiya bormi.  Yo'q bo'lsa `None`."""
     raw = cloud or _cloud()
@@ -97,8 +162,27 @@ def check(cloud: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     if not payload.get("available"):
         logger.info("Yangilanish yo'q: %s", payload.get("reason", "eng yangi versiya"))
         return None
-    if str(payload.get("version")) == __version__:
+    offered = str(payload.get("version"))
+    if offered == __version__:
         logger.info("Allaqachon eng yangi versiya: %s", __version__)
+        return None
+
+    # Rollback'dan keyin buzuq deb topilgan versiya qayta taklif qilinsa
+    # olinmaydi — aks holda "o'rnat → qulash → qaytar" abadiy aylanardi.
+    # Yangiroq reliz chiqishi bilan blok o'z-o'zidan ahamiyatsiz qoladi.
+    state = _read_state() or {}
+    if state.get("blocked_version") and offered == str(state["blocked_version"]):
+        logger.warning("Versiya %s buzuq deb belgilangan — o'tkazib yuborildi", offered)
+        return None
+
+    # Pastga tushish faqat admin ataylab `pin` qilganda mumkin.  Aks holda
+    # serverga yozish huquqini olgan hujumchi eski (zaif) relizni qaytarib
+    # o'rnatishi mumkin edi — imzolar muddati tugamaydi.
+    policy = (payload.get("policy") or {}).get("channel", "")
+    if policy != "pin" and _version_key(offered) <= _version_key(__version__):
+        logger.warning(
+            "Eski versiya taklif qilindi (%s <= %s) — rad etildi", offered, __version__
+        )
         return None
     return payload
 
@@ -180,8 +264,97 @@ def install(installer: Path) -> None:
     )
 
 
+def _rollback(state: Dict[str, Any]) -> None:
+    """Buzuq relizdan oldingi versiyaga qaytadi.
+
+    Qoida o'zgarmaydi: tekshirilmagan fayl ishga tushirilmaydi.  Oldingi
+    o'rnatuvchi ham qayta imzo tekshiruvidan o'tadi (manifesti u bilan
+    birga saqlangan).  Tekshiruv o'tmasa yoki fayl yo'q bo'lsa rollback
+    bo'lmaydi — lekin buzuq versiya "blocked" bo'lib qoladi va qayta
+    o'rnatilmaydi.
+    """
+    broken = str(state.get("to_version", ""))
+    prev_exe = Path(str(state.get("previous_installer") or ""))
+    prev_manifest = Path(str(state.get("previous_manifest") or ""))
+    _write_state(
+        {
+            "blocked_version": broken,
+            "rolled_back_at": _now().isoformat(),
+            "rolled_back_to": state.get("from_version", ""),
+        }
+    )
+    if not prev_exe.is_file() or not prev_manifest.is_file():
+        logger.error(
+            "Versiya %s ishga tushmadi, lekin oldingi o'rnatuvchi saqlanmagan — "
+            "qo'lda qayta o'rnatish kerak", broken
+        )
+        return
+    key = public_key_path()
+    try:
+        verify_release_manifest(prev_exe, prev_manifest, key)
+    except (UpdateVerificationError, OSError) as exc:
+        logger.error("Oldingi o'rnatuvchi tekshiruvdan o'tmadi — rollback yo'q: %s", exc)
+        return
+    logger.warning(
+        "Versiya %s ishga tusha olmadi — %s ga qaytarilmoqda",
+        broken,
+        state.get("from_version"),
+    )
+    install(prev_exe)
+
+
+def _resolve_pending(state: Dict[str, Any]) -> Optional[str]:
+    """Oldingi yangilanish taqdirini hal qiladi.
+
+    Qaytaradi: `"wait"` — hukm chiqarish erta (yangi tekshiruv boshlanmaydi);
+    `None` — holat yopildi, davom etsa bo'ladi.
+    """
+    if "blocked_version" in state:
+        return None  # blok `check()` da hisobga olinadi, bu yerda ish yo'q
+    to_version = str(state.get("to_version", ""))
+    from_version = str(state.get("from_version", ""))
+    started_at = _parse_at(state.get("started_at")) or _now()
+
+    if __version__ == from_version and __version__ != to_version:
+        # Setup umuman ishlamagan (masalan tok o'chgan) — hech narsa
+        # o'zgarmagan, keyingi tekshiruv odatdagidek davom etadi.
+        logger.info("Oldingi yangilanish (%s) amalga oshmagan — qayta uriniladi", to_version)
+        _clear_state()
+        return None
+
+    if __version__ != to_version:
+        # Uchinchi versiya (qo'lda qayta o'rnatilgan) — holat eskirgan.
+        _clear_state()
+        return None
+
+    # Biz yangi versiyamiz.  Panel ishga tushdimi?
+    alive = _read_alive()
+    alive_at = _parse_at(alive.get("at")) if alive else None
+    if alive and alive_at and alive_at > started_at:
+        if str(alive.get("version")) == to_version and alive.get("phase") == "running":
+            logger.info("Yangilanish muvaffaqiyatli: %s ishlab turibdi", to_version)
+            _clear_state()
+            return None
+        if (
+            str(alive.get("version")) == to_version
+            and alive.get("phase") == "starting"
+            and (_now() - started_at).total_seconds() > ROLLBACK_GRACE_SEC
+        ):
+            # Dastur qayta-qayta ishga tushishga urinyapti, lekin
+            # `running` ga hech yetmayapti — reliz buzuq.
+            _rollback(state)
+            return "wait"
+    # Hali hech kim dasturni ishga tushirmagan (tunda yangilangan) yoki
+    # eski jarayon hali yopilmagan — hukm chiqarish erta.
+    return "wait"
+
+
 def run_once(*, dry_run: bool = False) -> int:
     """Bir marta tekshiradi va kerak bo'lsa yangilaydi."""
+    state = _read_state()
+    if state and _resolve_pending(state) == "wait":
+        return 0
+
     try:
         update = check()
     except UpdateError as exc:
@@ -191,7 +364,8 @@ def run_once(*, dry_run: bool = False) -> int:
     if update is None:
         return 0
 
-    logger.info("Yangi versiya: %s (joriy: %s)", update["version"], __version__)
+    version = str(update["version"])
+    logger.info("Yangi versiya: %s (joriy: %s)", version, __version__)
     with tempfile.TemporaryDirectory(prefix="chaqimchi-update-") as tmp:
         try:
             installer = download_and_verify(update, Path(tmp))
@@ -201,13 +375,35 @@ def run_once(*, dry_run: bool = False) -> int:
         if dry_run:
             logger.info("dry-run: o'rnatilmadi, paket tekshiruvdan o'tdi")
             return 0
-        # O'rnatuvchi vaqtinchalik papkadan ko'chiriladi: papka biz
-        # chiqishimiz bilan o'chadi, o'rnatuvchi esa hali ishlayotgan
-        # bo'ladi.
-        keep = paths.data_dir() / "update"
-        keep.mkdir(parents=True, exist_ok=True)
+        # O'rnatuvchi (va rollback uchun manifesti) vaqtinchalik papkadan
+        # ko'chiriladi: papka biz chiqishimiz bilan o'chadi, o'rnatuvchi
+        # esa hali ishlayotgan bo'ladi.
+        keep = _keep_dir()
         final = keep / installer.name
         final.write_bytes(installer.read_bytes())
+        manifest_src = installer.with_suffix(".json")
+        if manifest_src.is_file():
+            (keep / manifest_src.name).write_bytes(manifest_src.read_bytes())
+
+        # Joriy versiyaning o'rnatuvchisi (oldingi yangilanishdan qolgan)
+        # rollback nishoni bo'ladi.  Qolgan eski fayllar o'chiriladi —
+        # disk yangilanish arxiviga aylanib ketmasin.
+        prev_exe = keep / f"chaqimchi-windows-{__version__}.exe"
+        prev_manifest = keep / f"chaqimchi-windows-{__version__}.json"
+        wanted = {final, keep / manifest_src.name, prev_exe, prev_manifest}
+        for stale in keep.glob("chaqimchi-windows-*"):
+            if stale not in wanted:
+                stale.unlink(missing_ok=True)
+
+        _write_state(
+            {
+                "from_version": __version__,
+                "to_version": version,
+                "started_at": _now().isoformat(),
+                "previous_installer": str(prev_exe) if prev_exe.is_file() else "",
+                "previous_manifest": str(prev_manifest) if prev_manifest.is_file() else "",
+            }
+        )
         install(final)
     return 0
 
@@ -221,12 +417,21 @@ def main(argv: Optional[list] = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    from logging.handlers import RotatingFileHandler
+
+    # Har 15 daqiqada ishga tushadigan vazifa — rotatsiyasiz bu log yillar
+    # davomida jimgina o'sib borardi.
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s: %(message)s",
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(paths.logs_dir() / "update.log", encoding="utf-8"),
+            RotatingFileHandler(
+                paths.logs_dir() / "update.log",
+                maxBytes=2 * 1024 * 1024,
+                backupCount=2,
+                encoding="utf-8",
+            ),
         ],
     )
     return run_once(dry_run=args.dry_run)

@@ -74,9 +74,6 @@ async function requestOtp(){
   const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   $('loginMsg').textContent=d.message||d.detail||'';
-  // Sinov rejimida server tokenni darhol qaytaradi — kod oynasini
-  // umuman ko'rsatmaymiz, aks holda mijoz kutib qolardi.
-  if(r.ok&&d.access_token){token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp();return}
   $('verify').classList.remove('hidden');
 }
 async function verifyOtp(){const params=new URLSearchParams(location.search);const body={telegram_id:$('telegram').value.trim(),code:$('code').value.trim()};if(params.get('site'))body.site_id=params.get('site');const r=await fetch('/api/v1/owner/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
@@ -141,35 +138,36 @@ async function downloadAttendanceCsv(){const from=$('attendanceFrom').value,to=$
 function showApp(){$('login').classList.add('hidden');$('app').classList.remove('hidden');loadData().catch(()=>{})}
 function logout(){token='';localStorage.removeItem('chaqimchi_owner_token');location.reload()}
 
-// Havoladan to'g'ridan-to'g'ri kirish: `/owner?tg=<id>&site=<obyekt>`.
+// Havoladan to'g'ridan-to'g'ri kirish: `/owner?key=<token>`.
 //
 // Do'kon egasiga "Telegram ID ingizni kiriting, keyin kodni kutib
 // turing" deyish — u qilmaydigan ish.  Havola bosilishi bilan panel
 // ochilishi kerak.
 //
-// Bu **yangi** ruxsat emas: server tomonda ayni `auth/request` chaqiriladi
-// va u faqat `CHAQIMCHI_OTP_BYPASS_IDS` ro'yxatidagilarga token beradi.
-// Ro'yxat bo'shatilsa havola ham darhol ishlamay qoladi va odatdagi
-// kod so'raladigan oyna chiqadi.
+// `key` — uzun tasodifiy token (admin panel yoki Telegram bot beradi).
+// Ilgari bu yerda `?tg=<id>` ishlardi — Telegram ID sir emasligi uchun
+// olib tashlandi.  Token bekor qilinsa (yangi havola yaratilsa yoki
+// muddati o'tsa) odatdagi kod so'raladigan oyna chiqadi.
 async function loginFromLink(){
   const params=new URLSearchParams(location.search);
-  const tg=(params.get('tg')||'').trim();
-  if(!tg)return false;
-  $('telegram').value=tg;
-  const body={telegram_id:tg};
-  if(params.get('site'))body.site_id=params.get('site');
+  const key=(params.get('key')||'').trim();
+  if(!key)return false;
   try{
-    const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r=await fetch('/api/v1/owner/auth/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     const d=await r.json();
     if(r.ok&&d.access_token){
       token=d.access_token;
       localStorage.setItem('chaqimchi_owner_token',token);
+      // Manzil qatoridagi tokenni tozalaymiz — u credential, tarix va
+      // skrinshotlarda qolmasin.  Telegramdagi havola ishlayveradi.
+      params.delete('key');
+      const rest=params.toString();
+      history.replaceState(null,'',location.pathname+(rest?`?${rest}`:''));
       showApp();
       return true;
     }
-    // Imtiyoz o'chirilgan — odatdagi yo'l bilan davom etadi.
-    $('loginMsg').textContent=d.message||d.detail||'';
-    $('verify').classList.remove('hidden');
+    // Havola eskirgan — odatdagi yo'l bilan davom etadi.
+    $('loginMsg').textContent=d.detail||d.message||'';
   }catch(err){
     $('loginMsg').textContent='Server bilan aloqa yo‘q.';
   }

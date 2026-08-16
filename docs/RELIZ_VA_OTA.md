@@ -153,6 +153,33 @@ heartbeat uni allaqachon yuboradi.
 
 ---
 
+## Bosqichli tarqatish (Windows relizlari uchun MAJBURIY tartib)
+
+Windows qurilmalar yangilanishni har 15 daqiqada tekshiradi — buzuq reliz
+15 daqiqada **hamma** qurilmaga yetadi. Shuning uchun tartib qat'iy:
+
+1. **Relizdan oldin** admin panelda barcha mijoz saytlarini `hold` ga
+   o'tkazing (Yangilanish tugmasi). O'z sinov qurilmangiz `auto` da qoladi.
+2. Reliz fayllarini serverga qo'ying — 15 daqiqada faqat sizning
+   qurilmangiz yangilanadi.
+3. **24 soat kuting**: panel ochiladimi, hodisalar kelyaptimi, heartbeat'da
+   yangi versiya ko'rinyaptimi.
+4. Muammo bo'lmasa mijoz saytlarini yana `auto` ga qaytaring.
+
+Himoya qatlamlari (`chaqimchi_ai/local/updater.py`):
+
+- **Faqat yangiroq versiya** o'rnatiladi — serverga yozish huquqini olgan
+  hujumchi eski (zaif) relizni qaytara olmaydi. `pin` bundan mustasno
+  (admin ataylab qotirgan versiya).
+- **Avto-rollback**: yangilashdan keyin panel `running` holatiga yetmasa
+  (30 daqiqa ichida, dastur ishga tushishga uringan bo'lsa), updater
+  oldingi versiyaning saqlangan o'rnatuvchisini (imzosini qayta tekshirib)
+  qaytaradi va buzuq versiyani `blocked` qiladi — qayta o'rnatilmaydi.
+- Rollback nishoni birinchi OTA'dan keyin paydo bo'ladi: qo'lda
+  o'rnatilgan birinchi versiyada hali saqlangan oldingi `.exe` yo'q.
+
+---
+
 ## Hali yo'q: cloud'dan boshqariladigan tarqatish
 
 Hozir yangilanish har bir qurilmada qo'lda ishga tushiriladi. Cloud'dan

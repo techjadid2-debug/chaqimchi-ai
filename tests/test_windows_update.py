@@ -205,6 +205,187 @@ def test_install_refuses_to_run_outside_windows(updater, installer: Path) -> Non
         updater.install(installer)
 
 
+# ── Pastga tushish himoyasi ──────────────────────────────────────────────
+
+
+def _cloud_dict() -> Dict[str, Any]:
+    return {"enabled": True, "url": "https://c.uz", "site_id": "s",
+            "device_id": "d", "device_token": "t"}
+
+
+def _fake_response(monkeypatch: pytest.MonkeyPatch, payload: Dict[str, Any]) -> None:
+    class _Response:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> Dict[str, Any]:
+            return payload
+
+    monkeypatch.setattr("chaqimchi_ai.local.updater.httpx.get", lambda *a, **k: _Response())
+
+
+def test_downgrade_offer_is_rejected(updater, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serverni egallagan hujumchi eski (zaif) relizni qaytara olmasin.
+
+    Imzolar muddati tugamaydi: bir marta imzolangan eski `.exe` abadiy
+    "haqiqiy".  Shuning uchun qurilma o'zi "faqat yangiroq" deb turishi
+    shart.
+    """
+    _fake_response(monkeypatch, {
+        "available": True, "version": "0.0.1", "policy": {"channel": "auto"},
+    })
+    assert updater.check(_cloud_dict()) is None
+
+
+def test_pin_policy_may_go_backwards(updater, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`pin` — admin ataylab qotirgan versiya; unga pastga yo'l ochiq."""
+    _fake_response(monkeypatch, {
+        "available": True, "version": "0.0.1", "policy": {"channel": "pin", "version": "0.0.1"},
+    })
+    offered = updater.check(_cloud_dict())
+    assert offered is not None and offered["version"] == "0.0.1"
+
+
+def test_blocked_version_is_not_reoffered(updater, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rollback qilingan buzuq versiya qayta o'rnatilmasin — aks holda
+    "o'rnat → qulash → qaytar" abadiy aylanardi."""
+    updater._write_state({"blocked_version": "9.9.9"})
+    _fake_response(monkeypatch, {
+        "available": True, "version": "9.9.9", "policy": {"channel": "auto"},
+    })
+    assert updater.check(_cloud_dict()) is None
+
+
+# ── Rollback holat mashinasi ─────────────────────────────────────────────
+#
+# Linux'dagi `apply_signed_update.py` to'liq health-gate bilan ishlaydi;
+# Windows'da esa Setup.exe'dan keyin hech qanday nazorat yo'q edi: buzuq
+# reliz do'konni jimgina o'chirib qo'yardi.  Bu testlar yangi qoidani
+# qo'riqlaydi: panel `running` demaguncha yangilanish "muvaffaqiyatli"
+# hisoblanmaydi.
+
+
+def _alive(updater, *, phase: str, version: str, at: str) -> None:
+    from chaqimchi_ai.local import paths
+
+    paths.alive_marker_path().write_text(
+        json.dumps({"version": version, "phase": phase, "at": at}),
+        encoding="utf-8",
+    )
+
+
+def test_successful_update_clears_the_state(updater) -> None:
+    from chaqimchi_ai import __version__
+
+    updater._write_state({
+        "from_version": "0.0.1",
+        "to_version": __version__,
+        "started_at": "2026-01-01T00:00:00+00:00",
+    })
+    _alive(updater, phase="running", version=__version__, at="2026-01-01T00:10:00+00:00")
+
+    assert updater._resolve_pending(updater._read_state()) is None
+    assert updater._read_state() is None, "holat yopilishi kerak"
+
+
+def test_no_login_yet_means_no_verdict(updater) -> None:
+    """Tunda yangilangan, hech kim kirmagan — bu qulash EMAS."""
+    from chaqimchi_ai import __version__
+
+    updater._write_state({
+        "from_version": "0.0.1",
+        "to_version": __version__,
+        "started_at": "2026-01-01T00:00:00+00:00",
+    })
+
+    assert updater._resolve_pending(updater._read_state()) == "wait"
+    state = updater._read_state()
+    assert state and "blocked_version" not in state, "rollback bo'lmasligi kerak"
+
+
+def test_crash_looping_release_is_rolled_back(
+    updater, installer: Path, keys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dastur ishga tushishga urinib `running` ga yetmasa — reliz buzuq."""
+    from datetime import datetime, timezone
+
+    from chaqimchi_ai import __version__
+
+    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    manifest = _sign(installer, keys)
+    installed = []
+    monkeypatch.setattr(updater, "install", lambda path: installed.append(path))
+
+    updater._write_state({
+        "from_version": "0.0.1",
+        "to_version": __version__,
+        "started_at": "2026-01-01T00:00:00+00:00",
+        "previous_installer": str(installer),
+        "previous_manifest": str(manifest),
+    })
+    _alive(
+        updater,
+        phase="starting",
+        version=__version__,
+        at=datetime.now(timezone.utc).isoformat(),
+    )
+
+    assert updater._resolve_pending(updater._read_state()) == "wait"
+    assert installed == [installer], "oldingi o'rnatuvchi qayta ishga tushishi kerak"
+    state = updater._read_state()
+    assert state and state["blocked_version"] == __version__
+
+
+def test_rollback_never_runs_an_unverified_installer(
+    updater, installer: Path, keys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Qoida rollback'da ham o'zgarmaydi: imzosiz fayl ishga tushmaydi."""
+    from datetime import datetime, timezone
+
+    from chaqimchi_ai import __version__
+
+    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    manifest = _sign(installer, keys)
+    installer.write_bytes(installer.read_bytes() + b"BUZILGAN")
+    installed = []
+    monkeypatch.setattr(updater, "install", lambda path: installed.append(path))
+
+    updater._write_state({
+        "from_version": "0.0.1",
+        "to_version": __version__,
+        "started_at": "2026-01-01T00:00:00+00:00",
+        "previous_installer": str(installer),
+        "previous_manifest": str(manifest),
+    })
+    _alive(
+        updater,
+        phase="starting",
+        version=__version__,
+        at=datetime.now(timezone.utc).isoformat(),
+    )
+
+    updater._resolve_pending(updater._read_state())
+    assert installed == [], "tekshiruvdan o'tmagan fayl ishga tushmasligi kerak"
+    state = updater._read_state()
+    assert state and state["blocked_version"] == __version__, "versiya baribir bloklanadi"
+
+
+def test_install_that_never_happened_clears_the_state(updater) -> None:
+    """Setup umuman ishlamagan (tok o'chgan) — eski versiya davom etadi."""
+    from chaqimchi_ai import __version__
+
+    updater._write_state({
+        "from_version": __version__,
+        "to_version": "8.8.8",
+        "started_at": "2026-01-01T00:00:00+00:00",
+    })
+
+    assert updater._resolve_pending(updater._read_state()) is None
+    assert updater._read_state() is None
+
+
 # ── Cloud tomoni ─────────────────────────────────────────────────────────
 
 

@@ -53,6 +53,18 @@ def status_path() -> Path:
     return data_dir() / "retail-status.json"
 
 
+def alive_marker_path() -> Path:
+    """Panel jarayoni tirikligining diskdagi izi.
+
+    Updater yangilashdan keyin dastur haqiqatan ishga tushganini shu
+    fayldan biladi: `phase="starting"` — `main()` boshlandi,
+    `phase="running"` — panel ishlab turibdi (har daqiqa yangilanadi).
+    Cloud heartbeat buning o'rnini bosolmaydi: updater SYSTEM sifatida
+    lokal ishlaydi va internetga qaramasligi kerak.
+    """
+    return data_dir() / "app-alive.json"
+
+
 def outbox_path() -> Path:
     """Hodisalar navbati.
 

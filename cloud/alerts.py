@@ -23,8 +23,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -33,6 +35,16 @@ logger = logging.getLogger(__name__)
 
 #: Aloqa nazorati qanchalik tez-tez tekshiriladi (standart 15 daqiqa).
 DEFAULT_INTERVAL_SEC = 900
+
+#: Server diski shu foizdan oshsa admin ogohlantiriladi.  Pastga qaytish
+#: chegarasi ataylab boshqa (histerezis) — 84.9/85.1 atrofida tebranish
+#: har 15 daqiqada xabar/tiklandi juftini yubormasin.
+DISK_ALERT_PERCENT = 85
+DISK_OK_PERCENT = 80
+
+#: `alert_state` jadvalida server ogohlantirishlari shu soxta sayt ID
+#: ostida yuritiladi — jadval sxemasini o'zgartirmasdan.
+SERVER_SITE_ID = "__server__"
 
 #: Yangi ochilgan mijoz shu muddat ichida juftlanmasa — ogohlantiriladi.
 #: Pairing kod 48 soat amal qiladi; shundan oldin xabar berish erta bo‘lardi
@@ -226,6 +238,64 @@ def plan_camera_alerts(
     return alerts, forget
 
 
+def disk_watch_path() -> Path:
+    """Qaysi disk kuzatiladi.
+
+    Docker'da `/app/data` — volume'lar turgan host fayl tizimini ko'rsatadi
+    (statvfs bind mount orqali hostnikini qaytaradi).  Konteynersiz ishga
+    tushirishda ham shu papka ishlaydi, bo'lmasa ildiz.
+    """
+    override = os.environ.get("CHAQIMCHI_DISK_WATCH_PATH", "").strip()
+    if override:
+        return Path(override)
+    default = Path("/app/data")
+    return default if default.exists() else Path("/")
+
+
+def disk_usage_percent(path: Path) -> Optional[float]:
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return None
+    if not usage.total:
+        return None
+    return usage.used / usage.total * 100
+
+
+def _disk_text(percent: float) -> str:
+    return (
+        f"💾 <b>Cloud server</b> — disk {percent:.0f}% to'lgan\n"
+        f"Media kvotasi ishlayapti, lekin joy baribir kamaymoqda.\n"
+        f"Eski backuplarni ko'chiring yoki diskni kengaytiring."
+    )
+
+
+def _disk_recovery_text(percent: float) -> str:
+    return f"✅ <b>Cloud server</b> — disk bo'shadi ({percent:.0f}%)."
+
+
+def plan_disk_alert(
+    percent: Optional[float], previous: Dict[str, str]
+) -> Tuple[List[Alert], List[str]]:
+    """Server diski uchun ogohlantirish (sof funksiya, histerezis bilan).
+
+    Qurilma monitoringi mijoz tomonini qo'riqlaydi; bu esa VPS'ning o'zini.
+    Disk to'lsa PostgreSQL o'qish rejimiga tushadi va snapshot yuklash 500
+    qaytara boshlaydi — bu holatni mijozdan oldin bilishimiz kerak.
+    """
+    if percent is None:
+        return [], []
+    prev = previous.get(SERVER_SITE_ID)
+    if percent >= DISK_ALERT_PERCENT:
+        state = "full"
+        if prev != state:
+            return [Alert(SERVER_SITE_ID, state, _disk_text(percent), remember=state, kind="disk")], []
+        return [], []
+    if prev is not None and percent <= DISK_OK_PERCENT:
+        return [Alert(SERVER_SITE_ID, "ok", _disk_recovery_text(percent), remember=None, kind="disk")], []
+    return [], []
+
+
 def plan_alerts(
     sites: List[Dict[str, Any]],
     previous: Dict[str, str],
@@ -341,13 +411,16 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
 
     conn_alerts, conn_forget = plan_alerts(sites, store.alert_states("connection"), now=now)
     cam_alerts, cam_forget = plan_camera_alerts(sites, store.alert_states("cameras"))
+    disk_alerts, _ = plan_disk_alert(
+        disk_usage_percent(disk_watch_path()), store.alert_states("disk")
+    )
 
     for site_id in conn_forget:
         store.clear_alert_state(site_id, kind="connection")
     for site_id in cam_forget:
         store.clear_alert_state(site_id, kind="cameras")
 
-    for alert in conn_alerts + cam_alerts:
+    for alert in conn_alerts + cam_alerts + disk_alerts:
         if await sender.send(alert.text):
             run.sent += 1
             run.messages.append(alert.text)
@@ -433,10 +506,14 @@ __all__ = [
     "AlertConfig",
     "AlertRun",
     "AlertService",
+    "DISK_ALERT_PERCENT",
     "PAIRING_GRACE_HOURS",
     "TelegramSender",
+    "disk_usage_percent",
+    "disk_watch_path",
     "plan_alerts",
     "plan_camera_alerts",
+    "plan_disk_alert",
     "run_check",
     "test_message",
 ]

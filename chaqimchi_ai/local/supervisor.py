@@ -43,6 +43,13 @@ LOG_TAIL_LINES = 200
 #: zanjir har ~30 soniyada yozadi.
 STATUS_STALE_SEC = 180
 
+#: `retail.log` shu hajmdan oshsa keyingi startda chetga suriladi
+#: (`retail.log.1`).  Log — bola jarayonning stdout'i, shuning uchun
+#: `RotatingFileHandler` ishlamaydi: rotatsiya faqat ochishdan oldin
+#: mumkin.  Qulab qayta ishga tushish aynan shu nuqtadan o'tadi, ya'ni
+#: eng shovqinli stsenariy (crash-loop) baribir chegaralangan.
+LOG_MAX_BYTES = 20 * 1024 * 1024
+
 
 class RetailSupervisor:
     """Bitta `retail.service` jarayonini kuzatadi."""
@@ -135,6 +142,7 @@ class RetailSupervisor:
             "--base-dir",
             str(data_dir),
         ]
+        self._rotate_log_if_big()
         self._log_handle = self._log_path.open("a", encoding="utf-8", errors="replace")
         self._log_handle.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} ishga tushmoqda =====\n")
         self._log_handle.flush()
@@ -161,6 +169,18 @@ class RetailSupervisor:
                 target=self._watch, name="retail-supervisor", daemon=True
             )
             self._watch_thread.start()
+
+    def _rotate_log_if_big(self) -> None:
+        """Katta logni chetga suradi — `C:` disk log bilan to'lmasin."""
+        try:
+            if self._log_path.stat().st_size <= LOG_MAX_BYTES:
+                return
+            backup = self._log_path.with_name(self._log_path.name + ".1")
+            backup.unlink(missing_ok=True)
+            self._log_path.rename(backup)
+        except OSError:
+            # Rotatsiya bo'lmasa ham zanjir ishga tushishi muhimroq.
+            logger.warning("retail.log rotatsiyasi bajarilmadi", exc_info=True)
 
     def _terminate(self) -> None:
         process, self._process = self._process, None

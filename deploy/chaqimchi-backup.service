@@ -1,0 +1,33 @@
+# Chaqimchi Cloud kunlik backup.
+#
+# Ilgari backup FAQAT deploy paytida olinardi (scripts/deploy_cloud.sh).
+# Uch hafta deploy bo'lmasa va VPS o'lsa — uch haftalik hodisa, hisob-faktura
+# va akkauntlar yo'qolardi.  Bu unit backup'ni deploy'dan uzadi: timer uni
+# har kuni chaqiradi, skript esa deploy'dagi bilan aynan bitta
+# (scripts/backup_production.sh — PostgreSQL + SQLite cloud-state + MinIO,
+# AES-256 bilan shifrlangan).
+#
+# O'rnatish (VPS'da, root):
+#   cp deploy/backup.env.example /etc/chaqimchi/backup.env  # va tahrirlang
+#   chmod 600 /etc/chaqimchi/backup.env
+#   cp deploy/chaqimchi-backup.{service,timer} /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now chaqimchi-backup.timer
+#   systemctl start chaqimchi-backup.service   # birinchi sinov darhol
+
+[Unit]
+Description=Chaqimchi Cloud backup (PostgreSQL + cloud-state + MinIO)
+Wants=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/chaqimchi-ai
+EnvironmentFile=/etc/chaqimchi/backup.env
+ExecStart=/home/deploy/chaqimchi-ai/scripts/backup_production.sh
+# 14 kundan eski arxivlar o'chiriladi — disk backup tufayli to'lib qolmasin.
+# Muhim nusxalarni restic/tashqi joyga ko'chirish backup skriptining o'zida
+# (RESTIC_REPOSITORY berilsa) bajariladi.
+ExecStartPost=/usr/bin/find ${CHAQIMCHI_BACKUP_DIR} -name chaqimchi-*.tar.gz.enc -mtime +14 -delete
+Nice=10
+IOSchedulingClass=idle

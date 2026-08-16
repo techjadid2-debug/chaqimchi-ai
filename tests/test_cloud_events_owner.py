@@ -49,6 +49,73 @@ def _provision(client: TestClient):
     return site, device, headers
 
 
+def test_media_quota_evicts_oldest_media_but_keeps_events(
+    production_client, monkeypatch
+) -> None:
+    """Bitta shovqinli sayt VPS diskini to'ldira olmasin.
+
+    Kvotadan oshganda eng eski media o'chadi, hodisa yozuvi (statistika)
+    esa qoladi — edge'dagi `outbox.prune` mantig'i bilan bir xil.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+
+    for index in range(3):
+        event_id = f"evt-quota-{index}"
+        client.post(
+            "/api/v1/edge/events/batch",
+            headers=headers,
+            json={
+                "events": [
+                    {
+                        "event_id": event_id,
+                        "event_type": "line_crossed",
+                        "camera_id": "cam-1",
+                        "occurred_at": f"2026-01-0{index + 1}T10:00:00+00:00",
+                        "has_snapshot": True,
+                    }
+                ]
+            },
+        )
+        upload = client.put(
+            f"/api/v1/edge/events/{event_id}/snapshot",
+            headers={**headers, "Content-Type": "image/jpeg"},
+            content=b"x" * 1000,
+        )
+        assert upload.status_code == 200
+
+    # Kvota: 2 ta snapshot sig'adi, 3-chisi eng eskisini siqib chiqaradi.
+    monkeypatch.setenv("CHAQIMCHI_SITE_MEDIA_MAX_BYTES", "2000")
+    main._purge_expired_events()
+
+    store = main.get_event_store()
+    events = {e["event_id"]: e for e in store.list_events(site["site_id"], limit=10)}
+    assert len(events) == 3, "hodisa yozuvlari o'chmasligi kerak"
+    assert not events["evt-quota-0"]["snapshot_key"], "eng eski media bo'shatiladi"
+    assert events["evt-quota-2"]["snapshot_key"], "eng yangi media qoladi"
+    assert store.media_usage_bytes(site["site_id"]) <= 2000
+
+
+def test_claim_is_rate_limited(production_client) -> None:
+    """Pairing kodni qo'pol kuch bilan terib bo'lmasin.
+
+    Kod 6 hex belgi va 48 soat yashaydi; cheklovsiz bu endpoint begona
+    do'konning qurilma tokenini (u orqali RTSP parollarini) topib olish
+    uchun ochiq eshik bo'lardi.  Halol qurilma 1-2 marta claim qiladi.
+    """
+    client, _messages = production_client
+
+    responses = [
+        client.post("/api/v1/devices/claim", json={"pairing_code": "AAAAAA"}).status_code
+        for _ in range(12)
+    ]
+
+    assert 429 in responses, "claim so'rovlari chegaralanishi shart"
+    assert responses[0] == 400, "birinchi urinishlar odatdagidek tekshirilsin"
+
+
 def test_event_ingestion_is_idempotent_and_snapshot_is_private(production_client) -> None:
     client, _messages = production_client
     site, _device, headers = _provision(client)
@@ -349,18 +416,13 @@ def test_owner_trend_returns_a_full_week(production_client) -> None:
     assert trend["daily"][-1]["entered"] == 1
 
 
-# ── Sinov rejimi: kodsiz kirish ──────────────────────────────────────────
+# ── Kirish havolasi: `/owner?key=<token>` ────────────────────────────────
 #
-# Mijozga ko'rsatish uchun vaqtincha yoqilgan imtiyoz.  Bu **ataylab
-# qo'yilgan zaiflik**, shuning uchun chegaralari testda qat'iy
-# belgilanadi: standart holatda o'chiq, faqat ro'yxatdagi ID ga, va
-# faqat haqiqiy a'zoga.
-
-
-# Har test **o'z** Telegram ID sidan foydalanadi.  `ratelimit` baketi
-# telegram_id bo'yicha va testlar orasida umumiy: bir xil ID uchinchi
-# so'rovdan keyin 429 oladi va tekshirilayotgan mantiqqa umuman yetib
-# bormaydi — test esa sababini aytmasdan qulardi.
+# Kodsiz kirishning xavfsiz ko'rinishi.  Ilgari bu o'rinda Telegram ID
+# ro'yxati (`CHAQIMCHI_OTP_BYPASS_IDS`) bor edi — ID sir emasligi uchun
+# olib tashlandi.  Endi credential — uzun tasodifiy token: faqat admin
+# yaratadi, yangi havola eskisini bekor qiladi, a'zolik har kirishda
+# qayta tekshiriladi.
 
 
 def _member(client, site_id: str, telegram_id: str, role: str = "owner") -> None:
@@ -371,121 +433,169 @@ def _member(client, site_id: str, telegram_id: str, role: str = "owner") -> None
     )
 
 
-def test_listed_id_gets_a_token_without_a_code(production_client, monkeypatch) -> None:
-    """Ro'yxatdagi odam kod terib o'tirmaydi."""
-    client, messages = production_client
-    site, _device, _headers = _provision(client)
-    _member(client, site["site_id"], "5476913898")
-    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898,7631725599")
-
-    response = client.post(
-        "/api/v1/owner/auth/request",
-        json={"telegram_id": "5476913898", "site_id": site["site_id"]},
+def _make_link(client, site_id: str, telegram_id: str):
+    return client.post(
+        f"/api/v1/admin/sites/{site_id}/members/{telegram_id}/login-link",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
     )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["bypass"] is True
-    assert body["access_token"], "token darhol berilishi kerak"
-    assert body["site_id"] == site["site_id"]
-    # Kod yuborilmasligi ham kerak — bekorga xabar bormasin.
+
+def _key_of(response) -> str:
+    url = response.json()["url"]
+    assert "/owner?key=" in url
+    return url.split("key=", 1)[1]
+
+
+def test_link_opens_the_panel(production_client) -> None:
+    """Havola bosilishi bilan panel ochiladi — kod so'ralmaydi."""
+    client, messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000010")
+
+    key = _key_of(_make_link(client, site["site_id"], "5476000010"))
+    session = client.post("/api/v1/owner/auth/link", json={"key": key})
+
+    assert session.status_code == 200
+    token = session.json()["access_token"]
+    assert session.json()["site_id"] == site["site_id"]
+    events = client.get("/api/v1/owner/events", headers={"Authorization": f"Bearer {token}"})
+    assert events.status_code == 200
+    # Havola OTP emas — Telegramga xabar ketmasin.
     assert not messages
 
 
-def test_the_token_actually_opens_the_panel(production_client, monkeypatch) -> None:
-    """Token haqiqiy bo'lsin — "ok" deb yolg'on aytmasin."""
+def test_link_needs_a_real_member(production_client) -> None:
+    """Havola faqat mavjud a'zoga yaratiladi — begona ID uchun yo'q."""
     client, _messages = production_client
     site, _device, _headers = _provision(client)
-    _member(client, site["site_id"], "7631725599")
-    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898,7631725599")
 
-    token = client.post(
-        "/api/v1/owner/auth/request",
-        json={"telegram_id": "7631725599", "site_id": site["site_id"]},
-    ).json()["access_token"]
+    response = _make_link(client, site["site_id"], "5476000011")
 
-    events = client.get("/api/v1/owner/events", headers={"Authorization": f"Bearer {token}"})
-    assert events.status_code == 200
+    assert response.status_code == 404
 
 
-def test_bypass_is_off_by_default(production_client, monkeypatch) -> None:
-    """Muhit o'zgaruvchisi qo'yilmasa imtiyoz umuman yo'q."""
+def test_guessed_key_is_rejected(production_client) -> None:
+    client, _messages = production_client
+    _provision(client)
+
+    response = client.post(
+        "/api/v1/owner/auth/link", json={"key": "x" * 43}
+    )
+
+    assert response.status_code == 401
+
+
+def test_new_link_revokes_the_old_one(production_client) -> None:
+    """"Havola tarqalib ketdi" muammosi bitta tugma bilan yopiladi."""
     client, _messages = production_client
     site, _device, _headers = _provision(client)
-    _member(client, site["site_id"], "5476000001")
-    monkeypatch.delenv("CHAQIMCHI_OTP_BYPASS_IDS", raising=False)
+    _member(client, site["site_id"], "5476000012")
 
-    body = client.post(
-        "/api/v1/owner/auth/request",
-        json={"telegram_id": "5476000001", "site_id": site["site_id"]},
-    ).json()
+    old_key = _key_of(_make_link(client, site["site_id"], "5476000012"))
+    new_key = _key_of(_make_link(client, site["site_id"], "5476000012"))
 
-    assert "access_token" not in body, "standart holatda kodsiz kirish bo'lmasin"
-    assert not body.get("bypass")
+    assert client.post("/api/v1/owner/auth/link", json={"key": old_key}).status_code == 401
+    assert client.post("/api/v1/owner/auth/link", json={"key": new_key}).status_code == 200
 
 
-def test_unlisted_id_still_needs_a_code(production_client, monkeypatch) -> None:
-    """Imtiyoz aynan ro'yxatdagilarga — qolganlarga tegmaydi."""
+def test_revoked_link_stops_working(production_client) -> None:
     client, _messages = production_client
     site, _device, _headers = _provision(client)
-    _member(client, site["site_id"], "999000111")
-    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898,7631725599")
+    _member(client, site["site_id"], "5476000013")
+    key = _key_of(_make_link(client, site["site_id"], "5476000013"))
 
-    body = client.post(
-        "/api/v1/owner/auth/request",
-        json={"telegram_id": "999000111", "site_id": site["site_id"]},
-    ).json()
+    revoke = client.delete(
+        f"/api/v1/admin/sites/{site['site_id']}/members/5476000013/login-link",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+    )
 
-    assert "access_token" not in body
+    assert revoke.status_code == 200
+    assert revoke.json()["revoked"] == 1
+    assert client.post("/api/v1/owner/auth/link", json={"key": key}).status_code == 401
 
 
-def test_bypass_does_not_let_in_a_stranger(production_client, monkeypatch) -> None:
-    """Eng muhim chegara: ro'yxatda bo'lish **a'zolikni almashtirmaydi**.
+def test_expired_link_is_rejected(production_client) -> None:
+    """Muddat tekshiruvi ham ishlaydi — abadiy havola yo'q."""
+    import cloud.main as main
 
-    Aks holda ro'yxatga tushib qolgan ID istalgan obyektga kira olardi.
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000014")
+
+    key = main.get_event_store().create_login_link(
+        site["site_id"],
+        "5476000014",
+        secret="owner-secret-with-more-than-32-characters",
+        ttl_days=0,
+    )
+
+    assert client.post("/api/v1/owner/auth/link", json={"key": key}).status_code == 401
+
+
+def test_disabled_member_link_stops_working(production_client) -> None:
+    """A'zolik har kirishda qayta tekshiriladi.
+
+    A'zo o'chirilgach uning qo'lidagi eski havola ham darhol o'lishi
+    shart — aks holda "xodim ketdi, kirishi qoldi" bo'lardi.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000015")
+    key = _key_of(_make_link(client, site["site_id"], "5476000015"))
+    member = main.get_event_store().member_for_site(site["site_id"], "5476000015")
+    main.get_event_store().disable_member(site["site_id"], member["id"])
+
+    assert client.post("/api/v1/owner/auth/link", json={"key": key}).status_code == 401
+
+
+def test_otp_test_code_is_ignored_in_production(production_client, monkeypatch) -> None:
+    """Production'da qat'iy test kodi ishlatilmaydi.
+
+    Lifespan bunday serverni umuman yoqmaydi, lekin himoya bir qavat
+    bilan qolmasin: env qanday bo'lmasin, so'rov paytida ham test kod
+    faqat test muhitida qo'llanadi.
     """
     client, _messages = production_client
-    _site, _device, _headers = _provision(client)
-    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476000002")
-
-    body = client.post(
-        "/api/v1/owner/auth/request", json={"telegram_id": "5476000002"}
-    ).json()
-
-    # Hech qanday obyektga a'zo emas → token yo'q, sir ham oshkor bo'lmaydi.
-    assert "access_token" not in body
-    assert body["message"] == "Agar akkaunt mavjud bo'lsa, kod yuborildi"
-
-
-def test_bypass_use_is_logged_loudly(production_client, monkeypatch, caplog) -> None:
-    """Vaqtincha zaiflik jimgina qolib ketmasligi kerak."""
-    import logging
-
-    client, _messages = production_client
     site, _device, _headers = _provision(client)
-    _member(client, site["site_id"], "5476000003")
-    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476000003")
+    _member(client, site["site_id"], "5476000016")
+    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
 
-    with caplog.at_level(logging.WARNING):
-        client.post(
-            "/api/v1/owner/auth/request",
-            json={"telegram_id": "5476000003", "site_id": site["site_id"]},
-        )
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "5476000016"})
+    verified = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "5476000016", "site_id": site["site_id"], "code": "123456"},
+    )
 
-    # `getMessage()` — `%s` o'rinlari to'ldirilgan matn; `record.message`
-    # formatlashdan oldin bo'sh bo'lishi mumkin.
-    messages = [record.getMessage() for record in caplog.records]
-    assert any(
-        "CHETLAB O'TILDI" in text and "5476000003" in text for text in messages
-    ), "imtiyoz ishlatilgani ogohlantirish bo'lib logga tushsin"
+    assert verified.status_code == 401, "test kod production'da o'tmasin"
 
 
-def test_code_login_still_works(production_client, monkeypatch) -> None:
-    """Odatdagi yo'l buzilmaganini tekshiramiz."""
+def test_production_startup_refuses_test_doors(tmp_path, monkeypatch) -> None:
+    """Sinov eshiklari qolgan production server umuman yonmaydi."""
+    import cloud.main as main
+
+    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
+    monkeypatch.setenv("CHAQIMCHI_OTP_TEST_CODE", "123456")
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "42")
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
+    monkeypatch.setattr(main, "_store", None)
+    monkeypatch.setattr(main, "_event_store", None)
+    monkeypatch.setattr(main, "_event_store_key", None)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        with TestClient(main.app):
+            pass
+
+    assert "CHAQIMCHI_OTP_TEST_CODE" in str(excinfo.value)
+    assert "CHAQIMCHI_OTP_BYPASS_IDS" in str(excinfo.value)
+
+
+def test_code_login_still_works(production_client) -> None:
+    """Odatdagi OTP yo'li buzilmaganini tekshiramiz."""
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     _member(client, site["site_id"], "424242")
-    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898")
 
     client.post("/api/v1/owner/auth/request", json={"telegram_id": "424242"})
     verified = client.post(

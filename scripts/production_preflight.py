@@ -110,6 +110,21 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     elif any(not re.fullmatch(r"-?\d+", item.strip()) for item in recipients.split(",")):
         errors.append("Telegram chat ID'lari vergul bilan ajratilgan sonlar bo'lishi kerak")
 
+    # Sinov eshiklari production'da bo'lishi mumkin emas.  Bular env
+    # orqali yoqilgani uchun eng real xavf — "demo paytida qo'yib,
+    # o'chirishni unutish".  Cloud lifespan ham xuddi shu tekshiruvni
+    # qiladi, lekin preflight muammoni deploy'dan OLDIN ushlaydi.
+    if values.get("CHAQIMCHI_OTP_TEST_CODE", "").strip():
+        errors.append(
+            "CHAQIMCHI_OTP_TEST_CODE production'da taqiqlanadi — hamma "
+            "mijozning OTP kodi bitta doimiy qiymat bo'lib qoladi"
+        )
+    if values.get("CHAQIMCHI_OTP_BYPASS_IDS", "").strip():
+        errors.append(
+            "CHAQIMCHI_OTP_BYPASS_IDS olib tashlangan — o'rniga admin "
+            "panel yoki Telegram bot beradigan kirish havolasini ishlating"
+        )
+
     release_url = require("CHAQIMCHI_SOTQIN_RELEASE_URL")
     release_sha = require("CHAQIMCHI_SOTQIN_RELEASE_SHA256")
     if release_url and not _https(release_url):

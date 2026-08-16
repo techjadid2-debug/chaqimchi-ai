@@ -148,6 +148,25 @@ Section "!${APP_NAME} (majburiy)" SecMain
     DetailPrint "Ulanish kodi topildi: $PairingCode"
   ${EndIf}
 
+  ; ── Ma'lumotlar papkasi ruxsatlari ──────────────────────────────────
+  ;
+  ; `%PROGRAMDATA%` standart holda hamma lokal user'ga o'qish beradi —
+  ; ya'ni config.yaml ichidagi qurilma tokeni va NVR RTSP parollarini
+  ; istalgan hisob o'qiy olardi.  Meros ruxsatlarni uzamiz va faqat
+  ; SYSTEM, Administrators hamda **interaktiv** kirgan user'ga beramiz
+  ; (panel user sessiyasida ishlaydi — usiz dastur ochilmay qolardi).
+  ; SID'lar ataylab: guruh nomlari tildan tilga o'zgaradi (ruscha
+  ; Windows'da "Administrators" yo'q), SID esa hamma joyda bir xil.
+  ;   S-1-5-18 = SYSTEM, S-1-5-32-544 = Administrators, S-1-5-4 = INTERACTIVE
+  CreateDirectory "$APPDATA\Chaqimchi"
+  DetailPrint "Sozlamalar papkasi himoyalanmoqda..."
+  nsExec::ExecToLog 'icacls "$APPDATA\Chaqimchi" /inheritance:r \
+    /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-4:(OI)(CI)M"'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Ogohlantirish: papka ruxsatlari toraytirilmadi (kod $0)."
+  ${EndIf}
+
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   WriteRegStr HKLM "Software\ChaqimchiAI" "InstallDir" "$INSTDIR"

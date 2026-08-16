@@ -15,6 +15,7 @@ ikkalasini ishlatib ko'rish kerak bo'lsa, ular urishmaydi.
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import os
 import re
@@ -32,6 +33,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from chaqimchi_ai import __version__
 from chaqimchi_ai.local import (
     camera_probe,
     cloud_config,
@@ -858,6 +860,29 @@ def _auto_pair_if_handed_off() -> None:
         logger.exception("Avtomatik ulanishda kutilmagan xato")
 
 
+def _write_alive(phase: str) -> None:
+    """Updater rollback qarori uchun tiriklik izi.
+
+    `starting` — `main()` boshlandi; `running` — panel ishlab turibdi
+    (sikl har daqiqa yangilab turadi).  Yangilashdan keyin `running`
+    yozilmasa, updater dastur ishga tusha olmagan deb biladi va oldingi
+    versiyaga qaytaradi (`chaqimchi_ai/local/updater.py`).
+    """
+    try:
+        paths.alive_marker_path().write_text(
+            json.dumps(
+                {
+                    "version": __version__,
+                    "phase": phase,
+                    "at": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+    except OSError:  # noqa: PERF203 — disk to'la bo'lsa ham panel ishlayversin
+        logger.warning("Tiriklik izi yozilmadi: %s", paths.alive_marker_path())
+
+
 def _start_config_sync() -> None:
     """Cloud sozlamasini fonda kuzatib boradi.
 
@@ -870,6 +895,7 @@ def _start_config_sync() -> None:
 
     def _loop() -> None:
         while True:
+            _write_alive("running")
             try:
                 # Heartbeat birinchi: cloud qurilma tirikligini va qaysi
                 # versiyada ekanini bilishi kerak, hatto zanjir
@@ -904,15 +930,28 @@ def _autostart_if_ready() -> None:
 
 
 def main() -> None:
+    from logging.handlers import RotatingFileHandler
+
+    # Rotatsiyasiz log 24/7 ishlaydigan do'kon kompyuterida `C:` diskini
+    # to'ldirishning eng ehtimolli yo'li edi (ayniqsa kamera uzilib
+    # qayta ulanaverganda).  5 MB × 3 — bir necha haftalik tarix, yetadi.
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(paths.logs_dir() / "local.log", encoding="utf-8"),
+            RotatingFileHandler(
+                paths.logs_dir() / "local.log",
+                maxBytes=5 * 1024 * 1024,
+                backupCount=3,
+                encoding="utf-8",
+            ),
         ],
     )
     import uvicorn
+
+    # Updater uchun: dastur hech bo'lmasa shu nuqtagacha yetib keldi.
+    _write_alive("starting")
 
     url = f"http://127.0.0.1:{PORT}"
     print("=" * 62)

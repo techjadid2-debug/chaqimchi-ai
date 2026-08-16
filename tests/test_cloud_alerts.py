@@ -398,6 +398,47 @@ def test_api_test_message_rejected_when_not_configured(cloud_client) -> None:
     assert "TELEGRAM_TOKEN" in r.json()["detail"]
 
 
+# ── Server diski ─────────────────────────────────────────────────────────
+#
+# Qurilma monitoringi mijoz tomonini qo'riqlaydi; bu VPS'ning o'zini.
+# Disk to'lsa PostgreSQL o'qish rejimiga tushadi va media yuklash 500
+# qaytara boshlaydi — buni mijozdan oldin bilish kerak.
+
+
+def test_full_disk_raises_an_alert_once() -> None:
+    from cloud.alerts import SERVER_SITE_ID, plan_disk_alert
+
+    alerts, _ = plan_disk_alert(91.0, {})
+    assert len(alerts) == 1
+    assert alerts[0].site_id == SERVER_SITE_ID
+    assert alerts[0].kind == "disk"
+    assert alerts[0].remember == "full"
+
+    # Holat yozilgach o'sha xabar takrorlanmaydi.
+    repeat, _ = plan_disk_alert(92.0, {SERVER_SITE_ID: "full"})
+    assert repeat == []
+
+
+def test_disk_recovery_uses_hysteresis() -> None:
+    """84.9/85.1 atrofidagi tebranish xabar bo'roniga aylanmasin."""
+    from cloud.alerts import SERVER_SITE_ID, plan_disk_alert
+
+    # 85 dan tushdi, lekin hali 80 dan baland — jim.
+    between, _ = plan_disk_alert(83.0, {SERVER_SITE_ID: "full"})
+    assert between == []
+
+    # 80 dan pastga tushgach "tiklandi" ketadi.
+    recovered, _ = plan_disk_alert(70.0, {SERVER_SITE_ID: "full"})
+    assert len(recovered) == 1 and recovered[0].remember is None
+
+
+def test_unknown_disk_usage_is_silent() -> None:
+    from cloud.alerts import plan_disk_alert
+
+    alerts, forget = plan_disk_alert(None, {})
+    assert alerts == [] and forget == []
+
+
 def test_api_manual_check_runs(cloud_client) -> None:
     cloud_client.post(
         "/api/v1/admin/sites",

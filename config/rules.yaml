@@ -1,15 +1,13 @@
 # Do'kon qoidalari — namuna.
 #
 # Yoqish: `retail.rules_path: config/rules.yaml` (config.yaml da).
-# Qoida o'zgarsa faqat analitika xizmati qayta yuklanadi, yuz tanish tegilmaydi.
+# Qoida o'zgarsa faqat analitika xizmati qayta yuklanadi.
 #
 # Harakatlar:
 #   cloud_sync     — hodisa cloudga ketadi (standart)
 #   telegram_alert — cloud mijozga Telegram xabarini yuboradi
 #   save_clip      — hodisa atrofidagi video kesib olinadi
 #   ignore         — hodisa bostiriladi
-# Canonical do'kon MVP taxminiy AI talqinidan foydalanmaydi. `ai_review`
-# mexanizmi repoda tarixiy/future modul sifatida qolgan, bu qoidalarga kirmaydi.
 
 schedules:
   ish-vaqti: {start: "09:00", end: "21:00"}

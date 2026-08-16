@@ -99,7 +99,7 @@ class OpenVINOPersonDetector:
             from openvino import Core  # type: ignore[import-not-found]
         except ImportError as exc:  # pragma: no cover - qurilmaga xos bog'liqlik
             raise RuntimeError(
-                "OpenVINO o'rnatilmagan: pip install -r requirements-retail.txt"
+                "OpenVINO o'rnatilmagan: pip install -r requirements-sotqin.txt"
             ) from exc
 
         self.confidence = float(confidence)

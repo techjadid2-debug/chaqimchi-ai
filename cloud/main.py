@@ -1887,17 +1887,12 @@ async def admin_list_camera_inventory(
         raise HTTPException(404, str(exc)) from exc
 
 
-@app.get("/api/v1/admin/sites/{site_id}/discover-cameras")
-async def admin_discover_cameras(site_id: str, _: None = Depends(require_admin)) -> Dict[str, Any]:
-    """Lokal tarmoqdagi kameralarni avtomatik qidirish (ONVIF + Port scan)."""
-    from chaqimchi_ai.discovery import discover_cameras_all
-
-    try:
-        devices = await discover_cameras_all(timeout_sec=2.5)
-        return {"ok": True, "count": len(devices), "devices": devices}
-    except Exception as exc:
-        logger.warning("Camera discovery failed: %s", exc)
-        return {"ok": False, "error": str(exc), "devices": []}
+# Eslatma: bu yerda ilgari `/discover-cameras` (admin va installer varianti)
+# bor edi.  U **VPS konteynerining o'z tarmog'ini** skanerlardi — do'kon
+# tarmog'ini emas, ya'ni hech qachon kamera topa olmasdi; ustiga
+# autentifikatsiyalangan port-scan primitivi edi.  To'g'ri qidiruv
+# qurilmaning o'zida: `chaqimchi_ai/local/app.py` (`/api/setup/auto-find`)
+# va `chaqimchi_ai/sotqin_agent.py` (`/api/v1/discover-cameras`).
 
 
 @app.put("/api/v1/admin/sites/{site_id}/camera-inventory/{camera_id}")
@@ -2094,23 +2089,6 @@ async def installer_list_cameras(
         return {"cameras": get_store().list_cameras(site_id)}
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-
-
-@app.get("/api/v1/installer/sites/{site_id}/discover-cameras")
-async def installer_discover_cameras(
-    site_id: str,
-    installer: PortalPrincipal = Depends(require_active_installer),
-) -> Dict[str, Any]:
-    """O'rnatuvchi uchun lokal tarmoqdagi kameralarni avtomatik skanerlash."""
-    _require_installer_site(installer, site_id)
-    from chaqimchi_ai.discovery import discover_cameras_all
-
-    try:
-        devices = await discover_cameras_all(timeout_sec=2.5)
-        return {"ok": True, "count": len(devices), "devices": devices}
-    except Exception as exc:
-        logger.warning("Installer camera discovery failed: %s", exc)
-        return {"ok": False, "error": str(exc), "devices": []}
 
 
 @app.put("/api/v1/installer/sites/{site_id}/cameras/{camera_id}")

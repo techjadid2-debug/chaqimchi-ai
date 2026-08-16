@@ -255,11 +255,57 @@ async def preview(camera_id: str = "", rtsp_url: str = "") -> Response:
 
 
 class ScanChannelsBody(BaseModel):
-    brand: str = Field(pattern="^(hikvision|dahua|uniview)$")
+    brand: str = Field(default="auto", pattern="^(auto|hikvision|dahua|uniview)$")
     host: str = Field(min_length=3, max_length=120)
     port: int = Field(default=554, ge=1, le=65535)
     username: str = Field(default="", max_length=64)
     password: str = Field(default="", max_length=128)
+
+
+class AutoFindBody(BaseModel):
+    host: str = Field(min_length=3, max_length=120)
+    port: int = Field(default=554, ge=1, le=65535)
+    username: str = Field(default="", max_length=64)
+    password: str = Field(default="", max_length=128)
+    channel: int = Field(default=1, ge=1, le=64)
+
+
+@app.post("/api/setup/auto-find")
+async def auto_find(body: AutoFindBody) -> Dict[str, Any]:
+    """Brendni bilmasdan ishlaydigan RTSP formatini o'zi topadi.
+
+    Mijoz NVR brendini ko'pincha bilmaydi yoki noto'g'ri tanlaydi.
+    Ilgari bitta noto'g'ri format sinalib, "tasvir kelmadi" degan
+    foydasiz xato chiqardi.  Endi ma'lum formatlar ketma-ket sinaladi
+    va topilgani mijozga nomi bilan ko'rsatiladi.
+    """
+    import anyio
+
+    name, url, result = await anyio.to_thread.run_sync(
+        functools.partial(
+            camera_probe.find_working_url,
+            body.host,
+            port=body.port,
+            username=body.username,
+            password=body.password,
+            channel=body.channel,
+        )
+    )
+    if url is None:
+        return {
+            "ok": False,
+            "error": result.error,
+            "hint": result.hint,
+        }
+    _PREVIEW_CACHE.put(url, result.jpeg or b"")
+    return {
+        "ok": True,
+        "format": name,
+        "rtsp_url": url,
+        "safe_url": camera_probe.redact(url),
+        "width": result.width,
+        "height": result.height,
+    }
 
 
 @app.post("/api/setup/scan-channels")
@@ -278,25 +324,53 @@ async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
     import anyio
 
     found = []
-    for channel in range(1, MAX_CAMERAS + 1):
-        try:
-            url = camera_probe.build_rtsp(
-                brand=body.brand,
-                host=body.host,
-                port=body.port,
-                username=body.username,
-                password=body.password,
-                channel=channel,
-            )
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
+    #: Birinchi kanalda topilgan format qolganlariga ham to'g'ri keladi —
+    #: bitta NVR bitta formatdan foydalanadi.  Shuni eslab qolamiz, aks
+    #: holda har kanal uchun 11 ta variantni qayta sinardik.
+    working_path: Optional[str] = None
 
-        result = await anyio.to_thread.run_sync(
-            functools.partial(
-                camera_probe.grab_frame, url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC
+    for channel in range(1, MAX_CAMERAS + 1):
+        url: Optional[str] = None
+        result = None
+
+        if body.brand == "auto" and working_path is None:
+            _name, url, result = await anyio.to_thread.run_sync(
+                functools.partial(
+                    camera_probe.find_working_url,
+                    body.host,
+                    port=body.port,
+                    username=body.username,
+                    password=body.password,
+                    channel=channel,
+                )
             )
-        )
-        if result.ok:
+            if url:
+                working_path = camera_probe.path_template(url, channel)
+        else:
+            try:
+                url = (
+                    camera_probe.apply_template(
+                        working_path, body.host, body.port, body.username, body.password, channel
+                    )
+                    if working_path
+                    else camera_probe.build_rtsp(
+                        brand=body.brand,
+                        host=body.host,
+                        port=body.port,
+                        username=body.username,
+                        password=body.password,
+                        channel=channel,
+                    )
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            result = await anyio.to_thread.run_sync(
+                functools.partial(
+                    camera_probe.grab_frame, url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC
+                )
+            )
+
+        if url and result is not None and result.ok:
             _PREVIEW_CACHE.put(url, result.jpeg or b"")
             found.append(
                 {

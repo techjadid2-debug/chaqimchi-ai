@@ -121,6 +121,31 @@
     }
     const host = $("host").value.trim();
     if (!host) throw new Error("NVR yoki kamera IP manzilini kiriting.");
+
+    // Brend noma'lum bo'lsa dastur ma'lum formatlarni o'zi sinaydi.
+    // Mijoz NVR brendini ko'pincha bilmaydi yoki noto'g'ri tanlaydi —
+    // bitta noto'g'ri format esa "tasvir kelmadi" degan foydasiz xato
+    // berardi.
+    if ($("brand").value === "auto") {
+      note("testResult", "warn", "Format qidirilmoqda…", " Bir necha variant sinaladi.");
+      const found = await api("/api/setup/auto-find", {
+        method: "POST",
+        body: JSON.stringify({
+          host,
+          username: $("username").value,
+          password: $("password").value,
+          channel: Number($("channel").value || 1),
+        }),
+      });
+      if (!found.ok) {
+        const error = new Error(found.error + " " + found.hint);
+        error.diagnosed = true;
+        throw error;
+      }
+      note("testResult", "ok", `Format topildi: ${found.format}`, "");
+      return found.rtsp_url;
+    }
+
     const data = await api("/api/setup/rtsp-template", {
       method: "POST",
       body: JSON.stringify({
@@ -154,7 +179,13 @@
         "/api/setup/preview?rtsp_url=" + encodeURIComponent(url) + "&t=" + Date.now();
       goToStep(2);
     } catch (error) {
-      note("testResult", "err", "Tekshirib bo‘lmadi.", " " + error.message);
+      // Avtomatik qidiruv allaqachon aniq sabab qaytargan bo'lsa uni
+      // "Tekshirib bo'lmadi" degan umumiy matn bilan yopmaymiz.
+      if (error.diagnosed) {
+        note("testResult", "err", "Kamera topilmadi.", " " + error.message);
+      } else {
+        note("testResult", "err", "Tekshirib bo‘lmadi.", " " + error.message);
+      }
     } finally {
       button.disabled = false;
     }

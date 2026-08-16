@@ -12,12 +12,14 @@ chiziladi).  Kelmasa — mijoz tuzata oladigan tilda sabab qaytaradi.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
+import socket
 from dataclasses import dataclass
-from typing import Optional, Tuple
-from urllib.parse import quote, urlparse, urlunparse
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import quote, unquote, urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -100,25 +102,240 @@ def build_rtsp(
     return f"rtsp://{auth}{clean_host}:{int(port)}{path}"
 
 
-def _classify(url: str) -> Tuple[str, str]:
-    """Kadr kelmaganda eng ehtimolli sababni taxmin qiladi.
+def rtsp_describe(url: str, *, timeout_sec: float = 5.0) -> Tuple[int, str]:
+    """RTSP serverga to'g'ridan-to'g'ri `DESCRIBE` yuboradi.
 
-    Aniq sababni OpenCV bermaydi (u faqat `False` qaytaradi), shuning uchun
-    mijozga "xato 0xC00D" emas, **tekshiriladigan ro'yxat** beriladi.
+    Nega kerak: OpenCV muvaffaqiyatsizlikda faqat `False` qaytaradi va
+    sabab noma'lum qoladi.  Mijozga esa "tasvir kelmadi" emas, **nima
+    qilish kerakligi** aytilishi kerak — parolmi, yo'lmi, tarmoqmi.
+
+    RTSP javob kodi buni aniq ajratadi:
+
+        200  ishlaydi
+        401  parol yoki foydalanuvchi noto'g'ri
+        404  bu manzilda oqim yo'q (yo'l noto'g'ri)
+        0    umuman ulanmadi (port yopiq, boshqa tarmoq, NVR o'chiq)
+
+    Digest autentifikatsiya qo'lda bajariladi: kutubxona qo'shishdan
+    ko'ra yigirma qator kod arzonroq va bog'liqlik keltirmaydi.
     """
     parts = urlparse(url)
-    if not parts.username:
+    host, port = parts.hostname, parts.port or 554
+    if not host:
+        return 0, "manzil noto'g'ri"
+
+    target = urlunparse((parts.scheme, f"{host}:{port}", parts.path, "", parts.query, ""))
+    user = unquote(parts.username or "")
+    password = unquote(parts.password or "")
+
+    def _request(auth_header: str = "", seq: int = 1) -> str:
+        lines = [f"DESCRIBE {target} RTSP/1.0", f"CSeq: {seq}", "User-Agent: Chaqimchi"]
+        if auth_header:
+            lines.append(auth_header)
+        return "\r\n".join(lines) + "\r\n\r\n"
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout_sec) as sock:
+            sock.settimeout(timeout_sec)
+            sock.sendall(_request().encode("ascii", "ignore"))
+            first = sock.recv(4096).decode("utf-8", "replace")
+
+            if " 401 " not in first.split("\r\n")[0]:
+                return _status_code(first), first
+
+            # 401 keldi — endi Digest bilan qayta so'raymiz.
+            challenge = _digest_challenge(first)
+            if challenge is None or not user:
+                return 401, first
+            header = _digest_header(user, password, target, challenge)
+            sock.sendall(_request(header, seq=2).encode("ascii", "ignore"))
+            second = sock.recv(4096).decode("utf-8", "replace")
+            return _status_code(second), second
+    except (OSError, socket.timeout) as exc:
+        logger.info("RTSP DESCRIBE ulanmadi (%s): %s", redact(url), exc)
+        return 0, str(exc)
+
+
+def _status_code(response: str) -> int:
+    try:
+        return int(response.split(" ", 2)[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+def _digest_challenge(response: str) -> Optional[Dict[str, str]]:
+    match = re.search(r"WWW-Authenticate:\s*Digest\s*(.+)", response, re.I)
+    if not match:
+        return None
+    return dict(re.findall(r'(\w+)="([^"]*)"', match.group(1)))
+
+
+def _digest_header(user: str, password: str, uri: str, challenge: Dict[str, str]) -> str:
+    realm = challenge.get("realm", "")
+    nonce = challenge.get("nonce", "")
+    ha1 = hashlib.md5(f"{user}:{realm}:{password}".encode()).hexdigest()  # noqa: S324
+    ha2 = hashlib.md5(f"DESCRIBE:{uri}".encode()).hexdigest()  # noqa: S324
+    digest = hashlib.md5(f"{ha1}:{nonce}:{ha2}".encode()).hexdigest()  # noqa: S324
+    return (
+        f'Authorization: Digest username="{user}", realm="{realm}", '
+        f'nonce="{nonce}", uri="{uri}", response="{digest}"'
+    )
+
+
+def _classify(url: str) -> Tuple[str, str]:
+    """Kadr kelmaganda **aniq** sababni aytadi.
+
+    Ilgari bu yerda umumiy "tekshiriladigan ro'yxat" berilardi — mijoz
+    to'rtta narsani birdan tekshirishga majbur bo'lardi va odatda
+    hech birini tuzatolmasdi.  Endi RTSP serverning o'z javobi so'raladi.
+    """
+    parts = urlparse(url)
+    code, _raw = rtsp_describe(url)
+
+    if code == 0:
         return (
-            "Kameradan tasvir kelmadi.",
-            "Ko'pincha sabab — foydalanuvchi nomi va parol kiritilmagan. "
-            "NVR menyusidan foydalanuvchi yarating va shu yerga yozing.",
+            "Kameraga umuman ulanib bo'lmadi.",
+            "Manzil yoki port noto'g'ri, NVR o'chiq, yoki kompyuter va NVR "
+            "boshqa tarmoqda. Kompyuterda `ping " + str(parts.hostname or "") + "` "
+            "buyrug'ini sinab ko'ring.",
+        )
+    if code == 401:
+        if not parts.username:
+            return (
+                "Kamera foydalanuvchi nomi va parol so'rayapti.",
+                "NVR menyusidan foydalanuvchi yarating (faqat ko'rish huquqi "
+                "yetarli) va shu yerga kiriting.",
+            )
+        return (
+            "Foydalanuvchi nomi yoki parol noto'g'ri.",
+            "NVR menyusidagi login bilan bir xil ekaniga ishonch hosil qiling. "
+            "Ko'p NVR'da katta-kichik harf farq qiladi.",
+        )
+    if code == 404:
+        return (
+            "Ulanish bor, lekin bu manzilda kamera oqimi yo'q.",
+            "Kanal raqami noto'g'ri yoki NVR boshqa formatdan foydalanadi. "
+            "«Barcha kameralarni topish» tugmasini bosing — dastur ma'lum "
+            "formatlarni o'zi sinab ko'radi.",
+        )
+    if code == 200:
+        return (
+            "Kamera javob berdi, lekin tasvirni ochib bo'lmadi.",
+            "Ko'pincha sabab — H.265 (HEVC) siqish. NVR menyusida shu kamera "
+            "uchun substream'ni H.264 ga o'zgartiring: "
+            "Configuration → Video → Sub Stream → H.264.",
         )
     return (
-        "Kameradan tasvir kelmadi.",
-        "Tekshiring: (1) parol to'g'rimi, (2) NVR'da RTSP yoqilganmi, "
-        "(3) kamera H.265 emas, H.264 substream berayaptimi, "
-        "(4) kompyuter va NVR bitta tarmoqdami.",
+        f"Kamera kutilmagan javob qaytardi (kod {code}).",
+        "NVR sozlamalarida RTSP yoqilganini tekshiring.",
     )
+
+
+#: Ma'lum RTSP yo'llari, ehtimolligi bo'yicha tartiblangan.
+#:
+#: Nega kerak: sehrgar ilgari faqat **bitta** yo'lni sinardi — mijoz
+#: tanlagan brendnikini.  Brend noto'g'ri tanlansa yoki NVR nostandart
+#: format ishlatsa, "tasvir kelmadi" degan foydasiz xato chiqardi va
+#: mijoz nima qilishni bilmasdi.  Endi hammasi sinaladi.
+#:
+#: Substream birinchi: u yengil (640x360) va oddiy ofis kompyuterida ham
+#: dekodlanadi; main stream 1080p bo'lib, tahlil uchun og'ir.
+KNOWN_PATHS: Tuple[Tuple[str, str], ...] = (
+    ("Hikvision / HiLook", "/Streaming/Channels/{ch}02"),
+    ("Dahua / IMOU", "/cam/realmonitor?channel={ch}&subtype=1"),
+    ("Uniview (UNV)", "/unicast/c{ch}/s1/live"),
+    ("Xiongmai / Besder", "/h264Preview_0{ch}_sub"),
+    ("TP-Link Tapo / Vigi", "/stream2"),
+    ("Umumiy (ch0_1)", "/live/ch0_1"),
+    ("Umumiy (av0)", "/live/av0"),
+    ("ONVIF profil", "/onvif1"),
+    # Substream topilmasa main stream ham yaraydi — sekinroq, lekin
+    # ishlaydi.  Mijozga "umuman ishlamaydi" dan ko'ra yaxshiroq.
+    ("Hikvision (asosiy oqim)", "/Streaming/Channels/{ch}01"),
+    ("Dahua (asosiy oqim)", "/cam/realmonitor?channel={ch}&subtype=0"),
+    ("Uniview (asosiy oqim)", "/unicast/c{ch}/s0/live"),
+)
+
+
+def candidate_urls(
+    host: str, *, port: int = 554, username: str = "", password: str = "", channel: int = 1
+) -> List[Tuple[str, str]]:
+    """Sinab ko'riladigan barcha manzillar: `(nom, url)`."""
+    clean_host = re.sub(r"^rtsps?://", "", host.strip(), flags=re.I).split("/")[0]
+    auth = f"{quote(username, safe='')}:{quote(password, safe='')}@" if username else ""
+    return [
+        (name, f"rtsp://{auth}{clean_host}:{int(port)}{path.format(ch=channel)}")
+        for name, path in KNOWN_PATHS
+    ]
+
+
+def find_working_url(
+    host: str,
+    *,
+    port: int = 554,
+    username: str = "",
+    password: str = "",
+    channel: int = 1,
+    timeout_sec: int = SCAN_TIMEOUT_SEC,
+) -> Tuple[Optional[str], Optional[str], ProbeResult]:
+    """Ishlaydigan RTSP manzilini qidiradi.
+
+    Qaytaradi: `(nom, url, natija)`.  Topilmasa `(None, None, oxirgi
+    natija)` — oxirgi natijada mijozga ko'rsatiladigan sabab bo'ladi.
+
+    Avval bitta `DESCRIBE` bilan parol tekshiriladi: agar u noto'g'ri
+    bo'lsa o'nta yo'lni sinash bir daqiqa vaqtni behuda sarflardi va
+    mijozga baribir noto'g'ri sabab ko'rsatilardi.
+    """
+    urls = candidate_urls(
+        host, port=port, username=username, password=password, channel=channel
+    )
+    code, _ = rtsp_describe(urls[0][1])
+    if code in (0, 401):
+        error, hint = _classify(urls[0][1])
+        return None, None, ProbeResult(ok=False, error=error, hint=hint)
+
+    last = ProbeResult(ok=False, error="Kamera topilmadi.", hint="")
+    for name, url in urls:
+        result = grab_frame(url, timeout_sec=timeout_sec)
+        if result.ok:
+            logger.info("Ishlaydigan format topildi: %s", name)
+            return name, url, result
+        last = result
+    return None, None, last
+
+
+def path_template(url: str, channel: int) -> str:
+    """Ishlaydigan manzildan kanal o'rni belgilangan shablon yasaydi.
+
+    Bitta NVR barcha kanallarda **bitta** formatdan foydalanadi.  Birinchi
+    kanalda topilgan yo'lni shablonga aylantirib, qolganlarini bir urinishda
+    tekshiramiz — aks holda har kanal uchun o'nlab variantni qayta sinardik.
+    """
+    parts = urlparse(url)
+    path = parts.path + (f"?{parts.query}" if parts.query else "")
+    # Kanal raqami yo'lda ikki xil ko'rinishda uchraydi: `102`/`c1`/`01`
+    # (o'rnida) yoki `channel=1` (parametrda).
+    for pattern, replacement in (
+        (rf"channel={channel}\b", "channel={ch}"),
+        (rf"/Streaming/Channels/{channel}(\d\d)", r"/Streaming/Channels/{ch}\1"),
+        (rf"/c{channel}/", "/c{ch}/"),
+        (rf"_0{channel}_", "_0{ch}_"),
+    ):
+        new_path, count = re.subn(pattern, replacement, path, count=1)
+        if count:
+            return new_path
+    # Kanal raqami umuman yo'q (masalan Tapo `/stream2`) — shablon
+    # o'zgarmaydi va barcha kanallar bir xil manzilni ko'rsatadi.
+    return path
+
+
+def apply_template(
+    template: str, host: str, port: int, username: str, password: str, channel: int
+) -> str:
+    clean_host = re.sub(r"^rtsps?://", "", host.strip(), flags=re.I).split("/")[0]
+    auth = f"{quote(username, safe='')}:{quote(password, safe='')}@" if username else ""
+    return f"rtsp://{auth}{clean_host}:{int(port)}{template.format(ch=channel)}"
 
 
 def grab_frame(url: str, *, timeout_sec: int = DEFAULT_TIMEOUT_SEC) -> ProbeResult:

@@ -266,3 +266,90 @@ def test_utc_timestamps_are_converted_to_local_time(client: TestClient, tmp_path
     report = client.get("/api/report").json()
     assert report["entered"] == 1
     assert report["date"] == now_utc.astimezone().date().isoformat()
+
+
+# ── RTSP formatini avtomatik topish ──────────────────────────────────────
+#
+# Mijoz NVR brendini ko'pincha bilmaydi yoki noto'g'ri tanlaydi.  Ilgari
+# sehrgar faqat **bitta** formatni sinardi va "tasvir kelmadi" degan
+# foydasiz xato berardi — mijoz nima qilishni bilmasdi.
+
+
+def test_known_paths_cover_the_common_uzbek_market_brands() -> None:
+    from chaqimchi_ai.local.camera_probe import KNOWN_PATHS
+
+    joined = " ".join(path for _name, path in KNOWN_PATHS).lower()
+    for marker in ("streaming/channels", "realmonitor", "unicast", "h264preview"):
+        assert marker in joined, f"{marker} formatlar ro'yxatida yo'q"
+
+
+def test_substream_is_tried_before_the_main_stream() -> None:
+    """Substream yengil (640x360) va oddiy kompyuterda dekodlanadi;
+    1080p main stream tahlil uchun og'ir."""
+    from chaqimchi_ai.local.camera_probe import KNOWN_PATHS
+
+    paths = [path for _name, path in KNOWN_PATHS]
+    assert paths.index("/Streaming/Channels/{ch}02") < paths.index(
+        "/Streaming/Channels/{ch}01"
+    )
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("rtsp://h/Streaming/Channels/102", "/Streaming/Channels/{ch}02"),
+        ("rtsp://h/cam/realmonitor?channel=1&subtype=1", "/cam/realmonitor?channel={ch}&subtype=1"),
+        ("rtsp://h/unicast/c1/s1/live", "/unicast/c{ch}/s1/live"),
+        ("rtsp://h/h264Preview_01_sub", "/h264Preview_0{ch}_sub"),
+        # Kanal raqami yo'q format — shablon o'zgarmaydi.
+        ("rtsp://h/stream2", "/stream2"),
+    ],
+)
+def test_channel_slot_is_found_in_every_known_format(url: str, expected: str) -> None:
+    """Birinchi kanalda topilgan format qolganlariga ham qo'llanadi —
+    aks holda har kanal uchun o'nlab variantni qayta sinardik."""
+    from chaqimchi_ai.local.camera_probe import path_template
+
+    assert path_template(url, 1) == expected
+
+
+def test_auto_find_reports_a_usable_reason_when_nothing_works(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Xato xabari mijoz **tuzata oladigan** bo'lishi kerak."""
+    from chaqimchi_ai.local import camera_probe
+
+    monkeypatch.setattr(camera_probe, "rtsp_describe", lambda url, **kw: (401, ""))
+    response = client.post(
+        "/api/setup/auto-find",
+        json={"host": "192.168.1.64", "username": "admin", "password": "xato"},
+    )
+    body = response.json()
+    assert body["ok"] is False
+    assert "parol" in (body["error"] + body["hint"]).lower()
+
+
+def test_unreachable_camera_says_so_plainly(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chaqimchi_ai.local import camera_probe
+
+    monkeypatch.setattr(camera_probe, "rtsp_describe", lambda url, **kw: (0, "timeout"))
+    body = client.post("/api/setup/auto-find", json={"host": "10.0.0.9"}).json()
+    assert body["ok"] is False
+    assert "ulanib bo'lmadi" in body["error"].lower()
+    assert "ping" in body["hint"].lower(), "mijozga aniq tekshiruv berilishi kerak"
+
+
+def test_codec_problem_is_named(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """RTSP 200 qaytardi-yu kadr kelmadi — bu deyarli doim H.265."""
+    from chaqimchi_ai.local import camera_probe
+
+    monkeypatch.setattr(camera_probe, "rtsp_describe", lambda url, **kw: (200, ""))
+    monkeypatch.setattr(
+        camera_probe,
+        "grab_frame",
+        lambda url, **kw: camera_probe.ProbeResult(ok=False, error="x", hint="y"),
+    )
+    body = client.post("/api/setup/auto-find", json={"host": "192.168.1.64"}).json()
+    assert body["ok"] is False

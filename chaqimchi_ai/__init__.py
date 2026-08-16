@@ -10,7 +10,7 @@ from typing import Any
 #: o'qish ham mumkin emas: u reliz paketiga kirmaydi.
 #:
 #: Ikkalasining mosligini `tests/test_sotqin_release_contract.py` ushlab turadi.
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 __all__ = ["FaceEngine", "FaceCompareResult", "VideoFrameResult", "__version__"]
 
 

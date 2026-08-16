@@ -216,10 +216,19 @@ Section "Yangilanishlarni o'zi olsin" SecUpdater
   ;
   ; Xavfsizlik: yangilovchi paketni Ed25519 imzosi bilan tekshiradi
   ; (`chaqimchi_ai/local/updater.py`).  Imzo mos kelmasa paket tashlanadi.
+  ;
+  ; Nega 15 daqiqa (ilgari 6 soat edi): admin paneldan yangilanish
+  ; buyurilgach uni olti soat kutish amalda "masofadan boshqarish yo'q"
+  ; degani edi — o'rnatuvchi do'konda o'tirib kutolmaydi.
+  ;
+  ; Narxi deyarli nol: ulanmagan qurilmada tekshiruv tarmoqqa umuman
+  ; chiqmaydi (`updater._cloud()` darhol to'xtaydi), ulangan qurilmada
+  ; esa bu bitta kichik HTTPS so'rovi.  Yuklab olish faqat haqiqatan
+  ; yangi versiya bo'lganda boshlanadi.
   DetailPrint "Yangilanish vazifasi qo'shilmoqda..."
   nsExec::ExecToLog 'schtasks /Create /F /TN "Chaqimchi AI Update" \
     /TR "\"$INSTDIR\python\python.exe\" -m chaqimchi_ai.local.updater" \
-    /SC HOURLY /MO 6 /RU SYSTEM /RL HIGHEST'
+    /SC MINUTE /MO 15 /RU SYSTEM /RL HIGHEST'
   Pop $0
   ${If} $0 != 0
     DetailPrint "Ogohlantirish: avtomatik yangilanish sozlanmadi (kod $0)."

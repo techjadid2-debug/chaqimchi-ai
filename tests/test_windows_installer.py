@@ -262,3 +262,49 @@ def test_numeric_version_has_four_parts() -> None:
     numeric = ".".join(part if part.isdigit() else "0" for part in parts)
     assert _re.fullmatch(r"\d+\.\d+\.\d+\.\d+", numeric), numeric
     del subprocess, sys
+
+
+# ── Masofadan yangilash tezligi ──────────────────────────────────────────
+#
+# Bu **mahsulot va'dasi**, shunchaki texnik tafsilot emas: admin panel
+# mijozga aniq vaqt aytadi.  Ikkalasi bir joyda tekshiriladi, aks holda
+# biri o'zgarib, ikkinchisi yolg'on gapirib qolardi.
+
+#: Admin panelda aytiladigan va o'rnatuvchida sozlanadigan vaqt.
+UPDATE_CHECK_MINUTES = 15
+
+
+def test_update_task_runs_often_enough_to_be_useful() -> None:
+    """Ilgari 6 soat edi — buyruq berib olti soat kutish amalda
+    "masofadan boshqarish yo'q" degani edi."""
+    source = _nsis_code()
+    assert "/SC MINUTE" in source, "yangilanish soatlab emas, daqiqalab tekshirilsin"
+    found = re.search(r"/SC MINUTE /MO (\d+)", source)
+    assert found, "tekshirish oralig'i topilmadi"
+    assert int(found.group(1)) == UPDATE_CHECK_MINUTES
+
+
+def test_update_task_runs_with_admin_rights() -> None:
+    """Yangilash `Program Files` ga yozadi.  Dastur oddiy foydalanuvchi
+    huquqi bilan ishlaydi va o'zini eleva qila olmaydi — vazifa SYSTEM
+    nomiga yozilmasa har safar ruxsat oynasi chiqardi."""
+    source = _nsis_code()
+    assert "/RU SYSTEM" in source
+    assert "/RL HIGHEST" in source
+
+
+def test_admin_panel_promises_the_same_interval() -> None:
+    """Panel aytgan vaqt o'rnatuvchidagi jadval bilan mos bo'lsin."""
+    admin = (ROOT / "cloud" / "static" / "admin.html").read_text(encoding="utf-8")
+    assert f"{UPDATE_CHECK_MINUTES} daqiqa ichida qo'llaydi" in admin, (
+        "admin paneldagi va'da o'rnatuvchidagi jadvalga mos kelmayapti"
+    )
+
+
+def test_update_check_is_free_when_not_paired() -> None:
+    """Har 15 daqiqada ishlagani uchun ulanmagan qurilmada tekshiruv
+    tarmoqqa **umuman** chiqmasligi kerak."""
+    updater = (ROOT / "chaqimchi_ai" / "local" / "updater.py").read_text(encoding="utf-8")
+    body = updater[updater.index("def _cloud("): updater.index("def check(")]
+    assert "raise UpdateError" in body, "ulanmagan qurilma darhol to'xtashi kerak"
+    assert "httpx" not in body, "ulanmasdan turib tarmoqqa so'rov yuborilmasin"

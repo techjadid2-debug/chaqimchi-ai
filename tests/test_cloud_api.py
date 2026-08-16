@@ -527,3 +527,31 @@ def test_quick_trial_is_rate_limited(cloud_client) -> None:
     ]
     assert codes.count(200) == 3, codes
     assert codes[-1] == 429
+
+
+def test_windows_release_version_comes_from_the_file_not_the_server(tmp_path, monkeypatch):
+    """Sayt ko'rsatgan versiya yuklab olinadigan fayl bilan bir xil bo'lsin.
+
+    Haqiqiy xato: bu yerda serverning o'z `__version__` i qaytarilardi.
+    Yangi o'rnatuvchi yuklangach sayt hamon eski raqamni ko'rsatardi,
+    fayl nomi esa yangisini — "yangisi chiqdimi?" degan savolga javob
+    berib bo'lmasdi.
+    """
+    from cloud import main as cloud_main
+
+    releases = tmp_path / "releases"
+    releases.mkdir()
+    exe = releases / "chaqimchi-windows-9.9.9.exe"
+    exe.write_bytes(b"x" * 2048)
+    exe.with_suffix(".json").write_text('{"version": "9.9.9"}', encoding="utf-8")
+
+    monkeypatch.setattr(cloud_main, "_release_dirs", lambda: [releases])
+    monkeypatch.setattr(cloud_main, "_windows_installer_url", lambda: "")
+    monkeypatch.setattr(cloud_main, "_windows_installer_file", lambda: exe)
+
+    with TestClient(cloud_main.app) as client:
+        body = client.get("/api/v1/public/windows-release").json()
+
+    assert body["available"] is True
+    assert body["version"] == "9.9.9", "versiya relizdan olinishi kerak"
+    assert body["version"] != cloud_main.__version__

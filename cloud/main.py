@@ -1224,10 +1224,17 @@ async def public_windows_release() -> Dict[str, Any]:
     installer = _windows_installer_file()
     if installer is None:
         return {"available": False, "size_mb": None, "version": __version__}
+    # Versiya **relizdan** olinadi, cloud image'idan emas.  Ilgari bu yerda
+    # `__version__` turardi, ya'ni serverning o'z raqami: yangi
+    # o'rnatuvchi yuklangan bo'lsa ham sayt eski raqamni ko'rsatardi.
+    # Yuklab olinadigan fayl nomi esa relizdan olinardi — natijada badge
+    # 0.6.1, fayl 0.6.2 bo'lib chiqardi va "yangisi chiqdimi?" degan
+    # savolga javob berib bo'lmasdi.
+    release = latest_windows_release()
     return {
         "available": True,
         "size_mb": round(installer.stat().st_size / 1024 / 1024),
-        "version": __version__,
+        "version": release["version"] if release else __version__,
         "url": "/api/v1/public/download-installer",
     }
 

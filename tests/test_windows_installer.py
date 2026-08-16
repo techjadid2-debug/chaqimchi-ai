@@ -138,10 +138,39 @@ def test_installer_asks_for_permission() -> None:
     assert "RequestExecutionLevel admin" in _nsis()
 
 
-def test_installer_does_not_open_a_firewall_hole() -> None:
+def test_installer_never_opens_the_panel_to_the_network() -> None:
     """Dastur `127.0.0.1` da tinglaydi.  Ilgari 8750 port butun tarmoq
     uchun ochilardi — do'kon Wi-Fi'sidagi har kim panelga kira olardi."""
-    assert "netsh advfirewall" not in _nsis_code()
+    source = _nsis_code()
+    for port in ("8750", "8760"):
+        assert f"localport={port}" not in source, f"{port} porti tarmoqqa ochilmasin"
+    assert "protocol=TCP" not in source, "panel TCP porti hech qachon ochilmaydi"
+
+
+def test_camera_discovery_rule_is_narrow() -> None:
+    """Kamera qidiruvi uchun bitta istisno bor: ONVIF javoblari (UDP 3702).
+
+    U **tor** bo'lishi shart — aks holda avvalgi xato qaytadi.  To'rtta
+    cheklov birga tekshiriladi: aynan shu port, faqat lokal tarmoq,
+    faqat uy/ish tarmog'i profili va faqat dasturning o'z fayli.
+    """
+    source = _nsis_code()
+    if "netsh advfirewall firewall add rule" not in source:
+        pytest.skip("fayrvol qoidasi qo'shilmagan")
+
+    assert "localport=3702" in source
+    assert "remoteip=localsubnet" in source, "ruxsat lokal tarmoq bilan cheklansin"
+    assert "profile=private,domain" in source, "ommaviy Wi-Fi'da yoqilmasin"
+    assert "python.exe" in source, "ruxsat faqat dasturning o'ziga berilsin"
+    assert "action=allow" in source and "dir=in" in source
+
+
+def test_uninstaller_removes_the_firewall_rule() -> None:
+    """O'chirilgan dasturdan keyin ochiq port qolib ketmasligi kerak."""
+    source = _nsis_code()
+    if "netsh advfirewall firewall add rule" not in source:
+        pytest.skip("fayrvol qoidasi qo'shilmagan")
+    assert "netsh advfirewall firewall delete rule" in source
 
 
 def test_installer_keeps_writable_data_out_of_program_files() -> None:

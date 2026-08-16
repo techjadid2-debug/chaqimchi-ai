@@ -258,15 +258,47 @@ KNOWN_PATHS: Tuple[Tuple[str, str], ...] = (
 
 
 def candidate_urls(
-    host: str, *, port: int = 554, username: str = "", password: str = "", channel: int = 1
+    host: str,
+    *,
+    port: int = 554,
+    username: str = "",
+    password: str = "",
+    channel: int = 1,
+    brand: str = "",
 ) -> List[Tuple[str, str]]:
-    """Sinab ko'riladigan barcha manzillar: `(nom, url)`."""
+    """Sinab ko'riladigan barcha manzillar: `(nom, url)`.
+
+    `brand` berilsa o'sha brendning yo'llari **oldinga** o'tadi.  Brend
+    kameraning o'z javobidan aniqlanadi (`onvif_client.brand_from_banner`),
+    ya'ni mijozdan hech narsa so'ralmaydi.  Natijada odatda birinchi
+    urinishdayoq topiladi: o'n bir variantni sinash ~30 soniya, bittasi
+    esa 2-3 soniya.
+    """
     clean_host = re.sub(r"^rtsps?://", "", host.strip(), flags=re.I).split("/")[0]
     auth = f"{quote(username, safe='')}:{quote(password, safe='')}@" if username else ""
+    paths = order_paths(brand)
     return [
         (name, f"rtsp://{auth}{clean_host}:{int(port)}{path.format(ch=channel)}")
-        for name, path in KNOWN_PATHS
+        for name, path in paths
     ]
+
+
+def order_paths(brand: str) -> Tuple[Tuple[str, str], ...]:
+    """`KNOWN_PATHS` ni brend bo'yicha tartiblaydi."""
+    if not brand:
+        return KNOWN_PATHS
+    from chaqimchi_ai.local import onvif_client
+
+    keys = onvif_client.path_order_for(brand)
+    if not keys:
+        return KNOWN_PATHS
+    preferred = [
+        item for item in KNOWN_PATHS if any(key.lower() in item[0].lower() for key in keys)
+    ]
+    if not preferred:
+        return KNOWN_PATHS
+    rest = [item for item in KNOWN_PATHS if item not in preferred]
+    return tuple(preferred + rest)
 
 
 def find_working_url(
@@ -287,13 +319,25 @@ def find_working_url(
     bo'lsa o'nta yo'lni sinash bir daqiqa vaqtni behuda sarflardi va
     mijozga baribir noto'g'ri sabab ko'rsatilardi.
     """
-    urls = candidate_urls(
+    from chaqimchi_ai.local import onvif_client
+
+    probe = candidate_urls(
         host, port=port, username=username, password=password, channel=channel
     )
-    code, _ = rtsp_describe(urls[0][1])
+    code, raw = rtsp_describe(probe[0][1])
     if code in (0, 401):
-        error, hint = _classify(urls[0][1])
+        error, hint = _classify(probe[0][1])
         return None, None, ProbeResult(ok=False, error=error, hint=hint)
+
+    # Brend kameraning o'z javobidan aniqlanadi: `Server:` sarlavhasi va
+    # `realm="IP Camera(…)"` ni har bir ishlab chiqaruvchi o'zicha
+    # to'ldiradi.  Bu bepul ma'lumot ilgari ishlatilmasdi.
+    brand = onvif_client.brand_from_banner(raw)
+    if brand:
+        logger.info("Brend aniqlandi: %s", brand)
+    urls = candidate_urls(
+        host, port=port, username=username, password=password, channel=channel, brand=brand
+    )
 
     last = ProbeResult(ok=False, error="Kamera topilmadi.", hint="")
     for name, url in urls:
@@ -302,7 +346,47 @@ def find_working_url(
             logger.info("Ishlaydigan format topildi: %s", name)
             return name, url, result
         last = result
+
+    # Ma'lum yo'llarning hech biri ishlamadi.  Endi taxmin qilishni
+    # to'xtatib, kameradan **so'raymiz**: ONVIF aynan shu savolga javob
+    # beradi.  Ro'yxatda yo'q yoki nostandart sozlangan kamera faqat shu
+    # yo'l bilan qo'shiladi — ilgari bunday kamera umuman ishlamasdi.
+    name, url, result = _try_onvif(
+        host, username=username, password=password, timeout_sec=timeout_sec
+    )
+    if url:
+        return name, url, result
     return None, None, last
+
+
+def _try_onvif(
+    host: str, *, username: str, password: str, timeout_sec: int
+) -> Tuple[Optional[str], Optional[str], ProbeResult]:
+    """ONVIF orqali oqim manzilini olib, kadr kelishini tekshiradi."""
+    from chaqimchi_ai.local import onvif_client
+
+    clean_host = re.sub(r"^rtsps?://", "", host.strip(), flags=re.I).split("/")[0].split(":")[0]
+    for onvif_port in (80, 8899, 8000):
+        answer = onvif_client.describe(
+            clean_host, username=username, password=password, port=onvif_port
+        )
+        if not answer.ok:
+            continue
+        best = onvif_client.pick_best_profile(answer.profiles)
+        if best is None or not best.uri:
+            continue
+        url = onvif_client.with_credentials(best.uri, username, password, host=clean_host)
+        result = grab_frame(url, timeout_sec=timeout_sec)
+        if result.ok:
+            brand = onvif_client.normalise_brand(answer.device.brand) or "ONVIF"
+            logger.info("ONVIF orqali topildi: %s (%s)", brand, best.encoding)
+            return f"{brand} (ONVIF)", url, result
+        # Manzil ONVIF'dan keldi-yu kadr kelmadi — deyarli har doim
+        # sabab kodek.  Umumiy "topilmadi" o'rniga aniq sababni beramiz.
+        warning, advice = onvif_client.compatibility_note(best)
+        if warning:
+            return None, None, ProbeResult(ok=False, error=warning, hint=advice)
+    return None, None, ProbeResult(ok=False, error="", hint="")
 
 
 def path_template(url: str, channel: int) -> str:
@@ -349,19 +433,23 @@ def grab_frame(url: str, *, timeout_sec: int = DEFAULT_TIMEOUT_SEC) -> ProbeResu
             hint="Dasturni qayta o'rnating — o'rnatuvchi kerakli fayllarni olib keladi.",
         )
 
-    # Ikkita sozlama, ikkalasi ham kerak:
-    #
     # `rtsp_transport;tcp` — UDP do'kon Wi-Fi'sida kadr yo'qotadi va tasvir
-    # "sinadi".
+    # "sinadi".  `stimeout` — soket I/O kutish chegarasi (mikrosoniyada):
+    # OpenCV'ning `CAP_PROP_OPEN_TIMEOUT_MSEC` xossasi FFMPEG backendida
+    # e'tiborsiz qolarkan va javob bermaydigan IP'da ulanish 30 soniya
+    # osilib turardi.
     #
-    # `timeout` (mikrosoniyada) — **haqiqiy** kutish chegarasi.  OpenCV'ning
-    # `CAP_PROP_OPEN_TIMEOUT_MSEC` xossasi FFMPEG backendida e'tiborsiz
-    # qolarkan: javob bermaydigan IP'da ulanish 30 soniya osilib turardi,
-    # to'rt kanalni tekshirish esa ikki daqiqa olardi va mijoz dastur
-    # qotib qoldi deb o'ylardi.  `stimeout` — eski FFMPEG'dagi nomi.
-    micros = int(timeout_sec * 1_000_000)
+    # `timeout` **ataylab ishlatilmaydi**: RTSP demuxer uchun uning ma'nosi
+    # boshqa ("kiruvchi ulanishni kutish", `listen` rejimini nazarda
+    # tutadi), ya'ni u mijoz ulanishini butunlay buzishi mumkin.
+    #
+    # Muhit o'zgaruvchisi chaqiruvdan keyin **tiklanadi**: `retail.service`
+    # alohida jarayon bo'lsa ham, supervisor unga `dict(os.environ)` ni
+    # uzatadi.  Sinov qoldirgan qiymat zanjirga o'tib, barcha kamerani
+    # ochilmaydigan qilib qo'ygan edi — aynan shu xato.
+    previous = os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS")
     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-        f"rtsp_transport;tcp|timeout;{micros}|stimeout;{micros}"
+        f"rtsp_transport;tcp|stimeout;{int(timeout_sec * 1_000_000)}"
     )
 
     capture = None
@@ -408,3 +496,8 @@ def grab_frame(url: str, *, timeout_sec: int = DEFAULT_TIMEOUT_SEC) -> ProbeResu
     finally:
         if capture is not None:
             capture.release()
+        # Muhitni tiklaymiz — pastdagi izohga qarang.
+        if previous is None:
+            os.environ.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
+        else:
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = previous

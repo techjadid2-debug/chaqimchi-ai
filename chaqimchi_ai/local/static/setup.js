@@ -64,6 +64,99 @@
     const manual = $("brand").value === "manual";
     $("templateFields").classList.toggle("hidden", manual);
     $("manualField").classList.toggle("hidden", !manual);
+    // ONVIF tanlanganda kanal maydoni ma'nosiz: manzilni kamera beradi.
+    $("channel").closest(".field").classList.toggle("hidden", $("brand").value === "onvif");
+  });
+
+  // Kompyuter quvvati — kamera qo'shishdan oldin, so'ralmasdan.
+  (async () => {
+    try {
+      const data = await api("/api/setup/hardware");
+      $("hardwareCard").hidden = false;
+      const level = data.recommended_cameras >= 4 ? "ok" : data.recommended_cameras > 0 ? "warn" : "err";
+      const details =
+        `${data.cores} yadro · ${Math.round(data.ram_mb / 1024)} GB xotira · ` +
+        `${Math.round(data.free_disk_gb)} GB bo‘sh joy`;
+      note("hardwareResult", level, data.summary, details);
+      if (data.warnings.length) {
+        $("hardwareResult").insertAdjacentHTML(
+          "beforeend",
+          data.warnings.map((text) => `<div class="note warn">${esc(text)}</div>`).join(""),
+        );
+      }
+    } catch (error) {
+      // Baho ko'rsatilmasa ham sozlash davom etaveradi — bu ma'lumot,
+      // to'siq emas.
+      $("hardwareCard").hidden = true;
+    }
+  })();
+
+  $("onvifBtn").addEventListener("click", async () => {
+    const button = $("onvifBtn");
+    const host = $("host").value.trim();
+    if (!host) {
+      note("onvifResult", "err", "Avval IP manzilni kiriting.", "");
+      return;
+    }
+    button.disabled = true;
+    note("onvifResult", "warn", "Kameradan so‘ralmoqda…", " Bu 5–15 soniya oladi.");
+    try {
+      const data = await api("/api/setup/onvif", {
+        method: "POST",
+        body: JSON.stringify({
+          host,
+          username: $("username").value.trim(),
+          password: $("password").value,
+        }),
+      });
+      if (!data.ok) {
+        note("onvifResult", "err", data.error, " " + data.hint);
+        return;
+      }
+      const title = data.brand ? `${data.brand} topildi` : "Kamera topildi";
+      $("onvifResult").innerHTML =
+        `<div class="note ok"><b>${esc(title)}</b>${esc(data.model || "")} — ` +
+        `${data.count} ta oqim. Tavsiya etilgani belgilangan.</div>` +
+        '<div class="found-list">' +
+        data.streams
+          .map((stream, index) => {
+            const size = stream.width ? `${stream.width}×${stream.height}` : "o‘lchami noma’lum";
+            const mark = stream.recommended ? " ✓ tavsiya etiladi" : "";
+            const warn = stream.warning
+              ? `<div class="note warn">${esc(stream.warning)} ${esc(stream.advice)}</div>`
+              : "";
+            return `
+          <div class="found">
+            <div>
+              <b>${esc(stream.name)}${mark}</b><br>
+              <code>${esc(stream.encoding)} · ${esc(size)}</code>
+              ${warn}
+            </div>
+            <button class="button ${stream.recommended ? "primary" : "ghost"} small"
+                    type="button" data-stream="${index}">Shuni ishlatish</button>
+          </div>`;
+          })
+          .join("") +
+        "</div>";
+      $("onvifResult")
+        .querySelectorAll("button[data-stream]")
+        .forEach((item) =>
+          item.addEventListener("click", () => {
+            // Manzil ONVIF'dan keldi — endi uni qo'lda kiritish
+            // rejimiga qo'yamiz va odatdagi tasvir sinovidan o'tkazamiz.
+            const stream = data.streams[Number(item.dataset.stream)];
+            $("brand").value = "manual";
+            $("brand").dispatchEvent(new Event("change"));
+            $("manualUrl").value = stream.rtsp_url;
+            note("onvifResult", "ok", "Manzil qo‘yildi.", " Endi «Tasvirni tekshirish» tugmasini bosing.");
+            $("testBtn").scrollIntoView({ behavior: "smooth", block: "center" });
+          }),
+        );
+    } catch (error) {
+      note("onvifResult", "err", "ONVIF so‘rovi bajarilmadi.", error.message);
+    } finally {
+      button.disabled = false;
+    }
   });
 
   $("scanBtn").addEventListener("click", async () => {
@@ -144,6 +237,33 @@
       }
       note("testResult", "ok", `Format topildi: ${found.format}`, "");
       return found.rtsp_url;
+    }
+
+    // ONVIF: yo'lni taxmin qilmaymiz — kameradan so'raymiz va tahlil
+    // uchun eng mos oqimni (H.264 substream) o'zi tanlaydi.
+    if ($("brand").value === "onvif") {
+      note("testResult", "warn", "Kameradan so‘ralmoqda…", " ONVIF so‘rovi 5–15 soniya oladi.");
+      const answer = await api("/api/setup/onvif", {
+        method: "POST",
+        body: JSON.stringify({
+          host,
+          username: $("username").value,
+          password: $("password").value,
+        }),
+      });
+      if (!answer.ok) {
+        const error = new Error(answer.error + " " + answer.hint);
+        error.diagnosed = true;
+        throw error;
+      }
+      const best = answer.streams.find((item) => item.recommended) || answer.streams[0];
+      if (!best) throw new Error("Kamerada mos oqim topilmadi.");
+      if (best.warning) {
+        note("testResult", "warn", best.warning, " " + best.advice);
+      } else {
+        note("testResult", "ok", `${answer.brand || "Kamera"}: ${best.encoding} oqim tanlandi`, "");
+      }
+      return best.rtsp_url;
     }
 
     const data = await api("/api/setup/rtsp-template", {

@@ -68,7 +68,11 @@ def open_stream(url: str) -> Any:
     """
     import cv2
 
-    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+    # `setdefault` emas, **aniq belgilash**: bu qiymat jarayonga tashqaridan
+    # meros bo'lib o'tishi mumkin (supervisor bolaga butun muhitni uzatadi)
+    # va o'sha begona qiymat barcha kamerani ochilmaydigan qilib qo'ygan
+    # edi.  Zanjir qanday ulanishini faqat shu qator hal qiladi.
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;10000000"
     capture = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
     try:
         capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)

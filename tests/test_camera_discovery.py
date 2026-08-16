@@ -48,9 +48,12 @@ async def test_probe_ip_camera_services_mock():
 
 @pytest.mark.asyncio
 async def test_scan_local_network_mock():
+    # Skanerlash endi **barcha** interfeysdan boradi: NVR ko'pincha
+    # internetdan alohida kabelda turadi va faqat standart yo'nalishni
+    # tekshirish uni ko'rmasdan qoldirardi.
     with patch(
-        "chaqimchi_ai.discovery.get_local_ip_range",
-        return_value=("192.168.1.10", ["192.168.1.20", "192.168.1.30"]),
+        "chaqimchi_ai.discovery.local_ipv4_addresses",
+        return_value=["192.168.1.10"],
     ):
         with patch(
             "chaqimchi_ai.discovery.probe_ip_camera_services", new_callable=AsyncMock
@@ -61,6 +64,26 @@ async def test_scan_local_network_mock():
             devices = await scan_local_network_for_cameras()
             assert len(devices) == 1
             assert devices[0]["ip"] == "192.168.1.20"
+            # O'z manzilini so'ramaslik kerak.
+            assert "192.168.1.10" not in {call.args[0] for call in mock_probe.call_args_list}
+
+
+@pytest.mark.asyncio
+async def test_scan_covers_every_interface():
+    """Ikkita tarmoq bo'lsa ikkalasi ham skanerlanadi."""
+    with patch(
+        "chaqimchi_ai.discovery.local_ipv4_addresses",
+        return_value=["192.168.1.10", "10.10.0.5"],
+    ):
+        with patch(
+            "chaqimchi_ai.discovery.probe_ip_camera_services", new_callable=AsyncMock
+        ) as mock_probe:
+            mock_probe.return_value = None
+            await scan_local_network_for_cameras()
+
+    asked = {call.args[0] for call in mock_probe.call_args_list}
+    assert "192.168.1.20" in asked
+    assert "10.10.0.20" in asked
 
 
 def test_onvif_ws_discovery_mock():

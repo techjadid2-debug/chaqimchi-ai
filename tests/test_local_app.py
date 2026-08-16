@@ -353,3 +353,60 @@ def test_codec_problem_is_named(client: TestClient, monkeypatch: pytest.MonkeyPa
     )
     body = client.post("/api/setup/auto-find", json={"host": "192.168.1.64"}).json()
     assert body["ok"] is False
+
+
+# ── OpenCV sozlamasi zanjirga oqib ketmasligi ────────────────────────────
+#
+# Haqiqiy xato: kamera sinovi `OPENCV_FFMPEG_CAPTURE_OPTIONS` ni jarayon
+# muhitiga yozardi, supervisor esa bolaga butun muhitni uzatardi.  Zanjir
+# `setdefault` ishlatgani uchun o'sha begona qiymatni saqlab qolardi va
+# **barcha kamera ochilmay qolardi** — logda faqat "ochilmadi" ko'rinardi.
+
+
+def test_probe_restores_the_capture_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+
+    from chaqimchi_ai.local import camera_probe
+
+    monkeypatch.setenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", "oldindan;bor")
+    camera_probe.grab_frame("rtsp://10.255.255.1:554/x", timeout_sec=1)
+    assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == "oldindan;bor"
+
+
+def test_probe_leaves_no_trace_when_nothing_was_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+
+    from chaqimchi_ai.local import camera_probe
+
+    monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
+    camera_probe.grab_frame("rtsp://10.255.255.1:554/x", timeout_sec=1)
+    assert "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ
+
+
+def test_probe_never_uses_the_ambiguous_timeout_option() -> None:
+    """RTSP demuxer uchun `timeout` "kiruvchi ulanishni kutish" degani va
+    `listen` rejimini nazarda tutadi — mijoz ulanishini buzadi."""
+    source = (
+        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "camera_probe.py"
+    ).read_text(encoding="utf-8")
+    assert "|timeout;" not in source, "noaniq `timeout` opsiyasi qaytarilmasin"
+    assert "stimeout;" in source
+
+
+def test_pipeline_pins_its_own_capture_options() -> None:
+    """Zanjir tashqaridan kelgan qiymatga tayanmasligi kerak."""
+    source = (
+        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "retail" / "runner.py"
+    ).read_text(encoding="utf-8")
+    assert 'os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]' in source
+    code = "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "os.environ.setdefault" not in code, "meros qilib olingan qiymat saqlanib qolardi"
+
+
+def test_supervisor_strips_the_probe_options() -> None:
+    source = (
+        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "supervisor.py"
+    ).read_text(encoding="utf-8")
+    assert 'env.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS"' in source

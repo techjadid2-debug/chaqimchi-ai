@@ -32,7 +32,14 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from chaqimchi_ai.local import camera_probe, cloud_config, cloud_link, config_store, paths
+from chaqimchi_ai.local import (
+    camera_probe,
+    cloud_config,
+    cloud_link,
+    config_store,
+    onvif_client,
+    paths,
+)
 from chaqimchi_ai.local.supervisor import RetailSupervisor
 
 logger = logging.getLogger(__name__)
@@ -94,6 +101,24 @@ async def health() -> Dict[str, Any]:
 @app.get("/api/setup/summary")
 async def setup_summary() -> Dict[str, Any]:
     return {**config_store.summary(), "max_cameras": MAX_CAMERAS}
+
+
+@app.get("/api/setup/hardware")
+async def hardware_capacity() -> Dict[str, Any]:
+    """Bu kompyuter nechta kamerani ko'taradi.
+
+    Sehrgar buni kamera qo'shishdan **oldin** ko'rsatadi: zaif mashinaga
+    to'rtta kamera qo'shilsa hisobot jimgina to'liqsiz bo'lardi va buni
+    hech kim sezmasdi.
+    """
+    import anyio
+
+    from chaqimchi_ai.local import hardware
+
+    capacity = await anyio.to_thread.run_sync(
+        functools.partial(hardware.measure, str(paths.data_dir()))
+    )
+    return {"ok": True, **capacity.as_dict()}
 
 
 @app.post("/api/setup/scan")
@@ -392,6 +417,84 @@ async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
             else "Birorta kanaldan tasvir kelmadi. IP, login va parolni tekshiring "
             "yoki NVR'da RTSP yoqilganiga ishonch hosil qiling."
         ),
+    }
+
+
+class OnvifBody(BaseModel):
+    host: str = Field(min_length=3, max_length=120)
+    username: str = Field(default="", max_length=64)
+    password: str = Field(default="", max_length=128)
+    #: ONVIF veb-xizmati porti (RTSP porti emas).  Ko'pchilikda 80,
+    #: arzon modellarda 8899 uchraydi.
+    port: int = Field(default=80, ge=1, le=65535)
+    #: WS-Discovery bergan aniq manzil — bo'lsa u birinchi sinaladi.
+    xaddr: str = Field(default="", max_length=300)
+
+
+@app.post("/api/setup/onvif")
+async def onvif_probe(body: OnvifBody) -> Dict[str, Any]:
+    """Kameradan ONVIF orqali oqim manzilini **so'raydi**.
+
+    Farqi shu: `scan-channels` ma'lum yo'llarni birma-bir *taxmin*
+    qiladi, bu esa kameraning o'zidan aniq manzilni oladi.  Ro'yxatda
+    bo'lmagan yoki nostandart sozlangan kamera faqat shu yo'l bilan
+    ishlaydi.
+
+    Ustiga ustak, javobda kodek ham keladi — ya'ni H.265 muammosini
+    mijoz kamerani qo'shishdan **oldin** biladi, hisobot bo'sh chiqqanda
+    emas.
+    """
+    import anyio
+
+    result = await anyio.to_thread.run_sync(
+        functools.partial(
+            onvif_client.describe,
+            body.host.strip(),
+            username=body.username,
+            password=body.password,
+            xaddr=body.xaddr.strip(),
+            port=body.port,
+        )
+    )
+
+    if not result.ok:
+        return {
+            "ok": False,
+            "error": result.error,
+            "hint": result.hint,
+            "brand": onvif_client.normalise_brand(result.device.brand),
+        }
+
+    best = onvif_client.pick_best_profile(result.profiles)
+    streams = []
+    for profile in result.profiles:
+        warning, advice = onvif_client.compatibility_note(profile)
+        url = onvif_client.with_credentials(
+            profile.uri, body.username, body.password, host=body.host.strip()
+        )
+        streams.append(
+            {
+                "token": profile.token,
+                "name": profile.name,
+                "encoding": profile.encoding or "noma'lum",
+                "width": profile.width,
+                "height": profile.height,
+                "fps": profile.fps,
+                "rtsp_url": url,
+                "safe_url": camera_probe.redact(url),
+                "recommended": bool(best and profile.token == best.token),
+                "warning": warning,
+                "advice": advice,
+            }
+        )
+
+    return {
+        "ok": True,
+        "brand": onvif_client.normalise_brand(result.device.brand),
+        "model": result.device.model,
+        "firmware": result.device.firmware,
+        "streams": streams,
+        "count": len(streams),
     }
 
 

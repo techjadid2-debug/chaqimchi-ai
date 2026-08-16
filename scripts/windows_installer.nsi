@@ -157,6 +157,31 @@ Section "!${APP_NAME} (majburiy)" SecMain
   WriteRegDWORD HKLM "${REG_UNINSTALL}" "EstimatedSize" "$0"
 SectionEnd
 
+Section "Kameralarni avtomatik topish (tarmoq ruxsati)" SecFirewall
+  ; Kameralarni topish ONVIF WS-Discovery ga tayanadi: dastur
+  ; 239.255.255.250:3702 ga UDP so'rov yuboradi va kameralar unga
+  ; **javob** qaytaradi.
+  ;
+  ; Muammo shundaki, Windows Fayrvoli multicast so'roviga kelgan
+  ; javobni faqat qisqa vaqt oynasida o'tkazadi, undan keyin jimgina
+  ; tashlab yuboradi.  Natijada "Kameralarni topish" tugmasi hech
+  ; qanday xato bermasdan bo'sh ro'yxat qaytarardi — mijoz uchun bu
+  ; eng tushunarsiz holat.
+  ;
+  ; Ruxsat faqat **lokal tarmoq** bilan cheklangan: internetdan hech
+  ; kim bu portga ulana olmaydi.
+  DetailPrint "Kamera qidiruvi uchun tarmoq ruxsati..."
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule \
+    name="Chaqimchi AI — kamera qidiruvi" dir=in action=allow \
+    protocol=UDP localport=3702 profile=private,domain \
+    remoteip=localsubnet program="$INSTDIR\python\python.exe"'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Ogohlantirish: tarmoq ruxsati qo'shilmadi (kod $0)."
+    DetailPrint "Kameralarni qo'lda IP manzili bilan qo'shishingiz mumkin."
+  ${EndIf}
+SectionEnd
+
 Section "Ish stoliga yorliq" SecDesktop
   SetShellVarContext all
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\Chaqimchi_AI.bat" "" "$INSTDIR\app.ico" 0
@@ -195,6 +220,8 @@ SectionEnd
 ; ── Bo'lim izohlari ─────────────────────────────────────────────────────
 
 LangString DESC_SecMain ${LANG_UZBEK} "Dastur, Python muhiti va AI modeli. Internet talab qilinmaydi."
+LangString DESC_SecFirewall ${LANG_UZBEK} "Kameralarni tarmoqdan avtomatik topish uchun ruxsat. Faqat lokal tarmoq, internetdan kirish yo'q."
+LangString DESC_SecFirewall ${LANG_ENGLISH} "Allows automatic camera discovery on the local network. Local subnet only; no access from the internet."
 LangString DESC_SecDesktop ${LANG_UZBEK} "Ish stolida ${APP_NAME} yorlig'i bo'ladi."
 LangString DESC_SecAutostart ${LANG_UZBEK} "Kompyuter yoqilganda nazorat o'zi ishga tushadi. Tavsiya etiladi."
 LangString DESC_SecUpdater ${LANG_UZBEK} "Yangi versiyalar o'zi yuklanadi va o'rnatiladi. Faqat imzosi tekshirilgan paketlar qabul qilinadi."
@@ -205,6 +232,7 @@ LangString DESC_SecAutostart ${LANG_ENGLISH} "Starts monitoring automatically wh
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} $(DESC_SecMain)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecFirewall} $(DESC_SecFirewall)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} $(DESC_SecDesktop)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} $(DESC_SecAutostart)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecUpdater} $(DESC_SecUpdater)
@@ -297,6 +325,10 @@ Section "Uninstall"
   ; Yangilanish vazifasi ham olib tashlanadi: qolib ketsa o'chirilgan
   ; dasturni har olti soatda qayta o'rnatishga urinardi.
   nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI Update"'
+  ; Fayrvol qoidasi ham olib tashlanadi: o'chirilgan dasturdan keyin
+  ; ochiq port qolib ketmasligi kerak.
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule \
+    name="Chaqimchi AI — kamera qidiruvi"'
   Pop $0
 
   DeleteRegValue HKLM "${REG_RUN}" "ChaqimchiAI"

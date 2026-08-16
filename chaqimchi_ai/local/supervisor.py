@@ -115,6 +115,11 @@ class RetailSupervisor:
         (data_dir / "data").mkdir(parents=True, exist_ok=True)
 
         env = dict(os.environ)
+        # Kamera sinovi qoldirgan OpenCV sozlamasi zanjirga o'tmasin: u
+        # boshqa maqsad uchun (qisqa kutish) qo'yiladi va bir marta barcha
+        # kamerani ochilmaydigan qilib qo'ygan edi.  Zanjir o'z qiymatini
+        # o'zi belgilaydi (`retail/runner.py`).
+        env.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
         env["CHAQIMCHI_CONFIG"] = str(config_store.config_file())
         env["CHAQIMCHI_RETAIL_STATUS"] = str(paths.status_path())
         # Bolaning stdout'i buferlanmasin: yiqilganda oxirgi qatorlar

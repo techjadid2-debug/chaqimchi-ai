@@ -110,8 +110,59 @@ class OpenVINOPersonDetector:
         # ishlamay qolgandan ko'ra sekinroq ishlagani yaxshi.  Qaysi qurilmada
         # ketayotgani `device_in_use` da ko'rinadi va benchmarkda qayd etiladi.
         self.device_in_use = device if device in available else fallback_device
-        self._compiled = core.compile_model(model, self.device_in_use)
+        self._compiled = self._compile(core, model, fallback_device)
         self._output = self._compiled.output(0)
+
+    def _compile(self, core: Any, model: Any, fallback_device: str) -> Any:
+        """Modelni kompilyatsiya qiladi, kerak bo'lsa CPU'ga tushadi.
+
+        Nega `try` shart: `available_devices` da "GPU" turishi uni
+        **ishlaydi** degani emas.  Eski Intel grafikasi (Haswell HD 4600
+        va undan avvalgilar — OpenVINO Gen8/Broadwell dan boshlab
+        qo'llab-quvvatlaydi) ro'yxatda ko'rinadi, lekin kompilyatsiya
+        paytida yiqiladi.  Bu istisno ushlanmasa butun xizmat qulaydi va
+        supervisor uni qayta-qayta ishga tushirib, do'kon nazoratsiz
+        qolardi — sekin ishlagan CPU esa ishlaydi.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            compiled = core.compile_model(model, self.device_in_use, self._hints())
+            logger.info("Detektor qurilmasi: %s", self.device_in_use)
+            return compiled
+        except Exception as exc:  # noqa: BLE001 — OpenVINO turli istisno beradi
+            if self.device_in_use == fallback_device:
+                raise
+            logger.warning(
+                "%s da kompilyatsiya bo'lmadi (%s) — %s ga o'tildi",
+                self.device_in_use,
+                exc,
+                fallback_device,
+            )
+            self.device_in_use = fallback_device
+            return core.compile_model(model, fallback_device, self._hints())
+
+    def _hints(self) -> Dict[str, Any]:
+        """Kompilyatsiya ko'rsatmalari.
+
+        CPU'da barcha yadroni inferensga berish noto'g'ri: o'sha
+        protsessorda RTSP oqimlari ham dekodlanadi.  4 yadroli mashinada
+        (masalan i5-4590) OpenVINO to'rttasini ham egallab olsa, kadr
+        dekodlash kechikadi va tasvir "sinadi".  Bittasini dekodlashga
+        qoldiramiz.
+        """
+        if self.device_in_use != "CPU":
+            return {}
+        import os
+
+        cores = os.cpu_count() or 4
+        return {
+            "INFERENCE_NUM_THREADS": max(1, cores - 1),
+            # Kechikish rejimi: bizga bitta kadrning tez qaytishi kerak,
+            # navbat to'ldirish emas — har kamera ketma-ket so'raydi.
+            "PERFORMANCE_HINT": "LATENCY",
+        }
 
     def detect(self, frame: np.ndarray) -> List[Dict[str, Any]]:
         height, width = frame.shape[:2]

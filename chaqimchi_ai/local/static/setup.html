@@ -30,6 +30,14 @@
       <h1>Kamerangizni ulaymiz</h1>
       <p class="lead">Do‘koningizdagi NVR yoki IP kamera shu kompyuter bilan bitta tarmoqda bo‘lishi kerak. Avval tarmoqni tekshiramiz.</p>
 
+      <!-- Kompyuter quvvati kamera qo‘shishdan OLDIN aytiladi: zaif
+           mashinaga to‘rtta kamera qo‘shilsa hisobot jimgina to‘liqsiz
+           bo‘lardi va buni hech kim sezmasdi. -->
+      <div class="card quiet" id="hardwareCard" hidden>
+        <h2>Bu kompyuter nimani ko‘taradi</h2>
+        <div id="hardwareResult"></div>
+      </div>
+
       <div class="card">
         <h2>Tarmoqdagi kameralarni qidirish</h2>
         <p class="hint">Qidiruv 10–30 soniya davom etadi.</p>
@@ -49,6 +57,7 @@
             <option value="hikvision">Hikvision / HiLook</option>
             <option value="dahua">Dahua / IMOU</option>
             <option value="uniview">Uniview (UNV)</option>
+            <option value="onvif">ONVIF — kameradan so‘ralsin</option>
             <option value="manual">Boshqa — RTSP manzilini o‘zim yozaman</option>
           </select>
         </label>
@@ -84,9 +93,12 @@
         <div class="actions">
           <button class="button primary" id="testBtn" type="button">Tasvirni tekshirish</button>
           <button class="button ghost" id="scanChannelsBtn" type="button">Shu NVR’dagi barcha kameralarni topish</button>
+          <button class="button ghost" id="onvifBtn" type="button">ONVIF orqali so‘rash</button>
         </div>
+        <p class="hint">«ONVIF orqali so‘rash» — manzilni taxmin qilmaydi, kameraning o‘zidan so‘raydi. Boshqa usullar ishlamasa shuni sinang.</p>
         <div id="testResult"></div>
         <div id="channelResult"></div>
+        <div id="onvifResult"></div>
       </div>
 
       <div class="card quiet" id="savedCard">

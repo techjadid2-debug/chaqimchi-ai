@@ -768,6 +768,11 @@ def _start_config_sync() -> None:
     def _loop() -> None:
         while True:
             try:
+                # Heartbeat birinchi: cloud qurilma tirikligini va qaysi
+                # versiyada ekanini bilishi kerak, hatto zanjir
+                # to'xtagan bo'lsa ham.
+                cloud_config.send_heartbeat(supervisor.status())
+
                 applied = cloud_config.sync_once()
                 if applied and applied.get("cameras"):
                     # Kamera ro'yxati o'zgardi — zanjir uni faqat startda
@@ -819,6 +824,7 @@ def main() -> None:
     # keyin qayta start bo'lardi.
     try:
         cloud_config.sync_once()
+        cloud_config.send_heartbeat(supervisor.status())
     except Exception:  # noqa: BLE001
         logger.exception("Boshlang'ich cloud sozlamasi olinmadi")
     _autostart_if_ready()

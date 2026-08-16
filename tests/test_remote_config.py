@@ -214,3 +214,59 @@ def test_network_failure_is_not_fatal(local, monkeypatch) -> None:
     etishi va eski sozlamada qolishi kerak."""
     monkeypatch.setattr(local, "fetch", lambda cloud: None)
     assert local.sync_once() is None
+
+
+# ── Heartbeat ────────────────────────────────────────────────────────────
+#
+# `retail.service` dagi `CloudEventSync` `health_provider`siz yaratilgan,
+# ya'ni heartbeat **umuman yuborilmasdi**.  Natijada admin panelda
+# versiya `v?` bo'lib turardi va kamera holati ko'rinmasdi.
+
+
+def test_heartbeat_reports_the_running_version(local, monkeypatch) -> None:
+    """Versiyasiz cloud yangilanish qaysi do'konga yetganini bilolmaydi."""
+    from chaqimchi_ai import __version__
+
+    sent = {}
+
+    class _Response:
+        def raise_for_status(self) -> None:
+            return None
+
+    def _post(url, headers=None, json=None, timeout=None):
+        sent["url"] = url
+        sent["headers"] = headers
+        sent["body"] = json
+        return _Response()
+
+    monkeypatch.setattr(local.httpx, "post", _post)
+    assert local.send_heartbeat({"cameras_active": 2}) is True
+
+    assert sent["url"].endswith("/api/v1/edge/heartbeat")
+    assert sent["body"]["app_version"] == __version__
+    assert sent["body"]["cameras_active"] == 2
+    assert sent["body"]["product_name"] == "Chaqimchi Windows"
+    assert sent["headers"]["X-Device-Token"] == "tok-1"
+
+
+def test_heartbeat_is_skipped_when_not_paired(local, monkeypatch) -> None:
+    from chaqimchi_ai.local import config_store
+
+    config_store.update("cloud_sync", {"enabled": False})
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("ulanmagan qurilma heartbeat yubormasligi kerak")
+
+    monkeypatch.setattr(local.httpx, "post", _fail)
+    assert local.send_heartbeat({}) is False
+
+
+def test_heartbeat_failure_is_not_fatal(local, monkeypatch) -> None:
+    """Internet uzilishi odatiy hol — dastur ishlashda davom etsin."""
+    import httpx as real_httpx
+
+    def _boom(*args, **kwargs):
+        raise real_httpx.ConnectError("tarmoq yo'q")
+
+    monkeypatch.setattr(local.httpx, "post", _boom)
+    assert local.send_heartbeat({"cameras_active": 0}) is False

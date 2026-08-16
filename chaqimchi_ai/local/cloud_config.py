@@ -25,12 +25,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
 
+from chaqimchi_ai import __version__
 from chaqimchi_ai.local import config_store, paths
 
 logger = logging.getLogger(__name__)
@@ -138,6 +140,55 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
         config_store.save_store_hours(site["open_from"], site["open_to"])
 
     return changed
+
+
+def send_heartbeat(status: Dict[str, Any]) -> bool:
+    """Qurilma holatini cloudga yuboradi.
+
+    Nega lokal ilova yuboradi, zanjir emas: `retail.service` dagi
+    `CloudEventSync` `health_provider`siz yaratilgan, ya'ni heartbeat
+    **umuman yuborilmasdi**.  Natijada admin panelda versiya `v?` bo'lib
+    turardi va kamera holati ko'rinmasdi.
+
+    Bundan tashqari zanjir to'xtab qolsa cloud buni bilishi kerak — agar
+    heartbeat faqat zanjirdan kelsa, yiqilgan qurilma shunchaki
+    "jim" bo'lib qolardi va sababi noma'lum bo'lardi.  Lokal ilova esa
+    doim ishlaydi.
+    """
+    raw = config_store.read_raw().get("cloud_sync") or {}
+    if not raw.get("enabled") or not raw.get("device_token"):
+        return False
+
+    try:
+        free_bytes = shutil.disk_usage(str(paths.data_dir())).free
+    except OSError:
+        free_bytes = 0
+
+    payload = {
+        "cameras_active": int(status.get("cameras_active") or 0),
+        "disk_free_bytes": int(free_bytes),
+        "outbox_pending": int(_pending_events() or 0),
+        "app_version": __version__,
+        "product_name": "Chaqimchi Windows",
+    }
+    try:
+        response = httpx.post(
+            f"{str(raw['url']).rstrip('/')}/api/v1/edge/heartbeat",
+            headers=_headers(raw),
+            json=payload,
+            timeout=TIMEOUT_SEC,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.info("Heartbeat yuborilmadi: %s", exc)
+        return False
+    return True
+
+
+def _pending_events() -> Optional[int]:
+    from chaqimchi_ai.local import cloud_link
+
+    return cloud_link.pending_events()
 
 
 def sync_once() -> Optional[Dict[str, Any]]:

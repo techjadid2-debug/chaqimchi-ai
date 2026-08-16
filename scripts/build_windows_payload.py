@@ -32,6 +32,7 @@ import argparse
 import hashlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -305,6 +306,42 @@ def step_launcher() -> None:
         shutil.copy2(icon, PAYLOAD / "app.ico")
 
 
+def step_version() -> None:
+    """Versiyani o'rnatuvchi uchun yozadi.
+
+    Nega: `windows_installer.nsi` da versiya **qo'lda** yozilgan edi va
+    siljib ketgan — dastur 0.6.2, o'rnatuvchi esa "0.7.0" deb yozardi.
+    Bunday nomuvofiqlik bir marta cheksiz yangilanish siklini keltirib
+    chiqargan: cloud bir versiyani, qurilma boshqasini aytardi va
+    yangilash hech qachon "tugallandi" bo'lmasdi.
+
+    Endi manba bitta — `chaqimchi_ai.__version__`.  Qo'lda yozish
+    imkoniyati umuman qoldirilmaydi.
+    """
+    # Paketni import qilmaymiz: qurish skripti loyihadan tashqarida ham
+    # ishga tushiriladi va o'sha paytda `chaqimchi_ai` yo'lda bo'lmaydi.
+    # Faylni o'qish esa har doim ishlaydi.
+    source = (ROOT / "chaqimchi_ai" / "__init__.py").read_text(encoding="utf-8")
+    found = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', source, re.M)
+    if not found:
+        raise SystemExit("chaqimchi_ai/__init__.py ichida __version__ topilmadi")
+    version = found.group(1)
+
+    # NSIS `VIProductVersion` qat'iy `x.x.x.x` shaklini talab qiladi.
+    parts = (version.split("+")[0].split("-")[0].split(".") + ["0", "0", "0"])[:4]
+    numeric = ".".join(part if part.isdigit() else "0" for part in parts)
+
+    target = BUILD / "version.nsh"
+    target.write_text(
+        "; Avtomatik yaratilgan — qo'lda tahrirlamang.\n"
+        "; Manba: chaqimchi_ai/__init__.py (`build_windows_payload.py` yozadi).\n"
+        f'!define APP_VERSION "{version}"\n'
+        f'!define APP_VERSION_NUMERIC "{numeric}"\n',
+        encoding="utf-8",
+    )
+    log.info("     ✓ versiya: %s", version)
+
+
 def directory_size(path: Path) -> int:
     return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
 
@@ -334,6 +371,7 @@ def main() -> int:
     step_models(cache)
     step_code()
     step_launcher()
+    step_version()
 
     # Xavfsizlik tekshiruvi: cloud kodi payloadga tushib qolmasin.
     for forbidden in ("cloud", "webapp"):

@@ -215,3 +215,50 @@ def test_installer_launcher_stays_visible_on_error() -> None:
     assert "Chaqimchi_AI.bat" in source
     assert "pause" in source, "xato oynada qolishi kerak"
     assert ".vbs" not in _nsis_code(), "yashirin ishga tushirish qaytarilmasin"
+
+
+# ── Versiya bitta manbadan ───────────────────────────────────────────────
+#
+# Haqiqiy xato: `windows_installer.nsi` da versiya qo'lda yozilgan edi
+# va siljib ketdi — dastur 0.6.2, o'rnatuvchi esa "0.7.0" deb yozardi.
+# Bir marta shunday nomuvofiqlik cheksiz yangilanish siklini keltirib
+# chiqargan: cloud bir raqamni, qurilma boshqasini aytardi va yangilash
+# hech qachon tugamasdi.
+
+
+def test_installer_does_not_hardcode_the_version() -> None:
+    source = _nsis_code()
+    assert not re.search(
+        r'!define\s+APP_VERSION\s+"', source
+    ), "versiya qo'lda yozilmasin — u siljib ketadi"
+    assert 'build\\version.nsh' in source, "versiya qurish paytida yozilishi kerak"
+
+
+def test_build_writes_the_version_from_the_single_source() -> None:
+    """Qurish skripti versiyani `chaqimchi_ai/__init__.py` dan olishi kerak."""
+    builder = (Path(__file__).resolve().parents[1] / "scripts" / "build_windows_payload.py").read_text(
+        encoding="utf-8"
+    )
+    assert "version.nsh" in builder
+    assert "__version__" in builder, "manba — paketning o'z versiyasi"
+    assert "APP_VERSION_NUMERIC" in builder, "NSIS x.x.x.x shaklini talab qiladi"
+
+
+def test_numeric_version_has_four_parts() -> None:
+    """`VIProductVersion` qat'iy `x.x.x.x` kutadi; aks holda kompilyatsiya
+    yiqiladi va buni faqat reliz paytida bilardik."""
+    import re as _re
+    import subprocess
+    import sys
+
+    version = _re.search(
+        r'__version__\s*=\s*["\']([^"\']+)["\']',
+        (Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "__init__.py").read_text(
+            encoding="utf-8"
+        ),
+    )
+    assert version is not None
+    parts = (version.group(1).split("+")[0].split("-")[0].split(".") + ["0", "0", "0"])[:4]
+    numeric = ".".join(part if part.isdigit() else "0" for part in parts)
+    assert _re.fullmatch(r"\d+\.\d+\.\d+\.\d+", numeric), numeric
+    del subprocess, sys

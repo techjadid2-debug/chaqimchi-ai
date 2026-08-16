@@ -33,8 +33,18 @@ Unicode True
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
+; Versiya `build_windows_payload.py` tomonidan yoziladi (manba —
+; `chaqimchi_ai/__init__.py`).  Bu yerda qo'lda yozilmaydi: ilgari
+; shunday edi va siljib ketgan — dastur 0.6.2, o'rnatuvchi esa "0.7.0"
+; deb yozardi.  Nomuvofiqlik bir marta cheksiz yangilanish siklini
+; keltirib chiqargan, chunki cloud va qurilma har xil raqam aytardi.
+;
+; Fayl yo'q bo'lsa kompilyatsiya ataylab to'xtaydi: bu payload
+; qurilmaganini bildiradi va o'sha payloadsiz o'rnatuvchi baribir
+; yaroqsiz bo'lardi.
+!include "..\build\version.nsh"
+
 !define APP_NAME     "Chaqimchi AI"
-!define APP_VERSION  "0.7.0"
 !define APP_PUBLISHER "Chaqimchi AI"
 !define APP_PORT     "8760"
 !define APP_URL      "http://localhost:${APP_PORT}"
@@ -59,7 +69,7 @@ RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 SetCompressorDictSize 64
 
-VIProductVersion "0.7.0.0"
+VIProductVersion "${APP_VERSION_NUMERIC}"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} o'rnatuvchisi"
 VIAddVersionKey "FileVersion" "${APP_VERSION}"

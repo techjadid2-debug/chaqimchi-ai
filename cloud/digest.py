@@ -113,9 +113,20 @@ class DailyDigestService:
             report["attendance"] = self.events.attendance_report(
                 site_id, start=now.date(), end=now.date(), now=now
             )
+            # Bo'sh kun uchun "Kirdi: 0" xabari — shovqin: qurilma hali
+            # ulanmagan yoki do'kon yopiq bo'lgan kunlarda bot bekorga
+            # yozib turardi.  Ma'lumot yo'q — xabar ham yo'q.
+            traffic = (report.get("traffic") or {}) if isinstance(report, dict) else {}
+            if not stats.get("total") and not traffic.get("entered"):
+                self.events.mark_digest_sent(site_id, digest_date)
+                continue
             text = build_digest(str(site["name"]), digest_date, stats, report)
             site_sent = 0
             for member in members:
+                # A'zo kunlik hisobotni o'chirib qo'ygan bo'lishi mumkin
+                # (panel sozlamasi) — hurmat qilamiz.
+                if member.get("digest_muted"):
+                    continue
                 try:
                     await self.sender(str(member["telegram_id"]), text)
                     sent += 1

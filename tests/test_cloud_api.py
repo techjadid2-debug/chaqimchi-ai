@@ -312,7 +312,7 @@ def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     assert onboarding.json()["pairing"]["code"] == site["pairing_code"]
 
 
-def test_lead_notification_reaches_only_explicit_personal_ids_and_retries_duplicates(
+def test_lead_notification_reaches_only_explicit_personal_ids_once(
     cloud_client, monkeypatch
 ) -> None:
     import cloud.main as cm
@@ -352,9 +352,10 @@ def test_lead_notification_reaches_only_explicit_personal_ids_and_retries_duplic
     assert first.status_code == repeated.status_code == 200
     assert first.json()["duplicate"] is False
     assert repeated.json()["duplicate"] is True
-    assert [chat_id for chat_id, _ in sent] == ["5476913898"] * 2
+    # Takroriy ariza (bir xil telefon) qayta xabar TUG'DIRMAYDI: tugmani
+    # 5 marta bosgan mehmon adminga 5 ta xabar bo'lib tushar edi.
+    assert [chat_id for chat_id, _ in sent] == ["5476913898"]
     assert "Yangi Chaqimchi AI" in sent[0][1]
-    assert "Takroriy Chaqimchi AI" in sent[1][1]
 
 
 def test_public_registration_opens_bot_and_start_returns_role_buttons(

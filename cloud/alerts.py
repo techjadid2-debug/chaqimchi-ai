@@ -223,9 +223,14 @@ def plan_camera_alerts(
         if not expected:
             continue
 
-        state = "ok" if active >= expected else f"missing:{expected - active}"
+        # Holat ataylab sonsiz ("missing:2" emas, shunchaki "missing"):
+        # 2 kamera -> 1 kamera -> 2 kamera tebranishi har 15 daqiqada
+        # yangi xabar tug'dirardi.  Nechta yo'qolgani xabar matnida
+        # baribir yoziladi; qayta xabar esa faqat to'liq tiklangandan
+        # keyingi yangi yo'qolishda ketadi.
+        state = "ok" if active >= expected else "missing"
 
-        if state.startswith("missing"):
+        if state == "missing":
             if prev != state:
                 alerts.append(
                     Alert(site_id, state, _camera_text(site), remember=state, kind="cameras")

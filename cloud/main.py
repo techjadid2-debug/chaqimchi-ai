@@ -561,6 +561,24 @@ def require_attendance() -> None:
         )
 
 
+class TelegramSendError(HTTPException):
+    """Telegram API xatosi — javob matni bilan.
+
+    Oddiy 502 yetarli emas edi: "chat not found" (a'zo botga /start
+    bosmagan) va vaqtinchalik tarmoq xatosini farqlab bo'lmasdi, natijada
+    mavjud bo'lmagan chatga har batch'da qayta urinilaverardi.
+    """
+
+    def __init__(self, telegram_status: int, body: str) -> None:
+        super().__init__(502, "Telegram xabari yuborilmadi")
+        self.telegram_status = telegram_status
+        self.body = body
+
+    @property
+    def chat_not_found(self) -> bool:
+        return self.telegram_status == 400 and "chat not found" in self.body.lower()
+
+
 async def _send_owner_telegram(
     chat_id: str,
     text: str,
@@ -584,13 +602,71 @@ async def _send_owner_telegram(
             json=payload,
         )
         if response.status_code >= 400:
-            raise HTTPException(502, "Telegram OTP yuborilmadi")
+            raise TelegramSendError(response.status_code, response.text[:300])
+
+
+class _DurableAlertThrottle:
+    """`cloud/notify.py` tormozi uchun bazaga tayangan implementatsiya.
+
+    Xotiradagi standart tormoz jarayon bilan o'ladi — har deploy'dan keyin
+    hamma sayt bir vaqtda "birinchi xabar"ini qayta olardi.
+    """
+
+    def allow(self, site_id: str, event_type: str, camera_id: str) -> bool:
+        from cloud import notify
+
+        return get_store().alert_throttle_allow(
+            site_id,
+            f"{event_type}:{camera_id}",
+            window_sec=notify.DEFAULT_THROTTLE_SEC,
+        )
+
+
+_durable_throttle = _DurableAlertThrottle()
+
+
+#: Shuncha ketma-ket "chat not found" dan keyin a'zoga yuborish to'xtaydi.
+NOTIFY_FAILURE_LIMIT = 3
+
+#: Bitta a'zo soatiga ko'pi bilan shuncha ogohlantirish oladi — sayt/kamera
+#: soni qancha bo'lmasin.  Undan ko'pi baribir o'qilmaydi va botni
+#: o'chirtirishga olib keladi.
+OWNER_ALERTS_PER_HOUR = 10
 
 
 async def _notify_site_members(site_id: str, text: str) -> None:
-    for member in get_event_store().list_members(site_id):
+    # Tarifda Telegram yo'q bo'lsa — yuborilmaydi (masalan starter).
+    site = get_store().get_site(site_id)
+    if site is not None:
+        try:
+            if not get_plan(str(site.get("plan"))).telegram_allowed:
+                return
+        except ValueError:
+            pass
+    store = get_event_store()
+    for member in store.list_members(site_id):
+        if int(member.get("notify_failures") or 0) >= NOTIFY_FAILURE_LIMIT:
+            continue
+        if not ratelimit.limiter().hit(
+            "owner-alerts",
+            f"{site_id}:{member['telegram_id']}",
+            limit=OWNER_ALERTS_PER_HOUR,
+            window_sec=3600,
+        ):
+            continue
         try:
             await _send_owner_telegram(str(member["telegram_id"]), text)
+            if int(member.get("notify_failures") or 0):
+                store.reset_notify_failures(site_id, str(member["id"]))
+        except TelegramSendError as exc:
+            if exc.chat_not_found:
+                failures = store.record_notify_failure(site_id, str(member["id"]))
+                if failures >= NOTIFY_FAILURE_LIMIT:
+                    logger.warning(
+                        "A'zo %s (site %s) botga /start bosmagan — unga yuborish to'xtatildi",
+                        member["telegram_id"],
+                        site_id,
+                    )
         except Exception:
             # Event qabul qilinishi Telegramdagi vaqtinchalik xatoga bog'lanmasin.
             continue
@@ -1078,7 +1154,12 @@ async def _notify_new_lead(lead: Dict[str, Any], *, duplicate: bool = False) -> 
     if not recipients:
         logger.warning("Lead %s saqlandi, lekin Telegram recipient sozlanmagan", lead["id"])
         return
-    get_store().ensure_lead_notification_deliveries(str(lead["id"]), recipients, reset=duplicate)
+    # `reset=duplicate` EMAS: takroriy ariza (bir xil telefon 24 soat
+    # ichida) yuborilgan xabarni "pending"ga qaytarib, adminga o'sha
+    # arizani qayta-qayta yubortirardi — 5 marta bosgan mehmon 5 ta xabar
+    # demak edi.  Yangi qabul qiluvchi qo'shilsa `ensure` uni baribir
+    # yaratadi; yuborilganlar esa yuborilganligicha qoladi.
+    get_store().ensure_lead_notification_deliveries(str(lead["id"]), recipients)
     for chat_id in recipients:
         delivery = get_store().lead_notification_delivery(str(lead["id"]), chat_id)
         if delivery and delivery["state"] == "sent":
@@ -2402,8 +2483,9 @@ async def ingest_event_batch(
     new_events = [event for event in body.events if event.event_id not in existing]
     # Butun batch uchun **bitta** yig'ma xabar. Har event uchun alohida yuborish
     # 500 talik batchda botni Telegram limitiga urib, xabarni butunlay
-    # yo'qotardi — batafsili `cloud/notify.py` da.
-    message = build_alert(device["site_id"], new_events)
+    # yo'qotardi — batafsili `cloud/notify.py` da.  Tormoz bazada turadi:
+    # xotiradagisi har deploy'da nolga qaytib, xabar bo'roni berardi.
+    message = build_alert(device["site_id"], new_events, throttle_service=_durable_throttle)
     if message:
         if any(event.has_snapshot or event.has_clip for event in new_events):
             message += (
@@ -3227,6 +3309,28 @@ async def owner_add_member(
     )
 
 
+class DigestPrefBody(BaseModel):
+    muted: bool
+
+
+@app.put("/api/v1/owner/digest")
+async def owner_set_digest_pref(
+    body: DigestPrefBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Kunlik hisobotni o'zi uchun yoqadi/o'chiradi.
+
+    Bungacha digest majburiy edi — o'chirishning yagona yo'li a'zolikdan
+    chiqish edi.  Sozlama a'zoning o'ziga tegishli: boshqalarga ta'sir
+    qilmaydi.
+    """
+    if owner.auth_kind != "telegram":
+        raise HTTPException(400, "Bu sozlama faqat Telegram a'zolari uchun")
+    if not get_event_store().set_digest_muted(owner.site_id, owner.member_id, body.muted):
+        raise HTTPException(404, "A'zo topilmadi")
+    return {"ok": True, "digest_muted": body.muted}
+
+
 @app.delete("/api/v1/owner/members/{member_id}")
 async def owner_delete_member(
     member_id: str,
@@ -3300,6 +3404,12 @@ async def owner_telegram_webhook(
     command = text.split()[0].lower().split("@", 1)[0] if text else ""
     members = get_event_store().members_for_telegram(telegram_id)
     if telegram_id and chat.get("type") == "private" and command in {"/start", "/help"}:
+        # /start har bosilganda xabar + yangi kirish havolasi yaratiladi —
+        # cheklovsiz bu DB'ni ham, chatni ham bo'lar edi.  Oshib ketsa
+        # indamay qaytamiz: webhook'ka 429 berish Telegram'ni retry'ga
+        # undaydi.
+        if not ratelimit.limiter().hit("tg-start", telegram_id, limit=5, window_sec=600):
+            return {"ok": True}
         base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
         customer_url = f"{base}/owner"
         if members:

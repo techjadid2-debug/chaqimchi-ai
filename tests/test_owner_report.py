@@ -380,3 +380,54 @@ def test_trend_days_use_tashkent_boundaries(tmp_path: Path) -> None:
     trend = store.traffic_trend("site-1", days=2, until=DAY)
 
     assert [item["entered"] for item in trend["daily"]] == [1, 0]
+
+
+# ── Digest xizmati: bo'sh kun va mute ────────────────────────────────────
+
+
+def _digest_service(store, sent):
+    from cloud.digest import DailyDigestService
+
+    async def sender(chat_id, text):
+        sent.append((chat_id, text))
+
+    return DailyDigestService(store, lambda: [{"id": "site-1", "name": "Oq Saroy"}], sender)
+
+
+def _tashkent_evening():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    return datetime(DAY.year, DAY.month, DAY.day, 21, 30, tzinfo=ZoneInfo("Asia/Tashkent"))
+
+
+def test_empty_day_digest_is_not_sent(tmp_path: Path) -> None:
+    """Bo'sh kun uchun "Kirdi: 0" xabari — shovqin; yuborilmaydi."""
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _digest_service(store, sent)
+
+    count = asyncio.run(service.check_once(_tashkent_evening()))
+
+    assert count == 0 and sent == []
+    # Belgilab qo'yiladi — har daqiqada qayta urinilmasin.
+    assert store.digest_was_sent("site-1", DAY.isoformat())
+
+
+def test_muted_member_does_not_get_the_digest(tmp_path: Path) -> None:
+    """A'zo o'zi uchun kunlik hisobotni o'chira oladi (yangi panel sozlamasi)."""
+    import asyncio
+
+    store = store_with([crossing(12, "in")], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    muted = store.add_member("site-1", "222", role="manager")
+    store.set_digest_muted("site-1", str(muted["id"]), True)
+    sent: List = []
+    service = _digest_service(store, sent)
+
+    asyncio.run(service.check_once(_tashkent_evening()))
+
+    assert [chat_id for chat_id, _ in sent] == ["111"], "faqat mute qilmagan a'zo olsin"

@@ -133,6 +133,8 @@ class EventStore:
                 role TEXT NOT NULL,
                 display_name TEXT,
                 active INTEGER NOT NULL DEFAULT 1,
+                digest_muted INTEGER NOT NULL DEFAULT 0,
+                notify_failures INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 UNIQUE(site_id, telegram_id)
             )
@@ -282,6 +284,12 @@ class EventStore:
         employee_columns = self._existing_columns(conn, "employees")
         if "deactivated_at" not in employee_columns:
             conn.execute("ALTER TABLE employees ADD COLUMN deactivated_at TEXT")
+        member_columns = self._existing_columns(conn, "owner_members")
+        for name in ("digest_muted", "notify_failures"):
+            if name not in member_columns:
+                conn.execute(
+                    f"ALTER TABLE owner_members ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                )
 
     @staticmethod
     def _dict(row: Any) -> Dict[str, Any]:
@@ -1284,12 +1292,51 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(
                 self._sql(
-                    "SELECT id,site_id,telegram_id,role,display_name,active,created_at "
+                    "SELECT id,site_id,telegram_id,role,display_name,active,"
+                    "digest_muted,notify_failures,created_at "
                     "FROM owner_members WHERE site_id=? AND active=1 ORDER BY created_at"
                 ),
                 (site_id,),
             ).fetchall()
         return [self._dict(row) for row in rows]
+
+    def set_digest_muted(self, site_id: str, member_id: str, muted: bool) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("UPDATE owner_members SET digest_muted=? WHERE site_id=? AND id=?"),
+                (1 if muted else 0, site_id, member_id),
+            )
+            return bool(cursor.rowcount)
+
+    def record_notify_failure(self, site_id: str, member_id: str) -> int:
+        """Yuborish muvaffaqiyatsizligini sanaydi; yangi qiymatni qaytaradi.
+
+        "Chat not found" — a'zo botga hech qachon /start bosmagani belgisi;
+        bir necha urinishdan keyin unga yuborish to'xtatiladi, aks holda
+        har batch'da log xatoga to'lardi.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "UPDATE owner_members SET notify_failures=notify_failures+1 "
+                    "WHERE site_id=? AND id=?"
+                ),
+                (site_id, member_id),
+            )
+            row = conn.execute(
+                self._sql("SELECT notify_failures FROM owner_members WHERE site_id=? AND id=?"),
+                (site_id, member_id),
+            ).fetchone()
+        return int(self._dict(row)["notify_failures"]) if row else 0
+
+    def reset_notify_failures(self, site_id: str, member_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "UPDATE owner_members SET notify_failures=0 WHERE site_id=? AND id=?"
+                ),
+                (site_id, member_id),
+            )
 
     def disable_member(self, site_id: str, member_id: str) -> bool:
         with self._connect() as conn:

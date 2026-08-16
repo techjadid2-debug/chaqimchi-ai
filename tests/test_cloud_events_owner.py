@@ -641,3 +641,110 @@ def test_code_login_still_works(production_client) -> None:
 
     assert verified.status_code == 200
     assert verified.json()["access_token"]
+
+
+# ── Telegram tartibi (minimal rejim) ─────────────────────────────────────
+
+
+def test_member_gets_at_most_ten_alerts_per_hour(production_client) -> None:
+    """Soatlik shaxsiy limit: undan ko'pi baribir o'qilmaydi va mijoz
+    botni o'chirtiradi.  Kamera/tur soni qancha bo'lmasin — 10 ta."""
+    client, messages = production_client
+    site, _device, headers = _provision(client)
+    _member(client, site["site_id"], "5476100001")
+
+    for index in range(12):
+        client.post(
+            "/api/v1/edge/events/batch",
+            headers=headers,
+            json={
+                "events": [
+                    {
+                        "event_id": f"evt-cap-{index}",
+                        "event_type": "camera_tampered",
+                        "severity": "critical",
+                        "camera_id": f"cam-{index:02d}",
+                    }
+                ]
+            },
+        )
+
+    assert len(messages) == 10, "soatiga 10 tadan oshmasin"
+
+
+def test_alert_throttle_survives_a_restart(production_client) -> None:
+    """Tormoz bazada: deploy'dan keyin xabar bo'roni bo'lmasin."""
+    import cloud.main as main
+
+    client, _messages = production_client
+    _provision(client)
+
+    store = main.get_store()
+    assert store.alert_throttle_allow("site-x", "camera_tampered:cam-1") is True
+    assert store.alert_throttle_allow("site-x", "camera_tampered:cam-1") is False
+
+    # "Restart": xuddi shu DB ustida yangi CloudStore ochamiz.
+    from cloud.store import CloudStore
+
+    fresh = CloudStore(store.db_path)
+    assert fresh.alert_throttle_allow("site-x", "camera_tampered:cam-1") is False, (
+        "tormoz restartdan keyin ham eslab qolsin"
+    )
+
+
+def test_missing_chat_stops_future_sends(production_client, monkeypatch) -> None:
+    """"Chat not found" — a'zo botga /start bosmagan.  3 urinishdan keyin
+    unga yuborish to'xtaydi; ilgari har batch'da log xatoga to'lardi."""
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    _member(client, site["site_id"], "5476100002")
+
+    attempts = []
+
+    async def failing_send(chat_id, text, *, reply_markup=None):
+        attempts.append(chat_id)
+        raise main.TelegramSendError(400, '{"description":"Bad Request: chat not found"}')
+
+    monkeypatch.setattr(main, "_send_owner_telegram", failing_send)
+
+    for index in range(5):
+        client.post(
+            "/api/v1/edge/events/batch",
+            headers=headers,
+            json={
+                "events": [
+                    {
+                        "event_id": f"evt-nf-{index}",
+                        "event_type": "camera_tampered",
+                        "severity": "critical",
+                        "camera_id": f"cam-nf-{index}",
+                    }
+                ]
+            },
+        )
+
+    assert len(attempts) == 3, "3 muvaffaqiyatsizlikdan keyin urinish to'xtasin"
+    member = main.get_event_store().list_members(site["site_id"])[0]
+    assert int(member["notify_failures"]) >= 3
+
+
+def test_owner_can_mute_the_daily_digest(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476100003")
+    key = _key_of(_make_link(client, site["site_id"], "5476100003"))
+    token = client.post("/api/v1/owner/auth/link", json={"key": key}).json()["access_token"]
+
+    response = client.put(
+        "/api/v1/owner/digest",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"muted": True},
+    )
+
+    assert response.status_code == 200
+    import cloud.main as main
+
+    member = main.get_event_store().list_members(site["site_id"])[0]
+    assert int(member["digest_muted"]) == 1

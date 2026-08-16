@@ -124,19 +124,24 @@ def test_all_cameras_working_is_quiet() -> None:
 
 def test_camera_alert_not_repeated() -> None:
     sites = [_site_row(cameras_active=2)]
-    alerts, _ = plan_camera_alerts(sites, {"s1": "missing:1"})
+    alerts, _ = plan_camera_alerts(sites, {"s1": "missing"})
     assert alerts == []
 
 
-def test_worsening_sends_new_alert() -> None:
-    """1 ta kamera o‘chgan edi, endi 2 ta — bu yangi xabar."""
-    alerts, _ = plan_camera_alerts([_site_row(cameras_active=1)], {"s1": "missing:1"})
-    assert len(alerts) == 1
-    assert "2 ta kamera ishlamayapti" in alerts[0].text
+def test_count_flapping_does_not_send_new_alerts() -> None:
+    """2→1→2 kamera tebranishi har 15 daqiqada yangi xabar EMAS.
+
+    Holat ataylab sonsiz saqlanadi ("missing", "missing:2" emas): son
+    o'zgarishi bilan qayta xabar ketishi admin chatining asosiy shovqin
+    manbai edi.  Yangi xabar faqat to'liq tiklanib, keyin yana
+    yo'qolganda ketadi.
+    """
+    alerts, _ = plan_camera_alerts([_site_row(cameras_active=1)], {"s1": "missing"})
+    assert alerts == []
 
 
 def test_camera_recovery_alert() -> None:
-    alerts, _ = plan_camera_alerts([_site_row(cameras_active=3)], {"s1": "missing:1"})
+    alerts, _ = plan_camera_alerts([_site_row(cameras_active=3)], {"s1": "missing"})
     assert len(alerts) == 1
     assert "kameralar tiklandi" in alerts[0].text
     assert alerts[0].remember is None

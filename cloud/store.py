@@ -72,6 +72,13 @@ DEFAULT_TEMPLATES = {
 }
 
 
+#: Lead xabari shuncha urinishdan keyin tashlab qo'yiladi (holat
+#: `abandoned`).  Eksponensial backoff bilan bu ~6 soatlik urinish —
+#: undan keyin chat mavjud emasligi aniq va abadiy retry faqat log
+#: shovqini bo'lardi.
+LEAD_DELIVERY_MAX_ATTEMPTS = 8
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -1377,6 +1384,21 @@ class CloudStore:
                 "WHERE lead_id=? AND chat_id=?",
                 (attempts, _iso(now), _iso(now), lead_id, str(chat_id)),
             )
+        elif attempts >= LEAD_DELIVERY_MAX_ATTEMPTS:
+            # Abadiy retry — log shovqini: mavjud bo'lmagan chatga soatiga
+            # bir marta urinib, jurnal "chat not found" bilan to'lardi.
+            # Yetarlicha urinishdan keyin yetkazish yopiladi.
+            conn.execute(
+                "UPDATE lead_notification_deliveries SET state='abandoned',attempts=?,"
+                "last_error=?,next_attempt_at=NULL,updated_at=? WHERE lead_id=? AND chat_id=?",
+                (
+                    attempts,
+                    (error or "Telegram yuborilmadi")[:500],
+                    _iso(now),
+                    lead_id,
+                    str(chat_id),
+                ),
+            )
         else:
             delay_seconds = min(3600, 60 * (2 ** min(attempts - 1, 6)))
             conn.execute(
@@ -1874,6 +1896,42 @@ class CloudStore:
         )
         conn.commit()
         conn.close()
+
+    def alert_throttle_allow(self, site_id: str, key: str, *, window_sec: int = 600) -> bool:
+        """Chidamli xabar tormozi: oynada bir marta True, qolganida False.
+
+        `cloud/notify.py` dagi xotiradagi tormoz har deploy'da nolga
+        qaytib, hamma sayt uchun bir vaqtda xabar bo'roni berardi.  Bu
+        yozuv `alert_state` jadvalida turadi va restartdan omon qoladi.
+        """
+        kind = f"notify:{key}"[:200]
+        now = _utc_now()
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT notified_at FROM alert_state WHERE site_id = ? AND kind = ?",
+                (site_id, kind),
+            ).fetchone()
+            if row is not None:
+                try:
+                    # `_iso` naiv "YYYY-MM-DD HH:MM:SS" yozadi — UTC deb o'qiladi.
+                    last = datetime.fromisoformat(str(row["notified_at"])).replace(
+                        tzinfo=timezone.utc
+                    )
+                except ValueError:
+                    last = None
+                if last is not None and (now - last).total_seconds() < window_sec:
+                    return False
+            conn.execute(
+                "INSERT INTO alert_state (site_id, kind, connection, notified_at)"
+                " VALUES (?, ?, 'sent', ?)"
+                " ON CONFLICT(site_id, kind) DO UPDATE SET notified_at = ?",
+                (site_id, kind, _iso(now), _iso(now)),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
 
     def clear_alert_state(self, site_id: str, *, kind: Optional[str] = None) -> None:
         """`kind` berilmasa — saytning barcha ogohlantirish holatlari o‘chadi."""

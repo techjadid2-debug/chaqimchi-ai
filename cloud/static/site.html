@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="Chaqimchi AI — Mavjud Windows kompyuteringiz yoki tayyor mini-PC orqali do‘kon kameralariga AI tahlil: mijozlar oqimi, kassa navbati, xavfsizlik va davomat.">
-  <meta property="og:title" content="Chaqimchi AI — Do‘koningiz nazorati va tahlili">
-  <meta property="og:description" content="Mavjud Windows kompyuter yoki tayyor mini-PC orqali kameralaringizni sun’iy intellektga aylantiring.">
+  <meta property="og:title" content="Chaqimchi AI — Mavjud kameralaringizni aqlli tahlilga aylantiring">
+  <meta property="og:description" content="Do‘koningizdagi Windows kompyuter yoki tayyor mini-PC orqali mijozlar oqimi, kassa navbati va xavfsizlik nazorati. Video sizda qoladi.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og.png">
+  <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-v2.jpg">
   <title>Chaqimchi AI — Do‘koningiz nazorati va sun’iy intellekt tahlili</title>
-  <link rel="stylesheet" href="/assets/site.css?v=20260816-v3">
+  <link rel="stylesheet" href="/assets/site.css?v=20260816-v7">
 </head>
 <body>
   <header class="nav-shell">
     <nav class="nav" aria-label="Asosiy navigatsiya">
       <a class="brand" href="/">
-        <span class="brand-mark"><img src="/assets/chaqimchi-logo-black-crop-v1.png" alt="Chaqimchi AI"></span>
+        <span class="brand-mark"><img src="/assets/chaqimchi-logo-v2.webp" alt="Chaqimchi AI"></span>
         <span>Chaqimchi <b>AI</b></span>
       </a>
       <div class="nav-links">
@@ -28,7 +28,9 @@
       <div class="nav-actions">
         <a class="text-link" href="/installer">O‘rnatuvchilar</a>
         <a class="text-link" href="/owner">Mijoz kirishi</a>
-        <a class="button button-small button-light" href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">Telegramda boshlash</a>
+        <!-- Navigatsiyadagi tugma ataylab ikkilamchi (to'q): hero'dagi lime
+             tugma sahifadagi yagona asosiy harakat bo'lib qolishi kerak. -->
+        <a class="button button-small" href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">Telegramda boshlash</a>
       </div>
     </nav>
   </header>
@@ -43,11 +45,15 @@
           Yangi qimmat kameralar shart emas. Do‘koningizdagi mavjud <b>Windows kompyuter</b>, <b>NVR</b> yoki tayyor <b>Chaqimchi Box</b> mini-PC orqali mijozlar soni, kassa navbati, xavfsizlik va xodimlar davomatini Telegram va Cloud orqali kuzating.
         </p>
         <div class="hero-actions">
-          <a class="button button-light" href="#pilot">🛠️ Tayyor qilib o‘rnatib bering</a>
-          <a class="button button-ghost" href="#download">💻 O‘zim o‘rnataman</a>
+          <a class="button button-light" href="#pilot"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#quti"></use></svg>Tayyor qilib o‘rnatib bering</a>
+          <a class="button button-ghost" href="#download"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kompyuter"></use></svg>O‘zim o‘rnataman</a>
           <a class="text-cta" href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">Telegram orqali ulanish →</a>
         </div>
         <div class="hero-trust">
+          <!-- Narx ilgagi: mijoz "qancha turadi?" degan savol bilan keladi va
+               javob uchun 4 blok pastga tushishga majbur bo'lmasligi kerak.
+               Qiymatni JS `/api/v1/public/pricing` dan qo'yadi. -->
+          <span id="heroPrice" hidden></span>
           <span>4 kamera qabul profili</span>
           <span>Hikvision · Dahua · Uniview NVR</span>
           <span>Windows 10/11 &amp; Linux</span>
@@ -83,7 +89,7 @@
         <!-- Variant 1: O'zida kompyuteri borlar uchun -->
         <article class="path-card path-self">
           <div class="path-badge">O‘zingiz o‘rnatasiz · Bepul</div>
-          <h3>💻 Menda Windows / Kompyuter bor</h3>
+          <h3><svg class="icon icon-lg" aria-hidden="true"><use href="/assets/icons.svg#kompyuter"></use></svg>Menda Windows / Kompyuter bor</h3>
           <p class="path-desc">Do‘koningizdagi mavjud Windows 10/11 kompyuteringizga o‘zingiz o‘rnatasiz — usta chaqirish shart emas.</p>
           <ul class="path-benefits">
             <li>Qo‘shimcha qurilma sotib olish shart emas</li>
@@ -93,13 +99,14 @@
           </ul>
           <div class="path-cta">
             <a class="button button-light" href="#download">Yuklab olish →</a>
+            <a class="text-link" href="/install" style="display:block; margin-top:10px; text-align:center;">O‘rnatish yo‘riqnomasi</a>
           </div>
         </article>
 
         <!-- Variant 2: Kompyuteri yo'qlar uchun -->
         <article class="path-card path-managed">
           <div class="path-badge managed-badge">Kalit topshirish · Tayyor yechim</div>
-          <h3>📦 Kompyuterim yo‘q / Usta kerak</h3>
+          <h3><svg class="icon icon-lg" aria-hidden="true"><use href="/assets/icons.svg#quti"></use></svg>Kompyuterim yo‘q / Usta kerak</h3>
           <p class="path-desc">Biz sizga tayyor sozlangan ixcham mini-PC (Intel N100 Chaqimchi Box) yetkazib beramiz va to‘liq o‘rnatib beramiz.</p>
           <ul class="path-benefits">
             <li>Tayyor sozlangan ixcham mini-PC qurilmasi</li>
@@ -124,7 +131,7 @@
 
       <div class="download-grid">
         <div class="download-card">
-          <div class="os-icon">🪟</div>
+          <div class="os-icon"><svg class="icon icon-xl" aria-hidden="true"><use href="/assets/icons.svg#kompyuter"></use></svg></div>
           <h3>Windows 10 / 11</h3>
           <p>O‘rnatgach brauzerda sozlash oynasi ochiladi: kamerangizni ulaysiz va kirish chizig‘ini chizasiz. Video kompyuteringizda qoladi.</p>
 
@@ -133,17 +140,12 @@
                qo'lda yozilmaydi. -->
           <div id="downloadReady" class="download-action" hidden>
             <a class="button button-light" id="downloadBtn" href="/api/v1/public/download-installer">
-              ⬇️ Windows uchun yuklab olish
+              Windows uchun yuklab olish
             </a>
-            <details style="margin-top: 12px;">
-              <summary style="cursor: pointer; font-size: 13px; color: var(--muted);">Windows “bu faylni bloklab qo‘ydi” desa nima qilaman?</summary>
-              <p style="font-size: 13px; margin: 10px 0 0;">
-                Bu normal holat: dasturimiz yangi va hali Microsoft sertifikati olinmagan.
-                Ko‘k oynada <b>“Qo‘shimcha ma’lumot”</b> (More info) ni bosing, so‘ng
-                <b>“Baribir ishga tushirish”</b> (Run anyway) ni tanlang.
-                Ishonchingiz komil bo‘lishi uchun faylni faqat shu rasmiy saytdan yuklab oling.
-              </p>
-            </details>
+            <p class="hint" style="margin: 12px 0 0;">
+              Birinchi marta o‘rnatyapsizmi? <a href="/install">Qadam-baqadam yo‘riqnoma</a> —
+              Windows ogohlantirishi, ruxsat so‘rovi va kamerani ulash tushuntirilgan.
+            </p>
           </div>
 
           <form id="notifyForm" class="quick-download-form" style="display: grid; gap: 10px;" hidden>
@@ -166,7 +168,7 @@
         </div>
 
         <div class="download-card">
-          <div class="os-icon">🐧</div>
+          <div class="os-icon"><svg class="icon icon-xl" aria-hidden="true"><use href="/assets/icons.svg#quti"></use></svg></div>
           <h3>Linux / Mini-PC / Ubuntu Server</h3>
           <p>Ubuntu 22.04 / 24.04 uchun 1 qatorli o‘rnatish buyrug‘i. Bu yo‘l texnik mutaxassislar uchun — pairing kod kerak bo‘ladi.</p>
           <div class="code-box">
@@ -189,17 +191,17 @@
       <div class="feature-sales-grid">
         <article>
           <span class="feature-tag">ODAM OQIMI</span>
-          <h3>👥 Xaridorlar va Navbat</h3>
+          <h3><svg class="icon icon-lg" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg>Xaridorlar va Navbat</h3>
           <p>Kunlik kirish-chiqish soni, do‘konda ayni damdagi odamlar soni va kassada navbat 3 kishidan oshganda tezkor ogohlantirish.</p>
         </article>
         <article>
           <span class="feature-tag">XAVFSIZLIK</span>
-          <h3>🚨 Xavfsizlik va Nazorat</h3>
+          <h3><svg class="icon icon-lg" aria-hidden="true"><use href="/assets/icons.svg#qalqon"></use></svg>Xavfsizlik va Nazorat</h3>
           <p>Kamera yopilishi yoki burilishi, do‘kon yopilgandan keyingi harakat va taqiqlangan orqa xonaga begona kirishi nazorati.</p>
         </article>
         <article class="feature-pilot">
           <span class="feature-tag">DAVOMAT · BEPUL YOPIQ PILOT</span>
-          <h3>👤 Xodimlar Davomati (Face ID)</h3>
+          <h3><svg class="icon icon-lg" aria-hidden="true"><use href="/assets/icons.svg#soat"></use></svg>Xodimlar Davomati (Face ID)</h3>
           <p>Xodimlar qachon keldi, qachon ketdi va kechikishlar hisoboti. <b>Hozircha sotuvda emas</b> — faqat xodimlarning yozma roziligi bilan bepul yopiq pilotda ishlaydi. Yuz namunasi do‘kondagi qurilmadan chiqmaydi.</p>
         </article>
       </div>
@@ -212,19 +214,37 @@
     <section id="configurator" class="configurator section-pad">
       <div class="section-intro">
         <p class="eyebrow"><span></span> Shaffof Narxlar</p>
-        <h2>Tarif va funksiyalarni tanlang</h2>
-        <p>Bazaviy platforma — <b id="baseHeadline">…</b>. Qo‘shimcha funksiyalarni faqat kerakli kameralar soni bo‘yicha tanlang. Yillik to‘lovda 2 oy bepul.</p>
+        <h2>Tayyor paketni tanlang</h2>
+        <p>Bazaviy platforma — <b id="baseHeadline">…</b>. Har bir AI funksiyasi ulangan kameralar soni bo‘yicha hisoblanadi. Yillik to‘lovda 2 oy bepul.</p>
       </div>
+
+      <!-- Tayyor paketlar: mijoz o'zi yig'ish o'rniga bittasini bosadi.
+           Narxlar shu yerda yozilmaydi — JS ularni /api/v1/public/pricing
+           dan hisoblaydi, ya'ni katalog o'zgarsa sayt ham o'zgaradi. -->
+      <div id="presetGrid" class="preset-grid" role="list"></div>
+
+      <p id="presetHint" class="preset-hint">Yoki quyida o‘zingizga mos qilib yig‘ing.</p>
+
+      <noscript>
+        <div class="preset-hint" style="text-align:left">
+          <b>Narxlarni ko‘rish uchun brauzerda JavaScript yoqilgan bo‘lishi kerak.</b><br>
+          Yoqa olmasangiz bizga yozing — narxni og‘zaki aytamiz:
+          <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>.
+          Bazaviy platforma oyiga $20 dan boshlanadi, har bir AI funksiyasi
+          kamerasiga qarab qo‘shiladi.
+        </div>
+      </noscript>
+
       <div class="config-layout">
         <form id="purchaseForm" class="config-form">
           <div class="config-switches">
-            <div class="billing-switch" role="group" aria-label="To‘lov davri">
-              <button type="button" class="billing-option active" data-billing="monthly">Oylik</button>
-              <button type="button" class="billing-option" data-billing="yearly">Yillik <small>2 oy bepul</small></button>
+            <div class="billing-switch" role="radiogroup" aria-label="To‘lov davri">
+              <button type="button" class="billing-option active" role="radio" aria-checked="true" data-billing="monthly">Oylik</button>
+              <button type="button" class="billing-option" role="radio" aria-checked="false" data-billing="yearly">Yillik <small>2 oy bepul</small></button>
             </div>
-            <div class="billing-switch" role="group" aria-label="Valyuta">
-              <button type="button" class="billing-option active" data-currency="uzs">so‘m</button>
-              <button type="button" class="billing-option" data-currency="usd">$</button>
+            <div class="billing-switch" role="radiogroup" aria-label="Valyuta">
+              <button type="button" class="billing-option active" role="radio" aria-checked="true" data-currency="uzs">so‘m</button>
+              <button type="button" class="billing-option" role="radio" aria-checked="false" data-currency="usd">$</button>
             </div>
           </div>
 
@@ -234,22 +254,25 @@
           </div>
 
           <fieldset>
-            <legend>Qo‘shimcha AI funksiyalar</legend>
+            <legend>AI funksiyalari</legend>
+            <p id="featureNote" class="feature-note" hidden></p>
             <div id="featureList" class="feature-list">Narxlar yuklanmoqda…</div>
           </fieldset>
 
-          <div class="hardware-preference" style="margin-top: 20px;">
-            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 8px;">O‘rnatish usuli:</label>
-            <div style="display: grid; gap: 8px; font-size: 13px;">
-              <label style="display: flex; gap: 8px; align-items: center; cursor: pointer;">
-                <input type="radio" name="setup_mode" value="self" checked>
-                <span>Menda Windows/Kompyuter bor (O‘zim o‘rnataman / Bepul)</span>
-              </label>
-              <label style="display: flex; gap: 8px; align-items: center; cursor: pointer;">
-                <input type="radio" name="setup_mode" value="turnkey">
-                <span>Tayyor mini-PC qurilmasi va usta bilan o‘rnatib bering</span>
-              </label>
-            </div>
+          <div class="hardware-preference">
+            <span class="hardware-title">O‘rnatish usuli:</span>
+            <label class="hardware-option">
+              <input type="radio" name="setup_mode" value="self" checked>
+              <span><b>Menda kompyuter bor</b> — o‘zim o‘rnataman, bepul</span>
+            </label>
+            <label class="hardware-option">
+              <input type="radio" name="setup_mode" value="turnkey">
+              <span><b>Qurilma va usta kerak</b> — mini-PC bilan kelib ulab beramiz</span>
+            </label>
+            <p id="turnkeyNote" class="hardware-note" hidden>
+              Qurilma va o‘rnatish narxi yuqoridagi oylik to‘lovga kirmaydi —
+              mutaxassis bog‘langanda aytiladi.
+            </p>
           </div>
 
           <div class="purchase-fields">
@@ -261,14 +284,14 @@
           <input name="city" type="hidden" value="">
           <input name="website" type="hidden" value="">
           <input name="message" id="purchaseMessage" type="hidden" value="">
-          <button class="button config-buy" type="submit">Ulanishni boshlash</button>
+          <button class="button config-buy" type="submit">So‘rov yuborish</button>
           <p id="purchaseStatus" class="form-status" role="status" aria-live="polite"></p>
         </form>
 
         <aside class="order-summary" aria-live="polite">
           <p>Tanlangan hisob-kitob</p>
-          <h3>Chaqimchi AI</h3>
-          <div id="summaryFeatures" class="summary-features">Qo‘shimcha funksiya tanlanmagan</div>
+          <h3 id="summaryTitle">Chaqimchi AI</h3>
+          <ul id="summaryFeatures" class="summary-features"><li>Qo‘shimcha funksiya tanlanmagan</li></ul>
           <div class="summary-line"><span>Bazaviy platforma</span><b id="basePrice">—</b></div>
           <div class="summary-line"><span>AI funksiyalar</span><b id="featuresPrice">—</b></div>
           <div class="summary-total">
@@ -278,6 +301,17 @@
           </div>
           <a href="#pilot" class="summary-install">Usta chaqirib o‘rnatib olish →</a>
         </aside>
+      </div>
+
+      <!-- Mobilda narx xulosasi formadan keyin tushib ketadi va mijoz
+           funksiya tanlayotganda summani ko'rmaydi.  Bu panel ekran
+           pastida yopishib turadi. -->
+      <div id="stickyPrice" class="sticky-price" hidden>
+        <div>
+          <small id="stickyLabel">Jami oyiga</small>
+          <strong id="stickyTotal">—</strong>
+        </div>
+        <button class="button" type="button" id="stickyCta">So‘rov yuborish</button>
       </div>
     </section>
 
@@ -332,7 +366,7 @@
       <div class="faq-grid">
         <details>
           <summary>Mavjud kompyuterimga o‘rnatsam bo‘ladimi?</summary>
-          <p>Ha. Windows 10/11 ishlayotgan kompyuter bo‘lsa yetarli. Mustaqil o‘rnatiladigan dastur hozir yakuniy sinovdan o‘tmoqda — <a href="#download">raqamingizni qoldiring</a>, tayyor bo‘lganda yuboramiz. Shu paytgacha mutaxassisimiz kelib o‘rnatib bera oladi.</p>
+          <p>Ha. Windows 10/11 ishlayotgan kompyuter bo‘lsa yetarli: dasturni yuklab olasiz, Keyingi → Keyingi → Tayyor, so‘ng brauzerda kamerani ulaysiz. Butun jarayon 10 daqiqa. <a href="/install">Qadam-baqadam yo‘riqnoma</a>.</p>
         </details>
         <details>
           <summary>Agar kompyuterim bo‘lmasa-chi?</summary>
@@ -346,6 +380,22 @@
           <summary>Video yozuvlar qayerda saqlanadi?</summary>
           <p>To‘liq video arxiv sizning shaxsiy NVR yoki kompyuteringizda qoladi. Cloudga faqat aniqlangan hodisalar statistikasi va qisqa video parchalar xavfsiz shifrlangan holda yuboriladi.</p>
         </details>
+        <details>
+          <summary>Qanday to‘layman?</summary>
+          <p>Bog‘langanimizdan so‘ng sizga to‘lov havolasi yuboriladi — <b>Payme</b> yoki <b>Click</b> orqali kartadan to‘laysiz. Naqd yoki bank o‘tkazmasi ham qabul qilinadi. To‘lov tushishi bilan obuna avtomatik uzayadi, qo‘shimcha hech narsa qilish shart emas.</p>
+        </details>
+        <details>
+          <summary>Narx dollarda ko‘rsatilgan — kurs oshsa to‘lovim oshadimi?</summary>
+          <p>Shartnoma <b>dollar narxini</b> muzlatadi. Har bir hisob-faktura ochilgan kundagi kurs bo‘yicha so‘mga aylantiriladi va o‘sha summa o‘zgarmaydi. Ya‘ni to‘lanmagan hisobingiz kurs tufayli qimmatlashmaydi.</p>
+        </details>
+        <details>
+          <summary>Keyinroq bekor qilsam nima bo‘ladi?</summary>
+          <p>Majburiy uzoq muddatli shartnoma yo‘q — oylik to‘lovni to‘xtatsangiz kifoya. Obuna tugagach tizim yana <b>14 kun</b> ishlashda davom etadi, shu vaqt ichida hisobotlaringizni yuklab olasiz. Dastur va yozuvlar sizning kompyuteringizda qoladi.</p>
+        </details>
+        <details>
+          <summary>Funksiyani keyin qo‘shsam yoki olib tashlasam bo‘ladimi?</summary>
+          <p>Ha, istalgan payt. Masalan avval faqat mijozlar oqimini yoqasiz, keyin kassa navbatini qo‘shasiz. Kameralar sonini ham o‘zgartirish mumkin — narx keyingi oydan qayta hisoblanadi.</p>
+        </details>
       </div>
     </section>
   </main>
@@ -354,7 +404,7 @@
 
   <footer>
     <a class="brand" href="/">
-      <span class="brand-mark"><img src="/assets/chaqimchi-logo-black-crop-v1.png" alt="Chaqimchi AI"></span>
+      <span class="brand-mark"><img src="/assets/chaqimchi-logo-v2.webp" alt="Chaqimchi AI"></span>
       <span>Chaqimchi <b>AI</b></span>
     </a>
     <p>
@@ -370,7 +420,7 @@
     </div>
   </footer>
 
-  <script src="/assets/site.js?v=20260816-v9" defer></script>
+  <script src="/assets/site.js?v=20260816-v12" defer></script>
 </body>
 </html>
 

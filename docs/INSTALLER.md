@@ -22,6 +22,12 @@ modeli va barcha kutubxonalar bor — **internet ham, `pip` ham kerak emas**.
 Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
 **“Qo‘shimcha ma’lumot” → “Baribir ishga tushirish”**.
 
+> **Mijozga beriladigan yo‘riqnoma — saytda:** `/install`
+> (`cloud/static/install.html`). Har bir to‘siq alohida qadam sifatida
+> yozilgan (brauzer ogohlantirishi, SmartScreen, UAC, kamera ulash) va
+> “Nima ishlamayapti?” bo‘limi bor. Bu hujjatda takrorlanmaydi — matn
+> bitta joyda turishi kerak, aks holda ular bir-biridan uzoqlashadi.
+
 | Nima | Qayerda |
 |---|---|
 | Dastur | `C:\Program Files\Chaqimchi AI` (faqat o‘qish) |

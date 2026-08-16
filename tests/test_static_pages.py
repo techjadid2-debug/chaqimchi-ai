@@ -114,3 +114,80 @@ def test_pages_do_not_reference_removed_scripts() -> None:
         text = page.read_text(encoding="utf-8")
         for name in removed:
             assert name not in text, f"{page.name}: o'chirilgan faylga ishora — {name}"
+
+
+# ── Ikonkalar, fokus va rasm hajmi ───────────────────────────────────────
+
+ICONS = STATIC / "icons.svg"
+
+
+#: Ichki panellar — admin, o'rnatuvchi va mijoz kabineti.  Ular sotuv
+#: sahifasi emas va u yerda emoji ishlatilishi muammo emas: foydalanuvchisi
+#: bizning xodim yoki tanish mijoz, brend ko'rinishi esa hal qiluvchi emas.
+INTERNAL_PAGES = {"admin.html", "installer.html", "owner.html"}
+
+#: Bular emoji emas, tipografik belgilar — hamma joyda bir xil chiziladi.
+TYPOGRAPHIC = {"─", "✓", "○", "★", "☑", "→", "←", "·"}
+
+
+def test_public_pages_use_the_icon_sprite_not_emoji() -> None:
+    """Emoji har qurilmada boshqacha: 🪟 Windows'da rangsiz kvadrat,
+    Android'da butunlay boshqa shakl.  Brend ranglarini ham bermaydi."""
+    import unicodedata
+
+    for page in pages():
+        if page.name in INTERNAL_PAGES:
+            continue
+        text = page.read_text(encoding="utf-8")
+        emoji = {
+            char
+            for char in text
+            if ord(char) > 0x2100
+            and unicodedata.category(char) == "So"
+            and char not in TYPOGRAPHIC
+        }
+        assert not emoji, f"{page.name}: emoji ikonka qolgan — {sorted(emoji)}"
+
+
+def test_icon_sprite_is_valid_and_small() -> None:
+    """Sprite bitta so'rov bilan keladi; katta bo'lsa afzalligi yo'qoladi."""
+    import xml.etree.ElementTree as ElementTree
+
+    tree = ElementTree.parse(ICONS)
+    symbols = [node.get("id") for node in tree.iter("{http://www.w3.org/2000/svg}symbol")]
+    assert len(symbols) >= 8, f"ikonkalar kam: {symbols}"
+    assert len(set(symbols)) == len(symbols), "takrorlangan id"
+    assert ICONS.stat().st_size < 30_000, "sprite juda katta"
+
+
+def test_every_referenced_icon_exists_in_the_sprite() -> None:
+    """Nomi noto'g'ri yozilgan `<use>` sahifada bo'sh joy qoldiradi va
+    hech qanday xato bermaydi — buni faqat ko'z bilan sezish mumkin."""
+    import xml.etree.ElementTree as ElementTree
+
+    tree = ElementTree.parse(ICONS)
+    available = {node.get("id") for node in tree.iter("{http://www.w3.org/2000/svg}symbol")}
+    for page in pages():
+        used = set(re.findall(r"icons\.svg#([\w\-]+)", page.read_text(encoding="utf-8")))
+        missing = used - available
+        assert not missing, f"{page.name}: spriteда yo'q ikonka — {sorted(missing)}"
+
+
+def test_keyboard_focus_is_visible_everywhere() -> None:
+    """Bungacha fokus ramkasi faqat `.field input` da bor edi — klaviatura
+    bilan yuruvchi foydalanuvchi qayerda turganini ko'rmasdi (WCAG 2.4.7)."""
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    assert ":focus-visible" in css
+
+
+def test_browser_facing_images_are_small() -> None:
+    """Logotip 38 px joyda ko'rsatiladi, lekin 516 KB fayl yuklanardi;
+    `og.png` esa 891 KB edi.  Mobil internetda bu sezilarli kechikish."""
+    for page in pages():
+        text = page.read_text(encoding="utf-8")
+        for name in re.findall(r'/assets/([\w\-.]+\.(?:png|jpg|jpeg|webp))', text):
+            asset = STATIC / name
+            if not asset.is_file():
+                continue
+            size_kb = asset.stat().st_size / 1024
+            assert size_kb < 200, f"{page.name} → {name}: {size_kb:.0f} KB, juda katta"

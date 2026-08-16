@@ -56,7 +56,8 @@ python scripts/build_windows_payload.py     # → build/payload
 makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.exe
 ```
 
-Tafsilot: [docs/INSTALLER.md](docs/INSTALLER.md) 0-bo‘lim.
+Mijozga beriladigan qadam-baqadam yo‘riqnoma saytda: `/install`.
+Texnik tafsilot: [docs/INSTALLER.md](docs/INSTALLER.md) 0-bo‘lim.
 
 Production release qurish va N100 ga o‘rnatish:
 

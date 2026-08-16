@@ -121,41 +121,175 @@
     return `${groups(toUzs(cents))} so‘m`;
   }
 
-  function cameraOptions(max) {
-    let html = "";
-    for (let n = 1; n <= max; n += 1) html += `<option value="${n}">${n} kamera</option>`;
-    return html;
-  }
-
   const escape = (value) => String(value).replace(/[&<>"]/g, (char) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]
   ));
 
+  // ── Tayyor paketlar ───────────────────────────────────────────────────
+  //
+  // Faqat tarkib e'lon qilinadi; narx `pricing` dan hisoblanadi.  Shu sabab
+  // katalogda narx o'zgarsa yoki yangi funksiya qo'shilsa paket kartalari
+  // o'zini yangilaydi — bu yerda hech narsa tuzatilmaydi.
+  const PRESETS = [
+    {
+      id: "start",
+      name: "Boshlang‘ich",
+      note: "Kichik do‘kon uchun: nechta mijoz kirdi va qachon gavjum.",
+      items: [{ code: "person_count", cameras: 2 }],
+    },
+    {
+      id: "shop",
+      name: "Do‘kon",
+      badge: "Ommabop",
+      note: "Mijozlar oqimi va kassadagi navbat birga — eng ko‘p tanlanadi.",
+      items: [
+        { code: "person_count", cameras: 4 },
+        { code: "queue_length", cameras: 4 },
+      ],
+    },
+    {
+      id: "full",
+      name: "To‘liq",
+      note: "Yuqoridagilar ustiga tungi harakat, taqiqlangan zona va kamera nazorati.",
+      items: [
+        { code: "person_count", cameras: 4 },
+        { code: "queue_length", cameras: 4 },
+        { code: "store_security", cameras: 4 },
+      ],
+    },
+  ];
+
+  function presetCents(preset) {
+    return preset.items.reduce((total, item) => {
+      const feature = pricing.features.find((entry) => entry.code === item.code);
+      return total + (feature ? feature.monthly_usd_cents * item.cameras : 0);
+    }, pricing.base.monthly_usd_cents);
+  }
+
+  function renderPresets() {
+    const grid = document.getElementById("presetGrid");
+    if (!grid) return;
+    const months = billing === "yearly" ? pricing.yearly_months_charged : 1;
+    const suffix = billing === "yearly" ? "/yil" : "/oy";
+
+    grid.innerHTML = PRESETS.map((preset) => {
+      const names = preset.items
+        .map((item) => pricing.features.find((entry) => entry.code === item.code))
+        .filter(Boolean)
+        .map((feature) => escape(feature.name));
+      const cameras = Math.max(...preset.items.map((item) => item.cameras));
+      return `
+        <article class="preset${preset.badge ? " preset-featured" : ""}" role="listitem">
+          ${preset.badge ? `<span class="preset-badge">${escape(preset.badge)}</span>` : ""}
+          <h3>${escape(preset.name)}</h3>
+          <p class="preset-note">${escape(preset.note)}</p>
+          <ul class="preset-items">${names.map((name) => `<li>${name}</li>`).join("")}</ul>
+          <p class="preset-cameras">${cameras} kameragacha</p>
+          <p class="preset-price"><b>${money(presetCents(preset) * months)}</b><span>${suffix}</span></p>
+          <button class="button${preset.badge ? " button-light" : ""}" type="button" data-preset="${preset.id}">Shu paketni tanlash</button>
+        </article>`;
+    }).join("");
+
+    grid.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => applyPreset(button.dataset.preset));
+    });
+  }
+
+  function applyPreset(id) {
+    const preset = PRESETS.find((item) => item.id === id);
+    if (!preset) return;
+    output.list.querySelectorAll(".feature-choice").forEach((row) => {
+      const wanted = preset.items.find((item) => item.code === row.dataset.code);
+      const box = row.querySelector("input[type=checkbox]");
+      box.checked = Boolean(wanted);
+      if (wanted) setCameras(row, wanted.cameras);
+      syncRow(row);
+    });
+    updateQuote();
+    document.getElementById("purchaseForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ── Kamera soni: +/− ──────────────────────────────────────────────────
+  //
+  // Ilgari bu `<select>` edi va funksiya belgilanmaguncha `opacity: .45`
+  // bilan o'chib turardi — mijoz uni umuman payqamasdi.  Endi u belgilanmagan
+  // qatorda umuman ko'rinmaydi, belgilanganda esa katta +/− tugmalari
+  // chiqadi (telefonda barmoq bilan bosish uchun).
+  function cameraCount(row) {
+    return Number(row.dataset.cameras || 1);
+  }
+
+  function setCameras(row, value) {
+    const max = pricing.max_cameras;
+    const next = Math.min(max, Math.max(1, value));
+    row.dataset.cameras = String(next);
+    const readout = row.querySelector("[data-readout]");
+    if (readout) readout.textContent = String(next);
+    row.querySelector("[data-step='-1']").disabled = next <= 1;
+    row.querySelector("[data-step='1']").disabled = next >= max;
+  }
+
+  /** Qator ko'rinishini belgilash holatiga moslaydi. */
+  function syncRow(row) {
+    const checked = row.querySelector("input[type=checkbox]").checked;
+    row.classList.toggle("is-on", checked);
+    row.querySelector(".feature-stepper").hidden = !checked;
+  }
+
   function renderCatalog() {
     output.headline.textContent = `${money(pricing.base.monthly_usd_cents)}/oy`;
     output.includes.innerHTML = pricing.base.includes.map((item) => `<li>${escape(item)}</li>`).join("");
+
     output.list.innerHTML = pricing.features.map((feature) => `
-      <label class="feature-choice" data-code="${escape(feature.code)}">
-        <input type="checkbox">
-        <span>${escape(feature.name)}${feature.available ? "" : ' <i class="soon">Tez orada</i>'}</span>
-        <select class="feature-cameras" aria-label="${escape(feature.name)} — kamera soni" disabled>${cameraOptions(pricing.max_cameras)}</select>
-        <b data-price="${feature.monthly_usd_cents}">${money(feature.monthly_usd_cents)} / kamera</b>
-      </label>`).join("");
+      <div class="feature-choice" data-code="${escape(feature.code)}" data-cameras="1">
+        <label class="feature-head">
+          <input type="checkbox">
+          <span class="feature-name">${escape(feature.name)}${feature.available ? "" : ' <i class="soon">Tez orada</i>'}</span>
+        </label>
+        <div class="feature-stepper" hidden>
+          <button type="button" class="step" data-step="-1" aria-label="${escape(feature.name)}: kamerani kamaytirish">−</button>
+          <output data-readout aria-live="polite">1</output>
+          <span class="step-unit">kamera</span>
+          <button type="button" class="step" data-step="1" aria-label="${escape(feature.name)}: kamera qo‘shish">+</button>
+        </div>
+        <b class="feature-sum" data-price="${feature.monthly_usd_cents}"></b>
+      </div>`).join("");
+
     output.list.querySelectorAll(".feature-choice").forEach((row) => {
-      const box = row.querySelector("input");
-      const cameras = row.querySelector("select");
-      box.addEventListener("change", () => { cameras.disabled = !box.checked; updateQuote(); });
-      cameras.addEventListener("change", updateQuote);
+      const box = row.querySelector("input[type=checkbox]");
+      box.addEventListener("change", () => { syncRow(row); updateQuote(); });
+
+      row.querySelectorAll("[data-step]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setCameras(row, cameraCount(row) + Number(button.dataset.step));
+          updateQuote();
+        });
+      });
+
+      // Klaviatura: stepper ustida o'q tugmalari ham ishlaydi — sichqonchasiz
+      // foydalanuvchi har safar tugmaga o'tishga majbur bo'lmasin.
+      row.querySelector(".feature-stepper").addEventListener("keydown", (event) => {
+        const delta = { ArrowRight: 1, "+": 1, ArrowUp: 1, ArrowLeft: -1, "-": -1, ArrowDown: -1 }[event.key];
+        if (!delta) return;
+        event.preventDefault();
+        setCameras(row, cameraCount(row) + delta);
+        updateQuote();
+      });
+
+      setCameras(row, 1);
+      syncRow(row);
     });
+
+    renderPresets();
   }
 
   function selection() {
     return [...output.list.querySelectorAll(".feature-choice")]
-      .filter((row) => row.querySelector("input").checked)
+      .filter((row) => row.querySelector("input[type=checkbox]").checked)
       .map((row) => {
         const code = row.dataset.code;
         const feature = pricing.features.find((item) => item.code === code);
-        const cameras = Number(row.querySelector("select").value || 1);
+        const cameras = cameraCount(row);
         return { code, name: feature.name, available: feature.available, cameras, cents: feature.monthly_usd_cents * cameras };
       });
   }
@@ -169,30 +303,49 @@
     const months = isYearly ? pricing.yearly_months_charged : 1;
     const suffix = isYearly ? " / yil" : " / oy";
 
-    output.features.textContent = selected.length
-      ? selected.map((item) => `${item.name} · ${item.cameras} kamera · ${money(item.cents * months)}`).join("\n")
-      : "Qo‘shimcha funksiya tanlanmagan";
-    output.features.style.whiteSpace = "pre-line";
+    // Har funksiya yonida uning **o'z** summasi: "$5/kamera" ni 4 ga
+    // ko'paytirishni mijozga qoldirmaslik kerak.
+    output.list.querySelectorAll(".feature-choice").forEach((row) => {
+      const cell = row.querySelector(".feature-sum");
+      const unit = Number(cell.dataset.price);
+      cell.innerHTML = row.querySelector("input[type=checkbox]").checked
+        ? `<b>${money(unit * cameraCount(row) * months)}</b><small>${suffix}</small>`
+        : `<small>${money(unit)} / kamera</small>`;
+    });
+
+    output.features.innerHTML = selected.length
+      ? selected.map((item) => `<li>${escape(item.name)} · ${item.cameras} kamera · ${money(item.cents * months)}</li>`).join("")
+      : "<li>Qo‘shimcha funksiya tanlanmagan</li>";
     output.base.textContent = money(pricing.base.monthly_usd_cents * months) + suffix;
     output.addOns.textContent = money(addOnCents * months) + suffix;
     output.total.textContent = money(monthlyCents * months);
     output.label.textContent = isYearly ? "Jami yiliga" : "Jami oyiga";
 
+    const stickyTotal = document.getElementById("stickyTotal");
+    const stickyLabel = document.getElementById("stickyLabel");
+    if (stickyTotal) stickyTotal.textContent = money(monthlyCents * months);
+    if (stickyLabel) stickyLabel.textContent = isYearly ? "Jami yiliga" : "Jami oyiga";
+
+    // Tugma matni **haqiqatga** mos bo'lishi kerak: forma to'lov sahifasiga
+    // olib bormaydi, u ariza yuboradi va biz qo'ng'iroq qilamiz.
     const pending = selected.filter((item) => !item.available);
     if (pending.length) {
       output.buy.textContent = "Navbatga yozilish";
       output.saving.textContent = `${pending.map((item) => item.name).join(", ")} — ishga tushirilmoqda. Tayyor bo‘lganda birinchi bo‘lib sizga ulanadi.`;
     } else {
-      output.buy.textContent = "Sotib olishni boshlash";
+      output.buy.textContent = "So‘rov yuborish";
       output.saving.textContent = isYearly
         ? `${money(monthlyCents * (12 - pricing.yearly_months_charged))} tejaysiz — 2 oy bepul.`
         : "Yillik to‘lovda 2 oy bepul.";
     }
 
     const setupModeInput = purchaseForm.querySelector("input[name=setup_mode]:checked");
-    const setupModeText = setupModeInput && setupModeInput.value === "turnkey"
+    const isTurnkey = setupModeInput && setupModeInput.value === "turnkey";
+    const setupModeText = isTurnkey
       ? "Qurilma va Usta bilan o‘rnatish"
       : "Mustaqil (O‘z kompyuteriga) o‘rnatish";
+    const turnkeyNote = document.getElementById("turnkeyNote");
+    if (turnkeyNote) turnkeyNote.hidden = !isTurnkey;
 
     output.message.value = [
       `Sotib olish so‘rovi (${setupModeText})`,
@@ -203,24 +356,53 @@
   }
 
 
+  /** Almashtirgichni tanlaydi va ekran o'quvchiga holatni aytadi. */
+  function activate(button) {
+    button.parentElement.querySelectorAll("button").forEach((item) => {
+      const on = item === button;
+      item.classList.toggle("active", on);
+      item.setAttribute("aria-checked", String(on));
+    });
+  }
+
   purchaseForm.querySelectorAll("[data-billing]").forEach((button) => button.addEventListener("click", () => {
     billing = button.dataset.billing;
-    button.parentElement.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
+    activate(button);
+    renderPresets();
     updateQuote();
   }));
   purchaseForm.querySelectorAll("[data-currency]").forEach((button) => button.addEventListener("click", () => {
     currency = button.dataset.currency;
-    button.parentElement.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
-    renderPrices();
+    activate(button);
+    output.headline.textContent = `${money(pricing.base.monthly_usd_cents)}/oy`;
+    renderPresets();
     updateQuote();
   }));
 
-  function renderPrices() {
-    output.headline.textContent = `${money(pricing.base.monthly_usd_cents)}/oy`;
-    output.list.querySelectorAll(".feature-choice b").forEach((cell) => {
-      cell.textContent = `${money(Number(cell.dataset.price))} / kamera`;
+  // Mobil narx paneli faqat konfigurator ekranda turganda ko'rinadi; shu
+  // paytda Telegram tugmasi yashiriladi, aks holda ikkisi bir-birining
+  // ustiga tushardi.
+  const stickyPrice = document.getElementById("stickyPrice");
+  const mobileCta = document.querySelector(".mobile-lead-cta");
+  const stickyCta = document.getElementById("stickyCta");
+  if (stickyCta) {
+    stickyCta.addEventListener("click", () => {
+      purchaseForm.querySelector("input[name=phone]").focus();
+      purchaseForm.scrollIntoView({ behavior: "smooth", block: "end" });
     });
   }
+  if (stickyPrice && "IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.some((entry) => entry.isIntersecting);
+      stickyPrice.hidden = !visible;
+      if (mobileCta) mobileCta.classList.toggle("is-hidden", visible);
+    }, { threshold: 0 });
+    observer.observe(purchaseForm);
+  }
+
+  purchaseForm.querySelectorAll("input[name=setup_mode]").forEach((radio) => {
+    radio.addEventListener("change", updateQuote);
+  });
 
   purchaseForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -232,7 +414,7 @@
       output.status,
       output.buy,
       output.message.value,
-      "Tanlovingiz qabul qilindi. To‘lov havolasi va o‘rnatish bo‘yicha jamoamiz bog‘lanadi.",
+      "So‘rovingiz qabul qilindi. Jamoamiz bog‘lanib, narxni tasdiqlaydi va o‘rnatishni kelishadi.",
       cameras,
     );
   });
@@ -243,9 +425,33 @@
       pricing = data;
       currency = data.currency_default === "usd" ? "usd" : "uzs";
       renderCatalog();
+
+      // Hero'dagi narx ilgagi.  Qiymat sahifaga yozilmaydi: katalogda baza
+      // narxi o'zgarsa hero ham o'zi yangilanadi.
+      const heroPrice = document.getElementById("heroPrice");
+      if (heroPrice) {
+        heroPrice.textContent = `${money(pricing.base.monthly_usd_cents)}/oydan`;
+        heroPrice.hidden = false;
+      }
+
+      // Funksiyalar hali sotuvga ochilmagan bo'lsa (qabul testi tugamagan),
+      // uchta "Tez orada" qatori mijozga "bu sayt hech narsa sotmaydi" deb
+      // ko'rinadi.  Bitta aniq izoh buni tushuntiradi.
+      const note = document.getElementById("featureNote");
+      if (note && pricing.features.length && pricing.features.every((item) => !item.available)) {
+        note.textContent =
+          "AI funksiyalari hozir birinchi do‘konlarda sinovdan o‘tmoqda. " +
+          "Hozir navbatga yozilishingiz mumkin — ishga tushganda birinchi bo‘lib sizga ulanadi.";
+        note.hidden = false;
+      }
+
       updateQuote();
     })
     .catch(() => {
       output.list.textContent = "Narxlarni yuklab bo‘lmadi. Sahifani yangilang yoki bizga qo‘ng‘iroq qiling.";
+      const grid = document.getElementById("presetGrid");
+      if (grid) grid.remove();
+      const hint = document.getElementById("presetHint");
+      if (hint) hint.remove();
     });
 })();

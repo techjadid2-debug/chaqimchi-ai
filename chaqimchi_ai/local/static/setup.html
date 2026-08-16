@@ -75,14 +75,16 @@
           <input type="text" id="manualUrl" placeholder="rtsp://foydalanuvchi:parol@192.168.1.64:554/..." autocomplete="off">
         </label>
 
-        <label class="field">Bu kamera qayerda turibdi?
+        <label class="field">Bu kamera qayerda turibdi? <small>bitta kamera qo‘shganda</small>
           <input type="text" id="label" placeholder="Masalan: Kirish eshigi" autocomplete="off">
         </label>
 
         <div class="actions">
           <button class="button primary" id="testBtn" type="button">Tasvirni tekshirish</button>
+          <button class="button ghost" id="scanChannelsBtn" type="button">Shu NVR’dagi barcha kameralarni topish</button>
         </div>
         <div id="testResult"></div>
+        <div id="channelResult"></div>
       </div>
 
       <div class="card quiet" id="savedCard">
@@ -109,10 +111,11 @@
 
     <!-- ── 3-QADAM ── -->
     <section class="step hidden" data-step="3">
-      <h1>Kirish chizig‘ini chizing</h1>
+      <h1>Kirish chizig‘ini to‘g‘rilang</h1>
       <p class="lead">
-        Eshik oldidan o‘tuvchi chiziq torting — tizim shu chiziqni kesib o‘tgan odamlarni sanaydi.
-        <b>Chiziqsiz hech narsa sanalmaydi.</b>
+        Taxminiy chiziq allaqachon chizilgan — uni <b>eshik oldiga surib</b> to‘g‘rilang.
+        Tizim shu chiziqni kesib o‘tgan odamlarni sanaydi, shuning uchun u
+        haqiqatan odamlar o‘tadigan joyda bo‘lishi kerak.
       </p>
 
       <div class="card">

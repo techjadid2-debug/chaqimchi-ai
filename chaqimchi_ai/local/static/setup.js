@@ -160,6 +160,77 @@
     }
   });
 
+  // Do'konda odatda bitta NVR va unda bir necha kamera bo'ladi.  Ilgari
+  // mijoz har biri uchun IP, login va parolni qaytadan kiritardi — bir
+  // xil ma'lumotni to'rt marta.  Endi bir marta kiritadi.
+  $("scanChannelsBtn").addEventListener("click", async () => {
+    const button = $("scanChannelsBtn");
+    if ($("brand").value === "manual") {
+      return note("channelResult", "warn", "Bu tugma NVR uchun.", " Brendni yuqorida tanlang.");
+    }
+    button.disabled = true;
+    note("channelResult", "warn", "Kanallar tekshirilmoqda…", " Har biri uchun 15 soniyagacha.");
+    try {
+      const data = await api("/api/setup/scan-channels", {
+        method: "POST",
+        body: JSON.stringify({
+          brand: $("brand").value,
+          host: $("host").value.trim(),
+          username: $("username").value,
+          password: $("password").value,
+        }),
+      });
+      if (!data.found) {
+        return note("channelResult", "err", "Kamera topilmadi.", " " + data.hint);
+      }
+      $("channelResult").innerHTML =
+        `<div class="note ok"><b>${data.found} ta kamera topildi</b>Nomini yozing va saqlang.</div>` +
+        data.channels
+          .map(
+            (item) => `
+        <div class="camera-row">
+          <span class="dot on"></span>
+          <div class="meta">
+            <b>${item.channel}-kanal</b>
+            <code>${esc(item.safe_url)}</code>
+          </div>
+          <input type="text" data-name="${item.channel}" placeholder="Masalan: Kirish"
+                 style="max-width:190px" value="${item.channel === 1 ? "Kirish eshigi" : ""}">
+        </div>`,
+          )
+          .join("") +
+        '<div class="actions"><button class="button primary" id="saveChannelsBtn" type="button">Hammasini saqlash</button></div>';
+
+      $("saveChannelsBtn").addEventListener("click", async () => {
+        const btn = $("saveChannelsBtn");
+        btn.disabled = true;
+        try {
+          for (const item of data.channels) {
+            const field = document.querySelector(`[data-name="${item.channel}"]`);
+            await api("/api/setup/cameras", {
+              method: "POST",
+              body: JSON.stringify({
+                label: (field && field.value.trim()) || `${item.channel}-kanal`,
+                rtsp_url: item.rtsp_url,
+              }),
+            });
+          }
+          $("password").value = "";
+          await loadCameras();
+          note("channelResult", "ok", "Kameralar saqlandi.", " Keyingi qadamga o‘tishingiz mumkin.");
+        } catch (error) {
+          note("channelResult", "err", "Saqlanmadi.", " " + error.message);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    } catch (error) {
+      note("channelResult", "err", "Tekshirib bo‘lmadi.", " " + error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   /* ── 2-qadam: kadrni tasdiqlash ─────────────────────────────────────── */
 
   $("rejectFrame").addEventListener("click", () => {
@@ -269,8 +340,41 @@
     editor.load(geometry, first);
     editor.setMode($("geoMode").value);
     $("geoCamera").value = first;
+    suggestLine(first);
     loadFrame();
     renderShapes();
+  }
+
+  /**
+   * Kamerada chiziq bo'lmasa taxminiy chiziq chizib beradi.
+   *
+   * Nega: bo'sh kadr oldida "chiziq torting" degan ko'rsatma eng ko'p
+   * to'xtatadigan joy edi — mijoz qayerdan qayerga tortishni bilmaydi.
+   * Tayyor chiziqni surib to'g'rilash ancha oson.
+   *
+   * Balandlik 0.62 — eshik odatda kadrning pastki yarmida bo'ladi, lekin
+   * eng pastda emas (u yerda pol ko'rinadi).  Bu **taxmin**, shuning
+   * uchun mijozga aynan shunday aytiladi va u surib o'zgartira oladi.
+   */
+  function suggestLine(cameraId) {
+    if (!cameraId) return;
+    const exists = editor.lines.some((line) => line.camera_id === cameraId);
+    if (exists) return;
+    editor.lines.push({
+      name: "Kirish",
+      camera_id: cameraId,
+      start: [0.15, 0.62],
+      end: [0.85, 0.62],
+      swap_direction: false,
+    });
+    editor.draw();
+    note(
+      "geoResult",
+      "warn",
+      "Taxminiy chiziq chizildi.",
+      " Uni eshik oldiga surib to‘g‘rilang: nuqtalarni sudrab ko‘chiring. " +
+        "Yashil o‘q do‘kon ichkarisini ko‘rsatishi kerak.",
+    );
   }
 
   function loadFrame() {
@@ -285,6 +389,7 @@
 
   $("geoCamera").addEventListener("change", () => {
     editor.setCamera($("geoCamera").value);
+    suggestLine($("geoCamera").value);
     loadFrame();
     renderShapes();
   });

@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 #: 15 s dan ortiq kutish mijozga "osilib qoldi" bo'lib ko'rinadi.
 DEFAULT_TIMEOUT_SEC = 15
 
+#: Bir necha kanalni ketma-ket sinaganda har biri uchun qisqaroq vaqt:
+#: 4 kanal × 15 s = bir daqiqa, mijoz esa kutmaydi.  Ishlaydigan kamera
+#: odatda 2-3 soniyada javob beradi.
+SCAN_TIMEOUT_SEC = 6
+
 #: Sehrgarga yuboriladigan rasm kengligi.  Kadr shundan kengroq bo'lsa
 #: kichraytiriladi: chiziq koordinatalari 0..1 da saqlangani uchun aniqlik
 #: yo'qolmaydi, sahifa esa tez ochiladi.
@@ -127,18 +132,24 @@ def grab_frame(url: str, *, timeout_sec: int = DEFAULT_TIMEOUT_SEC) -> ProbeResu
             hint="Dasturni qayta o'rnating — o'rnatuvchi kerakli fayllarni olib keladi.",
         )
 
-    # RTSP ni TCP ustidan olamiz: UDP do'kon Wi-Fi'sida kadr yo'qotadi va
-    # tasvir "sinadi".  Sozlama faqat muhit o'zgaruvchisi orqali beriladi —
-    # OpenCV uni `VideoCapture` yaratilishida o'qiydi.
-    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+    # Ikkita sozlama, ikkalasi ham kerak:
+    #
+    # `rtsp_transport;tcp` — UDP do'kon Wi-Fi'sida kadr yo'qotadi va tasvir
+    # "sinadi".
+    #
+    # `timeout` (mikrosoniyada) — **haqiqiy** kutish chegarasi.  OpenCV'ning
+    # `CAP_PROP_OPEN_TIMEOUT_MSEC` xossasi FFMPEG backendida e'tiborsiz
+    # qolarkan: javob bermaydigan IP'da ulanish 30 soniya osilib turardi,
+    # to'rt kanalni tekshirish esa ikki daqiqa olardi va mijoz dastur
+    # qotib qoldi deb o'ylardi.  `stimeout` — eski FFMPEG'dagi nomi.
+    micros = int(timeout_sec * 1_000_000)
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+        f"rtsp_transport;tcp|timeout;{micros}|stimeout;{micros}"
+    )
 
     capture = None
     try:
         capture = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
-        # Kutish vaqti millisekundda.  Usiz ulanmaydigan manzilda OpenCV
-        # 30 soniyadan ortiq osilib turadi va sehrgar qotib qolgandek
-        # ko'rinadi.  Eski OpenCV'da bu konstantalar yo'q — shuning uchun
-        # `getattr` bilan, sozlanmasa ham ishlashi kerak.
         for name in ("CAP_PROP_OPEN_TIMEOUT_MSEC", "CAP_PROP_READ_TIMEOUT_MSEC"):
             prop = getattr(cv2, name, None)
             if prop is not None:

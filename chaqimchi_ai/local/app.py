@@ -14,6 +14,7 @@ ikkalasini ishlatib ko'rish kerak bo'lsa, ular urishmaydi.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import re
@@ -251,6 +252,73 @@ async def preview(camera_id: str = "", rtsp_url: str = "") -> Response:
         # Kadr do'kon ichini ko'rsatadi — brauzer keshiga tushmasin.
         headers={"Cache-Control": "no-store"},
     )
+
+
+class ScanChannelsBody(BaseModel):
+    brand: str = Field(pattern="^(hikvision|dahua|uniview)$")
+    host: str = Field(min_length=3, max_length=120)
+    port: int = Field(default=554, ge=1, le=65535)
+    username: str = Field(default="", max_length=64)
+    password: str = Field(default="", max_length=128)
+
+
+@app.post("/api/setup/scan-channels")
+async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
+    """Bitta NVR login/paroli bilan barcha kanallarni sinab ko'radi.
+
+    Nega kerak: do'konda odatda bitta NVR va unda 4 kamera bo'ladi.
+    Ilgari mijoz har kamera uchun IP, login va parolni **qaytadan**
+    kiritardi — bir xil ma'lumotni to'rt marta.  Endi bir marta kiritadi
+    va ishlaydigan kanallar ro'yxatini oladi.
+
+    Har kanal ketma-ket sinaladi: NVR bir vaqtda ko'p ulanishni ko'tara
+    olmaydi va parallel so'rovlar ishlaydigan kamerani ham "javob
+    bermadi" qilib ko'rsatardi.
+    """
+    import anyio
+
+    found = []
+    for channel in range(1, MAX_CAMERAS + 1):
+        try:
+            url = camera_probe.build_rtsp(
+                brand=body.brand,
+                host=body.host,
+                port=body.port,
+                username=body.username,
+                password=body.password,
+                channel=channel,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+        result = await anyio.to_thread.run_sync(
+            functools.partial(
+                camera_probe.grab_frame, url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC
+            )
+        )
+        if result.ok:
+            _PREVIEW_CACHE.put(url, result.jpeg or b"")
+            found.append(
+                {
+                    "channel": channel,
+                    "rtsp_url": url,
+                    "safe_url": camera_probe.redact(url),
+                    "width": result.width,
+                    "height": result.height,
+                }
+            )
+
+    return {
+        "ok": True,
+        "found": len(found),
+        "channels": found,
+        "hint": (
+            ""
+            if found
+            else "Birorta kanaldan tasvir kelmadi. IP, login va parolni tekshiring "
+            "yoki NVR'da RTSP yoqilganiga ishonch hosil qiling."
+        ),
+    }
 
 
 class CameraSaveBody(BaseModel):

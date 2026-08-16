@@ -166,14 +166,23 @@
       </div>
 
       <div class="card">
-        <h2>Telegram xabarlari <small style="font-weight:500;color:var(--muted)">(ixtiyoriy)</small></h2>
-        <p class="hint">
-          Telegramda <b>@BotFather</b> ga <code>/newbot</code> yozing — u token beradi.
-          Chat ID ni olish uchun <b>@userinfobot</b> ga <code>/start</code> yuboring.
-          Bo‘sh qoldirsangiz tizim baribir ishlaydi, xabarlar faqat shu paneldan ko‘rinadi.
-        </p>
-        <label class="field">Bot token<input type="text" id="tgToken" placeholder="123456:ABC-DEF..." autocomplete="off"></label>
-        <label class="field">Chat ID<input type="text" id="tgChat" placeholder="123456789" autocomplete="off"></label>
+        <h2>Telegram xabarlari <small style="font-weight:500;color:var(--muted)">(hozircha tayyor emas)</small></h2>
+        <div class="note warn">
+          <b>Bu funksiya hali ishlamaydi.</b>
+          Telegram xabarlarini cloud yuboradi, dastur esa hozir cloudga ulanmagan.
+          Token kiritsangiz ham xabar kelmaydi — u faqat saqlanadi va cloud
+          ulanganda ishga tushadi. Bugungi kunda barcha hodisalarni
+          <b>shu kompyuterdagi panelda</b> ko‘rasiz.
+        </div>
+        <details>
+          <summary style="cursor:pointer">Baribir hozir kiritib qo‘yaman</summary>
+          <p class="hint">
+            Telegramda <b>@BotFather</b> ga <code>/newbot</code> yozing — u token beradi.
+            Chat ID ni olish uchun <b>@userinfobot</b> ga <code>/start</code> yuboring.
+          </p>
+          <label class="field">Bot token<input type="text" id="tgToken" placeholder="123456:ABC-DEF..." autocomplete="off"></label>
+          <label class="field">Chat ID<input type="text" id="tgChat" placeholder="123456789" autocomplete="off"></label>
+        </details>
       </div>
 
       <div id="finishResult"></div>

@@ -445,6 +445,10 @@
     const connected = Boolean(state.connected);
     $("cloudConnected").classList.toggle("hidden", !connected);
     $("cloudForm").classList.toggle("hidden", connected);
+    // Manzil o'rnatuvchi bilan kelgan bo'lsa mijoz uni yozmaydi.
+    if (!connected && state.default_cloud_url && !$("cloudUrl").value) {
+      $("cloudUrl").value = state.default_cloud_url;
+    }
     if (connected) {
       $("cloudSite").textContent = `Obyekt: ${state.site_id}`;
       const link = $("cloudOwnerLink");

@@ -41,6 +41,10 @@ Unicode True
 !define REG_UNINSTALL "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChaqimchiAI"
 !define REG_RUN      "Software\Microsoft\Windows\CurrentVersion\Run"
 
+; Fayl nomidan olingan pairing kod.  NSIS o'zgaruvchini **ishlatilishidan
+; oldin** e'lon qilishni talab qiladi, shuning uchun bu yerda.
+Var PairingCode
+
 Name "${APP_NAME}"
 OutFile "..\releases\Chaqimchi_AI_Setup.exe"
 InstallDir "$PROGRAMFILES64\Chaqimchi AI"
@@ -115,6 +119,25 @@ Section "!${APP_NAME} (majburiy)" SecMain
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Boshqaruv paneli.lnk" "${APP_URL}" "" "$INSTDIR\app.ico" 0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME} ni o'chirish.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
 
+  ; ── Pairing kodni fayl nomidan olish ────────────────────────────────
+  ;
+  ; Admin panel `...?code=A1B2C3` havolasini beradi va brauzer faylni
+  ; `Chaqimchi_AI_Setup-A1B2C3.exe` nomi bilan saqlaydi.  Kodni
+  ; `%PROGRAMDATA%\Chaqimchi\pairing.txt` ga yozamiz — dastur birinchi
+  ; ishga tushishda uni o'qib cloudga o'zi ulanadi va faylni o'chiradi.
+  ;
+  ; Nom buzilsa (brauzer `(1)` qo'shsa yoki mijoz faylni qayta nomlasa)
+  ; hech narsa yozilmaydi va sehrgar kodni odatdagidek so'raydi.
+  ; Ya'ni bu qulaylik, majburiyat emas.
+  Call ExtractPairingCode
+  ${If} $PairingCode != ""
+    CreateDirectory "$APPDATA\Chaqimchi"
+    FileOpen $0 "$APPDATA\Chaqimchi\pairing.txt" w
+    FileWrite $0 "$PairingCode"
+    FileClose $0
+    DetailPrint "Ulanish kodi topildi: $PairingCode"
+  ${EndIf}
+
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   WriteRegStr HKLM "Software\ChaqimchiAI" "InstallDir" "$INSTDIR"
@@ -186,6 +209,68 @@ LangString DESC_SecAutostart ${LANG_ENGLISH} "Starts monitoring automatically wh
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} $(DESC_SecAutostart)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecUpdater} $(DESC_SecUpdater)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+Function ExtractPairingCode
+  ; Fayl nomidan oxirgi `-` dan keyingi 6 belgini oladi va ular hex
+  ; ekanini tekshiradi: `Chaqimchi_AI_Setup-A1B2C3.exe` -> `A1B2C3`.
+  ;
+  ; Nega qat'iy tekshiruv: bu qiymat keyin cloudga yuboriladi.  Nomda
+  ; tasodifiy matn bo'lsa (`Setup (1).exe`) uni kod deb yuborish
+  ; foydasiz so'rov va chalkash xato xabari bo'lardi.
+  Push $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  StrCpy $PairingCode ""
+
+  StrCpy $R0 "$EXEFILE"
+  ; `.exe` kengaytmasini kesamiz.
+  StrLen $R1 $R0
+  IntOp $R1 $R1 - 4
+  StrCpy $R0 $R0 $R1
+
+  ; Oxirgi 7 belgi `-XXXXXX` shaklidami?
+  StrCpy $R2 $R0 7 -7
+  StrCpy $R3 $R2 1
+  StrCmp $R3 "-" 0 done
+
+  StrCpy $R2 $R2 6 1          ; chiziqchadan keyingi 6 belgi
+  StrCpy $R1 0                ; tekshirilgan belgilar soni
+
+  check_loop:
+    StrCmp $R1 6 accept
+    StrCpy $R3 $R2 1 $R1
+    ; Faqat 0-9 va A-F (katta harf) qabul qilinadi.
+    StrCmp $R3 "0" next
+    StrCmp $R3 "1" next
+    StrCmp $R3 "2" next
+    StrCmp $R3 "3" next
+    StrCmp $R3 "4" next
+    StrCmp $R3 "5" next
+    StrCmp $R3 "6" next
+    StrCmp $R3 "7" next
+    StrCmp $R3 "8" next
+    StrCmp $R3 "9" next
+    StrCmp $R3 "A" next
+    StrCmp $R3 "B" next
+    StrCmp $R3 "C" next
+    StrCmp $R3 "D" next
+    StrCmp $R3 "E" next
+    StrCmp $R3 "F" next
+    Goto done
+  next:
+    IntOp $R1 $R1 + 1
+    Goto check_loop
+
+  accept:
+    StrCpy $PairingCode $R2
+
+  done:
+    Pop $R3
+    Pop $R2
+    Pop $R1
+    Pop $R0
+FunctionEnd
 
 Function .onInit
   ; Ilgari o'rnatilgan bo'lsa avval o'chirishni taklif qilamiz: eski

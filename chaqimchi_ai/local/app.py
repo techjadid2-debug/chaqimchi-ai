@@ -581,6 +581,19 @@ def _open_browser(url: str, delay_sec: float = 1.5) -> None:
     threading.Thread(target=_later, daemon=True).start()
 
 
+def _auto_pair_if_handed_off() -> None:
+    """O'rnatuvchi kod qoldirgan bo'lsa cloudga o'zi ulanadi.
+
+    Bu sehrgarning 5-qadamini mijoz uchun butunlay yo'q qiladi: u
+    faqat o'rnatadi, qolgani o'zi bo'ladi.  Xato bo'lsa jimgina
+    o'tkaziladi — sehrgar kodni odatdagidek so'raydi.
+    """
+    try:
+        cloud_link.auto_pair()
+    except Exception:  # noqa: BLE001 — ulanish dasturni to'xtatmasligi kerak
+        logger.exception("Avtomatik ulanishda kutilmagan xato")
+
+
 def _autostart_if_ready() -> None:
     """Sozlangan bo'lsa AI zanjirini o'zi ko'taradi.
 
@@ -611,6 +624,7 @@ def main() -> None:
     print(f"  Sozlamalar: {paths.data_dir()}")
     print("=" * 62)
 
+    _auto_pair_if_handed_off()
     _autostart_if_ready()
     if os.environ.get("CHAQIMCHI_LOCAL_NO_BROWSER", "").lower() not in {"1", "true", "yes"}:
         _open_browser(url)

@@ -615,15 +615,29 @@
     });
 
     function showPairing(name, code, expires, siteId) {
-      $("detailTitle").textContent = `${name} — juftlash kodi`;
+      // Windows uchun asosiy yo'l: kod **havolaga** qo'shiladi, brauzer
+      // faylni shu kod bilan saqlaydi va o'rnatuvchi uni o'zi o'qiydi.
+      // Mijoz 6 ta belgini qo'lda ko'chirmaydi.
+      const link = `${location.origin}/api/v1/public/download-installer?code=${encodeURIComponent(code)}`;
+      $("detailTitle").textContent = `${name} — o'rnatish havolasi`;
       $("detailBody").innerHTML = `
-        <div class="code-box">${esc(code)}</div>
-        <p class="muted" style="margin: 0.75rem 0;">
-          Amal qiladi: ${esc((expires || "").slice(0, 16))} (UTC). O'rnatuvchiga shu kodni bering.
+        <p style="margin: 0 0 0.5rem; font-size: 0.85rem;"><b>Mijozga shu havolani yuboring</b> (Telegram, SMS):</p>
+        <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.74rem; overflow-x: auto;">${esc(link)}</pre>
+        <button class="btn btn-primary" data-copy="${esc(link)}">Havolani nusxalash</button>
+        <p class="muted" style="margin: 0.75rem 0 1.25rem; font-size: 0.8rem;">
+          U havolani bosadi, dastur yuklanadi va o'rnatilgach <b>o'zi ulanadi</b> —
+          hech qanday kod yozmaydi.
         </p>
-        <p style="margin-bottom: 0.4rem; font-size: 0.8rem;">Sotqin pairing buyrug'i:</p>
-        <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.78rem; overflow-x: auto;">sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py --cloud ${esc(location.origin)} --code ${esc(code)}</pre>
-        <a class="btn" href="/connect" target="_blank" rel="noopener">Ulash sahifasini ochish</a>
+
+        <details>
+          <summary style="cursor: pointer; font-size: 0.85rem;">Kodni qo'lda kiritish kerak bo'lsa</summary>
+          <div class="code-box" style="margin-top: 0.75rem;">${esc(code)}</div>
+          <p class="muted" style="margin: 0.75rem 0; font-size: 0.8rem;">
+            Amal qiladi: ${esc((expires || "").slice(0, 16))} (UTC), bir martalik.
+          </p>
+          <p style="margin-bottom: 0.4rem; font-size: 0.8rem;">Linux Sotqin uchun buyruq:</p>
+          <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.72rem; overflow-x: auto;">sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py --cloud ${esc(location.origin)} --code ${esc(code)}</pre>
+        </details>
         <p class="muted mono" style="margin-top: 0.75rem; font-size: 0.72rem;">site_id: ${esc(siteId)}</p>`;
       $("detailOverlay").hidden = false;
     }

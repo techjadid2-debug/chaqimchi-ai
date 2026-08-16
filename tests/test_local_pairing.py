@@ -213,3 +213,133 @@ def test_status_is_honest_before_pairing(client: TestClient) -> None:
     assert body["connected"] is False
     assert body["site_id"] is None
     assert body["owner_url"] is None
+
+
+# ── Avtomatik ulanish (kod fayl nomidan) ─────────────────────────────────
+#
+# Mijoz 6 ta belgini qo'lda ko'chirmasligi uchun: admin panel
+# `...?code=A1B2C3` havolasini beradi, brauzer faylni shu kod bilan
+# saqlaydi, o'rnatuvchi esa kodni nomdan ajratib `pairing.txt` ga yozadi.
+#
+# Bu **qulaylik, majburiyat emas**: nom buzilsa yoki internet bo'lmasa
+# sehrgar kodni odatdagidek so'raydi.  Shuning uchun har bir xato yo'lida
+# dastur jimgina davom etishi tekshiriladi.
+
+
+def _handoff(tmp_path: Path, code: str) -> Path:
+    path = tmp_path / "pairing.txt"
+    path.write_text(code, encoding="utf-8")
+    return path
+
+
+def test_installer_handoff_pairs_without_the_customer_typing_anything(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setattr(
+        "chaqimchi_ai.local.cloud_link.httpx.post",
+        lambda *a, **k: _FakeResponse(
+            200, {"site_id": "s1", "device_id": "d1", "device_token": "t1"}
+        ),
+    )
+    handoff = _handoff(tmp_path, "A1B2C3")
+
+    site = cloud_link.auto_pair()
+
+    assert site is not None and site.site_id == "s1"
+    assert _cloud_sync(tmp_path)["enabled"] is True
+    assert not handoff.exists(), "bir martalik kod diskda qolib ketmasin"
+
+
+def test_handoff_is_kept_when_the_shop_has_no_internet_yet(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Do'konda internet keyinroq ulanishi mumkin — kod saqlanib qolsin
+    va keyingi ishga tushishda qayta urinilsin."""
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+
+    def _boom(*args, **kwargs):
+        raise httpx.ConnectError("tarmoq yo'q")
+
+    monkeypatch.setattr("chaqimchi_ai.local.cloud_link.httpx.post", _boom)
+    handoff = _handoff(tmp_path, "A1B2C3")
+
+    assert cloud_link.auto_pair() is None
+    assert handoff.exists(), "internet yo'qligi kodni yo'qotmasligi kerak"
+    assert _cloud_sync(tmp_path).get("enabled") is not True
+
+
+def test_handoff_is_dropped_when_the_code_is_already_used(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kod rad etilgan bo'lsa (muddati o'tgan/ishlatilgan) uni saqlashning
+    ma'nosi yo'q — lekin dastur yiqilmasligi ham kerak."""
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setattr(
+        "chaqimchi_ai.local.cloud_link.httpx.post",
+        lambda *a, **k: _FakeResponse(400, {"detail": "Pairing kod topilmadi"}),
+    )
+    _handoff(tmp_path, "A1B2C3")
+
+    assert cloud_link.auto_pair() is None
+    assert _cloud_sync(tmp_path).get("enabled") is not True
+
+
+def test_no_handoff_file_is_not_an_error(client: TestClient) -> None:
+    """Odatdagi holat: mijoz oddiy havoladan yuklab olgan."""
+    from chaqimchi_ai.local import cloud_link
+
+    assert cloud_link.auto_pair() is None
+
+
+def test_auto_pairing_is_skipped_without_a_default_cloud(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Paket qaysi cloudga ulanishini bilmasa, taxmin qilmasligi kerak."""
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.delenv("CHAQIMCHI_DEFAULT_CLOUD_URL", raising=False)
+    handoff = _handoff(tmp_path, "A1B2C3")
+
+    assert cloud_link.auto_pair() is None
+    assert handoff.exists()
+
+
+def test_already_connected_device_ignores_a_stale_handoff(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Qayta o'rnatishda eski kod qolib ketishi mumkin — u ishlab turgan
+    ulanishni buzmasligi kerak."""
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setattr(
+        "chaqimchi_ai.local.cloud_link.httpx.post",
+        lambda *a, **k: _FakeResponse(
+            200, {"site_id": "s1", "device_id": "d1", "device_token": "t1"}
+        ),
+    )
+    client.post("/api/setup/pair", json={"code": "A1B2C3", "cloud_url": CLOUD})
+    handoff = _handoff(tmp_path, "FFFFFF")
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("ulangan qurilma qayta claim qilmasligi kerak")
+
+    monkeypatch.setattr("chaqimchi_ai.local.cloud_link.httpx.post", _fail)
+    assert cloud_link.auto_pair() is None
+    assert not handoff.exists(), "eskirgan kod tozalanishi kerak"
+    assert _cloud_sync(tmp_path)["site_id"] == "s1"
+
+
+def test_default_cloud_url_prefills_the_wizard(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mijoz server manzilini yodda tutmaydi va yozmasligi kerak."""
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    assert client.get("/api/setup/cloud-status").json()["default_cloud_url"] == CLOUD

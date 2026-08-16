@@ -18,6 +18,7 @@ va uning maydonlari bir xil — cloud ikkalasini ham farq qilmaydi.
 from __future__ import annotations
 
 import logging
+import os
 import platform
 import re
 from dataclasses import dataclass
@@ -158,6 +159,65 @@ def claim(code: str, cloud_url: str) -> PairedSite:
     return PairedSite(site_id=site_id, device_id=device_id, cloud_url=safe_url)
 
 
+#: O'rnatuvchi fayl nomidan olgan pairing kodni shu faylga qoldiradi.
+#: Dastur birinchi ishga tushishda uni o'qiydi va **o'chiradi**: kod bir
+#: martalik, diskda qolib ketishining ma'nosi yo'q.
+PAIRING_HANDOFF = "pairing.txt"
+
+
+def default_cloud_url() -> str:
+    """O'rnatuvchi bilan kelgan cloud manzili.
+
+    Qurish paytida qo'yiladi (`build_windows_payload.py`).  Mijoz uni
+    qo'lda yozmasligi kerak — u qaysi serverga ulanishini bilmaydi ham.
+    """
+    return os.environ.get("CHAQIMCHI_DEFAULT_CLOUD_URL", "").strip()
+
+
+def auto_pair() -> Optional[PairedSite]:
+    """O'rnatuvchi qoldirgan kod bilan avtomatik ulanadi.
+
+    Mijoz 6 ta belgini qo'lda ko'chirmasligi uchun: admin panel
+    `...?code=A1B2C3` havolasini beradi, brauzer faylni shu kod bilan
+    saqlaydi, o'rnatuvchi esa kodni nomdan ajratib olib shu faylga
+    yozadi.
+
+    Xato bo'lsa **jimgina qaytadi**: sehrgar kodni odatdagidek so'raydi.
+    Ya'ni bu qulaylik, majburiyat emas — shuning uchun bu yerda hech
+    qanday xato mijozga ko'rsatilmaydi.
+    """
+    from chaqimchi_ai.local import paths
+
+    handoff = paths.data_dir() / PAIRING_HANDOFF
+    if not handoff.is_file():
+        return None
+    if status()["connected"]:
+        handoff.unlink(missing_ok=True)
+        return None
+
+    try:
+        code = handoff.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return None
+
+    cloud_url = default_cloud_url()
+    if not cloud_url:
+        logger.info("Avtomatik ulanish o'tkazildi: cloud manzili sozlanmagan")
+        return None
+
+    try:
+        site = claim(code, cloud_url)
+    except PairingError as exc:
+        logger.info("Avtomatik ulanish bajarilmadi (%s) — sehrgar kodni so'raydi", exc)
+        # Faylni **qoldiramiz**: internet hali yo'q bo'lishi mumkin,
+        # keyingi ishga tushishda qayta urinib ko'ramiz.
+        return None
+
+    handoff.unlink(missing_ok=True)
+    logger.info("Avtomatik ulandi: site=%s", site.site_id)
+    return site
+
+
 def unlink() -> None:
     """Ulanishni uzadi.
 
@@ -182,6 +242,9 @@ def status() -> Dict[str, Any]:
     connected = bool(raw.get("enabled") and raw.get("device_token"))
     return {
         "connected": connected,
+        # Sehrgar maydonini oldindan to'ldiradi: mijoz server manzilini
+        # yodda tutmaydi va uni qo'lda yozishi kerak emas.
+        "default_cloud_url": default_cloud_url(),
         "cloud_url": raw.get("url") if connected else None,
         "site_id": raw.get("site_id") if connected else None,
         "owner_url": f"{raw.get('url')}/owner" if connected else None,

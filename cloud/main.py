@@ -1233,16 +1233,27 @@ async def public_windows_release() -> Dict[str, Any]:
 
 
 @app.get("/api/v1/public/download-installer")
-async def public_download_installer() -> Response:
+async def public_download_installer(code: str = "") -> Response:
     """Windows o'rnatuvchisi (.exe).
 
-    Ataylab **hech qanday parametr yo'q**.  Ilgari bu endpoint `code` va
-    `site_id` ni qabul qilardi, saytda esa "yuklangan faylni bosing, u
-    avtomatik ulanadi" deb yozilardi — aslida esa kod e'tiborsiz qolib,
-    hammaga bir xil fayl berilardi.  Dastur endi mijoz kompyuterida
-    mustaqil ishlaydi; cloudga ulanish keyinroq, pairing kod bilan
-    bajariladi.
+    `code` berilsa **fayl nomiga** qo'shiladi:
+    `Chaqimchi_AI_Setup-A1B2C3.exe`.  O'rnatuvchi nomdan kodni o'qiydi va
+    dastur birinchi ishga tushishda cloudga o'zi ulanadi — mijoz 6 ta
+    belgini qo'lda ko'chirmaydi.
+
+    Nega aynan fayl nomi: 68 MB paketni har mijoz uchun qayta qurish
+    mumkin emas, brauzer esa serverdan kelgan nomni saqlaydi.  Nom
+    buzilsa (masalan `... (1).exe`) sehrgar kodni odatdagidek so'raydi —
+    ya'ni bu qulaylik, majburiyat emas.
+
+    Kod maxfiy emas: u bir martalik, 48 soat amal qiladi va baribir
+    mijozga beriladi.  Shu sabab uni havolada tashish xavf tug'dirmaydi.
     """
+    safe_code = re.sub(r"[^A-Fa-f0-9]", "", code).upper()[:6]
+    filename = (
+        f"Chaqimchi_AI_Setup-{safe_code}.exe" if len(safe_code) == 6 else "Chaqimchi_AI_Setup.exe"
+    )
+
     url = _windows_installer_url()
     if url:
         return RedirectResponse(url, status_code=307)
@@ -1255,11 +1266,12 @@ async def public_download_installer() -> Response:
         )
     return FileResponse(
         path=installer,
-        filename="Chaqimchi_AI_Setup.exe",
+        filename=filename,
         media_type="application/vnd.microsoft.portable-executable",
         # O'rnatuvchi versiya bilan almashadi — brauzer eskisini keshda
-        # ushlab qolmasin.
-        headers={"Cache-Control": "no-cache"},
+        # ushlab qolmasin.  Kodli havola esa umuman keshlanmasin: har
+        # mijozga o'z fayli ketishi kerak.
+        headers={"Cache-Control": "no-store" if len(safe_code) == 6 else "no-cache"},
     )
 
 

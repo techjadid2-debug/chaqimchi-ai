@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -220,11 +221,22 @@ def step_code() -> None:
             shutil.copy2(source, PAYLOAD / name)
 
 
+#: Paket qaysi cloudga ulanishini bilishi kerak: mijoz server manzilini
+#: yodda tutmaydi va sehrgarda uni qo'lda yozishi ham kerak emas.
+#: Qurish paytida beriladi:
+#:   CHAQIMCHI_DEFAULT_CLOUD_URL=https://... python scripts/build_windows_payload.py
+DEFAULT_CLOUD_URL = os.environ.get("CHAQIMCHI_DEFAULT_CLOUD_URL", "").strip().rstrip("/")
+
 LAUNCHER = """@echo off
 chcp 65001 > nul
 title Chaqimchi AI
 
 cd /d "%~dp0"
+
+REM Paket qaysi cloudga ulanishini shu yerdan biladi (qurish paytida
+REM qo'yiladi).  Bo'sh bo'lsa dastur lokal rejimda ishlaydi va sehrgar
+REM cloud manzilini so'raydi.
+set CHAQIMCHI_DEFAULT_CLOUD_URL=__CLOUD_URL__
 
 if not exist "python\\python.exe" (
     echo [XATO] Dastur fayllari topilmadi.
@@ -277,7 +289,14 @@ Telegram: @fibotai
 
 def step_launcher() -> None:
     log.info("[5/5] Ishga tushirish fayllari")
-    (PAYLOAD / "Chaqimchi_AI.bat").write_text(LAUNCHER, encoding="utf-8")
+    if not DEFAULT_CLOUD_URL:
+        log.warning(
+            "CHAQIMCHI_DEFAULT_CLOUD_URL berilmadi — dastur cloudga o'zi "
+            "ulana olmaydi va sehrgar manzilni so'raydi"
+        )
+    (PAYLOAD / "Chaqimchi_AI.bat").write_text(
+        LAUNCHER.replace("__CLOUD_URL__", DEFAULT_CLOUD_URL), encoding="utf-8"
+    )
     # Windows Notepad CRLF kutadi; LF bilan yozilsa matn bitta qatorga
     # yopishib qoladi va mijoz o'qiy olmaydi.
     (PAYLOAD / "O'QING.txt").write_text(READ_ME.replace("\n", "\r\n"), encoding="utf-8")

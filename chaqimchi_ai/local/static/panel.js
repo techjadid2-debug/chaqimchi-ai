@@ -237,8 +237,14 @@
     const source = cloud.remote_config
       ? " · <b>Kameralar cloud’dan boshqariladi</b>"
       : "";
+    // Muhim izoh: ulangach hodisalar cloudga jo'naydi va lokal navbatdan
+    // o'chadi — shu sababli bu yerdagi "Bugungi holat" kichik yoki bo'sh
+    // ko'rinishi normal.  Izohsiz bu "dastur buzildi" degan taassurot
+    // berardi.
     bar.innerHTML =
-      `<b>Cloudga ulangan</b>Mijoz paneli: <a href="${esc(cloud.owner_url)}" target="_blank" rel="noopener noreferrer">${esc(cloud.owner_url)}</a>${queue}${source}`;
+      `<b>Cloudga ulangan</b>To‘liq kunlik hisobot endi mijoz panelida: ` +
+      `<a href="${esc(cloud.owner_url)}" target="_blank" rel="noopener noreferrer">${esc(cloud.owner_url)}</a>` +
+      `${queue}${source}`;
   }
 
   async function refresh() {

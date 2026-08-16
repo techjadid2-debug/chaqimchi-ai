@@ -180,3 +180,28 @@ def test_panels_load_the_editor_and_owner_cannot_edit_raw_json() -> None:
     assert "zonesJson" not in owner
     assert "<textarea" not in owner
     assert "...currentConfig" in owner, "saqlashda geometriya yo'qolmasin"
+
+
+def test_wizard_offers_one_click_presets_and_camera_roles() -> None:
+    """Sehrgar qulayligi (2026-08-17): bir-bosim shablonlar va kamera roli.
+
+    `addPreset()` allaqachon bor edi — tugmasi yo'q edi; `priority` server
+    tomonda bor edi — UI yo'q edi.  Bu test ular qaytib yo'qolib
+    qolmasligini qo'riqlaydi.
+    """
+    setup_html = (ROOT / "chaqimchi_ai" / "local" / "static" / "setup.html").read_text(
+        encoding="utf-8"
+    )
+    setup_js = (ROOT / "chaqimchi_ai" / "local" / "static" / "setup.js").read_text(
+        encoding="utf-8"
+    )
+
+    for button in ("presetLineBtn", "presetQueueBtn", "presetRestrictedBtn"):
+        assert button in setup_html, f"shablon tugmasi yo'q: {button}"
+    assert "addPreset" in setup_js, "tugmalar addPreset'ga ulanmagan"
+    assert 'id="cameraRole"' in setup_html, "kamera roli tanlovi yo'q"
+    assert "ROLE_PRESETS" in setup_js
+    assert '"security"' in setup_js and '"background"' in setup_js, (
+        "rol -> priority mapping saqlansin"
+    )
+    assert 'id="hoursHint"' in setup_html, "ish soatlari bo'sh qolsa ogohlantirish joyi"

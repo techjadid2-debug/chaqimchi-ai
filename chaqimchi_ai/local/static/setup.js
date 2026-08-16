@@ -418,21 +418,39 @@
     goToStep(1);
   });
 
+  // Rol → tahlil muhimligi va tayyor nom.  `priority` allaqachon server
+  // tomonda bor edi (`CameraSaveBody.priority`), UI esa yo'q edi — hamma
+  // kamera bir xil "retail" bo'lib ketardi.
+  const ROLE_PRESETS = {
+    entrance: { label: "Kirish eshigi", priority: "security" },
+    checkout: { label: "Kassa", priority: "retail" },
+    sales: { label: "Savdo zali", priority: "retail" },
+    storage: { label: "Ombor", priority: "background" },
+  };
+
+  $("cameraRole").addEventListener("change", () => {
+    const preset = ROLE_PRESETS[$("cameraRole").value];
+    if (preset && !$("label").value.trim()) $("label").value = preset.label;
+  });
+
   $("acceptFrame").addEventListener("click", async () => {
     const button = $("acceptFrame");
     button.disabled = true;
     try {
+      const preset = ROLE_PRESETS[$("cameraRole").value];
       await api("/api/setup/cameras", {
         method: "POST",
         body: JSON.stringify({
-          label: $("label").value.trim(),
+          label: $("label").value.trim() || (preset ? preset.label : ""),
           rtsp_url: pendingUrl,
+          priority: preset ? preset.priority : "retail",
         }),
       });
       pendingUrl = "";
       $("password").value = "";
       $("manualUrl").value = "";
       $("label").value = "";
+      $("cameraRole").value = "";
       await loadCameras();
       goToStep(1);
       note("scanResult", "ok", "Kamera saqlandi.", " Yana qo‘shishingiz yoki keyingi qadamga o‘tishingiz mumkin.");
@@ -523,6 +541,30 @@
     suggestLine(first);
     loadFrame();
     renderShapes();
+    wirePresetButtons();
+  }
+
+  /** Bir-bosim shablonlar: tayyor shakl tushadi, mijoz uni surib to'g'rilaydi. */
+  let presetsWired = false;
+  function wirePresetButtons() {
+    if (presetsWired) return;
+    presetsWired = true;
+    const presets = [
+      ["presetLineBtn", "entrance", "Kirish chizig‘i qo‘shildi — uni eshik oldiga suring."],
+      ["presetQueueBtn", "queue", "Navbat zonasi qo‘shildi — burchaklarini kassa oldiga suring."],
+      ["presetRestrictedBtn", "restricted", "Taqiqlangan zona qo‘shildi — kerakli joyga suring."],
+    ];
+    presets.forEach(([buttonId, type, message]) => {
+      const button = $(buttonId);
+      if (!button) return;
+      button.addEventListener("click", () => {
+        if (!editor || !editor.addPreset(type)) {
+          note("geoResult", "err", "Avval kamera tanlang.", "");
+          return;
+        }
+        note("geoResult", "ok", message, "");
+      });
+    });
   }
 
   /**
@@ -678,6 +720,27 @@
   });
 
   /* ── 4-qadam: yakun ─────────────────────────────────────────────────── */
+
+  // Ish soatlari bo'sh — bu xato emas, lekin OQIBATI aytilishi shart.
+  function updateHoursHint() {
+    const from = $("openFrom").value;
+    const to = $("openTo").value;
+    if (!from && !to) {
+      note(
+        "hoursHint",
+        "warn",
+        "Ish soatlari kiritilmadi.",
+        " Tungi nazorat (yopiq do‘konda harakat ogohlantirishi) ishlamaydi.",
+      );
+    } else if (Boolean(from) !== Boolean(to)) {
+      note("hoursHint", "warn", "Ikkala vaqtni ham kiriting.", "");
+    } else {
+      clearNote("hoursHint");
+    }
+  }
+  $("openFrom").addEventListener("change", updateHoursHint);
+  $("openTo").addEventListener("change", updateHoursHint);
+  updateHoursHint();
 
   $("finishBtn").addEventListener("click", async () => {
     const button = $("finishBtn");

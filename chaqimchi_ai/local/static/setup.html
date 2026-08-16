@@ -86,9 +86,23 @@
           <input type="text" id="manualUrl" placeholder="rtsp://foydalanuvchi:parol@192.168.1.64:554/..." autocomplete="off">
         </label>
 
-        <label class="field">Bu kamera qayerda turibdi? <small>bitta kamera qo‘shganda</small>
-          <input type="text" id="label" placeholder="Masalan: Kirish eshigi" autocomplete="off">
-        </label>
+        <div class="grid-2">
+          <label class="field">Bu kamera qayerda turibdi?
+            <!-- Rol tanlash nomni ham to'ldiradi, ham tahlil muhimligini
+                 belgilaydi (kirish/kassa kamerasi birinchi navbatda
+                 tahlil qilinadi, ombor esa fonda). -->
+            <select id="cameraRole">
+              <option value="">Tanlang…</option>
+              <option value="entrance">Kirish eshigi</option>
+              <option value="checkout">Kassa</option>
+              <option value="sales">Savdo zali</option>
+              <option value="storage">Ombor</option>
+            </select>
+          </label>
+          <label class="field">Nomi <small>panelda shu ko‘rinadi</small>
+            <input type="text" id="label" placeholder="Masalan: Kirish eshigi" autocomplete="off">
+          </label>
+        </div>
 
         <div class="actions">
           <button class="button primary" id="testBtn" type="button">Tasvirni tekshirish</button>
@@ -145,6 +159,16 @@
           </label>
         </div>
 
+        <!-- Bir-bosim shablonlar: mijoz qo'lda chizishni bilmasa ham
+             tayyor shakl tushadi, keyin uni surib to'g'rilaydi.
+             `zone-editor.js addPreset()` allaqachon bor edi — tugmasi
+             yo'q edi. -->
+        <div class="actions" style="margin-top:0">
+          <button class="button ghost small" id="presetLineBtn" type="button">+ Kirish chizig‘i</button>
+          <button class="button ghost small" id="presetQueueBtn" type="button">+ Kassa navbati zonasi</button>
+          <button class="button ghost small" id="presetRestrictedBtn" type="button">+ Taqiqlangan zona</button>
+        </div>
+
         <p class="hint">
           <b>Chiziq:</b> ikki nuqtani bosing. <b>Zona:</b> burchaklarni bosing, oxirida ikki marta bosing.
           O‘ng tugma — o‘chiradi. Nuqtani sudrab ko‘chirish mumkin. Yashil o‘q do‘kon <b>ichkarisini</b> ko‘rsatadi.
@@ -176,6 +200,10 @@
           <label class="field">Ochilish<input type="time" id="openFrom"></label>
           <label class="field">Yopilish<input type="time" id="openTo"></label>
         </div>
+        <!-- Bo'sh qoldirilsa jim o'tib ketmasin: tungi nazorat funksiyasi
+             indamay o'chiq qolgani eng ko'p "nega ishlamadi" savolini
+             tug'diradigan holat edi. -->
+        <div id="hoursHint"></div>
         <div class="grid-3">
           <label class="field">Do‘konda odam limiti<input type="number" id="occupancy" min="1" max="10000" value="20"></label>
           <label class="field">Navbat limiti <small>kassada</small><input type="number" id="queueLimit" min="1" max="1000" value="5"></label>

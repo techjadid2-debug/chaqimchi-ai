@@ -47,9 +47,6 @@ bash "$installer"
   --cloud "$cloud_url" --code "${pairing_code^^}"
 systemctl restart chaqimchi-sotqin
 systemctl restart chaqimchi-retail
-if systemctl is-enabled --quiet chaqimchi-attendance.service; then
-  systemctl restart chaqimchi-attendance
-fi
 systemctl --no-pager --full status chaqimchi-sotqin chaqimchi-retail >/dev/null
 echo
 echo "── Tekshiruv ro'yxati ─────────────────────────────────────────────"

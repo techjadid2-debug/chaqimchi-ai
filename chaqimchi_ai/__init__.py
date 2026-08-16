@@ -1,6 +1,9 @@
-"""Chaqimchi AI paketi; og'ir vision importlari lazy yuklanadi."""
+"""Chaqimchi AI paketi.
 
-from typing import Any
+Lokal Face ID (davomat) to'plami arxivlangan — `archive/attendance-local`
+git tegida turadi.  Yuz tanish keyinchalik **cloud** tomonda quriladi
+(`docs/archive/README.md`).
+"""
 
 #: Versiya ikki joyda yozilgan: bu yerda va `pyproject.toml` da.
 #:
@@ -11,16 +14,4 @@ from typing import Any
 #:
 #: Ikkalasining mosligini `tests/test_sotqin_release_contract.py` ushlab turadi.
 __version__ = "0.6.3"
-__all__ = ["FaceEngine", "FaceCompareResult", "VideoFrameResult", "__version__"]
-
-
-def __getattr__(name: str) -> Any:
-    if name in {"FaceEngine", "FaceCompareResult", "VideoFrameResult"}:
-        from chaqimchi_ai.face_engine import FaceCompareResult, FaceEngine, VideoFrameResult
-
-        return {
-            "FaceEngine": FaceEngine,
-            "FaceCompareResult": FaceCompareResult,
-            "VideoFrameResult": VideoFrameResult,
-        }[name]
-    raise AttributeError(name)
+__all__ = ["__version__"]

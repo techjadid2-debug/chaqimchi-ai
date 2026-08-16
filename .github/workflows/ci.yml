@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    # `soddalashtirish-*` ham qo'shildi: asosiy ish shu branch'da ketyapti
+    # va CI faqat main'ni kuzatsa, o'nlab commit tekshirilmasdan yig'ilib
+    # qolar edi.
+    branches: [main, master, "soddalashtirish-*"]
   pull_request:
 
 jobs:
@@ -18,6 +21,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Ruff
-        run: python -m ruff check chaqimchi_ai webapp cloud tests scripts
+        run: python -m ruff check chaqimchi_ai cloud tests scripts
       - name: Pytest
         run: python -m pytest -q

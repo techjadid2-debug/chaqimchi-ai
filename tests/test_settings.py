@@ -5,8 +5,8 @@ from chaqimchi_ai.settings import AppSettings
 
 def test_settings_defaults_when_file_missing(tmp_path: Path) -> None:
     cfg = AppSettings.load(tmp_path / "missing.yaml", base_dir=tmp_path)
-    assert cfg.face.compare_threshold == 0.4
-    assert cfg.face.det_size == (640, 640)
+    assert cfg.tracking.enabled is True
+    assert cfg.scene.enabled is False
 
 
 def test_resolved_reference_relative(tmp_path: Path) -> None:
@@ -32,7 +32,6 @@ def test_default_config_yaml_loads() -> None:
     base = Path(__file__).resolve().parent.parent
     path = base / "config" / "config.yaml"
     cfg = AppSettings.load(path, base_dir=base)
-    assert cfg.face.compare_threshold == 0.4
     assert cfg.events.match_debounce_sec == 30
     assert cfg.events.save_snapshots is True
     assert cfg.tracking.enabled is True

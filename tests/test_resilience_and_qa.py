@@ -1,11 +1,6 @@
-"""2-Bosqich: Barqarorlik (Resilience), Disk Favqulodda FIFO Tozalash va Statik Tracker testlari."""
-
-import time
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+"""Barqarorlik (Resilience) va Statik Tracker testlari."""
 
 from chaqimchi_ai.retail.tracker import MotionTracker
-from chaqimchi_ai.retention import purge_emergency_if_disk_low
 
 
 def test_motion_tracker_detects_static_objects():
@@ -41,30 +36,7 @@ def test_motion_tracker_moving_object_is_not_static():
     assert not tracker.is_static(track_id, min_hits=5, max_net_movement=5.0)
 
 
-def test_purge_emergency_if_disk_low(tmp_path: Path):
-    media_dir = tmp_path / "media"
-    media_dir.mkdir()
-
-    # 3 ta eski fayl yaratamiz
-    f1 = media_dir / "old1.mp4"
-    f1.write_bytes(b"x" * 1024)
-    time.sleep(0.01)
-    f2 = media_dir / "old2.jpg"
-    f2.write_bytes(b"y" * 2048)
-    time.sleep(0.01)
-    f3 = media_dir / "new.jpg"
-    f3.write_bytes(b"z" * 4096)
-
-    # Diskda joy kamligini mock qilamiz (masalan 1 GB qolgan, minimum 2 GB kerak)
-    mock_usage = MagicMock(free=1 * 1024 * 1024 * 1024, total=100 * 1024 * 1024 * 1024)
-    with patch("shutil.disk_usage", return_value=mock_usage):
-        deleted_count, freed_bytes = purge_emergency_if_disk_low(
-            [media_dir],
-            min_free_bytes=2 * 1024 * 1024 * 1024,
-            target_free_bytes=3 * 1024 * 1024 * 1024,
-        )
-        assert deleted_count == 3
-        assert freed_bytes == 1024 + 2048 + 4096
-        assert not f1.exists()
-        assert not f2.exists()
-        assert not f3.exists()
+# Eslatma: `purge_emergency_if_disk_low` testi olib tashlandi — funksiya
+# `chaqimchi_ai/retention.py` bilan birga arxivlangan (hech qaysi xizmat
+# uni chaqirmasdi; disk himoyasi edge'da `outbox.prune`, cloudda esa
+# media kvotasi orqali ishlaydi).

@@ -30,9 +30,30 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple
 
-from chaqimchi_ai.face_tracker import bbox_iou
-
 Bbox = List[float]
+
+
+def bbox_iou(a: List[float], b: List[float]) -> float:
+    """bbox [x1,y1,x2,y2] — intersection over union.
+
+    Ilgari `chaqimchi_ai/face_tracker.py` da edi; u modul davomat
+    to'plami bilan arxivlangach funksiya shu yerga ko'chdi.
+    """
+    ax1, ay1, ax2, ay2 = a[0], a[1], a[2], a[3]
+    bx1, by1, bx2, by2 = b[0], b[1], b[2], b[3]
+    inter_x1 = max(ax1, bx1)
+    inter_y1 = max(ay1, by1)
+    inter_x2 = min(ax2, bx2)
+    inter_y2 = min(ay2, by2)
+    if inter_x2 <= inter_x1 or inter_y2 <= inter_y1:
+        return 0.0
+    inter = (inter_x2 - inter_x1) * (inter_y2 - inter_y1)
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    if union <= 0:
+        return 0.0
+    return inter / union
 
 
 def _center(bbox: Bbox) -> Tuple[float, float]:

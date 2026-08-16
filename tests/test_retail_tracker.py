@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytest
 
-from chaqimchi_ai.face_tracker import FaceTracker
 from chaqimchi_ai.retail.tracker import MotionTracker
 
 
@@ -31,15 +30,6 @@ def test_normal_walking_speed_keeps_one_id() -> None:
     """640×360 da 5 FPS: odam ~60 px keng, kadrlar orasida ~45 px siljiydi."""
     tracker = MotionTracker()
     assert len(set(ids_while_walking(tracker, start=50.0, step=45.0, frames=8))) == 1
-
-
-def test_old_tracker_fails_on_the_same_input() -> None:
-    """Nima uchun yangi tracker kerakligini qayd etadi."""
-    old = FaceTracker(iou_threshold=0.25, max_missed_frames=10)
-    seen = []
-    for index in range(8):
-        seen.append(old.update([box(50.0 + index * 45.0)])[0]["track_id"])
-    assert len(set(seen)) > 1  # har kadrda yangi ID
 
 
 def test_very_fast_movement_still_breaks_and_that_is_honest() -> None:

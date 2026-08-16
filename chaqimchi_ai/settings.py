@@ -10,23 +10,6 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class FaceSettings(BaseModel):
-    model_name: str = "buffalo_l"
-    model_root: Optional[str] = None
-    model_version: Optional[str] = None
-    det_size: Tuple[int, int] = (640, 640)
-    preprocess_max_side: int = Field(default=1024, ge=64, le=4096)
-    compare_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
-    commercial_model_licensed: bool = False
-
-    @field_validator("det_size")
-    @classmethod
-    def _det(cls, v: Any) -> Tuple[int, int]:
-        if isinstance(v, (list, tuple)) and len(v) == 2:
-            return int(v[0]), int(v[1])
-        raise ValueError("det_size [w,h] bo‘lishi kerak")
-
-
 class PathsSettings(BaseModel):
     reference_image: str = "data/abdulvosit/reference_outdoor.png"
     db_path: str = "data/database"
@@ -335,7 +318,10 @@ class LicenseSettings(BaseModel):
 class AppSettings(BaseModel):
     environment: Literal["development", "test", "production"] = "development"
     license: LicenseSettings = Field(default_factory=LicenseSettings)
-    face: FaceSettings = Field(default_factory=FaceSettings)
+    # Eslatma: konfiguratsiyadagi `face:` bo'limi endi o'qilmaydi —
+    # davomat to'plami arxivlangan (`archive/attendance-local` tegi).
+    # Pydantic notanish kalitlarni indamay o'tkazadi, shuning uchun eski
+    # config.yaml fayllar buzilmaydi.
     paths: PathsSettings = Field(default_factory=PathsSettings)
     events: EventsSettings = Field(default_factory=EventsSettings)
     tracking: TrackingSettings = Field(default_factory=TrackingSettings)
@@ -396,35 +382,8 @@ class AppSettings(BaseModel):
             errors.append("CHAQIMCHI_JWT_SECRET kamida 32 belgidan iborat bo'lishi shart")
         if not self.rate_limit.enabled:
             errors.append("rate_limit productionda yoqilishi shart")
-        if not self.storage.encrypt_embeddings:
-            errors.append("embedding shifrlash productionda yoqilishi shart")
-        if (
-            self.storage.encrypt_embeddings
-            and not os.environ.get("CHAQIMCHI_EMBEDDING_KEY", "").strip()
-        ):
-            errors.append("CHAQIMCHI_EMBEDDING_KEY berilishi shart")
-        licensed = self.face.commercial_model_licensed or os.environ.get(
-            "CHAQIMCHI_FACE_MODEL_LICENSED", ""
-        ).lower() in {"1", "true", "yes"}
-        attendance_pilot = os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-        if not licensed and not attendance_pilot:
-            errors.append("commercial Face ID model litsenziyasi tasdiqlanishi shart")
-        if licensed:
-            from chaqimchi_ai.model_bundle import verify_model_manifest
-
-            manifest = os.environ.get("CHAQIMCHI_FACE_MODEL_MANIFEST", "").strip()
-            if not manifest:
-                errors.append("CHAQIMCHI_FACE_MODEL_MANIFEST berilishi shart")
-            else:
-                errors.extend(verify_model_manifest(Path(manifest)))
-            if self.face.model_name in {"buffalo_l", "buffalo_s", "antelopev2"}:
-                errors.append("commercial rejim demo InsightFace model nomidan foydalana olmaydi")
-        if attendance_pilot and self.events.save_snapshots:
-            errors.append("davomat pilotida biometrik snapshot saqlash o'chirilishi shart")
+        # Face ID / davomat tekshiruvlari olib tashlandi: to'plam arxivda
+        # (`archive/attendance-local`), production'da bunday xizmat yo'q.
         if self.cloud_sync.enabled:
             if not self.cloud_sync.url.lower().startswith("https://"):
                 errors.append("cloud_sync.url productionda HTTPS bo'lishi shart")

@@ -81,37 +81,23 @@ if [[ ! -f "$env_file" ]]; then
   fi
 fi
 
-attendance=false
-if grep -Eq '^CHAQIMCHI_ATTENDANCE_PILOT=(1|true|yes)$' "$env_file"; then
-  attendance=true
-fi
-
 # ── Reliz nusxasi ─────────────────────────────────────────────────────────
 install -d -o chaqimchi -g chaqimchi "$release" "$install_root/shared/data" "$install_root/shared/logs" "$install_root/shared/models"
 install -d "$release/config" "$release/models" "$release/scripts"
 cp -a "$source_dir/chaqimchi_ai" "$source_dir/requirements-sotqin.txt" "$release/"
-# webapp — faqat davomat piloti UI'si. Do'kon analitikasi unga bog'liq emas.
-if [[ "$attendance" == true ]]; then
-  cp -a "$source_dir/webapp" "$source_dir/requirements-attendance.txt" "$release/"
-fi
 cp -a "$source_dir/config/sotqin.yaml" "$source_dir/config/rules.yaml" "$release/config/"
 cp -a "$source_dir/models/retail_manifest.json" "$release/models/"
 for script in \
-  accept_n100_pilot.py apply_signed_update.py backup_db.py benchmark_n100.py \
-  calibrate_threshold.py fetch_retail_model.py install_sotqin.sh \
-  pair_sotqin.py soak_n100.py sotqin_preflight.py verify_model_bundle.py; do
+  accept_n100_pilot.py apply_signed_update.py benchmark_n100.py \
+  fetch_retail_model.py install_sotqin.sh \
+  pair_sotqin.py soak_n100.py sotqin_preflight.py; do
   cp -a "$source_dir/scripts/$script" "$release/scripts/"
 done
 ln -s "$install_root/shared/data" "$release/data"
 
 python3 -m venv "$install_root/venv"
 "$install_root/venv/bin/pip" install --upgrade pip
-if [[ "$attendance" == true ]]; then
-  # requirements-attendance.txt asosiy faylni `-r` orqali o'z ichiga oladi.
-  "$install_root/venv/bin/pip" install -r "$release/requirements-attendance.txt"
-else
-  "$install_root/venv/bin/pip" install -r "$release/requirements-sotqin.txt"
-fi
+"$install_root/venv/bin/pip" install -r "$release/requirements-sotqin.txt"
 
 # Retail modeli repoga binary sifatida kirmaydi. Rasmiy HTTPS manbadan olinadi
 # va commit qilingan SHA-256 manifesti bilan tekshiriladi.
@@ -177,9 +163,4 @@ install -m 0644 "$source_dir/deploy/chaqimchi-sotqin.service" /etc/systemd/syste
 install -m 0644 "$source_dir/deploy/chaqimchi-retail.service" /etc/systemd/system/chaqimchi-retail.service
 systemctl daemon-reload
 systemctl enable chaqimchi-sotqin.service chaqimchi-retail.service
-if [[ "$attendance" == true ]]; then
-  install -m 0644 "$source_dir/deploy/chaqimchi-attendance.service" /etc/systemd/system/chaqimchi-attendance.service
-  systemctl daemon-reload
-  systemctl enable chaqimchi-attendance.service
-fi
 echo "Sotqin R1 o'rnatildi: control va retail tayyor. Pairingdan keyin xizmatlar ishga tushadi."

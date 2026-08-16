@@ -37,25 +37,23 @@ def _requirements(name: str) -> list[str]:
     return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
 
 
-def test_base_install_has_no_face_recognition_stack() -> None:
-    """Yuz tanish asosiy qutiga tushmaydi — u ~1 GB va sotilmaydi.
+def test_no_face_recognition_stack_anywhere() -> None:
+    """Yuz tanish kutubxonalari hech bir to'plamga qaytib kirmasin.
 
-    Faqat `CHAQIMCHI_ATTENDANCE_PILOT=true` bo'lganda alohida fayl o'rnatiladi.
+    Davomat to'plami arxivlangan (`archive/attendance-local` tegi); yuz
+    tanish keyin **cloud** tomonda quriladi.  Qurilma to'plamlariga
+    insightface/onnx qaytsa — bu ~1 GB keraksiz yuk va arxiv qarori
+    buzilgani belgisi.
     """
     base = _requirements("requirements-sotqin.txt")
-    attendance = _requirements("requirements-attendance.txt")
-    installer = (ROOT / "scripts" / "install_sotqin.sh").read_text()
+    dev = _requirements("requirements.txt")
 
     assert any(item.startswith("openvino") for item in base)
-    for heavy in ("insightface", "onnx", "onnxruntime"):
+    for heavy in ("insightface", "onnxruntime", "onnx"):
         assert not any(item.startswith(heavy) for item in base), heavy
-    for heavy in ("insightface", "onnx", "onnxruntime"):
-        assert any(item.startswith(heavy) for item in attendance), heavy
-    # Davomat fayli asosiy ro'yxatni o'z ichiga oladi — pilot yoqilganda
-    # ikkita pip chaqiruvi kerak bo'lmasin.
-    assert "-r requirements-sotqin.txt" in attendance
-    assert "CHAQIMCHI_ATTENDANCE_PILOT" in installer
-    assert "requirements-attendance.txt" in installer
+        assert not any(item.startswith(heavy) for item in dev), heavy
+    assert not (ROOT / "requirements-attendance.txt").exists()
+    assert not (ROOT / "webapp").exists()
 
 
 def test_installer_refuses_to_fall_back_to_cpu_silently() -> None:
@@ -78,7 +76,6 @@ def test_services_declare_a_memory_ceiling() -> None:
     limits = {
         "chaqimchi-retail.service": "MemoryMax=2560M",
         "chaqimchi-sotqin.service": "MemoryMax=512M",
-        "chaqimchi-attendance.service": "MemoryMax=3G",
     }
     for unit, expected in limits.items():
         assert expected in (ROOT / "deploy" / unit).read_text(), unit
@@ -90,14 +87,15 @@ def test_release_contains_every_runtime_service_and_verified_model() -> None:
     manifest = json.loads((ROOT / "models" / "retail_manifest.json").read_text())
 
     assert "chaqimchi-retail.service" in installer
-    assert "chaqimchi-attendance.service" in installer
     assert "fetch_retail_model.py" in installer
     assert (ROOT / "scripts" / "soak_n100.py").is_file()
     assert '"$root/models/retail_manifest.json"' in builder
-    assert '"$root/webapp"' in builder
     assert '"$root/config/sotqin.yaml"' in builder
-    assert '"$root/requirements-attendance.txt"' in builder
     assert "install_edge.sh" not in builder
+    # Davomat to'plami arxivlangan — reliz endi webapp olib yurmaydi.
+    assert "webapp" not in builder
+    assert "attendance" not in builder
+    assert "attendance" not in installer
     assert all(len(item["sha256"]) == 64 for item in manifest["files"].values())
 
 

@@ -249,3 +249,37 @@ def test_cache_token_matches_the_file_contents(asset: str) -> None:
     assert f"/assets/{asset}?v={expected}" in html, (
         f"{asset} o'zgargan — site.html dagi `?v=` ni `{expected}` ga almashtiring"
     )
+
+
+# ── Havoladan to'g'ridan-to'g'ri kirish ──────────────────────────────────
+#
+# Do'kon egasiga "Telegram ID ingizni kiriting, keyin kodni kutib
+# turing" deyish — u qilmaydigan ish.  Havola bosilishi bilan panel
+# ochilishi kerak.
+
+
+def test_owner_panel_logs_in_from_the_link() -> None:
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "loginFromLink" in html
+    assert "params.get('tg')" in html, "havoladagi Telegram ID o'qilmayapti"
+    assert "loginFromLink()" in html, "sahifa ochilganda chaqirilmayapti"
+
+
+def test_link_login_reuses_the_server_check() -> None:
+    """Havola **yangi ruxsat emas**: server ayni ro'yxatni tekshiradi.
+
+    Agar sahifa tokenni o'zi yasasa yoki boshqa endpointga borsa,
+    ro'yxatni bo'shatish havolani to'xtatmasdi — va vaqtincha imtiyoz
+    abadiy qolib ketardi.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    block = html[html.index("async function loginFromLink"):]
+    block = block[: block.index("if(token)")]
+    assert "/api/v1/owner/auth/request" in block, "server tekshiruvidan o'tsin"
+    assert "d.access_token" in block, "token faqat serverdan olinsin"
+
+
+def test_stored_session_wins_over_the_link() -> None:
+    """Kirgan odam har safar qayta kirmasin."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "if(token){showApp();}else{loginFromLink();}" in html

@@ -140,7 +140,43 @@ async function loadAttendanceReport(){try{const from=$('attendanceFrom').value,t
 async function downloadAttendanceCsv(){const from=$('attendanceFrom').value,to=$('attendanceTo').value||from;if(!from)return;const r=await fetch(`/api/v1/owner/attendance.csv?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`,{headers:{Authorization:`Bearer ${token}`}});if(!r.ok)return alert((await r.json()).detail||'CSV olinmadi');const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`davomat-${from}-${to}.csv`;a.click();URL.revokeObjectURL(url)}
 function showApp(){$('login').classList.add('hidden');$('app').classList.remove('hidden');loadData().catch(()=>{})}
 function logout(){token='';localStorage.removeItem('chaqimchi_owner_token');location.reload()}
-if(token)showApp();
+
+// Havoladan to'g'ridan-to'g'ri kirish: `/owner?tg=<id>&site=<obyekt>`.
+//
+// Do'kon egasiga "Telegram ID ingizni kiriting, keyin kodni kutib
+// turing" deyish — u qilmaydigan ish.  Havola bosilishi bilan panel
+// ochilishi kerak.
+//
+// Bu **yangi** ruxsat emas: server tomonda ayni `auth/request` chaqiriladi
+// va u faqat `CHAQIMCHI_OTP_BYPASS_IDS` ro'yxatidagilarga token beradi.
+// Ro'yxat bo'shatilsa havola ham darhol ishlamay qoladi va odatdagi
+// kod so'raladigan oyna chiqadi.
+async function loginFromLink(){
+  const params=new URLSearchParams(location.search);
+  const tg=(params.get('tg')||'').trim();
+  if(!tg)return false;
+  $('telegram').value=tg;
+  const body={telegram_id:tg};
+  if(params.get('site'))body.site_id=params.get('site');
+  try{
+    const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(r.ok&&d.access_token){
+      token=d.access_token;
+      localStorage.setItem('chaqimchi_owner_token',token);
+      showApp();
+      return true;
+    }
+    // Imtiyoz o'chirilgan — odatdagi yo'l bilan davom etadi.
+    $('loginMsg').textContent=d.message||d.detail||'';
+    $('verify').classList.remove('hidden');
+  }catch(err){
+    $('loginMsg').textContent='Server bilan aloqa yo‘q.';
+  }
+  return false;
+}
+
+if(token){showApp();}else{loginFromLink();}
 </script>
 </body>
 </html>

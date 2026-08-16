@@ -322,6 +322,11 @@ class MemberBody(BaseModel):
 
 class OtpRequestBody(BaseModel):
     telegram_id: str = Field(min_length=1, max_length=32)
+    #: Bir necha obyektga a'zo bo'lgan odam qaysi biriga kirishini
+    #: ko'rsatadi.  Odatdagi oqimda kerak emas (obyekt kod tasdiqlangach
+    #: tanlanadi), sinov rejimida esa token darhol beriladi va tanlov
+    #: shu yerda bo'lishi kerak.
+    site_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
 
 class OtpVerifyBody(BaseModel):
@@ -471,6 +476,62 @@ def _owner_secret() -> str:
     if len(secret) < 32:
         raise HTTPException(503, "CHAQIMCHI_OWNER_JWT_SECRET sozlanmagan")
     return secret
+
+
+#: Sinov davrida kodsiz kiradigan Telegram ID lari.
+#:
+#: Bu **ataylab qo'yilgan zaiflik** va faqat sinov uchun.  Ro'yxatdagi
+#: odam panelga kod terib o'tirmasdan kiradi — ya'ni uning Telegram ID
+#: sini bilgan har kim ham kira oladi (ID esa maxfiy ma'lumot emas).
+#:
+#: Shuning uchun uchta cheklov birga ishlaydi:
+#:
+#: 1. Ro'yxat **muhit o'zgaruvchisida**, kodda emas — serverni qayta
+#:    ishga tushirmasdan o'chirish mumkin va reliz ichida tarqalmaydi;
+#: 2. Bo'sh bo'lsa (standart holat) hech kimga imtiyoz yo'q;
+#: 3. Har ishlatilishi `WARNING` bo'lib logga tushadi — kim, qachon.
+#:
+#: Ro'yxatdagi ID baribir haqiqiy a'zo bo'lishi shart: bu tekshiruv
+#: aylanib o'tilmaydi, faqat **kod** bosqichi tashlab ketiladi.
+ENV_OTP_BYPASS_IDS = "CHAQIMCHI_OTP_BYPASS_IDS"
+
+
+def _otp_bypass_ids() -> set:
+    raw = os.environ.get(ENV_OTP_BYPASS_IDS, "")
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
+def _pick_member(members: List[Dict[str, Any]], site_id: Optional[str]) -> Dict[str, Any]:
+    """A'zolikdan qaysi obyektga kirishni tanlaydi.
+
+    Ikkala kirish yo'li (kod bilan va sinov rejimida) shu funksiyani
+    ishlatadi — mantiq ikki joyda takrorlansa, biri o'zgarib ikkinchisi
+    boshqacha ishlab qolardi.
+    """
+    if site_id:
+        member = next((item for item in members if item["site_id"] == site_id), None)
+    elif len(members) == 1:
+        member = members[0]
+    else:
+        raise HTTPException(409, "Bir nechta obyekt bor; site_id ko'rsating")
+    if not member:
+        raise HTTPException(401, "Owner akkaunti topilmadi")
+    return member
+
+
+def _owner_session(member: Dict[str, Any]) -> Dict[str, Any]:
+    """Owner uchun session javobi."""
+    try:
+        token = issue_owner_token(member)
+    except Exception as exc:
+        raise HTTPException(503, "Owner session yaratilmadi") from exc
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": 12 * 3600,
+        "site_id": member["site_id"],
+        "role": member["role"],
+    }
 
 
 def _attendance_enabled() -> bool:
@@ -2692,6 +2753,26 @@ async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
     # Akkaunt bor-yo'qligini tashqariga oshkor qilmaymiz.
     if not members:
         return {"ok": True, "message": "Agar akkaunt mavjud bo'lsa, kod yuborildi"}
+
+    # Sinov ro'yxatidagilar kod terib o'tirmaydi — token darhol beriladi.
+    # A'zolik tekshiruvi (yuqorida) baribir o'tadi: imtiyoz faqat **kod**
+    # bosqichini olib tashlaydi, begona odamni ichkariga kiritmaydi.
+    if str(body.telegram_id) in _otp_bypass_ids():
+        member = _pick_member(members, body.site_id)
+        logger.warning(
+            "OTP CHETLAB O'TILDI (sinov rejimi): telegram_id=%s site_id=%s. "
+            "Ishlab chiqarishda %s bo'sh bo'lishi kerak.",
+            body.telegram_id,
+            member["site_id"],
+            ENV_OTP_BYPASS_IDS,
+        )
+        return {
+            "ok": True,
+            "message": "Sinov rejimi: kod so'ralmadi",
+            "bypass": True,
+            **_owner_session(member),
+        }
+
     secret = _owner_secret()
     test_code = os.environ.get("CHAQIMCHI_OTP_TEST_CODE", "").strip()
     code = get_event_store().create_otp(
@@ -2718,26 +2799,8 @@ async def owner_verify_otp(body: OtpVerifyBody) -> Dict[str, Any]:
     if not get_event_store().verify_otp(body.telegram_id, body.code, secret=secret):
         raise HTTPException(401, "Kod noto'g'ri yoki muddati tugagan")
     members = get_event_store().members_for_telegram(body.telegram_id)
-    if body.site_id:
-        member = next((item for item in members if item["site_id"] == body.site_id), None)
-    elif len(members) == 1:
-        member = members[0]
-    else:
-        raise HTTPException(409, "Bir nechta obyekt bor; site_id ko'rsating")
-    if not member:
-        raise HTTPException(401, "Owner akkaunti topilmadi")
-    try:
-        token = issue_owner_token(member)
-    except Exception as exc:
-        raise HTTPException(503, "Owner session yaratilmadi") from exc
-    return {
-        "ok": True,
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": 12 * 3600,
-        "site_id": member["site_id"],
-        "role": member["role"],
-    }
+    member = _pick_member(members, body.site_id)
+    return {"ok": True, **_owner_session(member)}
 
 
 @app.get("/api/v1/owner/events")

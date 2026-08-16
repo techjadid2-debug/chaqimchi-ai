@@ -66,7 +66,19 @@
 let token=localStorage.getItem('chaqimchi_owner_token')||'';
 const $=id=>document.getElementById(id);
 async function passwordLogin(){const r=await fetch('/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('portalUsername').value.trim(),password:$('portalPassword').value})});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}if(d.account.role!=='customer'){$('loginMsg').textContent='Bu login mijoz akkaunti emas.';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
-async function requestOtp(){const id=$('telegram').value.trim();const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegram_id:id})});const d=await r.json();$('loginMsg').textContent=d.message||d.detail||'';$('verify').classList.remove('hidden')}
+async function requestOtp(){
+  const id=$('telegram').value.trim();
+  const params=new URLSearchParams(location.search);
+  const body={telegram_id:id};
+  if(params.get('site'))body.site_id=params.get('site');
+  const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  $('loginMsg').textContent=d.message||d.detail||'';
+  // Sinov rejimida server tokenni darhol qaytaradi — kod oynasini
+  // umuman ko'rsatmaymiz, aks holda mijoz kutib qolardi.
+  if(r.ok&&d.access_token){token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp();return}
+  $('verify').classList.remove('hidden');
+}
 async function verifyOtp(){const params=new URLSearchParams(location.search);const body={telegram_id:$('telegram').value.trim(),code:$('code').value.trim()};if(params.get('site'))body.site_id=params.get('site');const r=await fetch('/api/v1/owner/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path,options={}){const headers={Authorization:`Bearer ${token}`,...(options.headers||{})};const r=await fetch(path,{...options,headers});const d=await r.json();if(r.status===401){logout();throw new Error('Session tugadi')}if(!r.ok)throw new Error(d.detail||'So‘rov bajarilmadi');return d}

@@ -347,3 +347,151 @@ def test_owner_trend_returns_a_full_week(production_client) -> None:
     assert trend["total"] == 1
     # Bugun oxirgi ustun bo'lishi kerak — grafik chapdan o'ngga o'sadi.
     assert trend["daily"][-1]["entered"] == 1
+
+
+# ── Sinov rejimi: kodsiz kirish ──────────────────────────────────────────
+#
+# Mijozga ko'rsatish uchun vaqtincha yoqilgan imtiyoz.  Bu **ataylab
+# qo'yilgan zaiflik**, shuning uchun chegaralari testda qat'iy
+# belgilanadi: standart holatda o'chiq, faqat ro'yxatdagi ID ga, va
+# faqat haqiqiy a'zoga.
+
+
+# Har test **o'z** Telegram ID sidan foydalanadi.  `ratelimit` baketi
+# telegram_id bo'yicha va testlar orasida umumiy: bir xil ID uchinchi
+# so'rovdan keyin 429 oladi va tekshirilayotgan mantiqqa umuman yetib
+# bormaydi — test esa sababini aytmasdan qulardi.
+
+
+def _member(client, site_id: str, telegram_id: str, role: str = "owner") -> None:
+    client.post(
+        f"/api/v1/admin/sites/{site_id}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": telegram_id, "role": role},
+    )
+
+
+def test_listed_id_gets_a_token_without_a_code(production_client, monkeypatch) -> None:
+    """Ro'yxatdagi odam kod terib o'tirmaydi."""
+    client, messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476913898")
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898,7631725599")
+
+    response = client.post(
+        "/api/v1/owner/auth/request",
+        json={"telegram_id": "5476913898", "site_id": site["site_id"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bypass"] is True
+    assert body["access_token"], "token darhol berilishi kerak"
+    assert body["site_id"] == site["site_id"]
+    # Kod yuborilmasligi ham kerak — bekorga xabar bormasin.
+    assert not messages
+
+
+def test_the_token_actually_opens_the_panel(production_client, monkeypatch) -> None:
+    """Token haqiqiy bo'lsin — "ok" deb yolg'on aytmasin."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "7631725599")
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898,7631725599")
+
+    token = client.post(
+        "/api/v1/owner/auth/request",
+        json={"telegram_id": "7631725599", "site_id": site["site_id"]},
+    ).json()["access_token"]
+
+    events = client.get("/api/v1/owner/events", headers={"Authorization": f"Bearer {token}"})
+    assert events.status_code == 200
+
+
+def test_bypass_is_off_by_default(production_client, monkeypatch) -> None:
+    """Muhit o'zgaruvchisi qo'yilmasa imtiyoz umuman yo'q."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000001")
+    monkeypatch.delenv("CHAQIMCHI_OTP_BYPASS_IDS", raising=False)
+
+    body = client.post(
+        "/api/v1/owner/auth/request",
+        json={"telegram_id": "5476000001", "site_id": site["site_id"]},
+    ).json()
+
+    assert "access_token" not in body, "standart holatda kodsiz kirish bo'lmasin"
+    assert not body.get("bypass")
+
+
+def test_unlisted_id_still_needs_a_code(production_client, monkeypatch) -> None:
+    """Imtiyoz aynan ro'yxatdagilarga — qolganlarga tegmaydi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "999000111")
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898,7631725599")
+
+    body = client.post(
+        "/api/v1/owner/auth/request",
+        json={"telegram_id": "999000111", "site_id": site["site_id"]},
+    ).json()
+
+    assert "access_token" not in body
+
+
+def test_bypass_does_not_let_in_a_stranger(production_client, monkeypatch) -> None:
+    """Eng muhim chegara: ro'yxatda bo'lish **a'zolikni almashtirmaydi**.
+
+    Aks holda ro'yxatga tushib qolgan ID istalgan obyektga kira olardi.
+    """
+    client, _messages = production_client
+    _site, _device, _headers = _provision(client)
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476000002")
+
+    body = client.post(
+        "/api/v1/owner/auth/request", json={"telegram_id": "5476000002"}
+    ).json()
+
+    # Hech qanday obyektga a'zo emas → token yo'q, sir ham oshkor bo'lmaydi.
+    assert "access_token" not in body
+    assert body["message"] == "Agar akkaunt mavjud bo'lsa, kod yuborildi"
+
+
+def test_bypass_use_is_logged_loudly(production_client, monkeypatch, caplog) -> None:
+    """Vaqtincha zaiflik jimgina qolib ketmasligi kerak."""
+    import logging
+
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000003")
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476000003")
+
+    with caplog.at_level(logging.WARNING):
+        client.post(
+            "/api/v1/owner/auth/request",
+            json={"telegram_id": "5476000003", "site_id": site["site_id"]},
+        )
+
+    # `getMessage()` — `%s` o'rinlari to'ldirilgan matn; `record.message`
+    # formatlashdan oldin bo'sh bo'lishi mumkin.
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "CHETLAB O'TILDI" in text and "5476000003" in text for text in messages
+    ), "imtiyoz ishlatilgani ogohlantirish bo'lib logga tushsin"
+
+
+def test_code_login_still_works(production_client, monkeypatch) -> None:
+    """Odatdagi yo'l buzilmaganini tekshiramiz."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "424242")
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "5476913898")
+
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "424242"})
+    verified = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "424242", "site_id": site["site_id"], "code": "123456"},
+    )
+
+    assert verified.status_code == 200
+    assert verified.json()["access_token"]

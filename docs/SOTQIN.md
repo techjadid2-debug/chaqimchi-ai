@@ -1,8 +1,12 @@
-# Sotqin R1 — lokal qurilma va edge AI
+# Sotqin R1 (Chaqimchi Box) — lokal qurilma va edge AI
 
-**Sotqin** hozirgi do‘kon MVP’ning yagona lokal qurilmasi. Mijoz NVR va
-kameralar bilan birga Sotqinni buyurtma qiladi; dastur oldindan o‘rnatiladi va
-pairing orqali Chaqimchi Cloud’ga bog‘lanadi.
+> **Holat (2026-08-16): keyingi bosqich mahsuloti.** Asosiy yo‘l hozir
+> mijozning mavjud Windows kompyuteri (`docs/DOKON_MVP.md`). Box kodi
+> ishlaydi va saqlanadi, lekin faol sotuv va rivojlantirish fokusida emas.
+
+**Sotqin** — kompyuteri yo‘q mijozlar uchun tayyor mini-PC yechimi. Mijoz
+NVR va kameralar bilan birga Sotqinni buyurtma qiladi; dastur oldindan
+o‘rnatiladi va pairing orqali Chaqimchi Cloud’ga bog‘lanadi.
 
 ## R1 apparat profili
 
@@ -69,8 +73,8 @@ Nega shunday bo'lingani va qurilma sig'imi qanday hisoblangani:
 - config 0600 permission bilan atomik saqlanadi;
 - Sotqin uchun `chaqimchi-sotqin`/`x86_64` imzolangan update va rollback.
 
-Eski `/api/v1/edge/*`, `pair_edge.py` va `install_edge.sh` vaqtincha
-compatibility alias bo'lib qoladi.
+Eski `/api/v1/edge/*` endpointlari compatibility alias bo'lib qoladi
+(`pair_edge.py` va `install_edge.sh` shim'lari o'chirilgan).
 
 ## O'rnatish
 

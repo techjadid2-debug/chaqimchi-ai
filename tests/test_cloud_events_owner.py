@@ -49,6 +49,42 @@ def _provision(client: TestClient):
     return site, device, headers
 
 
+def test_config_profile_matches_the_device_product(production_client) -> None:
+    """Windows do'kon kompyuteri N100 pasportini olmasin.
+
+    Ilgari hamma qurilmaga bitta profil ketardi: Windows PC o'zini
+    "Intel N100" deb hisoblab, 40 GB bufer va 20 GB bo'sh joy siyosatini
+    qabul qilardi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+
+    # Sotqin (product_name'siz eski claim ham shu yo'lga tushadi).
+    sotqin_config = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert sotqin_config["product"]["hardware_model"] == "Intel N100"
+    assert sotqin_config["buffer_policy"]["max_bytes"] == 40 * 1024**3
+
+    # Windows qurilma — o'z profili.
+    code = client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/pairing",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+    ).json()["pairing_code"]
+    windows = client.post(
+        "/api/v1/devices/claim",
+        json={"pairing_code": code, "product_name": "Chaqimchi Windows"},
+    ).json()
+    win_headers = {
+        "X-Site-Id": windows["site_id"],
+        "X-Device-Id": windows["device_id"],
+        "X-Device-Token": windows["device_token"],
+    }
+    win_config = client.get("/api/v1/sotqin/config", headers=win_headers).json()
+    assert win_config["product"]["name"] == "Chaqimchi Windows"
+    assert "hardware_model" not in win_config["product"]
+    assert win_config["product"]["max_cameras"] == 4
+    assert "max_bytes" not in win_config["buffer_policy"], "N100 bufer siyosati ketmasin"
+
+
 def test_media_quota_evicts_oldest_media_but_keeps_events(
     production_client, monkeypatch
 ) -> None:

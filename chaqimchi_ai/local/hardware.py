@@ -24,6 +24,8 @@ import shutil
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
+
 logger = logging.getLogger(__name__)
 
 #: Bitta kamerani kuzatish uchun sekundiga shuncha inferens kerak.
@@ -53,7 +55,8 @@ BASE_RAM_MB = 900
 MIN_FREE_DISK_GB = 20
 
 #: Mahsulot va'da qilgan chegara — bahodan qat'i nazar oshirilmaydi.
-MAX_SUPPORTED_CAMERAS = 4
+#: Qiymat yagona manbadan: `chaqimchi_ai/limits.py`.
+MAX_SUPPORTED_CAMERAS = SHOP_MAX_CAMERAS
 
 
 @dataclass

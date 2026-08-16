@@ -1,20 +1,23 @@
 # Do‘kon MVP — canonical kontrakt va joriy holat
 
-Sana: 2026-08-13. Bu hujjat mahsulot bo‘yicha yagona faol qaror manbasi.
-Eski Orange Pi, umumiy Face platforma va taxminiy tarif hujjatlari arxiv.
+Sana: 2026-08-16. Bu hujjat mahsulot bo‘yicha yagona faol qaror manbasi.
+Eski Orange Pi, umumiy Face platforma va taxminiy tarif hujjatlari arxivda;
+lokal Face ID davomat to‘plami ham arxivlandi
+(`git tag archive/attendance-local`).
 
 ## Mahsulot qarori
 
 | Qaror | Canonical qiymat |
 |---|---|
 | Mijoz | Do‘kon |
-| Pilot | 1 do‘kon, 4 kamera |
-| Edge | Sotqin R1: Intel N100, 8 GB RAM, 128 GB NVMe |
-| Video | To‘liq arxiv NVR’da; Sotqin faqat event buffer/klip |
-| Kamera ulash | Admin panelda qo‘lda RTSP/NVR substream |
-| AI | Odam deteksiyasi/tracking lokal; event/hisobot/alert cloud |
-| Davomat | Rozilikli xodim, embedding faqat edge’da, bepul yopiq pilot |
-| Tijoriy Face | Commercial model bundle tasdiqlanmaguncha yopiq |
+| Pilot | 1 do‘kon, 4 kamera (yagona manba: `chaqimchi_ai/limits.py`) |
+| Asosiy qurilma | **Mijozning mavjud Windows 10/11 kompyuteri** (`Chaqimchi_AI_Setup.exe`) |
+| Keyingi bosqich | Chaqimchi Box — Sotqin R1: Intel N100, 8 GB, 128 GB NVMe (kod tayyor, sotuv fokusda emas) |
+| Video | To‘liq arxiv NVR’da; qurilma faqat event buffer/klip |
+| Kamera ulash | Sozlash ustasi: ONVIF qidiruv, NVR kanal skaneri yoki qo‘lda RTSP; admin panelda masofadan ham kiritish mumkin |
+| AI | Odam deteksiyasi/tracking lokal (OpenVINO, CPU; yaroqli iGPU bo‘lsa GPU); event/hisobot/alert cloud |
+| Yuz tanish | Faol scope’da YO‘Q — keyinchalik **cloud** tomonda quriladi |
+| Panelga kirish | Kirish havolasi (`?key=`, admin/bot beradi) yoki Telegram OTP; parolli portal akkauntlar |
 
 ## MVP’da bor
 
@@ -24,95 +27,73 @@ Eski Orange Pi, umumiy Face platforma va taxminiy tarif hujjatlari arxiv.
 - kamera tamper, after-hours person, restricted zone va loitering;
 - qoida engine, cooldown, snapshot va pre/post event MP4 klip;
 - offline SQLite outbox, cloud replay, tenantga ajratilgan media;
+- Windows o‘rnatuvchi: Keyingi→Keyingi→Tayyor, pairing kod fayl nomidan,
+  sozlash ustasi (ONVIF/NVR skaner), imzolangan OTA (15 daqiqa tekshiruv,
+  faqat yangiroq versiya, avto-rollback);
 - admin provisioning, pairing, encrypted RTSP inventari, heartbeat va config
-  ACK/NACK;
+  ACK/NACK, per-site update policy (auto/hold/pin);
 - owner statistikasi, trend, kamera rollari, line/zone/ish vaqti sozlamasi,
-  Telegram alert/digest;
-- xodim CRUD, haftalik jadval, keldi-ketdi/kechikish/erta ketish, CSV;
-- lokal yuz enrollment/delete; embedding va davomat snapshoti cloudga
-  chiqmaydi;
-- installer control + retail + attendance xizmatlarini va modelni o‘rnatadi;
-- public katalogda faqat `person_count`, `queue_length`, `store_security`.
+  Telegram alert/digest, kirish havolasi;
+- cloud o‘z-o‘zini kuzatishi: qurilma offline/kamera yo‘qolishi alertlari,
+  server disk alerti, site boshiga media kvotasi, kunlik shifrlangan backup.
 
 ## Kod bor, lekin hali real qurilmada qabul qilinmagan
 
-- 4 kamerali N100 sig‘imi va termal barqarorlik;
-- 72 soatlik elektr/internet/kamera uzilishi soak testi;
+- 4 kamerali sig‘im bahosi real i5-4590 da o‘lchov bilan tasdiqlanmagan
+  (`chaqimchi_ai/local/hardware.py` dagi `INFERENCES_PER_CORE=8.0` — taxmin);
+- 72 soatlik elektr/internet/kamera uzilishi barqarorlik sinovi;
 - real do‘konlarda line/queue/tamper/loitering aniqlik kalibratsiyasi;
-- end-to-end production installer va rollback sinovi;
-- davomat false accept/recall va ikki kamera arrival/departure sinovi.
+- Windows OTA rollback stsenariysining real qurilmada sinovi;
+- N100 Box yo‘li uchun benchmark/soak (Box keyingi bosqichga qoldirilgan).
 
-Shu besh band tugamaguncha saytdagi funksiyalar production’da sotuvga
+Shu bandlar tugamaguncha saytdagi funksiyalar production’da sotuvga
 ochilmaydi. `CHAQIMCHI_AVAILABLE_FEATURES` ning o‘zi yetarli emas:
 `CHAQIMCHI_N100_ACCEPTANCE_FILE` ham tekshiruvdan o‘tishi shart.
 
 ## MVP’da yo‘q
 
 - o‘g‘rilik, jinoyatchi yoki “shubhali niyat” klassifikatsiyasi;
-- mijozlarni yuz orqali tanish yoki qora ro‘yxat;
+- yuz tanish: mijoz Face ID ham, xodim davomati ham (davomat keyin cloudda);
 - uzluksiz videoni cloudga ko‘chirish;
 - POS/savdo konversiyasi, shelf/stock va heatmap;
-- ONVIF discovery, vendor P2P va avtomatik NVR kanal importi;
+- vendor P2P (faqat lokal tarmoqdagi RTSP/ONVIF bilan ishlaymiz);
 - QSV hardware decode va 8 kamera SLA;
-- pullik davomat — commercial yuz modeli litsenziyasigacha.
-
-## Davomat maxfiylik kontrakti
-
-Owner cloud panelda xodim ismi, tabel ID, yozma rozilik va haftalik jadvalni
-yaratadi. Enrollment Sotqinning lokal panelida bajariladi. Cloudga faqat
-xodim UUID, canonical ism, jadval, first/last seen va hisoblangan status
-boradi. Foto, embedding va lokal fayl yo‘li chiqmaydi. Xodim o‘chirilsa keyingi
-config reconcile’da lokal embedding ham o‘chadi.
-
-Davomat kamerasi `Kelish`, `Ketish` yoki `Ikkalasi` rolida belgilanadi.
-Checkout missing faqat smena tugagach ketish kamerasi hodisasi bo‘lmasa
-chiqadi; oddiy ketma-ket matchlar “ketdi” deb noto‘g‘ri hisoblanmaydi.
-
-Production’da ikki rejimdan bittasi shart:
-
-1. `CHAQIMCHI_ATTENDANCE_PILOT=true`, bepul yopiq pilot, snapshotlar o‘chiq;
-2. `CHAQIMCHI_FACE_MODEL_LICENSED=true` va SHA256 bilan tekshiriladigan
-   commercial model manifesti.
+- Windows xizmat (service) rejimi — hozircha user sessiyasida ishlaydi.
 
 ## Qabul mezoni
 
-`scripts/accept_n100_pilot.py` quyidagilarni tekshiradi:
+### Windows yo‘li (asosiy)
 
-- benchmark Intel GPU’da, haqiqiy do‘kon videosida va kamida 60 soniya;
-- verdict 4 kamera uchun warning’siz `ok`;
-- soak kamida 72 soat va eng kam faol kamera soni 4;
-- kamera uptime kamida 99%, kutilmagan restart va yo‘qolgan critical event 0;
-- maksimal harorat 85°C dan oshmagan.
+Sotuvga ochishdan oldin real do‘kon kompyuterida:
 
-Soak hisoboti qurilmada qo'lda tuzilmaydi:
+- 4 kamera bilan **72 soat** uzluksiz ishlash: kutilmagan restart 0,
+  yo‘qolgan critical event 0, kamera uptime ≥ 99%;
+- kunlik kirish soni qo‘lda sanash bilan solishtirilganda ±10% ichida;
+- hodisa klipi cloudga yetib borishi va owner panelda ochilishi;
+- OTA yangilanish (test relizi bilan) muvaffaqiyatli o‘tishi.
 
-```bash
-sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/soak_n100.py \
-  --hours 72 --output soak-72h.json
-```
+Natija qabul JSON fayliga yoziladi va `CHAQIMCHI_N100_ACCEPTANCE_FILE`
+orqali ulanadi (fayl nomi tarixiy — mexanizm bitta).
 
-Soak hisoboti JSON maydonlari:
+### Box / N100 yo‘li (keyingi bosqich)
 
-```json
-{
-  "duration_hours": 72.1,
-  "cameras_min_active": 4,
-  "unexpected_restarts": 0,
-  "camera_uptime_percent": 99.5,
-  "max_temperature_c": 78.0,
-  "undelivered_critical_events": 0
-}
-```
+`scripts/accept_n100_pilot.py` tekshiradi: benchmark Intel GPU’da, haqiqiy
+do‘kon videosida ≥ 60 soniya; verdict 4 kamera uchun warning’siz `ok`; soak
+≥ 72 soat, uptime ≥ 99%, restart 0, harorat ≤ 85°C. Soak hisobotini
+`scripts/soak_n100.py` tuzadi.
 
 ## Qolgan ishlar tartibi
 
-1. Sotqin R1 ga release o‘rnatish va 4 ta haqiqiy RTSP substream ulash.
-2. Kamera rollari, line, restricted zone, queue va ish vaqtini kalibrlash.
-3. Haqiqiy videoda benchmark, keyin 72 soat soak; qabul artefaktini yaratish.
-4. Bitta do‘konda har hodisani owner panel/Telegram/klipgacha E2E tekshirish.
-5. Yozma rozilikli 3–5 xodim bilan attendance pilot va CSVni qabul qilish.
-6. Natija o‘tgach uch public feature’ni ochish; 8 kamera yoki yangi funksiyani
-   faqat alohida o‘lchovdan keyin qo‘shish.
+1. Jonli Windows qurilmada 4 ta haqiqiy RTSP substream bilan to‘liq oqimni
+   tekshirish (hodisa → snapshot → klip → owner panel → Telegram).
+2. `INFERENCES_PER_CORE` ni real i5-4590 da bir marta o‘lchash va
+   `hardware.py` ni o‘lchovga bog‘lash.
+3. Kamera rollari, line, restricted zone, queue va ish vaqtini kalibrlash.
+4. 72 soat barqarorlik sinovi va qabul artefaktini yaratish.
+5. Natija o‘tgach public feature’larni ochish (`person_count`,
+   `queue_length`, `store_security`).
+6. Keyingi bosqich: o‘rnatuvchini Authenticode bilan imzolash, Windows
+   service rejimi, Box sotuvini qayta ochish, cloud yuz tanish davomati.
 
 ## Ochiq qarorlar
 
@@ -120,5 +101,4 @@ Soak hisoboti JSON maydonlari:
 - Qaysi kamera kirish, kassa, savdo zali va ombor rolida bo‘ladi?
 - Taqiqlangan zonalar va ish soatlari aniq qanday?
 - Telegram alert kimlarga va qaysi severity’dan yuboriladi?
-- 72 soat soak’ni boshlash sanasi va qabul qiluvchi mas’ul kim?
-- Davomat pilotidagi xodimlar rozilik shakli va retention siyosati qanday?
+- 72 soat sinovni boshlash sanasi va qabul qiluvchi mas’ul kim?

@@ -40,6 +40,7 @@ from chaqimchi_ai.licensing.plans import (
     is_sellable,
     usd_rate_uzs,
 )
+from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
 from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
 from chaqimchi_ai.settings import SceneLineSettings, SceneZoneSettings
 from chaqimchi_ai.sotqin_profile import (
@@ -461,6 +462,8 @@ def require_device(
         "site_id": x_site_id,
         "device_id": x_device_id,
         "device_token": x_device_token,
+        # Config profili qurilma turiga qarab tanlanadi (Windows vs Sotqin).
+        "product_name": str(device.get("product_name") or ""),
     }
 
 
@@ -2609,14 +2612,33 @@ async def edge_site_config(
     features = get_store().site_feature_summary(device["site_id"])
     # Edge AI qarorini chiqarmaydi: faqat cloud jobiga kerakli sampling va
     # queue turini qabul qiladi. Active assignmentlar revision bilan keladi.
-    config["product"] = product_payload()
-    config["buffer_policy"] = {
-        "max_days": BUFFER_RETENTION_DAYS,
-        "max_bytes": BUFFER_MAX_BYTES,
-        "min_free_bytes": MIN_FREE_BYTES,
-        "critical_priority": True,
-        "full_video_storage": "nvr",
-    }
+    #
+    # Profil qurilma turiga qarab: ilgari HAMMA qurilmaga N100 pasporti va
+    # 40 GB bufer siyosati ketardi — Windows do'kon kompyuteri o'zini
+    # "Intel N100" deb hisoblab, yarim bo'sh 250 GB diskda 20 GB bo'sh joy
+    # talab qilardi.
+    if str(device.get("product_name") or "").lower().startswith("chaqimchi windows"):
+        config["product"] = {
+            "name": "Chaqimchi Windows",
+            "hardware_profile": "WINDOWS-SHOP-PC",
+            "guaranteed_cameras": SHOP_MAX_CAMERAS,
+            "max_cameras": SHOP_MAX_CAMERAS,
+        }
+        # Windows'da bufer chegaralarini qurilmaning o'zi diskiga qarab
+        # boshqaradi (`chaqimchi_ai/outbox.py` prune + settings).
+        config["buffer_policy"] = {
+            "critical_priority": True,
+            "full_video_storage": "nvr",
+        }
+    else:
+        config["product"] = product_payload()
+        config["buffer_policy"] = {
+            "max_days": BUFFER_RETENTION_DAYS,
+            "max_bytes": BUFFER_MAX_BYTES,
+            "min_free_bytes": MIN_FREE_BYTES,
+            "critical_priority": True,
+            "full_video_storage": "nvr",
+        }
     config["cameras"] = get_store().list_cameras(device["site_id"], include_source=True)
     config["cloud_features"] = [
         {

@@ -34,6 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from chaqimchi_ai import __version__
+from chaqimchi_ai.limits import NVR_SCAN_CHANNELS, SHOP_MAX_CAMERAS
 from chaqimchi_ai.local import (
     camera_probe,
     cloud_config,
@@ -52,7 +53,8 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 #: Do'kon profili: ko'pi bilan 4 kamera qabul qilingan (`docs/DOKON_MVP.md`).
 #: Sehrgar bundan ortig'ini taklif qilmaydi — o'lchanmagan sig'imni va'da
 #: qilish keyin "sekin ishlaydi" degan shikoyatga aylanadi.
-MAX_CAMERAS = 4
+#: Qiymat yagona manbadan: `chaqimchi_ai/limits.py`.
+MAX_CAMERAS = SHOP_MAX_CAMERAS
 
 supervisor = RetailSupervisor()
 
@@ -356,7 +358,9 @@ async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
     #: holda har kanal uchun 11 ta variantni qayta sinardik.
     working_path: Optional[str] = None
 
-    for channel in range(1, MAX_CAMERAS + 1):
+    # Skaner limitdan ko'proq kanalni ko'radi (masalan kamera 5-kanalda
+    # turgan bo'lishi mumkin); tanlash baribir MAX_CAMERAS bilan cheklanadi.
+    for channel in range(1, NVR_SCAN_CHANNELS + 1):
         url: Optional[str] = None
         result = None
 

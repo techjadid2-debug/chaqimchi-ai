@@ -1,12 +1,18 @@
 # Chaqimchi AI — do‘kon MVP
 
-Chaqimchi AI hozir **Intel N100 Sotqin R1 + NVR/IP kamera + Cloud** sifatida
-faqat do‘konlar uchun qurilmoqda. Birinchi qabul profili — bitta do‘kon va
-ko‘pi bilan **4 kamera**. Uzluksiz video NVR’da qoladi; Sotqin lokal tahlil
-qiladi, cloudga esa hodisa, ruxsat etilgan media, hisobot va health yuboriladi.
+Chaqimchi AI hozir **mijozning mavjud Windows kompyuteri + NVR/IP kamera +
+Cloud** sifatida faqat do‘konlar uchun qurilmoqda. Birinchi qabul profili —
+bitta do‘kon va ko‘pi bilan **4 kamera** (yagona manba:
+`chaqimchi_ai/limits.py`). Uzluksiz video NVR’da qoladi; tahlil do‘kon
+kompyuterida lokal ishlaydi, cloudga esa hodisa, ruxsat etilgan media,
+hisobot va health yuboriladi.
+
+**Chaqimchi Box** (Intel N100 mini-PC, usta bilan o‘rnatiladi) — keyingi
+bosqich mahsuloti: kodi repoda saqlanadi va ishlaydi, lekin faol sotuv va
+rivojlantirish fokusi hozir Windows yo‘lida.
 
 Canonical mahsulot kontrakti va joriy holat:
-[docs/DOKON_MVP.md](docs/DOKON_MVP.md). Qurilma tafsiloti:
+[docs/DOKON_MVP.md](docs/DOKON_MVP.md). Box qurilma tafsiloti:
 [docs/SOTQIN.md](docs/SOTQIN.md).
 
 ## MVP doirasi
@@ -14,13 +20,15 @@ Canonical mahsulot kontrakti va joriy holat:
 - odam kirishi/chiqishi, bandlik, navbat va zonada turish;
 - kamera yopilishi/burilishi, ish vaqtidan tashqari odam, taqiqlangan zona va
   uzoq turish;
-- owner panel, Telegram alert/digest, CSV, offline outbox va event klip;
-- yozma rozilikli xodimlar uchun lokal davomat Face ID — hozircha faqat
-  **bepul yopiq pilot**.
+- owner panel (kirish havolasi yoki Telegram kod bilan), Telegram
+  alert/digest, CSV, offline outbox va event klip;
+- kamera ulash: qo‘lda RTSP, ONVIF qidiruv va NVR kanal skaneri (bitta
+  login/parol bilan barcha kanallar).
 
-Tizim o‘g‘rilik, jinoyat yoki niyatni taxmin qilmaydi. Oddiy mijoz Face ID’i,
-Orange Pi mahsuloti va 8 kamera va’dasi faol MVP scope’ida emas. Commercial yuz
-modelining manifesti tekshirilmaguncha pullik davomat production’da fail-closed.
+Tizim o‘g‘rilik, jinoyat yoki niyatni taxmin qilmaydi. Yuz tanish (davomat
+Face ID) faol scope’da **emas**: lokal to‘plam arxivlangan
+(`git tag archive/attendance-local`), keyinchalik cloud tomonda quriladi.
+Orange Pi mahsuloti va 8 kamera va’dasi ham scope’da emas.
 
 ## Ishga tushirish
 
@@ -40,11 +48,10 @@ Asosiy xizmatlar:
 |---|---|
 | `make run-cloud` | Admin, owner, billing va event cloud’i (`:8750`) |
 | `make run-local` | Mijoz kompyuteridagi sozlash ustasi va panel (`:8760`) |
-| `make run-sotqin` | Sotqin control agent |
-| `make run-retail` | Lokal do‘kon analitikasi |
-| `make run-web` | Lokal yopiq-pilot davomat/enrollment paneli (`:8743`) |
+| `make run-retail` | Lokal do‘kon analitikasi (AI zanjiri) |
+| `make run-sotqin` | Box (N100) control agenti — keyingi bosqich |
 
-## Windows lokal o‘rnatish
+## Windows lokal o‘rnatish (asosiy yo‘l)
 
 Do‘kon egasi mavjud Windows kompyuteriga o‘zi o‘rnatadi: `Chaqimchi_AI_Setup.exe`
 → Keyingi → Keyingi → Tayyor → brauzerda sozlash ustasi ochiladi. Python va AI
@@ -58,8 +65,10 @@ makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.ex
 
 Mijozga beriladigan qadam-baqadam yo‘riqnoma saytda: `/install`.
 Texnik tafsilot: [docs/INSTALLER.md](docs/INSTALLER.md) 0-bo‘lim.
+Reliz imzolash va masofadan yangilash (15 daqiqalik tekshiruv, avto-rollback):
+[docs/RELIZ_VA_OTA.md](docs/RELIZ_VA_OTA.md).
 
-Production release qurish va N100 ga o‘rnatish:
+## Box (N100) o‘rnatish — keyingi bosqich
 
 ```bash
 ./scripts/build_sotqin_release.sh
@@ -67,35 +76,22 @@ Production release qurish va N100 ga o‘rnatish:
 sudo ./scripts/install_sotqin.sh
 ```
 
-Installer control, retail va ixtiyoriy attendance xizmatlarini, verifikatsiya
-qilingan OpenVINO retail modelini va lokal secretlarni o‘rnatadi. Kameralar
-hozir admin panelda RTSP manzilini qo‘lda kiritish orqali ulanadi; ONVIF
-discovery hali yo‘q.
-
 ## Sotuv darvozasi
 
-Public funksiyani ochish uchun faqat environment flag yetmaydi. Haqiqiy do‘kon
-videosida N100 benchmark va 4 kamera bilan 72 soat soak hisobotidan qabul fayli
-yaratilishi kerak:
+Public AI funksiyalarini ochish uchun faqat environment flag yetmaydi —
+haqiqiy do‘konda o‘tkazilgan qabul sinovi fayli kerak
+(`CHAQIMCHI_N100_ACCEPTANCE_FILE` + `CHAQIMCHI_AVAILABLE_FEATURES`).
 
-```bash
-python scripts/benchmark_n100.py --seconds 60 --cameras 4 \
-  --source pilot-store.mp4 --json benchmark.json
-sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/soak_n100.py \
-  --hours 72 --output soak-72h.json
-python scripts/accept_n100_pilot.py --benchmark benchmark.json \
-  --soak soak-72h.json --approved-by "Qabul komissiyasi" \
-  --output acceptance/n100-r1.json
-```
-
-So‘ng production’da `CHAQIMCHI_N100_ACCEPTANCE_FILE` va
-`CHAQIMCHI_AVAILABLE_FEATURES` sozlanadi. Qabul mezonlari va qolgan ishlar
-[docs/DOKON_MVP.md](docs/DOKON_MVP.md) da.
+Windows yo‘li uchun mezon: **real do‘kon kompyuterida 4 kamera bilan 72
+soat uzluksiz, restartsiz ishlash** va kunlik hisobotning qo‘lda sanash
+bilan solishtirilgan tekshiruvi. Hozircha bu qabul o‘tkazilmagan — shuning
+uchun sotuvda ehtiyotkor va’da beriladi (batafsil:
+[docs/DOKON_MVP.md](docs/DOKON_MVP.md)).
 
 ## Asosiy hujjatlar
 
 - [Do‘kon MVP kontrakti va gap-list](docs/DOKON_MVP.md)
-- [Sotqin R1](docs/SOTQIN.md)
+- [Sotqin R1 / Box](docs/SOTQIN.md)
 - [Retail pipeline](chaqimchi_ai/retail/README.md)
 - [Installer](docs/INSTALLER.md)
 - [Reliz chiqarish va OTA](docs/RELIZ_VA_OTA.md)

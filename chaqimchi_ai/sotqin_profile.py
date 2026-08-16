@@ -7,13 +7,16 @@ turadi.  Shuning uchun 128 GB NVMe'ni uzluksiz videoga ishlatish mumkin emas.
 
 from __future__ import annotations
 
+from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
+
 PRODUCT_NAME = "Sotqin"
 HARDWARE_PROFILE = "SOTQIN-N100-8-128-R1"
 HARDWARE_MODEL = "Intel N100"
 HARDWARE_REVISION = "R1"
 
-# Sotilgan R1 profili: 4 kamera SLA, 8 kamera esa obyekt qabul testidan keyin.
-GUARANTEED_CAMERAS = 4
+# Sotilgan R1 profili: 4 kamera SLA (yagona manba: chaqimchi_ai/limits.py),
+# 8 kamera esa apparat imkoniyati — faqat obyekt qabul testidan keyin.
+GUARANTEED_CAMERAS = SHOP_MAX_CAMERAS
 MAX_CAMERAS = 8
 
 # 128 GB NVMe'da OS, update rollback va loglar uchun joy qoldiriladi.

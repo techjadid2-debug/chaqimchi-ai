@@ -221,3 +221,31 @@ def test_version_is_hidden_until_it_is_known() -> None:
         html = (STATIC / name).read_text(encoding="utf-8")
         block = html[html.index(f'id="{marker}"'):]
         assert "hidden" in block[: block.index(">") + 1], f"{name}: boshida yashirin bo'lsin"
+
+
+# ── Kesh tokeni mazmunga bog'liq bo'lsin ─────────────────────────────────
+#
+# Haqiqiy xato: `?v=` qo'lda qo'yiladigan sana edi (`v=20260816-v12`) va
+# uni yangilash unutildi.  JS o'zgardi, token o'zgarmadi — saytga qaytgan
+# mijoz brauzer keshidan **eski** faylni olardi va tuzatish unga yetib
+# bormasdi.  Serverda hammasi to'g'ri turardi, ekranda esa eskisi.
+
+
+def _content_token(name: str) -> str:
+    import hashlib
+
+    return hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
+
+
+@pytest.mark.parametrize("asset", ["site.js", "site.css"])
+def test_cache_token_matches_the_file_contents(asset: str) -> None:
+    """Fayl o'zgarsa token ham o'zgarishi **shart**.
+
+    Shu test tufayli uni unutib bo'lmaydi: mazmun o'zgargan zahoti
+    test qulaydi va to'g'ri qiymatni aytadi.
+    """
+    html = (STATIC / "site.html").read_text(encoding="utf-8")
+    expected = _content_token(asset)
+    assert f"/assets/{asset}?v={expected}" in html, (
+        f"{asset} o'zgargan — site.html dagi `?v=` ni `{expected}` ga almashtiring"
+    )

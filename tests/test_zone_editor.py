@@ -172,6 +172,11 @@ def test_panels_load_the_editor_and_owner_cannot_edit_raw_json() -> None:
     assert 'id="geoCanvas"' in installer
     assert "installer/sites/${activeSite}/config" in installer
 
-    assert 'id="linesJson" rows="4" style="width:100%" readonly' in owner
-    assert 'id="zonesJson" rows="6" style="width:100%" readonly' in owner
-    assert "geometrySummary" in owner
+    # Yangi panelda (2026-08-17) ega geometriyani UMUMAN ko'rmaydi: JSON
+    # textarealar oddiy mijozni cho'chitardi.  Chiziq/zona faqat o'rnatuvchi
+    # vositasida; ega sozlamalarni saqlaganda mavjud geometriya o'zgarmasdan
+    # qaytariladi (`...currentConfig` spread).
+    assert "linesJson" not in owner
+    assert "zonesJson" not in owner
+    assert "<textarea" not in owner
+    assert "...currentConfig" in owner, "saqlashda geometriya yo'qolmasin"

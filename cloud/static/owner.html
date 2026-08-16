@@ -3,178 +3,828 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
   <title>Chaqimchi AI — Do‘kon paneli</title>
-  <link rel="stylesheet" href="/assets/admin.css">
-  <style>
-    body{max-width:1180px;margin:auto;padding:24px} .hidden{display:none!important}
-    .login{max-width:440px;margin:10vh auto}.row{display:flex;gap:10px;flex-wrap:wrap}
-    input,select,button{padding:11px;border-radius:8px;border:1px solid #344155;background:#111827;color:#f8fafc}
-    button{cursor:pointer;background:#2563eb}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
-    .card{background:#111827;border:1px solid #263449;border-radius:12px;padding:16px}.events{width:100%;border-collapse:collapse}
-    th,td{text-align:left;padding:10px;border-bottom:1px solid #263449}small{color:#94a3b8}.error{color:#f87171}
-    .up{color:#4ade80}.down{color:#f87171}
-    .bars{display:flex;align-items:flex-end;gap:3px;height:130px;margin-top:8px}
-    .bars>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
-    .bars i{display:block;background:#2563eb;border-radius:3px 3px 0 0;min-height:2px}
-    .bars b{font-weight:400;font-size:10px;color:#64748b;text-align:center;padding-top:4px}
-    .bars .peak i{background:#f59e0b}
-  </style>
+  <link rel="stylesheet" href="/assets/owner.css">
 </head>
 <body>
-  <section id="login" class="login card">
-    <h1>Chaqimchi AI</h1><p>Do‘koningiz holatini login va parol bilan kuzating.</p>
-    <div style="display:grid;gap:10px"><input id="portalUsername" autocomplete="username" placeholder="Login"><input id="portalPassword" type="password" autocomplete="current-password" placeholder="Parol"><button onclick="passwordLogin()">Mijoz paneliga kirish</button></div>
-    <div style="display:flex;align-items:center;gap:10px;margin:18px 0"><i style="height:1px;background:#344155;flex:1"></i><small>yoki Telegram OTP</small><i style="height:1px;background:#344155;flex:1"></i></div>
-    <div class="row"><input id="telegram" placeholder="Telegram ID"><button onclick="requestOtp()">Kod olish</button></div>
-    <div id="verify" class="hidden"><div class="row"><input id="code" inputmode="numeric" maxlength="6" placeholder="6 xonali kod"><button onclick="verifyOtp()">Kirish</button></div></div>
-    <p id="loginMsg"></p>
+  <!-- ── KIRISH ── -->
+  <section id="login" class="login-wrap">
+    <a class="brand" href="/">
+      <img src="/assets/chaqimchi-logo-v2.webp" alt="">
+      <span>Chaqimchi <b>AI</b></span>
+    </a>
+
+    <div class="card">
+      <h2>Do‘kon paneliga kirish</h2>
+      <p class="lead" style="margin-bottom:10px">
+        Eng osoni — <b>kirish havolasi</b>: Telegram botimizga
+        <code>/start</code> yozsangiz, bot sizga shaxsiy havola beradi.
+        Havola bosilishi bilan panel ochiladi.
+      </p>
+      <a class="button primary" id="botLink" href="__TELEGRAM_BOT_URL__" target="_blank" rel="noopener noreferrer">Telegram botni ochish</a>
+
+      <details class="alt-login">
+        <summary>Login va parolim bor</summary>
+        <div style="display:grid;gap:10px;margin-top:12px">
+          <input id="portalUsername" type="text" autocomplete="username" placeholder="Login">
+          <input id="portalPassword" type="password" autocomplete="current-password" placeholder="Parol">
+          <button class="button" id="passwordBtn" type="button">Kirish</button>
+        </div>
+      </details>
+
+      <details class="alt-login">
+        <summary>Telegram kod bilan kirish</summary>
+        <div style="display:grid;gap:10px;margin-top:12px">
+          <input id="telegram" type="text" inputmode="numeric" placeholder="Telegram ID (botdan: /start)">
+          <button class="button ghost" id="otpRequestBtn" type="button">Kod olish</button>
+          <div id="verify" class="hidden" style="display:grid;gap:10px">
+            <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="6 xonali kod">
+            <button class="button" id="otpVerifyBtn" type="button">Kirish</button>
+          </div>
+        </div>
+      </details>
+      <p id="loginMsg" class="hint" role="status" aria-live="polite"></p>
+    </div>
   </section>
+
+  <!-- ── PANEL ── -->
   <main id="app" class="hidden">
-    <div class="row" style="justify-content:space-between"><h1>Do‘kon nazorati</h1><button onclick="logout()">Chiqish</button></div>
-    <div class="cards">
-      <div class="card"><small>Bugun kirdi</small><h2 id="entered">0</h2><small id="enteredChange">—</small></div>
-      <div class="card"><small>Chiqdi</small><h2 id="exited">0</h2><small id="inside">—</small></div>
-      <div class="card"><small>Gavjum soat</small><h2 id="busiest">—</h2><small id="busiestCount">—</small></div>
-      <div class="card"><small>Eng uzun navbat</small><h2 id="queueLongest">—</h2><small id="queueDetail">—</small></div>
-      <div class="card"><small>Sotqin holati</small><h2 id="edgeHealth">—</h2><small id="totalEvents">—</small></div>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <div class="row" style="justify-content:space-between"><h2>Soat bo‘yicha kirish</h2><small id="reportDate">—</small></div>
-      <div id="hourly" class="bars"></div>
-      <small>Xodim jadvalini shu grafikka qarab tuzing: gavjum soatda kassada odam ko‘p bo‘lsin.</small>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <div class="row" style="justify-content:space-between">
-        <h2>Kunlar bo‘yicha</h2>
-        <select id="trendDays" onchange="loadTrend()"><option value="7">7 kun</option><option value="14">14 kun</option><option value="30">30 kun</option></select>
+    <header class="topbar">
+      <a class="brand" href="/owner">
+        <img src="/assets/chaqimchi-logo-v2.webp" alt="">
+        <span>Chaqimchi <b>AI</b></span>
+      </a>
+      <div class="topbar-actions">
+        <span id="siteName"></span>
+        <button class="button ghost small" id="logoutBtn" type="button">Chiqish</button>
       </div>
-      <div id="daily" class="bars"></div>
-      <small id="trendSummary">—</small>
+    </header>
+
+    <div class="shell">
+      <!-- Holat: oddiy tilda, bitta qarashda.  Ichki kod nomlari va
+           "3/4 · 47°C" kabi texnik satr o'rniga "Hammasi ishlayapti"
+           yoki aniq muammo. -->
+      <div id="statusBanner" class="status-banner warn"><div>Yuklanmoqda…</div></div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Kameralar</h2>
+          <span class="hint" id="cameraHint" style="margin:0"></span>
+        </div>
+        <div id="cameraGrid" class="camera-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Kunlik hisobot</h2>
+          <div class="chip-row">
+            <button class="chip active" type="button" data-day="today">Bugun</button>
+            <button class="chip" type="button" data-day="yesterday">Kecha</button>
+            <input type="date" id="reportDate" style="width:auto">
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><small>Kirdi</small><strong id="entered">0</strong><span id="enteredChange">—</span></div>
+          <div class="stat"><small>Chiqdi</small><strong id="exited">0</strong><span id="inside">—</span></div>
+          <div class="stat"><small>Gavjum soat</small><strong id="busiest">—</strong><span id="busiestCount">—</span></div>
+          <div class="stat"><small>Eng uzun navbat</small><strong id="queueLongest">—</strong><span id="queueDetail">—</span></div>
+        </div>
+        <div id="hourly" class="bars"></div>
+        <div id="hourReadout" class="bar-readout">Ustunni bossangiz — o‘sha soat raqamlari chiqadi.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Xavfsizlik</h2>
+          <span class="hint" id="securitySummary" style="margin:0"></span>
+        </div>
+        <div class="stats" id="securityStats"></div>
+        <div id="securityEvents"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Hodisalar</h2>
+          <button class="button ghost small" id="refreshBtn" type="button">Yangilash</button>
+        </div>
+        <div class="filters">
+          <select id="typeFilter"><option value="">Barcha turlar</option></select>
+          <select id="cameraFilter"><option value="">Barcha kameralar</option></select>
+        </div>
+        <div class="scroll-x">
+          <table class="events">
+            <thead><tr><th>Vaqt</th><th>Kamera</th><th>Hodisa</th><th>Joy</th><th>Media</th></tr></thead>
+            <tbody id="events"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Kunlar bo‘yicha</h2>
+          <div class="chip-row" id="trendChips">
+            <button class="chip active" type="button" data-days="7">7 kun</button>
+            <button class="chip" type="button" data-days="14">14</button>
+            <button class="chip" type="button" data-days="30">30</button>
+            <button class="chip" type="button" data-days="90">90</button>
+          </div>
+        </div>
+        <div id="daily" class="bars"></div>
+        <p class="hint" id="trendSummary">—</p>
+      </div>
+
+      <div class="card">
+        <h2>Do‘kon sozlamalari</h2>
+        <div class="grid-3">
+          <label class="field">Odam limiti<input id="occupancy" type="number" min="1"></label>
+          <label class="field">Navbat limiti<input id="queueLimit" type="number" min="1"></label>
+          <label class="field">Uzoq turish (soniya)<input id="loitering" type="number" min="5"></label>
+        </div>
+        <div class="grid-2">
+          <label class="field">Ochilish vaqti<input id="openFrom" type="time"></label>
+          <label class="field">Yopilish vaqti<input id="openTo" type="time"></label>
+        </div>
+        <div id="cameraRoles"></div>
+        <div class="actions" style="margin-top:12px">
+          <button class="button primary" id="saveConfigBtn" type="button">Saqlash</button>
+        </div>
+        <p class="hint">Kirish chizig‘i va zonalarni o‘rnatuvchi sozlaydi — kerak bo‘lsa bizga yozing.</p>
+        <div id="configStatus"></div>
+      </div>
+
+      <div class="card">
+        <h2>Bildirishnomalar</h2>
+        <label class="switch" style="margin-bottom:14px">
+          <input type="checkbox" id="digestToggle">
+          <span class="track"></span>
+          <span>Har kuni kechqurun kunlik hisobot kelsin</span>
+        </label>
+        <div id="memberList"></div>
+        <div class="grid-2" style="align-items:end">
+          <label class="field">Yangi a’zo (Telegram ID) <small>u avval botga /start yozgan bo‘lsin</small>
+            <input id="newMemberId" type="text" inputmode="numeric" placeholder="Masalan: 123456789">
+          </label>
+          <div class="actions" style="margin:0 0 12px">
+            <button class="button ghost" id="addMemberBtn" type="button">Qo‘shish</button>
+          </div>
+        </div>
+        <div id="memberStatus"></div>
+      </div>
+
+      <div class="card quiet">
+        <h2>To‘lov</h2>
+        <p id="tariffLine" class="lead" style="margin-bottom:10px">—</p>
+        <div id="invoiceList"></div>
+        <div class="actions" style="margin-top:10px">
+          <button class="button" id="invoiceBtn" type="button">To‘lov hisobini ochish</button>
+        </div>
+        <p class="hint">Funksiyalarni o‘zgartirish (qo‘shish/olib tashlash) uchun bizga yozing — keyingi oydan qayta hisoblanadi.</p>
+        <div id="billingStatus"></div>
+      </div>
     </div>
-    <div class="card" style="margin-top:16px">
-      <h2>Zonada turish vaqti</h2>
-      <div style="overflow:auto"><table class="events"><thead><tr><th>Zona</th><th>Necha marta</th><th>O‘rtacha</th><th>Eng uzun</th></tr></thead><tbody id="dwell"></tbody></table></div>
-      <small id="securityLine">—</small>
-    </div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Tarif va Cloud AI funksiyalari</h2><button onclick="loadSubscription()">Yangilash</button></div><p id="subscriptionSummary"><small>Yuklanmoqda…</small></p><div id="featureList"></div><div class="row" style="margin-top:12px"><button onclick="requestFeatures()">Tanlovni admin tasdig'iga yuborish</button><button onclick="createInvoice()">To'lov hisobini ochish</button></div><small id="invoiceSummary"></small></div>
-    <div class="card" style="margin-top:16px"><h2>Do‘kon qoidalari</h2><div class="row"><label>Odam limiti <input id="occupancy" type="number" min="1"></label><label>Navbat limiti <input id="queueLimit" type="number" min="1"></label><label>Uzoq turish (soniya) <input id="loitering" type="number" min="5"></label><label>Ochilish <input id="openFrom" type="time"></label><label>Yopilish <input id="openTo" type="time"></label></div><div id="cameraRoles" style="margin:14px 0"></div><div id="geometrySummary" style="margin:12px 0"></div><details><summary>Texnik line/zone sozlamalari</summary><p><small>Chiziq va zonani obyektda o‘rnatuvchi kadr ustida chizadi. Bu yerda ular faqat ko‘rinadi; o‘zgartirish kerak bo‘lsa o‘rnatuvchiga murojaat qiling.</small></p><label>Lines JSON<textarea id="linesJson" rows="4" style="width:100%" readonly></textarea></label><label>Zones JSON<textarea id="zonesJson" rows="6" style="width:100%" readonly></textarea></label></details><button onclick="saveConfig()" style="margin-top:12px">Sozlamani saqlash</button><p id="configStatus"><small>Odam tahlili Sotqinda ishlaydi; uzluksiz video cloudga yuborilmaydi.</small></p></div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Xodimlar davomati <small>yopiq pilot</small></h2><button onclick="loadAttendance()">Yangilash</button></div><p><small>Cloud faqat xodim profili, jadvali va vaqt hodisasini saqlaydi. Yuz namunasi va embedding do‘kondagi Sotqindan chiqmaydi.</small></p><div class="row"><input id="employeeName" placeholder="Xodim ismi"><input id="employeeExternal" placeholder="Tabel ID (ixtiyoriy)"><label><input id="employeeConsent" type="checkbox"> Yozma rozilik olindi</label><button onclick="createEmployee()">Xodim qo‘shish</button></div><div style="overflow:auto;margin-top:12px"><table class="events"><thead><tr><th>Xodim</th><th>Jadval</th><th>Enrollment</th><th></th></tr></thead><tbody id="employees"></tbody></table></div></div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Davomat hisoboti</h2><div class="row"><input id="attendanceFrom" type="date"><input id="attendanceTo" type="date"><button onclick="loadAttendanceReport()">Ko‘rsatish</button><button onclick="downloadAttendanceCsv()">CSV</button></div></div><div id="attendanceSummary"><small>Ma’lumot yuklanmoqda…</small></div><div style="overflow:auto"><table class="events"><thead><tr><th>Sana</th><th>Xodim</th><th>Keldi</th><th>Ketdi</th><th>Holat</th></tr></thead><tbody id="attendanceRows"></tbody></table></div></div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Oxirgi hodisalar</h2><button onclick="loadData()">Yangilash</button></div><div style="overflow:auto"><table class="events"><thead><tr><th>Vaqt</th><th>Kamera</th><th>Hodisa</th><th>Zona/xodim</th><th>Media</th></tr></thead><tbody id="events"></tbody></table></div></div>
   </main>
+
+  <!-- Rasm/klip modal: yangi oynaga blob ochish popup-blockerda yutilardi
+       va xatoda hech narsa ko'rinmasdi. -->
+  <div id="modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <b id="modalTitle"></b>
+        <div style="display:flex;gap:8px">
+          <a class="button ghost small" id="modalDownload" href="#" download>Yuklab olish</a>
+          <button class="button small" id="modalClose" type="button">Yopish</button>
+        </div>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
 <script>
-let token=localStorage.getItem('chaqimchi_owner_token')||'';
-const $=id=>document.getElementById(id);
-async function passwordLogin(){const r=await fetch('/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('portalUsername').value.trim(),password:$('portalPassword').value})});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}if(d.account.role!=='customer'){$('loginMsg').textContent='Bu login mijoz akkaunti emas.';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
-async function requestOtp(){
-  const id=$('telegram').value.trim();
-  const params=new URLSearchParams(location.search);
-  const body={telegram_id:id};
-  if(params.get('site'))body.site_id=params.get('site');
-  const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const d=await r.json();
-  $('loginMsg').textContent=d.message||d.detail||'';
-  $('verify').classList.remove('hidden');
-}
-async function verifyOtp(){const params=new URLSearchParams(location.search);const body={telegram_id:$('telegram').value.trim(),code:$('code').value.trim()};if(params.get('site'))body.site_id=params.get('site');const r=await fetch('/api/v1/owner/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(path,options={}){const headers={Authorization:`Bearer ${token}`,...(options.headers||{})};const r=await fetch(path,{...options,headers});const d=await r.json();if(r.status===401){logout();throw new Error('Session tugadi')}if(!r.ok)throw new Error(d.detail||'So‘rov bajarilmadi');return d}
-let currentConfig=null;
-let cameraInventory=[];
-const minutes=s=>s>=60?`${Math.floor(s/60)} daq ${Math.round(s%60)} s`:`${Math.round(s)} s`;
-function drawReport(r){const t=r.traffic;$('reportDate').textContent=r.date;$('entered').textContent=t.entered;$('exited').textContent=t.exited;
-  $('enteredChange').innerHTML=t.change_percent===null?'<small>kecha ma’lumot yo‘q</small>':`<span class="${t.change_percent>=0?'up':'down'}">${t.change_percent>=0?'▲':'▼'} ${Math.abs(t.change_percent)}%</span> kechagiga nisbatan`;
-  $('inside').textContent=`Hozir ichkarida ~${t.inside_estimate} kishi`;
-  $('busiest').textContent=t.busiest_hour?`${String(t.busiest_hour.hour).padStart(2,'0')}:00`:'—';
-  $('busiestCount').textContent=t.busiest_hour?`${t.busiest_hour.entered} kishi kirdi`:'Hali kirish yo‘q';
-  $('queueLongest').textContent=r.queue.longest?`${r.queue.longest} kishi`:'—';
-  $('queueDetail').textContent=r.queue.longest?`${r.queue.longest_at} da · jami ${r.queue.alerts} marta uzun navbat`:'Navbat chegaradan oshmadi';
-  const peak=Math.max(1,...t.hourly.map(h=>h.entered));
-  $('hourly').innerHTML=t.hourly.map(h=>`<div class="${t.busiest_hour&&h.hour===t.busiest_hour.hour&&h.entered?'peak':''}" title="${String(h.hour).padStart(2,'0')}:00 — ${h.entered} kirdi, ${h.exited} chiqdi"><i style="height:${Math.round(h.entered/peak*100)}%"></i><b>${h.hour%3===0?h.hour:''}</b></div>`).join('');
-  $('dwell').innerHTML=r.dwell.length?r.dwell.map(d=>`<tr><td>${esc(d.zone)}</td><td>${d.count}</td><td>${minutes(d.average_sec)}</td><td>${minutes(d.longest_sec)}</td></tr>`).join(''):'<tr><td colspan="4"><small>Bugun zonada uzoq turish qayd etilmadi.</small></td></tr>';
-  const s=r.security;const alarms=[];if(s.camera_tampered)alarms.push(`${s.camera_tampered} marta kamera buzilgan`);if(s.after_hours_presence)alarms.push(`${s.after_hours_presence} marta ish vaqtidan tashqari harakat`);if(s.restricted_zone)alarms.push(`${s.restricted_zone} marta taqiqlangan zonaga kirish`);if(s.loitering)alarms.push(`${s.loitering} marta uzoq turish`);
-  $('securityLine').innerHTML=alarms.length?`<span class="error">⚠ ${alarms.join(' · ')}</span>`:'Xavfsizlik hodisasi yo‘q.'}
-function drawTrend(t){const peak=Math.max(1,...t.daily.map(d=>d.entered));
-  $('daily').innerHTML=t.daily.map(d=>`<div class="${t.busiest_day&&d.date===t.busiest_day.date?'peak':''}" title="${d.date} (${d.weekday}) — ${d.entered} kishi"><i style="height:${Math.round(d.entered/peak*100)}%"></i><b>${t.days<=14?d.weekday.slice(0,2):(d.date.slice(8)==='01'||Number(d.date.slice(8))%5===0?d.date.slice(8):'')}</b></div>`).join('');
-  const parts=[`Jami ${t.total} kishi, kuniga o‘rtacha ${t.average}`];
-  if(t.busiest_day)parts.push(`eng kuchli kun — ${t.busiest_day.weekday} (${t.busiest_day.entered})`);
-  if(t.change_percent!==null)parts.push(`oldingi ${t.days} kunga nisbatan ${t.change_percent>=0?'▲':'▼'} ${Math.abs(t.change_percent)}%`);
-  $('trendSummary').textContent=parts.join(' · ')}
-async function loadTrend(){try{drawTrend(await api(`/api/v1/owner/trend?days=${$('trendDays').value}`))}catch(e){$('trendSummary').textContent=e.message}}
-async function loadData(){const [stats,report,data,health,config,cameras]=await Promise.all([api('/api/v1/owner/stats'),api('/api/v1/owner/report'),api('/api/v1/owner/events?limit=100'),api('/api/v1/owner/health'),api('/api/v1/owner/config'),api('/api/v1/owner/cameras')]);currentConfig=config.config;cameraInventory=cameras.cameras;drawReport(report);$('totalEvents').textContent=`Bugun ${stats.total} hodisa`;const device=health.devices[0];const expected=health.cameras_expected||'—';$('edgeHealth').textContent=device?`${device.health.cameras_active}/${expected} · ${device.health.temperature_c??'—'}°C`:'Offline';$('occupancy').value=currentConfig.occupancy_limit;$('queueLimit').value=currentConfig.queue_limit||5;$('loitering').value=currentConfig.loitering_sec;$('openFrom').value=currentConfig.open_from||'';$('openTo').value=currentConfig.open_to||'';$('linesJson').value=JSON.stringify(currentConfig.lines||[],null,2);$('zonesJson').value=JSON.stringify(currentConfig.zones||[],null,2);renderGeometrySummary();renderCameraRoles();$('events').innerHTML=data.events.map(e=>{const media=[];if(e.snapshot_key)media.push(`<a href="#" onclick="snapshot('${e.event_id}');return false">Rasm</a>`);if(e.clip_key)media.push(`<a href="#" onclick="clip('${e.event_id}');return false">Klip</a>`);return `<tr><td>${new Date(e.occurred_at).toLocaleString()}</td><td>${esc(e.camera_id)}</td><td>${esc(e.label||e.event_type)}</td><td>${esc(e.zone||e.line_name||e.person_name||'—')}</td><td>${media.join(' · ')||'—'}</td></tr>`}).join('');await Promise.all([loadTrend(),loadSubscription(),loadAttendance()])}
-function renderCameraRoles(){const roles=currentConfig.camera_roles||{},attendance=new Set(currentConfig.attendance_camera_ids||[]),attendanceRoles=currentConfig.attendance_camera_roles||{};$('cameraRoles').innerHTML=cameraInventory.length?cameraInventory.map(c=>`<div class="row" style="align-items:center;margin:6px 0"><b style="min-width:140px">${esc(c.label||c.camera_id)}</b><select data-camera-role="${esc(c.camera_id)}"><option value="entrance" ${roles[c.camera_id]==='entrance'?'selected':''}>Kirish</option><option value="checkout" ${roles[c.camera_id]==='checkout'?'selected':''}>Kassa</option><option value="sales_floor" ${roles[c.camera_id]==='sales_floor'?'selected':''}>Savdo zali</option><option value="storage" ${roles[c.camera_id]==='storage'?'selected':''}>Ombor</option></select><label><input type="checkbox" data-attendance-camera="${esc(c.camera_id)}" ${attendance.has(c.camera_id)?'checked':''}> Davomat</label><select data-attendance-role="${esc(c.camera_id)}"><option value="arrival" ${attendanceRoles[c.camera_id]==='arrival'?'selected':''}>Kelish</option><option value="departure" ${attendanceRoles[c.camera_id]==='departure'?'selected':''}>Ketish</option><option value="both" ${!attendanceRoles[c.camera_id]||attendanceRoles[c.camera_id]==='both'?'selected':''}>Ikkalasi</option></select></div>`).join(''):'<small>Avval admin panelda kamera qo‘shing.</small>'}
-// Ega uchun chiziq/zona holati — koordinata emas, javob: hisoblanadimi yoki yo'q.
-function renderGeometrySummary(){
-  const lines=currentConfig.lines||[],zones=currentConfig.zones||[];
-  if(!lines.length&&!zones.length){
-    $('geometrySummary').innerHTML='<div class="toast toast-err">Chiziq va zona hali chizilmagan — kirganlar soni, navbat va uzoq turish hisoblanmaydi. O‘rnatuvchiga murojaat qiling.</div>';
-    return;
-  }
-  const parts=[];
-  if(lines.length)parts.push(`${lines.length} ta hisoblash chizig‘i (${lines.map(l=>esc(l.name)).join(', ')})`);
-  const queue=zones.filter(z=>z.queue),restricted=zones.filter(z=>z.restricted),dwell=zones.filter(z=>z.dwell_sec);
-  if(queue.length)parts.push(`${queue.length} ta navbat zonasi`);
-  if(restricted.length)parts.push(`${restricted.length} ta taqiqlangan zona`);
-  if(dwell.length)parts.push(`${dwell.length} ta uzoq turish zonasi`);
-  const other=zones.length-queue.length-restricted.length-dwell.length;
-  if(other>0)parts.push(`${other} ta oddiy zona`);
-  $('geometrySummary').innerHTML=`<div class="toast toast-ok">Sozlangan: ${parts.join(' · ')}</div>`;
-}
-async function saveConfig(){if(!currentConfig)return;let lines,zones;try{lines=JSON.parse($('linesJson').value||'[]');zones=JSON.parse($('zonesJson').value||'[]')}catch(_){return alert('Lines/Zones JSON noto‘g‘ri')}const camera_roles={};document.querySelectorAll('[data-camera-role]').forEach(x=>camera_roles[x.dataset.cameraRole]=x.value);const attendance_camera_ids=[...document.querySelectorAll('[data-attendance-camera]:checked')].map(x=>x.dataset.attendanceCamera);if(attendance_camera_ids.length>2)return alert('Davomat uchun ko‘pi bilan 2 kamera');const attendance_camera_roles={};attendance_camera_ids.forEach(id=>{const x=document.querySelector(`[data-attendance-role="${id}"]`);attendance_camera_roles[id]=x?x.value:'both'});const body={...currentConfig,camera_roles,attendance_camera_ids,attendance_camera_roles,occupancy_limit:Number($('occupancy').value),queue_limit:Number($('queueLimit').value),loitering_sec:Number($('loitering').value),open_from:$('openFrom').value||null,open_to:$('openTo').value||null,lines,zones};try{currentConfig=(await api('/api/v1/owner/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).config;$('configStatus').textContent='Sozlama saqlandi va Sotqinga yuboriladi.';await loadData()}catch(e){$('configStatus').textContent=e.message}}
-async function snapshot(id){const r=await fetch(`/api/v1/owner/events/${id}/snapshot`,{headers:{Authorization:`Bearer ${token}`}});if(r.ok)window.open(URL.createObjectURL(await r.blob()),'_blank')}
-async function clip(id){const r=await fetch(`/api/v1/owner/events/${id}/clip`,{headers:{Authorization:`Bearer ${token}`}});if(r.ok)window.open(URL.createObjectURL(await r.blob()),'_blank')}
-async function loadSubscription(){try{const [view,invoices]=await Promise.all([api('/api/v1/owner/features'),api('/api/v1/owner/invoices')]);const summary=view.summary;const selected=summary.drafts.length?summary.drafts:summary.assignments.filter(x=>x.status==='active');const selectedCodes=new Map(selected.map(x=>[x.feature_code,x.camera_count]));const q=summary.active_quote;$('subscriptionSummary').innerHTML=`<small>Faol hisob: <b>$${(q.monthly_usd_cents/100).toFixed(0)}/oy</b> · ${(q.monthly_uzs||0).toLocaleString('ru-RU')} so'm. Draft tanlov admin tasdig'idan keyin Sotqinga yuboriladi.</small>`;$('featureList').innerHTML=view.catalog.features.filter(f=>f.active).map(f=>`<label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" data-feature="${esc(f.code)}" ${selectedCodes.has(f.code)?'checked':''}><span style="min-width:170px">${esc(f.name)}</span><small>$${(f.monthly_usd_cents/100).toFixed(0)}/kamera/oy</small><input data-feature-count="${esc(f.code)}" type="number" min="1" max="4" value="${selectedCodes.get(f.code)||1}" style="width:65px"></label>`).join('');const pending=invoices.find(i=>i.state==='pending');$('invoiceSummary').innerHTML=pending?`To'lanmagan hisob: <a href="${esc(pending.pay_url)}">${(pending.amount_uzs||0).toLocaleString('ru-RU')} so‘m to‘lash</a>`:'To‘lanmagan hisob yo‘q.'}catch(e){$('subscriptionSummary').textContent=e.message}}
-async function requestFeatures(){const selections=[...document.querySelectorAll('[data-feature]')].filter(x=>x.checked).map(x=>({feature_code:x.dataset.feature,camera_count:Number(document.querySelector(`[data-feature-count="${x.dataset.feature}"]`).value)}));if(!selections.length)return alert('Kamida bitta funksiya tanlang');try{const q=await api('/api/v1/owner/features/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selections})});if(!confirm(`Yangi hisob: $${(q.monthly_usd_cents/100).toFixed(0)}/oy. Admin tasdig'iga yuborilsinmi?`))return;await api('/api/v1/owner/features/request',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({selections})});await loadSubscription();alert('So‘rov admin tasdig‘iga yuborildi')}catch(e){alert(e.message)}}
-async function createInvoice(){try{const inv=await api('/api/v1/owner/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({months:1})});location.href=inv.pay_url}catch(e){alert(e.message)}}
-const weekNames=['Du','Se','Cho','Pa','Ju','Sha','Ya'];
-function scheduleText(items){const active=(items||[]).filter(x=>x.enabled);if(!active.length)return 'Jadval yo‘q';const times=[...new Set(active.map(x=>`${x.start_time}–${x.end_time}`))].join(', ');return `${active.map(x=>weekNames[x.weekday]).join(', ')} · ${times}`}
-async function loadAttendance(){try{const data=await api('/api/v1/owner/employees');$('employees').innerHTML=data.employees.length?data.employees.map(e=>`<tr><td><b>${esc(e.name)}</b><br><small>${esc(e.external_id||e.id)}</small></td><td>${esc(scheduleText(e.schedules))}</td><td>${esc(e.enrollment_status)}</td><td><button onclick="editSchedule('${e.id}')">Jadval</button> <button onclick="deactivateEmployee('${e.id}')">O‘chirish</button></td></tr>`).join(''):'<tr><td colspan="4"><small>Xodim qo‘shilmagan.</small></td></tr>';const today=new Date().toISOString().slice(0,10);if(!$('attendanceFrom').value){$('attendanceFrom').value=today;$('attendanceTo').value=today}await loadAttendanceReport()}catch(e){$('employees').innerHTML=`<tr><td colspan="4"><small>${esc(e.message)}</small></td></tr>`}}
-async function createEmployee(){const name=$('employeeName').value.trim();if(!name)return alert('Xodim ismini kiriting');if(!$('employeeConsent').checked)return alert('Yozma rozilik olinmasdan xodim qo‘shilmaydi');try{await api('/api/v1/owner/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,external_id:$('employeeExternal').value.trim()||null,consent:true,consent_note:'Owner panel orqali qayd etildi'})});$('employeeName').value='';$('employeeExternal').value='';$('employeeConsent').checked=false;await loadAttendance()}catch(e){alert(e.message)}}
-async function editSchedule(id){const days=prompt('Ish kunlari: 0=Dushanba ... 6=Yakshanba','0,1,2,3,4');if(days===null)return;const start=prompt('Kirish vaqti','09:00');if(start===null)return;const end=prompt('Chiqish vaqti','18:00');if(end===null)return;const grace=Number(prompt('Kechikish toleransi (daqiqa)','5'));const weekdays=days.split(',').map(x=>Number(x.trim())).filter(x=>Number.isInteger(x)&&x>=0&&x<=6);try{await api(`/api/v1/owner/employees/${id}/schedule`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({schedules:weekdays.map(weekday=>({weekday,start_time:start,end_time:end,grace_minutes:grace,enabled:true}))})});await loadAttendance()}catch(e){alert(e.message)}}
-async function deactivateEmployee(id){if(!confirm('Xodim davomatdan chiqarilsinmi? Lokal yuz namunasi Sotqin panelidan ham o‘chiriladi.'))return;try{await api(`/api/v1/owner/employees/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:false})});await loadAttendance()}catch(e){alert(e.message)}}
-function attendanceStatus(r){const bits=[r.status];if(r.early_leave_minutes)bits.push(`${r.early_leave_minutes} daq erta`);if(r.checkout_missing)bits.push('chiqish aniqlanmadi');return bits.join(' · ')}
-async function loadAttendanceReport(){try{const from=$('attendanceFrom').value,to=$('attendanceTo').value||from;if(!from)return;const data=await api(`/api/v1/owner/attendance?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`);const s=data.summary;$('attendanceSummary').innerHTML=`<p><b>${s.present}</b> keldi · <b>${s.absent}</b> kelmadi · <b>${s.late}</b> kechikdi · <b>${s.checkout_missing}</b> chiqishi aniqlanmadi</p>`;$('attendanceRows').innerHTML=data.rows.length?data.rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.employee_name)}</td><td>${r.first_seen?new Date(r.first_seen).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'—'}</td><td>${r.last_seen&&r.last_seen!==r.first_seen?new Date(r.last_seen).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'—'}</td><td>${esc(attendanceStatus(r))}</td></tr>`).join(''):'<tr><td colspan="5"><small>Davomat ma’lumoti yo‘q.</small></td></tr>'}catch(e){$('attendanceSummary').textContent=e.message}}
-async function downloadAttendanceCsv(){const from=$('attendanceFrom').value,to=$('attendanceTo').value||from;if(!from)return;const r=await fetch(`/api/v1/owner/attendance.csv?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`,{headers:{Authorization:`Bearer ${token}`}});if(!r.ok)return alert((await r.json()).detail||'CSV olinmadi');const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`davomat-${from}-${to}.csv`;a.click();URL.revokeObjectURL(url)}
-function showApp(){$('login').classList.add('hidden');$('app').classList.remove('hidden');loadData().catch(()=>{})}
-function logout(){token='';localStorage.removeItem('chaqimchi_owner_token');location.reload()}
+(() => {
+  "use strict";
 
-// Havoladan to'g'ridan-to'g'ri kirish: `/owner?key=<token>`.
-//
-// Do'kon egasiga "Telegram ID ingizni kiriting, keyin kodni kutib
-// turing" deyish — u qilmaydigan ish.  Havola bosilishi bilan panel
-// ochilishi kerak.
-//
-// `key` — uzun tasodifiy token (admin panel yoki Telegram bot beradi).
-// Ilgari bu yerda `?tg=<id>` ishlardi — Telegram ID sir emasligi uchun
-// olib tashlandi.  Token bekor qilinsa (yangi havola yaratilsa yoki
-// muddati o'tsa) odatdagi kod so'raladigan oyna chiqadi.
-async function loginFromLink(){
-  const params=new URLSearchParams(location.search);
-  const key=(params.get('key')||'').trim();
-  if(!key)return false;
-  try{
-    const r=await fetch('/api/v1/owner/auth/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
-    const d=await r.json();
-    if(r.ok&&d.access_token){
-      token=d.access_token;
-      localStorage.setItem('chaqimchi_owner_token',token);
-      // Manzil qatoridagi tokenni tozalaymiz — u credential, tarix va
-      // skrinshotlarda qolmasin.  Telegramdagi havola ishlayveradi.
-      params.delete('key');
-      const rest=params.toString();
-      history.replaceState(null,'',location.pathname+(rest?`?${rest}`:''));
-      showApp();
-      return true;
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) =>
+    String(value ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let token = localStorage.getItem("chaqimchi_owner_token") || "";
+  let reportDay = "";           // "" = bugun
+  let trendDays = 7;
+  let cameraList = [];
+  let currentConfig = null;
+  let previewUrls = [];         // revoke uchun
+
+  function note(containerId, kind, text) {
+    $(containerId).innerHTML = `<div class="note ${kind}">${esc(text)}</div>`;
+  }
+
+  async function api(path, options = {}) {
+    const headers = { Authorization: `Bearer ${token}`, ...(options.headers || {}) };
+    if (options.body) headers["Content-Type"] = "application/json";
+    const response = await fetch(path, { ...options, headers });
+    if (response.status === 401) { logout(); throw new Error("Sessiya tugadi"); }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || "So‘rov bajarilmadi");
+    return data;
+  }
+
+  /* ── Kirish ─────────────────────────────────────────────────────────── */
+
+  // Havoladan kirish: `/owner?key=<token>`.  `key` — uzun tasodifiy token
+  // (admin panel yoki Telegram bot beradi).  Ilgari bu yerda `?tg=<id>`
+  // ishlardi — Telegram ID sir emasligi uchun olib tashlandi.
+  async function loginFromLink() {
+    const params = new URLSearchParams(location.search);
+    const key = (params.get("key") || "").trim();
+    if (!key) return false;
+    try {
+      const r = await fetch("/api/v1/owner/auth/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      const d = await r.json();
+      if (r.ok && d.access_token) {
+        token = d.access_token;
+        localStorage.setItem("chaqimchi_owner_token", token);
+        // Manzil qatoridagi tokenni tozalaymiz — u credential, tarix va
+        // skrinshotlarda qolmasin.  Telegramdagi havola ishlayveradi.
+        params.delete("key");
+        const rest = params.toString();
+        history.replaceState(null, "", location.pathname + (rest ? `?${rest}` : ""));
+        showApp();
+        return true;
+      }
+      $("loginMsg").textContent = d.detail || d.message || "Havola eskirgan — botdan yangisini oling.";
+    } catch (err) {
+      $("loginMsg").textContent = "Server bilan aloqa yo‘q.";
     }
-    // Havola eskirgan — odatdagi yo'l bilan davom etadi.
-    $('loginMsg').textContent=d.detail||d.message||'';
-  }catch(err){
-    $('loginMsg').textContent='Server bilan aloqa yo‘q.';
+    return false;
   }
-  return false;
-}
 
-if(token){showApp();}else{loginFromLink();}
+  async function passwordLogin() {
+    try {
+      const r = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: $("portalUsername").value.trim(), password: $("portalPassword").value }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Kirish xatosi");
+      if (d.account.role !== "customer") throw new Error("Bu login mijoz akkaunti emas.");
+      token = d.access_token;
+      localStorage.setItem("chaqimchi_owner_token", token);
+      showApp();
+    } catch (err) { $("loginMsg").textContent = err.message; }
+  }
+
+  async function requestOtp() {
+    const params = new URLSearchParams(location.search);
+    const body = { telegram_id: $("telegram").value.trim() };
+    if (params.get("site")) body.site_id = params.get("site");
+    const r = await fetch("/api/v1/owner/auth/request", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    $("loginMsg").textContent = d.message || d.detail || "";
+    $("verify").classList.remove("hidden");
+  }
+
+  async function verifyOtp() {
+    const params = new URLSearchParams(location.search);
+    const body = { telegram_id: $("telegram").value.trim(), code: $("code").value.trim() };
+    if (params.get("site")) body.site_id = params.get("site");
+    const r = await fetch("/api/v1/owner/auth/verify", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!r.ok) { $("loginMsg").textContent = d.detail || "Kirish xatosi"; return; }
+    token = d.access_token;
+    localStorage.setItem("chaqimchi_owner_token", token);
+    showApp();
+  }
+
+  function logout() {
+    token = "";
+    localStorage.removeItem("chaqimchi_owner_token");
+    location.reload();
+  }
+
+  /* ── Holat banneri ──────────────────────────────────────────────────── */
+
+  function drawStatus(health) {
+    const banner = $("statusBanner");
+    $("siteName").textContent = health.site_name || "";
+    const expected = Number(health.cameras_expected || 0);
+    const active = Number(health.cameras_active || 0);
+    const minutes = health.minutes_since_seen;
+
+    let kind = "ok";
+    let title = "Hammasi ishlayapti";
+    let sub = expected ? `${active}/${expected} kamera ulangan` : "Qurilma ulangan";
+
+    if (health.connection === "not_paired") {
+      kind = "err"; title = "Qurilma hali ulanmagan";
+      sub = "O‘rnatish tugallanmagan — o‘rnatuvchi bilan bog‘laning.";
+    } else if (health.connection === "offline") {
+      kind = "err"; title = "Qurilma aloqada emas";
+      sub = minutes != null ? `Oxirgi aloqa: ${sinceLabel(minutes)}. Tok va internetni tekshiring.` : "Tok va internetni tekshiring.";
+    } else if (health.connection === "stale") {
+      kind = "warn"; title = "Aloqa uzilib turibdi";
+      sub = minutes != null ? `Oxirgi aloqa: ${sinceLabel(minutes)}.` : "";
+    } else if (expected && active < expected) {
+      kind = "warn"; title = `${expected - active} ta kamera ishlamayapti`;
+      sub = `${expected} tadan ${active} tasi ulangan. Kamera tokini va kabelini tekshiring.`;
+    }
+
+    banner.className = `status-banner ${kind}`;
+    banner.innerHTML = `<div><span>${esc(title)}</span><span class="sub">${esc(sub)}</span></div>`;
+  }
+
+  function sinceLabel(minutes) {
+    const value = Number(minutes);
+    if (!Number.isFinite(value)) return "noma’lum";
+    if (value < 60) return `${Math.round(value)} daqiqa oldin`;
+    if (value < 1440) return `${Math.floor(value / 60)} soat oldin`;
+    return `${Math.floor(value / 1440)} kun oldin`;
+  }
+
+  /* ── Kameralar ──────────────────────────────────────────────────────── */
+
+  async function drawCameras() {
+    const grid = $("cameraGrid");
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls = [];
+    if (!cameraList.length) {
+      grid.innerHTML = '<p class="hint">Kamera hali qo‘shilmagan.</p>';
+      $("cameraHint").textContent = "";
+      return;
+    }
+    $("cameraHint").textContent = "Rasmni bossangiz kattaroq ochiladi";
+    grid.innerHTML = cameraList.map((camera) => `
+      <button class="camera-card" type="button" data-camera="${esc(camera.camera_id)}">
+        <div class="shot empty" data-shot="${esc(camera.camera_id)}">rasm yuklanmoqda…</div>
+        <div class="meta"><span class="dot" data-dot="${esc(camera.camera_id)}"></span><b>${esc(camera.label || camera.camera_id)}</b></div>
+      </button>`).join("");
+
+    grid.querySelectorAll(".camera-card").forEach((cardButton) => {
+      cardButton.addEventListener("click", () => openCameraModal(cardButton.dataset.camera));
+    });
+
+    for (const camera of cameraList) {
+      loadPreview(camera.camera_id);
+    }
+  }
+
+  async function loadPreview(cameraId) {
+    const holder = document.querySelector(`[data-shot="${CSS.escape(cameraId)}"]`);
+    const dot = document.querySelector(`[data-dot="${CSS.escape(cameraId)}"]`);
+    try {
+      const r = await fetch(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error("yo‘q");
+      const url = URL.createObjectURL(await r.blob());
+      previewUrls.push(url);
+      const img = document.createElement("img");
+      img.className = "shot";
+      img.alt = "";
+      img.src = url;
+      holder.replaceWith(img);
+      img.dataset.shot = cameraId;
+      if (dot) dot.className = "dot on";
+    } catch (err) {
+      if (holder) holder.textContent = "rasm hali kelmagan";
+    }
+  }
+
+  async function openCameraModal(cameraId) {
+    const camera = cameraList.find((item) => item.camera_id === cameraId);
+    openModal(esc((camera && camera.label) || cameraId));
+    await renderMediaInModal(
+      `/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`,
+      "image",
+      `${cameraId}.jpg`,
+      "Bu kameradan rasm hali kelmagan. Qurilma ulanganda o‘zi paydo bo‘ladi.",
+    );
+  }
+
+  /* ── Kunlik hisobot ─────────────────────────────────────────────────── */
+
+  function drawReport(report) {
+    const traffic = report.traffic;
+    $("entered").textContent = traffic.entered;
+    $("exited").textContent = traffic.exited;
+    $("enteredChange").innerHTML = traffic.change_percent === null
+      ? "kechagi ma’lumot yo‘q"
+      : `<span class="${traffic.change_percent >= 0 ? "up" : "down"}">${traffic.change_percent >= 0 ? "▲" : "▼"} ${Math.abs(traffic.change_percent)}%</span> kechagiga nisbatan`;
+    $("inside").textContent = `Hozir ichkarida ~${traffic.inside_estimate} kishi`;
+    $("busiest").textContent = traffic.busiest_hour ? `${String(traffic.busiest_hour.hour).padStart(2, "0")}:00` : "—";
+    $("busiestCount").textContent = traffic.busiest_hour ? `${traffic.busiest_hour.entered} kishi kirdi` : "hali kirish yo‘q";
+    $("queueLongest").textContent = report.queue.longest ? `${report.queue.longest} kishi` : "—";
+    $("queueDetail").textContent = report.queue.longest
+      ? `${report.queue.longest_at} da · ${report.queue.alerts} marta uzun navbat`
+      : "navbat chegaradan oshmadi";
+
+    const peak = Math.max(1, ...traffic.hourly.map((h) => h.entered));
+    $("hourly").innerHTML = traffic.hourly.map((h) => `
+      <div class="${traffic.busiest_hour && h.hour === traffic.busiest_hour.hour && h.entered ? "peak" : ""}"
+           data-hour="${h.hour}" data-in="${h.entered}" data-out="${h.exited}">
+        <i style="height:${Math.round((h.entered / peak) * 100)}%"></i>
+        <b>${h.hour % 3 === 0 ? h.hour : ""}</b>
+      </div>`).join("");
+    // Teginish/bosish bilan qiymat: `title` tooltip telefonlarda ishlamaydi.
+    $("hourly").querySelectorAll("[data-hour]").forEach((bar) => {
+      bar.addEventListener("click", () => {
+        $("hourly").querySelectorAll(".selected").forEach((el) => el.classList.remove("selected"));
+        bar.classList.add("selected");
+        $("hourReadout").textContent =
+          `${String(bar.dataset.hour).padStart(2, "0")}:00 — ${bar.dataset.in} kirdi, ${bar.dataset.out} chiqdi`;
+      });
+    });
+
+    drawSecurity(report.security);
+  }
+
+  const SECURITY_LABELS = {
+    camera_tampered: "Kamera yopilgan/burilgan",
+    after_hours_presence: "Ish vaqtidan tashqari harakat",
+    restricted_zone: "Taqiqlangan zonaga kirish",
+    loitering: "Uzoq turish",
+  };
+
+  function drawSecurity(security) {
+    const entries = Object.entries(SECURITY_LABELS);
+    $("securityStats").innerHTML = entries.map(([key, label]) => `
+      <div class="stat"><small>${esc(label)}</small><strong>${Number(security[key] || 0)}</strong></div>`).join("");
+    const total = entries.reduce((sum, [key]) => sum + Number(security[key] || 0), 0);
+    $("securitySummary").textContent = total ? `${total} ta hodisa` : "hodisa yo‘q";
+  }
+
+  const SECURITY_TYPES = new Set(["camera_tampered", "after_hours_presence", "zone_entered", "loitering", "stream_frozen"]);
+
+  function drawSecurityEvents(events) {
+    const list = events.filter((event) => SECURITY_TYPES.has(event.event_type)).slice(0, 6);
+    $("securityEvents").innerHTML = list.length
+      ? list.map((event) => `
+        <div class="member-row">
+          <div class="who"><b>${esc(event.label || event.event_type)}</b>
+            <small>${new Date(event.occurred_at).toLocaleString()} · ${esc(event.camera_id)}</small></div>
+          ${mediaButtons(event)}
+        </div>`).join("")
+      : '<p class="hint">So‘nggi xavfsizlik hodisalari yo‘q — yaxshi belgi.</p>';
+    bindMediaButtons($("securityEvents"));
+  }
+
+  /* ── Hodisalar ──────────────────────────────────────────────────────── */
+
+  const TYPE_OPTIONS = [
+    ["line_crossed", "Kirish/chiqish"],
+    ["queue_threshold_exceeded", "Navbat uzun"],
+    ["loitering", "Uzoq turish"],
+    ["zone_entered", "Zonaga kirish"],
+    ["camera_tampered", "Kamera buzilishi"],
+    ["after_hours_presence", "Tungi harakat"],
+    ["camera_offline", "Kamera o‘chdi"],
+    ["camera_recovered", "Kamera tiklandi"],
+  ];
+
+  function mediaButtons(event) {
+    const parts = [];
+    if (event.snapshot_key) parts.push(`<button class="button ghost small" type="button" data-media="snapshot" data-event="${esc(event.event_id)}" data-title="${esc(event.label || event.event_type)}">Rasm</button>`);
+    if (event.clip_key) parts.push(`<button class="button ghost small" type="button" data-media="clip" data-event="${esc(event.event_id)}" data-title="${esc(event.label || event.event_type)}">Klip</button>`);
+    return parts.join(" ") || '<span class="hint" style="margin:0">—</span>';
+  }
+
+  function bindMediaButtons(root) {
+    root.querySelectorAll("[data-media]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = btn.dataset.media;
+        openModal(btn.dataset.title);
+        renderMediaInModal(
+          `/api/v1/owner/events/${encodeURIComponent(btn.dataset.event)}/${kind}`,
+          kind === "clip" ? "video" : "image",
+          `${btn.dataset.event}.${kind === "clip" ? "mp4" : "jpg"}`,
+          "Media topilmadi — muddati o‘tib o‘chirilgan bo‘lishi mumkin.",
+        );
+      });
+    });
+  }
+
+  async function loadEvents() {
+    const params = new URLSearchParams({ limit: "100" });
+    if ($("typeFilter").value) params.set("event_type", $("typeFilter").value);
+    if ($("cameraFilter").value) params.set("camera_id", $("cameraFilter").value);
+    const data = await api(`/api/v1/owner/events?${params.toString()}`);
+    $("events").innerHTML = data.events.length
+      ? data.events.map((event) => `
+        <tr>
+          <td>${new Date(event.occurred_at).toLocaleString()}</td>
+          <td>${esc(event.camera_id)}</td>
+          <td>${esc(event.label || event.event_type)}</td>
+          <td>${esc(event.zone || event.line_name || "—")}</td>
+          <td>${mediaButtons(event)}</td>
+        </tr>`).join("")
+      : '<tr><td colspan="5"><span class="hint">Hodisa yo‘q.</span></td></tr>';
+    bindMediaButtons($("events"));
+    drawSecurityEvents(data.events);
+  }
+
+  /* ── Trend ──────────────────────────────────────────────────────────── */
+
+  async function loadTrend() {
+    try {
+      const trend = await api(`/api/v1/owner/trend?days=${trendDays}`);
+      const peak = Math.max(1, ...trend.daily.map((d) => d.entered));
+      $("daily").innerHTML = trend.daily.map((d) => `
+        <div class="${trend.busiest_day && d.date === trend.busiest_day.date ? "peak" : ""}"
+             data-hour="${d.date}" data-in="${d.entered}" data-out="">
+          <i style="height:${Math.round((d.entered / peak) * 100)}%"></i>
+          <b>${trend.days <= 14 ? d.weekday.slice(0, 2) : (Number(d.date.slice(8)) % 5 === 0 ? d.date.slice(8) : "")}</b>
+        </div>`).join("");
+      $("daily").querySelectorAll("[data-hour]").forEach((bar) => {
+        bar.addEventListener("click", () => {
+          $("trendSummary").textContent = `${bar.dataset.hour}: ${bar.dataset.in} kishi kirdi`;
+        });
+      });
+      const parts = [`Jami ${trend.total} kishi, kuniga o‘rtacha ${trend.average}`];
+      if (trend.busiest_day) parts.push(`eng gavjum kun — ${trend.busiest_day.weekday} (${trend.busiest_day.entered})`);
+      if (trend.change_percent !== null) parts.push(`oldingi davrga nisbatan ${trend.change_percent >= 0 ? "▲" : "▼"} ${Math.abs(trend.change_percent)}%`);
+      $("trendSummary").textContent = parts.join(" · ");
+    } catch (err) { $("trendSummary").textContent = err.message; }
+  }
+
+  /* ── Sozlamalar ─────────────────────────────────────────────────────── */
+
+  const ROLE_OPTIONS = [
+    ["entrance", "Kirish"],
+    ["checkout", "Kassa"],
+    ["sales_floor", "Savdo zali"],
+    ["storage", "Ombor"],
+  ];
+
+  function drawConfig(config) {
+    currentConfig = config;
+    $("occupancy").value = config.occupancy_limit ?? "";
+    $("queueLimit").value = config.queue_limit ?? "";
+    $("loitering").value = config.loitering_sec ?? "";
+    $("openFrom").value = config.open_from || "";
+    $("openTo").value = config.open_to || "";
+    const roles = config.camera_roles || {};
+    $("cameraRoles").innerHTML = cameraList.length
+      ? cameraList.map((camera) => `
+        <div class="member-row">
+          <div class="who"><b>${esc(camera.label || camera.camera_id)}</b></div>
+          <select data-role="${esc(camera.camera_id)}" style="width:auto">
+            ${ROLE_OPTIONS.map(([value, label]) =>
+              `<option value="${value}" ${roles[camera.camera_id] === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </div>`).join("")
+      : "";
+  }
+
+  async function saveConfig() {
+    if (!currentConfig) return;
+    const from = $("openFrom").value;
+    const to = $("openTo").value;
+    if (Boolean(from) !== Boolean(to)) {
+      note("configStatus", "err", "Ochilish va yopilishni birga kiriting yoki ikkalasini bo‘sh qoldiring.");
+      return;
+    }
+    const camera_roles = {};
+    document.querySelectorAll("[data-role]").forEach((select) => { camera_roles[select.dataset.role] = select.value; });
+    const body = {
+      ...currentConfig,
+      camera_roles,
+      occupancy_limit: Number($("occupancy").value || currentConfig.occupancy_limit),
+      queue_limit: Number($("queueLimit").value || currentConfig.queue_limit),
+      loitering_sec: Number($("loitering").value || currentConfig.loitering_sec),
+      open_from: from || null,
+      open_to: to || null,
+    };
+    try {
+      const saved = await api("/api/v1/owner/config", { method: "PUT", body: JSON.stringify(body) });
+      currentConfig = saved.config;
+      note("configStatus", "ok", "Saqlandi — bir daqiqada qurilmaga tushadi.");
+    } catch (err) { note("configStatus", "err", err.message); }
+  }
+
+  /* ── A'zolar va digest ──────────────────────────────────────────────── */
+
+  async function loadMembers() {
+    try {
+      const data = await api("/api/v1/owner/members");
+      const me = data.me;
+      const mine = data.members.find((member) => String(member.id) === String(me));
+      $("digestToggle").checked = !(mine && Number(mine.digest_muted));
+      $("memberList").innerHTML = data.members.map((member) => `
+        <div class="member-row">
+          <div class="who"><b>${esc(member.display_name || member.telegram_id)}</b>
+            <small>Telegram ID: ${esc(member.telegram_id)} · ${member.role === "owner" ? "egasi" : "xodim"}${Number(member.notify_failures) >= 3 ? " · <span style=\"color:var(--danger)\">botga /start bosmagan</span>" : ""}</small>
+          </div>
+          ${String(member.id) === String(me) ? '<span class="hint" style="margin:0">siz</span>'
+            : `<button class="button danger small" type="button" data-remove="${esc(member.id)}">O‘chirish</button>`}
+        </div>`).join("");
+      $("memberList").querySelectorAll("[data-remove]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          try {
+            await api(`/api/v1/owner/members/${encodeURIComponent(btn.dataset.remove)}`, { method: "DELETE" });
+            await loadMembers();
+          } catch (err) { note("memberStatus", "err", err.message); }
+        });
+      });
+    } catch (err) { note("memberStatus", "err", err.message); }
+  }
+
+  async function addMember() {
+    const telegramId = $("newMemberId").value.trim();
+    if (!/^[-0-9]{3,32}$/.test(telegramId)) { note("memberStatus", "err", "Telegram ID noto‘g‘ri."); return; }
+    try {
+      await api("/api/v1/owner/members", { method: "POST", body: JSON.stringify({ telegram_id: telegramId, role: "manager" }) });
+      $("newMemberId").value = "";
+      note("memberStatus", "ok", "Qo‘shildi. U botga /start yozsa, xabarlar boradi.");
+      await loadMembers();
+    } catch (err) { note("memberStatus", "err", err.message); }
+  }
+
+  async function toggleDigest() {
+    try {
+      await api("/api/v1/owner/digest", { method: "PUT", body: JSON.stringify({ muted: !$("digestToggle").checked }) });
+    } catch (err) {
+      note("memberStatus", "err", err.message);
+      $("digestToggle").checked = !$("digestToggle").checked;
+    }
+  }
+
+  /* ── To'lov ─────────────────────────────────────────────────────────── */
+
+  async function loadBilling() {
+    try {
+      const [features, invoices] = await Promise.all([
+        api("/api/v1/owner/features"),
+        api("/api/v1/owner/invoices"),
+      ]);
+      const quote = features.summary.active_quote;
+      const uzs = Number(quote.monthly_uzs || 0);
+      $("tariffLine").textContent = uzs
+        ? `Joriy tarif: oyiga ${uzs.toLocaleString("ru-RU")} so‘m`
+        : "Joriy tarif: bazaviy platforma";
+      $("invoiceList").innerHTML = invoices.length
+        ? invoices.slice(0, 5).map((invoice) => `
+          <div class="member-row">
+            <div class="who"><b>${Number(invoice.amount_uzs || 0).toLocaleString("ru-RU")} so‘m</b>
+              <small>${esc(invoice.created_at || "")} · ${invoice.state === "paid" ? "to‘langan" : invoice.state === "pending" ? "to‘lanmagan" : esc(invoice.state)}</small></div>
+            ${invoice.state === "pending" ? `<a class="button primary small" href="${esc(invoice.pay_url)}">To‘lash</a>` : ""}
+          </div>`).join("")
+        : '<p class="hint">Hisob-fakturalar hali yo‘q.</p>';
+    } catch (err) { note("billingStatus", "err", err.message); }
+  }
+
+  async function createInvoice() {
+    try {
+      const invoice = await api("/api/v1/owner/invoices", { method: "POST", body: JSON.stringify({ months: 1 }) });
+      location.href = invoice.pay_url;
+    } catch (err) { note("billingStatus", "err", err.message); }
+  }
+
+  /* ── Modal ──────────────────────────────────────────────────────────── */
+
+  let modalUrl = "";
+
+  function openModal(title) {
+    $("modalTitle").textContent = title;
+    $("modalBody").innerHTML = '<p class="hint">Yuklanmoqda…</p>';
+    $("modalDownload").classList.add("hidden");
+    $("modal").classList.remove("hidden");
+  }
+
+  function closeModal() {
+    $("modal").classList.add("hidden");
+    if (modalUrl) { URL.revokeObjectURL(modalUrl); modalUrl = ""; }
+  }
+
+  async function renderMediaInModal(path, kind, filename, missingText) {
+    try {
+      const r = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(missingText);
+      if (modalUrl) URL.revokeObjectURL(modalUrl);
+      modalUrl = URL.createObjectURL(await r.blob());
+      $("modalBody").innerHTML = kind === "video"
+        ? `<video class="media" src="${modalUrl}" controls autoplay playsinline></video>`
+        : `<img class="media" src="${modalUrl}" alt="">`;
+      const download = $("modalDownload");
+      download.href = modalUrl;
+      download.download = filename;
+      download.classList.remove("hidden");
+    } catch (err) {
+      $("modalBody").innerHTML = `<div class="note warn">${esc(err.message)}</div>`;
+    }
+  }
+
+  /* ── Yig'ish ────────────────────────────────────────────────────────── */
+
+  async function refresh() {
+    try {
+      const [health, cameras] = await Promise.all([
+        api("/api/v1/owner/health"),
+        api("/api/v1/owner/cameras"),
+      ]);
+      cameraList = cameras.cameras || [];
+      drawStatus(health);
+      await drawCameras();
+      const cameraFilter = $("cameraFilter");
+      const selected = cameraFilter.value;
+      cameraFilter.innerHTML = '<option value="">Barcha kameralar</option>' +
+        cameraList.map((camera) => `<option value="${esc(camera.camera_id)}">${esc(camera.label || camera.camera_id)}</option>`).join("");
+      cameraFilter.value = selected;
+
+      const report = await api(`/api/v1/owner/report${reportDay ? `?date=${reportDay}` : ""}`);
+      drawReport(report);
+      await loadEvents();
+      await loadTrend();
+    } catch (err) {
+      // Sessiya tugagan bo'lsa logout allaqachon bo'ldi; boshqa xatoda
+      // banner orqali ko'rsatamiz.
+      const banner = $("statusBanner");
+      banner.className = "status-banner warn";
+      banner.innerHTML = `<div><span>Ma’lumot yangilanmadi</span><span class="sub">${esc(err.message)}</span></div>`;
+    }
+  }
+
+  async function showApp() {
+    $("login").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    await refresh();
+    try {
+      const config = await api("/api/v1/owner/config");
+      drawConfig(config.config);
+    } catch (err) { note("configStatus", "err", err.message); }
+    loadMembers();
+    loadBilling();
+    // Avto-yangilanish: mijoz sahifani ochib qo'ysa ham raqamlar eskirmaydi.
+    setInterval(refresh, 60000);
+  }
+
+  /* ── Ulanishlar ─────────────────────────────────────────────────────── */
+
+  $("passwordBtn").addEventListener("click", passwordLogin);
+  $("otpRequestBtn").addEventListener("click", requestOtp);
+  $("otpVerifyBtn").addEventListener("click", verifyOtp);
+  $("logoutBtn").addEventListener("click", logout);
+  $("refreshBtn").addEventListener("click", refresh);
+  $("saveConfigBtn").addEventListener("click", saveConfig);
+  $("addMemberBtn").addEventListener("click", addMember);
+  $("digestToggle").addEventListener("change", toggleDigest);
+  $("invoiceBtn").addEventListener("click", createInvoice);
+  $("typeFilter").addEventListener("change", loadEvents);
+  $("cameraFilter").addEventListener("change", loadEvents);
+  $("modalClose").addEventListener("click", closeModal);
+  $("modal").addEventListener("click", (event) => { if (event.target === $("modal")) closeModal(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
+
+  const typeFilter = $("typeFilter");
+  TYPE_OPTIONS.forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    typeFilter.appendChild(option);
+  });
+
+  document.querySelectorAll("[data-day]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("[data-day]").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      if (chip.dataset.day === "today") { reportDay = ""; $("reportDate").value = ""; }
+      else {
+        const d = new Date(Date.now() - 86400000);
+        reportDay = d.toISOString().slice(0, 10);
+        $("reportDate").value = reportDay;
+      }
+      refresh();
+    });
+  });
+  $("reportDate").addEventListener("change", () => {
+    document.querySelectorAll("[data-day]").forEach((c) => c.classList.remove("active"));
+    reportDay = $("reportDate").value || "";
+    refresh();
+  });
+
+  $("trendChips").querySelectorAll("[data-days]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      $("trendChips").querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      trendDays = Number(chip.dataset.days);
+      loadTrend();
+    });
+  });
+
+  // Bot manzili sozlanmagan bo'lsa tugma ma'nosiz — yashiramiz.
+  if (!$("botLink").getAttribute("href")) $("botLink").classList.add("hidden");
+
+  if (token) { showApp(); } else { loginFromLink(); }
+})();
 </script>
 </body>
 </html>

@@ -1005,11 +1005,20 @@ async def admin_panel() -> FileResponse:
 
 
 @app.get("/owner", include_in_schema=False)
-async def owner_panel() -> FileResponse:
+async def owner_panel() -> HTMLResponse:
     page = STATIC_DIR / "owner.html"
     if not page.is_file():
         raise HTTPException(404, "Owner panel topilmadi")
-    return FileResponse(page)
+    # Kirish ekranidagi "Telegram botdan havola oling" tugmasi uchun bot
+    # manzili shu yerda qo'yiladi — sahifaga qo'lda yozilmaydi.
+    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    bot_url = (
+        f"https://t.me/{bot_username}"
+        if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
+        else ""
+    )
+    content = page.read_text(encoding="utf-8").replace("__TELEGRAM_BOT_URL__", bot_url)
+    return HTMLResponse(content)
 
 
 @app.get("/api/v1/plans")
@@ -3039,6 +3048,12 @@ async def owner_health(owner: OwnerPrincipal = Depends(require_active_owner)) ->
         "devices": get_event_store().health(owner.site_id),
         "cameras_expected": detail["cameras_expected"],
         "connection": detail["connection"],
+        # Panel sarlavhasi uchun: do'kon nomi va oxirgi aloqadan beri
+        # o'tgan vaqt — "Qurilma 2 soatdan beri aloqada emas" kabi oddiy
+        # tildagi holat shulardan yasaladi.
+        "site_name": detail.get("name"),
+        "minutes_since_seen": detail.get("minutes_since_seen"),
+        "cameras_active": detail.get("cameras_active"),
     }
 
 
@@ -3290,7 +3305,13 @@ async def owner_feature_request(
 
 @app.get("/api/v1/owner/members")
 async def owner_members(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
-    return {"members": get_event_store().list_members(owner.site_id)}
+    # `me` — panel o'z qatorini topib, digest tumblerini to'g'ri ko'rsatishi
+    # uchun (token ichidagi member_id brauzerga boshqa yo'l bilan chiqmaydi).
+    return {
+        "members": get_event_store().list_members(owner.site_id),
+        "me": owner.member_id,
+        "role": owner.role,
+    }
 
 
 @app.post("/api/v1/owner/members")

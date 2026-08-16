@@ -262,7 +262,7 @@ def test_cache_token_matches_the_file_contents(asset: str) -> None:
 def test_owner_panel_logs_in_from_the_link() -> None:
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     assert "loginFromLink" in html
-    assert "params.get('key')" in html, "havoladagi token o'qilmayapti"
+    assert 'params.get("key")' in html, "havoladagi token o'qilmayapti"
     assert "loginFromLink()" in html, "sahifa ochilganda chaqirilmayapti"
 
 
@@ -275,10 +275,11 @@ def test_link_login_uses_the_token_endpoint() -> None:
     """
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     block = html[html.index("async function loginFromLink"):]
-    block = block[: block.index("if(token)")]
+    block = block[: block.index("async function passwordLogin")]
     assert "/api/v1/owner/auth/link" in block, "token server tekshiruvidan o'tsin"
     assert "d.access_token" in block, "token faqat serverdan olinsin"
-    assert "params.get('tg')" not in html, "Telegram ID bilan kirish qaytmasin"
+    assert 'params.get("tg")' not in html, "Telegram ID bilan kirish qaytmasin"
+    assert "params.get('tg')" not in html
 
 
 def test_link_token_is_scrubbed_from_the_address_bar() -> None:
@@ -290,4 +291,58 @@ def test_link_token_is_scrubbed_from_the_address_bar() -> None:
 def test_stored_session_wins_over_the_link() -> None:
     """Kirgan odam har safar qayta kirmasin."""
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
-    assert "if(token){showApp();}else{loginFromLink();}" in html
+    assert "if (token) { showApp(); } else { loginFromLink(); }" in html
+
+
+# ── Yangi mijoz paneli qoidalari ─────────────────────────────────────────
+#
+# Qaror (2026-08-17): panel yorug' brend uslubida, telefonli mijoz uchun.
+# Bu testlar eski holat qaytib kelmasligini qo'riqlaydi.
+
+
+def test_owner_panel_is_light_branded_not_admin_dark() -> None:
+    """Panel admin.css (qorong'u dasturchi uslubi) bilan kelmasin."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "owner.css" in html
+    assert "admin.css" not in html
+    assert "chaqimchi-logo" in html, "brend logotipi ko'rinsin"
+
+
+def test_owner_panel_has_no_attendance_leftovers() -> None:
+    """Davomat arxivlangan — panelda uning izi qolmasin.
+
+    Ilgari ikkita davomat kartasi production'da har ochilishda 403 xato
+    ko'rsatib turardi — mijozning birinchi taassuroti "buzuq narsa" edi.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8").lower()
+    for marker in ("davomat", "attendance", "xodimlar davomati", "enrollment", "person_name"):
+        assert marker not in html, f"davomat qoldig'i: {marker}"
+
+
+def test_owner_panel_has_no_raw_json_editors() -> None:
+    """Lines/Zones JSON textarealar oddiy mijozni cho'chitadi — endi
+    geometriya faqat o'rnatuvchi vositasida."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "linesJson" not in html
+    assert "zonesJson" not in html
+    assert "<textarea" not in html
+
+
+def test_owner_panel_shows_camera_previews_and_refreshes() -> None:
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "/preview" in html, "kamera rasmi endpointi ishlatilsin"
+    assert "setInterval(refresh" in html, "avto-yangilanish bo'lsin"
+
+
+def test_owner_media_opens_in_a_modal_with_errors_shown() -> None:
+    """`window.open(blob)` popup-blockerda yutilardi va xato jim qolardi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "window.open(" not in html
+    assert "renderMediaInModal" in html
+    assert "URL.revokeObjectURL" in html, "blob URL oqib ketmasin"
+
+
+def test_owner_panel_does_not_say_sotqin() -> None:
+    """Ichki kod nomi mijozga ko'rinmasin."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "Sotqin" not in html

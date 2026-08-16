@@ -93,51 +93,19 @@ def test_the_popular_preset_is_in_the_middle() -> None:
     assert badged == [1], f"«Ommabop» belgisi o'rtada bo'lishi kerak, hozir: {badged}"
 
 
-# ── Stepper ──────────────────────────────────────────────────────────────
-
-
-def test_camera_stepper_replaced_the_dropdown() -> None:
-    """`<select>` `<label>` ichida edi: uni bosganda checkbox ham
-    almashishi mumkin edi va o'chirilgan holatda ko'rinmasdi."""
-    source = SITE_JS.read_text(encoding="utf-8")
-    assert "feature-cameras" not in source, "eski `<select>` qoldig'i"
-    assert "cameraOptions" not in source, "eski `<option>` generatori qoldig'i"
-    assert 'data-step="-1"' in source and 'data-step="1"' in source
-
-
-def test_stepper_is_clamped_to_the_catalog_limit() -> None:
-    """Chegara qo'lda yozilmasin: `pricing.max_cameras` serverdan keladi."""
-    source = SITE_JS.read_text(encoding="utf-8")
-    clamp = re.search(r"function setCameras\(row, value\) \{(.*?)\n  \}", source, re.S)
-    assert clamp, "setCameras topilmadi"
-    body = clamp.group(1)
-    assert "pricing.max_cameras" in body, "chegara serverdan olinmayapti"
-    assert "Math.min" in body and "Math.max" in body, "qiymat cheklanmayapti"
-
-
-def test_stepper_is_reachable_with_a_keyboard() -> None:
-    source = SITE_JS.read_text(encoding="utf-8")
-    assert "ArrowRight" in source and "ArrowLeft" in source, "o'q tugmalari ishlamaydi"
-
-
-# ── Sahifa tuzilishi ─────────────────────────────────────────────────────
+# ── Sahifa tuzilishi (chuqur minimalizm) ─────────────────────────────────
+#
+# Qaror (2026-08-16): sahifa hero + tayyor paketlar + bitta forma + 5 savol.
+# Ilgari 9 bo'lim, 3 alohida forma va 9 ta raqobatlashuvchi tugma bor edi —
+# mijoz nima bosishni bilmasdi.  Quyidagi testlar o'sha holat qaytib
+# kelmasligini qo'riqlaydi.
 
 
 def test_pricing_section_has_a_noscript_fallback() -> None:
-    """JS o'chsa narx bo'limi abadiy "Narxlar yuklanmoqda…" turardi."""
+    """JS o'chsa narx bo'limi abadiy bo'sh turardi."""
     html = SITE_HTML.read_text(encoding="utf-8")
     assert "<noscript>" in html
     assert "JavaScript" in html
-
-
-def test_mobile_price_bar_and_telegram_button_do_not_overlap() -> None:
-    """Ikkalasi ham ekran pastida `position: fixed` — biri ikkinchisini
-    yopib qo'yardi."""
-    css = SITE_CSS.read_text(encoding="utf-8")
-    assert ".mobile-lead-cta.is-hidden" in css, "Telegram tugmasi yashirilmaydi"
-    assert ".sticky-price" in css
-    js = SITE_JS.read_text(encoding="utf-8")
-    assert "is-hidden" in js, "JS panelni almashtirmaydi"
 
 
 def test_switches_announce_their_state() -> None:
@@ -147,11 +115,27 @@ def test_switches_announce_their_state() -> None:
     assert 'aria-checked' in html
 
 
-def test_summary_is_a_real_list() -> None:
-    """`\\n` bilan ajratilgan matn ekran o'quvchida bitta uzun satr bo'lardi."""
+def test_the_page_has_exactly_one_lead_form_flow() -> None:
+    """Uchala forma bitta oqimga birlashtirildi.
+
+    `notifyForm` bundan mustasno emas — u ham `/api/v1/public/leads` ga
+    boradi va faqat dastur nashr qilinmaganda ko'rinadi.  Lekin to'liq
+    konfigurator formasi (`purchaseForm`) qaytmasligi kerak.
+    """
     html = SITE_HTML.read_text(encoding="utf-8")
-    assert '<ul id="summaryFeatures"' in html
-    assert "white-space" not in SITE_JS.read_text(encoding="utf-8")
+    assert 'id="leadForm"' in html
+    assert 'id="purchaseForm"' not in html, "konfigurator formasi qaytib kelgan"
+    assert 'id="stickyPrice"' not in html, "sticky narx paneli qaytib kelgan"
+    assert html.count("<form") == 2, "sahifada leadForm va notifyForm'dan boshqa forma bo'lmasin"
+
+
+def test_presets_lead_to_the_single_form() -> None:
+    """Paket tugmasi mijozni yagona formaga olib boradi va tanlov
+    admin xabarida (`message`) ko'rinadi."""
+    source = SITE_JS.read_text(encoding="utf-8")
+    assert "goToForm" in source
+    assert "presetSummary" in source
+    assert 'getElementById("leadMessage")' in source
 
 
 def test_buy_button_does_not_promise_a_checkout() -> None:
@@ -160,3 +144,10 @@ def test_buy_button_does_not_promise_a_checkout() -> None:
     assert "Sotib olishni boshlash" not in source, (
         "tugma to'lov sahifasini va'da qiladi, aslida ariza yuboriladi"
     )
+
+
+def test_attendance_is_not_advertised() -> None:
+    """Davomat (Face ID) arxivlangan — sotuv sahifasi uni taklif qilmasin."""
+    html = SITE_HTML.read_text(encoding="utf-8").lower()
+    assert "davomat" not in html
+    assert "face id" not in html

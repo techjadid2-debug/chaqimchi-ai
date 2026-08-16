@@ -191,3 +191,33 @@ def test_browser_facing_images_are_small() -> None:
                 continue
             size_kb = asset.stat().st_size / 1024
             assert size_kb < 200, f"{page.name} → {name}: {size_kb:.0f} KB, juda katta"
+
+
+# ── Versiya sahifada ko'rinsin ───────────────────────────────────────────
+#
+# Haqiqiy muammo: yuklab olish tugmasi faqat hajmni ko'rsatardi (68 MB),
+# u esa har relizda bir xil.  Natijada yangi versiya chiqqanini
+# sahifadan bilib bo'lmasdi va eski fayl qayta yuklab olinardi —
+# "yuklab olganim eski fayl bilan bir xil ekan".
+
+
+def test_landing_page_shows_the_installer_version() -> None:
+    html = (STATIC / "site.html").read_text(encoding="utf-8")
+    js = (STATIC / "site.js").read_text(encoding="utf-8")
+    assert 'id="downloadVersion"' in html, "versiya uchun joy yo'q"
+    assert "release.version" in js, "versiya API javobidan olinmayapti"
+
+
+def test_install_guide_shows_the_installer_version() -> None:
+    html = (STATIC / "install.html").read_text(encoding="utf-8")
+    assert 'id="guideDownloadVersion"' in html
+    assert "release.version" in html
+
+
+def test_version_is_hidden_until_it_is_known() -> None:
+    """Bo'sh "Versiya" yozuvi mijozni chalg'itadi — nashr qilinmagan
+    bo'lsa umuman ko'rinmasin."""
+    for name, marker in (("site.html", "downloadVersion"), ("install.html", "guideDownloadVersion")):
+        html = (STATIC / name).read_text(encoding="utf-8")
+        block = html[html.index(f'id="{marker}"'):]
+        assert "hidden" in block[: block.index(">") + 1], f"{name}: boshida yashirin bo'lsin"

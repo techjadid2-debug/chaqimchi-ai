@@ -71,6 +71,14 @@
         const size = release.size_mb ? ` (${release.size_mb} MB)` : "";
         const button = document.getElementById("downloadBtn");
         if (button) button.textContent = `⬇️ Windows uchun yuklab olish${size}`;
+        // Versiyani ko'rsatamiz.  Ilgari faqat hajm chiqardi, u esa har
+        // relizda bir xil (68 MB) — natijada yangi fayl chiqqanini
+        // sahifadan bilib bo'lmasdi va eski fayl qayta yuklab olinardi.
+        const label = document.getElementById("downloadVersion");
+        if (label && release.version) {
+          label.textContent = `Versiya ${release.version}`;
+          label.hidden = false;
+        }
         downloadReady.hidden = false;
         notifyForm.hidden = true;
       })

@@ -38,6 +38,7 @@
         <a class="button button-light" id="guideDownloadBtn" href="/api/v1/public/download-installer">
           Windows uchun yuklab olish
         </a>
+        <p class="hint" id="guideDownloadVersion" style="margin: 8px 0 0;" hidden></p>
       </div>
 
       <div id="guideDownloadPending">
@@ -262,6 +263,13 @@
         const button = document.getElementById("guideDownloadBtn");
         if (button && release.size_mb) {
           button.textContent = `Windows uchun yuklab olish (${release.size_mb} MB)`;
+        }
+        // Versiya ko'rinsin: hajm har relizda bir xil (68 MB) va usiz
+        // yangi fayl chiqqanini sahifadan bilib bo'lmasdi.
+        const label = document.getElementById("guideDownloadVersion");
+        if (label && release.version) {
+          label.textContent = `Versiya ${release.version}`;
+          label.hidden = false;
         }
         document.getElementById("guideDownloadReady").hidden = false;
         document.getElementById("guideDownloadPending").hidden = true;

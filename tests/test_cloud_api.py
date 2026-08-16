@@ -449,7 +449,30 @@ def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_pa
     response = cloud_client.get("/api/v1/public/download-installer")
     assert response.status_code == 200
     assert response.content.startswith(b"MZ")
-    assert "Chaqimchi_AI_Setup.exe" in response.headers.get("content-disposition", "")
+    # Fayl nomida versiya bo'lishi shart: usiz har yuklab olishda bir xil
+    # nom va deyarli bir xil hajm tushardi va mijoz yangi versiyani
+    # olganini ko'ra olmasdi.
+    disposition = response.headers.get("content-disposition", "")
+    assert "Chaqimchi_AI_Setup-" in disposition
+    assert disposition.endswith('.exe"')
+
+
+def test_download_filename_carries_version_and_pairing_code(cloud_client, monkeypatch, tmp_path) -> None:
+    """Nomdagi kod o'rnatuvchi tomonidan o'qiladi va dastur o'zi ulanadi.
+
+    Versiya qo'shilgach kod nomning **oxirida** qolishi shart — NSIS
+    aynan oxirgi `-XXXXXX` ni o'qiydi.
+    """
+    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    disposition = cloud_client.get(
+        "/api/v1/public/download-installer?code=13204e"
+    ).headers["content-disposition"]
+    assert disposition.endswith('-13204E.exe"'), disposition
 
 
 def test_windows_installer_redirects_when_published_externally(cloud_client, monkeypatch) -> None:

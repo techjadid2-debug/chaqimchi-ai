@@ -176,6 +176,8 @@
   /* ── Boshqaruv ───────────────────────────────────────────────────────── */
 
   function drawCloud(cloud) {
+    const version = $("appVersion");
+    if (version && cloud.app_version) version.textContent = "v" + cloud.app_version;
     const bar = $("cloudBar");
     if (!cloud.connected) {
       bar.innerHTML =

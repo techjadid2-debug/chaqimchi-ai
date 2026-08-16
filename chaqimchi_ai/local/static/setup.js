@@ -675,6 +675,14 @@
   (async function boot() {
     try {
       await loadCameras();
+      // Versiya yuqorida ko'rinib tursin: mijoz yangi versiyani
+      // o'rnatganini shundan tekshiradi.
+      api("/api/setup/cloud-status")
+        .then((state) => {
+          const badge = $("appVersion");
+          if (badge && state.app_version) badge.textContent = "v" + state.app_version;
+        })
+        .catch(() => {});
       const summary = await api("/api/setup/summary");
       if (!summary.model_available) {
         note(

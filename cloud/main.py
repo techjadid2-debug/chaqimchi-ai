@@ -1250,9 +1250,17 @@ async def public_download_installer(code: str = "") -> Response:
     mijozga beriladi.  Shu sabab uni havolada tashish xavf tug'dirmaydi.
     """
     safe_code = re.sub(r"[^A-Fa-f0-9]", "", code).upper()[:6]
-    filename = (
-        f"Chaqimchi_AI_Setup-{safe_code}.exe" if len(safe_code) == 6 else "Chaqimchi_AI_Setup.exe"
-    )
+
+    # Versiya fayl nomida bo'lishi shart.  Usiz `Chaqimchi_AI_Setup.exe`
+    # har safar bir xil nom va deyarli bir xil hajm bilan tushardi —
+    # mijoz yangi versiyani yuklab olganini **ko'ra olmasdi** va eski
+    # faylni qayta o'rnatib, muammo tuzalmadi deb o'ylardi.
+    release = latest_windows_release()
+    version = release["version"] if release else __version__
+    parts = ["Chaqimchi_AI_Setup", version]
+    if len(safe_code) == 6:
+        parts.append(safe_code)
+    filename = "-".join(parts) + ".exe"
 
     url = _windows_installer_url()
     if url:

@@ -55,3 +55,22 @@ benchmark:
 windows-installer:
 	$(PY) scripts/build_windows_payload.py
 	makensis -V2 scripts/windows_installer.nsi
+
+# To'liq Windows RELIZ: payload (cloud manzili bilan) + NSIS + versiyalangan
+# nusxa + Ed25519 imzo.  0.6.4 relizida bu qadamlar qo'lda bajarilib, ikkita
+# tuzoqqa duch kelindi (cloud URL unutildi, imzo noto'g'ri mahsulot bilan
+# ketayozdi) — endi hammasi bitta buyruq:
+#   make windows-release CLOUD_URL=https://chaqimchi.example
+# Eslatma: versiyani OLDIN ko'taring (pyproject.toml + chaqimchi_ai/__init__.py)
+# va commit qiling; chiqqan .exe/.json ni serverga scp qiling (buyruq oxirida
+# ko'rsatiladi), tarqatish tartibi docs/RELIZ_VA_OTA.md da.
+windows-release:
+	@test -n "$(CLOUD_URL)" || (echo 'Usage: make windows-release CLOUD_URL=https://cloud-manzil' && exit 1)
+	CHAQIMCHI_DEFAULT_CLOUD_URL="$(CLOUD_URL)" $(PY) scripts/build_windows_payload.py
+	makensis -V2 scripts/windows_installer.nsi
+	@VERSION=$$($(PY) -c "import chaqimchi_ai; print(chaqimchi_ai.__version__)"); \
+	cp releases/Chaqimchi_AI_Setup.exe "releases/chaqimchi-windows-$$VERSION.exe"; \
+	$(PY) scripts/sign_release.py "releases/chaqimchi-windows-$$VERSION.exe"; \
+	echo ""; \
+	echo "Serverga yuklash:"; \
+	echo "  scp releases/chaqimchi-windows-$$VERSION.exe releases/chaqimchi-windows-$$VERSION.json <server>:<dir>/releases/"

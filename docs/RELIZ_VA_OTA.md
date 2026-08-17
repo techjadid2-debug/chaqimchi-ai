@@ -49,7 +49,26 @@ scp releases/chaqimchi-sotqin-0.6.1.{tar.gz,json} <server>:<deploy-dir>/releases
 Imzolovchi uch narsani o'zi tekshiradi va xato bo'lsa manifest yozmaydi:
 arxiv nomi bilan ichidagi `__version__` mos kelishi, versiya qurilma qabul
 qiladigan belgilardan iborat bo'lishi, va imzo **aynan qurilmadagi ochiq
-kalit** bilan tekshirilishi.
+kalit** bilan tekshirilishi. Mahsulot nomi (`chaqimchi-windows` /
+`chaqimchi-sotqin`) fayl nomidan o'zi aniqlanadi.
+
+### Windows relizi (asosiy mahsulot)
+
+Versiya ko'tarilib commit qilingandan keyin hammasi bitta buyruq:
+
+```bash
+make windows-release CLOUD_URL=https://chaqimchi.169.58.27.216.nip.io
+# so'ng chiqarilgan .exe va .json ni serverga:
+scp releases/chaqimchi-windows-X.Y.Z.{exe,json} deploy@<server>:/home/deploy/chaqimchi-ai/releases/
+```
+
+`CLOUD_URL` majburiy: u o'rnatuvchiga bake qilinadi va yangi mijoz
+pairing kod bilan yuklaganda dastur cloudga o'zi ulanadi. Usiz sehrgar
+manzilni qo'lda so'raydi (0.6.4 da bir marta shu unutilgan).
+
+Serverga tushishi bilan: sayt tugmasi yangi versiyani ko'rsatadi,
+qurilmalar 15 daqiqa ichida o'zi yangilanadi (`auto` siyosatda).
+Tarqatish tartibi — pastdagi "Bosqichli tarqatish" bo'limi.
 
 ### Yangi o'rnatishlar uchun (`/downloads/sotqin-installer.sh`)
 

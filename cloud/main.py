@@ -11,6 +11,7 @@ import csv
 import hashlib
 import html
 import io
+import json
 import logging
 import os
 import re
@@ -19,7 +20,7 @@ from contextlib import asynccontextmanager
 from datetime import date as date_type
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -50,11 +51,12 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import ratelimit
+from cloud import botfmt, ratelimit
 from cloud.alerts import AlertService, test_message
-from cloud.digest import DailyDigestService
+from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
-from cloud.notify import build_alert, event_label
+from cloud.notify import event_label, select_alert_events
+from cloud.notify import summarize as notify_summarize
 from cloud.owner_auth import (
     OwnerPrincipal,
     issue_owner_token,
@@ -605,6 +607,76 @@ async def _send_owner_telegram(
             raise TelegramSendError(response.status_code, response.text[:300])
 
 
+async def _send_owner_photo(
+    chat_id: str,
+    photo: bytes,
+    caption: str,
+    *,
+    reply_markup: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Rasmli xabar (sendPhoto, multipart).
+
+    Snapshotlar maxfiy (auth talab qiladi), shuning uchun URL bilan emas —
+    baytlar to'g'ridan-to'g'ri yuboriladi.  Xato turlari matnli yuborish
+    bilan bir xil: `chat not found` hisobi bitta joyda yuritiladi.
+    """
+    import httpx
+
+    token = (
+        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+    )
+    if not token:
+        raise HTTPException(503, "Owner Telegram bot tokeni sozlanmagan")
+    data: Dict[str, Any] = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}
+    if reply_markup:
+        data["reply_markup"] = json.dumps(reply_markup)
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            f"https://api.telegram.org/bot{token}/sendPhoto",
+            data=data,
+            files={"photo": ("hodisa.jpg", photo, "image/jpeg")},
+        )
+        if response.status_code >= 400:
+            raise TelegramSendError(response.status_code, response.text[:300])
+
+
+#: Bot menyusida ko'rinadigan buyruqlar — foydalanuvchi yozib o'tirmaydi,
+#: "/" bosganda ro'yxatdan tanlaydi.
+BOT_COMMANDS = [
+    {"command": "hisobot", "description": "Bugungi hisobot"},
+    {"command": "kamera", "description": "Kameralardan jonli rasm"},
+    {"command": "panel", "description": "Mijoz paneliga kirish"},
+    {"command": "yordam", "description": "Buyruqlar ro'yxati"},
+]
+
+
+async def _setup_bot_commands() -> None:
+    """`setMyCommands` — start'da bir marta.
+
+    Muvaffaqiyatsizlik kritik emas: menyu eski qolsa ham bot ishlayveradi,
+    shuning uchun xato faqat log'ga yoziladi.
+    """
+    import httpx
+
+    token = (
+        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+    )
+    if not token:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"https://api.telegram.org/bot{token}/setMyCommands",
+                json={"commands": BOT_COMMANDS},
+            )
+        if response.status_code >= 400:
+            logger.warning("setMyCommands xatosi: %s %s", response.status_code, response.text[:200])
+    except Exception:
+        logger.warning("Bot buyruqlar menyusi o'rnatilmadi", exc_info=True)
+
+
 class _DurableAlertThrottle:
     """`cloud/notify.py` tormozi uchun bazaga tayangan implementatsiya.
 
@@ -634,7 +706,13 @@ NOTIFY_FAILURE_LIMIT = 3
 OWNER_ALERTS_PER_HOUR = 10
 
 
-async def _notify_site_members(site_id: str, text: str) -> None:
+async def _notify_site_members(
+    site_id: str,
+    text: str,
+    *,
+    photo: Optional[bytes] = None,
+    reply_markup: Optional[Dict[str, Any]] = None,
+) -> None:
     # Tarifda Telegram yo'q bo'lsa — yuborilmaydi (masalan starter).
     site = get_store().get_site(site_id)
     if site is not None:
@@ -655,7 +733,11 @@ async def _notify_site_members(site_id: str, text: str) -> None:
         ):
             continue
         try:
-            await _send_owner_telegram(str(member["telegram_id"]), text)
+            chat_id = str(member["telegram_id"])
+            if photo is not None:
+                await _send_owner_photo(chat_id, photo, text, reply_markup=reply_markup)
+            else:
+                await _send_owner_telegram(chat_id, text, reply_markup=reply_markup)
             if int(member.get("notify_failures") or 0):
                 store.reset_notify_failures(site_id, str(member["id"]))
         except TelegramSendError as exc:
@@ -670,6 +752,54 @@ async def _notify_site_members(site_id: str, text: str) -> None:
         except Exception:
             # Event qabul qilinishi Telegramdagi vaqtinchalik xatoga bog'lanmasin.
             continue
+
+
+#: Snapshot batchdan KEYIN alohida yuklanadi — rasm yetib kelishini shu
+#: muddatgacha kutamiz (2 soniyalik qadamlar bilan).
+ALERT_SNAPSHOT_WAIT_SEC = 20
+
+
+async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
+    """Batch ogohlantirishi — imkon bo'lsa hodisa RASMI bilan.
+
+    Muammo: qurilma avval hodisalar batchini yuboradi, snapshot esa bir
+    necha soniyadan keyin alohida PUT bilan keladi.  Shuning uchun rasm
+    biroz kutiladi; kelmasa matnli xabar ketadi — kechikkanidan ko'ra
+    rasmsiz yetib borgani yaxshi.
+    """
+    site = get_store().get_site(site_id)
+    site_name = str(site.get("name")) if site else None
+    try:
+        config = get_event_store().get_site_config(site_id)["config"]
+        labels = {
+            str(key): str(value) for key, value in (config.get("camera_labels") or {}).items()
+        }
+    except Exception:
+        labels = {}
+
+    text = notify_summarize(events, site_name=site_name, camera_labels=labels)
+
+    photo: Optional[bytes] = None
+    candidate = next(
+        (e for e in events if e.has_snapshot and e.severity == "critical"), None
+    ) or next((e for e in events if e.has_snapshot), None)
+    if candidate is not None:
+        attempts = max(1, ALERT_SNAPSHOT_WAIT_SEC // 2)
+        for attempt in range(attempts):
+            row = get_event_store().event(site_id, candidate.event_id)
+            key = (row or {}).get("snapshot_key")
+            if key:
+                try:
+                    photo = get_snapshot_store().get(str(key))
+                except Exception:
+                    photo = None
+                break
+            if attempt + 1 < attempts:
+                await asyncio.sleep(2)
+
+    base = public_url().rstrip("/")
+    markup = botfmt.panel_button(base) if base else None
+    await _notify_site_members(site_id, text, photo=photo, reply_markup=markup)
 
 
 #: Bitta obyekt media (snapshot + klip) uchun ko'pi bilan shuncha joy oladi.
@@ -796,10 +926,16 @@ async def lifespan(app: FastAPI):
         get_store().ensure_bootstrap_admin(bootstrap_username, bootstrap_password)
     alerts = get_alerts()
     alerts.start()
-    _digest = DailyDigestService(get_event_store(), get_store().list_sites, _send_owner_telegram)
+    _digest = DailyDigestService(
+        get_event_store(),
+        get_store().list_sites,
+        _send_owner_telegram,
+        panel_url=public_url(),
+    )
     _digest_task = asyncio.create_task(_digest.run())
     _maintenance_task = asyncio.create_task(_maintenance_loop())
     _lead_notification_task = asyncio.create_task(_lead_notification_loop())
+    _bot_commands_task = asyncio.create_task(_setup_bot_commands())
     try:
         yield
     finally:
@@ -812,6 +948,7 @@ async def lifespan(app: FastAPI):
         if _lead_notification_task is not None:
             _lead_notification_task.cancel()
             _lead_notification_task = None
+        _bot_commands_task.cancel()
         _digest = None
         await alerts.stop()
 
@@ -1013,9 +1150,7 @@ async def owner_panel() -> HTMLResponse:
     # manzili shu yerda qo'yiladi — sahifaga qo'lda yozilmaydi.
     bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
     bot_url = (
-        f"https://t.me/{bot_username}"
-        if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
-        else ""
+        f"https://t.me/{bot_username}" if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username) else ""
     )
     content = page.read_text(encoding="utf-8").replace("__TELEGRAM_BOT_URL__", bot_url)
     return HTMLResponse(content)
@@ -2502,13 +2637,10 @@ async def ingest_event_batch(
     # 500 talik batchda botni Telegram limitiga urib, xabarni butunlay
     # yo'qotardi — batafsili `cloud/notify.py` da.  Tormoz bazada turadi:
     # xotiradagisi har deploy'da nolga qaytib, xabar bo'roni berardi.
-    message = build_alert(device["site_id"], new_events, throttle_service=_durable_throttle)
-    if message:
-        if any(event.has_snapshot or event.has_clip for event in new_events):
-            message += (
-                f"\n🔐 Rasm va klip: {public_url().rstrip('/')}/owner?site={device['site_id']}"
-            )
-        background_tasks.add_task(_notify_site_members, device["site_id"], message)
+    # Xabar imkon bo'lsa hodisa RASMI bilan ketadi (`_notify_alert`).
+    allowed = select_alert_events(device["site_id"], new_events, throttle_service=_durable_throttle)
+    if allowed:
+        background_tasks.add_task(_notify_alert, device["site_id"], allowed)
     return {"ok": True, "accepted": accepted}
 
 
@@ -2666,7 +2798,11 @@ async def edge_update(
     if release is None:
         return {"available": False, "reason": "nashr qilingan reliz yo'q", "policy": policy}
     if policy["channel"] == "hold":
-        return {"available": False, "reason": "obyekt uchun yangilanish to'xtatilgan", "policy": policy}
+        return {
+            "available": False,
+            "reason": "obyekt uchun yangilanish to'xtatilgan",
+            "policy": policy,
+        }
     if policy["channel"] == "pin" and policy["version"] != release["version"]:
         pinned = _windows_release_by_version(str(policy["version"]))
         if pinned is None:
@@ -3448,68 +3584,228 @@ async def owner_telegram_webhook(
     telegram_id = str(chat.get("id") or "")
     text = str(message.get("text") or "").strip()
     command = text.split()[0].lower().split("@", 1)[0] if text else ""
+    # Eski buyruqlar yashaydi — foydalanuvchi yodlab qolgan bo'lishi mumkin.
+    command = BOT_COMMAND_ALIASES.get(command, command)
     members = get_event_store().members_for_telegram(telegram_id)
-    if telegram_id and chat.get("type") == "private" and command in {"/start", "/help"}:
+    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+
+    if (
+        telegram_id
+        and chat.get("type") == "private"
+        and (command == "/start" or (command == "/yordam" and not members))
+    ):
         # /start har bosilganda xabar + yangi kirish havolasi yaratiladi —
         # cheklovsiz bu DB'ni ham, chatni ham bo'lar edi.  Oshib ketsa
         # indamay qaytamiz: webhook'ka 429 berish Telegram'ni retry'ga
         # undaydi.
         if not ratelimit.limiter().hit("tg-start", telegram_id, limit=5, window_sec=600):
             return {"ok": True}
-        base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
-        customer_url = f"{base}/owner"
-        if members:
-            # A'zoga shaxsiy kirish havolasi — bot orqali yetkaziladi,
-            # ya'ni faqat o'sha Telegram akkaunt egasi ko'radi.  Bu eski
-            # "kodsiz kirish ro'yxati"ning xavfsiz o'rnini bosadi: havola
-            # uzun tasodifiy token, Telegram ID emas.
-            try:
-                token = get_event_store().create_login_link(
-                    str(members[0]["site_id"]),
-                    telegram_id,
-                    secret=_owner_secret(),
-                    ttl_days=LOGIN_LINK_TTL_DAYS,
-                )
-                customer_url += f"?key={quote(token, safe='')}"
-            except HTTPException:
-                # Owner JWT secret sozlanmagan (dev muhit) — oddiy havola.
-                customer_url += f"?site={quote(str(members[0]['site_id']), safe='')}"
-        await _send_owner_telegram(
-            telegram_id,
-            "<b>Chaqimchi AI platformasiga xush kelibsiz.</b>\n\n"
-            "Yangi Sotqin mini-kompyuterini sozlash uchun o‘rnatuvchi bo‘limini tanlang. "
-            "Agar tizimni harid qilgan bo‘lsangiz, mijoz panelidan kamera va qurilma "
-            "holatini kuzating.",
-            reply_markup={
-                "inline_keyboard": [
-                    [{"text": "🖥 Sotqinni o‘rnatish", "url": f"{base}/installer"}],
-                    [{"text": "🏪 Mijoz panelini ochish", "url": customer_url}],
-                    [{"text": "🛒 Tarif va maslahat", "url": f"{base}/#configurator"}],
-                ]
-            },
-        )
+        text_out, markup = _bot_welcome(base, telegram_id, members)
+        await _send_owner_telegram(telegram_id, text_out, reply_markup=markup)
         return {"ok": True}
     if not telegram_id or not members:
         return {"ok": True}
 
-    lines: List[str] = []
+    if command == "/yordam":
+        await _send_owner_telegram(
+            telegram_id,
+            "<b>Chaqimchi AI bot buyruqlari</b>\n\n"
+            "/hisobot — bugungi hisobot: kirdi-chiqdi, navbat, gavjum soat\n"
+            "/kamera — har kameradan oxirgi rasm\n"
+            "/panel — mijoz paneliga kirish havolasi\n"
+            "/yordam — shu ro'yxat\n\n"
+            "Har kuni kechqurun kunlik, dushanba ertalab haftalik hisobot "
+            "avtomatik keladi. Muhim ogohlantirishlar (kamera o'chdi va h.k.) "
+            "darhol yuboriladi.",
+        )
+    elif command == "/panel":
+        if not ratelimit.limiter().hit("tg-start", telegram_id, limit=5, window_sec=600):
+            return {"ok": True}
+        url, is_personal = _bot_panel_url(base, telegram_id, members)
+        note = (
+            "\n\nEslatma: oldingi kirish havolangiz endi ishlamaydi — doim eng yangisini ishlating."
+            if is_personal
+            else ""
+        )
+        await _send_owner_telegram(
+            telegram_id,
+            "📊 <b>Mijoz paneli</b> — quyidagi tugma orqali kiring." + note,
+            reply_markup={"inline_keyboard": [[{"text": "📊 Panelni ochish", "url": url}]]},
+        )
+    elif command == "/kamera":
+        # Har bosishda kamera boshiga bitta rasm ketadi — spam bo'lmasin.
+        if not ratelimit.limiter().hit("tg-kamera", telegram_id, limit=5, window_sec=600):
+            return {"ok": True}
+        await _bot_send_camera_photos(telegram_id, members)
+    elif command == "/hisobot":
+        await _bot_send_report(telegram_id, members, base)
+    else:
+        await _send_owner_telegram(
+            telegram_id,
+            "Buyruqlar: /hisobot, /kamera, /panel, /yordam",
+        )
+    return {"ok": True}
+
+
+#: Eski buyruqlar → yangi nomlar (foydalanuvchiga sinish yo'q).
+BOT_COMMAND_ALIASES = {
+    "/today": "/hisobot",
+    "/status": "/hisobot",
+    "/cameras": "/kamera",
+    "/help": "/yordam",
+}
+
+
+def _bot_panel_url(base: str, telegram_id: str, members: List[Dict[str, Any]]) -> Tuple[str, bool]:
+    """Panelga kirish havolasi.
+
+    A'zoga shaxsiy token — bot orqali yetkaziladi, ya'ni faqat o'sha
+    Telegram akkaunt egasi ko'radi.  Bu eski "kodsiz kirish ro'yxati"ning
+    xavfsiz o'rnini bosadi: havola uzun tasodifiy token, Telegram ID emas.
+    """
+    url = f"{base}/owner"
+    if not members:
+        return url, False
+    try:
+        token = get_event_store().create_login_link(
+            str(members[0]["site_id"]),
+            telegram_id,
+            secret=_owner_secret(),
+            ttl_days=LOGIN_LINK_TTL_DAYS,
+        )
+        return f"{url}?key={quote(token, safe='')}", True
+    except HTTPException:
+        # Owner JWT secret sozlanmagan (dev muhit) — oddiy havola.
+        return f"{url}?site={quote(str(members[0]['site_id']), safe='')}", False
+
+
+def _bot_welcome(
+    base: str, telegram_id: str, members: List[Dict[str, Any]]
+) -> Tuple[str, Dict[str, Any]]:
+    if members:
+        url, _ = _bot_panel_url(base, telegram_id, members)
+        text = (
+            "👋 <b>Chaqimchi AI</b> — do'koningiz nazorati.\n\n"
+            "Panelga quyidagi tugma orqali kiring.\n\n"
+            "Foydali buyruqlar:\n"
+            "/hisobot — bugungi hisobot\n"
+            "/kamera — kameralardan jonli rasm\n"
+            "/yordam — to'liq ro'yxat"
+        )
+        markup = {"inline_keyboard": [[{"text": "📊 Panelni ochish", "url": url}]]}
+        return text, markup
+    text = (
+        "👋 <b>Chaqimchi AI</b> — do'kon uchun aqlli kamera-nazorat.\n\n"
+        "Kameralaringiz do'konni o'zi kuzatadi: kirdi-chiqdi hisobi, navbat, "
+        "xavfsizlik ogohlantirishlari — hammasi shu botda va panelda. "
+        "Tarif bitta: oyiga $20 (so'mda kurs bo'yicha), hammasi ichida.\n\n"
+        "Tizim o'rnatilgan bo'lsa, mijoz panelini oching. O'rnatish uchun "
+        "kelgan bo'lsangiz — o'rnatuvchi bo'limi."
+    )
+    markup = {
+        "inline_keyboard": [
+            [{"text": "🏪 Mijoz paneli", "url": f"{base}/owner"}],
+            [{"text": "🛠 O'rnatuvchi bo'limi", "url": f"{base}/installer"}],
+            [{"text": "💰 Tarif va narx", "url": f"{base}/#narx"}],
+        ]
+    }
+    return text, markup
+
+
+async def _bot_send_report(telegram_id: str, members: List[Dict[str, Any]], base: str) -> None:
+    """/hisobot — bugungi holat, kunlik digest formatida."""
+    store_events = get_event_store()
     for member in members:
-        site = get_store().get_site(member["site_id"])
+        site_id = str(member["site_id"])
+        site = get_store().get_site(site_id)
         if not site:
             continue
-        if command in {"/today", "/status", "/cameras"}:
-            stats = get_event_store().stats(member["site_id"])
-            detail = get_store().site_detail(member["site_id"])
-            lines.append(
-                f"{site['name']}: {stats['total']} hodisa, "
-                f"{detail['cameras_active']}/{detail['cameras_expected']} kamera, "
-                f"aloqa {detail['connection']}"
+        report = store_events.retail_report(site_id)
+        stats = store_events.stats(site_id)
+        traffic = report.get("traffic") or {}
+        if not stats.get("total") and not traffic.get("entered"):
+            await _send_owner_telegram(
+                telegram_id,
+                f"{botfmt.header(site['name'])}\nBugun hali hodisa yo'q.",
             )
-        else:
-            lines.append(f"{site['name']} uchun buyruqlar: /status, /today, /cameras, /help")
-    if lines:
-        await _send_owner_telegram(telegram_id, "\n".join(lines))
-    return {"ok": True}
+            continue
+        try:
+            config = store_events.get_site_config(site_id)["config"]
+            open_from = config.get("open_from") or None
+        except Exception:
+            open_from = None
+        first_movement = store_events.first_movement_time(site_id) if open_from else None
+        text_out = build_digest(
+            str(site["name"]),
+            str(report["date"]),
+            stats,
+            report,
+            open_from=open_from,
+            first_movement=first_movement,
+        )
+        detail = get_store().site_detail(site_id)
+        text_out += (
+            f"\n📷 Kamera: {detail['cameras_active']}/{detail['cameras_expected']} "
+            f"ishlayapti · aloqa {detail['connection']}"
+        )
+        await _send_owner_telegram(telegram_id, text_out, reply_markup=botfmt.panel_button(base))
+
+
+async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]]) -> None:
+    """/kamera — har kameradan oxirgi kadr + yangi kadr so'rovi.
+
+    Qurilma jonli strim bermaydi (zaif kompyuter, cloud orqali o'tkazish
+    qimmat) — buning o'rniga oxirgi saqlangan kadr darhol yuboriladi va
+    keyingi heartbeat'da (≤1 daqiqa) yangisi so'raladi.
+    """
+    for member in members:
+        site_id = str(member["site_id"])
+        try:
+            cameras = [c for c in get_store().list_cameras(site_id) if c["enabled"]]
+        except ValueError:
+            continue
+        if not cameras:
+            await _send_owner_telegram(
+                telegram_id,
+                "Kameralar hali ulanmagan — o'rnatuvchingiz bilan bog'laning.",
+            )
+            continue
+        missing: List[str] = []
+        for camera in cameras:
+            label = str(camera.get("label") or camera["camera_id"])
+            key = camera.get("preview_key")
+            photo: Optional[bytes] = None
+            if key:
+                try:
+                    photo = get_snapshot_store().get(str(key))
+                except FileNotFoundError:
+                    photo = None
+            if photo is None:
+                missing.append(label)
+            else:
+                caption = f"📷 <b>{botfmt.escape(label)}</b>"
+                taken = botfmt.stamp(camera.get("preview_at"))
+                if taken:
+                    caption += f" · {taken}"
+                try:
+                    await _send_owner_photo(telegram_id, photo, caption)
+                except TelegramSendError:
+                    logger.warning(
+                        "Kamera rasmi yuborilmadi: site=%s camera=%s",
+                        site_id,
+                        camera["camera_id"],
+                        exc_info=True,
+                    )
+            try:
+                get_store().request_camera_preview(site_id, str(camera["camera_id"]))
+            except ValueError:
+                pass
+        tail = "🔄 Yangi rasm so'raldi — 1 daqiqadan keyin /kamera ni qayta bosing."
+        if missing:
+            tail = (
+                "Hali rasm kelmagan: " + ", ".join(botfmt.escape(m) for m in missing) + "\n" + tail
+            )
+        await _send_owner_telegram(telegram_id, tail)
 
 
 # ── To'lov: hisob-faktura (admin) ────────────────────────────────────────

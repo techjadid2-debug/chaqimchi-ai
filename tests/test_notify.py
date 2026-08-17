@@ -60,7 +60,7 @@ def test_device_rule_flag_is_authoritative() -> None:
 
 
 def test_recovery_reaches_the_owner_despite_low_severity() -> None:
-    """"Buzildi"ning "tiklandi" jufti — usiz tizim doim buzuq ko'rinadi."""
+    """ "Buzildi"ning "tiklandi" jufti — usiz tizim doim buzuq ko'rinadi."""
     recovered = EdgeEvent(
         event_type="camera_recovered",
         camera_id="camera-01",
@@ -79,10 +79,11 @@ def test_batch_becomes_one_grouped_message() -> None:
 
     assert message is not None
     assert "503 ta ogohlantirish" in message
-    # Eng ko'p takrorlangani birinchi turadi va o'zbekcha nomlanadi.
+    # Eng ko'p takrorlangani birinchi turadi va o'zbekcha nomlanadi
+    # (oxirida Toshkent vaqti qo'shiladi — u testda qat'iy emas).
     lines = message.splitlines()
-    assert lines[1] == "• Taqiqlangan zonaga kirish — camera-01 ×500"
-    assert lines[2] == "• Uzoq turish — camera-02 ×3"
+    assert lines[1].startswith("• Taqiqlangan zonaga kirish — camera-01 ×500")
+    assert lines[2].startswith("• Uzoq turish — camera-02 ×3")
 
 
 def test_critical_event_changes_the_marker() -> None:
@@ -143,11 +144,10 @@ def test_ai_conclusion_is_written_into_the_message() -> None:
     """
     message = summarize([ai_review("kassa-01", "Ikki kishi janjallashmoqda")])
 
-    assert message.splitlines() == [
-        "⚠️ 1 ta ogohlantirish",
-        "• AI ko'rdi — kassa-01",
-        "   ↳ Ikki kishi janjallashmoqda",
-    ]
+    lines = message.splitlines()
+    assert lines[0] == "⚠️ 1 ta ogohlantirish"
+    assert lines[1].startswith("• AI ko'rdi — kassa-01")
+    assert lines[2] == "   ↳ Ikki kishi janjallashmoqda"
 
 
 def test_description_is_used_when_there_is_no_reason() -> None:

@@ -126,39 +126,86 @@ def throttle() -> AlertThrottle:
     return _throttle
 
 
-def summarize(events: Sequence[EdgeEvent]) -> str:
+def summarize(
+    events: Sequence[EdgeEvent],
+    *,
+    site_name: Optional[str] = None,
+    camera_labels: Optional[Dict[str, str]] = None,
+) -> str:
     """Ruxsat berilgan eventlardan bitta o'qiladigan xabar.
 
     Qatorlar soni bo'yicha emas, **hodisa soni** bo'yicha tartiblanadi: eng
-    ko'p takrorlangan muammo birinchi turadi.
+    ko'p takrorlangan muammo birinchi turadi.  Uslub `cloud/botfmt.py`da:
+    do'kon nomi sarlavhada, kamera odam o'qiydigan nomi bilan, vaqt
+    Toshkentcha.
     """
+    from cloud import botfmt
+
     groups: Dict[Tuple[str, str], int] = {}
     notes: Dict[Tuple[str, str], str] = {}
+    latest: Dict[Tuple[str, str], str] = {}
     critical = 0
     for event in events:
         key = (event.event_type, event.camera_id)
         groups[key] = groups.get(key, 0) + 1
         if event.severity == "critical":
             critical += 1
+        moment = botfmt.clock(event.occurred_at)
+        if moment:
+            latest[key] = moment
         # Birinchi izoh saqlanadi: takrorlangan hodisada eng eskisi
         # muammoning boshlanishini ko'rsatadi.
         note = event_note(event)
         if note and key not in notes:
             notes[key] = note
 
-    total = sum(groups.values())
     head = "🔴" if critical else "⚠️"
-    lines = [f"{head} {total} ta ogohlantirish"]
+    total = sum(groups.values())
+    if site_name:
+        title = botfmt.header(site_name, icon=head)
+        if total > 1:
+            title += f" — {total} ta ogohlantirish"
+    else:
+        title = f"{head} {total} ta ogohlantirish"
+    lines = [title]
     ordered = sorted(groups.items(), key=lambda item: (-item[1], item[0]))
     for (event_type, camera_id), count in ordered[:MAX_LINES]:
         suffix = f" ×{count}" if count > 1 else ""
-        lines.append(f"• {event_label(event_type)} — {camera_id}{suffix}")
+        camera = botfmt.escape(botfmt.camera_name(camera_id, camera_labels))
+        when = f" · {latest[(event_type, camera_id)]}" if (event_type, camera_id) in latest else ""
+        lines.append(f"• {event_label(event_type)} — {camera}{suffix}{when}")
         note = notes.get((event_type, camera_id))
         if note:
             lines.append(f"   ↳ {note}")
     if len(ordered) > MAX_LINES:
         lines.append(f"• va yana {len(ordered) - MAX_LINES} ta turdagi hodisa")
     return "\n".join(lines)
+
+
+def select_alert_events(
+    site_id: str,
+    events: Iterable[EdgeEvent],
+    *,
+    throttle_service: Optional[AlertThrottle] = None,
+) -> List[EdgeEvent]:
+    """Batchdan botga chiqishi kerak bo'lgan hodisalar — tormoz bilan.
+
+    Rasmli alert uchun tanlash matndan ajratildi: chaqiruvchi avval
+    ro'yxatni oladi, snapshot kutadi, keyin matn/rasm yasaydi.
+    """
+    limiter = throttle_service or _throttle
+    alerts = [event for event in events if wants_telegram(event)]
+    if not alerts:
+        return []
+    seen: Dict[Tuple[str, str], bool] = {}
+    allowed: List[EdgeEvent] = []
+    for event in alerts:
+        key = (event.event_type, event.camera_id)
+        if key not in seen:
+            seen[key] = limiter.allow(site_id, event.event_type, event.camera_id)
+        if seen[key]:
+            allowed.append(event)
+    return allowed
 
 
 def wants_telegram(event: EdgeEvent) -> bool:
@@ -195,19 +242,7 @@ def build_alert(
     Tormoz shu yerda qo'llanadi: bir xil (tur, kamera) juftligi oynada
     allaqachon yuborilgan bo'lsa, uning **hamma** eventlari xabardan tushadi.
     """
-    limiter = throttle_service or _throttle
-    alerts = [event for event in events if wants_telegram(event)]
-    if not alerts:
-        return None
-
-    seen: Dict[Tuple[str, str], bool] = {}
-    allowed: List[EdgeEvent] = []
-    for event in alerts:
-        key = (event.event_type, event.camera_id)
-        if key not in seen:
-            seen[key] = limiter.allow(site_id, event.event_type, event.camera_id)
-        if seen[key]:
-            allowed.append(event)
+    allowed = select_alert_events(site_id, events, throttle_service=throttle_service)
     if not allowed:
         return None
     return summarize(allowed)

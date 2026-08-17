@@ -175,7 +175,9 @@ def test_scan_endpoint_calls_the_real_discovery(local_client):
                 "has_rtsp": True,
                 "has_onvif": True,
                 "rtsp_port": 554,
-                "suggested_urls": [{"name": "Hikvision Substream", "url": "rtsp://…", "path": "/x"}],
+                "suggested_urls": [
+                    {"name": "Hikvision Substream", "url": "rtsp://…", "path": "/x"}
+                ],
             }
         ]
         response = local_client.post("/api/setup/scan")
@@ -204,8 +206,7 @@ def test_main_stream_is_suggested_for_known_brands() -> None:
 
     cases = {
         "rtsp://u:p@h:554/Streaming/Channels/102": "rtsp://u:p@h:554/Streaming/Channels/101",
-        "rtsp://u:p@h:554/cam/realmonitor?channel=1&subtype=1":
-            "rtsp://u:p@h:554/cam/realmonitor?channel=1&subtype=0",
+        "rtsp://u:p@h:554/cam/realmonitor?channel=1&subtype=1": "rtsp://u:p@h:554/cam/realmonitor?channel=1&subtype=0",
         "rtsp://u:p@h:554/unicast/c2/s1/live": "rtsp://u:p@h:554/unicast/c2/s0/live",
         "rtsp://u:p@h:554/stream2": "rtsp://u:p@h:554/stream1",
     }

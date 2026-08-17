@@ -24,7 +24,7 @@ def production_client(tmp_path: Path, monkeypatch):
 
     messages = []
 
-    async def fake_send(chat_id: str, text: str) -> None:
+    async def fake_send(chat_id: str, text: str, *, reply_markup=None) -> None:
         messages.append((chat_id, text))
 
     monkeypatch.setattr(main, "_send_owner_telegram", fake_send)
@@ -85,9 +85,7 @@ def test_config_profile_matches_the_device_product(production_client) -> None:
     assert "max_bytes" not in win_config["buffer_policy"], "N100 bufer siyosati ketmasin"
 
 
-def test_media_quota_evicts_oldest_media_but_keeps_events(
-    production_client, monkeypatch
-) -> None:
+def test_media_quota_evicts_oldest_media_but_keeps_events(production_client, monkeypatch) -> None:
     """Bitta shovqinli sayt VPS diskini to'ldira olmasin.
 
     Kvotadan oshganda eng eski media o'chadi, hodisa yozuvi (statistika)
@@ -224,7 +222,8 @@ def test_late_clip_retry_does_not_duplicate_the_telegram_alert(production_client
     assert first.json()["accepted"] == ["evt-late-clip"]
     assert second.json()["accepted"] == ["evt-late-clip"]
     assert len(messages) == 1
-    assert "Rasm va klip" in messages[0][1]
+    # Yangi format: do'kon nomi sarlavhada, hodisa odam tilida.
+    assert "Kamera yopildi" in messages[0][1]
 
 
 def test_edge_health_heartbeat_is_visible_to_owner(production_client) -> None:
@@ -514,15 +513,13 @@ def test_guessed_key_is_rejected(production_client) -> None:
     client, _messages = production_client
     _provision(client)
 
-    response = client.post(
-        "/api/v1/owner/auth/link", json={"key": "x" * 43}
-    )
+    response = client.post("/api/v1/owner/auth/link", json={"key": "x" * 43})
 
     assert response.status_code == 401
 
 
 def test_new_link_revokes_the_old_one(production_client) -> None:
-    """"Havola tarqalib ketdi" muammosi bitta tugma bilan yopiladi."""
+    """ "Havola tarqalib ketdi" muammosi bitta tugma bilan yopiladi."""
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     _member(client, site["site_id"], "5476000012")
@@ -693,7 +690,7 @@ def test_alert_throttle_survives_a_restart(production_client) -> None:
 
 
 def test_missing_chat_stops_future_sends(production_client, monkeypatch) -> None:
-    """"Chat not found" — a'zo botga /start bosmagan.  3 urinishdan keyin
+    """ "Chat not found" — a'zo botga /start bosmagan.  3 urinishdan keyin
     unga yuborish to'xtaydi; ilgari har batch'da log xatoga to'lardi."""
     import cloud.main as main
 
@@ -788,3 +785,187 @@ def test_non_sellable_plan_still_needs_assignments(production_client) -> None:
     config = client.get("/api/v1/sotqin/config", headers=headers).json()
 
     assert config["cloud_features"] == []
+
+
+def test_alert_goes_out_with_the_snapshot_photo(production_client, monkeypatch) -> None:
+    """Rasmli alert: snapshot bo'lsa xabar sendPhoto bilan ketadi.
+
+    Bot "xunuk" bo'lishining bosh sababi shu edi: snapshot cloudda yotar,
+    bot esa quruq matn yuborar edi.
+    """
+    import asyncio
+
+    import cloud.main as main
+    from chaqimchi_ai.event_models import EdgeEvent
+
+    client, messages = production_client
+    site, _device, headers = _provision(client)
+    _member(client, site["site_id"], "5476200001")
+
+    photos = []
+
+    async def fake_photo(chat_id, photo, caption, *, reply_markup=None):
+        photos.append((chat_id, photo, caption, reply_markup))
+
+    monkeypatch.setattr(main, "_send_owner_photo", fake_photo)
+
+    event = EdgeEvent(
+        event_id="evt-photo-1",
+        event_type="camera_tampered",
+        severity="critical",
+        camera_id="camera-01",
+        has_snapshot=True,
+    )
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-photo-1",
+                    "event_type": "camera_tampered",
+                    "severity": "critical",
+                    "camera_id": "camera-01",
+                    "has_snapshot": True,
+                }
+            ]
+        },
+    )
+    # Batch paytida rasm hali kelmagan — matn ketdi.  Endi snapshot yetib
+    # keldi deb faraz qilib, alert oqimini qayta chaqiramiz.
+    client.put(
+        "/api/v1/edge/events/evt-photo-1/snapshot",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"jpeg-bytes",
+    )
+    asyncio.run(main._notify_alert(site["site_id"], [event]))
+
+    assert photos, "snapshot bor — sendPhoto ishlatilsin"
+    chat_id, photo, caption, _markup = photos[-1]
+    assert photo == b"jpeg-bytes"
+    assert "Set-1" in caption, "do'kon nomi sarlavhada bo'lsin"
+    assert "Kamera yopildi" in caption
+
+
+# ── Bot buyruqlari (/hisobot, /kamera, /panel, /yordam) ──────────────────
+
+
+def _webhook(client, text: str, chat_id: int = 900111):
+    return client.post(
+        "/api/v1/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-test"},
+        json={"message": {"chat": {"id": chat_id, "type": "private"}, "text": text}},
+    )
+
+
+@pytest.fixture
+def bot_member_client(production_client, monkeypatch):
+    """Webhook + saytga ulangan a'zo bilan tayyor muhit."""
+    client, messages = production_client
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
+    site, device, headers = _provision(client)
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": "900111", "role": "owner"},
+    )
+    return client, messages, site, headers
+
+
+def test_hisobot_command_sends_the_daily_report(bot_member_client) -> None:
+    client, messages, site, headers = bot_member_client
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-in-1",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                }
+            ]
+        },
+    )
+    messages.clear()
+
+    assert _webhook(client, "/hisobot").status_code == 200
+
+    assert len(messages) == 1
+    text = messages[0][1]
+    assert "kunlik hisobot" in text
+    assert "Kirdi: <b>1</b> kishi" in text
+    assert "📷 Kamera:" in text
+
+
+def test_old_commands_stay_as_aliases(bot_member_client) -> None:
+    """/today va /status yodlab qolganlar uchun ishlashda davom etadi."""
+    client, messages, _site, _headers = bot_member_client
+
+    assert _webhook(client, "/today").status_code == 200
+
+    assert len(messages) == 1
+    assert "Bugun hali hodisa yo'q" in messages[0][1]
+
+
+def test_yordam_lists_the_commands(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "/yordam")
+
+    assert "/hisobot" in messages[0][1]
+    assert "/kamera" in messages[0][1]
+
+
+def test_panel_command_gives_a_fresh_login_link(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "/panel")
+
+    assert "oldingi kirish havolangiz endi ishlamaydi" in messages[0][1]
+
+
+def test_unknown_text_gets_a_short_hint(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "salom")
+
+    assert messages[0][1] == "Buyruqlar: /hisobot, /kamera, /panel, /yordam"
+
+
+def test_kamera_without_cameras_explains_itself(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "/kamera")
+
+    assert "Kameralar hali ulanmagan" in messages[0][1]
+
+
+def test_kamera_sends_the_last_preview_and_requests_a_new_one(
+    bot_member_client, monkeypatch
+) -> None:
+    from cryptography.fernet import Fernet
+
+    import cloud.main as main
+
+    client, messages, site, _headers = bot_member_client
+    monkeypatch.setenv("CHAQIMCHI_CAMERA_SECRET_KEY", Fernet.generate_key().decode())
+    store = main.get_store()
+    store.upsert_camera(site["site_id"], "camera-01", label="Kirish", rtsp_url="rtsp://demo/1")
+    main.get_snapshot_store().put("previews/p1.jpg", b"preview-bytes")
+    store.set_camera_preview(site["site_id"], "camera-01", "previews/p1.jpg")
+    photos = []
+
+    async def fake_photo(chat_id, photo, caption, *, reply_markup=None):
+        photos.append((chat_id, photo, caption))
+
+    monkeypatch.setattr(main, "_send_owner_photo", fake_photo)
+
+    _webhook(client, "/kamera")
+
+    assert photos and photos[0][1] == b"preview-bytes"
+    assert "Kirish" in photos[0][2]
+    # Keyingi heartbeat'da yangi kadr kelsin.
+    assert store.pending_preview_cameras(site["site_id"]) == ["camera-01"]
+    assert any("Yangi rasm so'raldi" in m[1] for m in messages)

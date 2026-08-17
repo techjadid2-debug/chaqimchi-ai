@@ -77,7 +77,9 @@ def test_builder_downloads_transitive_dependencies() -> None:
     tugardi.  Yuklab olishda `--no-deps` bo'lmasligi shart.
     """
     source = BUILDER.read_text(encoding="utf-8")
-    download_block = source[source.index("download_cmd = ["): source.index("subprocess.run(download_cmd")]
+    download_block = source[
+        source.index("download_cmd = [") : source.index("subprocess.run(download_cmd")
+    ]
     assert "--no-deps" not in download_block, "yuklab olishda bog'liqliklar tashlab ketilmasin"
 
 
@@ -193,17 +195,17 @@ def test_installer_offers_autostart() -> None:
 
 def test_uninstaller_cleans_up_everything_it_created() -> None:
     source = _nsis()
-    uninstall = source[source.index('Section "Uninstall"'):]
+    uninstall = source[source.index('Section "Uninstall"') :]
     for leftover in ("$DESKTOP\\${APP_NAME}.lnk", "ChaqimchiAI", "$INSTDIR\\python"):
         assert leftover in uninstall, f"o'chirishda qolib ketadi: {leftover}"
-    assert "DeleteRegValue HKLM \"${REG_RUN}\"" in uninstall, "avtostart yozuvi qolib ketadi"
+    assert 'DeleteRegValue HKLM "${REG_RUN}"' in uninstall, "avtostart yozuvi qolib ketadi"
 
 
 def test_uninstaller_asks_before_deleting_shop_data() -> None:
     """Kamera sozlamalari va do'kon statistikasi qaytarilmaydi.  Yangilash
     esa jim rejimda o'tadi va ma'lumotga tegmasligi kerak."""
     source = _nsis()
-    uninstall = source[source.index('Section "Uninstall"'):]
+    uninstall = source[source.index('Section "Uninstall"') :]
     assert "IfSilent" in uninstall, "yangilashda ma'lumot so'ralmasdan o'chib ketardi"
     assert "MB_YESNO" in uninstall
 
@@ -228,17 +230,17 @@ def test_installer_launcher_stays_visible_on_error() -> None:
 
 def test_installer_does_not_hardcode_the_version() -> None:
     source = _nsis_code()
-    assert not re.search(
-        r'!define\s+APP_VERSION\s+"', source
-    ), "versiya qo'lda yozilmasin — u siljib ketadi"
-    assert 'build\\version.nsh' in source, "versiya qurish paytida yozilishi kerak"
+    assert not re.search(r'!define\s+APP_VERSION\s+"', source), (
+        "versiya qo'lda yozilmasin — u siljib ketadi"
+    )
+    assert "build\\version.nsh" in source, "versiya qurish paytida yozilishi kerak"
 
 
 def test_build_writes_the_version_from_the_single_source() -> None:
     """Qurish skripti versiyani `chaqimchi_ai/__init__.py` dan olishi kerak."""
-    builder = (Path(__file__).resolve().parents[1] / "scripts" / "build_windows_payload.py").read_text(
-        encoding="utf-8"
-    )
+    builder = (
+        Path(__file__).resolve().parents[1] / "scripts" / "build_windows_payload.py"
+    ).read_text(encoding="utf-8")
     assert "version.nsh" in builder
     assert "__version__" in builder, "manba — paketning o'z versiyasi"
     assert "APP_VERSION_NUMERIC" in builder, "NSIS x.x.x.x shaklini talab qiladi"
@@ -305,7 +307,7 @@ def test_update_check_is_free_when_not_paired() -> None:
     """Har 15 daqiqada ishlagani uchun ulanmagan qurilmada tekshiruv
     tarmoqqa **umuman** chiqmasligi kerak."""
     updater = (ROOT / "chaqimchi_ai" / "local" / "updater.py").read_text(encoding="utf-8")
-    body = updater[updater.index("def _cloud("): updater.index("def check(")]
+    body = updater[updater.index("def _cloud(") : updater.index("def check(")]
     assert "raise UpdateError" in body, "ulanmagan qurilma darhol to'xtashi kerak"
     assert "httpx" not in body, "ulanmasdan turib tarmoqqa so'rov yuborilmasin"
 
@@ -322,4 +324,4 @@ def test_ffmpeg_is_bundled_with_a_pinned_hash() -> None:
     assert digest, "ffmpeg uchun haqiqiy SHA256 yo'q"
     assert "download(FFMPEG_URL, archive, FFMPEG_SHA256)" in source
     assert "step_ffmpeg(cache)" in source, "qadam main() da chaqirilmagan"
-    assert 'bin/ffmpeg.exe' in source, "faqat ffmpeg.exe ajratib olinadi"
+    assert "bin/ffmpeg.exe" in source, "faqat ffmpeg.exe ajratib olinadi"

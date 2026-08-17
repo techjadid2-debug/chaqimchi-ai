@@ -257,9 +257,7 @@ async def preview(camera_id: str = "", rtsp_url: str = "") -> Response:
     """
     url = rtsp_url.strip()
     if camera_id:
-        match = next(
-            (item for item in config_store.cameras() if item.get("id") == camera_id), None
-        )
+        match = next((item for item in config_store.cameras() if item.get("id") == camera_id), None)
         if match is None:
             raise HTTPException(404, "Kamera topilmadi")
         url = str(match.get("stream_url") or "")

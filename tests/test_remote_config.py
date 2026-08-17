@@ -95,7 +95,9 @@ def test_cache_is_readable_by_the_pipeline(local, monkeypatch) -> None:
 
 
 def test_cloud_lines_reach_the_local_config(local, tmp_path: Path, monkeypatch) -> None:
-    _reply(local, {"revision": 2, "cameras": [], "config": {"lines": [LINE], "zones": []}}, monkeypatch)
+    _reply(
+        local, {"revision": 2, "cameras": [], "config": {"lines": [LINE], "zones": []}}, monkeypatch
+    )
 
     applied = local.sync_once()
 

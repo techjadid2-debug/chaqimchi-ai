@@ -507,6 +507,94 @@ class EventStore:
         by_type = {row["event_type"]: int(row["count"]) for row in rows}
         return {"date": day.isoformat(), "total": sum(by_type.values()), "by_type": by_type}
 
+    #: "Ochilish vaqti" uchun hisobga olinadigan harakat turlari — kamera
+    #: sog'ligi hodisalari emas (ular odam kelganini bildirmaydi).
+    MOVEMENT_TYPES = (
+        "line_crossed",
+        "person_detected",
+        "zone_entered",
+        "loitering",
+        "queue_threshold_exceeded",
+    )
+
+    def first_movement_time(self, site_id: str, *, day: Optional[date] = None) -> Optional[str]:
+        """Kunning birinchi harakat hodisasi (Toshkent kuni bo'yicha).
+
+        Kunlik hisobotdagi "Ochilish: 09:05" satri uchun — do'kon
+        jadvaldagidan kech ochilsa ega buni hisobotdan ko'radi.
+        """
+        timezone_tashkent = ZoneInfo("Asia/Tashkent")
+        day = day or datetime.now(timezone_tashkent).date()
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=timezone_tashkent)
+        start = start_local.astimezone(timezone.utc).isoformat()
+        end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        placeholders = ",".join("?" for _ in self.MOVEMENT_TYPES)
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT MIN(occurred_at) AS first FROM production_events "
+                    f"WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    f"AND event_type IN ({placeholders})"
+                ),
+                (site_id, start, end, *self.MOVEMENT_TYPES),
+            ).fetchone()
+        value = self._dict(row).get("first") if row else None
+        return str(value) if value else None
+
+    def camera_uptime_percent(self, site_id: str, *, start: date, end: date) -> Optional[float]:
+        """Davr bo'yicha kamera ishlash foizi (offline/recovered juftlaridan).
+
+        Haftalik hisobot uchun: "kameralar 98% vaqt ishladi".  Hodisa
+        umuman bo'lmasa (uzilish qayd etilmagan) — 100%.  Ma'lumot yo'q
+        davr uchun None emas, 100 qaytadi: uzilish hodisasi bor-yo'qligi
+        yagona ishonchli signalimiz.
+        """
+        timezone_tashkent = ZoneInfo("Asia/Tashkent")
+        start_local = datetime.combine(start, datetime.min.time(), tzinfo=timezone_tashkent)
+        end_local = datetime.combine(
+            end, datetime.min.time(), tzinfo=timezone_tashkent
+        ) + timedelta(days=1)
+        period_start = start_local.astimezone(timezone.utc)
+        period_end = end_local.astimezone(timezone.utc)
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT camera_id,event_type,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type IN ('camera_offline','camera_recovered') "
+                    "ORDER BY camera_id,occurred_at"
+                ),
+                (site_id, period_start.isoformat(), period_end.isoformat()),
+            ).fetchall()
+        events = [self._dict(row) for row in rows]
+        if not events:
+            return 100.0
+        total_seconds = (period_end - period_start).total_seconds()
+        downtime = 0.0
+        cameras = {item["camera_id"] for item in events}
+        for camera_id in cameras:
+            offline_since: Optional[datetime] = None
+            for item in (e for e in events if e["camera_id"] == camera_id):
+                try:
+                    moment = datetime.fromisoformat(str(item["occurred_at"]))
+                except ValueError:
+                    continue
+                if moment.tzinfo is None:
+                    moment = moment.replace(tzinfo=timezone.utc)
+                if item["event_type"] == "camera_offline" and offline_since is None:
+                    offline_since = moment
+                elif item["event_type"] == "camera_recovered" and offline_since is not None:
+                    downtime += (moment - offline_since).total_seconds()
+                    offline_since = None
+            if offline_since is not None:
+                # Davr oxirigacha tiklanmagan.
+                downtime += (period_end - offline_since).total_seconds()
+        if not cameras or total_seconds <= 0:
+            return 100.0
+        # O'rtacha: umumiy downtime kamera-davrlar yig'indisiga nisbatan.
+        ratio = downtime / (total_seconds * len(cameras))
+        return round(max(0.0, min(1.0, 1 - ratio)) * 100, 1)
+
     def retail_report(self, site_id: str, *, day: Optional[date] = None) -> Dict[str, Any]:
         """Do'kon egasi uchun kunlik hisobot.
 
@@ -1332,9 +1420,7 @@ class EventStore:
     def reset_notify_failures(self, site_id: str, member_id: str) -> None:
         with self._connect() as conn:
             conn.execute(
-                self._sql(
-                    "UPDATE owner_members SET notify_failures=0 WHERE site_id=? AND id=?"
-                ),
+                self._sql("UPDATE owner_members SET notify_failures=0 WHERE site_id=? AND id=?"),
                 (site_id, member_id),
             )
 

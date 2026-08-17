@@ -109,7 +109,12 @@ def test_pages_do_not_reference_removed_scripts() -> None:
     """`run_windows.bat`, `install_windows.bat` va maket onboarding
     o'chirildi — ularga ishora qilgan yo'riqnoma mijozni yo'qolgan faylga
     yuborardi."""
-    removed = ("run_windows.bat", "install_windows.bat", "local-onboarding", "chaqimchi_ai.pair_sotqin")
+    removed = (
+        "run_windows.bat",
+        "install_windows.bat",
+        "local-onboarding",
+        "chaqimchi_ai.pair_sotqin",
+    )
     for page in pages():
         text = page.read_text(encoding="utf-8")
         for name in removed:
@@ -142,9 +147,7 @@ def test_public_pages_use_the_icon_sprite_not_emoji() -> None:
         emoji = {
             char
             for char in text
-            if ord(char) > 0x2100
-            and unicodedata.category(char) == "So"
-            and char not in TYPOGRAPHIC
+            if ord(char) > 0x2100 and unicodedata.category(char) == "So" and char not in TYPOGRAPHIC
         }
         assert not emoji, f"{page.name}: emoji ikonka qolgan — {sorted(emoji)}"
 
@@ -185,7 +188,7 @@ def test_browser_facing_images_are_small() -> None:
     `og.png` esa 891 KB edi.  Mobil internetda bu sezilarli kechikish."""
     for page in pages():
         text = page.read_text(encoding="utf-8")
-        for name in re.findall(r'/assets/([\w\-.]+\.(?:png|jpg|jpeg|webp))', text):
+        for name in re.findall(r"/assets/([\w\-.]+\.(?:png|jpg|jpeg|webp))", text):
             asset = STATIC / name
             if not asset.is_file():
                 continue
@@ -217,9 +220,12 @@ def test_install_guide_shows_the_installer_version() -> None:
 def test_version_is_hidden_until_it_is_known() -> None:
     """Bo'sh "Versiya" yozuvi mijozni chalg'itadi — nashr qilinmagan
     bo'lsa umuman ko'rinmasin."""
-    for name, marker in (("site.html", "downloadVersion"), ("install.html", "guideDownloadVersion")):
+    for name, marker in (
+        ("site.html", "downloadVersion"),
+        ("install.html", "guideDownloadVersion"),
+    ):
         html = (STATIC / name).read_text(encoding="utf-8")
-        block = html[html.index(f'id="{marker}"'):]
+        block = html[html.index(f'id="{marker}"') :]
         assert "hidden" in block[: block.index(">") + 1], f"{name}: boshida yashirin bo'lsin"
 
 
@@ -274,7 +280,7 @@ def test_link_login_uses_the_token_endpoint() -> None:
     oqim qaytib kelmasligini qo'riqlaydi.
     """
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
-    block = html[html.index("async function loginFromLink"):]
+    block = html[html.index("async function loginFromLink") :]
     block = block[: block.index("async function passwordLogin")]
     assert "/api/v1/owner/auth/link" in block, "token server tekshiruvidan o'tsin"
     assert "d.access_token" in block, "token faqat serverdan olinsin"

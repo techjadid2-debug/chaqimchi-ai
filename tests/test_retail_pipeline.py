@@ -257,7 +257,9 @@ def test_telegram_choice_travels_inside_the_event(tmp_path: Path) -> None:
     """
     rules = RuleEngine(
         [
-            Rule(name="alertli", event_type="line_crossed", actions=("telegram_alert", "cloud_sync")),
+            Rule(
+                name="alertli", event_type="line_crossed", actions=("telegram_alert", "cloud_sync")
+            ),
             Rule(name="jim", event_type="loitering", actions=("cloud_sync",)),
         ]
     )

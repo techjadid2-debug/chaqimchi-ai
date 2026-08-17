@@ -41,7 +41,9 @@ import zipfile
 from pathlib import Path
 from typing import List
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%H:%M:%S")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%H:%M:%S"
+)
 log = logging.getLogger("payload")
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,11 +56,22 @@ PAYLOAD = BUILD / "payload"
 # mijozning kompyuterida administrator huquqi bilan ishlaydi, ya'ni bu
 # yerga tushgan har qanday fayl to'liq ishonchli bo'lishi kerak.
 PYTHON_VERSION = "3.12.9"
-PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
+PYTHON_EMBED_URL = (
+    f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
+)
 PYTHON_EMBED_SHA256 = "615861fb801e8b04c847598db4e1e46e4b046295017caa37cb5486dde72b5865"
 
 # ── Wheel'lar Windows/CPython 3.12 uchun yuklanadi ───────────────────────
-PIP_PLATFORM = ["--platform", "win_amd64", "--python-version", "3.12", "--implementation", "cp", "--abi", "cp312"]
+PIP_PLATFORM = [
+    "--platform",
+    "win_amd64",
+    "--python-version",
+    "3.12",
+    "--implementation",
+    "cp",
+    "--abi",
+    "cp312",
+]
 
 REQUIREMENTS = ROOT / "requirements-windows-local.txt"
 
@@ -70,8 +83,7 @@ REQUIREMENTS = ROOT / "requirements-windows-local.txt"
 # yetadi: bizga faqat `-c copy` bilan segment yozish kerak.
 FFMPEG_VERSION = "9.0.1"
 FFMPEG_URL = (
-    "https://www.gyan.dev/ffmpeg/builds/packages/"
-    f"ffmpeg-{FFMPEG_VERSION}-essentials_build.zip"
+    f"https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-{FFMPEG_VERSION}-essentials_build.zip"
 )
 FFMPEG_SHA256 = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9"
 
@@ -81,8 +93,14 @@ MODEL_BASE = (
     "models_bin/1/person-detection-retail-0013/FP16/"
 )
 MODELS = [
-    ("person-detection-retail-0013.xml", "19556695d2b18255fe5593d388ae69ba7f9a2f5c3f986bde8356741d0db26e89"),
-    ("person-detection-retail-0013.bin", "cf4a1f2f252d229966001e15454c5ba02a7ace047b181b235e3a2c4aebcf3ba7"),
+    (
+        "person-detection-retail-0013.xml",
+        "19556695d2b18255fe5593d388ae69ba7f9a2f5c3f986bde8356741d0db26e89",
+    ),
+    (
+        "person-detection-retail-0013.bin",
+        "cf4a1f2f252d229966001e15454c5ba02a7ace047b181b235e3a2c4aebcf3ba7",
+    ),
 ]
 
 #: Payloadga **faqat** shular kiradi.  `cloud/` va `webapp/` ataylab yo'q:
@@ -156,9 +174,17 @@ def step_packages(python_dir: Path, cache: Path) -> None:
     # `--no-deps` YO'Q: tranzitiv paketlar ham kerak.  Eski skriptdagi
     # asosiy xato aynan shu edi — starlette, anyio, h11 tushmasdi.
     download_cmd = [
-        sys.executable, "-m", "pip", "download",
-        *PIP_PLATFORM, "--only-binary", ":all:",
-        "-d", str(wheels), "-r", str(REQUIREMENTS),
+        sys.executable,
+        "-m",
+        "pip",
+        "download",
+        *PIP_PLATFORM,
+        "--only-binary",
+        ":all:",
+        "-d",
+        str(wheels),
+        "-r",
+        str(REQUIREMENTS),
     ]
     subprocess.run(download_cmd, check=True)
 
@@ -177,9 +203,17 @@ def step_packages(python_dir: Path, cache: Path) -> None:
     # "not a supported wheel on this platform" deb rad etadi.  pip buni
     # faqat `--target` va `--no-deps` bilan birga ruxsat beradi.
     install_cmd = [
-        sys.executable, "-m", "pip", "install",
-        *PIP_PLATFORM, "--only-binary", ":all:",
-        "--no-deps", "--no-compile", "--target", str(site_packages),
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        *PIP_PLATFORM,
+        "--only-binary",
+        ":all:",
+        "--no-deps",
+        "--no-compile",
+        "--target",
+        str(site_packages),
         *[str(item) for item in files],
     ]
     subprocess.run(install_cmd, check=True)
@@ -244,8 +278,7 @@ def step_code() -> None:
     public_key = ROOT / "deploy" / "update-public.pem"
     if not public_key.is_file():
         raise SystemExit(
-            f"Imzo kaliti topilmadi: {public_key}\n"
-            "Avval: python scripts/generate_update_key.py"
+            f"Imzo kaliti topilmadi: {public_key}\nAvval: python scripts/generate_update_key.py"
         )
     (PAYLOAD / "deploy").mkdir(parents=True, exist_ok=True)
     shutil.copy2(public_key, PAYLOAD / "deploy" / "update-public.pem")

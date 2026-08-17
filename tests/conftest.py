@@ -19,3 +19,17 @@ from cloud import ratelimit
 def _fresh_ratelimit():
     ratelimit.limiter().reset()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_alert_snapshot_wait(monkeypatch):
+    """Rasmli alert snapshot kutishi testlarda 0 bo'lsin.
+
+    Aks holda `has_snapshot=True` hodisali har bir test 20 soniyagacha
+    uxlab, butun to'plamni sekinlashtirardi (TestClient background
+    tasklarni sinxron bajaradi).
+    """
+    import cloud.main as main
+
+    monkeypatch.setattr(main, "ALERT_SNAPSHOT_WAIT_SEC", 0)
+    yield

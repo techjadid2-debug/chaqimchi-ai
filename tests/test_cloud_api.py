@@ -389,8 +389,11 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
     assert webhook.status_code == 200
     assert sent[0][0] == "5476913898"
     buttons = sent[0][2]["inline_keyboard"]
-    assert buttons[0][0]["url"] == "https://chaqimchi.example/installer"
-    assert buttons[1][0]["url"] == "https://chaqimchi.example/owner"
+    assert buttons[0][0]["url"] == "https://chaqimchi.example/owner"
+    assert buttons[1][0]["url"] == "https://chaqimchi.example/installer"
+    assert buttons[2][0]["url"] == "https://chaqimchi.example/#narx"
+    # Ichki kod nomi mijozga ko'rinmasin.
+    assert "Sotqin" not in sent[0][1]
     assert cloud_client.post("/api/v1/telegram/webhook", json={"message": {}}).status_code == 404
 
 
@@ -458,7 +461,9 @@ def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_pa
     assert disposition.endswith('.exe"')
 
 
-def test_download_filename_carries_version_and_pairing_code(cloud_client, monkeypatch, tmp_path) -> None:
+def test_download_filename_carries_version_and_pairing_code(
+    cloud_client, monkeypatch, tmp_path
+) -> None:
     """Nomdagi kod o'rnatuvchi tomonidan o'qiladi va dastur o'zi ulanadi.
 
     Versiya qo'shilgach kod nomning **oxirida** qolishi shart — NSIS
@@ -470,9 +475,9 @@ def test_download_filename_carries_version_and_pairing_code(cloud_client, monkey
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
     monkeypatch.setattr("cloud.main._release_dirs", list)
 
-    disposition = cloud_client.get(
-        "/api/v1/public/download-installer?code=13204e"
-    ).headers["content-disposition"]
+    disposition = cloud_client.get("/api/v1/public/download-installer?code=13204e").headers[
+        "content-disposition"
+    ]
     assert disposition.endswith('-13204E.exe"'), disposition
 
 
@@ -523,8 +528,7 @@ def test_quick_trial_is_rate_limited(cloud_client) -> None:
     ratelimit.limiter().reset()
     payload = {"phone": "+998 90 111 22 33", "consent": True}
     codes = [
-        cloud_client.post("/api/v1/public/quick-trial", json=payload).status_code
-        for _ in range(5)
+        cloud_client.post("/api/v1/public/quick-trial", json=payload).status_code for _ in range(5)
     ]
     assert codes.count(200) == 3, codes
     assert codes[-1] == 429

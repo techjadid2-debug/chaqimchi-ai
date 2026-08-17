@@ -81,9 +81,7 @@ def verify_release_manifest(
         raise UpdateVerificationError("Release manifest schema qo'llab-quvvatlanmaydi")
     if schema >= 2:
         if manifest.get("product") not in KNOWN_PRODUCTS:
-            raise UpdateVerificationError(
-                f"Release product noma'lum: {manifest.get('product')!r}"
-            )
+            raise UpdateVerificationError(f"Release product noma'lum: {manifest.get('product')!r}")
         if not str(manifest.get("target_arch", "")).strip():
             raise UpdateVerificationError("Release target_arch berilmagan")
     actual_hash = sha256_file(archive)

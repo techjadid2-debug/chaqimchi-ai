@@ -106,13 +106,14 @@ def test_code_is_accepted_in_the_shape_people_actually_type(
     """Mijoz kodni kichik harf bilan yoki chiziqcha bilan ko'chiradi."""
     monkeypatch.setattr(
         "chaqimchi_ai.local.cloud_link.httpx.post",
-        lambda *a, **k: _FakeResponse(
-            200, {"site_id": "s", "device_id": "d", "device_token": "t"}
-        ),
+        lambda *a, **k: _FakeResponse(200, {"site_id": "s", "device_id": "d", "device_token": "t"}),
     )
-    assert client.post(
-        "/api/setup/pair", json={"code": " a1b2-c3 ", "cloud_url": "cloud.example.uz"}
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/setup/pair", json={"code": " a1b2-c3 ", "cloud_url": "cloud.example.uz"}
+        ).status_code
+        == 200
+    )
     # `https://` qo'shilgan bo'lishi kerak: usiz `CloudEventSync` manzilni
     # ochib bo'lmaydigan holda saqlab qo'yardi.
     assert _cloud_sync(tmp_path)["url"] == "https://cloud.example.uz"
@@ -176,9 +177,10 @@ def test_incomplete_cloud_response_is_rejected(
         "chaqimchi_ai.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(200, {"site_id": "s", "device_id": "d"}),
     )
-    assert client.post(
-        "/api/setup/pair", json={"code": "A1B2C3", "cloud_url": CLOUD}
-    ).status_code == 422
+    assert (
+        client.post("/api/setup/pair", json={"code": "A1B2C3", "cloud_url": CLOUD}).status_code
+        == 422
+    )
     assert _cloud_sync(tmp_path).get("enabled") is not True
 
 
@@ -192,9 +194,7 @@ def test_unpair_removes_the_token_not_just_the_flag(
     yuborib qo'ymasligi kerak."""
     monkeypatch.setattr(
         "chaqimchi_ai.local.cloud_link.httpx.post",
-        lambda *a, **k: _FakeResponse(
-            200, {"site_id": "s", "device_id": "d", "device_token": "t"}
-        ),
+        lambda *a, **k: _FakeResponse(200, {"site_id": "s", "device_id": "d", "device_token": "t"}),
     )
     client.post("/api/setup/pair", json={"code": "A1B2C3", "cloud_url": CLOUD})
 

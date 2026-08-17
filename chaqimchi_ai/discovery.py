@@ -161,9 +161,7 @@ async def scan_local_network_for_cameras(max_concurrent: int = 64) -> List[Dict[
         if len(parts) != 4:
             continue
         prefix = f"{parts[0]}.{parts[1]}.{parts[2]}"
-        candidate_ips.extend(
-            f"{prefix}.{i}" for i in range(1, 255) if f"{prefix}.{i}" not in own
-        )
+        candidate_ips.extend(f"{prefix}.{i}" for i in range(1, 255) if f"{prefix}.{i}" not in own)
 
     if not candidate_ips:
         logger.info("Lokal tarmoq diapazoni topilmadi")

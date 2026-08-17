@@ -124,8 +124,7 @@ def claim(code: str, cloud_url: str) -> PairedSite:
     except httpx.HTTPError as exc:
         logger.warning("Cloud bilan ulanish xatosi: %s", exc)
         raise PairingError(
-            "Cloud serverga ulanib bo'lmadi. Internetni tekshiring "
-            "va qayta urinib ko'ring."
+            "Cloud serverga ulanib bo'lmadi. Internetni tekshiring va qayta urinib ko'ring."
         ) from exc
 
     if response.status_code == 400:

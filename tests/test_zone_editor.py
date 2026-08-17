@@ -192,9 +192,7 @@ def test_wizard_offers_one_click_presets_and_camera_roles() -> None:
     setup_html = (ROOT / "chaqimchi_ai" / "local" / "static" / "setup.html").read_text(
         encoding="utf-8"
     )
-    setup_js = (ROOT / "chaqimchi_ai" / "local" / "static" / "setup.js").read_text(
-        encoding="utf-8"
-    )
+    setup_js = (ROOT / "chaqimchi_ai" / "local" / "static" / "setup.js").read_text(encoding="utf-8")
 
     for button in ("presetLineBtn", "presetQueueBtn", "presetRestrictedBtn"):
         assert button in setup_html, f"shablon tugmasi yo'q: {button}"

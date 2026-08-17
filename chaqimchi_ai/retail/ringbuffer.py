@@ -34,12 +34,15 @@ def default_ffmpeg_binary() -> str:
     override = os.environ.get("CHAQIMCHI_FFMPEG", "").strip()
     if override:
         return override
-    bundled = Path(__file__).resolve().parents[2] / "bin" / (
-        "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+    bundled = (
+        Path(__file__).resolve().parents[2]
+        / "bin"
+        / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
     )
     if bundled.is_file():
         return str(bundled)
     return "ffmpeg"
+
 
 #: Segment nomi: `camera-01-20260813-142530.mp4`.  Vaqt nomdan o'qiladi —
 #: alohida indeks fayli yuritish kerak emas va u buzilib qolmaydi.

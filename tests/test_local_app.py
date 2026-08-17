@@ -56,7 +56,10 @@ def test_first_run_opens_the_wizard_not_the_panel(client: TestClient) -> None:
 def test_camera_is_actually_written_to_config(client: TestClient, tmp_path: Path) -> None:
     response = client.post(
         "/api/setup/cameras",
-        json={"label": "Kirish eshigi", "rtsp_url": "rtsp://admin:pw@192.168.1.64:554/Streaming/channels/102"},
+        json={
+            "label": "Kirish eshigi",
+            "rtsp_url": "rtsp://admin:pw@192.168.1.64:554/Streaming/channels/102",
+        },
     )
     assert response.status_code == 200
     assert response.json()["camera_id"] == "camera-01"
@@ -82,7 +85,13 @@ def test_rtsp_template_escapes_special_characters(client: TestClient) -> None:
     """Parolda `@` bo'lsa xom qo'shish manzilni buzadi va kamera ochilmaydi."""
     response = client.post(
         "/api/setup/rtsp-template",
-        json={"brand": "hikvision", "host": "192.168.1.64", "username": "admin", "password": "a@b/c", "channel": 2},
+        json={
+            "brand": "hikvision",
+            "host": "192.168.1.64",
+            "username": "admin",
+            "password": "a@b/c",
+            "channel": 2,
+        },
     )
     url = response.json()["rtsp_url"]
     assert url == "rtsp://admin:a%40b%2Fc@192.168.1.64:554/Streaming/channels/202"
@@ -108,7 +117,12 @@ def test_geometry_is_validated_before_it_is_kept(client: TestClient) -> None:
     client.post("/api/setup/cameras", json={"rtsp_url": "rtsp://host/1"})
     response = client.put(
         "/api/setup/geometry",
-        json={"lines": [{"name": "Kirish", "camera_id": "camera-01", "start": [5.0, 5.0], "end": [9.0, 9.0]}], "zones": []},
+        json={
+            "lines": [
+                {"name": "Kirish", "camera_id": "camera-01", "start": [5.0, 5.0], "end": [9.0, 9.0]}
+            ],
+            "zones": [],
+        },
     )
     assert response.status_code == 422, "0..1 dan tashqaridagi koordinata qabul qilinmasligi kerak"
 
@@ -211,10 +225,30 @@ def test_report_counts_only_todays_local_day(client: TestClient, tmp_path: Path)
     _seed_outbox(
         tmp_path,
         [
-            {"event_type": "line_crossed", "direction": "in", "camera_id": "camera-01", "occurred_at": now.isoformat()},
-            {"event_type": "line_crossed", "direction": "in", "camera_id": "camera-01", "occurred_at": now.isoformat()},
-            {"event_type": "line_crossed", "direction": "out", "camera_id": "camera-01", "occurred_at": now.isoformat()},
-            {"event_type": "line_crossed", "direction": "in", "camera_id": "camera-01", "occurred_at": yesterday.isoformat()},
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": now.isoformat(),
+            },
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": now.isoformat(),
+            },
+            {
+                "event_type": "line_crossed",
+                "direction": "out",
+                "camera_id": "camera-01",
+                "occurred_at": now.isoformat(),
+            },
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": yesterday.isoformat(),
+            },
         ],
     )
     report = client.get("/api/report").json()
@@ -289,9 +323,7 @@ def test_substream_is_tried_before_the_main_stream() -> None:
     from chaqimchi_ai.local.camera_probe import KNOWN_PATHS
 
     paths = [path for _name, path in KNOWN_PATHS]
-    assert paths.index("/Streaming/Channels/{ch}02") < paths.index(
-        "/Streaming/Channels/{ch}01"
-    )
+    assert paths.index("/Streaming/Channels/{ch}02") < paths.index("/Streaming/Channels/{ch}01")
 
 
 @pytest.mark.parametrize(
@@ -399,9 +431,7 @@ def test_pipeline_pins_its_own_capture_options() -> None:
         Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "retail" / "runner.py"
     ).read_text(encoding="utf-8")
     assert 'os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]' in source
-    code = "\n".join(
-        line for line in source.splitlines() if not line.lstrip().startswith("#")
-    )
+    code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
     assert "os.environ.setdefault" not in code, "meros qilib olingan qiymat saqlanib qolardi"
 
 
@@ -495,9 +525,7 @@ def test_unreachable_main_stream_is_not_stored(
     assert _config(tmp_path)["retail"]["cameras"][0].get("record_url") is None
 
 
-def test_explicit_record_url_wins_over_the_suggestion(
-    client: TestClient, tmp_path: Path
-) -> None:
+def test_explicit_record_url_wins_over_the_suggestion(client: TestClient, tmp_path: Path) -> None:
     response = client.post(
         "/api/setup/cameras",
         json={
@@ -537,12 +565,15 @@ def test_feature_status_turns_green_after_configuration(client: TestClient) -> N
         "/api/setup/geometry",
         json={
             "lines": [
-                {"name": "kirish", "camera_id": "camera-01",
-                 "start": [0.1, 0.6], "end": [0.9, 0.6]}
+                {"name": "kirish", "camera_id": "camera-01", "start": [0.1, 0.6], "end": [0.9, 0.6]}
             ],
             "zones": [
-                {"name": "kassa", "camera_id": "camera-01", "queue": True,
-                 "polygon": [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]}
+                {
+                    "name": "kassa",
+                    "camera_id": "camera-01",
+                    "queue": True,
+                    "polygon": [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]],
+                }
             ],
         },
     )

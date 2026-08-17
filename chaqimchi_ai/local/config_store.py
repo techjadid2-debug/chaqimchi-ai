@@ -251,9 +251,7 @@ def save_telegram(token: Optional[str], chat_id: Optional[str]) -> Dict[str, Any
     return update("telegram", {"token": token, "chat_id": chat_id, "enabled": enabled})
 
 
-def save_limits(
-    *, occupancy_limit: int, queue_limit: int, loitering_sec: int
-) -> Dict[str, Any]:
+def save_limits(*, occupancy_limit: int, queue_limit: int, loitering_sec: int) -> Dict[str, Any]:
     return update(
         "scene",
         {
@@ -342,32 +340,45 @@ def feature_status() -> List[Dict[str, Any]]:
 
     return [
         item(
-            "line_count", "Kirish-chiqish sanash", bool(lines),
+            "line_count",
+            "Kirish-chiqish sanash",
+            bool(lines),
             "Kirish chizig'i chizilmagan — sozlamalarda eshik ustiga chizing",
         ),
         item(
-            "queue", "Kassa navbati", bool(queue_zones),
+            "queue",
+            "Kassa navbati",
+            bool(queue_zones),
             "Navbat zonasi belgilanmagan — kassa oldiga zona chizib, «navbat» ni belgilang",
         ),
         item(
-            "restricted", "Taqiqlangan zona", bool(restricted_zones),
+            "restricted",
+            "Taqiqlangan zona",
+            bool(restricted_zones),
             "Taqiqlangan zona chizilmagan (masalan ombor eshigi)",
         ),
         item(
-            "dwell", "Zonada uzoq turish", bool(dwell_zones),
+            "dwell",
+            "Zonada uzoq turish",
+            bool(dwell_zones),
             "Hech bir zonada «uzoq turish» vaqti kiritilmagan",
         ),
         item(
-            "after_hours", "Ish vaqtidan tashqari nazorat", hours_set,
+            "after_hours",
+            "Ish vaqtidan tashqari nazorat",
+            hours_set,
             "Ochilish va yopilish soatlari kiritilmagan",
         ),
         item(
-            "tamper", "Kamera buzilishi nazorati",
+            "tamper",
+            "Kamera buzilishi nazorati",
             bool(retail.get("tamper_enabled", True)),
             "Sozlamada o'chirilgan",
         ),
         item(
-            "clips", "Hodisa videosi (klip)", clip_source,
+            "clips",
+            "Hodisa videosi (klip)",
+            clip_source,
             "Asosiy oqim manzili topilmadi — kamera sozlamasida kiriting",
         ),
     ]

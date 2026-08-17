@@ -144,7 +144,9 @@ class RetailSupervisor:
         ]
         self._rotate_log_if_big()
         self._log_handle = self._log_path.open("a", encoding="utf-8", errors="replace")
-        self._log_handle.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} ishga tushmoqda =====\n")
+        self._log_handle.write(
+            f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} ishga tushmoqda =====\n"
+        )
         self._log_handle.flush()
 
         creationflags = 0

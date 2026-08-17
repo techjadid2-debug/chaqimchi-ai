@@ -346,9 +346,7 @@ def find_working_url(
     """
     from chaqimchi_ai.local import onvif_client
 
-    probe = candidate_urls(
-        host, port=port, username=username, password=password, channel=channel
-    )
+    probe = candidate_urls(host, port=port, username=username, password=password, channel=channel)
     code, raw = rtsp_describe(probe[0][1])
     if code in (0, 401):
         error, hint = _classify(probe[0][1])

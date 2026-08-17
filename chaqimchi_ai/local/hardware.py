@@ -217,9 +217,7 @@ def measure(base_dir: str = ".") -> Capacity:
             "ishlaydi. Bu normal, faqat kamera soni cheklanadi."
         )
     if ram_mb and ram_mb < 4000:
-        capacity.warnings.append(
-            "Operativ xotira 4 GB dan kam. Kamida 8 GB tavsiya etiladi."
-        )
+        capacity.warnings.append("Operativ xotira 4 GB dan kam. Kamida 8 GB tavsiya etiladi.")
     if free_disk_gb and free_disk_gb < MIN_FREE_DISK_GB:
         capacity.warnings.append(
             f"Diskda {free_disk_gb:.0f} GB bo'sh joy qoldi. Video buferi uchun "

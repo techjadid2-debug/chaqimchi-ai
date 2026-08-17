@@ -36,7 +36,7 @@ def cloud(tmp_path: Path, monkeypatch):
 
     sent = []
 
-    async def fake_send(chat_id: str, text: str) -> None:
+    async def fake_send(chat_id: str, text: str, *, reply_markup=None) -> None:
         sent.append((chat_id, text))
 
     monkeypatch.setattr(main, "_send_owner_telegram", fake_send)

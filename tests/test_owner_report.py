@@ -260,7 +260,7 @@ def test_the_daily_message_answers_the_owners_questions(tmp_path: Path) -> None:
         [crossing(18, "in", index) for index in range(9)] + [queue_event(18, 22, 7)],
     )
 
-    assert "Kirdi: 9 kishi" in text
+    assert "Kirdi: <b>9</b> kishi" in text
     assert "Gavjum soat: 18:00" in text
     assert "eng uzuni 7 kishi (18:22)" in text
 
@@ -271,7 +271,68 @@ def test_a_calm_day_message_stays_short(tmp_path: Path) -> None:
 
     assert "⚠️" not in text
     assert "Navbat" not in text
-    assert len(text.splitlines()) <= 4
+    assert len(text.splitlines()) <= 6
+
+
+# ── Ochilish nazorati ────────────────────────────────────────────────────
+
+
+def digest_with_opening(tmp_path: Path, events, open_from: str) -> str:
+    store = store_with(events, tmp_path)
+    return build_digest(
+        "Oq Saroy",
+        DAY.isoformat(),
+        store.stats("site-1", day=DAY),
+        store.retail_report("site-1", day=DAY),
+        open_from=open_from,
+        first_movement=store.first_movement_time("site-1", day=DAY),
+    )
+
+
+def test_on_time_opening_is_reported_without_warning(tmp_path: Path) -> None:
+    text = digest_with_opening(tmp_path, [crossing(9, "in", 5)], "09:00")
+
+    assert "Ochilish: 09:05 (jadval: 09:00)" in text
+    assert "kechikish" not in text
+
+
+def test_late_opening_gets_a_warning(tmp_path: Path) -> None:
+    """20 daqiqadan ortiq kechikish — ega buni bilishi kerak.
+
+    Real-vaqt alert ataylab yo'q (shovqin qoidasi): kunlik hisobotdagi
+    bitta satr yetarli.
+    """
+    text = digest_with_opening(tmp_path, [crossing(9, "in", 45)], "09:00")
+
+    assert "Ochilish: 09:45 (jadval: 09:00) ⚠️ kechikish" in text
+
+
+def test_no_schedule_means_no_opening_line(tmp_path: Path) -> None:
+    text = digest_for(tmp_path, [crossing(9, "in", 45)])
+
+    assert "Ochilish" not in text
+
+
+def test_first_movement_ignores_camera_health_events(tmp_path: Path) -> None:
+    """Tungi camera_offline "do'kon ochildi" degani emas."""
+    store = store_with(
+        [
+            EdgeEvent(
+                event_type="camera_offline",
+                camera_id="eshik-01",
+                severity="critical",
+                occurred_at=moment(3),
+            ),
+            crossing(9, "in", 10),
+        ],
+        tmp_path,
+    )
+
+    first = store.first_movement_time("site-1", day=DAY)
+
+    from cloud import botfmt
+
+    assert botfmt.clock(first) == "09:10"
 
 
 def test_security_problems_are_pushed_into_the_message(tmp_path: Path) -> None:
@@ -431,3 +492,118 @@ def test_muted_member_does_not_get_the_digest(tmp_path: Path) -> None:
     asyncio.run(service.check_once(_tashkent_evening()))
 
     assert [chat_id for chat_id, _ in sent] == ["111"], "faqat mute qilmagan a'zo olsin"
+
+
+# ── Haftalik hisobot (dushanba 09:00) ────────────────────────────────────
+
+# 2026-08-17 — dushanba; o'tgan hafta 10–16 avgust (ISO 33-hafta).
+MONDAY = date(2026, 8, 17)
+
+
+def _monday_morning():
+    return datetime(MONDAY.year, MONDAY.month, MONDAY.day, 9, 30, tzinfo=TASHKENT)
+
+
+def _week_store(tmp_path: Path) -> EventStore:
+    events: List[EdgeEvent] = []
+    for offset, count in enumerate([50, 60, 55, 70, 90, 120, 100]):
+        events += entries(date(2026, 8, 10) + timedelta(days=offset), count)
+    return store_with(events, tmp_path)
+
+
+def test_weekly_report_goes_out_monday_morning(tmp_path: Path) -> None:
+    import asyncio
+
+    store = _week_store(tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _digest_service(store, sent)
+
+    count = asyncio.run(service.check_once(_monday_morning()))
+
+    assert count == 1 and len(sent) == 1
+    text = sent[0][1]
+    assert "haftalik hisobot" in text
+    assert "Hafta davomida kirdi: <b>545</b> kishi" in text
+    assert "Eng gavjum kun: Shanba — 120 kishi" in text
+    # Belgi ISO hafta ko'rinishida — kunlik sana bilan to'qnashmaydi.
+    assert store.digest_was_sent("site-1", "2026-W33")
+    # Ertalab 09:30 da kunlik hisobot hali ketmagan (u 21:00 da).
+    assert not store.digest_was_sent("site-1", MONDAY.isoformat())
+
+
+def test_weekly_report_is_sent_only_once(tmp_path: Path) -> None:
+    import asyncio
+
+    store = _week_store(tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _digest_service(store, sent)
+
+    asyncio.run(service.check_once(_monday_morning()))
+    asyncio.run(service.check_once(_monday_morning()))
+
+    assert len(sent) == 1
+
+
+def test_weekly_is_skipped_on_other_days(tmp_path: Path) -> None:
+    import asyncio
+
+    store = _week_store(tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _digest_service(store, sent)
+
+    tuesday = datetime(2026, 8, 18, 9, 30, tzinfo=TASHKENT)
+    asyncio.run(service._weekly_once(tuesday))
+
+    assert sent == []
+
+
+def test_empty_week_sends_nothing(tmp_path: Path) -> None:
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _digest_service(store, sent)
+
+    asyncio.run(service.check_once(_monday_morning()))
+
+    assert sent == []
+    assert store.digest_was_sent("site-1", "2026-W33"), "qayta urinilmasin"
+
+
+def test_camera_uptime_is_computed_from_offline_pairs(tmp_path: Path) -> None:
+    """Hafta ichida 1 kamera 2 soat o'chgan → uptime ≈ 98.8%."""
+    week_day = date(2026, 8, 12)
+    store = store_with(
+        [
+            EdgeEvent(
+                event_type="camera_offline",
+                camera_id="eshik-01",
+                severity="critical",
+                occurred_at=moment(10, day=week_day),
+            ),
+            EdgeEvent(
+                event_type="camera_recovered",
+                camera_id="eshik-01",
+                severity="info",
+                occurred_at=moment(12, day=week_day),
+            ),
+        ],
+        tmp_path,
+    )
+
+    uptime = store.camera_uptime_percent("site-1", start=date(2026, 8, 10), end=date(2026, 8, 16))
+
+    assert uptime == 98.8
+
+
+def test_uptime_is_full_when_no_outage_was_recorded(tmp_path: Path) -> None:
+    store = store_with([], tmp_path)
+
+    assert (
+        store.camera_uptime_percent("site-1", start=date(2026, 8, 10), end=date(2026, 8, 16))
+        == 100.0
+    )

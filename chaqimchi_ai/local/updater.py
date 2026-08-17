@@ -84,7 +84,7 @@ def _cloud() -> Dict[str, Any]:
 
 
 def _version_key(version: str) -> tuple:
-    """"0.10.0 > 0.9.0" to'g'ri chiqishi uchun sonli taqqoslash."""
+    """ "0.10.0 > 0.9.0" to'g'ri chiqishi uchun sonli taqqoslash."""
     parts = []
     for piece in str(version).split("."):
         try:
@@ -180,9 +180,7 @@ def check(cloud: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     # o'rnatishi mumkin edi — imzolar muddati tugamaydi.
     policy = (payload.get("policy") or {}).get("channel", "")
     if policy != "pin" and _version_key(offered) <= _version_key(__version__):
-        logger.warning(
-            "Eski versiya taklif qilindi (%s <= %s) — rad etildi", offered, __version__
-        )
+        logger.warning("Eski versiya taklif qilindi (%s <= %s) — rad etildi", offered, __version__)
         return None
     return payload
 
@@ -236,9 +234,7 @@ def download_and_verify(update: Dict[str, Any], workdir: Path) -> Path:
 
     if str(verified.get("version")) != version:
         installer.unlink(missing_ok=True)
-        raise UpdateError(
-            f"Manifest versiyasi mos emas: {verified.get('version')} != {version}"
-        )
+        raise UpdateError(f"Manifest versiyasi mos emas: {verified.get('version')} != {version}")
 
     logger.info("Paket tekshirildi: %s (%s)", installer.name, verified.get("sha256", "")[:16])
     return installer
@@ -286,7 +282,8 @@ def _rollback(state: Dict[str, Any]) -> None:
     if not prev_exe.is_file() or not prev_manifest.is_file():
         logger.error(
             "Versiya %s ishga tushmadi, lekin oldingi o'rnatuvchi saqlanmagan — "
-            "qo'lda qayta o'rnatish kerak", broken
+            "qo'lda qayta o'rnatish kerak",
+            broken,
         )
         return
     key = public_key_path()

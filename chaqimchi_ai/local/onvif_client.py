@@ -58,21 +58,14 @@ DEVICE_SERVICE_PATHS: Tuple[str, ...] = (
 )
 
 _SOAP_ENV = "http://www.w3.org/2003/05/soap-envelope"
-_WSSE = (
-    "http://docs.oasis-open.org/wss/2004/01/"
-    "oasis-200401-wss-wssecurity-secext-1.0.xsd"
-)
-_WSU = (
-    "http://docs.oasis-open.org/wss/2004/01/"
-    "oasis-200401-wss-wssecurity-utility-1.0.xsd"
-)
+_WSSE = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
+_WSU = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"
 _PASSWORD_DIGEST = (
     "http://docs.oasis-open.org/wss/2004/01/"
     "oasis-200401-wss-username-token-profile-1.0#PasswordDigest"
 )
 _BASE64_BINARY = (
-    "http://docs.oasis-open.org/wss/2004/01/"
-    "oasis-200401-wss-soap-message-security-1.0#Base64Binary"
+    "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary"
 )
 
 
@@ -281,9 +274,7 @@ def get_device_information(
     return info if (info.manufacturer or info.model) else None
 
 
-def get_media_service(
-    service_url: str, username: str = "", password: str = ""
-) -> str:
+def get_media_service(service_url: str, username: str = "", password: str = "") -> str:
     """Media xizmatining manzili.
 
     Ko'pchilik kamerada u qurilma xizmati bilan bir xil manzilda javob
@@ -326,9 +317,7 @@ def _rehost(url: str, reference: str) -> str:
     return urlunparse((target.scheme, netloc, target.path, "", target.query, ""))
 
 
-def get_profiles(
-    media_url: str, username: str = "", password: str = ""
-) -> List[StreamProfile]:
+def get_profiles(media_url: str, username: str = "", password: str = "") -> List[StreamProfile]:
     """Kameradagi oqimlar ro'yxati: kodek, o'lcham, FPS."""
     root = _call(
         media_url,
@@ -373,9 +362,7 @@ def _float(value: str) -> float:
         return 0.0
 
 
-def get_stream_uri(
-    media_url: str, token: str, username: str = "", password: str = ""
-) -> str:
+def get_stream_uri(media_url: str, token: str, username: str = "", password: str = "") -> str:
     """Oqimning aniq RTSP manzili.  **Taxmin qilinmaydi** — so'raladi."""
     root = _call(
         media_url,

@@ -294,10 +294,14 @@ def plan_disk_alert(
     if percent >= DISK_ALERT_PERCENT:
         state = "full"
         if prev != state:
-            return [Alert(SERVER_SITE_ID, state, _disk_text(percent), remember=state, kind="disk")], []
+            return [
+                Alert(SERVER_SITE_ID, state, _disk_text(percent), remember=state, kind="disk")
+            ], []
         return [], []
     if prev is not None and percent <= DISK_OK_PERCENT:
-        return [Alert(SERVER_SITE_ID, "ok", _disk_recovery_text(percent), remember=None, kind="disk")], []
+        return [
+            Alert(SERVER_SITE_ID, "ok", _disk_recovery_text(percent), remember=None, kind="disk")
+        ], []
     return [], []
 
 

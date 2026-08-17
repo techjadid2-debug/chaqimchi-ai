@@ -190,6 +190,13 @@
 
   <script>
     // ── Holat ────────────────────────────────────────────────────────────
+    // Bo'limlar manzillari: yuklab olish dl'dan, qurilma buyrug'i api'dan.
+    // location.origin admin subdomenini ko'rsatadi — u bu ishlarga noto'g'ri.
+    const PLATFORM = { apex: location.origin, api: location.origin, dl: location.origin };
+    fetch("/api/v1/public/urls").then((r) => r.ok ? r.json() : null).then((data) => {
+      if (data) Object.assign(PLATFORM, data);
+    }).catch(() => {});
+
     const KEY_STORAGE = "chaqimchi_admin_token";
     const LEGACY_KEY_STORAGE = "chaqimchi_admin_key";
     let adminToken = sessionStorage.getItem(KEY_STORAGE) || "";
@@ -468,7 +475,7 @@
     }
 
     function payLink(inv) {
-      const base = providers.public_url || location.origin;
+      const base = providers.public_url || PLATFORM.apex;
       return `${base}/pay/${inv.id}`;
     }
 
@@ -618,7 +625,7 @@
       // Windows uchun asosiy yo'l: kod **havolaga** qo'shiladi, brauzer
       // faylni shu kod bilan saqlaydi va o'rnatuvchi uni o'zi o'qiydi.
       // Mijoz 6 ta belgini qo'lda ko'chirmaydi.
-      const link = `${location.origin}/api/v1/public/download-installer?code=${encodeURIComponent(code)}`;
+      const link = `${PLATFORM.dl}/api/v1/public/download-installer?code=${encodeURIComponent(code)}`;
       $("detailTitle").textContent = `${name} — o'rnatish havolasi`;
       $("detailBody").innerHTML = `
         <p style="margin: 0 0 0.5rem; font-size: 0.85rem;"><b>Mijozga shu havolani yuboring</b> (Telegram, SMS):</p>
@@ -636,7 +643,7 @@
             Amal qiladi: ${esc((expires || "").slice(0, 16))} (UTC), bir martalik.
           </p>
           <p style="margin-bottom: 0.4rem; font-size: 0.8rem;">Linux Sotqin uchun buyruq:</p>
-          <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.72rem; overflow-x: auto;">sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py --cloud ${esc(location.origin)} --code ${esc(code)}</pre>
+          <pre class="mono" style="background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 10px; font-size: 0.72rem; overflow-x: auto;">sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py --cloud ${esc(PLATFORM.api)} --code ${esc(code)}</pre>
         </details>
         <p class="muted mono" style="margin-top: 0.75rem; font-size: 0.72rem;">site_id: ${esc(siteId)}</p>`;
       $("detailOverlay").hidden = false;

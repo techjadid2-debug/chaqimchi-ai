@@ -254,6 +254,8 @@
   </main>
 
   <script>
+      const PLATFORM = { api: location.origin, dl: location.origin };
+      fetch('/api/v1/public/urls').then((r) => r.ok ? r.json() : null).then((d) => { if (d) Object.assign(PLATFORM, d); }).catch(() => {});
     // Yuklab olish tugmasi serverdan so'raladi: dastur nashr qilinmagan
     // bo'lsa mijoz 503 qaytaradigan buzuq tugmani bosmasligi kerak.
     fetch("/api/v1/public/windows-release")
@@ -288,7 +290,7 @@
         status.className = 'form-status error';
         return;
       }
-      out.textContent = `curl -fsSL ${location.origin}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${location.origin} --code ${value}`;
+      out.textContent = `curl -fsSL ${PLATFORM.dl}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${PLATFORM.api} --code ${value}`;
       copy.hidden = false;
       status.textContent = 'Buyruq tayyor.';
       status.className = 'form-status ok';

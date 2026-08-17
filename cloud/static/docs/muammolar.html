@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="uz">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Muammolar va yechimlar — Chaqimchi AI hujjatlari</title>
+<meta name="description" content="Chaqimchi AI: kamera ulanmadi, tasvir kelmadi, Telegram xabar kelmaydi — yechimlar.">
+<link rel="stylesheet" href="/docs-static/assets/docs.css"></head>
+<body>
+<nav class="doc-nav"><a class="brand" href="/">Chaqimchi AI · Hujjatlar</a><a href="https://chaqimchi.uz">Asosiy sayt</a></nav>
+<main>
+  <p class="crumbs"><a href="/">Hujjatlar</a> → Muammolar</p>
+  <h1>Keng tarqalgan muammolar</h1>
+  <p class="lead">Dastur xato sababini o'zi aytishga harakat qiladi — bu sahifa o'sha xabarlarni kengroq tushuntiradi.</p>
+
+  <h2>«Kameraga umuman ulanib bo'lmadi»</h2>
+  <p>Kompyuter va NVR bir tarmoqda emasligi eng ehtimoliy sabab. Kompyuterda <code>cmd</code> ochib <code>ping NVR_IP</code> yozing: javob bo'lmasa — kabel/kommutatorni tekshiring. NVR ba'zan internetdan alohida kabelda bo'ladi — kompyuterga ikkinchi tarmoq kartasi yoki NVR'ni umumiy routerga ulash kerak.</p>
+
+  <h2>«Foydalanuvchi nomi yoki parol noto'g'ri»</h2>
+  <p>NVR menyusidagi login bilan bir xil ekaniga ishonch hosil qiling (katta-kichik harf farq qiladi). Ayrim NVR'lar ko'p noto'g'ri urinishdan keyin vaqtincha bloklaydi — 5–10 daqiqa kutib qayta urinib ko'ring.</p>
+
+  <h2>«Ulanish bor, lekin bu manzilda oqim yo'q»</h2>
+  <p>Kanal raqami yoki yo'l formati noto'g'ri. «Barcha kameralarni topish» tugmasini bosing — dastur ma'lum formatlarni o'zi sinaydi. Brendingiz sahifasi: <a href="/nvr-hikvision">Hikvision</a> · <a href="/nvr-dahua">Dahua</a> · <a href="/nvr-uniview">Uniview</a>.</p>
+
+  <h2>«Kamera javob berdi, lekin tasvirni ochib bo'lmadi»</h2>
+  <p>Deyarli har doim sabab — <b>H.265 (HEVC)</b> siqish. NVR menyusida shu kanalning substreamini <b>H.264</b> ga o'zgartiring: Hikvision — Configuration → Video → Sub Stream; Dahua — Camera → Encode → Sub Stream.</p>
+
+  <h2>«Kamera soati adashgan» (ONVIF kirishda)</h2>
+  <p>ONVIF autentifikatsiyasi kamera soatiga bog'liq. Dastur farqni o'zi moslaydi, lekin juda katta farqda kamera baribir rad etishi mumkin. NVR menyusida vaqtni to'g'rilang yoki NTP yoqing (System → Time).</p>
+
+  <h2>Qidiruv kamerani topmayapti</h2>
+  <p>Ko'p NVR o'zini tarmoqda e'lon qilmaydi — bu normal. NVR IP manzilini qo'lda kiriting (natija bir xil bo'ladi). Windows o'rnatishda «tarmoq ruxsati» bandi o'chirilgan bo'lsa, qidiruv ishlamaydi — dasturni qayta o'rnatib bandni yoqing.</p>
+
+  <h2>Telegram'ga xabar kelmayapti</h2>
+  <p>1. Botga kirib <code>/start</code> bosganingizni tekshiring — bot avval siz yozmaguningizcha xabar yubora olmaydi.<br>
+  2. Panel a'zosi ekaningizni tekshiring (hisob egasidan so'rang).<br>
+  3. Kunlik hisobot kechqurun keladi; tezkor ogohlantirishlar faqat jiddiy hodisalarda (kamera o'chdi va h.k.) — har hodisada emas.</p>
+
+  <h2>Hisobot bo'sh yoki kam sanayapti</h2>
+  <p>Kirish chizig'i chizilmagan yoki noto'g'ri joyda. Chiziq eshik ostida, odam oyog'i kesib o'tadigan joyda bo'lishi kerak. Panelda chiziqni qayta chizing — hisob shu zahoti tiklanadi.</p>
+
+  <h2>Yechim topilmadi?</h2>
+  <p><a href="https://chaqimchi.uz/aloqa">Bog'laning</a> — kamera modeli va xato matnini yozsangiz, tez javob beramiz.</p>
+</main>
+</body>
+</html>

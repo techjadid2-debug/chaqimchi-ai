@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="uz">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hikvision NVR ulash — Chaqimchi AI hujjatlari</title>
+<meta name="description" content="Hikvision/HiLook NVR: RTSP manzil formati, ONVIF yoqish, substream sozlash.">
+<link rel="stylesheet" href="/docs-static/assets/docs.css"></head>
+<body>
+<nav class="doc-nav"><a class="brand" href="/">Chaqimchi AI · Hujjatlar</a><a href="https://chaqimchi.uz">Asosiy sayt</a><a href="/muammolar">Muammolar</a></nav>
+<main>
+  <p class="crumbs"><a href="/">Hujjatlar</a> → Hikvision</p>
+  <h1>Hikvision / HiLook NVR</h1>
+  <p class="lead">Odatda dastur hammasini o'zi topadi. Bu sahifa qo'lda kiritish kerak bo'lgan holatlar uchun.</p>
+
+  <h2>RTSP manzil formati</h2>
+  <pre><code>rtsp://LOGIN:PAROL@NVR_IP:554/Streaming/Channels/102</code></pre>
+  <table>
+    <tr><th>Raqam</th><th>Ma'nosi</th></tr>
+    <tr><td><code>101</code></td><td>1-kanal, asosiy oqim (og'ir, tahlil uchun KERAK EMAS)</td></tr>
+    <tr><td><code>102</code></td><td>1-kanal, substream (yengil — <b>shuni ishlating</b>)</td></tr>
+    <tr><td><code>202</code>, <code>302</code>…</td><td>2-, 3-kanal substreamlari</td></tr>
+  </table>
+  <div class="note">Paroldagi maxsus belgilar (@, /, :) muammo chiqarsa — dastur ustasida login-parolni alohida maydonlarga kiriting, u o'zi to'g'ri kodlaydi.</div>
+
+  <h2>ONVIF yoqish (avtomatik topish uchun)</h2>
+  <p>NVR menyusi: <b>Configuration → Network → Advanced Settings → Integration Protocol</b> → «Enable ONVIF» belgilang va foydalanuvchi qo'shing (Media huquqi bilan). Ayrim modellarda ONVIF alohida foydalanuvchi talab qiladi — admin login bilan ishlamasa shu sabab.</p>
+
+  <h2>Substream sozlash</h2>
+  <p><b>Configuration → Video/Audio → Sub-stream</b>: kodek <b>H.264</b> (H.265 emas!), o'lcham 640×360 yoki 640×480, 10–15 fps. H.265 substream tahlil kompyuterida ochilmasligi mumkin — bu eng ko'p uchraydigan «tasvir kelmadi» sababi.</p>
+
+  <h2>Port</h2>
+  <p>RTSP standart port: <b>554</b>. NVR'da o'zgartirilgan bo'lsa (Network → Ports) manzilda o'sha portni yozing.</p>
+</main>
+</body>
+</html>

@@ -67,6 +67,17 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     public_url = require("CHAQIMCHI_PUBLIC_URL")
     if public_url and not _https(public_url):
         errors.append("CHAQIMCHI_PUBLIC_URL haqiqiy HTTPS manzil bo'lishi kerak")
+    # Subdomen manzillari ixtiyoriy, lekin berilsa HTTPS bo'lishi shart.
+    for key in (
+        "CHAQIMCHI_APP_URL",
+        "CHAQIMCHI_API_URL",
+        "CHAQIMCHI_DL_URL",
+        "CHAQIMCHI_PARTNER_URL",
+        "CHAQIMCHI_ADMIN_URL",
+    ):
+        value = values.get(key, "").strip()
+        if value and not _https(value):
+            errors.append(f"{key} haqiqiy HTTPS manzil bo'lishi kerak")
 
     for key in (
         "POSTGRES_DB",

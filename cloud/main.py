@@ -52,7 +52,7 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import botfmt, faces, ratelimit
+from cloud import botfmt, faces, ratelimit, urls
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
@@ -802,7 +802,7 @@ async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
             if attempt + 1 < attempts:
                 await asyncio.sleep(2)
 
-    base = public_url().rstrip("/")
+    base = urls.app_url().rstrip("/")
     markup = botfmt.panel_button(base) if base else None
     await _notify_site_members(site_id, text, photo=photo, reply_markup=markup)
 
@@ -954,7 +954,7 @@ async def lifespan(app: FastAPI):
         get_event_store(),
         get_store().list_sites,
         _send_owner_telegram,
-        panel_url=public_url(),
+        panel_url=urls.app_url(),
     )
     _digest_task = asyncio.create_task(_digest.run())
     _maintenance_task = asyncio.create_task(_maintenance_loop())
@@ -1003,8 +1003,26 @@ def _static_page(name: str) -> FileResponse:
     return FileResponse(page)
 
 
-@app.get("/", include_in_schema=False)
-async def public_site(request: Request) -> HTMLResponse:
+#: Subdomen prefikslari → bo'lim.  Domenga bog'lanmagan (prefiks bo'yicha):
+#: chaqimchi.uz ham, test.example ham bir xil ishlaydi.
+_HOST_SECTIONS = ("app", "partner", "admin", "dl", "docs", "api")
+
+
+def _host_section(request: Request) -> str:
+    """So'rov qaysi subdomenga kelgan (apex — landing).
+
+    `request.base_url` proxy headerlarini hurmat qiladi (uvicorn
+    `--proxy-headers` bilan ishlaydi) — Caddy ortida ham to'g'ri host
+    ko'rinadi.
+    """
+    host = (request.base_url.hostname or "").lower()
+    for prefix in _HOST_SECTIONS:
+        if host.startswith(prefix + "."):
+            return prefix
+    return "apex"
+
+
+def _render_landing(request: Request) -> HTMLResponse:
     page = STATIC_DIR / "site.html"
     if not page.is_file():
         raise HTTPException(404, "Sahifa topilmadi")
@@ -1019,8 +1037,35 @@ async def public_site(request: Request) -> HTMLResponse:
         page.read_text(encoding="utf-8")
         .replace("__PUBLIC_ORIGIN__", origin)
         .replace("__TELEGRAM_REGISTER_URL__", register_url)
+        # Subdomen sozlanmagan bo'lsa eski bitta-domen yo'llari ishlaydi.
+        .replace("__APP_URL__", urls.app_url() or origin)
+        .replace("__PARTNER_URL__", urls.partner_url() or origin)
+        .replace("__DL_URL__", urls.dl_url() or origin)
     )
     return HTMLResponse(content)
+
+
+@app.get("/", include_in_schema=False)
+async def public_site(request: Request) -> Any:
+    """Bosh sahifa — host'ga qarab: subdomenlar o'z bo'limini ochadi.
+
+    app.chaqimchi.uz — mijoz paneli, partner. — montajchi, admin. — admin,
+    dl. — yuklab olish, docs. — hujjatlar, apex — landing.  Bitta ilova,
+    bo'linish host darajasida: panellar API'ni nisbiy yo'ldan chaqiradi,
+    ya'ni CORS umuman kerak emas.
+    """
+    section = _host_section(request)
+    if section == "app":
+        return _render_owner()
+    if section == "partner":
+        return _static_page("installer.html")
+    if section == "admin":
+        return _static_page("admin.html")
+    if section == "dl":
+        return _static_page("dl.html")
+    if section == "docs":
+        return _docs_page("index")
+    return _render_landing(request)
 
 
 #: Chiziq/zona muharriri **ikkala** panelga kerak: cloud'dagi o'rnatuvchi
@@ -1050,8 +1095,11 @@ async def install_page() -> FileResponse:
 
 
 @app.get("/installer", include_in_schema=False)
-async def installer_page() -> FileResponse:
+async def installer_page(request: Request) -> Any:
     """O'rnatuvchi ro'yxatdan o'tishi, vazifalari va pairing paneli."""
+    redirect = _apex_redirect(request, "CHAQIMCHI_PARTNER_URL")
+    if redirect is not None:
+        return redirect
     return _static_page("installer.html")
 
 
@@ -1146,9 +1194,149 @@ async def sotqin_release(release_name: str) -> FileResponse:
     )
 
 
+DOCS_DIR = STATIC_DIR / "docs"
+
+
+def _docs_page(name: str) -> FileResponse:
+    """docs.chaqimchi.uz sahifasi (statik, SEO uchun ochiq)."""
+    if not re.fullmatch(r"[a-z0-9-]{1,60}", name):
+        raise HTTPException(404, "Sahifa topilmadi")
+    page = DOCS_DIR / f"{name}.html"
+    if not page.is_file():
+        raise HTTPException(404, "Sahifa topilmadi")
+    return FileResponse(page)
+
+
+@app.get("/docs-static/{name}", include_in_schema=False)
+async def docs_named_page(name: str, request: Request) -> Any:
+    """Hujjat sahifasi (kanonik yo'l — istalgan hostda ishlaydi)."""
+    return _docs_page(name)
+
+
+#: Hujjat sahifalari qisqa yo'llardan ham ochiladi (docs.chaqimchi.uz/nvr-hikvision).
+#: Ro'yxat qat'iy — /{name} umumiy marshruti boshqa yo'llarni yutib yubormasin.
+DOCS_PAGES = (
+    "ornatish-windows",
+    "nvr-hikvision",
+    "nvr-dahua",
+    "nvr-uniview",
+    "muammolar",
+    "xavfsizlik",
+)
+
+
+def _make_docs_route(page_name: str):
+    async def _route() -> FileResponse:
+        return _docs_page(page_name)
+
+    return _route
+
+
+for _docs_name in DOCS_PAGES:
+    app.add_api_route(
+        f"/{_docs_name}", _make_docs_route(_docs_name), methods=["GET"], include_in_schema=False
+    )
+
+
+@app.get("/docs-static/assets/docs.css", include_in_schema=False)
+async def docs_css() -> FileResponse:
+    style = DOCS_DIR / "docs.css"
+    if not style.is_file():
+        raise HTTPException(404, "Topilmadi")
+    return FileResponse(style, media_type="text/css")
+
+
+@app.get("/api/v1/public/urls")
+async def public_platform_urls(request: Request) -> Dict[str, str]:
+    """Platforma bo'limlari manzillari — sahifalar buyruq/havolalarni
+    to'g'ri subdomen bilan qursin (`location.origin` bo'lim hostini
+    ko'rsatadi, u esa yuklab olish yoki API uchun noto'g'ri bo'lardi)."""
+    fallback = str(request.base_url).rstrip("/")
+    return {
+        "apex": urls.public_url() or fallback,
+        "app": urls.app_url() or fallback,
+        "api": urls.api_url() or fallback,
+        "dl": urls.dl_url() or fallback,
+        "partner": urls.partner_url() or fallback,
+    }
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt(request: Request) -> Response:
+    """Host bo'yicha: landing va docs indekslanadi, panellar/API — yo'q."""
+    section = _host_section(request)
+    if section in ("apex", "docs"):
+        lines = ["User-agent: *", "Allow: /"]
+        base = urls.public_url()
+        if section == "apex" and base:
+            lines.append(f"Sitemap: {base}/sitemap.xml")
+    else:
+        lines = ["User-agent: *", "Disallow: /"]
+    return Response("\n".join(lines) + "\n", media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml(request: Request) -> Response:
+    if _host_section(request) != "apex":
+        raise HTTPException(404, "Topilmadi")
+    base = urls.public_url() or str(request.base_url).rstrip("/")
+    pages = ["/", "/install", "/maxfiylik", "/hamkorlik", "/aloqa", "/rozilik-shabloni"]
+    body = "".join(f"<url><loc>{base}{page}</loc></url>" for page in pages)
+    return Response(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</urlset>",
+        media_type="application/xml",
+    )
+
+
 @app.get("/privacy", include_in_schema=False)
+@app.get("/maxfiylik", include_in_schema=False)
 async def privacy_page() -> FileResponse:
     return _static_page("privacy.html")
+
+
+@app.get("/tariflar", include_in_schema=False)
+async def tariffs_redirect() -> RedirectResponse:
+    """Narx bitta joyda (landing #narx) — alohida sahifa saqlanmaydi."""
+    return RedirectResponse("/#narx", status_code=301)
+
+
+def _render_public(name: str, request: Request) -> HTMLResponse:
+    """Placeholder'li ochiq sahifa: bo'lim manzillari va bot havolasi qo'yiladi."""
+    page = STATIC_DIR / name
+    if not page.is_file():
+        raise HTTPException(404, "Sahifa topilmadi")
+    origin = str(request.base_url).rstrip("/")
+    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    register_url = (
+        f"https://t.me/{bot_username}?start=register"
+        if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
+        else f"{urls.public_url() or origin}/#pilot"
+    )
+    content = (
+        page.read_text(encoding="utf-8")
+        .replace("__TELEGRAM_REGISTER_URL__", register_url)
+        .replace("__APP_URL__", urls.app_url() or origin)
+        .replace("__PARTNER_URL__", urls.partner_url() or origin)
+        .replace("__DL_URL__", urls.dl_url() or origin)
+    )
+    return HTMLResponse(content)
+
+
+@app.get("/rozilik-shabloni", include_in_schema=False)
+async def consent_template_page() -> FileResponse:
+    """Xodim biometrik roziligi shabloni — montajchi chop etib olib boradi."""
+    return _static_page("rozilik-shabloni.html")
+
+
+@app.get("/hamkorlik", include_in_schema=False)
+async def partnership_page(request: Request) -> HTMLResponse:
+    return _render_public("hamkorlik.html", request)
+
+
+@app.get("/aloqa", include_in_schema=False)
+async def contact_page(request: Request) -> HTMLResponse:
+    return _render_public("aloqa.html", request)
 
 
 @app.get("/status", include_in_schema=False)
@@ -1157,16 +1345,18 @@ async def status_page() -> FileResponse:
 
 
 @app.get("/admin", include_in_schema=False)
-async def admin_panel() -> FileResponse:
+async def admin_panel(request: Request) -> Any:
     """Admin paneli. Kirish admin kalit bilan — brauzerda so‘raladi va API ga yuboriladi."""
+    redirect = _apex_redirect(request, "CHAQIMCHI_ADMIN_URL")
+    if redirect is not None:
+        return redirect
     page = STATIC_DIR / "admin.html"
     if not page.is_file():
         raise HTTPException(404, "Admin paneli topilmadi")
     return FileResponse(page)
 
 
-@app.get("/owner", include_in_schema=False)
-async def owner_panel() -> HTMLResponse:
+def _render_owner() -> HTMLResponse:
     page = STATIC_DIR / "owner.html"
     if not page.is_file():
         raise HTTPException(404, "Owner panel topilmadi")
@@ -1178,6 +1368,28 @@ async def owner_panel() -> HTMLResponse:
     )
     content = page.read_text(encoding="utf-8").replace("__TELEGRAM_BOT_URL__", bot_url)
     return HTMLResponse(content)
+
+
+def _apex_redirect(request: Request, env_key: str, path: str = "/") -> Optional[RedirectResponse]:
+    """Apexdagi eski panel yo'li subdomenga ko'chgan bo'lsa — 301.
+
+    Subdomen env sozlanmagan bo'lsa `None` — eski bitta-domen rejimi
+    o'zgarishsiz ishlaydi (orqaga moslik).
+    """
+    target = os.environ.get(env_key, "").strip().rstrip("/")
+    if target and _host_section(request) == "apex":
+        # Query saqlanadi: eski `?key=...` kirish havolalari sinmasin.
+        query = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse(f"{target}{path}{query}", status_code=301)
+    return None
+
+
+@app.get("/owner", include_in_schema=False)
+async def owner_panel(request: Request) -> Any:
+    redirect = _apex_redirect(request, "CHAQIMCHI_APP_URL")
+    if redirect is not None:
+        return redirect
+    return _render_owner()
 
 
 @app.get("/api/v1/plans")
@@ -1474,14 +1686,17 @@ async def public_quick_trial(
     except Exception:
         pass
 
-    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+    fallback = str(request.base_url).rstrip("/")
+    dl_base = urls.dl_url() or fallback
+    api_base = urls.api_url() or fallback
+    app_base = urls.app_url() or fallback
     return {
         "ok": True,
         "site_id": site_id,
         "pairing_code": code,
         "download_windows_url": f"/api/v1/public/download-installer?os=windows&code={code}&site_id={site_id}",
-        "linux_command": f"curl -fsSL {base}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud {base} --code {code}",
-        "owner_url": f"{base}/owner?site={site_id}",
+        "linux_command": f"curl -fsSL {dl_base}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud {api_base} --code {code}",
+        "owner_url": f"{app_base}/owner?site={site_id}",
         "message": "14 kunlik bepul sinov do'koningiz ochildi!",
     }
 
@@ -2251,9 +2466,11 @@ def _site_onboarding_payload(site_id: str) -> Dict[str, Any]:
     origin = public_url() or ""
     install_command = None
     if active_code and origin:
+        dl_base = urls.dl_url() or origin
+        api_base = urls.api_url() or origin
         install_command = (
-            f"curl -fsSL {origin}/downloads/sotqin-installer.sh | "
-            f"sudo bash -s -- --cloud {origin} --code {active_code['code']}"
+            f"curl -fsSL {dl_base}/downloads/sotqin-installer.sh | "
+            f"sudo bash -s -- --cloud {api_base} --code {active_code['code']}"
         )
     return {
         "site_id": site_id,
@@ -3042,7 +3259,7 @@ async def edge_update(
     """
     release = latest_windows_release()
     policy = get_store().update_policy(device["site_id"])
-    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+    base = urls.dl_url().rstrip("/") or str(request.base_url).rstrip("/")
 
     if release is None:
         return {"available": False, "reason": "nashr qilingan reliz yo'q", "policy": policy}
@@ -3314,7 +3531,7 @@ async def admin_create_owner_login_link(
         secret=_owner_secret(),
         ttl_days=LOGIN_LINK_TTL_DAYS,
     )
-    base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+    base = urls.app_url().rstrip("/") or str(request.base_url).rstrip("/")
     return {
         "ok": True,
         "url": f"{base}/owner?key={token}",
@@ -4157,7 +4374,7 @@ def _bot_panel_url(base: str, telegram_id: str, members: List[Dict[str, Any]]) -
     Telegram akkaunt egasi ko'radi.  Bu eski "kodsiz kirish ro'yxati"ning
     xavfsiz o'rnini bosadi: havola uzun tasodifiy token, Telegram ID emas.
     """
-    url = f"{base}/owner"
+    url = f"{urls.app_url() or base}/owner"
     if not members:
         return url, False
     try:
@@ -4198,9 +4415,9 @@ def _bot_welcome(
     )
     markup = {
         "inline_keyboard": [
-            [{"text": "🏪 Mijoz paneli", "url": f"{base}/owner"}],
-            [{"text": "🛠 O'rnatuvchi bo'limi", "url": f"{base}/installer"}],
-            [{"text": "💰 Tarif va narx", "url": f"{base}/#narx"}],
+            [{"text": "🏪 Mijoz paneli", "url": f"{urls.app_url() or base}/owner"}],
+            [{"text": "🛠 O'rnatuvchi bo'limi", "url": f"{urls.partner_url() or base}/installer"}],
+            [{"text": "💰 Tarif va narx", "url": f"{urls.public_url() or base}/#narx"}],
         ]
     }
     return text, markup
@@ -4242,7 +4459,9 @@ async def _bot_send_report(telegram_id: str, members: List[Dict[str, Any]], base
             f"\n📷 Kamera: {detail['cameras_active']}/{detail['cameras_expected']} "
             f"ishlayapti · aloqa {detail['connection']}"
         )
-        await _send_owner_telegram(telegram_id, text_out, reply_markup=botfmt.panel_button(base))
+        await _send_owner_telegram(
+            telegram_id, text_out, reply_markup=botfmt.panel_button(urls.app_url() or base)
+        )
 
 
 async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]]) -> None:

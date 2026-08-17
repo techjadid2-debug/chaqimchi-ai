@@ -117,10 +117,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("archive", type=Path)
     parser.add_argument("--private-key", type=Path, default=DEFAULT_PRIVATE)
     parser.add_argument("--public-key", type=Path, default=DEFAULT_PUBLIC)
-    parser.add_argument("--product", default="chaqimchi-sotqin")
+    # Standart qiymat YO'Q — mahsulot fayl nomidan aniqlanadi.  Ilgari
+    # default "chaqimchi-sotqin" edi va Windows relizi bir marta noto'g'ri
+    # mahsulot bilan imzolanib ketgan (2026-08-17, ushlab qolindi).
+    parser.add_argument("--product", default=None)
     parser.add_argument("--target-arch", default="x86_64")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)
+
+    if args.product is None:
+        name = args.archive.name
+        args.product = next(
+            (prefix for prefix in ("chaqimchi-windows", "chaqimchi-sotqin", "chaqimchi-lite")
+             if name.startswith(prefix + "-")),
+            None,
+        )
+        if args.product is None:
+            print(
+                f"XATO: fayl nomidan mahsulot aniqlanmadi: {name}\n"
+                "Nom chaqimchi-windows-X.Y.Z.exe yoki chaqimchi-sotqin-X.Y.Z.tar.gz "
+                "ko'rinishida bo'lsin, yoki --product bering.",
+                file=sys.stderr,
+            )
+            return 1
 
     if not args.archive.is_file():
         print(f"XATO: arxiv topilmadi: {args.archive}", file=sys.stderr)

@@ -16,7 +16,21 @@ env_file="${CHAQIMCHI_ENV_FILE:-.env.production}"
 compose_file="${CHAQIMCHI_COMPOSE_FILE:-docker-compose.prod.yml}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 stage="$(mktemp -d)"
-trap 'rm -rf -- "$stage"' EXIT
+# Tozalash HECH QACHON xato bilan tugamasin: `mc mirror` konteyner ichida
+# root sifatida yozadi, host user esa u fayllarni o'chira olmaydi.  EXIT
+# trapdagi `rm` xatosi bash'da skriptning chiqish kodiga aylanadi — aynan
+# shu sabab 2026-08-17 dagi birinchi deploy backupdan KEYIN "jimgina"
+# yiqilgan edi.  Root fayllarni compose'ning o'z konteyneriga o'chirtiramiz,
+# qolganini oddiy rm oladi; ikkalasi ham yiqilsa ham backup natijasiga
+# ta'sir qilmaydi.
+cleanup_stage() {
+  docker compose --env-file "${CHAQIMCHI_ENV_FILE:-.env.production}" \
+    -f "${CHAQIMCHI_COMPOSE_FILE:-docker-compose.prod.yml}" \
+    run --rm --no-deps --entrypoint sh -v "$stage:/stage" minio-init \
+    -c 'rm -rf /stage/minio' >/dev/null 2>&1 || true
+  rm -rf -- "$stage" 2>/dev/null || true
+}
+trap cleanup_stage EXIT
 mkdir -p -- "$CHAQIMCHI_BACKUP_DIR" "$stage/minio" "$stage/cloud-state"
 
 cd "$repo_dir"

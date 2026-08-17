@@ -434,3 +434,45 @@ def test_an_unwritable_status_path_does_not_crash_the_service(tmp_path: Path) ->
     blocked.write_text("men papka emasman", encoding="utf-8")
 
     write_status(blocked / "status.json", {"streams": {}}, now=1.0)
+
+
+def test_live_frame_loop_writes_requested_camera_frames(tmp_path: Path, monkeypatch) -> None:
+    """Jonli so'rov bor kameraning kadri JPEG bo'lib diskka tushadi.
+
+    Yangi RTSP ulanish yo'q — kadr pipeline xotirasidan olinadi.
+    """
+    import json
+    import threading
+    import time
+    from datetime import datetime, timedelta, timezone
+
+    import numpy as np
+
+    from chaqimchi_ai.retail import service
+
+    class FakePipeline:
+        def latest_frame(self, camera_id):
+            if camera_id == "camera-01":
+                return np.zeros((90, 1280, 3), dtype=np.uint8)
+            return None
+
+    until = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+    (tmp_path / "live-request.json").write_text(
+        json.dumps({"camera-01": {"until": until}, "camera-09": {"until": until}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(service, "LIVE_FRAME_INTERVAL_SEC", 0.01)
+    stopped = threading.Event()
+    thread = threading.Thread(
+        target=service._live_frame_loop, args=(FakePipeline(), tmp_path, stopped), daemon=True
+    )
+    thread.start()
+    target = tmp_path / "live" / "camera-01.jpg"
+    deadline = time.time() + 5
+    while time.time() < deadline and not target.is_file():
+        time.sleep(0.05)
+    stopped.set()
+    thread.join(timeout=2)
+
+    assert target.is_file() and target.stat().st_size > 0
+    assert not (tmp_path / "live" / "camera-09.jpg").exists(), "kadri yo'q kamera yozilmasin"

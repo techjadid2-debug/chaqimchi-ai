@@ -587,6 +587,69 @@ def _watcher(
     return observe
 
 
+#: Jonli kadr yozish qadami (soniya) va o'lchami.
+LIVE_FRAME_INTERVAL_SEC = 2.0
+LIVE_FRAME_WIDTH = 640
+LIVE_FRAME_JPEG_QUALITY = 70
+
+
+def _live_frame_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threading.Event) -> None:
+    """Jonli ko'rish kadrlarini diskka yozib turadi.
+
+    Lokal ilova heartbeat javobidan `live-request.json` yozadi; biz shu
+    yerda so'ralgan kameralarning **oxirgi tahlil kadri**ni (yangi RTSP
+    ulanishsiz) 640px JPEG qilib `live/` ga qo'yamiz; ilova esa uni
+    cloudga yuboradi.  So'rov yo'q payt sikl deyarli bepul (bitta stat).
+    """
+    import json as json_module
+    from datetime import datetime, timezone
+
+    import cv2
+
+    request_path = base_dir / "live-request.json"
+    out_dir = base_dir / "live"
+
+    while not stopped.wait(LIVE_FRAME_INTERVAL_SEC):
+        if not request_path.is_file():
+            continue
+        try:
+            raw = json_module.loads(request_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(raw, dict):
+            continue
+        now = datetime.now(timezone.utc)
+        for camera_id, item in raw.items():
+            try:
+                until = datetime.fromisoformat(str((item or {}).get("until")))
+            except (TypeError, ValueError):
+                continue
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            if until <= now:
+                continue
+            frame = pipeline.latest_frame(str(camera_id))
+            if frame is None:
+                continue
+            height, width = frame.shape[:2]
+            if width > LIVE_FRAME_WIDTH:
+                scale = LIVE_FRAME_WIDTH / width
+                frame = cv2.resize(frame, (LIVE_FRAME_WIDTH, max(1, round(height * scale))))
+            ok, encoded = cv2.imencode(
+                ".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), LIVE_FRAME_JPEG_QUALITY]
+            )
+            if not ok:
+                continue
+            out_dir.mkdir(parents=True, exist_ok=True)
+            target = out_dir / f"{camera_id}.jpg"
+            temporary = target.with_name(f".{target.name}.tmp")
+            try:
+                temporary.write_bytes(encoded.tobytes())
+                os.replace(temporary, target)
+            except OSError:
+                temporary.unlink(missing_ok=True)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Retail AI xizmati")
     parser.add_argument("--config", default=None, help="config yo'li (standart: $CHAQIMCHI_CONFIG)")
@@ -620,6 +683,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         on_stats=_watcher(settings, base_dir, stopped),
     )
     runner.start()
+    threading.Thread(
+        target=_live_frame_loop,
+        args=(runner.pipeline, base_dir, stopped),
+        name="live-frames",
+        daemon=True,
+    ).start()
     sync_thread: Optional[threading.Thread] = None
     if sync_cfg.enabled:
         sync = CloudEventSync(sync_cfg, outbox)

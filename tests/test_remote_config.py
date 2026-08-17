@@ -235,6 +235,10 @@ def test_heartbeat_reports_the_running_version(local, monkeypatch) -> None:
         def raise_for_status(self) -> None:
             return None
 
+        @staticmethod
+        def json() -> Dict[str, Any]:
+            return {"ok": True}
+
     def _post(url, headers=None, json=None, timeout=None):
         sent["url"] = url
         sent["headers"] = headers
@@ -272,3 +276,107 @@ def test_heartbeat_failure_is_not_fatal(local, monkeypatch) -> None:
 
     monkeypatch.setattr(local.httpx, "post", _boom)
     assert local.send_heartbeat({"cameras_active": 0}) is False
+
+
+# ── Jonli ko'rish va preview so'rovlari (0.6.6) ──────────────────────────
+#
+# Muhim kontekst: heartbeat javobi ilgari umuman o'qilmasdi — shu sabab
+# `preview_requested` Windows qurilmada ishlamasdi (botdagi /kamera yangi
+# kadr olomasdi).  Endi javobdan `live-request.json` yoziladi.
+
+
+def _future(seconds: int = 60) -> str:
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
+
+
+def test_heartbeat_response_creates_the_live_request_file(local) -> None:
+    local.apply_media_requests(
+        {
+            "live_requested": [{"camera_id": "camera-01", "until": _future()}],
+            "preview_requested": ["camera-02"],
+        }
+    )
+
+    raw = json.loads(local.live_request_path().read_text(encoding="utf-8"))
+    assert raw["camera-01"]["preview"] is False
+    assert raw["camera-02"]["preview"] is True, "bir martalik preview ham shu mexanizmda"
+
+
+def test_empty_response_clears_the_request_file(local) -> None:
+    local.apply_media_requests({"live_requested": [{"camera_id": "camera-01", "until": _future()}]})
+    assert local.live_request_path().is_file()
+
+    local.apply_media_requests({"live_requested": [], "preview_requested": []})
+
+    assert not local.live_request_path().is_file()
+
+
+def test_frames_are_uploaded_and_preview_is_one_shot(local, monkeypatch) -> None:
+    """O'zgargan kadr yuboriladi; preview bitta kadrdan keyin tugaydi."""
+    local.apply_media_requests(
+        {
+            "live_requested": [{"camera_id": "camera-01", "until": _future()}],
+            "preview_requested": ["camera-02"],
+        }
+    )
+    frames = local.live_frames_dir()
+    frames.mkdir(parents=True, exist_ok=True)
+    (frames / "camera-01.jpg").write_bytes(b"live-kadr")
+    (frames / "camera-02.jpg").write_bytes(b"preview-kadr")
+
+    uploads = []
+
+    class _Answer:
+        content = b"{}"
+
+        def raise_for_status(self):
+            return None
+
+        @staticmethod
+        def json():
+            return {"ok": True, "continue": True}
+
+    def fake_put(url, headers=None, content=None, timeout=None):
+        uploads.append((url, content))
+        return _Answer()
+
+    monkeypatch.setattr(local.httpx, "put", fake_put)
+    local._uploaded_mtimes.clear()
+
+    sent = local.upload_media_frames()
+
+    assert sent == 2
+    endpoints = {url.rsplit("/", 1)[-1] for url, _ in uploads}
+    assert endpoints == {"live-frame", "preview"}, "preview eski endpointga borsin"
+    # Preview bir martalik — ro'yxatdan chiqdi; jonli esa qoladi.
+    remaining = json.loads(local.live_request_path().read_text(encoding="utf-8"))
+    assert "camera-02" not in remaining and "camera-01" in remaining
+
+    # Kadr o'zgarmagan — qayta yuborilmaydi.
+    assert local.upload_media_frames() == 0
+
+
+def test_continue_false_stops_the_live_stream(local, monkeypatch) -> None:
+    local.apply_media_requests({"live_requested": [{"camera_id": "camera-01", "until": _future()}]})
+    frames = local.live_frames_dir()
+    frames.mkdir(parents=True, exist_ok=True)
+    (frames / "camera-01.jpg").write_bytes(b"kadr")
+
+    class _Stop:
+        content = b"{}"
+
+        def raise_for_status(self):
+            return None
+
+        @staticmethod
+        def json():
+            return {"ok": True, "continue": False}
+
+    monkeypatch.setattr(local.httpx, "put", lambda *a, **k: _Stop())
+    local._uploaded_mtimes.clear()
+
+    local.upload_media_frames()
+
+    assert not local.live_request_path().is_file(), "server to'xta dedi — so'rov o'chdi"

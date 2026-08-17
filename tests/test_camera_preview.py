@@ -506,3 +506,110 @@ def test_onboarding_cannot_reach_100_percent_without_a_drawn_line(client: TestCl
         },
     )
     assert steps()["geometry"] is True
+
+
+# ── Jonli ko'rish (0.6.6) ────────────────────────────────────────────────
+
+
+def _owner(client: TestClient, site_id: str) -> dict:
+    client.post(
+        f"/api/v1/admin/sites/{site_id}/members",
+        headers=ADMIN,
+        json={"telegram_id": "701", "role": "owner"},
+    ).raise_for_status()
+    import os
+
+    os.environ["CHAQIMCHI_OTP_TEST_CODE"] = "123456"
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "701"})
+    verified = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "701", "site_id": site_id, "code": "123456"},
+    )
+    os.environ.pop("CHAQIMCHI_OTP_TEST_CODE", None)
+    return {"Authorization": f"Bearer {verified.json()['access_token']}"}
+
+
+def test_live_request_reaches_the_device_via_heartbeat(client: TestClient) -> None:
+    """Panel 'Jonli' bosdi → heartbeat javobida kamera muddat bilan keladi."""
+    site, headers = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+
+    response = client.post("/api/v1/owner/cameras/camera-01/live", headers=owner)
+    assert response.status_code == 200
+    assert response.json()["until"]
+
+    beat = client.post(
+        "/api/v1/edge/heartbeat",
+        headers=headers,
+        json={"cameras_active": 1, "app_version": "0.6.6"},
+    ).json()
+    live = beat["live_requested"]
+    assert len(live) == 1 and live[0]["camera_id"] == "camera-01"
+
+
+def test_live_frames_flow_until_the_ttl_expires(client: TestClient) -> None:
+    """Kadr oqimi: muddat bor — continue true; muddat tugadi — false."""
+    import cloud.main as main
+
+    site, headers = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+    client.post("/api/v1/owner/cameras/camera-01/live", headers=owner)
+
+    upload = client.put(
+        "/api/v1/edge/cameras/camera-01/live-frame",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=JPEG,
+    )
+    assert upload.status_code == 200
+    assert upload.json()["continue"] is True
+
+    # Kadr odatdagi preview kaliti orqali panelga darhol ko'rinadi.
+    preview = client.get("/api/v1/owner/cameras/camera-01/preview", headers=owner)
+    assert preview.status_code == 200 and preview.content == JPEG
+
+    # Muddat tugadi — qurilmaga "to'xta" deyiladi.
+    store = main.get_store()
+    conn = store._connect()
+    conn.execute(
+        "UPDATE site_cameras SET live_until='2000-01-01T00:00:00+00:00' WHERE camera_id='camera-01'"
+    )
+    conn.commit()
+    conn.close()
+    upload = client.put(
+        "/api/v1/edge/cameras/camera-01/live-frame",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=JPEG,
+    )
+    assert upload.json()["continue"] is False
+    beat = client.post(
+        "/api/v1/edge/heartbeat",
+        headers=headers,
+        json={"cameras_active": 1, "app_version": "0.6.6"},
+    ).json()
+    assert beat["live_requested"] == []
+
+
+def test_live_frames_have_their_own_generous_budget(client: TestClient) -> None:
+    """96 talik preview limiti jonli oqimni 5 daqiqada o'ldirardi."""
+    site, headers = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+    client.post("/api/v1/owner/cameras/camera-01/live", headers=owner)
+
+    # Preview limitidan ko'proq kadr ketadi — jonli bucket alohida.
+    for _ in range(120):
+        response = client.put(
+            "/api/v1/edge/cameras/camera-01/live-frame",
+            headers={**headers, "Content-Type": "image/jpeg"},
+            content=JPEG,
+        )
+        assert response.status_code == 200
+
+
+def test_live_frame_is_size_capped(client: TestClient) -> None:
+    site, headers = _site_with_camera(client)
+    response = client.put(
+        "/api/v1/edge/cameras/camera-01/live-frame",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"x" * (512 * 1024 + 1),
+    )
+    assert response.status_code == 413

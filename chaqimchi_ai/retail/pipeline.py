@@ -463,6 +463,15 @@ class RetailPipeline:
                     self._totals.action_errors += 1
                 logger.exception("[%s] '%s' harakati bajarilmadi", camera_id, action)
 
+    def latest_frame(self, camera_id: str) -> Optional[Any]:
+        """Kameraning oxirgi tahlil qilingan kadri (jonli ko'rish uchun).
+
+        Yangi RTSP ulanish YO'Q — kadr allaqachon xotirada turadi, uni
+        faqat JPEG qilib berish qoladi.
+        """
+        camera = self._cameras.get(camera_id)
+        return camera.last_frame if camera is not None else None
+
     def _attach_face_crop(self, event: EdgeEvent, *, camera_id: str) -> None:
         """`face_captured` uchun odam ramkasining yuqori qismini kesib oladi.
 

@@ -534,6 +534,48 @@ class CloudStore:
         conn.close()
         return [str(row[0]) for row in rows]
 
+    def request_live(self, site_id: str, camera_id: str, *, ttl_sec: int = 90) -> str:
+        """Jonli ko'rishni yoqadi/uzaytiradi; muddat (ISO) qaytaradi.
+
+        Bir martalik preview'dan farqi — muddat: panel ochiq turganda
+        mijoz tomoni har 60 soniyada qayta chaqiradi va oqim uzilmaydi;
+        panel yopilsa muddat o'tib qurilma o'zi to'xtaydi.
+        """
+        until = _iso(_utc_now() + timedelta(seconds=max(10, ttl_sec)))
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET live_until=?,updated_at=? "
+            "WHERE site_id=? AND camera_id=? AND enabled=1",
+            (until, _iso(_utc_now()), site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+        return until
+
+    def live_cameras(self, site_id: str) -> List[Dict[str, Any]]:
+        """Hozir jonli rejimda kutilayotgan kameralar (muddat bilan)."""
+        now = _iso(_utc_now())
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT camera_id,live_until FROM site_cameras "
+            "WHERE site_id=? AND enabled=1 AND live_until IS NOT NULL AND live_until>? "
+            "ORDER BY camera_id",
+            (site_id, now),
+        ).fetchall()
+        conn.close()
+        return [{"camera_id": str(row[0]), "until": str(row[1])} for row in rows]
+
+    def live_active(self, site_id: str, camera_id: str) -> bool:
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT live_until FROM site_cameras WHERE site_id=? AND camera_id=?",
+            (site_id, camera_id),
+        ).fetchone()
+        conn.close()
+        return bool(row and row[0] and str(row[0]) > _iso(_utc_now()))
+
     def set_camera_preview(self, site_id: str, camera_id: str, key: str) -> None:
         """Rasm keldi: so'rov bayrog'i o'chadi, kalit saqlanadi."""
         now = _iso(_utc_now())
@@ -927,6 +969,9 @@ class CloudStore:
             "preview_requested": "INTEGER NOT NULL DEFAULT 0",
             "preview_key": "TEXT",
             "preview_at": "TEXT",
+            # Jonli ko'rish: shu vaqtgacha qurilma har 2-3 soniyada kadr
+            # yuboradi (panel ochiq ekan muddat uzaytirib turiladi).
+            "live_until": "TEXT",
         }
         for name, definition in camera_additions.items():
             if name not in camera_columns:

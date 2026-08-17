@@ -1078,7 +1078,18 @@ def _start_config_sync() -> None:
                 logger.exception("Cloud sozlamasini olishda kutilmagan xato")
             time.sleep(cloud_config.POLL_INTERVAL_SEC)
 
+    def _media_loop() -> None:
+        # Jonli ko'rish: zanjir yozgan kadrlarni har 2-3 soniyada cloudga
+        # yuboradi.  So'rov yo'q payt sikl bitta fayl-stat bilan tugaydi.
+        while True:
+            try:
+                cloud_config.upload_media_frames()
+            except Exception:  # noqa: BLE001 — jonli kadr dasturni to'xtatmasin
+                logger.exception("Jonli kadr yuborishda kutilmagan xato")
+            time.sleep(cloud_config.LIVE_UPLOAD_INTERVAL_SEC)
+
     threading.Thread(target=_loop, name="cloud-config-sync", daemon=True).start()
+    threading.Thread(target=_media_loop, name="live-frame-upload", daemon=True).start()
 
 
 def _autostart_if_ready() -> None:

@@ -37,11 +37,16 @@ from chaqimchi_ai.local import config_store, paths
 
 logger = logging.getLogger(__name__)
 
-#: Cloud sozlamasini shuncha soniyada bir marta so'raymiz.  Qurilma
-#: heartbeat'i ham 60 soniyada — bir xil ritm, cloudga qo'shimcha yuk yo'q.
-POLL_INTERVAL_SEC = 60
+#: Cloud sozlamasini shuncha soniyada bir marta so'raymiz.  60 emas, 20:
+#: mijoz panelda "Jonli ko'rish" bossа qurilma buni keyingi heartbeat'da
+#: biladi — kutish 60 soniyadan 20 gacha tushdi.  Har so'rov bir necha yuz
+#: bayt — kuniga ~4300 ta yengil so'rov, VPS uchun sezilmas yuk.
+POLL_INTERVAL_SEC = 20
 
 TIMEOUT_SEC = 20
+
+#: Jonli kadr yuborish qadami (soniya).
+LIVE_UPLOAD_INTERVAL_SEC = 2.5
 
 
 def cache_path() -> Path:
@@ -179,9 +184,14 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
             timeout=TIMEOUT_SEC,
         )
         response.raise_for_status()
-    except httpx.HTTPError as exc:
+        answer = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
         logger.info("Heartbeat yuborilmadi: %s", exc)
         return False
+    # Javob ilgari umuman o'qilmasdi — shuning uchun `preview_requested`
+    # Windows qurilmada ishlamasdi (botdagi /kamera yangi kadr olomasdi).
+    if isinstance(answer, dict):
+        apply_media_requests(answer)
     return True
 
 
@@ -189,6 +199,143 @@ def _pending_events() -> Optional[int]:
     from chaqimchi_ai.local import cloud_link
 
     return cloud_link.pending_events()
+
+
+# ── Jonli ko'rish va preview (media so'rovlari) ──────────────────────────
+#
+# Ish taqsimoti (jarayonlar chegarasi tufayli fayl orqali):
+#   heartbeat javobi     → `live-request.json`     (shu modul yozadi)
+#   retail zanjiri       → `data/live/{id}.jpg`    (kadr allaqachon xotirada,
+#                          faqat JPEG qilib yoziladi — yangi RTSP ulanish yo'q)
+#   yuklovchi sikl       → PUT /live-frame yoki /preview (shu modul)
+
+
+def live_request_path() -> Path:
+    return paths.data_dir() / "live-request.json"
+
+
+def live_frames_dir() -> Path:
+    return paths.data_dir() / "live"
+
+
+def apply_media_requests(answer: Dict[str, Any]) -> None:
+    """Heartbeat javobidagi jonli/preview so'rovlarini faylga yozadi."""
+    from datetime import datetime, timedelta, timezone
+
+    requests: Dict[str, Any] = {}
+    for item in answer.get("live_requested") or []:
+        if isinstance(item, dict) and item.get("camera_id"):
+            requests[str(item["camera_id"])] = {
+                "until": str(item.get("until") or ""),
+                "preview": False,
+            }
+    # Bir martalik preview — qisqa "jonli" deb qaraladi: bitta mexanizm.
+    one_shot_until = (datetime.now(timezone.utc) + timedelta(seconds=8)).isoformat()
+    for camera_id in answer.get("preview_requested") or []:
+        key = str(camera_id)
+        if key not in requests:
+            requests[key] = {"until": one_shot_until, "preview": True}
+
+    path = live_request_path()
+    if not requests:
+        # Bo'sh so'rov — fayl o'chadi; zanjir ham, yuklovchi ham tinchiydi.
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
+    ) as handle:
+        json.dump(requests, handle, ensure_ascii=False)
+        temporary = Path(handle.name)
+    os.replace(temporary, path)
+
+
+def _active_media_requests() -> Dict[str, Dict[str, Any]]:
+    from datetime import datetime, timezone
+
+    path = live_request_path()
+    if not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {}
+    now = datetime.now(timezone.utc)
+    active: Dict[str, Dict[str, Any]] = {}
+    for camera_id, item in raw.items() if isinstance(raw, dict) else []:
+        try:
+            until = datetime.fromisoformat(str(item.get("until")))
+        except (TypeError, ValueError):
+            continue
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        if until > now:
+            active[str(camera_id)] = item
+    return active
+
+
+#: Oxirgi yuborilgan kadr fayllarining mtime'lari — o'zgarmagan kadrni
+#: qayta yubormaslik uchun.
+_uploaded_mtimes: Dict[str, float] = {}
+
+
+def upload_media_frames() -> int:
+    """Zanjir yozgan jonli kadrlarni cloudga yuboradi.  Har 2-3 soniyada.
+
+    Qaytaradi: yuborilgan kadrlar soni.  `continue: false` javobida yoki
+    preview yuborilgach kamera so'rovdan chiqariladi.
+    """
+    requests = _active_media_requests()
+    if not requests:
+        return 0
+    raw = config_store.read_raw().get("cloud_sync") or {}
+    if not raw.get("enabled") or not raw.get("device_token"):
+        return 0
+
+    sent = 0
+    finished: list[str] = []
+    for camera_id, item in requests.items():
+        frame = live_frames_dir() / f"{camera_id}.jpg"
+        if not frame.is_file():
+            continue
+        try:
+            mtime = frame.stat().st_mtime
+        except OSError:
+            continue
+        if _uploaded_mtimes.get(camera_id) == mtime:
+            continue  # yangi kadr hali yozilmagan
+        try:
+            content = frame.read_bytes()
+        except OSError:
+            continue
+        if not content:
+            continue
+        endpoint = "preview" if item.get("preview") else "live-frame"
+        try:
+            response = httpx.put(
+                f"{str(raw['url']).rstrip('/')}/api/v1/edge/cameras/{camera_id}/{endpoint}",
+                headers={**_headers(raw), "Content-Type": "image/jpeg"},
+                content=content,
+                timeout=TIMEOUT_SEC,
+            )
+            response.raise_for_status()
+            answer = response.json() if response.content else {}
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.info("Jonli kadr yuborilmadi (%s): %s", camera_id, exc)
+            continue
+        _uploaded_mtimes[camera_id] = mtime
+        sent += 1
+        if item.get("preview") or answer.get("continue") is False:
+            finished.append(camera_id)
+
+    if finished:
+        remaining = {key: value for key, value in requests.items() if key not in finished}
+        path = live_request_path()
+        if remaining:
+            path.write_text(json.dumps(remaining, ensure_ascii=False), encoding="utf-8")
+        else:
+            path.unlink(missing_ok=True)
+    return sent
 
 
 def sync_once() -> Optional[Dict[str, Any]]:

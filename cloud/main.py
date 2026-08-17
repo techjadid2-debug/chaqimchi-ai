@@ -2444,6 +2444,27 @@ async def owner_camera_preview(
     return _camera_preview_response(owner.site_id, camera_id)
 
 
+@app.post("/api/v1/owner/cameras/{camera_id}/live")
+async def owner_request_live(
+    camera_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Jonli ko'rishni yoqadi (90 s; panel ochiq ekan qayta chaqiradi).
+
+    Video oqim emas: qurilma har 2-3 soniyada bitta JPEG yuboradi, panel
+    esa preview endpointini o'sha tezlikda qayta o'qiydi.  Zaif do'kon
+    kompyuteri va VPS uchun eng arzon "jonli" — kadr allaqachon tahlil
+    uchun xotirada turadi, faqat siqib yuboriladi.
+    """
+    try:
+        until = get_store().request_live(owner.site_id, camera_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    # Birinchi kadrgacha kutish: qurilma so'rovni keyingi heartbeat'da
+    # ko'radi (20 soniyagacha).
+    return {"ok": True, "until": until, "first_frame_wait_sec": 25}
+
+
 @app.delete("/api/v1/installer/sites/{site_id}/cameras/{camera_id}")
 async def installer_delete_camera(
     site_id: str,
@@ -2842,6 +2863,9 @@ async def edge_health_heartbeat(
         # tushiradi (`restart_on_config_change`), ya'ni har "rasmni ko'rsat"
         # bosilganda do'kon analitikasi bir necha soniyaga uzilardi.
         "preview_requested": get_store().pending_preview_cameras(device["site_id"]),
+        # Jonli ko'rish: panel ochiq turgan kameralar. Muddat bilan keladi —
+        # qurilma muddati o'tguncha har 2-3 soniyada kadr yuboradi.
+        "live_requested": get_store().live_cameras(device["site_id"]),
         "received": body.model_dump(),
     }
 
@@ -2878,6 +2902,49 @@ async def upload_camera_preview(
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return {"ok": True, "camera_id": camera_id}
+
+
+@app.put("/api/v1/edge/cameras/{camera_id}/live-frame")
+@app.put("/api/v1/sotqin/cameras/{camera_id}/live-frame")
+async def upload_live_frame(
+    camera_id: str,
+    request: Request,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Jonli ko'rish kadri (har 2-3 soniyada, panel ochiq ekan).
+
+    Oddiy preview bilan bitta kalitga yoziladi — panel o'sha GET
+    endpointdan o'qiyveradi.  Limit alohida va saxiy: 2.5 soniyalik
+    qadam bilan bu kuniga ~3 soat tomoshaga yetadi.  Javobdagi
+    `continue` qurilmaga davom etish-etmaslikni aytadi — muddat panel
+    tomonidan uzaytirilmasa oqim o'zi to'xtaydi.
+    """
+    ratelimit.check(
+        "camera-live",
+        device["site_id"],
+        limit=4_000,
+        window_sec=86_400,
+        message="Kunlik jonli ko'rish chegarasi oshdi",
+    )
+    if request.headers.get("content-type", "").split(";", 1)[0] != "image/jpeg":
+        raise HTTPException(415, "Faqat image/jpeg qabul qilinadi")
+    content = await request.body()
+    if not content:
+        raise HTTPException(400, "Kadr bo'sh")
+    if len(content) > 512 * 1024:
+        # Jonli kadr 640px va past sifat — 512 KB ham ortig'i bilan yetadi.
+        raise HTTPException(413, "Jonli kadr 512 KB dan katta")
+    key = f"{device['site_id']}/preview/{camera_id}.jpg"
+    get_snapshot_store().put(key, content, content_type="image/jpeg")
+    try:
+        get_store().set_camera_preview(device["site_id"], camera_id, key)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return {
+        "ok": True,
+        "camera_id": camera_id,
+        "continue": get_store().live_active(device["site_id"], camera_id),
+    }
 
 
 @app.get("/api/v1/edge/update")

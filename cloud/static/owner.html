@@ -211,6 +211,7 @@
       <div class="modal-head">
         <b id="modalTitle"></b>
         <div style="display:flex;gap:8px">
+          <button class="button ghost small hidden" id="modalLiveBtn" type="button">▶ Jonli ko‘rish</button>
           <a class="button ghost small" id="modalDownload" href="#" download>Yuklab olish</a>
           <button class="button small" id="modalClose" type="button">Yopish</button>
         </div>
@@ -422,12 +423,71 @@
   async function openCameraModal(cameraId) {
     const camera = cameraList.find((item) => item.camera_id === cameraId);
     openModal(esc((camera && camera.label) || cameraId));
+    liveCameraId = cameraId;
+    const liveBtn = $("modalLiveBtn");
+    liveBtn.classList.remove("hidden");
+    liveBtn.textContent = "▶ Jonli ko‘rish";
     await renderMediaInModal(
       `/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`,
       "image",
       `${cameraId}.jpg`,
       "Bu kameradan rasm hali kelmagan. Qurilma ulanganda o‘zi paydo bo‘ladi.",
     );
+  }
+
+  /* ── Jonli ko'rish ───────────────────────────────────────────────────
+     Video oqim emas: qurilma har 2-3 soniyada bitta kadr yuboradi, biz
+     preview'ni o'sha tezlikda qayta o'qiymiz.  Zaif do'kon kompyuteri
+     uchun eng arzon "jonli". */
+
+  let liveCameraId = "";
+  let liveTimer = null;
+  let liveKeepAlive = null;
+
+  async function startLive() {
+    if (!liveCameraId || liveTimer) return;
+    const btn = $("modalLiveBtn");
+    btn.textContent = "⏸ Jonli (ulanmoqda…)";
+    try {
+      await api(`/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/live`, { method: "POST" });
+    } catch (err) {
+      btn.textContent = "▶ Jonli ko‘rish";
+      return note("cameraHint", "warn", err.message);
+    }
+    // Muddatni panel ochiq ekan uzaytirib turamiz (server 90 s beradi).
+    liveKeepAlive = setInterval(() => {
+      api(`/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/live`, { method: "POST" }).catch(() => {});
+    }, 60000);
+    let firstFrameAt = 0;
+    liveTimer = setInterval(async () => {
+      try {
+        const r = await fetch(
+          `/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/preview`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!r.ok) return;
+        const fresh = URL.createObjectURL(await r.blob());
+        const img = $("modalBody").querySelector("img.media");
+        if (img) {
+          const old = img.src;
+          img.src = fresh;
+          if (old && old.startsWith("blob:") && old !== modalUrl) URL.revokeObjectURL(old);
+        } else {
+          $("modalBody").innerHTML = `<img class="media" src="${fresh}" alt="">`;
+        }
+        if (!firstFrameAt) {
+          firstFrameAt = Date.now();
+          $("modalLiveBtn").textContent = "⏸ Jonli — to‘xtatish";
+        }
+      } catch (_) {}
+    }, 2500);
+  }
+
+  function stopLive() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    if (liveKeepAlive) { clearInterval(liveKeepAlive); liveKeepAlive = null; }
+    const btn = $("modalLiveBtn");
+    if (btn) btn.textContent = "▶ Jonli ko‘rish";
   }
 
   /* ── Kunlik hisobot ─────────────────────────────────────────────────── */
@@ -794,6 +854,9 @@
   }
 
   function closeModal() {
+    stopLive();
+    liveCameraId = "";
+    $("modalLiveBtn").classList.add("hidden");
     $("modal").classList.add("hidden");
     if (modalUrl) { URL.revokeObjectURL(modalUrl); modalUrl = ""; }
   }
@@ -891,6 +954,7 @@
   $("typeFilter").addEventListener("change", loadEvents);
   $("cameraFilter").addEventListener("change", loadEvents);
   $("modalClose").addEventListener("click", closeModal);
+  $("modalLiveBtn").addEventListener("click", () => (liveTimer ? stopLive() : startLive()));
   $("modal").addEventListener("click", (event) => { if (event.target === $("modal")) closeModal(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 

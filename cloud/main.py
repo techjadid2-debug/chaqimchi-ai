@@ -851,6 +851,9 @@ def _purge_expired_events() -> int:
         for key in get_event_store().purge_inactive_employee_faces(site_id):
             get_snapshot_store().delete(key)
             removed += 1
+        # Issiqlik to'rlari 90 kun yashaydi — mavsumiy taqqoslashga yetadi,
+        # cheksiz o'sishga yo'l qo'ymaydi.
+        removed += get_event_store().purge_heatmaps(site_id, retention_days=90)
     return removed
 
 
@@ -2905,6 +2908,70 @@ async def upload_camera_preview(
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return {"ok": True, "camera_id": camera_id}
+
+
+class HeatmapItem(BaseModel):
+    camera_id: str = Field(min_length=1, max_length=40)
+    #: UTC soat bucket'i, "2026-08-18T14" ko'rinishida.
+    hour: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}$")
+    grid: List[List[int]]
+    frames: int = Field(default=0, ge=0, le=1_000_000)
+
+
+class HeatmapBody(BaseModel):
+    items: List[HeatmapItem] = Field(max_length=200)
+
+
+@app.post("/api/v1/edge/heatmap")
+@app.post("/api/v1/sotqin/heatmap")
+async def upload_heatmap(
+    body: HeatmapBody,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Kamera issiqlik to'rlari (soatlik, sonlar — rasm emas).
+
+    Qurilma har 10 daqiqada yig'ib yuboradi; internet uzilsa fayllar
+    diskda kutadi va keyin jamlanib keladi — shu sababli qabul ham
+    JAMLAB yozadi (bir soat uchun bir necha kelishi normal).
+    """
+    ratelimit.check(
+        "heatmap",
+        device["site_id"],
+        limit=600,
+        window_sec=86_400,
+        message="Kunlik issiqlik to'ri chegarasi oshdi",
+    )
+    store = get_event_store()
+    accepted = 0
+    for item in body.items:
+        grid = item.grid
+        if len(grid) != store.HEATMAP_ROWS or any(len(row) != store.HEATMAP_COLS for row in grid):
+            raise HTTPException(422, "To'r o'lchami 48×27 bo'lishi kerak")
+        if any(cell < 0 or cell > 1_000_000 for row in grid for cell in row):
+            raise HTTPException(422, "To'r qiymatlari chegaradan tashqarida")
+        store.add_heatmap(
+            device["site_id"], item.camera_id, item.hour, [list(row) for row in grid], item.frames
+        )
+        accepted += 1
+    return {"ok": True, "accepted": accepted}
+
+
+@app.get("/api/v1/owner/heatmap")
+async def owner_heatmap(
+    camera_id: str,
+    date: Optional[str] = None,
+    hour: Optional[int] = None,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Panel xaritasi: kamera ko'rinishi bo'yicha odam-borligi to'ri."""
+    zone = ZoneInfo("Asia/Tashkent")
+    try:
+        day = date_type.fromisoformat(date) if date else datetime.now(zone).date()
+    except ValueError as exc:
+        raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lsin") from exc
+    if hour is not None and not 0 <= hour <= 23:
+        raise HTTPException(422, "Soat 0..23 oralig'ida")
+    return get_event_store().heatmap(owner.site_id, camera_id, day=day, hour=hour)
 
 
 @app.put("/api/v1/edge/cameras/{camera_id}/live-frame")

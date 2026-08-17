@@ -97,6 +97,22 @@
         <div id="hourReadout" class="bar-readout">Ustunni bossangiz — o‘sha soat raqamlari chiqadi.</div>
       </div>
 
+      <!-- Do'kon xaritasi: odamlar ko'p yuradigan joylar kamera rasmi
+           ustida och-to'q qizil bilan.  Rasm emas, sonlar keladi. -->
+      <div class="card">
+        <div class="card-head">
+          <h2>Do‘kon xaritasi</h2>
+          <div class="chip-row">
+            <select id="heatCamera" style="width:auto"></select>
+            <input type="date" id="heatDate" style="width:auto">
+            <select id="heatHour" style="width:auto"><option value="">Kun bo‘yi</option></select>
+          </div>
+        </div>
+        <p class="hint" style="margin-top:0">To‘q qizil — mijozlar eng ko‘p yurgan joylar. Kamera ko‘rinishi ustida.</p>
+        <div class="heat-wrap"><canvas id="heatCanvas" width="640" height="360"></canvas></div>
+        <p class="hint" id="heatSummary">—</p>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <h2>Xavfsizlik</h2>
@@ -436,6 +452,87 @@
       `${cameraId}.jpg`,
       "Bu kameradan rasm hali kelmagan. Qurilma ulanganda o‘zi paydo bo‘ladi.",
     );
+  }
+
+  /* ── Do'kon xaritasi (issiqlik) ──────────────────────────────────────
+     Kataklar sonlari serverdan keladi; kamera rasmi fonga chiziladi va
+     ustiga och-to'q qizil qatlam tushadi. */
+
+  let heatLoaded = false;
+
+  function fillHeatControls() {
+    const select = $("heatCamera");
+    const current = select.value;
+    select.innerHTML = cameraList
+      .map((camera) => `<option value="${esc(camera.camera_id)}">${esc(camera.label || camera.camera_id)}</option>`)
+      .join("");
+    if (current) select.value = current;
+    if ($("heatHour").options.length <= 1) {
+      for (let hour = 8; hour <= 22; hour += 1) {
+        const option = document.createElement("option");
+        option.value = String(hour);
+        option.textContent = `${String(hour).padStart(2, "0")}:00`;
+        $("heatHour").appendChild(option);
+      }
+    }
+    if (!heatLoaded && cameraList.length) {
+      heatLoaded = true;
+      loadHeatmap();
+    }
+  }
+
+  async function loadHeatmap() {
+    const cameraId = $("heatCamera").value;
+    if (!cameraId) return;
+    const params = new URLSearchParams({ camera_id: cameraId });
+    if ($("heatDate").value) params.set("date", $("heatDate").value);
+    if ($("heatHour").value !== "") params.set("hour", $("heatHour").value);
+    let data;
+    try {
+      data = await api(`/api/v1/owner/heatmap?${params.toString()}`);
+    } catch (err) {
+      $("heatSummary").textContent = err.message;
+      return;
+    }
+    const canvas = $("heatCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Fon: kameraning oxirgi kadri (bo'lmasa oddiy kulrang maydon).
+    try {
+      const r = await fetch(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const blobUrl = URL.createObjectURL(await r.blob());
+        const image = new Image();
+        image.src = blobUrl;
+        await image.decode();
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(blobUrl);
+      } else {
+        ctx.fillStyle = "#e5e7eb";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    } catch (_) {
+      ctx.fillStyle = "#e5e7eb";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    const peak = Math.max(1, ...data.grid.map((row) => Math.max(...row)));
+    const cellW = canvas.width / data.cols;
+    const cellH = canvas.height / data.rows;
+    for (let r = 0; r < data.rows; r += 1) {
+      for (let c = 0; c < data.cols; c += 1) {
+        const value = data.grid[r][c];
+        if (!value) continue;
+        // Och → to'q: qiymat oshgani sari qatlam quyuqlashadi.
+        const alpha = 0.12 + 0.6 * (value / peak);
+        ctx.fillStyle = `rgba(220, 38, 38, ${alpha.toFixed(3)})`;
+        ctx.fillRect(c * cellW, r * cellH, Math.ceil(cellW), Math.ceil(cellH));
+      }
+    }
+    $("heatSummary").textContent = data.points
+      ? `${data.points} ta qadam nuqtasi yig‘ildi · eng gavjum katakda ${peak} ta`
+      : "Bu kun uchun hali ma’lumot yo‘q — qurilma har 10 daqiqada yuboradi.";
   }
 
   /* ── Jonli ko'rish ───────────────────────────────────────────────────
@@ -914,6 +1011,7 @@
       cameraList = cameras.cameras || [];
       drawStatus(health);
       await drawCameras();
+      fillHeatControls();
       const cameraFilter = $("cameraFilter");
       const selected = cameraFilter.value;
       cameraFilter.innerHTML = '<option value="">Barcha kameralar</option>' +
@@ -979,6 +1077,9 @@
   $("cameraFilter").addEventListener("change", loadEvents);
   $("modalClose").addEventListener("click", closeModal);
   $("modalLiveBtn").addEventListener("click", () => (liveTimer ? stopLive() : startLive()));
+  $("heatCamera").addEventListener("change", loadHeatmap);
+  $("heatDate").addEventListener("change", loadHeatmap);
+  $("heatHour").addEventListener("change", loadHeatmap);
   $("modal").addEventListener("click", (event) => { if (event.target === $("modal")) closeModal(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 

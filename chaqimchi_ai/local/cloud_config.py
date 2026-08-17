@@ -338,6 +338,54 @@ def upload_media_frames() -> int:
     return sent
 
 
+def heatmap_dir() -> Path:
+    return paths.data_dir() / "heatmap"
+
+
+def upload_heatmaps() -> int:
+    """Zanjir yozgan issiqlik to'rlarini cloudga jo'natadi.
+
+    Fayl 200 kelgandagina o'chadi — internet uzilganda ma'lumot diskda
+    kutib turadi (soatlik fayllar jamlanib boradi, yo'qolmaydi).
+    """
+    directory = heatmap_dir()
+    if not directory.is_dir():
+        return 0
+    files = sorted(directory.glob("*.json"))
+    if not files:
+        return 0
+    raw = config_store.read_raw().get("cloud_sync") or {}
+    if not raw.get("enabled") or not raw.get("device_token"):
+        return 0
+
+    items = []
+    consumed: list[Path] = []
+    for path in files[:24]:  # bitta so'rovda ko'pi bilan sutkalik to'plam
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            path.unlink(missing_ok=True)  # buzuq fayl qayta-qayta urilmasin
+            continue
+        items.append(payload)
+        consumed.append(path)
+    if not items:
+        return 0
+    try:
+        response = httpx.post(
+            f"{str(raw['url']).rstrip('/')}/api/v1/edge/heatmap",
+            headers=_headers(raw),
+            json={"items": items},
+            timeout=TIMEOUT_SEC,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.info("Issiqlik to'ri yuborilmadi: %s", exc)
+        return 0
+    for path in consumed:
+        path.unlink(missing_ok=True)
+    return len(consumed)
+
+
 def sync_once() -> Optional[Dict[str, Any]]:
     """Bir marta so'rab, o'zgargan bo'lsa qo'llaydi.
 

@@ -380,3 +380,47 @@ def test_continue_false_stops_the_live_stream(local, monkeypatch) -> None:
     local.upload_media_frames()
 
     assert not local.live_request_path().is_file(), "server to'xta dedi — so'rov o'chdi"
+
+
+def test_heatmap_files_are_uploaded_then_deleted(local, monkeypatch) -> None:
+    """Fayl faqat 200 dan keyin o'chadi — internet uzilganda kutib turadi."""
+    directory = local.heatmap_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "camera-01-2026-08-18T09.json").write_text(
+        json.dumps({"camera_id": "camera-01", "hour": "2026-08-18T09", "grid": [[1]], "frames": 2}),
+        encoding="utf-8",
+    )
+    sent = {}
+
+    class _Ok:
+        def raise_for_status(self):
+            return None
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        sent["url"] = url
+        sent["body"] = json
+        return _Ok()
+
+    monkeypatch.setattr(local.httpx, "post", fake_post)
+
+    assert local.upload_heatmaps() == 1
+    assert sent["url"].endswith("/api/v1/edge/heatmap")
+    assert sent["body"]["items"][0]["camera_id"] == "camera-01"
+    assert not list(directory.glob("*.json")), "muvaffaqiyatdan keyin fayl o'chadi"
+
+
+def test_heatmap_files_survive_a_network_failure(local, monkeypatch) -> None:
+    directory = local.heatmap_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "camera-01-x.json").write_text(
+        json.dumps({"camera_id": "camera-01", "hour": "2026-08-18T09", "grid": [[1]], "frames": 2}),
+        encoding="utf-8",
+    )
+
+    def fail(*_args, **_kwargs):
+        raise local.httpx.ConnectError("aloqa yo'q")
+
+    monkeypatch.setattr(local.httpx, "post", fail)
+
+    assert local.upload_heatmaps() == 0
+    assert list(directory.glob("*.json")), "fayl saqlanib qoladi"

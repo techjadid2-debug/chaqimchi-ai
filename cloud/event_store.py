@@ -266,6 +266,17 @@ class EventStore:
             """,
             "CREATE INDEX IF NOT EXISTS idx_employee_faces_site "
             "ON employee_faces(site_id,employee_id)",
+            """
+            CREATE TABLE IF NOT EXISTS heatmap_hourly (
+                site_id TEXT NOT NULL,
+                camera_id TEXT NOT NULL,
+                bucket_hour TEXT NOT NULL,
+                grid_json TEXT NOT NULL,
+                frames INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, camera_id, bucket_hour)
+            )
+            """,
             "CREATE INDEX IF NOT EXISTS idx_prod_events_site_time "
             "ON production_events(site_id,occurred_at)",
             "CREATE INDEX IF NOT EXISTS idx_owner_members_telegram "
@@ -876,6 +887,129 @@ class EventStore:
                 "yosh": age_buckets,
             },
         }
+
+    # ── Issiqlik xaritasi ────────────────────────────────────────────────
+
+    #: To'r o'lchami — qurilmadagi chaqimchi_ai/retail/heatmap.py bilan mos.
+    HEATMAP_COLS = 48
+    HEATMAP_ROWS = 27
+
+    def add_heatmap(
+        self, site_id: str, camera_id: str, bucket_hour: str, grid: List[List[int]], frames: int
+    ) -> None:
+        """Soatlik to'rni JAMLAB yozadi (qurilma bir soat uchun bir necha
+        marta yuborishi mumkin — internet uzilib qayta ulanganda)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT grid_json,frames FROM heatmap_hourly "
+                    "WHERE site_id=? AND camera_id=? AND bucket_hour=?"
+                ),
+                (site_id, camera_id, bucket_hour),
+            ).fetchone()
+            total_frames = int(frames)
+            if row:
+                existing = self._dict(row)
+                try:
+                    old = json.loads(existing["grid_json"])
+                    for row_index in range(min(len(old), self.HEATMAP_ROWS)):
+                        for col_index in range(min(len(old[row_index]), self.HEATMAP_COLS)):
+                            grid[row_index][col_index] += int(old[row_index][col_index])
+                except (ValueError, TypeError):
+                    pass
+                total_frames += int(existing["frames"] or 0)
+                conn.execute(
+                    self._sql(
+                        "UPDATE heatmap_hourly SET grid_json=?,frames=?,updated_at=? "
+                        "WHERE site_id=? AND camera_id=? AND bucket_hour=?"
+                    ),
+                    (
+                        json.dumps(grid, separators=(",", ":")),
+                        total_frames,
+                        _now().isoformat(),
+                        site_id,
+                        camera_id,
+                        bucket_hour,
+                    ),
+                )
+            else:
+                conn.execute(
+                    self._sql(
+                        "INSERT INTO heatmap_hourly "
+                        "(site_id,camera_id,bucket_hour,grid_json,frames,updated_at) "
+                        "VALUES (?,?,?,?,?,?)"
+                    ),
+                    (
+                        site_id,
+                        camera_id,
+                        bucket_hour,
+                        json.dumps(grid, separators=(",", ":")),
+                        total_frames,
+                        _now().isoformat(),
+                    ),
+                )
+
+    def heatmap(
+        self,
+        site_id: str,
+        camera_id: str,
+        *,
+        day: date,
+        hour: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Toshkent kuni (ixtiyoriy soati) bo'yicha jamlangan to'r.
+
+        Bucket'lar UTC'da saqlanadi — lokal soat oralig'i UTC bucket
+        satrlariga o'girilib yig'iladi.
+        """
+        zone = ZoneInfo("Asia/Tashkent")
+        hours = [hour] if hour is not None else list(range(24))
+        buckets = []
+        for local_hour in hours:
+            local = datetime.combine(day, datetime.min.time(), tzinfo=zone) + timedelta(
+                hours=local_hour
+            )
+            buckets.append(local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
+        placeholders = ",".join("?" for _ in buckets)
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT grid_json,frames FROM heatmap_hourly "
+                    f"WHERE site_id=? AND camera_id=? AND bucket_hour IN ({placeholders})"
+                ),
+                (site_id, camera_id, *buckets),
+            ).fetchall()
+        total = [[0] * self.HEATMAP_COLS for _ in range(self.HEATMAP_ROWS)]
+        frames = 0
+        for raw in rows:
+            row = self._dict(raw)
+            try:
+                cells = json.loads(row["grid_json"])
+            except (ValueError, TypeError):
+                continue
+            frames += int(row["frames"] or 0)
+            for row_index in range(min(len(cells), self.HEATMAP_ROWS)):
+                for col_index in range(min(len(cells[row_index]), self.HEATMAP_COLS)):
+                    total[row_index][col_index] += int(cells[row_index][col_index])
+        return {
+            "camera_id": camera_id,
+            "date": day.isoformat(),
+            "hour": hour,
+            "cols": self.HEATMAP_COLS,
+            "rows": self.HEATMAP_ROWS,
+            "grid": total,
+            "frames": frames,
+            "points": sum(sum(row) for row in total),
+        }
+
+    def purge_heatmaps(self, site_id: str, *, retention_days: int = 90) -> int:
+        cutoff = (_now() - timedelta(days=max(1, retention_days))).strftime("%Y-%m-%dT%H")
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("DELETE FROM heatmap_hourly WHERE site_id=? AND bucket_hour<?"),
+                (site_id, cutoff),
+            )
+            return int(cursor.rowcount or 0)
 
     #: Xodim treki bilan kirish kesishmasi orasidagi ruxsat etilgan farq.
     #: Trek raqamlari restartdan keyin qayta ishlatiladi — vaqt oynasi

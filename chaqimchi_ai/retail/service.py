@@ -605,6 +605,32 @@ LIVE_FRAME_INTERVAL_SEC = 2.0
 LIVE_FRAME_WIDTH = 640
 LIVE_FRAME_JPEG_QUALITY = 70
 
+#: Issiqlik to'ri qancha tez-tez diskka tushadi.
+HEATMAP_FLUSH_INTERVAL_SEC = 600.0
+
+
+def _heatmap_flush_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threading.Event) -> None:
+    """Har 10 daqiqada yig'ilgan to'rlarni faylga yozadi.
+
+    Yuborishni lokal ilova qiladi (cloud hisob ma'lumotlari unda) — biz
+    faqat `data/heatmap/` ga yozamiz; 200 kelganda ilova o'chiradi.
+    """
+    from datetime import datetime, timezone
+
+    from chaqimchi_ai.retail.heatmap import write_heatmap_file
+
+    directory = base_dir / "heatmap"
+    while not stopped.wait(HEATMAP_FLUSH_INTERVAL_SEC):
+        try:
+            drained = pipeline.drain_heatmaps()
+            if not drained:
+                continue
+            bucket = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+            for camera_id, item in drained.items():
+                write_heatmap_file(directory, camera_id, bucket, item["grid"], int(item["frames"]))
+        except Exception:
+            logger.exception("Issiqlik to'ri yozilmadi")
+
 
 def _live_frame_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threading.Event) -> None:
     """Jonli ko'rish kadrlarini diskka yozib turadi.
@@ -700,6 +726,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         target=_live_frame_loop,
         args=(runner.pipeline, base_dir, stopped),
         name="live-frames",
+        daemon=True,
+    ).start()
+    threading.Thread(
+        target=_heatmap_flush_loop,
+        args=(runner.pipeline, base_dir, stopped),
+        name="heatmap-flush",
         daemon=True,
     ).start()
     sync_thread: Optional[threading.Thread] = None

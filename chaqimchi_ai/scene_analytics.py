@@ -191,6 +191,11 @@ class SceneAnalyzer:
         self.pressure = pressure
         self._track_demography: Dict[int, Dict[str, Any]] = {}
         self._demo_attempts: Dict[int, int] = {}
+        #: Issiqlik to'ri: har kadrda oyoq nuqtalari yig'iladi (deyarli
+        #: bepul), 10 daqiqada bir cloudga ketadi.
+        from chaqimchi_ai.retail.heatmap import HeatmapGrid
+
+        self.heatmap = HeatmapGrid()
         self.motion = MotionGate(settings.motion_min_area_ratio)
         # Yuz uchun mo'ljallangan IoU tracker do'kon eshigida ishlamaydi: normal
         # yurgan odam bir kadrda ramkasining yarmidan ko'p siljiydi va track
@@ -283,6 +288,7 @@ class SceneAnalyzer:
         """
         now = time.monotonic() if now is None else float(now)
         self._last_analysis = now
+        self.heatmap.frame_done()
 
         detections = self.tracker.update(self.detector.detect(frame))
         events: List[EdgeEvent] = []
@@ -331,6 +337,7 @@ class SceneAnalyzer:
                     )
 
             center = ((x1 + x2) / 2 / width, y2 / height)
+            self.heatmap.add(center[0], center[1])
             current_zones = {zone.name for zone in self.zones if _inside(center, zone.polygon)}
             for zone_name in current_zones:
                 zone_counts[zone_name] = zone_counts.get(zone_name, 0) + 1

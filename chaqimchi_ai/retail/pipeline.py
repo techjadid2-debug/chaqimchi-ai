@@ -463,6 +463,18 @@ class RetailPipeline:
                     self._totals.action_errors += 1
                 logger.exception("[%s] '%s' harakati bajarilmadi", camera_id, action)
 
+    def drain_heatmaps(self) -> Dict[str, Any]:
+        """Har kameraning yig'ilgan issiqlik to'rini olib bo'shatadi."""
+        result: Dict[str, Any] = {}
+        for camera_id, camera in self._cameras.items():
+            grid = getattr(camera.analyzer, "heatmap", None)
+            if grid is None:
+                continue
+            cells, frames, points = grid.drain()
+            if points:
+                result[camera_id] = {"grid": cells, "frames": frames}
+        return result
+
     def latest_frame(self, camera_id: str) -> Optional[Any]:
         """Kameraning oxirgi tahlil qilingan kadri (jonli ko'rish uchun).
 

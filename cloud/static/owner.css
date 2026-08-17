@@ -211,3 +211,7 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
 .face-item figcaption { font-size: .72rem; margin-top: 4px; }
 .face-item small { display: block; opacity: .65; }
 .face-unknown b { opacity: .6; }
+
+/* Do'kon xaritasi (issiqlik) */
+.heat-wrap { width: 100%; max-width: 640px; }
+.heat-wrap canvas { width: 100%; height: auto; border-radius: 12px; background: rgba(127, 127, 127, .1); display: block; }

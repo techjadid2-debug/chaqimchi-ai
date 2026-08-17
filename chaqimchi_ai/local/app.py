@@ -1065,6 +1065,7 @@ def _start_config_sync() -> None:
                 # versiyada ekanini bilishi kerak, hatto zanjir
                 # to'xtagan bo'lsa ham.
                 cloud_config.send_heartbeat(supervisor.status())
+                cloud_config.upload_heatmaps()
 
                 applied = cloud_config.sync_once()
                 if applied and applied.get("cameras"):

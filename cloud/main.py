@@ -72,7 +72,7 @@ from cloud.portal_auth import (
     issue_portal_token,
 )
 from cloud.snapshots import SnapshotStore, snapshot_store_from_env
-from cloud.store import CloudStore, available_feature_codes
+from cloud.store import DEFAULT_FEATURES, CloudStore, available_feature_codes
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = Path(os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
@@ -1049,13 +1049,18 @@ async def list_plans() -> Dict[str, Any]:
 #: ham shu bitta qoidani ishlatadi.
 YEARLY_MONTHS_CHARGED = billable_months(12)
 
-#: Baza obunaga kiradigan, AI inferens talab qilmaydigan imkoniyatlar.
+#: Chaqimchi Lite tarifiga kiradigan HAMMA narsa (2026-08-17 qarori:
+#: bitta tarif, hammasi ichida — alohida narxlangan funksiyalar yo'q).
+#: Sayt shu ro'yxatni ko'rsatadi.
 BASE_PLAN_INCLUDES = (
-    "Qurilma va kamera holati 24/7 nazorat",
-    "Hodisa arxivi 30 kun",
+    "4 kameragacha ulash",
+    "Kirish-chiqish sanash va bandlik",
+    "Kassa navbati nazorati",
+    "Xavfsizlik: tungi harakat, taqiqlangan zona, kamera buzilishi",
+    "Mijoz paneli (telefonda) va kunlik hisobot",
     "Telegram ogohlantirishlari",
-    "Mijoz paneli va kunlik hisobot",
-    "Imzolangan dastur yangilanishlari",
+    "Hodisa arxivi 30 kun",
+    "Imzolangan avtomatik yangilanishlar",
 )
 
 
@@ -1284,7 +1289,10 @@ async def public_quick_trial(
 
     site = get_store().create_site(
         name=f"{name} ({phone[-4:] if len(phone) >= 4 else phone})",
-        plan="starter",
+        # "lite" — yagona sotiladigan tarif.  Ilgari "starter" edi: u
+        # sotilmaydigan va telegram_allowed=False, ya'ni sinov mijozi
+        # boshdanoq nogiron konfiguratsiya olardi.
+        plan="lite",
         contact_phone=phone,
         subscription_months=1,
     )
@@ -2740,6 +2748,23 @@ async def edge_site_config(
         for item in features["assignments"]
         if item["status"] == "active"
     ]
+    # Yagona tarif (Chaqimchi Lite, 2026-08-17): sotiladigan tarifda HAMMA
+    # funksiya ichida.  Ilgari kodlar faqat qo'lda approve qilingan
+    # assignmentlardan kelardi va hech bir saytga avto-biriktirilmasdi —
+    # pullik mijozning qurilmasi litsenziya filtri sabab hodisalarni
+    # jimgina tashlab yuborardi.  Assignmentlar bo'lsa ular ustun
+    # (kelajakdagi maxsus tariflar uchun), bo'lmasa tarifdan keladi.
+    if not config["cloud_features"]:
+        site = get_store().get_site(device["site_id"])
+        if site is not None and is_sellable(str(site.get("plan") or "")):
+            config["cloud_features"] = [
+                {
+                    "code": code,
+                    "camera_count": SHOP_MAX_CAMERAS,
+                    "queue_kind": queue_kind,
+                }
+                for code, _name, _category, queue_kind, _price in DEFAULT_FEATURES
+            ]
     config["attendance"] = {
         "enabled": _attendance_enabled(),
         "mode": (

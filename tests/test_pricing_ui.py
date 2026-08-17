@@ -1,26 +1,16 @@
-"""Saytdagi narx konfiguratori.
+"""Saytdagi tarif bo'limi.
 
-Nima uchun alohida test: narx bo'limi mijoz pul to'lash qaroriga keladigan
-yagona joy, lekin uning mantig'i brauzerda (`site.js`) turadi va server
-testlari uni umuman ko'rmaydi.
+Qaror (2026-08-17): 3 ta paket o'rniga BITTA tarif — "Chaqimchi Lite",
+$20/oy, hammasi ichida.  Narx sahifaga yozilmaydi: `/api/v1/public/pricing`
+dan keladi (so'm kursi bilan), ya'ni narx o'zgarsa sayt o'zi yangilanadi.
 
-Eng xavfli xato — **jimgina noto'g'ri narx**: paketda kodi noto'g'ri yozilgan
-funksiya `pricing.features` ichidan topilmaydi va narxga `0` bo'lib qo'shiladi.
-Sahifa buzilmaydi, ogohlantirish chiqmaydi — mijoz shunchaki arzon narx
-ko'radi va biz uni keyin ko'tarishga majbur bo'lamiz.
+Bu testlar eski holat (ko'p paket, qo'lda yozilgan narx, to'q nav tugma)
+qaytib kelmasligini qo'riqlaydi.
 """
 
 from __future__ import annotations
 
-import json
-import re
-import shutil
-import subprocess
 from pathlib import Path
-
-import pytest
-
-from cloud.store import DEFAULT_FEATURES
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE_JS = ROOT / "cloud" / "static" / "site.js"
@@ -28,122 +18,86 @@ SITE_HTML = ROOT / "cloud" / "static" / "site.html"
 SITE_CSS = ROOT / "cloud" / "static" / "site.css"
 
 
-def _presets() -> list[dict]:
-    """`site.js` dagi `PRESETS` massivini Node yordamida o'qiydi.
+def test_single_lite_tariff_card() -> None:
+    html = SITE_HTML.read_text(encoding="utf-8")
+    js = SITE_JS.read_text(encoding="utf-8")
 
-    Regexp bilan JSON qidirish o'rniga haqiqiy JS bajariladi — massiv
-    formati o'zgarsa test yolg'on "o'tdi" bermaydi.
+    assert 'id="liteCard"' in html, "bitta tarif kartasi bo'lsin"
+    assert "Chaqimchi Lite" in html
+    # Eski ko'p-paket mashinasi qaytmasin.
+    assert "presetGrid" not in html
+    assert "const PRESETS" not in js
+    assert "data-billing" not in html, "oylik/yillik almashtirgich olib tashlangan"
+    assert "Yillik to‘lovda 2 oy bepul" in html, "yillik chegirma bitta satr bo'lib qoladi"
+
+
+def test_price_is_not_hardcoded_in_the_card() -> None:
+    """Narx API'dan keladi — sahifada faqat joy turadi.
+
+    Qotirilgan narx bir marta katalogdan orqada qolib, mijoz eski narxni
+    ko'rgan edi.  noscript'dagi $20 bundan mustasno (JS'siz fallback).
     """
-    if shutil.which("node") is None:
-        pytest.skip("node topilmadi — konfigurator mantig'i tekshirilmadi")
-    source = SITE_JS.read_text(encoding="utf-8")
-    match = re.search(r"const PRESETS = (\[.*?\n  \]);", source, re.S)
-    assert match, "PRESETS massivi topilmadi — nomi o'zgargan bo'lishi mumkin"
-    script = f"console.log(JSON.stringify({match.group(1)}))"
-    result = subprocess.run(
-        ["node", "-e", script], capture_output=True, text=True, timeout=30, check=True
-    )
-    return json.loads(result.stdout)
-
-
-CATALOG_CODES = {code for code, *_rest in DEFAULT_FEATURES}
-CATALOG_PRICES = {code: price for code, _n, _c, _q, price in DEFAULT_FEATURES}
-
-#: `cloud/main.py` dagi `public_pricing` shu qiymatni beradi
-#: (`GUARANTEED_CAMERAS`).  Paketlar undan oshib ketmasligi kerak.
-MAX_CAMERAS = 4
-
-
-def test_every_preset_feature_exists_in_the_catalog() -> None:
-    """Noto'g'ri kod narxga 0 bo'lib qo'shiladi va hech qayerda ko'rinmaydi."""
-    for preset in _presets():
-        for item in preset["items"]:
-            assert item["code"] in CATALOG_CODES, (
-                f"«{preset['name']}» paketida katalogda yo'q kod: {item['code']}. "
-                f"Mavjudlari: {sorted(CATALOG_CODES)}"
-            )
-
-
-def test_presets_stay_within_the_accepted_camera_profile() -> None:
-    """4 kamera — o'lchangan sig'im (`docs/DOKON_MVP.md`).  Paket undan
-    oshsa, sotib bo'lmaydigan narsani sotgan bo'lamiz."""
-    for preset in _presets():
-        for item in preset["items"]:
-            assert 1 <= item["cameras"] <= MAX_CAMERAS, (
-                f"«{preset['name']}»: {item['code']} uchun {item['cameras']} kamera"
-            )
-
-
-def test_presets_are_ordered_from_cheap_to_expensive() -> None:
-    """Mijoz kartalarni chapdan o'ngga o'qiydi; narx sakrab tushsa
-    taqqoslash buziladi."""
-    base = 2_000  # LITE_MONTHLY_PRICE_USD_CENTS
-    totals = [
-        base + sum(CATALOG_PRICES[item["code"]] * item["cameras"] for item in preset["items"])
-        for preset in _presets()
-    ]
-    assert totals == sorted(totals), f"paket narxlari o'sib bormaydi: {totals}"
-
-
-def test_the_popular_preset_is_in_the_middle() -> None:
-    """Uchtadan o'rtadagisi belgilanadi — chekkadagi "ommabop" karta
-    yonidagilarni arzon yoki qimmat ko'rsatib qo'yadi."""
-    presets = _presets()
-    badged = [index for index, preset in enumerate(presets) if preset.get("badge")]
-    assert badged == [1], f"«Ommabop» belgisi o'rtada bo'lishi kerak, hozir: {badged}"
-
-
-# ── Sahifa tuzilishi (chuqur minimalizm) ─────────────────────────────────
-#
-# Qaror (2026-08-16): sahifa hero + tayyor paketlar + bitta forma + 5 savol.
-# Ilgari 9 bo'lim, 3 alohida forma va 9 ta raqobatlashuvchi tugma bor edi —
-# mijoz nima bosishni bilmasdi.  Quyidagi testlar o'sha holat qaytib
-# kelmasligini qo'riqlaydi.
-
-
-def test_pricing_section_has_a_noscript_fallback() -> None:
-    """JS o'chsa narx bo'limi abadiy bo'sh turardi."""
     html = SITE_HTML.read_text(encoding="utf-8")
-    assert "<noscript>" in html
-    assert "JavaScript" in html
+    js = SITE_JS.read_text(encoding="utf-8")
+    assert '<b id="litePrice">…</b>' in html, "narx joyi bo'sh (…) turishi kerak"
+    assert "monthly_usd_cents" in js, "narx pricing API'dan olinsin"
+    assert "usd_rate_uzs" in js, "so'm kursi serverdan olinsin"
 
 
-def test_switches_announce_their_state() -> None:
-    """`role="group"` ekran o'quvchiga qaysi biri tanlanganini aytmaydi."""
+def test_lite_price_shows_both_currencies() -> None:
+    """Qaror: so'm + dollar birga ("~260 000 so'm ($20)")."""
+    js = SITE_JS.read_text(encoding="utf-8")
+    assert "so‘m" in js
+    assert 'id="litePriceUsd"' in SITE_HTML.read_text(encoding="utf-8")
+
+
+def test_dark_nav_button_is_gone() -> None:
+    """Foydalanuvchi feedbacki (2026-08-17): to'q tugma noqulay — olib
+    tashlangan.  Telegram havolasi aloqa bo'limida qoladi."""
     html = SITE_HTML.read_text(encoding="utf-8")
-    assert 'role="radiogroup"' in html
-    assert 'aria-checked' in html
+    nav = html[html.index("<nav") : html.index("</nav>")]
+    assert "button" not in nav, "nav'da tugma bo'lmasin — faqat havolalar"
+    # Placeholder saqlanadi: server uni haqiqiy bot havolasiga almashtiradi.
+    assert "__TELEGRAM_REGISTER_URL__" in html
+
+
+def test_hidden_attribute_always_wins() -> None:
+    """Haqiqiy bag: inline `display:grid` `hidden`ni yengib, telefon
+    formasi reliz chiqqanda ham ko'rinib turardi (skrinshotda ushlangan)."""
+    css = SITE_CSS.read_text(encoding="utf-8")
+    html = SITE_HTML.read_text(encoding="utf-8")
+    assert "[hidden] { display: none !important; }" in css
+    # notifyForm'da endi inline display yo'q.
+    form_tag = html[html.index('id="notifyForm"') - 60 : html.index('id="notifyForm"') + 120]
+    assert "display" not in form_tag, "inline display hidden'ni yengmasin"
 
 
 def test_the_page_has_exactly_one_lead_form_flow() -> None:
-    """Uchala forma bitta oqimga birlashtirildi.
-
-    `notifyForm` bundan mustasno emas — u ham `/api/v1/public/leads` ga
-    boradi va faqat dastur nashr qilinmaganda ko'rinadi.  Lekin to'liq
-    konfigurator formasi (`purchaseForm`) qaytmasligi kerak.
-    """
+    """Bitta lead forma qoidasi saqlanadi (chuqur minimalizm)."""
     html = SITE_HTML.read_text(encoding="utf-8")
     assert 'id="leadForm"' in html
-    assert 'id="purchaseForm"' not in html, "konfigurator formasi qaytib kelgan"
-    assert 'id="stickyPrice"' not in html, "sticky narx paneli qaytib kelgan"
-    assert html.count("<form") == 2, "sahifada leadForm va notifyForm'dan boshqa forma bo'lmasin"
+    assert 'id="purchaseForm"' not in html
+    assert html.count("<form") == 2, "leadForm va notifyForm'dan boshqa forma bo'lmasin"
 
 
-def test_presets_lead_to_the_single_form() -> None:
-    """Paket tugmasi mijozni yagona formaga olib boradi va tanlov
-    admin xabarida (`message`) ko'rinadi."""
-    source = SITE_JS.read_text(encoding="utf-8")
-    assert "goToForm" in source
-    assert "presetSummary" in source
-    assert 'getElementById("leadMessage")' in source
+def test_cta_leads_to_the_single_form() -> None:
+    js = SITE_JS.read_text(encoding="utf-8")
+    assert 'getElementById("liteCta")' in js
+    assert "goToForm" in js
+    assert "Chaqimchi Lite" in js, "tanlov admin xabarida ko'rinsin"
 
 
 def test_buy_button_does_not_promise_a_checkout() -> None:
-    """Forma to'lov sahifasiga olib bormaydi — u ariza yuboradi."""
+    """Tugma to'lov sahifasini va'da qilmaydi — ariza yuboriladi."""
     source = SITE_JS.read_text(encoding="utf-8")
-    assert "Sotib olishni boshlash" not in source, (
-        "tugma to'lov sahifasini va'da qiladi, aslida ariza yuboriladi"
-    )
+    assert "Sotib olishni boshlash" not in source
+
+
+def test_pricing_section_has_a_noscript_fallback() -> None:
+    html = SITE_HTML.read_text(encoding="utf-8")
+    assert "<noscript>" in html
+    assert "JavaScript" in html
+    assert "Chaqimchi Lite" in html[html.index("<noscript>") : html.index("</noscript>")]
 
 
 def test_attendance_is_not_advertised() -> None:

@@ -111,41 +111,12 @@
       });
   }
 
-  // ── Tayyor paketlar ───────────────────────────────────────────────────
+  // ── Tarif: bitta "Chaqimchi Lite" kartasi ─────────────────────────────
   //
-  // Faqat tarkib e'lon qilinadi; narx `/api/v1/public/pricing` dan
-  // hisoblanadi.  Katalogda narx o'zgarsa kartalar o'zini yangilaydi.
-  const PRESETS = [
-    {
-      id: "start",
-      name: "Boshlang‘ich",
-      note: "Kichik do‘kon uchun: nechta mijoz kirdi va qachon gavjum.",
-      items: [{ code: "person_count", cameras: 2 }],
-    },
-    {
-      id: "shop",
-      name: "Do‘kon",
-      badge: "Ommabop",
-      note: "Mijozlar oqimi va kassadagi navbat birga — eng ko‘p tanlanadi.",
-      items: [
-        { code: "person_count", cameras: 4 },
-        { code: "queue_length", cameras: 4 },
-      ],
-    },
-    {
-      id: "full",
-      name: "To‘liq",
-      note: "Yuqoridagilar ustiga tungi harakat, taqiqlangan zona va kamera nazorati.",
-      items: [
-        { code: "person_count", cameras: 4 },
-        { code: "queue_length", cameras: 4 },
-        { code: "store_security", cameras: 4 },
-      ],
-    },
-  ];
-
+  // Qaror (2026-08-17): 3 ta paket o'rniga bitta tarif — $20/oy, hammasi
+  // ichida.  Narx sahifaga yozilmaydi: serverdan keladi (kurs bilan),
+  // ya'ni narx o'zgarsa sayt o'zi yangilanadi.
   let pricing = null;
-  let billing = "monthly";
 
   const groups = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   // Serverdagi `(cents * rate + 99) // 100` bilan bir xil: sayt va
@@ -153,82 +124,33 @@
   const toUzs = (cents) => Math.floor((cents * pricing.usd_rate_uzs + 99) / 100);
   const money = (cents) => `${groups(toUzs(cents))} so‘m`;
 
-  const escape = (value) => String(value).replace(/[&<>"]/g, (char) => (
-    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]
-  ));
-
-  function presetCents(preset) {
-    return preset.items.reduce((total, item) => {
-      const feature = pricing.features.find((entry) => entry.code === item.code);
-      return total + (feature ? feature.monthly_usd_cents * item.cameras : 0);
-    }, pricing.base.monthly_usd_cents);
-  }
-
-  function presetSummary(preset) {
-    const names = preset.items
-      .map((item) => pricing.features.find((entry) => entry.code === item.code))
-      .filter(Boolean)
-      .map((feature) => feature.name);
-    const months = billing === "yearly" ? pricing.yearly_months_charged : 1;
-    return [
-      `Paket: ${preset.name}`,
-      `To‘lov: ${billing === "yearly" ? "yillik" : "oylik"}`,
-      `Funksiyalar: ${names.join(", ")}`,
-      `Hisob: ${money(presetCents(preset) * months)}${billing === "yearly" ? "/yil" : "/oy"}`,
-    ].join(" | ");
-  }
-
-  function renderPresets() {
-    const grid = document.getElementById("presetGrid");
-    if (!grid || !pricing) return;
-    const months = billing === "yearly" ? pricing.yearly_months_charged : 1;
-    const suffix = billing === "yearly" ? "/yil" : "/oy";
-
-    grid.innerHTML = PRESETS.map((preset) => {
-      const names = preset.items
-        .map((item) => pricing.features.find((entry) => entry.code === item.code))
-        .filter(Boolean)
-        .map((feature) => escape(feature.name));
-      const cameras = Math.max(...preset.items.map((item) => item.cameras));
-      return `
-        <article class="preset${preset.badge ? " preset-featured" : ""}" role="listitem">
-          ${preset.badge ? `<span class="preset-badge">${escape(preset.badge)}</span>` : ""}
-          <h3>${escape(preset.name)}</h3>
-          <p class="preset-note">${escape(preset.note)}</p>
-          <ul class="preset-items">${names.map((name) => `<li>${name}</li>`).join("")}</ul>
-          <p class="preset-cameras">${cameras} kameragacha</p>
-          <p class="preset-price"><b>${money(presetCents(preset) * months)}</b><span>${suffix}</span></p>
-          <button class="button${preset.badge ? " button-light" : ""}" type="button" data-preset="${preset.id}">Shu paketni tanlash</button>
-        </article>`;
-    }).join("");
-
-    grid.querySelectorAll("[data-preset]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const preset = PRESETS.find((item) => item.id === button.dataset.preset);
-        if (preset) goToForm(presetSummary(preset));
+  function renderLite() {
+    const cents = pricing.base.monthly_usd_cents;
+    const usd = cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100);
+    const priceEl = document.getElementById("litePrice");
+    if (priceEl) priceEl.textContent = money(cents);
+    const usdEl = document.getElementById("litePriceUsd");
+    if (usdEl) usdEl.textContent = `Bu — oyiga $${usd}. So‘m narxi kurs bo‘yicha hisoblanadi.`;
+    const list = document.getElementById("liteIncludes");
+    if (list) {
+      list.innerHTML = (pricing.base.includes || [])
+        .map((item) => `<li>${String(item).replace(/[&<>"]/g, (c) => (
+          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]
+        ))}</li>`)
+        .join("");
+    }
+    const cta = document.getElementById("liteCta");
+    if (cta) {
+      cta.addEventListener("click", () => {
+        goToForm(`Tarif: Chaqimchi Lite | Oyiga ${money(cents)} ($${usd})`);
       });
-    });
+    }
   }
-
-  document.querySelectorAll("[data-billing]").forEach((button) => {
-    button.addEventListener("click", () => {
-      billing = button.dataset.billing;
-      button.parentElement.querySelectorAll("button").forEach((item) => {
-        const on = item === button;
-        item.classList.toggle("active", on);
-        item.setAttribute("aria-checked", String(on));
-      });
-      renderPresets();
-    });
-  });
 
   fetch("/api/v1/public/pricing")
     .then((response) => response.json())
     .then((data) => {
       pricing = data;
-
-      const headline = document.getElementById("baseHeadline");
-      if (headline) headline.textContent = `${money(pricing.base.monthly_usd_cents)}/oy`;
 
       // Hero'dagi narx ilgagi: mijoz "qancha turadi?" degan savol bilan
       // keladi va javob uchun pastga tushishga majbur bo'lmasligi kerak.
@@ -238,8 +160,8 @@
         heroPrice.hidden = false;
       }
 
-      // Funksiyalar hali sotuvga ochilmagan bo'lsa (qabul sinovi
-      // tugamagan), buni yashirmaymiz — bitta aniq izoh chiqadi.
+      // Funksiyalar hali qabul sinovidan o'tmagan bo'lsa buni
+      // yashirmaymiz — bitta halol izoh.
       const note = document.getElementById("featureNote");
       if (note && pricing.features.length && pricing.features.every((item) => !item.available)) {
         note.textContent =
@@ -248,13 +170,13 @@
         note.hidden = false;
       }
 
-      renderPresets();
+      renderLite();
     })
     .catch(() => {
-      const grid = document.getElementById("presetGrid");
-      if (grid) {
-        grid.innerHTML =
-          '<p class="preset-hint">Narxlarni yuklab bo‘lmadi. Sahifani yangilang yoki ' +
+      const card = document.getElementById("liteCard");
+      if (card) {
+        card.innerHTML =
+          '<p class="preset-hint">Narxni yuklab bo‘lmadi. Sahifani yangilang yoki ' +
           '<a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> ga yozing.</p>';
       }
     });

@@ -748,3 +748,43 @@ def test_owner_can_mute_the_daily_digest(production_client) -> None:
 
     member = main.get_event_store().list_members(site["site_id"])[0]
     assert int(member["digest_muted"]) == 1
+
+
+def test_lite_plan_includes_every_feature_out_of_the_box(production_client) -> None:
+    """Yagona tarif (2026-08-17): Chaqimchi Lite'da HAMMA funksiya ichida.
+
+    Ilgari cloud_features faqat qo'lda approve qilingan assignmentlardan
+    kelardi va hech bir saytga avto-biriktirilmasdi — pullik mijozning
+    qurilmasi litsenziya filtri sabab hodisalarni jimgina tashlab yuborardi.
+    """
+    client, _messages = production_client
+
+    site = client.post(
+        "/api/v1/admin/sites",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"name": "Lite do'kon", "plan": "lite"},
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
+    headers = {
+        "X-Site-Id": device["site_id"],
+        "X-Device-Id": device["device_id"],
+        "X-Device-Token": device["device_token"],
+    }
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    codes = {item["code"] for item in config["cloud_features"]}
+    assert codes == {"person_count", "queue_length", "store_security"}
+    assert all(item["camera_count"] == 4 for item in config["cloud_features"])
+
+
+def test_non_sellable_plan_still_needs_assignments(production_client) -> None:
+    """Maxsus tariflar (enterprise) assignment orqali boshqarilaveradi."""
+    client, _messages = production_client
+    _site, _device, headers = _provision(client)  # plan="enterprise"
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    assert config["cloud_features"] == []

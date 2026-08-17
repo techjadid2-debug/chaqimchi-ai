@@ -16,6 +16,13 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+/* `hidden` atributi HAR DOIM g'olib bo'lsin.  Haqiqiy bag: notify
+ * formasida inline `display:grid` UA'ning `[hidden]{display:none}`
+ * qoidasini yengib, "raqam qoldiring" formasi reliz chiqqanda ham
+ * ko'rinib turardi (2026-08-17 skrinshotda ushlangan). */
+[hidden] { display: none !important; }
+/* Yuklab olish hali nashr qilinmaganda chiqadigan telefon formasi. */
+.quick-download-form { display: grid; gap: 10px; max-width: 420px; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; }
 a { color: inherit; }
 button, input, textarea { font: inherit; }

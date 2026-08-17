@@ -668,9 +668,11 @@
       ]);
       const quote = features.summary.active_quote;
       const uzs = Number(quote.monthly_uzs || 0);
+      const cents = Number(quote.monthly_usd_cents || 0);
+      const usd = cents ? ` ($${cents % 100 ? (cents / 100).toFixed(2) : cents / 100})` : "";
       $("tariffLine").textContent = uzs
-        ? `Joriy tarif: oyiga ${uzs.toLocaleString("ru-RU")} so‘m`
-        : "Joriy tarif: bazaviy platforma";
+        ? `Joriy tarif: Chaqimchi Lite — oyiga ${uzs.toLocaleString("ru-RU")} so‘m${usd}`
+        : "Joriy tarif: Chaqimchi Lite";
       $("invoiceList").innerHTML = invoices.length
         ? invoices.slice(0, 5).map((invoice) => `
           <div class="member-row">

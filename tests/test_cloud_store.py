@@ -179,6 +179,9 @@ def test_feature_catalog_quote_and_draft_activation(tmp_path) -> None:
         "person_count",
         "queue_length",
         "store_security",
+        # Davomat katalogda bor (admin narxlaydi), lekin public sotuvda yo'q
+        # — test_public_pricing shuni qo'riqlaydi.
+        "davomat",
     }
     assert any(item["code"] == "retail" for item in store.list_business_templates())
 

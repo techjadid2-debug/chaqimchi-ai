@@ -678,3 +678,55 @@ def test_ai_review_action_is_accepted_but_does_nothing(tmp_path: Path) -> None:
     # `cloud_sync` bajarildi, `ai_review` esa hisoblandi-yu, hech nima qilmadi.
     assert recorder.names == ["cloud_sync"]
     assert pipeline.stats()["actions"]["ai_review"] == 1
+
+
+# ── Davomat: yuz kadri crop ──────────────────────────────────────────────
+
+
+def face_captured() -> EdgeEvent:
+    return EdgeEvent(
+        event_type="face_captured",
+        camera_id="kassa-01",
+        metadata={"bbox": [40, 20, 80, 120]},
+    )
+
+
+def test_face_capture_ships_an_upper_body_crop_not_the_full_frame(tmp_path: Path) -> None:
+    """Kadrda boshqa odamlar ham bor — cloudga faqat ramka yuqori qismi ketadi."""
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[face_captured()], snapshots=True
+    )
+    captured = {}
+
+    def writer(path: Path, frame) -> bool:
+        captured["shape"] = frame.shape
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"jpeg")
+        return True
+
+    pipeline.snapshot_writer = writer
+    big_frame = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    run(pipeline, frame=big_frame)
+
+    event = recorder.actions[0][1]
+    assert event.snapshot_path and event.snapshot_path.endswith("-face.jpg")
+    height, width, _ = captured["shape"]
+    assert height == 35, "bbox balandligining ~35% qismi (100 * 0.35)"
+    assert width == 48, "bbox eni + 10% chekka (40 + 2*4)"
+
+
+def test_face_capture_without_a_frame_is_sent_without_media(tmp_path: Path) -> None:
+    """Kadr topilmasa hodisa matn bo'lib ketaveradi — oqim to'xtamaydi."""
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[face_captured()], snapshots=True
+    )
+    # offer/step'siz to'g'ridan-to'g'ri dispatch — last_frame hali yo'q.
+    from chaqimchi_ai.retail.rules import Decision
+
+    pipeline._dispatch(
+        Decision(event=face_captured(), actions=("cloud_sync",), rule_name=None),
+        camera_id="kassa-01",
+    )
+
+    assert recorder.actions[0][1].snapshot_path is None

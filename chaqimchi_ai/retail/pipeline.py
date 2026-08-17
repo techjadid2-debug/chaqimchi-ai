@@ -432,6 +432,7 @@ class RetailPipeline:
         )
 
     def _dispatch(self, decision: Decision, *, camera_id: str) -> None:
+        self._attach_face_crop(decision.event, camera_id=camera_id)
         self._attach_security_snapshot(decision.event, camera_id=camera_id)
         # Qoida Telegram so'raganmi — hodisaning o'zida yozib qo'yiladi.
         # Bungacha `telegram_alert` harakati dekorativ edi: cloud faqat
@@ -461,6 +462,48 @@ class RetailPipeline:
                 with self._lock:
                     self._totals.action_errors += 1
                 logger.exception("[%s] '%s' harakati bajarilmadi", camera_id, action)
+
+    def _attach_face_crop(self, event: EdgeEvent, *, camera_id: str) -> None:
+        """`face_captured` uchun odam ramkasining yuqori qismini kesib oladi.
+
+        To'liq kadr yuborilmaydi — maxfiylik (kadrda boshqa odamlar bor)
+        va hajm: crop odatda 20-60 KB, to'liq kadr esa yarim megabayt.
+        Yuzni topish/tanish bu yerda YO'Q — hammasi cloudda.
+        """
+        if event.event_type != "face_captured" or self.snapshot_dir is None:
+            return
+        bbox = (event.metadata or {}).get("bbox")
+        camera = self._cameras.get(camera_id)
+        frame = camera.last_frame if camera is not None else None
+        if frame is None or not bbox or len(bbox) != 4:
+            with self._lock:
+                self._totals.snapshots_missing += 1
+            return
+        height, width = frame.shape[:2]
+        x1, y1, x2, y2 = (int(value) for value in bbox)
+        # Yuqori ~35% + yon tomonlarga 10% chekka: bosh ramka chetiga tegib
+        # turganda ham yuz kesilib qolmasin.
+        margin = int((x2 - x1) * 0.10)
+        top = max(0, y1)
+        bottom = min(height, y1 + max(1, int((y2 - y1) * 0.35)))
+        left = max(0, x1 - margin)
+        right = min(width, x2 + margin)
+        if bottom - top < 16 or right - left < 16:
+            with self._lock:
+                self._totals.snapshots_missing += 1
+            return
+        path = self.snapshot_dir / f"{camera_id}-{event.event_id}-face.jpg"
+        try:
+            written = self.snapshot_writer(path, frame[top:bottom, left:right])
+        except Exception:
+            written = False
+            logger.exception("[%s] yuz kadri yozilmadi", camera_id)
+        with self._lock:
+            if written:
+                event.snapshot_path = str(path)
+                self._totals.snapshots_written += 1
+            else:
+                self._totals.snapshots_missing += 1
 
     def _attach_security_snapshot(self, event: EdgeEvent, *, camera_id: str) -> None:
         # Oddiy zona kirishi retail analitikasi, xavfsizlik hodisasi emas.

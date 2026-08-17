@@ -125,6 +125,18 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
             "panel yoki Telegram bot beradigan kirish havolasini ishlating"
         )
 
+    # Yuz tanish piloti: embedding shifrlash kalitisiz yoqib bo'lmaydi —
+    # aks holda biometrik vektorlar bazada ochiq yotadi.
+    if values.get("CHAQIMCHI_ATTENDANCE_PILOT", "").strip().lower() in {"1", "true", "yes"}:
+        pilot_key = values.get("CHAQIMCHI_EMBEDDING_KEY", "").strip()
+        if not pilot_key:
+            errors.append("CHAQIMCHI_ATTENDANCE_PILOT yoqiq, lekin CHAQIMCHI_EMBEDDING_KEY yo'q")
+        else:
+            try:
+                Fernet(pilot_key.encode("utf-8"))
+            except (TypeError, ValueError):
+                errors.append("CHAQIMCHI_EMBEDDING_KEY haqiqiy Fernet kaliti emas")
+
     release_url = require("CHAQIMCHI_SOTQIN_RELEASE_URL")
     release_sha = require("CHAQIMCHI_SOTQIN_RELEASE_SHA256")
     if release_url and not _https(release_url):

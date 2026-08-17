@@ -233,6 +233,22 @@ class EventStore:
                 FOREIGN KEY(employee_id) REFERENCES employees(id)
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS employee_faces (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                employee_id TEXT NOT NULL,
+                photo_key TEXT NOT NULL,
+                embedding_b64 TEXT NOT NULL,
+                embedding_dim INTEGER NOT NULL DEFAULT 512,
+                det_score REAL,
+                photo_bytes INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(employee_id) REFERENCES employees(id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_employee_faces_site "
+            "ON employee_faces(site_id,employee_id)",
             "CREATE INDEX IF NOT EXISTS idx_prod_events_site_time "
             "ON production_events(site_id,occurred_at)",
             "CREATE INDEX IF NOT EXISTS idx_owner_members_telegram "
@@ -401,6 +417,135 @@ class EventStore:
                 (key, int(size_bytes), site_id, event_id),
             )
             return bool(cursor.rowcount)
+
+    def set_face_result(
+        self,
+        site_id: str,
+        event_id: str,
+        *,
+        matched: bool,
+        employee_id: Optional[str] = None,
+        score: Optional[float] = None,
+        note: Optional[str] = None,
+    ) -> bool:
+        """`face_captured` kadriga moslash natijasini yozadi.
+
+        Ism `employees`dan olinadi — qurilma yuborgan matnga ishonilmaydi
+        (ingest'dagi qoida bilan bir xil).
+        """
+        person_name = None
+        if matched and employee_id:
+            employee = self.employee(site_id, employee_id)
+            person_name = employee["name"] if employee else None
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT metadata_json FROM production_events "
+                    "WHERE site_id=? AND event_id=? AND event_type='face_captured'"
+                ),
+                (site_id, event_id),
+            ).fetchone()
+            if not row:
+                return False
+            try:
+                metadata = json.loads(self._dict(row)["metadata_json"] or "{}")
+            except ValueError:
+                metadata = {}
+            metadata["face"] = {
+                "matched": bool(matched),
+                **({"note": note} if note else {}),
+            }
+            cursor = conn.execute(
+                self._sql(
+                    "UPDATE production_events SET person_id=?,person_name=?,score=?,"
+                    "metadata_json=? WHERE site_id=? AND event_id=?"
+                ),
+                (
+                    employee_id if matched else None,
+                    person_name,
+                    score,
+                    json.dumps(metadata, ensure_ascii=False),
+                    site_id,
+                    event_id,
+                ),
+            )
+            return bool(cursor.rowcount)
+
+    def list_face_events(self, site_id: str, *, limit: int = 50) -> List[Dict[str, Any]]:
+        """Galereya uchun so'nggi yuz kadrlari (yangi birinchi)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT event_id,camera_id,occurred_at,person_id,person_name,"
+                    "score,snapshot_key,metadata_json FROM production_events "
+                    "WHERE site_id=? AND event_type='face_captured' "
+                    "ORDER BY occurred_at DESC LIMIT ?"
+                ),
+                (site_id, max(1, min(int(limit), 200))),
+            ).fetchall()
+        events = []
+        for raw in rows:
+            row = self._dict(raw)
+            try:
+                metadata = json.loads(row.pop("metadata_json") or "{}")
+            except ValueError:
+                metadata = {}
+            row["face"] = metadata.get("face") or {}
+            events.append(row)
+        return events
+
+    def purge_face_media(self, site_id: str, *, retention_days: int) -> List[str]:
+        """Muddati o'tgan yuz kadrlarini butunlay o'chiradi.
+
+        Oddiy hodisalardan farqi: yozuvning O'ZI ham o'chadi — biometrik iz
+        (kim qachon ko'ringani rasm bilan) kerak bo'lgandan uzoq yashamasligi
+        kerak.  Davomat statistikasi `employee_seen`da — u qoladi.
+        """
+        cutoff = (_now() - timedelta(days=max(1, retention_days))).isoformat()
+        keys: List[str] = []
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT event_id,snapshot_key FROM production_events "
+                    "WHERE site_id=? AND event_type='face_captured' AND occurred_at<?"
+                ),
+                (site_id, cutoff),
+            ).fetchall()
+            for raw in rows:
+                row = self._dict(raw)
+                if row["snapshot_key"]:
+                    keys.append(str(row["snapshot_key"]))
+                conn.execute(
+                    self._sql("DELETE FROM production_events WHERE site_id=? AND event_id=?"),
+                    (site_id, row["event_id"]),
+                )
+        return keys
+
+    def purge_inactive_employee_faces(self, site_id: str) -> List[str]:
+        """Ro'yxatdan chiqarilgan xodimlarning yuz namunalarini o'chiradi.
+
+        Maxfiylik va'dasi: xodim ketdi — biometrikasi ham ketadi.  Har 6
+        soatlik maintenance shu yerni chaqiradi, ya'ni kechikish ko'pi
+        bilan yarim kun.
+        """
+        keys: List[str] = []
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT f.id,f.photo_key FROM employee_faces f "
+                    "JOIN employees e ON e.id=f.employee_id "
+                    "WHERE f.site_id=? AND e.active=0"
+                ),
+                (site_id,),
+            ).fetchall()
+            for raw in rows:
+                row = self._dict(raw)
+                keys.append(str(row["photo_key"]))
+                conn.execute(
+                    self._sql("DELETE FROM employee_faces WHERE id=?"),
+                    (row["id"],),
+                )
+        return keys
 
     def media_usage_bytes(self, site_id: str) -> int:
         with self._connect() as conn:
@@ -1091,6 +1236,137 @@ class EventStore:
             }
             for employee in self.list_employees(site_id)
         ]
+
+    # ── Yuz namunalari (cloud enrollment) ────────────────────────────────
+    #
+    # Embedding hech qachon ochiq saqlanmaydi: `embedding_b64` — Fernet
+    # bilan shifrlangan vektor.  Kalit (`CHAQIMCHI_EMBEDDING_KEY`) faqat
+    # environmentda, bazada emas — baza nusxasi o'g'irlansa ham biometrik
+    # ma'lumot ochilmaydi.
+
+    #: Bitta xodimga rasm limiti: 1-3 rasm yetadi, ko'pi shovqin.
+    MAX_FACES_PER_EMPLOYEE = 3
+
+    def add_employee_face(
+        self,
+        site_id: str,
+        employee_id: str,
+        *,
+        photo_key: str,
+        embedding_b64: str,
+        det_score: Optional[float] = None,
+        photo_bytes: int = 0,
+    ) -> Dict[str, Any]:
+        employee = self.employee(site_id, employee_id)
+        if employee is None:
+            raise ValueError("Xodim topilmadi")
+        existing = self.list_employee_faces(site_id, employee_id=employee_id)
+        if len(existing) >= self.MAX_FACES_PER_EMPLOYEE:
+            raise ValueError(f"Bitta xodimga ko'pi bilan {self.MAX_FACES_PER_EMPLOYEE} ta rasm")
+        face_id = uuid.uuid4().hex[:12]
+        now = _now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO employee_faces "
+                    "(id,site_id,employee_id,photo_key,embedding_b64,embedding_dim,"
+                    "det_score,photo_bytes,created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+                ),
+                (
+                    face_id,
+                    site_id,
+                    employee_id,
+                    photo_key,
+                    embedding_b64,
+                    512,
+                    det_score,
+                    int(photo_bytes),
+                    now,
+                ),
+            )
+            # Birinchi yaroqli rasm — xodim ro'yxatga olindi.
+            conn.execute(
+                self._sql(
+                    "UPDATE employees SET enrollment_status='enrolled',updated_at=? "
+                    "WHERE site_id=? AND id=?"
+                ),
+                (now, site_id, employee_id),
+            )
+        return {
+            "id": face_id,
+            "employee_id": employee_id,
+            "photo_key": photo_key,
+            "det_score": det_score,
+            "created_at": now,
+        }
+
+    def list_employee_faces(
+        self, site_id: str, *, employee_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Rasm ro'yxati — embedding QAYTARILMAYDI (faqat moslash o'qiydi)."""
+        query = (
+            "SELECT id,employee_id,photo_key,det_score,photo_bytes,created_at "
+            "FROM employee_faces WHERE site_id=?"
+        )
+        params: List[Any] = [site_id]
+        if employee_id is not None:
+            query += " AND employee_id=?"
+            params.append(employee_id)
+        query += " ORDER BY created_at"
+        with self._connect() as conn:
+            rows = conn.execute(self._sql(query), tuple(params)).fetchall()
+        return [self._dict(row) for row in rows]
+
+    def employee_face(self, site_id: str, face_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT id,employee_id,photo_key,det_score,photo_bytes,created_at "
+                    "FROM employee_faces WHERE site_id=? AND id=?"
+                ),
+                (site_id, face_id),
+            ).fetchone()
+        return self._dict(row) if row else None
+
+    def delete_employee_face(self, site_id: str, face_id: str) -> Optional[str]:
+        """Rasmni o'chiradi, blob kalitini qaytaradi (chaqiruvchi blobni o'chiradi)."""
+        face = self.employee_face(site_id, face_id)
+        if face is None:
+            return None
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("DELETE FROM employee_faces WHERE site_id=? AND id=?"),
+                (site_id, face_id),
+            )
+            remaining = conn.execute(
+                self._sql(
+                    "SELECT COUNT(*) AS total FROM employee_faces WHERE site_id=? AND employee_id=?"
+                ),
+                (site_id, face["employee_id"]),
+            ).fetchone()
+            if not int(self._dict(remaining)["total"] or 0):
+                # Oxirgi rasm o'chdi — xodim yana ro'yxatga olinmagan holatda.
+                conn.execute(
+                    self._sql(
+                        "UPDATE employees SET enrollment_status='pending',updated_at=? "
+                        "WHERE site_id=? AND id=?"
+                    ),
+                    (_now().isoformat(), site_id, face["employee_id"]),
+                )
+        return str(face["photo_key"])
+
+    def face_embeddings(self, site_id: str) -> List[Dict[str, Any]]:
+        """Moslash uchun faol xodimlarning shifrlangan embeddinglari."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT f.employee_id,f.embedding_b64,e.name "
+                    "FROM employee_faces f JOIN employees e ON e.id=f.employee_id "
+                    "WHERE f.site_id=? AND e.active=1"
+                ),
+                (site_id,),
+            ).fetchall()
+        return [self._dict(row) for row in rows]
 
     def attendance_report(
         self,

@@ -263,6 +263,14 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
         for item in cache.get("cloud_features") or []
         if isinstance(item, dict) and item.get("code")
     }
+    # Davomat: cloud yoqqan bo'lsa VA kamera davomat ro'yxatida bo'lsa.
+    # Eski cloud `face_captured`ni tanimaydi va butun batchni rad etadi —
+    # shu filtr yoqilmagan saytda hodisa chiqishining oldini oladi.
+    attendance_on = bool((cache.get("attendance") or {}).get("enabled"))
+    attendance_cameras = {
+        str(camera_id)
+        for camera_id in (cache.get("config") or {}).get("attendance_camera_ids") or []
+    }
     traffic = {"line_crossed", "occupancy_exceeded", "dwell_exceeded"}
     queue = {"queue_threshold_exceeded"}
     security = {
@@ -275,6 +283,8 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
     def allowed(event: EdgeEvent) -> bool:
         if event.event_type == "person_detected":
             return False
+        if event.event_type == "face_captured":
+            return attendance_on and str(event.camera_id) in attendance_cameras
         # Kamera sog'ligi litsenziyalanadigan funksiya emas.  Mijoz qaysi
         # paketni olganidan qat'i nazar, kamerasi o'chganini bilishi kerak —
         # aks holda u ishlamayotgan tizim uchun pul to'lab yuraveradi.
@@ -394,8 +404,22 @@ def build_runner(
     # 320 GB talab qilardi — 128 GB disk esa oldin to'lardi.
     per_camera = cfg.buffer_max_bytes // max(1, len(recording))
 
+    # Davomat kameralari (cloud belgilagan, ko'pi bilan 2 ta): faqat shularda
+    # yuz kadri chiqadi — qolganlari uchun qo'shimcha ish yo'q.
+    cache = read_sotqin_cache(sotqin_cache_path(settings, base_dir))
+    attendance_enabled = bool((cache.get("attendance") or {}).get("enabled"))
+    attendance_cameras = {
+        str(camera_id)
+        for camera_id in (cache.get("config") or {}).get("attendance_camera_ids") or []
+    }
+
     for camera in cameras:
-        analyzer = SceneAnalyzer(camera.camera_id, detector, settings.scene)
+        analyzer = SceneAnalyzer(
+            camera.camera_id,
+            detector,
+            settings.scene,
+            attendance=attendance_enabled and camera.camera_id in attendance_cameras,
+        )
         clips = (
             RingBuffer(
                 camera.camera_id,

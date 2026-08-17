@@ -6,6 +6,10 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements-cloud.txt
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
+# libglib: opencv-python-headless'ning slim image'dagi yagona tizim bog'liqligi.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libglib2.0-0 \
+  && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 chaqimchi && useradd --uid 10001 --gid 10001 --no-create-home chaqimchi
 COPY --from=builder /install /usr/local
 COPY chaqimchi_ai ./chaqimchi_ai

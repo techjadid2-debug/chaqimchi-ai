@@ -64,6 +64,23 @@ def test_paired_device_emits_only_purchased_feature_events(tmp_path: Path) -> No
     assert allowed(EdgeEvent(event_type="queue_threshold_exceeded", camera_id="cam")) is False
     assert allowed(EdgeEvent(event_type="camera_tampered", camera_id="cam")) is False
     assert allowed(EdgeEvent(event_type="person_detected", camera_id="cam")) is False
+    # Davomat yoqilmagan — yuz kadri chiqmaydi (eski cloud batchni rad etardi).
+    assert allowed(EdgeEvent(event_type="face_captured", camera_id="cam")) is False
+
+
+def test_face_captures_flow_only_from_attendance_cameras(tmp_path: Path) -> None:
+    """Yuz kadri: cloud davomatni yoqqan VA kamera ro'yxatda bo'lsa."""
+    cache = tmp_path / "sotqin-cache.json"
+    cache.write_text(
+        '{"revision":7,"cloud_features":[],"attendance":{"enabled":true},'
+        '"config":{"attendance_camera_ids":["kirish-01"]}}',
+        encoding="utf-8",
+    )
+    settings = settings_for(sotqin_config_path="sotqin-cache.json")
+    allowed = retail_event_filter(settings, tmp_path)
+
+    assert allowed(EdgeEvent(event_type="face_captured", camera_id="kirish-01")) is True
+    assert allowed(EdgeEvent(event_type="face_captured", camera_id="zal-01")) is False
 
 
 def settings_for(**retail: Any) -> AppSettings:

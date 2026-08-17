@@ -314,15 +314,18 @@ def test_owner_panel_is_light_branded_not_admin_dark() -> None:
     assert "chaqimchi-logo" in html, "brend logotipi ko'rinsin"
 
 
-def test_owner_panel_has_no_attendance_leftovers() -> None:
-    """Davomat arxivlangan — panelda uning izi qolmasin.
+def test_owner_attendance_card_stays_hidden_until_the_pilot_allows_it() -> None:
+    """Davomat cloud-pilot sifatida qaytdi, lekin ESKI XATO qaytmasin.
 
-    Ilgari ikkita davomat kartasi production'da har ochilishda 403 xato
-    ko'rsatib turardi — mijozning birinchi taassuroti "buzuq narsa" edi.
+    Ilgari davomat kartasi production'da har ochilishda 403 xato ko'rsatib
+    turardi — mijozning birinchi taassuroti "buzuq narsa" edi.  Yangi
+    qoida: karta standart holatda yashirin, faqat API ruxsat bersa
+    ochiladi; 403 esa jim o'tkaziladi.
     """
-    html = (STATIC / "owner.html").read_text(encoding="utf-8").lower()
-    for marker in ("davomat", "attendance", "xodimlar davomati", "enrollment", "person_name"):
-        assert marker not in html, f"davomat qoldig'i: {marker}"
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert 'class="card hidden" id="attendanceCard"' in html, "karta standart yashirin bo'lsin"
+    assert "/api/v1/owner/faces" in html
+    assert '$("attendanceCard").classList.add("hidden")' in html, "403 da karta jim yopilsin"
 
 
 def test_owner_panel_has_no_raw_json_editors() -> None:

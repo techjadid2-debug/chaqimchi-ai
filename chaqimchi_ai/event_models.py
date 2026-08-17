@@ -14,6 +14,10 @@ EventType = Literal[
     # ── V1 ────────────────────────────────────────────────────────────────
     "person_detected",
     "employee_seen",
+    #: Davomat kamerasidan yuz kadri (yopiq pilot).  Qurilma yuzni
+    #: TANIMAYDI — faqat crop yuboradi; moslash cloudda bo'ladi va natija
+    #: server tomonda `employee_seen` sifatida yoziladi.
+    "face_captured",
     "zone_entered",
     "loitering",
     "occupancy_exceeded",

@@ -42,6 +42,10 @@ DEFAULT_FEATURES = (
         "realtime",
         600,
     ),
+    # Davomat — Lite'ga KIRMAYDIGAN pullik qo'shimcha (category=attendance
+    # bo'yicha tarif fallback'idan chiqarib tashlanadi).  Sotuvga litsenziyali
+    # yuz modeli kelgach ochiladi; hozir faqat yopiq pilot.
+    ("davomat", "Yuz orqali xodim davomati", "attendance", "batch", 800),
 )
 
 

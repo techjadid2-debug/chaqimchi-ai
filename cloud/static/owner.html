@@ -103,6 +103,25 @@
         <div id="securityEvents"></div>
       </div>
 
+      <!-- Davomat (yopiq pilot): funksiya yoqilmagan saytda umuman
+           ko'rinmaydi — kartani JS 403 bo'lmasa ochadi. -->
+      <div class="card hidden" id="attendanceCard">
+        <div class="card-head">
+          <h2>Davomat</h2>
+          <button class="button ghost small" id="attendanceCsvBtn" type="button">CSV yuklab olish</button>
+        </div>
+        <p class="hint" id="attendanceHint">Xodimlar kirish kamerasida yuz orqali avtomatik qayd etiladi (yozma rozilik bilan).</p>
+        <div class="scroll-x">
+          <table class="events">
+            <thead><tr><th>Xodim</th><th>Keldi</th><th>Ketdi</th><th>Holat</th></tr></thead>
+            <tbody id="attendanceRows"></tbody>
+          </table>
+        </div>
+        <div id="faceEmployees" class="face-grid" style="margin-top:12px"></div>
+        <p class="hint" style="margin-top:14px;margin-bottom:6px">So‘nggi kadrlar</p>
+        <div id="faceGallery" class="face-grid"></div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <h2>Hodisalar</h2>
@@ -556,6 +575,78 @@
     } catch (err) { $("trendSummary").textContent = err.message; }
   }
 
+  /* ── Davomat (yopiq pilot) ──────────────────────────────────────────── */
+
+  let faceUrls = [];
+
+  const ATTENDANCE_STATUS = {
+    present: "Keldi",
+    late: "Kechikdi",
+    absent: "Kelmadi",
+    pending: "Kutilmoqda",
+    unscheduled: "Jadvalsiz",
+    off: "Dam olish",
+  };
+
+  async function authedImage(url, img) {
+    try {
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) return;
+      const blobUrl = URL.createObjectURL(await response.blob());
+      faceUrls.push(blobUrl);
+      img.src = blobUrl;
+    } catch (_) {}
+  }
+
+  async function loadAttendance() {
+    let data;
+    try {
+      data = await api("/api/v1/owner/faces");
+    } catch (_) {
+      // 403 — funksiya bu saytda yoqilmagan; karta ko'rinmaydi.
+      $("attendanceCard").classList.add("hidden");
+      return;
+    }
+    $("attendanceCard").classList.remove("hidden");
+    faceUrls.forEach((u) => URL.revokeObjectURL(u));
+    faceUrls = [];
+
+    $("faceEmployees").innerHTML = data.employees.map((emp) => `
+      <figure class="face-item">
+        ${emp.photos.length
+          ? `<img data-src="/api/v1/owner/faces/photos/${esc(emp.photos[0].id)}/image" alt="">`
+          : `<div class="face-empty">🙂</div>`}
+        <figcaption><b>${esc(emp.name)}</b><small>${emp.enrollment_status === "enrolled" ? "ro‘yxatda" : "rasm kutilmoqda"}</small></figcaption>
+      </figure>`).join("") ||
+      '<p class="hint">Xodimlar hali kiritilmagan — qo‘shish uchun bizga yozing.</p>';
+
+    try {
+      const report = await api("/api/v1/owner/attendance");
+      const rows = (report.rows || []).map((row) => `
+        <tr>
+          <td>${esc(row.employee_name)}</td>
+          <td>${esc((row.first_seen || "").slice(11, 16) || "—")}</td>
+          <td>${esc((row.last_seen || "").slice(11, 16) || "—")}</td>
+          <td>${esc(ATTENDANCE_STATUS[row.status] || row.status)}${row.late_minutes ? ` (+${esc(row.late_minutes)} daq)` : ""}</td>
+        </tr>`).join("");
+      $("attendanceRows").innerHTML = rows ||
+        '<tr><td colspan="4" class="hint">Bugun hali qayd yo‘q.</td></tr>';
+    } catch (_) {}
+
+    try {
+      const gallery = await api("/api/v1/owner/faces/events?limit=12");
+      $("faceGallery").innerHTML = gallery.events.map((ev) => `
+        <figure class="face-item${ev.person_id ? "" : " face-unknown"}">
+          <img data-src="/api/v1/owner/faces/events/${esc(ev.event_id)}/image" alt="">
+          <figcaption><b>${ev.person_id ? esc(ev.person_name || "?") : "Notanish"}</b><small>${esc((ev.occurred_at || "").slice(11, 16))}</small></figcaption>
+        </figure>`).join("") || '<p class="hint">Kirish kamerasidan hali kadr kelmagan.</p>';
+    } catch (_) {}
+
+    document
+      .querySelectorAll("#attendanceCard img[data-src]")
+      .forEach((img) => authedImage(img.dataset.src, img));
+  }
+
   /* ── Sozlamalar ─────────────────────────────────────────────────────── */
 
   const ROLE_OPTIONS = [
@@ -746,6 +837,7 @@
       drawReport(report);
       await loadEvents();
       await loadTrend();
+      await loadAttendance();
     } catch (err) {
       // Sessiya tugagan bo'lsa logout allaqachon bo'ldi; boshqa xatoda
       // banner orqali ko'rsatamiz.
@@ -776,6 +868,22 @@
   $("otpVerifyBtn").addEventListener("click", verifyOtp);
   $("logoutBtn").addEventListener("click", logout);
   $("refreshBtn").addEventListener("click", refresh);
+  $("attendanceCsvBtn").addEventListener("click", async () => {
+    try {
+      const response = await fetch("/api/v1/owner/attendance.csv", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("CSV olinmadi");
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = "davomat.csv";
+      link.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      note("attendanceHint", "warn", err.message);
+    }
+  });
   $("saveConfigBtn").addEventListener("click", saveConfig);
   $("addMemberBtn").addEventListener("click", addMember);
   $("digestToggle").addEventListener("change", toggleDigest);

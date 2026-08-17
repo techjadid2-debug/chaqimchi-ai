@@ -46,6 +46,7 @@ RECOVERY_EVENTS = frozenset({"camera_recovered"})
 EVENT_LABELS: Dict[str, str] = {
     "person_detected": "Odam aniqlandi",
     "employee_seen": "Xodim ko'rindi",
+    "face_captured": "Yuz kadri (davomat)",
     "zone_entered": "Taqiqlangan zonaga kirish",
     "loitering": "Uzoq turish",
     "occupancy_exceeded": "Bandlik chegarasi oshdi",

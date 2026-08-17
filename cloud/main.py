@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import secrets
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date as date_type
 from datetime import datetime, timedelta
@@ -51,7 +52,7 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import botfmt, ratelimit
+from cloud import botfmt, faces, ratelimit
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
@@ -841,7 +842,23 @@ def _purge_expired_events() -> int:
         for key in get_event_store().purge_site_media_over_quota(site_id, quota):
             get_snapshot_store().delete(key)
             removed += 1
+        # Yuz kadrlari qisqa muddat yashaydi (maxfiylik va'dasi) — yozuvi
+        # bilan birga o'chadi; ketgan xodimning namunalari ham shu yerda.
+        face_retention = _face_retention_days()
+        for key in get_event_store().purge_face_media(site_id, retention_days=face_retention):
+            get_snapshot_store().delete(key)
+            removed += 1
+        for key in get_event_store().purge_inactive_employee_faces(site_id):
+            get_snapshot_store().delete(key)
+            removed += 1
     return removed
+
+
+def _face_retention_days() -> int:
+    try:
+        return max(1, int(os.environ.get("CHAQIMCHI_FACE_RETENTION_DAYS", "14")))
+    except ValueError:
+        return 14
 
 
 async def _maintenance_loop() -> None:
@@ -1231,7 +1248,9 @@ async def public_pricing() -> Dict[str, Any]:
                 "available": item["code"] in available,
             }
             for item in catalog["features"]
-            if item["active"]
+            # Davomat public sotuvda YO'Q (litsenziyali model kelgunicha
+            # yopiq pilot) — saytda ko'rinmasin.
+            if item["active"] and item["category"] != "attendance"
         ],
         # 8 kamera apparat maksimumi, lekin public sotuv va'dasi 72 soatlik
         # soak-test tugamaguncha faqat 4 kamera.
@@ -2648,6 +2667,7 @@ async def ingest_event_batch(
 async def upload_event_snapshot(
     event_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
     # Snapshot 8 MB gacha bo'lishi mumkin — kunlik chegara S3 hisobini va
@@ -2663,9 +2683,25 @@ async def upload_event_snapshot(
     if not event or event["device_id"] != device["device_id"]:
         raise HTTPException(404, "Event topilmadi")
     if event["event_type"] == "employee_seen":
+        # `employee_seen` — moslash NATIJASI, media'siz qoladi.  Yuz kadri
+        # faqat `face_captured` orqali keladi va davomat darvozasi ortida.
         raise HTTPException(
             403,
             "Davomat biometrik snapshotlari cloudga yuklanmaydi",
+        )
+    face_capture = event["event_type"] == "face_captured"
+    if face_capture:
+        if not _attendance_enabled():
+            raise HTTPException(403, "Davomat piloti yoqilmagan")
+        # Yuz kadrlari uchun alohida, qattiqroq chegara: davomat kamerasi
+        # kuniga yuzlab kadr yubormasligi kerak (qurilma o'zi debounce
+        # qiladi, bu — buzilgan qurilmadan himoya).
+        ratelimit.check(
+            "face-snapshots",
+            device["site_id"],
+            limit=200,
+            window_sec=86_400,
+            message="Kunlik yuz kadrlari chegarasi oshdi",
         )
     if request.headers.get("content-type", "").split(";", 1)[0] != "image/jpeg":
         raise HTTPException(415, "Faqat image/jpeg qabul qilinadi")
@@ -2674,10 +2710,75 @@ async def upload_event_snapshot(
         raise HTTPException(400, "Snapshot bo'sh")
     if len(content) > SNAPSHOT_MAX_BYTES:
         raise HTTPException(413, "Snapshot 8 MB dan katta")
-    key = f"{device['site_id']}/{event_id}.jpg"
+    key = (
+        f"{device['site_id']}/faces/{event_id}.jpg"
+        if face_capture
+        else f"{device['site_id']}/{event_id}.jpg"
+    )
     get_snapshot_store().put(key, content, content_type="image/jpeg")
     get_event_store().set_snapshot(device["site_id"], event_id, key, size_bytes=len(content))
+    if face_capture:
+        background_tasks.add_task(
+            _process_face_capture, device["site_id"], device["device_id"], event_id
+        )
     return {"ok": True, "event_id": event_id}
+
+
+async def _process_face_capture(site_id: str, device_id: str, event_id: str) -> None:
+    """Kelgan yuz kadrini xodimlar bilan solishtiradi.
+
+    Moslik topilsa server tomonda `employee_seen` yoziladi — davomat
+    hisoboti shu hodisadan o'zgarishsiz ishlayveradi.  Topilmasa kadr
+    galereyada "notanish" bo'lib qoladi va 14 kunda o'chadi.
+    """
+    ok, reason = faces.available()
+    if not ok:
+        logger.warning("Yuz kadri qayta ishlanmadi (site=%s): %s", site_id, reason)
+        return
+    store = get_event_store()
+    event = store.event(site_id, event_id)
+    if not event or not event.get("snapshot_key"):
+        return
+    try:
+        content = get_snapshot_store().get(str(event["snapshot_key"]))
+    except FileNotFoundError:
+        return
+    try:
+        # Aniqlash + embedding CPUda ~0.5 s — event loop bandligiga yo'l
+        # qo'ymaslik uchun alohida thread'da.
+        embedding = await asyncio.to_thread(faces.get_face_service().embed_jpeg, content)
+    except Exception:
+        logger.exception("Yuz kadrida xato: site=%s event=%s", site_id, event_id)
+        return
+    if embedding is None:
+        store.set_face_result(site_id, event_id, matched=False, note="yuz topilmadi")
+        return
+    candidates = []
+    for row in store.face_embeddings(site_id):
+        try:
+            candidates.append(
+                (str(row["employee_id"]), faces.decrypt_embedding(row["embedding_b64"]))
+            )
+        except Exception:  # pragma: no cover - buzuq yozuv moslashni to'xtatmasin
+            logger.warning("Embedding o'qilmadi: site=%s", site_id, exc_info=True)
+    result = faces.FaceService.match(embedding.vector, candidates)
+    if result is None:
+        store.set_face_result(site_id, event_id, matched=False)
+        return
+    employee_id, score = result
+    store.set_face_result(
+        site_id, event_id, matched=True, employee_id=employee_id, score=round(score, 3)
+    )
+    seen = EdgeEvent(
+        event_type="employee_seen",
+        camera_id=event.get("camera_id"),
+        severity="info",
+        person_id=employee_id,
+        score=round(score, 3),
+        occurred_at=event.get("occurred_at"),
+        metadata={"source_event_id": event_id},
+    )
+    store.ingest(site_id, device_id, [seen])
 
 
 @app.put("/api/v1/edge/events/{event_id}/clip")
@@ -2899,7 +3000,9 @@ async def edge_site_config(
                     "camera_count": SHOP_MAX_CAMERAS,
                     "queue_kind": queue_kind,
                 }
-                for code, _name, _category, queue_kind, _price in DEFAULT_FEATURES
+                for code, _name, category, queue_kind, _price in DEFAULT_FEATURES
+                # Davomat tarifga kirmaydi — u alohida pullik qo'shimcha.
+                if category != "attendance"
             ]
     config["attendance"] = {
         "enabled": _attendance_enabled(),
@@ -3429,6 +3532,229 @@ async def owner_attendance_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# \u2500\u2500 Yuz tanish: admin enrollment \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+#
+# Rasm yuklash faqat admin panelda: xodimning yozma roziligini kim olganini
+# bitta qo'lda ushlab turish uchun.  Mijoz paneli faqat o'qiydi.
+
+FACE_PHOTO_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _require_face_service() -> None:
+    ok, reason = faces.available()
+    if not ok:
+        raise HTTPException(503, f"Yuz tanish xizmati tayyor emas: {reason}")
+
+
+@app.get("/api/v1/admin/sites/{site_id}/faces")
+async def admin_site_faces(site_id: str, _: None = Depends(require_admin)) -> Dict[str, Any]:
+    require_attendance()
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Sayt topilmadi")
+    ok, reason = faces.available()
+    store = get_event_store()
+    photos: Dict[str, List[Dict[str, Any]]] = {}
+    for face in store.list_employee_faces(site_id):
+        photos.setdefault(str(face["employee_id"]), []).append(
+            {
+                "id": face["id"],
+                "det_score": face["det_score"],
+                "created_at": face["created_at"],
+            }
+        )
+    employees = [
+        {**employee, "photos": photos.get(str(employee["id"]), [])}
+        for employee in store.list_employees(site_id, include_inactive=True)
+    ]
+    return {
+        "service": {"ok": ok, "reason": reason},
+        "threshold": faces.match_threshold(),
+        "employees": employees,
+    }
+
+
+@app.post("/api/v1/admin/sites/{site_id}/employees")
+async def admin_create_employee(
+    site_id: str,
+    body: EmployeeCreateBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    require_attendance()
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Sayt topilmadi")
+    if not body.consent:
+        raise HTTPException(422, "Xodimning yozma roziligi qayd etilishi shart")
+    try:
+        employee = get_event_store().create_employee(
+            site_id,
+            name=body.name,
+            external_id=body.external_id,
+            consent_note=body.consent_note,
+        )
+        get_event_store().touch_site_config(site_id)
+        return employee
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/v1/admin/sites/{site_id}/faces/employees/{employee_id}/photos")
+async def admin_add_employee_face(
+    site_id: str,
+    employee_id: str,
+    request: Request,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    require_attendance()
+    _require_face_service()
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Sayt topilmadi")
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(422, "Rasm bo'sh")
+    if len(payload) > FACE_PHOTO_MAX_BYTES:
+        raise HTTPException(413, "Rasm 2 MB dan katta")
+    # Embedding CPUda ~0.5 s \u2014 event loopni band qilmaslik uchun thread'da.
+    embedding = await asyncio.to_thread(faces.get_face_service().embed_jpeg, payload)
+    if embedding is None:
+        raise HTTPException(422, "Rasmda yuz topilmadi \u2014 yaqinroq, yorug' rasm yuklang")
+    face_id = uuid.uuid4().hex[:12]
+    photo_key = f"{site_id}/faces/enroll/{employee_id}-{face_id}.jpg"
+    try:
+        record = get_event_store().add_employee_face(
+            site_id,
+            employee_id,
+            photo_key=photo_key,
+            embedding_b64=faces.encrypt_embedding(embedding.vector),
+            det_score=round(float(embedding.det_score), 3),
+            photo_bytes=len(payload),
+        )
+    except ValueError as exc:
+        raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
+    get_snapshot_store().put(photo_key, payload, content_type="image/jpeg")
+    get_event_store().touch_site_config(site_id)
+    return record
+
+
+@app.delete("/api/v1/admin/sites/{site_id}/faces/photos/{face_id}")
+async def admin_delete_employee_face(
+    site_id: str,
+    face_id: str,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    require_attendance()
+    photo_key = get_event_store().delete_employee_face(site_id, face_id)
+    if photo_key is None:
+        raise HTTPException(404, "Rasm topilmadi")
+    get_snapshot_store().delete(photo_key)
+    return {"ok": True, "id": face_id}
+
+
+@app.get("/api/v1/admin/sites/{site_id}/faces/photos/{face_id}/image")
+async def admin_employee_face_image(
+    site_id: str,
+    face_id: str,
+    _: None = Depends(require_admin),
+) -> Response:
+    require_attendance()
+    face = get_event_store().employee_face(site_id, face_id)
+    if face is None:
+        raise HTTPException(404, "Rasm topilmadi")
+    return _face_image_response(str(face["photo_key"]))
+
+
+def _face_image_response(key: str) -> Response:
+    try:
+        content = get_snapshot_store().get(key)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Rasm fayli topilmadi") from exc
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/v1/admin/sites/{site_id}/faces/events")
+async def admin_face_events(
+    site_id: str,
+    limit: int = 50,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    require_attendance()
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Sayt topilmadi")
+    return {"events": get_event_store().list_face_events(site_id, limit=limit)}
+
+
+@app.get("/api/v1/admin/sites/{site_id}/faces/events/{event_id}/image")
+async def admin_face_event_image(
+    site_id: str,
+    event_id: str,
+    _: None = Depends(require_admin),
+) -> Response:
+    require_attendance()
+    event = get_event_store().event(site_id, event_id)
+    if not event or event.get("event_type") != "face_captured" or not event.get("snapshot_key"):
+        raise HTTPException(404, "Kadr topilmadi")
+    return _face_image_response(str(event["snapshot_key"]))
+
+
+# ── Yuz tanish: mijoz paneli (faqat o'qish) ──────────────────────────────
+#
+# Rasm yuklash mijozga berilmaydi — rozilik hujjati bilan birga admin
+# nazoratida qoladi.  Mijoz o'z xodimlarini, davomatni va kadrlar
+# galereyasini ko'radi.
+
+
+@app.get("/api/v1/owner/faces")
+async def owner_faces(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    require_attendance()
+    store = get_event_store()
+    photos: Dict[str, List[Dict[str, Any]]] = {}
+    for face in store.list_employee_faces(owner.site_id):
+        photos.setdefault(str(face["employee_id"]), []).append(
+            {"id": face["id"], "created_at": face["created_at"]}
+        )
+    ok, _reason = faces.available()
+    return {
+        "ready": ok,
+        "employees": [
+            {**employee, "photos": photos.get(str(employee["id"]), [])}
+            for employee in store.list_employees(owner.site_id)
+        ],
+    }
+
+
+@app.get("/api/v1/owner/faces/events")
+async def owner_face_events(
+    limit: int = 30, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    require_attendance()
+    return {"events": get_event_store().list_face_events(owner.site_id, limit=limit)}
+
+
+@app.get("/api/v1/owner/faces/events/{event_id}/image")
+async def owner_face_event_image(
+    event_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Response:
+    require_attendance()
+    event = get_event_store().event(owner.site_id, event_id)
+    if not event or event.get("event_type") != "face_captured" or not event.get("snapshot_key"):
+        raise HTTPException(404, "Kadr topilmadi")
+    return _face_image_response(str(event["snapshot_key"]))
+
+
+@app.get("/api/v1/owner/faces/photos/{face_id}/image")
+async def owner_employee_face_image(
+    face_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Response:
+    require_attendance()
+    face = get_event_store().employee_face(owner.site_id, face_id)
+    if face is None:
+        raise HTTPException(404, "Rasm topilmadi")
+    return _face_image_response(str(face["photo_key"]))
 
 
 @app.get("/api/v1/owner/features")

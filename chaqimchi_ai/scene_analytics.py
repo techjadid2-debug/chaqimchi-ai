@@ -148,16 +148,35 @@ def _inside(point: Tuple[float, float], polygon: Sequence[Tuple[float, float]]) 
     return cv2.pointPolygonTest(contour, point, False) >= 0
 
 
+#: Davomat kadri uchun odam ramkasining minimal balandligi (kadr ulushida).
+#: Kichik ramka = uzoqdagi odam = crop ichida yuz o'qib bo'lmaydigan darajada
+#: mayda bo'ladi va cloud bekorga ishlaydi.
+FACE_MIN_BBOX_RATIO = 0.28
+#: Bitta trackdan ko'pi bilan shuncha yuz kadri — odam eshik oldida turib
+#: qolsa ham oqim to'lib ketmaydi.
+FACE_EMITS_PER_TRACK = 2
+#: Ikkinchi kadr kamida shuncha soniyadan keyin (birinchisi sifatsiz chiqsa
+#: zaxira bo'ladi).
+FACE_DEBOUNCE_SEC = 60.0
+
+
 class SceneAnalyzer:
     def __init__(
         self,
         camera_id: str,
         detector: PersonDetector,
         settings: SceneSettings,
+        *,
+        attendance: bool = False,
     ) -> None:
         self.camera_id = camera_id
         self.detector = detector
         self.settings = settings
+        #: Davomat kamerasi: odam ko'ringanida yuz crop hodisasi chiqadi.
+        #: Qurilma yuzni TANIMAYDI — moslash cloudda (cloud/faces.py).
+        self.attendance = bool(attendance)
+        self._track_face_emits: Dict[int, int] = {}
+        self._track_face_last: Dict[int, float] = {}
         self.motion = MotionGate(settings.motion_min_area_ratio)
         # Yuz uchun mo'ljallangan IoU tracker do'kon eshigida ishlamaydi: normal
         # yurgan odam bir kadrda ramkasining yarmidan ko'p siljiydi va track
@@ -248,6 +267,26 @@ class SceneAnalyzer:
                 )
 
             x1, y1, x2, y2 = detection["bbox"]
+
+            # Davomat: yetarlicha yaqin kelgan odamdan yuz kadri.
+            if self.attendance and (y2 - y1) / height >= FACE_MIN_BBOX_RATIO:
+                emits = self._track_face_emits.get(track_id, 0)
+                last = self._track_face_last.get(track_id)
+                if emits < FACE_EMITS_PER_TRACK and (
+                    last is None or now - last >= FACE_DEBOUNCE_SEC
+                ):
+                    self._track_face_emits[track_id] = emits + 1
+                    self._track_face_last[track_id] = now
+                    events.append(
+                        EdgeEvent(
+                            event_type="face_captured",
+                            camera_id=self.camera_id,
+                            track_id=track_id,
+                            score=float(detection.get("score", 0.0)),
+                            metadata={"bbox": detection["bbox"]},
+                        )
+                    )
+
             center = ((x1 + x2) / 2 / width, y2 / height)
             current_zones = {zone.name for zone in self.zones if _inside(center, zone.polygon)}
             for zone_name in current_zones:

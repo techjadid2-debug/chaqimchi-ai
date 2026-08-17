@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -159,6 +159,12 @@ FACE_EMITS_PER_TRACK = 2
 #: zaxira bo'ladi).
 FACE_DEBOUNCE_SEC = 60.0
 
+#: Bosim shundan oshsa demografiya o'tkazib yuboriladi — xavfsizlik va
+#: sanash muhimroq (himoya klapani).
+DEMOGRAPHY_PRESSURE_LIMIT = 0.85
+#: Bitta trek uchun urinishlar (kirish chizig'i kesilgan kadrlarda).
+DEMOGRAPHY_ATTEMPTS_PER_TRACK = 2
+
 
 class SceneAnalyzer:
     def __init__(
@@ -168,6 +174,8 @@ class SceneAnalyzer:
         settings: SceneSettings,
         *,
         attendance: bool = False,
+        demography: Optional[Any] = None,
+        pressure: Optional[Callable[[], float]] = None,
     ) -> None:
         self.camera_id = camera_id
         self.detector = detector
@@ -177,6 +185,12 @@ class SceneAnalyzer:
         self.attendance = bool(attendance)
         self._track_face_emits: Dict[int, int] = {}
         self._track_face_last: Dict[int, float] = {}
+        #: Demografiya (jins/yosh): faqat kirish chizig'i bor kamerada
+        #: beriladi; natija anonim raqamlar, rasm saqlanmaydi.
+        self.demography = demography
+        self.pressure = pressure
+        self._track_demography: Dict[int, Dict[str, Any]] = {}
+        self._demo_attempts: Dict[int, int] = {}
         self.motion = MotionGate(settings.motion_min_area_ratio)
         # Yuz uchun mo'ljallangan IoU tracker do'kon eshigida ishlamaydi: normal
         # yurgan odam bir kadrda ramkasining yarmidan ko'p siljiydi va track
@@ -208,6 +222,35 @@ class SceneAnalyzer:
         self._track_zones: Dict[int, set[str]] = {}
         self._emitted: Dict[Tuple[str, str], float] = {}
         self._occupancy_alerted = False
+
+    def _estimate_demography(
+        self, frame: np.ndarray, detection: Dict[str, Any], track_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """Kirish kesishmasida mijozning jins/yoshini baholaydi.
+
+        Trek boshiga ko'pi bilan 2 urinish; bosim yuqorida — o'tkazib
+        yuboriladi (xavfsizlik va sanash ustuvor).  Xato tahlilni hech
+        qachon to'xtatmaydi.
+        """
+        if self.demography is None:
+            return None
+        cached = self._track_demography.get(track_id)
+        if cached is not None:
+            return cached
+        if self.pressure is not None and self.pressure() >= DEMOGRAPHY_PRESSURE_LIMIT:
+            return None
+        attempts = self._demo_attempts.get(track_id, 0)
+        if attempts >= DEMOGRAPHY_ATTEMPTS_PER_TRACK:
+            return None
+        self._demo_attempts[track_id] = attempts + 1
+        try:
+            result = self.demography.estimate(frame, detection["bbox"])
+        except Exception:
+            logger.exception("[%s] demografiya baholanmadi", self.camera_id)
+            return None
+        if result:
+            self._track_demography[track_id] = result
+        return result
 
     def _emit_allowed(self, kind: str, key: str, now: float) -> bool:
         token = (kind, key)
@@ -309,6 +352,11 @@ class SceneAnalyzer:
 
             # Kirish/chiqish — konversiya hisobining maxraji.
             for crossing in self.lines.update(track_id, center):
+                metadata: Dict[str, Any] = {"bbox": detection["bbox"]}
+                if crossing.direction == "in":
+                    demography = self._estimate_demography(frame, detection, track_id)
+                    if demography:
+                        metadata["demografiya"] = demography
                 events.append(
                     EdgeEvent(
                         event_type="line_crossed",
@@ -316,7 +364,7 @@ class SceneAnalyzer:
                         track_id=track_id,
                         direction=crossing.direction,
                         line=crossing.line,
-                        metadata={"bbox": detection["bbox"]},
+                        metadata=metadata,
                     )
                 )
 

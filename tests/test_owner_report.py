@@ -607,3 +607,112 @@ def test_uptime_is_full_when_no_outage_was_recorded(tmp_path: Path) -> None:
         store.camera_uptime_percent("site-1", start=date(2026, 8, 10), end=date(2026, 8, 16))
         == 100.0
     )
+
+
+# ── Demografiya: jins/yosh (xodimlarsiz) ─────────────────────────────────
+
+
+def demo_crossing(hour: int, minute: int, track: int, jins: str, yosh: int) -> EdgeEvent:
+    return EdgeEvent(
+        event_type="line_crossed",
+        camera_id="eshik-01",
+        direction="in",
+        line="eshik",
+        track_id=track,
+        occurred_at=moment(hour, minute),
+        metadata={"demografiya": {"jins": jins, "yosh": yosh}},
+    )
+
+
+def test_demography_is_aggregated_with_percentages_and_age_buckets(tmp_path: Path) -> None:
+    store = store_with(
+        [
+            demo_crossing(10, 0, 1, "ayol", 25),
+            demo_crossing(10, 5, 2, "ayol", 34),
+            demo_crossing(10, 10, 3, "erkak", 62),
+            crossing(11, "in"),  # demografiyasiz kirish — sanoqni buzmaydi
+        ],
+        tmp_path,
+    )
+
+    report = store.retail_report("site-1", day=DAY)
+
+    demo = report["demografiya"]
+    assert demo["hisoblangan"] == 3
+    assert demo["jins"] == {"ayol": 67, "erkak": 33}
+    assert demo["yosh"]["18-30"] == 1
+    assert demo["yosh"]["31-45"] == 1
+    assert demo["yosh"]["60+"] == 1
+    assert report["traffic"]["entered"] == 4, "kirdi-chiqdi soni demografiyaga bog'liq emas"
+
+
+def test_employees_are_excluded_from_demography_but_not_from_footfall(
+    tmp_path: Path,
+) -> None:
+    """Xodim ertalab kirdi: yuz tanish uni topdi — demografiyaga kirmaydi."""
+    store = store_with(
+        [
+            demo_crossing(9, 0, 7, "erkak", 30),
+            EdgeEvent(
+                event_type="employee_seen",
+                camera_id="eshik-01",
+                severity="info",
+                track_id=7,
+                person_id="xodim-1",
+                occurred_at=moment(9, 1),
+            ),
+            demo_crossing(12, 0, 8, "ayol", 22),  # oddiy mijoz
+        ],
+        tmp_path,
+    )
+
+    report = store.retail_report("site-1", day=DAY)
+
+    demo = report["demografiya"]
+    assert demo["hisoblangan"] == 1, "faqat mijoz"
+    assert demo["xodim_chiqarilgan"] == 1
+    assert demo["jins"] == {"ayol": 100, "erkak": 0}
+    assert report["traffic"]["entered"] == 2, "xodim kirdi-chiqdi sonida qoladi"
+
+
+def test_recycled_track_id_outside_the_window_still_counts(tmp_path: Path) -> None:
+    """Trek raqami qayta ishlatilgan: xodim belgisi 6 soat oldin — mijoz sanaladi."""
+    store = store_with(
+        [
+            EdgeEvent(
+                event_type="employee_seen",
+                camera_id="eshik-01",
+                severity="info",
+                track_id=5,
+                person_id="xodim-1",
+                occurred_at=moment(9, 0),
+            ),
+            demo_crossing(15, 0, 5, "ayol", 40),
+        ],
+        tmp_path,
+    )
+
+    demo = store.retail_report("site-1", day=DAY)["demografiya"]
+
+    assert demo["hisoblangan"] == 1 and demo["xodim_chiqarilgan"] == 0
+
+
+def test_digest_gets_a_demography_line(tmp_path: Path) -> None:
+    store = store_with(
+        [demo_crossing(10, 0, 1, "ayol", 25), demo_crossing(10, 5, 2, "ayol", 28)],
+        tmp_path,
+    )
+
+    text = build_digest(
+        "Oq Saroy",
+        DAY.isoformat(),
+        store.stats("site-1", day=DAY),
+        store.retail_report("site-1", day=DAY),
+    )
+
+    assert "🚻 100% ayol · 0% erkak · asosan 18-30 yosh" in text
+
+
+def test_quiet_day_digest_has_no_demography_line(tmp_path: Path) -> None:
+    text = digest_for(tmp_path, [crossing(12, "in")])
+    assert "🚻" not in text

@@ -413,12 +413,25 @@ def build_runner(
         for camera_id in (cache.get("config") or {}).get("attendance_camera_ids") or []
     }
 
+    # Demografiya (jins/yosh): bitta umumiy estimator, faqat kirish
+    # chizig'i bor kameralarga beriladi.  Bosim oshsa analyzer o'zi
+    # o'chiradi (byudjetdagi pressure orqali).
+    from chaqimchi_ai.retail.demography import build_demography_estimator
+
+    demography = build_demography_estimator(settings, base_dir)
+    entrance_cameras = {line.camera_id for line in settings.scene.lines}
+
+    def read_pressure() -> float:
+        return broker.budget.pressure
+
     for camera in cameras:
         analyzer = SceneAnalyzer(
             camera.camera_id,
             detector,
             settings.scene,
             attendance=attendance_enabled and camera.camera_id in attendance_cameras,
+            demography=demography if camera.camera_id in entrance_cameras else None,
+            pressure=read_pressure,
         )
         clips = (
             RingBuffer(

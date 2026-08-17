@@ -2797,6 +2797,9 @@ async def _process_face_capture(site_id: str, device_id: str, event_id: str) -> 
         person_id=employee_id,
         score=round(score, 3),
         occurred_at=event.get("occurred_at"),
+        # track_id ham ko'chiriladi: demografiya hisobida xodimni
+        # chiqarib tashlash aynan (kamera, trek) juftligi orqali bo'ladi.
+        track_id=event.get("track_id"),
         metadata={"source_event_id": event_id},
     )
     store.ingest(site_id, device_id, [seen])

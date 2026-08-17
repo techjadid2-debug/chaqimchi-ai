@@ -87,21 +87,12 @@ FFMPEG_URL = (
 )
 FFMPEG_SHA256 = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9"
 
-# ── OpenVINO odam detektori (Apache 2.0) ─────────────────────────────────
-MODEL_BASE = (
-    "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/"
-    "models_bin/1/person-detection-retail-0013/FP16/"
-)
-MODELS = [
-    (
-        "person-detection-retail-0013.xml",
-        "19556695d2b18255fe5593d388ae69ba7f9a2f5c3f986bde8356741d0db26e89",
-    ),
-    (
-        "person-detection-retail-0013.bin",
-        "cf4a1f2f252d229966001e15454c5ba02a7ace047b181b235e3a2c4aebcf3ba7",
-    ),
-]
+# ── OpenVINO modellari (Apache 2.0) ──────────────────────────────────────
+#
+# Ro'yxat manifestdan o'qiladi — yagona manba.  Ilgari URL va sha256 shu
+# yerda takrorlanardi: yangi model qo'shilganda ikki joyni yangilash kerak
+# bo'lib, ulardan biri unutilishi aniq edi.
+MODEL_MANIFEST = ROOT / "models" / "retail_manifest.json"
 
 #: Payloadga **faqat** shular kiradi.  `cloud/` va `webapp/` ataylab yo'q:
 #: mijoz kompyuterida admin paneli, lead API va to'lov callbacklari
@@ -221,16 +212,17 @@ def step_packages(python_dir: Path, cache: Path) -> None:
 
 
 def step_models(cache: Path) -> None:
-    log.info("[3/6] AI modeli")
+    import json
+
+    log.info("[3/6] AI modellari (odam + demografiya)")
     models_dir = PAYLOAD / "models" / "retail"
     models_dir.mkdir(parents=True, exist_ok=True)
-    for name, digest in MODELS:
+    manifest = json.loads(MODEL_MANIFEST.read_text(encoding="utf-8"))
+    for name, meta in manifest["files"].items():
         cached = cache / name
-        download(MODEL_BASE + name, cached, digest)
+        download(str(meta["url"]), cached, str(meta["sha256"]))
         shutil.copy2(cached, models_dir / name)
-    manifest = ROOT / "models" / "retail_manifest.json"
-    if manifest.is_file():
-        shutil.copy2(manifest, PAYLOAD / "models" / "retail_manifest.json")
+    shutil.copy2(MODEL_MANIFEST, PAYLOAD / "models" / "retail_manifest.json")
 
 
 def step_ffmpeg(cache: Path) -> None:

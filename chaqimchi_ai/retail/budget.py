@@ -118,6 +118,12 @@ class InferenceBudget:
         """
         self._pressure = min(1.0, max(0.0, float(value)))
 
+    @property
+    def pressure(self) -> float:
+        """Joriy yuk (0..1) — ikkilamchi ishlar (demografiya) shu qiymatga
+        qarab o'zini o'chiradi."""
+        return self._pressure
+
     def _adapt(self) -> None:
         if len(self._latencies) < MIN_SAMPLES:
             return

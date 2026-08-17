@@ -117,6 +117,7 @@ def _send_face_capture(client: TestClient, headers: dict, event_id: str, data: b
                     "event_type": "face_captured",
                     "camera_id": "camera-01",
                     "severity": "info",
+                    "track_id": 42,
                     "has_snapshot": True,
                 }
             ]
@@ -249,6 +250,7 @@ def test_matched_capture_creates_employee_seen_and_attendance(pilot_client) -> N
 
     seen = main.get_event_store().list_events(site["site_id"], event_type="employee_seen", limit=10)
     assert len(seen) == 1 and seen[0]["person_id"] == employee["id"]
+    assert seen[0]["track_id"] == 42, "demografiya xodim chiqarishi trek orqali ishlaydi"
 
 
 def test_unknown_face_stays_in_the_gallery_without_attendance(pilot_client) -> None:

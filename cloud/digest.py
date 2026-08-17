@@ -67,6 +67,18 @@ def build_digest(
     if busiest:
         lines.append(f"Gavjum soat: {busiest['hour']:02d}:00 — {busiest['entered']} kishi")
 
+    # Demografiya — faqat ma'lumot yig'ilgan kunda (xodimlar hisobga
+    # kirmaydi, ular davomatda).
+    demografiya = report.get("demografiya") or {}
+    if demografiya.get("hisoblangan"):
+        jins = demografiya.get("jins") or {}
+        yosh = demografiya.get("yosh") or {}
+        line = f"🚻 {jins.get('ayol', 0)}% ayol · {jins.get('erkak', 0)}% erkak"
+        if any(yosh.values()):
+            top_age = max(yosh, key=lambda key: yosh[key])
+            line += f" · asosan {top_age} yosh"
+        lines.append(line)
+
     # Soatlik oqim mini-grafigi (08:00–23:00 oralig'i — tungi nol
     # ustunlar grafikni cho'zib yuborardi).
     hourly = traffic.get("hourly") or []

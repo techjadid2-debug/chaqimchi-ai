@@ -251,3 +251,100 @@ def test_track_state_is_released_so_memory_does_not_grow_all_day() -> None:
     detector.people = []
     analyzer.process(FRAME, now=1000.0)
     assert analyzer.lines.tracked == 0
+
+
+# ── Demografiya (jins/yosh) — kirish kesishmasida ────────────────────────
+
+
+class FakeDemography:
+    def __init__(self, result=None):
+        self.result = result or {"jins": "ayol", "yosh": 27}
+        self.calls = 0
+
+    def estimate(self, frame, bbox):
+        self.calls += 1
+        return self.result
+
+
+def _entrance_analyzer(demography, pressure=None):
+    settings = SceneSettings.model_validate({"enabled": True, "burst_fps": 30, **DOOR})
+    detector = ScriptedDetector()
+    analyzer = SceneAnalyzer("cam-1", detector, settings, demography=demography, pressure=pressure)
+    analyzer.motion.has_motion = lambda _frame: True
+    return analyzer, detector
+
+
+def _in_crossing(analyzer, detector, *, now: float = 1.0):
+    events = walk(analyzer, detector, start=0.30, stop=0.70, step=0.04, now=now)
+    crossed = [e for e in events if e.event_type == "line_crossed"]
+    return crossed[0] if crossed else None
+
+
+def test_demography_rides_the_in_crossing_metadata() -> None:
+    """Natija alohida hodisa emas — o'sha line_crossed metadatasida.
+
+    Yangi hodisa turi eski cloudda butun batchni 422 qilardi.
+    """
+    fake = FakeDemography({"jins": "erkak", "yosh": 41})
+    analyzer, detector = _entrance_analyzer(fake)
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None
+    if crossing.direction == "in":
+        assert crossing.metadata["demografiya"] == {"jins": "erkak", "yosh": 41}
+        assert fake.calls == 1
+    else:
+        assert "demografiya" not in crossing.metadata, "chiqishda baholanmaydi"
+
+
+def test_camera_without_estimator_stays_untouched() -> None:
+    analyzer, detector = _entrance_analyzer(None)
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None and "demografiya" not in crossing.metadata
+
+
+def test_high_pressure_skips_demography() -> None:
+    """Bosim 0.85+ — xavfsizlik va sanash ustuvor, demografiya kutadi."""
+    fake = FakeDemography()
+    analyzer, detector = _entrance_analyzer(fake, pressure=lambda: 0.9)
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None
+    assert "demografiya" not in crossing.metadata
+    assert fake.calls == 0, "og'ir paytda model umuman chaqirilmasin"
+
+
+def test_failed_estimates_are_capped_per_track() -> None:
+    """Yuz topilmayotgan trek uchun cheksiz urinish bo'lmasin."""
+
+    class NoFace(FakeDemography):
+        def estimate(self, frame, bbox):
+            self.calls += 1
+            return None
+
+    fake = NoFace()
+    analyzer, detector = _entrance_analyzer(fake)
+
+    # Bir trek ikki marta kirdi-chiqdi qildi (4 kesishma) — urinish 2 ta.
+    _in_crossing(analyzer, detector, now=1.0)
+    walk(analyzer, detector, start=0.70, stop=0.30, step=0.04, now=30.0)
+    _in_crossing(analyzer, detector, now=60.0)
+
+    assert fake.calls <= 2
+
+
+def test_estimator_crash_never_breaks_analysis() -> None:
+    class Boom(FakeDemography):
+        def estimate(self, frame, bbox):
+            raise RuntimeError("model yiqildi")
+
+    analyzer, detector = _entrance_analyzer(Boom())
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None, "tahlil davom etadi"
+    assert "demografiya" not in crossing.metadata

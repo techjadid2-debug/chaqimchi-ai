@@ -127,6 +127,11 @@ class SceneSettings(BaseModel):
     queue_limit: int = Field(default=5, ge=1, le=1000)
     zones: List[SceneZoneSettings] = Field(default_factory=list)
     lines: List[SceneLineSettings] = Field(default_factory=list)
+    #: Mijoz demografiyasi (jins/yosh) — faqat kirish chizig'i bor kamerada,
+    #: chiziq kesilgan paytda ishlaydi.  Rasm saqlanmaydi va yuborilmaydi.
+    demographics_enabled: bool = True
+    face_model_path: Optional[str] = "models/retail/face-detection-retail-0004.xml"
+    age_gender_model_path: Optional[str] = "models/retail/age-gender-recognition-retail-0013.xml"
 
 
 class RetailCameraSettings(BaseModel):

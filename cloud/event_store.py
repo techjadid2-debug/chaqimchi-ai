@@ -52,6 +52,23 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _age_bucket(age: Any) -> str:
+    """Yosh guruhi — do'kon egasi aniq son emas, guruh bilan ishlaydi."""
+    try:
+        value = int(age)
+    except (TypeError, ValueError):
+        return "31-45"
+    if value < 18:
+        return "<18"
+    if value <= 30:
+        return "18-30"
+    if value <= 45:
+        return "31-45"
+    if value <= 60:
+        return "46-60"
+    return "60+"
+
+
 def _change_percent(today: int, yesterday: int) -> Optional[float]:
     """Kechagiga nisbatan o'zgarish.
 
@@ -769,6 +786,12 @@ class EventStore:
             "restricted_zone": 0,
             "loitering": 0,
         }
+        # Demografiya (jins/yosh) — faqat mijozlar.  Xodim kirishlari
+        # `employee_seen` (kamera, trek) juftligi orqali chiqarib tashlanadi.
+        employee_marks = self._employee_marks_of_day(site_id, day, timezone_tashkent)
+        gender_counts = {"ayol": 0, "erkak": 0}
+        age_buckets = {"<18": 0, "18-30": 0, "31-45": 0, "46-60": 0, "60+": 0}
+        demo_total = demo_excluded = 0
 
         for row in rows:
             kind = row["event_type"]
@@ -777,6 +800,16 @@ class EventStore:
                 if row.get("direction") == "in":
                     entered += 1
                     hourly[local.hour]["entered"] += 1
+                    demo = (row.get("metadata") or {}).get("demografiya") or {}
+                    if demo.get("jins") in gender_counts:
+                        if self._matches_employee(row, employee_marks):
+                            # Xodim sanalmasin — kirdi-chiqdi SONI o'zgarmaydi,
+                            # faqat demografiya hisobidan chiqadi.
+                            demo_excluded += 1
+                        else:
+                            demo_total += 1
+                            gender_counts[str(demo["jins"])] += 1
+                            age_buckets[_age_bucket(demo.get("yosh"))] += 1
                 elif row.get("direction") == "out":
                     exited += 1
                     hourly[local.hour]["exited"] += 1
@@ -829,7 +862,67 @@ class EventStore:
                 key=lambda item: (-item["count"], item["zone"]),
             ),
             "security": security,
+            "demografiya": {
+                "hisoblangan": demo_total,
+                "xodim_chiqarilgan": demo_excluded,
+                "jins": (
+                    {
+                        "ayol": round(gender_counts["ayol"] * 100 / demo_total),
+                        "erkak": round(gender_counts["erkak"] * 100 / demo_total),
+                    }
+                    if demo_total
+                    else {}
+                ),
+                "yosh": age_buckets,
+            },
         }
+
+    #: Xodim treki bilan kirish kesishmasi orasidagi ruxsat etilgan farq.
+    #: Trek raqamlari restartdan keyin qayta ishlatiladi — vaqt oynasi
+    #: eski trekni yangi mijoz bilan adashtirishning oldini oladi.
+    EMPLOYEE_MATCH_WINDOW_SEC = 600
+
+    def _employee_marks_of_day(
+        self, site_id: str, day: date, zone: ZoneInfo
+    ) -> List[Dict[str, Any]]:
+        """Kun ichidagi `employee_seen` belgilari (kamera, trek, vaqt)."""
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+        start = start_local.astimezone(timezone.utc).isoformat()
+        end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT camera_id,track_id,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type='employee_seen' AND track_id IS NOT NULL"
+                ),
+                (site_id, start, end),
+            ).fetchall()
+        return [self._dict(row) for row in rows]
+
+    def _matches_employee(self, row: Dict[str, Any], marks: List[Dict[str, Any]]) -> bool:
+        if not marks or row.get("track_id") is None:
+            return False
+        try:
+            moment = datetime.fromisoformat(str(row["occurred_at"]))
+        except (TypeError, ValueError):
+            return False
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        for mark in marks:
+            if str(mark["camera_id"]) != str(row.get("camera_id")):
+                continue
+            if int(mark["track_id"]) != int(row["track_id"]):
+                continue
+            try:
+                seen_at = datetime.fromisoformat(str(mark["occurred_at"]))
+            except (TypeError, ValueError):
+                continue
+            if seen_at.tzinfo is None:
+                seen_at = seen_at.replace(tzinfo=timezone.utc)
+            if abs((seen_at - moment).total_seconds()) <= self.EMPLOYEE_MATCH_WINDOW_SEC:
+                return True
+        return False
 
     def traffic_trend(
         self, site_id: str, *, days: int = 7, until: Optional[date] = None

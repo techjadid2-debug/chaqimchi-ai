@@ -90,6 +90,9 @@
           <div class="stat"><small>Gavjum soat</small><strong id="busiest">—</strong><span id="busiestCount">—</span></div>
           <div class="stat"><small>Eng uzun navbat</small><strong id="queueLongest">—</strong><span id="queueDetail">—</span></div>
         </div>
+        <!-- Mijoz demografiyasi: xodimlar hisobga kirmaydi (ular davomatda).
+             Ma'lumot yo'q kunda butun blok yashirin. -->
+        <div class="stats hidden" id="demoStats" style="margin-top:8px"></div>
         <div id="hourly" class="bars"></div>
         <div id="hourReadout" class="bar-readout">Ustunni bossangiz — o‘sha soat raqamlari chiqadi.</div>
       </div>
@@ -524,7 +527,28 @@
       });
     });
 
+    drawDemography(report.demografiya);
     drawSecurity(report.security);
+  }
+
+  function drawDemography(demo) {
+    const block = $("demoStats");
+    if (!demo || !demo.hisoblangan) {
+      block.classList.add("hidden");
+      block.innerHTML = "";
+      return;
+    }
+    const ages = demo.yosh || {};
+    const topAge = Object.keys(ages).reduce(
+      (best, key) => (ages[key] > (ages[best] || 0) ? key : best),
+      "",
+    );
+    const jins = demo.jins || {};
+    block.innerHTML = `
+      <div class="stat"><small>Ayollar</small><strong>${jins.ayol || 0}%</strong><span>${demo.hisoblangan} kishidan</span></div>
+      <div class="stat"><small>Erkaklar</small><strong>${jins.erkak || 0}%</strong><span>xodimlar hisobga kirmaydi</span></div>
+      <div class="stat"><small>Asosiy yosh guruhi</small><strong>${esc(topAge || "—")}</strong><span>${topAge ? `${ages[topAge]} kishi` : ""}</span></div>`;
+    block.classList.remove("hidden");
   }
 
   const SECURITY_LABELS = {

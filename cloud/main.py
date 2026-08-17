@@ -393,6 +393,10 @@ class SiteConfigBody(BaseModel):
     )
     zones: List[SceneZoneSettings] = Field(default_factory=list, max_length=128)
     lines: List[SceneLineSettings] = Field(default_factory=list, max_length=32)
+    #: Do'kon plani: har kamera uchun pol to'rtburchagi (4 burchak, 0..1)
+    #: va plandagi o'rni.  Maydon aniq e'lon qilinmasa pydantic uni jimgina
+    #: tashlab yuborardi va panel saqlagani yo'qolardi.
+    floor_map: Dict[str, Any] = Field(default_factory=dict)
 
 
 class EmployeeCreateBody(BaseModel):
@@ -2961,9 +2965,14 @@ async def owner_heatmap(
     camera_id: str,
     date: Optional[str] = None,
     hour: Optional[int] = None,
+    days: int = 1,
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
-    """Panel xaritasi: kamera ko'rinishi bo'yicha odam-borligi to'ri."""
+    """Panel xaritasi: kamera ko'rinishi bo'yicha odam-borligi to'ri.
+
+    `days=7` — plan rejimi uchun haftalik yig'indi (odam yurmagan joylar
+    jihoz sifatida qorayadi).
+    """
     zone = ZoneInfo("Asia/Tashkent")
     try:
         day = date_type.fromisoformat(date) if date else datetime.now(zone).date()
@@ -2971,7 +2980,9 @@ async def owner_heatmap(
         raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lsin") from exc
     if hour is not None and not 0 <= hour <= 23:
         raise HTTPException(422, "Soat 0..23 oralig'ida")
-    return get_event_store().heatmap(owner.site_id, camera_id, day=day, hour=hour)
+    if not 1 <= days <= 30:
+        raise HTTPException(422, "Kunlar 1..30 oralig'ida")
+    return get_event_store().heatmap(owner.site_id, camera_id, day=day, hour=hour, days=days)
 
 
 @app.put("/api/v1/edge/cameras/{camera_id}/live-frame")
@@ -3497,6 +3508,26 @@ def _validate_site_config(body: SiteConfigBody) -> None:
         raise HTTPException(422, "Davomat roli faqat tanlangan davomat kamerasiga beriladi")
     if bool(body.open_from) != bool(body.open_to):
         raise HTTPException(422, "Ish boshlanishi va tugashi birga berilishi kerak")
+    cameras_map = (body.floor_map or {}).get("cameras") or {}
+    if not isinstance(cameras_map, dict) or len(cameras_map) > GUARANTEED_CAMERAS * 2:
+        raise HTTPException(422, "Do'kon plani noto'g'ri formatda")
+    for camera_id, item in cameras_map.items():
+        quad = (item or {}).get("quad")
+        if quad is None:
+            continue
+        if (
+            not isinstance(quad, list)
+            or len(quad) != 4
+            or any(
+                not isinstance(point, list)
+                or len(point) != 2
+                or any(not isinstance(v, (int, float)) or v < 0 or v > 1 for v in point)
+                for point in quad
+            )
+        ):
+            raise HTTPException(
+                422, f"{camera_id} pol to'rtburchagi 4 ta [x,y] (0..1) nuqta bo'lsin"
+            )
 
 
 @app.put("/api/v1/owner/config")

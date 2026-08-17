@@ -956,20 +956,25 @@ class EventStore:
         *,
         day: date,
         hour: Optional[int] = None,
+        days: int = 1,
     ) -> Dict[str, Any]:
         """Toshkent kuni (ixtiyoriy soati) bo'yicha jamlangan to'r.
 
         Bucket'lar UTC'da saqlanadi — lokal soat oralig'i UTC bucket
-        satrlariga o'girilib yig'iladi.
+        satrlariga o'girilib yig'iladi.  `days > 1` — `day` bilan tugaydigan
+        bir necha kun jamlanadi (do'kon plani "o'zi chizilishi" uchun:
+        haftalik yig'indida odam yurmagan joylar jihoz bo'lib ko'rinadi).
         """
         zone = ZoneInfo("Asia/Tashkent")
         hours = [hour] if hour is not None else list(range(24))
         buckets = []
-        for local_hour in hours:
-            local = datetime.combine(day, datetime.min.time(), tzinfo=zone) + timedelta(
-                hours=local_hour
-            )
-            buckets.append(local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
+        for offset in range(max(1, min(int(days), 30))):
+            target_day = day - timedelta(days=offset)
+            for local_hour in hours:
+                local = datetime.combine(target_day, datetime.min.time(), tzinfo=zone) + timedelta(
+                    hours=local_hour
+                )
+                buckets.append(local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
         placeholders = ",".join("?" for _ in buckets)
         with self._connect() as conn:
             rows = conn.execute(

@@ -103,13 +103,19 @@
         <div class="card-head">
           <h2>Do‘kon xaritasi</h2>
           <div class="chip-row">
+            <button class="chip active" type="button" data-heatmode="camera">Kamera</button>
+            <button class="chip" type="button" data-heatmode="plan">Plan (tepadan)</button>
             <select id="heatCamera" style="width:auto"></select>
             <input type="date" id="heatDate" style="width:auto">
             <select id="heatHour" style="width:auto"><option value="">Kun bo‘yi</option></select>
           </div>
         </div>
-        <p class="hint" style="margin-top:0">To‘q qizil — mijozlar eng ko‘p yurgan joylar. Kamera ko‘rinishi ustida.</p>
+        <p class="hint" style="margin-top:0" id="heatHint">To‘q qizil — mijozlar eng ko‘p yurgan joylar. Kamera ko‘rinishi ustida.</p>
         <div class="heat-wrap"><canvas id="heatCanvas" width="640" height="360"></canvas></div>
+        <div class="actions" style="margin-top:8px">
+          <button class="button ghost small" id="heatEditBtn" type="button">Pol burchaklarini to‘g‘irlash</button>
+          <button class="button primary small hidden" id="heatSaveBtn" type="button">Burchaklarni saqlash</button>
+        </div>
         <p class="hint" id="heatSummary">—</p>
       </div>
 
@@ -533,6 +539,174 @@
     $("heatSummary").textContent = data.points
       ? `${data.points} ta qadam nuqtasi yig‘ildi · eng gavjum katakda ${peak} ta`
       : "Bu kun uchun hali ma’lumot yo‘q — qurilma har 10 daqiqada yuboradi.";
+    if (heatEditing) drawQuadOverlay();
+  }
+
+  /* ── Do'kon plani (tepadan) va pol burchaklari ───────────────────────
+     Har kamera uchun pol to'rtburchagi: kamera rasmi ustidagi 4 burchak
+     to'rni "tepadan ko'rinish"ga akslantiradi.  Standart trapetsiya
+     taxminiy — ega burchaklarni sudrab aniqlashtiradi (saqlash configda).
+     7 kunlik yig'indida odam YURMAGAN joylar qoraytiriladi — jihozlar
+     plani trafikdan o'z-o'zidan chiziladi (taxminiy!). */
+
+  let heatMode = "camera";
+  let heatEditing = false;
+  let dragCorner = -1;
+
+  const DEFAULT_QUAD = [[0.15, 0.45], [0.85, 0.45], [1, 1], [0, 1]];
+
+  function floorQuad(cameraId) {
+    const cameras = ((currentConfig || {}).floor_map || {}).cameras || {};
+    const quad = (cameras[cameraId] || {}).quad;
+    return Array.isArray(quad) && quad.length === 4
+      ? quad.map((p) => [Number(p[0]), Number(p[1])])
+      : DEFAULT_QUAD.map((p) => [...p]);
+  }
+
+  function setFloorQuad(cameraId, quad) {
+    if (!currentConfig) return;
+    const map = currentConfig.floor_map || {};
+    const cameras = map.cameras || {};
+    cameras[cameraId] = { ...(cameras[cameraId] || {}), quad };
+    currentConfig.floor_map = { ...map, cameras };
+  }
+
+  function drawQuadOverlay() {
+    const canvas = $("heatCanvas");
+    const ctx = canvas.getContext("2d");
+    const quad = floorQuad($("heatCamera").value);
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    quad.forEach((p, i) => {
+      const x = p[0] * canvas.width, y = p[1] * canvas.height;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+    quad.forEach((p) => {
+      ctx.fillStyle = "#2563eb";
+      ctx.beginPath();
+      ctx.arc(p[0] * canvas.width, p[1] * canvas.height, 7, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function canvasPoint(event) {
+    const canvas = $("heatCanvas");
+    const rect = canvas.getBoundingClientRect();
+    return [
+      Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+      Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+    ];
+  }
+
+  $("heatCanvas").addEventListener("pointerdown", (event) => {
+    if (!heatEditing || heatMode !== "camera") return;
+    const [x, y] = canvasPoint(event);
+    const quad = floorQuad($("heatCamera").value);
+    dragCorner = quad.findIndex((p) => Math.hypot(p[0] - x, p[1] - y) < 0.05);
+    if (dragCorner >= 0) $("heatCanvas").setPointerCapture(event.pointerId);
+  });
+  $("heatCanvas").addEventListener("pointermove", (event) => {
+    if (dragCorner < 0) return;
+    const cameraId = $("heatCamera").value;
+    const quad = floorQuad(cameraId);
+    quad[dragCorner] = canvasPoint(event);
+    setFloorQuad(cameraId, quad);
+    loadHeatmap();
+  });
+  $("heatCanvas").addEventListener("pointerup", () => { dragCorner = -1; });
+
+  async function saveFloorMap() {
+    if (!currentConfig) return;
+    try {
+      await api("/api/v1/owner/config", {
+        method: "PUT",
+        body: JSON.stringify({ ...currentConfig }),
+      });
+      note("heatSummary", "ok", "Pol burchaklari saqlandi.");
+    } catch (err) {
+      note("heatSummary", "err", err.message);
+    }
+  }
+
+  // Bilinear: tepadan (u,v) → kamera rasmi nuqtasi.
+  function quadPoint(quad, u, v) {
+    const [tl, tr, br, bl] = quad;
+    return [
+      (1 - u) * (1 - v) * tl[0] + u * (1 - v) * tr[0] + u * v * br[0] + (1 - u) * v * bl[0],
+      (1 - u) * (1 - v) * tl[1] + u * (1 - v) * tr[1] + u * v * br[1] + (1 - u) * v * bl[1],
+    ];
+  }
+
+  async function loadPlanView() {
+    const canvas = $("heatCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#f3f4f6";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!cameraList.length) return;
+    const cols = cameraList.length > 1 ? 2 : 1;
+    const rows = Math.ceil(cameraList.length / cols);
+    const tileW = canvas.width / cols, tileH = canvas.height / rows;
+    const CELLS = 24;
+    let totalPoints = 0;
+    for (let index = 0; index < cameraList.length; index += 1) {
+      const camera = cameraList[index];
+      let data;
+      try {
+        data = await api(
+          `/api/v1/owner/heatmap?camera_id=${encodeURIComponent(camera.camera_id)}&days=7`,
+        );
+      } catch (_) { continue; }
+      totalPoints += data.points;
+      const quad = floorQuad(camera.camera_id);
+      const ox = (index % cols) * tileW, oy = Math.floor(index / cols) * tileH;
+      const peak = Math.max(1, ...data.grid.map((row) => Math.max(...row)));
+      const enoughData = data.frames > 500; // ~bir necha soat tahlil
+      for (let r = 0; r < CELLS; r += 1) {
+        for (let c = 0; c < CELLS; c += 1) {
+          const [px, py] = quadPoint(quad, (c + 0.5) / CELLS, (r + 0.5) / CELLS);
+          const value = data.grid[Math.min(data.rows - 1, Math.floor(py * data.rows))][
+            Math.min(data.cols - 1, Math.floor(px * data.cols))];
+          const cw = tileW / CELLS, ch = tileH / CELLS;
+          if (value) {
+            const alpha = 0.15 + 0.6 * (value / peak);
+            ctx.fillStyle = `rgba(220, 38, 38, ${alpha.toFixed(3)})`;
+          } else if (enoughData) {
+            // Hafta davomida hech kim bosmagan joy — jihoz/o'tib bo'lmas.
+            ctx.fillStyle = "rgba(55, 65, 81, 0.55)";
+          } else {
+            continue;
+          }
+          ctx.fillRect(ox + c * cw, oy + r * ch, Math.ceil(cw), Math.ceil(ch));
+        }
+      }
+      ctx.strokeStyle = "#9ca3af";
+      ctx.strokeRect(ox + 1, oy + 1, tileW - 2, tileH - 2);
+      ctx.fillStyle = "#111827";
+      ctx.font = "13px system-ui";
+      ctx.fillText(camera.label || camera.camera_id, ox + 8, oy + 18);
+    }
+    $("heatSummary").textContent = totalPoints
+      ? "Oxirgi 7 kun · qora joylar — odam yurmagan (jihozlar, taxminiy)"
+      : "Plan uchun hali ma’lumot yetarli emas — bir necha kun yig‘ilsin.";
+  }
+
+  function setHeatMode(mode) {
+    heatMode = mode;
+    document.querySelectorAll("[data-heatmode]").forEach((chip) =>
+      chip.classList.toggle("active", chip.dataset.heatmode === mode));
+    const cameraMode = mode === "camera";
+    $("heatCamera").style.display = cameraMode ? "" : "none";
+    $("heatDate").style.display = cameraMode ? "" : "none";
+    $("heatHour").style.display = cameraMode ? "" : "none";
+    $("heatEditBtn").style.display = cameraMode ? "" : "none";
+    $("heatHint").textContent = cameraMode
+      ? "To‘q qizil — mijozlar eng ko‘p yurgan joylar. Kamera ko‘rinishi ustida."
+      : "Tepadan ko‘rinish (taxminiy): har kamera o‘z pol to‘rtburchagi orqali akslantiriladi.";
+    if (cameraMode) loadHeatmap(); else loadPlanView();
   }
 
   /* ── Jonli ko'rish ───────────────────────────────────────────────────
@@ -1080,6 +1254,17 @@
   $("heatCamera").addEventListener("change", loadHeatmap);
   $("heatDate").addEventListener("change", loadHeatmap);
   $("heatHour").addEventListener("change", loadHeatmap);
+  document.querySelectorAll("[data-heatmode]").forEach((chip) =>
+    chip.addEventListener("click", () => setHeatMode(chip.dataset.heatmode)));
+  $("heatEditBtn").addEventListener("click", () => {
+    heatEditing = !heatEditing;
+    $("heatEditBtn").textContent = heatEditing
+      ? "Tahrirni yopish"
+      : "Pol burchaklarini to‘g‘irlash";
+    $("heatSaveBtn").classList.toggle("hidden", !heatEditing);
+    loadHeatmap();
+  });
+  $("heatSaveBtn").addEventListener("click", saveFloorMap);
   $("modal").addEventListener("click", (event) => { if (event.target === $("modal")) closeModal(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 

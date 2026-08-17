@@ -224,6 +224,6 @@ def test_public_site_exposes_customer_and_installer_entry_points(
     assert "Dahua" in guide.text
     assert "Nimani qayerga ulash kerak" in guide.text
     assert "Windows 11 x64" in guide.text
-    assert "/Streaming/channels/${channel}02" in panel.text
+    assert "/Streaming/Channels/${channel}02" in panel.text
     assert "/cam/realmonitor?channel=${channel}&subtype=1" in panel.text
     assert "Ro‘yxatdan o‘tish" in panel.text

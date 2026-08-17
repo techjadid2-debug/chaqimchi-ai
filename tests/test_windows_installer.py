@@ -104,12 +104,30 @@ def test_builder_never_ships_the_cloud_to_customers() -> None:
     assert 'for forbidden in ("cloud", "webapp")' in source, "tekshiruv yo'q"
 
 
-def test_builder_bundles_the_ai_model_with_a_checksum() -> None:
+def test_builder_bundles_the_ai_models_from_the_manifest() -> None:
+    """Model ro'yxati manifestdan o'qiladi — bitta manba.
+
+    Ilgari URL/sha256 builderda takrorlanardi va yangi model qo'shilganda
+    ikki joydan biri unutilishi aniq edi.
+    """
+    import json
+
     source = BUILDER.read_text(encoding="utf-8")
-    assert "person-detection-retail-0013.xml" in source
-    assert "person-detection-retail-0013.bin" in source
-    for digest in re.findall(r'"([0-9a-f]{64})"', source):
-        assert len(digest) == 64
+    assert "retail_manifest.json" in source, "builder manifestdan o'qisin"
+    manifest = json.loads(
+        (BUILDER.parent.parent / "models" / "retail_manifest.json").read_text(encoding="utf-8")
+    )
+    files = manifest["files"]
+    for name in (
+        "person-detection-retail-0013.xml",
+        "person-detection-retail-0013.bin",
+        "face-detection-retail-0004.xml",
+        "age-gender-recognition-retail-0013.xml",
+    ):
+        assert name in files, f"{name} manifestda bo'lsin"
+    for meta in files.values():
+        assert re.fullmatch(r"[0-9a-f]{64}", meta["sha256"]), "sha256 majburiy"
+        assert str(meta["url"]).startswith("https://"), "faqat HTTPS"
 
 
 # ── NSIS o'rnatuvchi ─────────────────────────────────────────────────────

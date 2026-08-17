@@ -246,3 +246,68 @@ def test_old_heatmaps_are_purged(client: TestClient) -> None:
     removed = main.get_event_store().purge_heatmaps(site["site_id"], retention_days=90)
 
     assert removed == 1
+
+
+# ── Do'kon plani: pol to'rtburchagi konfigda ─────────────────────────────
+
+
+def test_floor_map_round_trips_through_owner_config(client: TestClient) -> None:
+    """Panel saqlagan burchaklar qayta ochilganda joyida bo'lsin.
+
+    `floor_map` SiteConfigBody'da aniq e'lon qilinmasa pydantic uni
+    jimgina tashlab yuborardi — bu test o'sha regressiyani qo'riqlaydi.
+    """
+    site, _headers = _device(client)
+    owner = _owner(client, site["site_id"])
+    config = client.get("/api/v1/owner/config", headers=owner).json()["config"]
+    config["floor_map"] = {
+        "cameras": {"camera-01": {"quad": [[0.1, 0.4], [0.9, 0.4], [1, 1], [0, 1]]}}
+    }
+
+    put = client.put("/api/v1/owner/config", headers=owner, json=config)
+    assert put.status_code == 200
+
+    again = client.get("/api/v1/owner/config", headers=owner).json()["config"]
+    assert again["floor_map"]["cameras"]["camera-01"]["quad"][0] == [0.1, 0.4]
+
+
+def test_invalid_floor_quad_is_rejected(client: TestClient) -> None:
+    site, _headers = _device(client)
+    owner = _owner(client, site["site_id"])
+    config = client.get("/api/v1/owner/config", headers=owner).json()["config"]
+    config["floor_map"] = {"cameras": {"camera-01": {"quad": [[0.1, 0.4], [2.0, 0.4]]}}}
+
+    response = client.put("/api/v1/owner/config", headers=owner, json=config)
+
+    assert response.status_code == 422
+
+
+def test_weekly_aggregate_covers_several_days(client: TestClient) -> None:
+    """days=7 — plan rejimi haftalik yig'indidan chiziladi."""
+    from datetime import timedelta
+
+    site, headers = _device(client)
+    owner = _owner(client, site["site_id"])
+    now = datetime.now(timezone.utc)
+    for offset in (0, 3):
+        bucket = (now - timedelta(days=offset)).strftime("%Y-%m-%dT%H")
+        client.post(
+            "/api/v1/edge/heatmap",
+            headers=headers,
+            json={
+                "items": [
+                    {
+                        "camera_id": "camera-01",
+                        "hour": bucket,
+                        "grid": _grid((2, 2, 5)),
+                        "frames": 10,
+                    }
+                ]
+            },
+        )
+
+    single = client.get("/api/v1/owner/heatmap?camera_id=camera-01", headers=owner).json()
+    weekly = client.get("/api/v1/owner/heatmap?camera_id=camera-01&days=7", headers=owner).json()
+
+    assert weekly["points"] >= single["points"]
+    assert weekly["points"] == 10, "ikki kunning yig'indisi"

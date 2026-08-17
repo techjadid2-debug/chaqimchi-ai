@@ -124,24 +124,36 @@ async def _probe_tcp_port(ip: str, port: int, timeout: float = 0.5) -> bool:
 async def probe_ip_camera_services(ip: str) -> Optional[Dict[str, Any]]:
     """Bitta IP manzilda RTSP yoki ONVIF xizmatlari mavjudligini aniqlaydi."""
     # Odatdagi kamera portlari: 554 (RTSP), 8554 (RTSP alt), 80 (HTTP/ONVIF), 8000 (Hikvision SDK), 8899 (ONVIF)
-    rtsp_open = await _probe_tcp_port(ip, 554, timeout=0.4)
-    if not rtsp_open:
-        rtsp_open = await _probe_tcp_port(ip, 8554, timeout=0.3)
+    rtsp_port: Optional[int] = None
+    if await _probe_tcp_port(ip, 554, timeout=0.4):
+        rtsp_port = 554
+    elif await _probe_tcp_port(ip, 8554, timeout=0.3):
+        rtsp_port = 8554
 
-    onvif_open = (
-        await _probe_tcp_port(ip, 80, timeout=0.3)
-        or await _probe_tcp_port(ip, 8899, timeout=0.3)
-        or await _probe_tcp_port(ip, 8000, timeout=0.3)
-    )
+    # Qaysi ONVIF port ochiq — keyin "ONVIF orqali so'rash" aynan shu
+    # portga boradi.  Ilgari faqat ha/yo'q saqlanardi va so'rov doim 80
+    # portga ketib, 8899/8000 dagi NVRlar "ishlamayapti" bo'lib ko'rinardi.
+    onvif_port: Optional[int] = None
+    for port in (80, 8899, 8000):
+        if await _probe_tcp_port(ip, port, timeout=0.3):
+            onvif_port = port
+            break
 
-    if rtsp_open or onvif_open:
-        return {
+    if rtsp_port or onvif_port:
+        result: Dict[str, Any] = {
             "ip": ip,
-            "rtsp_port": 554 if rtsp_open else 8554,
-            "has_rtsp": rtsp_open,
-            "has_onvif": onvif_open,
+            "has_rtsp": rtsp_port is not None,
+            "has_onvif": onvif_port is not None,
             "vendor_hint": "IP Camera / NVR",
         }
+        # Port faqat haqiqatan ochiq bo'lsa yoziladi — ilgari RTSP yopiq
+        # bo'lsa ham "8554" deb taxmin qilinardi va suggested_urls
+        # ishlamaydigan portga qurilardi.
+        if rtsp_port is not None:
+            result["rtsp_port"] = rtsp_port
+        if onvif_port is not None:
+            result["onvif_port"] = onvif_port
+        return result
     return None
 
 
@@ -246,14 +258,20 @@ def _parse_probe_match(text: str, sender_ip: str) -> Optional[Dict[str, Any]]:
         if parsed.hostname:
             device_ip = parsed.hostname
 
-    return {
+    result: Dict[str, Any] = {
         "ip": device_ip,
         "xaddrs": xaddrs,
         "vendor_hint": vendor_from_scopes(scopes),
         "has_onvif": True,
-        "has_rtsp": True,
-        "rtsp_port": 554,
+        # RTSP haqida WS-Discovery hech narsa aytmaydi — ilgari bu yerda
+        # "has_rtsp: True, rtsp_port: 554" taxmini port-skaner topgan
+        # haqiqiy portni (masalan 8554) bosib ketardi.
     }
+    if xaddrs:
+        parsed = urllib.parse.urlparse(xaddrs.split()[0])
+        if parsed.port:
+            result["onvif_port"] = parsed.port
+    return result
 
 
 def vendor_from_scopes(scopes: str) -> str:
@@ -369,7 +387,11 @@ async def discover_cameras_all(timeout_sec: float = 3.0) -> List[Dict[str, Any]]
     for d in onvif_devices:
         ip = d["ip"]
         if ip in combined:
-            combined[ip].update(d)
+            # Skaner topgan haqiqiy port ma'lumotini bo'sh qiymat bilan
+            # bosib ketmaslik: WS-Discovery faqat ONVIF haqida biladi.
+            combined[ip].update(
+                {key: value for key, value in d.items() if value or key not in combined[ip]}
+            )
         else:
             combined[ip] = d
 

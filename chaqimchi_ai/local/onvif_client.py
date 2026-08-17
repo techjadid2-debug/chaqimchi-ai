@@ -29,7 +29,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse, urlunparse
 from xml.etree import ElementTree
@@ -123,19 +123,22 @@ class OnvifResult:
 # ── SOAP qurilishi ───────────────────────────────────────────────────────
 
 
-def _security_header(username: str, password: str) -> str:
+def _security_header(username: str, password: str, clock_offset: float = 0.0) -> str:
     """WS-Security UsernameToken (PasswordDigest).
 
     ONVIF shu usulni talab qiladi: parol ochiq ketmaydi, o'rniga
     `SHA1(nonce + vaqt + parol)` yuboriladi.  `Created` maydoni tufayli
-    eski so'rovni qayta ishlatib bo'lmaydi — shuning uchun kamera soati
-    juda adashgan bo'lsa autentifikatsiya rad etiladi (buni xato
-    matnida aytamiz).
+    eski so'rovni qayta ishlatib bo'lmaydi — kamera soati adashgan bo'lsa
+    autentifikatsiya rad etiladi.  Shuning uchun `clock_offset` bilan
+    `Created` **kamera soatiga** moslanadi: farq oldindan
+    `get_system_date_and_time()` (parolsiz chaqiruv) orqali o'lchanadi.
     """
     if not username:
         return ""
     nonce = os.urandom(16)
-    created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    created = (datetime.now(timezone.utc) + timedelta(seconds=clock_offset)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     digest = hashlib.sha1(  # noqa: S324 — algoritmni ONVIF standarti belgilaydi
         nonce + created.encode("utf-8") + password.encode("utf-8")
     ).digest()
@@ -158,17 +161,23 @@ def _escape(value: str) -> str:
     )
 
 
-def _envelope(body: str, username: str, password: str) -> str:
+def _envelope(body: str, username: str, password: str, clock_offset: float = 0.0) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         f'<s:Envelope xmlns:s="{_SOAP_ENV}">'
-        f"{_security_header(username, password)}"
+        f"{_security_header(username, password, clock_offset)}"
         f"<s:Body>{body}</s:Body></s:Envelope>"
     )
 
 
 def _call(
-    url: str, body: str, *, username: str = "", password: str = "", timeout: float = TIMEOUT_SEC
+    url: str,
+    body: str,
+    *,
+    username: str = "",
+    password: str = "",
+    timeout: float = TIMEOUT_SEC,
+    clock_offset: float = 0.0,
 ) -> Optional[ElementTree.Element]:
     """Bitta SOAP so'rovi.  Muvaffaqiyatsizlikda `None`.
 
@@ -176,7 +185,7 @@ def _call(
     WS-Security'ni talab qilsa ham, ayrim kameralar (ayniqsa arzon
     xitoy modellari) faqat HTTP Digest'ni tushunadi.
     """
-    payload = _envelope(body, username, password).encode("utf-8")
+    payload = _envelope(body, username, password, clock_offset).encode("utf-8")
     headers = {"Content-Type": "application/soap+xml; charset=utf-8"}
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
@@ -250,7 +259,7 @@ def _text(root: Optional[ElementTree.Element], name: str) -> str:
 
 
 def get_device_information(
-    service_url: str, username: str = "", password: str = ""
+    service_url: str, username: str = "", password: str = "", clock_offset: float = 0.0
 ) -> Optional[DeviceInfo]:
     """Ishlab chiqaruvchi, model, proshivka.
 
@@ -262,6 +271,7 @@ def get_device_information(
         '<GetDeviceInformation xmlns="http://www.onvif.org/ver10/device/wsdl"/>',
         username=username,
         password=password,
+        clock_offset=clock_offset,
     )
     if root is None:
         return None
@@ -274,7 +284,9 @@ def get_device_information(
     return info if (info.manufacturer or info.model) else None
 
 
-def get_media_service(service_url: str, username: str = "", password: str = "") -> str:
+def get_media_service(
+    service_url: str, username: str = "", password: str = "", clock_offset: float = 0.0
+) -> str:
     """Media xizmatining manzili.
 
     Ko'pchilik kamerada u qurilma xizmati bilan bir xil manzilda javob
@@ -287,6 +299,7 @@ def get_media_service(service_url: str, username: str = "", password: str = "") 
         "<Category>Media</Category></GetCapabilities>",
         username=username,
         password=password,
+        clock_offset=clock_offset,
     )
     if root is not None:
         media = _find(root, "Media")
@@ -317,13 +330,16 @@ def _rehost(url: str, reference: str) -> str:
     return urlunparse((target.scheme, netloc, target.path, "", target.query, ""))
 
 
-def get_profiles(media_url: str, username: str = "", password: str = "") -> List[StreamProfile]:
+def get_profiles(
+    media_url: str, username: str = "", password: str = "", clock_offset: float = 0.0
+) -> List[StreamProfile]:
     """Kameradagi oqimlar ro'yxati: kodek, o'lcham, FPS."""
     root = _call(
         media_url,
         '<GetProfiles xmlns="http://www.onvif.org/ver10/media/wsdl"/>',
         username=username,
         password=password,
+        clock_offset=clock_offset,
     )
     if root is None:
         return []
@@ -362,7 +378,9 @@ def _float(value: str) -> float:
         return 0.0
 
 
-def get_stream_uri(media_url: str, token: str, username: str = "", password: str = "") -> str:
+def get_stream_uri(
+    media_url: str, token: str, username: str = "", password: str = "", clock_offset: float = 0.0
+) -> str:
     """Oqimning aniq RTSP manzili.  **Taxmin qilinmaydi** — so'raladi."""
     root = _call(
         media_url,
@@ -375,6 +393,7 @@ def get_stream_uri(media_url: str, token: str, username: str = "", password: str
         "</GetStreamUri>",
         username=username,
         password=password,
+        clock_offset=clock_offset,
     )
     return _text(root, "Uri") if root is not None else ""
 
@@ -469,26 +488,96 @@ def compatibility_note(profile: StreamProfile) -> Tuple[str, str]:
     return ("", "")
 
 
+#: Port berilmaganda shu tartibda sinaladi: 80 (standart), 8899 (ko'p
+#: xitoy NVRlari), 8000 (Hikvision).
+ONVIF_PORT_CANDIDATES: Tuple[int, ...] = (80, 8899, 8000)
+
+#: Soat farqi shundan oshsa — foydalanuvchiga aniq maslahat beriladi
+#: (digest autentifikatsiya ko'p qurilmada ±5 daqiqadan keyin yiqiladi).
+CLOCK_SKEW_WARN_SEC = 300
+
+
+def _port_open(host: str, port: int, timeout: float = 0.6) -> bool:
+    """Tez TCP tekshiruvi — yopiq portga 6 soniyalik SOAP yubormaslik uchun."""
+    import socket
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def get_system_date_and_time(service_url: str) -> Optional[float]:
+    """Kamera soati bilan kompyuter soati orasidagi farq (soniya).
+
+    `GetSystemDateAndTime` — ONVIF'da **parolsiz** ruxsat etilgan yagona
+    chaqiruvlardan biri (spec shuni talab qiladi): aynan autentifikatsiya
+    uchun soatni bilish kerak bo'lgani uchun.
+    """
+    root = _call(
+        service_url,
+        '<GetSystemDateAndTime xmlns="http://www.onvif.org/ver10/device/wsdl"/>',
+        timeout=4.0,
+    )
+    if root is None:
+        return None
+    utc = _find(root, "UTCDateTime")
+    if utc is None:
+        return None
+    date_node, time_node = _find(utc, "Date"), _find(utc, "Time")
+    if date_node is None or time_node is None:
+        return None
+    try:
+        device_now = datetime(
+            int(_text(date_node, "Year")),
+            int(_text(date_node, "Month")),
+            int(_text(date_node, "Day")),
+            int(_text(time_node, "Hour")),
+            int(_text(time_node, "Minute")),
+            int(_text(time_node, "Second")),
+            tzinfo=timezone.utc,
+        )
+    except (TypeError, ValueError):
+        return None
+    return (device_now - datetime.now(timezone.utc)).total_seconds()
+
+
 def describe(
     host: str,
     *,
     username: str = "",
     password: str = "",
     xaddr: str = "",
-    port: int = 80,
+    port: int = 0,
 ) -> OnvifResult:
     """Kamerani ONVIF orqali to'liq so'rab chiqadi.
 
     Bitta chaqiruvda: brend, oqimlar ro'yxati va har birining RTSP
     manzili.  Sehrgar shu natijadan foydalanadi — yo'l taxmin qilish
     endi faqat **zaxira** yo'l.
+
+    `port=0` — avtomatik: 80/8899/8000 dan ochiqlari sinaladi (ilgari
+    doim 80 ketardi va 8899 dagi NVRlar "javob bermadi" bo'lardi).
     """
+    ports = (
+        (port,)
+        if port
+        else tuple(p for p in ONVIF_PORT_CANDIDATES if _port_open(host, p))
+        or ONVIF_PORT_CANDIDATES[:1]
+    )
+
     candidates: List[str] = []
     if xaddr:
-        candidates.append(_rehost(xaddr, f"http://{host}:{port}/"))
-    candidates.extend(f"http://{host}:{port}{path}" for path in DEVICE_SERVICE_PATHS)
-    if port != 80:
-        candidates.extend(f"http://{host}{path}" for path in DEVICE_SERVICE_PATHS)
+        candidates.append(_rehost(xaddr, f"http://{host}:{ports[0]}/"))
+    for candidate_port in ports:
+        candidates.extend(f"http://{host}:{candidate_port}{path}" for path in DEVICE_SERVICE_PATHS)
+
+    # Soat farqi bir marta o'lchanadi (parolsiz chaqiruv) va barcha
+    # keyingi so'rovlarning `Created` maydoniga qo'llanadi — kamera soati
+    # adashgan bo'lsa ham autentifikatsiya ishlayveradi.
+    clock_offset = 0.0
+    measured_offset: Optional[float] = None
 
     seen: set[str] = set()
     for service_url in candidates:
@@ -496,12 +585,22 @@ def describe(
             continue
         seen.add(service_url)
 
-        info = get_device_information(service_url, username, password)
+        if measured_offset is None:
+            measured_offset = get_system_date_and_time(service_url)
+            if measured_offset is not None:
+                clock_offset = measured_offset
+                if abs(measured_offset) > CLOCK_SKEW_WARN_SEC:
+                    logger.info(
+                        "ONVIF: kamera soati %.0f soniyaga adashgan — Created moslandi",
+                        measured_offset,
+                    )
+
+        info = get_device_information(service_url, username, password, clock_offset)
         if info is None:
             continue
 
-        media_url = get_media_service(service_url, username, password)
-        profiles = get_profiles(media_url, username, password)
+        media_url = get_media_service(service_url, username, password, clock_offset)
+        profiles = get_profiles(media_url, username, password, clock_offset)
         if not profiles:
             return OnvifResult(
                 ok=False,
@@ -519,7 +618,7 @@ def describe(
                 width=profile.width,
                 height=profile.height,
                 fps=profile.fps,
-                uri=get_stream_uri(media_url, profile.token, username, password),
+                uri=get_stream_uri(media_url, profile.token, username, password, clock_offset),
             )
             for profile in profiles
         ]
@@ -531,12 +630,22 @@ def describe(
         )
         return OnvifResult(ok=True, device=info, profiles=filled)
 
+    hint = (
+        "Kamera menyusida ONVIF yoqilganini va login-parol to'g'ri "
+        "ekanini tekshiring. Ba'zi kameralarda ONVIF uchun alohida "
+        "foydalanuvchi yaratish kerak."
+    )
+    if measured_offset is not None and abs(measured_offset) > CLOCK_SKEW_WARN_SEC:
+        minutes = int(abs(measured_offset) // 60)
+        hint = (
+            f"Kamera soati kompyuternikidan ~{minutes} daqiqaga farq qiladi — "
+            "bu autentifikatsiyani buzishi mumkin. Kamera/NVR menyusida "
+            "vaqtni to'g'rilang yoki NTP yoqing. " + hint
+        )
     return OnvifResult(
         ok=False,
         error="Kamera ONVIF so'roviga javob bermadi.",
-        hint="Kamera menyusida ONVIF yoqilganini va login-parol to'g'ri "
-        "ekanini tekshiring. Ba'zi kameralarda ONVIF uchun alohida "
-        "foydalanuvchi yaratish kerak.",
+        hint=hint,
     )
 
 

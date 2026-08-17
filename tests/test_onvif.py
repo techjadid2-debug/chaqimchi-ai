@@ -83,19 +83,69 @@ def _stream_uri(token: str) -> str:
 
 
 class FakeCamera:
-    """ONVIF so'rovlariga javob beradigan soxta kamera."""
+    """ONVIF so'rovlariga javob beradigan soxta kamera.
 
-    def __init__(self, *, require_auth: bool = True) -> None:
+    `clock_skew_sec` — kamera soati kompyuternikidan shunchaga farq
+    qiladi.  `strict_clock=True` bo'lsa kamera haqiqiy qattiqqo'l
+    qurilmadek `Created` maydonini o'z soati bilan solishtiradi va
+    ±300 soniyadan katta farqda 401 qaytaradi.
+    """
+
+    def __init__(
+        self,
+        *,
+        require_auth: bool = True,
+        clock_skew_sec: float = 0.0,
+        strict_clock: bool = False,
+    ) -> None:
         self.require_auth = require_auth
+        self.clock_skew_sec = clock_skew_sec
+        self.strict_clock = strict_clock
         self.calls: List[str] = []
         self.paths: List[str] = []
+        self.urls: List[str] = []
+
+    def _device_now(self):
+        from datetime import datetime, timedelta, timezone
+
+        return datetime.now(timezone.utc) + timedelta(seconds=self.clock_skew_sec)
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = request.content.decode("utf-8", "replace")
         self.paths.append(request.url.path)
+        self.urls.append(str(request.url))
+
+        # GetSystemDateAndTime — spec bo'yicha parolsiz ruxsat etiladi.
+        if "GetSystemDateAndTime" in body:
+            self.calls.append("GetSystemDateAndTime")
+            now = self._device_now()
+            return httpx.Response(
+                200,
+                text=(
+                    f'<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>'
+                    f"<GetSystemDateAndTimeResponse><SystemDateAndTime><UTCDateTime>"
+                    f"<Time><Hour>{now.hour}</Hour><Minute>{now.minute}</Minute>"
+                    f"<Second>{now.second}</Second></Time>"
+                    f"<Date><Year>{now.year}</Year><Month>{now.month}</Month>"
+                    f"<Day>{now.day}</Day></Date>"
+                    f"</UTCDateTime></SystemDateAndTime>"
+                    f"</GetSystemDateAndTimeResponse></s:Body></s:Envelope>"
+                ),
+            )
 
         if self.require_auth and "UsernameToken" not in body:
             return httpx.Response(401)
+
+        if self.strict_clock and "UsernameToken" in body:
+            from datetime import datetime, timezone
+
+            match = re.search(r"<Created[^>]*>([^<]+)</Created>", body)
+            if match:
+                created = datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(
+                    tzinfo=timezone.utc
+                )
+                if abs((created - self._device_now()).total_seconds()) > 300:
+                    return httpx.Response(401)
 
         for name in ("GetDeviceInformation", "GetCapabilities", "GetProfiles", "GetStreamUri"):
             if name in body:
@@ -114,9 +164,7 @@ class FakeCamera:
         return httpx.Response(400)
 
 
-@pytest.fixture
-def camera(monkeypatch: pytest.MonkeyPatch) -> FakeCamera:
-    fake = FakeCamera()
+def _wire(monkeypatch: pytest.MonkeyPatch, fake: FakeCamera, *, open_ports=(80,)) -> FakeCamera:
     transport = httpx.MockTransport(fake.handler)
     original = httpx.Client
 
@@ -125,7 +173,16 @@ def camera(monkeypatch: pytest.MonkeyPatch) -> FakeCamera:
         return original(*args, **kwargs)
 
     monkeypatch.setattr(onvif_client.httpx, "Client", _client)
+    # Haqiqiy TCP tekshiruvi testda tarmoqqa chiqmasin (va sekinlashtirmasin).
+    monkeypatch.setattr(
+        onvif_client, "_port_open", lambda _host, port, timeout=0.6: port in open_ports
+    )
     return fake
+
+
+@pytest.fixture
+def camera(monkeypatch: pytest.MonkeyPatch) -> FakeCamera:
+    return _wire(monkeypatch, FakeCamera())
 
 
 # ── Asosiy oqim: kamera manzilni o'zi beradi ─────────────────────────────
@@ -195,8 +252,8 @@ def test_password_is_never_sent_in_the_clear(camera: FakeCamera) -> None:
     sent: List[str] = []
     original = onvif_client._envelope
 
-    def _spy(body: str, username: str, password: str) -> str:
-        envelope = original(body, username, password)
+    def _spy(body: str, username: str, password: str, clock_offset: float = 0.0) -> str:
+        envelope = original(body, username, password, clock_offset)
         sent.append(envelope)
         return envelope
 
@@ -390,3 +447,67 @@ def test_all_interfaces_are_considered() -> None:
     addresses = discovery.local_ipv4_addresses()
     assert all(not a.startswith("127.") for a in addresses)
     assert all(not a.startswith("169.254.") for a in addresses)
+
+
+# ── Multi-port va soat farqi (0.6.6) ─────────────────────────────────────
+
+
+def test_describe_finds_the_service_on_a_nonstandard_port(monkeypatch) -> None:
+    """8899-portdagi NVR: ilgari so'rov doim 80 ga ketib "javob bermadi" edi."""
+    fake = _wire(monkeypatch, FakeCamera(), open_ports=(8899,))
+
+    result = onvif_client.describe("192.168.1.64", username="admin", password="parol")
+
+    assert result.ok
+    assert any(":8899/" in url for url in fake.urls), "so'rov ochiq portga borsin"
+
+
+def test_created_follows_the_camera_clock(monkeypatch) -> None:
+    """Kamera soati 10 daqiqa adashgan — autentifikatsiya baribir ishlaydi.
+
+    Qattiqqo'l kamera `Created` ni o'z soati bilan solishtiradi; farq
+    oldindan o'lchanib moslanmasa 401 qaytaradi.
+    """
+    fake = _wire(monkeypatch, FakeCamera(clock_skew_sec=600, strict_clock=True), open_ports=(80,))
+
+    result = onvif_client.describe("192.168.1.64", username="admin", password="parol")
+
+    assert "GetSystemDateAndTime" in fake.calls, "soat avval so'ralsin"
+    assert result.ok, "Created kamera soatiga moslangani uchun kirish o'tishi kerak"
+
+
+def test_clock_skew_is_mentioned_when_nothing_works(monkeypatch) -> None:
+    """Hech narsa ishlamasa ham mijozga eng ehtimoliy sabab aytilsin."""
+
+    class DeafCamera(FakeCamera):
+        def handler(self, request: httpx.Request) -> httpx.Response:
+            body = request.content.decode("utf-8", "replace")
+            if "GetSystemDateAndTime" in body:
+                return super().handler(request)
+            return httpx.Response(401)
+
+    _wire(monkeypatch, DeafCamera(clock_skew_sec=900), open_ports=(80,))
+
+    result = onvif_client.describe("192.168.1.64", username="admin", password="parol")
+
+    assert not result.ok
+    assert "soati" in result.hint, "soat farqi maslahat sifatida chiqsin"
+
+
+def test_describe_result_is_cached_briefly(monkeypatch) -> None:
+    """NVR skanerida har xato uchun DESCRIBE ikki marta ketmasin."""
+    camera_probe._DESCRIBE_CACHE.clear()
+    calls = {"n": 0}
+
+    def failing_connection(*_args, **_kwargs):
+        calls["n"] += 1
+        raise OSError("ulanmadi")
+
+    monkeypatch.setattr(camera_probe.socket, "create_connection", failing_connection)
+
+    url = "rtsp://10.0.0.9:554/test"
+    assert camera_probe.rtsp_describe(url)[0] == 0
+    assert camera_probe.rtsp_describe(url)[0] == 0
+
+    assert calls["n"] == 1, "ikkinchi chaqiruv keshdan qaytsin"
+    camera_probe._DESCRIBE_CACHE.clear()

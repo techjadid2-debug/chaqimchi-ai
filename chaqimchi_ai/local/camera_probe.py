@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import socket
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse, urlunparse
@@ -92,7 +93,10 @@ def build_rtsp(
     if username:
         auth = f"{quote(username, safe='')}:{quote(password, safe='')}@"
     paths = {
-        "hikvision": f"/Streaming/channels/{channel}02",
+        # Katta "Channels" — Hikvision hujjatlaridagi rasmiy ko'rinish;
+        # KNOWN_PATHS bilan bir xil bo'lishi shart (ilgari kichik harf
+        # bilan farq qilardi va ayrim qattiqqo'l proshivkalar 404 berardi).
+        "hikvision": f"/Streaming/Channels/{channel}02",
         "dahua": f"/cam/realmonitor?channel={channel}&subtype=1",
         "uniview": f"/unicast/c{channel}/s1/live",
     }
@@ -100,6 +104,18 @@ def build_rtsp(
     if path is None:
         raise ValueError(f"Noma'lum brend: {brand}")
     return f"rtsp://{auth}{clean_host}:{int(port)}{path}"
+
+
+#: `rtsp_describe` natijasining qisqa keshi: {url: (code, raw, monotonic)}.
+_DESCRIBE_CACHE: Dict[str, Tuple[int, str, float]] = {}
+DESCRIBE_CACHE_TTL_SEC = 10.0
+
+
+def _remember(url: str, code: int, raw: str) -> Tuple[int, str]:
+    if len(_DESCRIBE_CACHE) > 256:
+        _DESCRIBE_CACHE.clear()
+    _DESCRIBE_CACHE[url] = (code, raw, time.monotonic())
+    return code, raw
 
 
 def rtsp_describe(url: str, *, timeout_sec: float = 5.0) -> Tuple[int, str]:
@@ -119,6 +135,13 @@ def rtsp_describe(url: str, *, timeout_sec: float = 5.0) -> Tuple[int, str]:
     Digest autentifikatsiya qo'lda bajariladi: kutubxona qo'shishdan
     ko'ra yigirma qator kod arzonroq va bog'liqlik keltirmaydi.
     """
+    # Qisqa kesh: bitta URL uchun DESCRIBE natijasi 10 soniya yashaydi.
+    # NVR kanal skanerida har muvaffaqiyatsiz nomzod uchun `_classify`
+    # xuddi shu so'rovni qaytarardi — har xato ikki barobar qimmat edi.
+    cached = _DESCRIBE_CACHE.get(url)
+    if cached is not None and time.monotonic() - cached[2] < DESCRIBE_CACHE_TTL_SEC:
+        return cached[0], cached[1]
+
     parts = urlparse(url)
     host, port = parts.hostname, parts.port or 554
     if not host:
@@ -141,19 +164,19 @@ def rtsp_describe(url: str, *, timeout_sec: float = 5.0) -> Tuple[int, str]:
             first = sock.recv(4096).decode("utf-8", "replace")
 
             if " 401 " not in first.split("\r\n")[0]:
-                return _status_code(first), first
+                return _remember(url, _status_code(first), first)
 
             # 401 keldi — endi Digest bilan qayta so'raymiz.
             challenge = _digest_challenge(first)
             if challenge is None or not user:
-                return 401, first
+                return _remember(url, 401, first)
             header = _digest_header(user, password, target, challenge)
             sock.sendall(_request(header, seq=2).encode("ascii", "ignore"))
             second = sock.recv(4096).decode("utf-8", "replace")
-            return _status_code(second), second
+            return _remember(url, _status_code(second), second)
     except (OSError, socket.timeout) as exc:
         logger.info("RTSP DESCRIBE ulanmadi (%s): %s", redact(url), exc)
-        return 0, str(exc)
+        return _remember(url, 0, str(exc))
 
 
 def _status_code(response: str) -> int:
@@ -389,26 +412,25 @@ def _try_onvif(
     from chaqimchi_ai.local import onvif_client
 
     clean_host = re.sub(r"^rtsps?://", "", host.strip(), flags=re.I).split("/")[0].split(":")[0]
-    for onvif_port in (80, 8899, 8000):
-        answer = onvif_client.describe(
-            clean_host, username=username, password=password, port=onvif_port
-        )
-        if not answer.ok:
-            continue
-        best = onvif_client.pick_best_profile(answer.profiles)
-        if best is None or not best.uri:
-            continue
-        url = onvif_client.with_credentials(best.uri, username, password, host=clean_host)
-        result = grab_frame(url, timeout_sec=timeout_sec)
-        if result.ok:
-            brand = onvif_client.normalise_brand(answer.device.brand) or "ONVIF"
-            logger.info("ONVIF orqali topildi: %s (%s)", brand, best.encoding)
-            return f"{brand} (ONVIF)", url, result
-        # Manzil ONVIF'dan keldi-yu kadr kelmadi — deyarli har doim
-        # sabab kodek.  Umumiy "topilmadi" o'rniga aniq sababni beramiz.
-        warning, advice = onvif_client.compatibility_note(best)
-        if warning:
-            return None, None, ProbeResult(ok=False, error=warning, hint=advice)
+    # port=0 — describe o'zi 80/8899/8000 dan ochig'ini topadi (yopiq
+    # portlarga 6 soniyalik SOAP yuborilmaydi).
+    answer = onvif_client.describe(clean_host, username=username, password=password, port=0)
+    if not answer.ok:
+        return None, None, ProbeResult(ok=False, error="", hint="")
+    best = onvif_client.pick_best_profile(answer.profiles)
+    if best is None or not best.uri:
+        return None, None, ProbeResult(ok=False, error="", hint="")
+    url = onvif_client.with_credentials(best.uri, username, password, host=clean_host)
+    result = grab_frame(url, timeout_sec=timeout_sec)
+    if result.ok:
+        brand = onvif_client.normalise_brand(answer.device.brand) or "ONVIF"
+        logger.info("ONVIF orqali topildi: %s (%s)", brand, best.encoding)
+        return f"{brand} (ONVIF)", url, result
+    # Manzil ONVIF'dan keldi-yu kadr kelmadi — deyarli har doim sabab
+    # kodek.  Umumiy "topilmadi" o'rniga aniq sababni beramiz.
+    warning, advice = onvif_client.compatibility_note(best)
+    if warning:
+        return None, None, ProbeResult(ok=False, error=warning, hint=advice)
     return None, None, ProbeResult(ok=False, error="", hint="")
 
 

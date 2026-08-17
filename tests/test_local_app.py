@@ -94,8 +94,8 @@ def test_rtsp_template_escapes_special_characters(client: TestClient) -> None:
         },
     )
     url = response.json()["rtsp_url"]
-    assert url == "rtsp://admin:a%40b%2Fc@192.168.1.64:554/Streaming/channels/202"
-    assert response.json()["safe_url"] == "rtsp://…@192.168.1.64:554/Streaming/channels/202"
+    assert url == "rtsp://admin:a%40b%2Fc@192.168.1.64:554/Streaming/Channels/202"
+    assert response.json()["safe_url"] == "rtsp://…@192.168.1.64:554/Streaming/Channels/202"
 
 
 def test_camera_limit_matches_the_accepted_profile(client: TestClient) -> None:
@@ -588,3 +588,107 @@ def test_feature_status_turns_green_after_configuration(client: TestClient) -> N
     assert features["queue"]["active"] is True
     assert features["after_hours"]["active"] is True
     assert features["restricted"]["active"] is False, "taqiqlangan zona hali yo'q"
+
+
+# ── NVR kanal skaneri: fon-ish + progress (0.6.6) ────────────────────────
+
+
+def test_channel_scan_runs_in_the_background_with_progress(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Skaner endi sinxron emas: start → status polling.
+
+    Ilgari yomon holatda so'rov o'nlab daqiqa osilib turardi va mijoz
+    hech narsa ko'rmasdi.
+    """
+    import time as time_module
+
+    from chaqimchi_ai.local import app as app_module
+
+    channels = [
+        {
+            "channel": 1,
+            "rtsp_url": "rtsp://admin:p@10.0.0.5:554/Streaming/Channels/102",
+            "safe_url": "rtsp://…@10.0.0.5:554/Streaming/Channels/102",
+            "width": 640,
+            "height": 360,
+        }
+    ]
+    monkeypatch.setattr(app_module, "_scan_via_onvif", lambda body, deadline: channels)
+    monkeypatch.setattr(
+        app_module,
+        "_scan_via_templates",
+        lambda body, deadline: (_ for _ in ()).throw(
+            AssertionError("ONVIF topdi — zaxira kerak emas")
+        ),
+    )
+
+    start = client.post(
+        "/api/setup/scan-channels",
+        json={"host": "10.0.0.5", "username": "admin", "password": "p"},
+    )
+    assert start.status_code == 200
+    assert start.json()["started"] is True
+
+    for _ in range(50):
+        status = client.get("/api/setup/scan-channels/status").json()
+        if not status["running"]:
+            break
+        time_module.sleep(0.1)
+    assert status["running"] is False
+    assert status["found"] == 1
+    assert status["channels"][0]["channel"] == 1
+
+
+def test_channel_scan_falls_back_to_templates_without_credentials(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parolsiz ONVIF ishlamaydi — to'g'ri zaxira yo'lga o'tsin."""
+    import time as time_module
+
+    from chaqimchi_ai.local import app as app_module
+
+    calls = {"onvif": 0}
+
+    def fake_onvif(body, deadline):
+        calls["onvif"] += 1
+        return []
+
+    monkeypatch.setattr(app_module, "_scan_via_onvif", fake_onvif)
+    monkeypatch.setattr(app_module, "_scan_via_templates", lambda body, deadline: [])
+
+    client.post("/api/setup/scan-channels", json={"host": "10.0.0.5"})
+    for _ in range(50):
+        status = client.get("/api/setup/scan-channels/status").json()
+        if not status["running"]:
+            break
+        time_module.sleep(0.1)
+
+    assert calls["onvif"] == 0, "parol yo'q — ONVIF sinalmasin"
+    assert "tekshiring" in status["hint"]
+
+
+def test_scan_response_carries_onvif_details(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Topilgan ONVIF port/xaddr UI'ga yetsin — so'rov doim 80 ga ketmasin."""
+    from chaqimchi_ai import discovery
+
+    async def fake_discover(timeout_sec=3.0):
+        return [
+            {
+                "ip": "192.168.1.60",
+                "vendor_hint": "NVR",
+                "has_onvif": True,
+                "onvif_port": 8899,
+                "xaddrs": "http://192.168.1.60:8899/onvif/device_service",
+                "suggested_urls": [],
+            }
+        ]
+
+    monkeypatch.setattr(discovery, "discover_cameras_all", fake_discover)
+
+    data = client.post("/api/setup/scan").json()
+
+    assert data["devices"][0]["onvif_port"] == 8899
+    assert "8899" in data["devices"][0]["xaddrs"]

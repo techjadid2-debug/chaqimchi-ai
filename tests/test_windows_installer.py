@@ -160,7 +160,11 @@ def test_camera_discovery_rule_is_narrow() -> None:
     if "netsh advfirewall firewall add rule" not in source:
         pytest.skip("fayrvol qoidasi qo'shilmagan")
 
-    assert "localport=3702" in source
+    # localport ATAYLAB yo'q: WS-Discovery javobi dastur so'rov yuborgan
+    # tasodifiy (ephemeral) portga keladi — 3702 ga qotirilgan qoida
+    # haqiqiy javobni o'tkazmasdi va tugma baribir bo'sh qaytarardi.
+    # Torlik endi remoteip + profile + program uchligidan keladi.
+    assert "localport=" not in source, "javob porti oldindan noma'lum — portga qotirilmasin"
     assert "remoteip=localsubnet" in source, "ruxsat lokal tarmoq bilan cheklansin"
     assert "profile=private,domain" in source, "ommaviy Wi-Fi'da yoqilmasin"
     assert "python.exe" in source, "ruxsat faqat dasturning o'ziga berilsin"

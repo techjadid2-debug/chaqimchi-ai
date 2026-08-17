@@ -199,10 +199,15 @@ Section "Kameralarni avtomatik topish (tarmoq ruxsati)" SecFirewall
   ;
   ; Ruxsat faqat **lokal tarmoq** bilan cheklangan: internetdan hech
   ; kim bu portga ulana olmaydi.
+  ;
+  ; MUHIM: localport ko'rsatilmaydi — dastur so'rovni tasodifiy
+  ; (ephemeral) portdan yuboradi va kameraning javobi ham o'sha portga
+  ; keladi.  Ilgari qoida localport=3702 bilan edi, ya'ni haqiqiy javob
+  ; portiga umuman mos kelmasdi va tugma baribir bo'sh ro'yxat qaytarardi.
   DetailPrint "Kamera qidiruvi uchun tarmoq ruxsati..."
   nsExec::ExecToLog 'netsh advfirewall firewall add rule \
     name="Chaqimchi AI — kamera qidiruvi" dir=in action=allow \
-    protocol=UDP localport=3702 profile=private,domain \
+    protocol=UDP profile=private,domain \
     remoteip=localsubnet program="$INSTDIR\python\python.exe"'
   Pop $0
   ${If} $0 != 0

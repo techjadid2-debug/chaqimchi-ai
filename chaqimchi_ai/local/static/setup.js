@@ -120,6 +120,11 @@
     }
   })();
 
+  // Qidiruv topgan qurilmalarning ONVIF ma'lumotlari (IP bo'yicha).
+  // "ONVIF orqali so'rash" aynan topilgan portga boradi — ilgari bu
+  // ma'lumot yo'qolib, so'rov doim 80-portga ketardi.
+  const scanInfo = {};
+
   $("onvifBtn").addEventListener("click", async () => {
     const button = $("onvifBtn");
     const host = $("host").value.trim();
@@ -130,12 +135,15 @@
     button.disabled = true;
     note("onvifResult", "warn", "Kameradan so‘ralmoqda…", " Bu 5–15 soniya oladi.");
     try {
+      const known = scanInfo[host] || {};
       const data = await api("/api/setup/onvif", {
         method: "POST",
         body: JSON.stringify({
           host,
           username: $("username").value.trim(),
           password: $("password").value,
+          port: known.onvif_port || 0,
+          xaddr: (known.xaddrs || "").split(" ")[0] || "",
         }),
       });
       if (!data.ok) {
@@ -219,6 +227,14 @@
           )
           .join("") +
         "</div>";
+      // ONVIF port/xaddr ma'lumotini eslab qolamiz — "ONVIF orqali
+      // so'rash" tugmasi aynan shu portga boradi.
+      data.devices.forEach((device) => {
+        scanInfo[device.ip] = {
+          onvif_port: device.onvif_port || 0,
+          xaddrs: device.xaddrs || "",
+        };
+      });
       $("scanResult")
         .querySelectorAll("button[data-ip]")
         .forEach((item) =>
@@ -349,9 +365,12 @@
       return note("channelResult", "warn", "Bu tugma NVR uchun.", " Brendni yuqorida tanlang.");
     }
     button.disabled = true;
-    note("channelResult", "warn", "Kanallar tekshirilmoqda…", " Har biri uchun 15 soniyagacha.");
+    note("channelResult", "warn", "Kanallar tekshirilmoqda…", " Bu 1–2 daqiqa olishi mumkin.");
     try {
-      const data = await api("/api/setup/scan-channels", {
+      // Skaner fonda ishlaydi — start + progress so'rovi.  Ilgari bitta
+      // sinxron so'rov edi va yomon holatda brauzer daqiqalab osilib
+      // turardi, mijoz esa hech narsa ko'rmasdi.
+      await api("/api/setup/scan-channels", {
         method: "POST",
         body: JSON.stringify({
           brand: $("brand").value,
@@ -360,8 +379,25 @@
           password: $("password").value,
         }),
       });
-      if (!data.found) {
-        return note("channelResult", "err", "Kamera topilmadi.", " " + data.hint);
+      let data = null;
+      for (let attempt = 0; attempt < 150; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        data = await api("/api/setup/scan-channels/status");
+        if (!data.running) break;
+        note(
+          "channelResult",
+          "warn",
+          `Kanallar tekshirilmoqda… ${data.current_channel}/${data.total}`,
+          ` Hozircha topildi: ${data.found} ta.`,
+        );
+      }
+      if (!data || !data.found) {
+        return note(
+          "channelResult",
+          "err",
+          "Kamera topilmadi.",
+          " " + ((data && data.hint) || ""),
+        );
       }
       $("channelResult").innerHTML =
         `<div class="note ok"><b>${data.found} ta kamera topildi</b>Nomini yozing va saqlang.</div>` +

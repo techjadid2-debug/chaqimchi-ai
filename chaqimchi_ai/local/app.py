@@ -147,6 +147,10 @@ async def scan_network() -> Dict[str, Any]:
                 "has_onvif": bool(device.get("has_onvif")),
                 "has_rtsp": bool(device.get("has_rtsp")),
                 "rtsp_port": device.get("rtsp_port", 554),
+                # ONVIF so'rovi aynan topilgan portga borsin: ilgari bu
+                # ma'lumot yo'qolib, so'rov doim 80-portga ketardi.
+                "onvif_port": device.get("onvif_port", 0),
+                "xaddrs": device.get("xaddrs", ""),
                 "suggested_urls": device.get("suggested_urls", []),
             }
             for device in devices
@@ -335,43 +339,112 @@ async def auto_find(body: AutoFindBody) -> Dict[str, Any]:
     }
 
 
-@app.post("/api/setup/scan-channels")
-async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
-    """Bitta NVR login/paroli bilan barcha kanallarni sinab ko'radi.
+#: NVR kanal skaneri holati.  Lokal sehrgarda bitta foydalanuvchi bo'ladi —
+#: bitta job yetarli.  Ilgari skaner sinxron edi: yomon holatda o'nlab
+#: daqiqa "osilib" turardi va mijoz nima bo'layotganini ko'rmasdi.
+_SCAN_JOB: Dict[str, Any] = {"running": False, "channels": [], "hint": "", "current": 0}
+_SCAN_JOB_TASK: Optional[Any] = None
 
-    Nega kerak: do'konda odatda bitta NVR va unda 4 kamera bo'ladi.
-    Ilgari mijoz har kamera uchun IP, login va parolni **qaytadan**
-    kiritardi — bir xil ma'lumotni to'rt marta.  Endi bir marta kiritadi
-    va ishlaydigan kanallar ro'yxatini oladi.
+#: Butun skanerga umumiy chegara — undan keyin topilganlari bilan to'xtaydi.
+SCAN_CHANNELS_DEADLINE_SEC = 90.0
 
-    Har kanal ketma-ket sinaladi: NVR bir vaqtda ko'p ulanishni ko'tara
-    olmaydi va parallel so'rovlar ishlaydigan kamerani ham "javob
-    bermadi" qilib ko'rsatardi.
+
+def _channel_from_uri(uri: str) -> int:
+    """RTSP manzilidan kanal raqamini taxmin qiladi (topilmasa 0).
+
+    Hikvision: /Channels/302 → 3-kanal; Dahua: channel=3; boshqalar:
+    yo'ldagi birinchi kichik son.
     """
-    import anyio
+    match = re.search(r"[Cc]hannels?[/=](\d+)", uri)
+    if match:
+        value = int(match.group(1))
+        return value // 100 if value >= 100 else value
+    match = re.search(r"/c(\d+)/", uri)
+    if match:
+        return int(match.group(1))
+    return 0
 
-    found = []
-    #: Birinchi kanalda topilgan format qolganlariga ham to'g'ri keladi —
-    #: bitta NVR bitta formatdan foydalanadi.  Shuni eslab qolamiz, aks
-    #: holda har kanal uchun 11 ta variantni qayta sinardik.
+
+def _scan_via_onvif(body: ScanChannelsBody, deadline: float) -> List[Dict[str, Any]]:
+    """NVR kanallarini ONVIF profillaridan oladi (taxminsiz yo'l).
+
+    NVR har kanalni alohida profil qilib e'lon qiladi — bitta `describe`
+    barcha kanallarning aniq RTSP manzilini beradi.  Yo'l-taxminlash
+    endi faqat ONVIF ishlamagan holat uchun zaxira.
+    """
+    clean_host = body.host.strip().split("/")[0].split(":")[0]
+    answer = onvif_client.describe(
+        clean_host, username=body.username, password=body.password, port=0
+    )
+    if not answer.ok or not answer.profiles:
+        return []
+
+    # Kanal bo'yicha guruhlab, har kanaldan eng yengil (substream) oqim.
+    by_channel: Dict[int, List[Any]] = {}
+    unknown = 0
+    for profile in answer.profiles:
+        if not profile.uri:
+            continue
+        channel = _channel_from_uri(profile.uri)
+        if channel == 0:
+            unknown += 1
+            channel = -unknown  # vaqtinchalik nomer; keyin tartib beriladi
+        by_channel.setdefault(channel, []).append(profile)
+
+    found: List[Dict[str, Any]] = []
+    ordered = sorted(by_channel.items(), key=lambda item: (item[0] < 0, abs(item[0])))
+    for index, (channel, profiles) in enumerate(ordered[:NVR_SCAN_CHANNELS], start=1):
+        if time.monotonic() > deadline:
+            break
+        number = channel if channel > 0 else index
+        _SCAN_JOB["current"] = number
+        best = onvif_client.pick_best_profile(profiles)
+        if best is None or not best.uri:
+            continue
+        url = onvif_client.with_credentials(best.uri, body.username, body.password, host=clean_host)
+        result = camera_probe.grab_frame(url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC)
+        if result.ok:
+            _PREVIEW_CACHE.put(url, result.jpeg or b"")
+            found.append(
+                {
+                    "channel": number,
+                    "rtsp_url": url,
+                    "safe_url": camera_probe.redact(url),
+                    "width": result.width,
+                    "height": result.height,
+                }
+            )
+    return found
+
+
+def _scan_via_templates(body: ScanChannelsBody, deadline: float) -> List[Dict[str, Any]]:
+    """Zaxira yo'l: ma'lum RTSP yo'llarini kanalma-kanal sinash.
+
+    Muhim chegara: shablon **ko'pi bilan 2 kanalda** qidiriladi.  Ilgari
+    birinchi kanal bo'sh bo'lsa har kanal uchun to'liq qidiruv qaytadan
+    yurar va skaner o'nlab daqiqa cho'zilardi.
+    """
+    found: List[Dict[str, Any]] = []
     working_path: Optional[str] = None
+    template_attempts = 0
 
-    # Skaner limitdan ko'proq kanalni ko'radi (masalan kamera 5-kanalda
-    # turgan bo'lishi mumkin); tanlash baribir MAX_CAMERAS bilan cheklanadi.
     for channel in range(1, NVR_SCAN_CHANNELS + 1):
+        if time.monotonic() > deadline:
+            break
+        _SCAN_JOB["current"] = channel
         url: Optional[str] = None
         result = None
 
         if body.brand == "auto" and working_path is None:
-            _name, url, result = await anyio.to_thread.run_sync(
-                functools.partial(
-                    camera_probe.find_working_url,
-                    body.host,
-                    port=body.port,
-                    username=body.username,
-                    password=body.password,
-                    channel=channel,
-                )
+            if template_attempts >= 2:
+                break  # ikki kanalda ham format topilmadi — NVR javob bermayapti
+            template_attempts += 1
+            _name, url, result = camera_probe.find_working_url(
+                body.host,
+                port=body.port,
+                username=body.username,
+                password=body.password,
+                channel=channel,
             )
             if url:
                 working_path = camera_probe.path_template(url, channel)
@@ -391,13 +464,9 @@ async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
                         channel=channel,
                     )
                 )
-            except ValueError as exc:
-                raise HTTPException(422, str(exc)) from exc
-            result = await anyio.to_thread.run_sync(
-                functools.partial(
-                    camera_probe.grab_frame, url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC
-                )
-            )
+            except ValueError:
+                break
+            result = camera_probe.grab_frame(url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC)
 
         if url and result is not None and result.ok:
             _PREVIEW_CACHE.put(url, result.jpeg or b"")
@@ -410,17 +479,74 @@ async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
                     "height": result.height,
                 }
             )
+    return found
 
-    return {
-        "ok": True,
-        "found": len(found),
-        "channels": found,
-        "hint": (
+
+def _run_channel_scan(body: ScanChannelsBody) -> None:
+    """Skaner ishchisi (alohida thread'da) — natijani _SCAN_JOB ga yozadi."""
+    deadline = time.monotonic() + SCAN_CHANNELS_DEADLINE_SEC
+    try:
+        found = []
+        if body.username:
+            # ONVIF parol talab qiladi — parolsiz to'g'ri zaxira yo'lga.
+            found = _scan_via_onvif(body, deadline)
+        if not found:
+            found = _scan_via_templates(body, deadline)
+        _SCAN_JOB["channels"] = found
+        _SCAN_JOB["hint"] = (
             ""
             if found
             else "Birorta kanaldan tasvir kelmadi. IP, login va parolni tekshiring "
             "yoki NVR'da RTSP yoqilganiga ishonch hosil qiling."
-        ),
+        )
+    except Exception:
+        logger.exception("NVR kanal skaneri xato bilan tugadi")
+        _SCAN_JOB["hint"] = "Skanerda kutilmagan xato — qaytadan urinib ko'ring."
+    finally:
+        _SCAN_JOB["running"] = False
+        _SCAN_JOB["current"] = 0
+
+
+@app.post("/api/setup/scan-channels")
+async def scan_channels(body: ScanChannelsBody) -> Dict[str, Any]:
+    """NVR kanallarini skanerlashni **boshlaydi** (natija status orqali).
+
+    Nega kerak: do'konda odatda bitta NVR va unda 4 kamera bo'ladi —
+    mijoz login-parolni bir marta kiritadi.  Skaner fonda ishlaydi:
+    ilgari so'rov sinxron edi va yomon holatda brauzer daqiqalab osilib
+    turardi.
+
+    Kanallar ketma-ket sinaladi: NVR bir vaqtda ko'p ulanishni ko'tara
+    olmaydi va parallel so'rovlar ishlaydigan kamerani ham "javob
+    bermadi" qilib ko'rsatardi.
+    """
+    import anyio
+
+    global _SCAN_JOB_TASK
+    if _SCAN_JOB["running"]:
+        return {"ok": True, "started": False, "running": True}
+    _SCAN_JOB.update({"running": True, "channels": [], "hint": "", "current": 0})
+
+    async def _worker() -> None:
+        await anyio.to_thread.run_sync(functools.partial(_run_channel_scan, body))
+
+    import asyncio
+
+    _SCAN_JOB_TASK = asyncio.create_task(_worker())
+    return {"ok": True, "started": True, "running": True}
+
+
+@app.get("/api/setup/scan-channels/status")
+async def scan_channels_status() -> Dict[str, Any]:
+    """Skaner jarayoni: sehrgar har soniyada so'rab progress ko'rsatadi."""
+    return {
+        "ok": True,
+        "running": bool(_SCAN_JOB["running"]),
+        "current_channel": int(_SCAN_JOB["current"]),
+        "total": NVR_SCAN_CHANNELS,
+        "found": len(_SCAN_JOB["channels"]),
+        "channels": list(_SCAN_JOB["channels"]),
+        "hint": str(_SCAN_JOB["hint"]),
     }
 
 
@@ -428,9 +554,10 @@ class OnvifBody(BaseModel):
     host: str = Field(min_length=3, max_length=120)
     username: str = Field(default="", max_length=64)
     password: str = Field(default="", max_length=128)
-    #: ONVIF veb-xizmati porti (RTSP porti emas).  Ko'pchilikda 80,
-    #: arzon modellarda 8899 uchraydi.
-    port: int = Field(default=80, ge=1, le=65535)
+    #: ONVIF veb-xizmati porti (RTSP porti emas).  0 — avtomatik:
+    #: 80/8899/8000 dan ochig'i sinaladi (ilgari doim 80 ketardi va
+    #: 8899-portdagi NVRlar "javob bermadi" bo'lib ko'rinardi).
+    port: int = Field(default=0, ge=0, le=65535)
     #: WS-Discovery bergan aniq manzil — bo'lsa u birinchi sinaladi.
     xaddr: str = Field(default="", max_length=300)
 

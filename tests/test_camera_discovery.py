@@ -215,3 +215,79 @@ def test_main_stream_is_suggested_for_known_brands() -> None:
     # Notanish yo'l uchun taxmin qilinmaydi — noto'g'ri taxmin ffmpeg'ni
     # abadiy xatoga aylantirardi.
     assert suggest_record_url("rtsp://u:p@h:554/qandaydir/yol") is None
+
+
+# ── Port ma'lumotining to'g'riligi (0.6.6 tuzatishlari) ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_probe_reports_the_actual_open_rtsp_port():
+    """8554-portdagi kamera: ilgari 554 deb taxmin qilinardi va
+    suggested_urls ishlamaydigan portga qurilardi."""
+    with patch("chaqimchi_ai.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
+        mock_probe.side_effect = lambda ip, port, timeout=0.5: port in (8554, 8899)
+        res = await probe_ip_camera_services("192.168.1.120")
+
+    assert res is not None
+    assert res["rtsp_port"] == 8554
+    assert res["onvif_port"] == 8899, "ochiq ONVIF porti ham eslab qolinsin"
+
+
+@pytest.mark.asyncio
+async def test_probe_omits_rtsp_port_when_rtsp_is_closed():
+    with patch("chaqimchi_ai.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
+        mock_probe.side_effect = lambda ip, port, timeout=0.5: port == 80
+        res = await probe_ip_camera_services("192.168.1.120")
+
+    assert res is not None
+    assert res["has_rtsp"] is False
+    assert "rtsp_port" not in res, "yopiq port haqida taxmin yozilmasin"
+
+
+@pytest.mark.asyncio
+async def test_merge_keeps_the_scanned_rtsp_port():
+    """WS-Discovery skaner topgan 8554 ni 554 bilan bosib ketmasin."""
+    with patch(
+        "chaqimchi_ai.discovery.onvif_ws_discovery",
+        return_value=[
+            {
+                "ip": "192.168.1.55",
+                "has_onvif": True,
+                "xaddrs": "http://192.168.1.55:8899/onvif/device_service",
+                "onvif_port": 8899,
+            }
+        ],
+    ):
+        with patch(
+            "chaqimchi_ai.discovery.scan_local_network_for_cameras", new_callable=AsyncMock
+        ) as mock_scan:
+            mock_scan.return_value = [{"ip": "192.168.1.55", "has_rtsp": True, "rtsp_port": 8554}]
+            devices = await discover_cameras_all(timeout_sec=0.1)
+
+    assert len(devices) == 1
+    assert devices[0]["rtsp_port"] == 8554
+    assert devices[0]["onvif_port"] == 8899
+    assert all(":8554/" in item["url"] for item in devices[0]["suggested_urls"])
+
+
+def test_ws_discovery_does_not_claim_rtsp():
+    """WS-Discovery RTSP haqida hech narsa bilmaydi — da'vo ham qilmasin."""
+    with patch("socket.socket") as mock_sock_cls:
+        mock_sock = MagicMock()
+        mock_sock_cls.return_value = mock_sock
+        mock_sock.recvfrom.side_effect = [
+            (
+                b"""<Envelope><Body><ProbeMatches><ProbeMatch>
+                <XAddrs>http://192.168.1.60:8899/onvif/device_service</XAddrs>
+                <Scopes>onvif://www.onvif.org/name/NVR</Scopes>
+                </ProbeMatch></ProbeMatches></Body></Envelope>""",
+                ("192.168.1.60", 3702),
+            ),
+            socket.timeout("timed out"),
+        ]
+        found = onvif_ws_discovery(timeout_sec=0.1)
+
+    assert len(found) == 1
+    assert "has_rtsp" not in found[0]
+    assert "rtsp_port" not in found[0]
+    assert found[0]["onvif_port"] == 8899, "xaddr'dagi port ajratib olinsin"

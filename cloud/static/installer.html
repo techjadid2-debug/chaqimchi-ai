@@ -65,7 +65,7 @@
       const user=$('cameraUser').value,pass=$('cameraPass').value;
       if(!host||!user||!pass||!Number.isInteger(port)||port<1||port>65535||!Number.isInteger(channel)||channel<1){if(!silent)alert('NVR IP, port, kanal, foydalanuvchi va parolni to‘liq kiriting');return ''}
       const auth=`${encodeURIComponent(user)}:${encodeURIComponent(pass)}@`;
-      const path=brand==='hikvision'?`/Streaming/channels/${channel}02`:`/cam/realmonitor?channel=${channel}&subtype=1`;
+      const path=brand==='hikvision'?`/Streaming/Channels/${channel}02`:`/cam/realmonitor?channel=${channel}&subtype=1`;
       $('cameraRtsp').value=`rtsp://${auth}${host}:${port}${path}`;
       return $('cameraRtsp').value;
     }

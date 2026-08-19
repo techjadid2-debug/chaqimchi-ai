@@ -3,106 +3,114 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chaqimchi — to'lov</title>
-  <link rel="stylesheet" href="/assets/admin.css" />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <title>To'lov — Chaqimchi AI</title>
+  <!-- Mijoz yorug' paneldan shu yerga o'tadi.  Ilgari bu sahifa eski
+       qorong'u uslub bilan kelardi va mijoz aynan pul to'lash paytida
+       "dasturchi ekrani"ga tushib qolardi. -->
+  <link rel="stylesheet" href="/assets/owner.css" />
+  <link rel="stylesheet" href="/assets/panel.css" />
   <style>
-    .pay-wrap { max-width: 460px; margin: 0 auto; padding: 2rem 1.25rem; }
-    .amount { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .pay-shell { max-width: 460px; margin: 6vh auto 0; padding: 0 16px 60px; }
+    .amount { font-size: 34px; font-weight: 700; letter-spacing: -.03em; margin: 6px 0; }
     .pay-btn {
       display: flex; align-items: center; justify-content: center;
-      width: 100%; padding: 0.95rem 1rem; margin-top: 0.75rem;
-      border-radius: 12px; border: 1px solid var(--glass-border);
-      font-size: 0.95rem; font-weight: 600; text-decoration: none;
-      color: #0a0c10; transition: transform 0.15s ease, filter 0.15s ease;
+      width: 100%; min-height: 48px; margin-top: 10px;
+      border-radius: 999px; border: 1px solid transparent;
+      font-weight: 700; text-decoration: none; color: #0a0c10;
     }
-    .pay-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
     .pay-payme { background: #33cccc; }
     .pay-click { background: #40b6e8; }
-    .paid-box {
-      text-align: center; padding: 1.5rem 1rem;
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      background: rgba(16, 185, 129, 0.08); border-radius: 14px;
-    }
   </style>
 </head>
 <body>
-  <div class="pay-wrap">
-    <div class="logo" style="text-align: center; margin-bottom: 1.5rem;">Chaqimchi AI</div>
-    <div class="card" id="box">
-      <p class="muted">Yuklanmoqda…</p>
-    </div>
-    <p class="muted" style="text-align: center; margin-top: 1.25rem; font-size: 0.75rem;">
+  <div class="pay-shell">
+    <a class="brand" href="__APP_URL__" style="justify-content: center; width: 100%; margin-bottom: 18px">
+      <img src="/assets/chaqimchi-logo-v2.webp" alt="" />Chaqimchi <b>AI</b>
+    </a>
+    <div class="card" id="box"><p class="hint">Yuklanmoqda…</p></div>
+    <p class="hint" style="text-align: center">
       To'lov Payme yoki Click orqali xavfsiz amalga oshiriladi.
     </p>
   </div>
 
   <script>
-    const PLAN_LABEL = {
-      lite: "Sotqin R1 — do‘kon",
-      starter: "Starter", business: "Business", enterprise: "Enterprise"
-    };
+    // Mijozga sotilgan nom bilan bir xil bo'lishi shart: saytda
+    // "Chaqimchi Lite" deb yozilgan, bu yerda esa ichki kod nomi turardi.
+    const PLAN_LABEL = { lite: "Chaqimchi Lite" };
     const uzs = (n) => Number(n || 0).toLocaleString("ru-RU") + " so'm";
     const esc = (s) =>
       String(s ?? "").replace(/[&<>"']/g, (c) =>
         ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
       );
 
+    // Har boshi berk ko'chada chiqish yo'li bo'lishi kerak.  Ilgari
+    // mijozga menejerga murojaat qilish taklif qilinardi, lekin sahifada
+    // na telefon, na Telegram bor edi — u pul to'lay olmay qolib ketardi.
+    const HELP = `
+      <div class="action-row" style="justify-content: center">
+        <a class="button primary" href="__TELEGRAM_REGISTER_URL__">Telegramda yozish</a>
+        <a class="button ghost" href="__APP_URL__">Panelga qaytish</a>
+      </div>`;
+
     const invoiceId = location.pathname.split("/").filter(Boolean).pop();
 
     function renderPaid(inv) {
       return `
-        <div class="paid-box">
-          <div style="font-size: 1.6rem; margin-bottom: 0.5rem;">✓</div>
-          <div style="font-weight: 600;">To'lov qabul qilindi</div>
-          <p class="muted" style="margin-top: 0.5rem; font-size: 0.82rem;">
-            ${esc(inv.months)} oylik obuna faollashtirildi.
-          </p>
-        </div>`;
+        <div class="status-banner ok">To'lov qabul qilindi
+          <span class="sub">${esc(inv.months)} oylik obuna faollashtirildi.</span></div>
+        ${HELP}`;
     }
 
     function renderCancelled() {
-      return `<p>Bu hisob-faktura bekor qilingan.</p>
-              <p class="muted" style="margin-top: 0.5rem; font-size: 0.82rem;">
-                Yangi hisob uchun menejerga murojaat qiling.
-              </p>`;
+      return `
+        <div class="status-banner warn">Bu hisob bekor qilingan
+          <span class="sub">Yangi hisob ochish uchun bizga yozing.</span></div>
+        ${HELP}`;
     }
 
     function renderPending(inv) {
       const buttons = [
-        inv.payme_url ? `<a class="pay-btn pay-payme" href="${esc(inv.payme_url)}">Payme orqali to'lash</a>` : "",
-        inv.click_url ? `<a class="pay-btn pay-click" href="${esc(inv.click_url)}">Click orqali to'lash</a>` : "",
+        inv.payme_url
+          ? `<a class="pay-btn pay-payme" href="${esc(inv.payme_url)}">Payme orqali to'lash</a>`
+          : "",
+        inv.click_url
+          ? `<a class="pay-btn pay-click" href="${esc(inv.click_url)}">Click orqali to'lash</a>`
+          : "",
       ].join("");
 
-      const noProvider = buttons
-        ? ""
-        : `<p class="muted" style="margin-top: 1rem; font-size: 0.82rem;">
-             Onlayn to'lov hozircha ulanmagan — menejer bilan bog'laning.
-           </p>`;
-
       return `
-        <div class="muted" style="font-size: 0.8rem;">${esc(inv.site_name || "")}</div>
-        <div class="amount" style="margin: 0.35rem 0 0.25rem;">${uzs(inv.amount_uzs)}</div>
-        <div class="muted" style="font-size: 0.82rem;">
-          ${esc(PLAN_LABEL[inv.plan] || inv.plan)} tarifi · ${esc(inv.months)} oy
-        </div>
-        <div class="muted mono" style="font-size: 0.7rem; margin-top: 0.75rem;">
-          Hisob: ${esc(inv.id)}
-        </div>
-        ${buttons}${noProvider}`;
+        <div class="hint">${esc(inv.site_name || "")}</div>
+        <div class="amount">${uzs(inv.amount_uzs)}</div>
+        <div class="hint">${esc(PLAN_LABEL[inv.plan] || inv.plan)} · ${esc(inv.months)} oy</div>
+        ${buttons || `
+          <div class="note warn" style="margin-top: 14px"><b>Onlayn to'lov hozircha ulanmagan</b>
+            Naqd yoki bank o'tkazmasi uchun bizga yozing — hisobni biz yopamiz.</div>
+          ${HELP}`}
+        <details style="margin-top: 16px">
+          <summary class="hint">Hisob raqami</summary>
+          <p class="mono">${esc(inv.id)}</p>
+        </details>`;
     }
 
     (async () => {
       const box = document.getElementById("box");
       try {
         const res = await fetch(`/api/v1/invoices/${encodeURIComponent(invoiceId)}`);
-        if (!res.ok) throw new Error("Hisob-faktura topilmadi");
+        if (!res.ok) throw new Error("Bu hisob topilmadi yoki muddati o'tgan");
         const inv = await res.json();
         box.innerHTML =
           inv.state === "paid" ? renderPaid(inv)
           : inv.state === "cancelled" ? renderCancelled()
           : renderPending(inv);
       } catch (err) {
-        box.innerHTML = `<p>${esc(err.message)}</p>`;
+        // Xom xato matni ("Failed to fetch") mijozga hech narsa aytmaydi —
+        // unga nima qilishni aytadigan yo'l kerak.
+        box.innerHTML = `
+          <div class="status-banner err">${esc(err.message)}
+            <span class="sub">Havolani qaytadan oching yoki bizga yozing.</span></div>
+          ${HELP}`;
       }
     })();
   </script>

@@ -405,14 +405,17 @@ def test_admin_panel_is_light_and_reuses_the_customer_design_system() -> None:
     assert "#0a0c10" not in css, "qorong'u fon qaytib kelmasin"
 
 
-def test_old_admin_css_still_serves_the_other_panels() -> None:
-    """`admin.css` o'chirilmasin: uni o'rnatuvchi paneli va to'lov sahifasi
-    ishlatadi (pay.html hatto `--glass-border` o'zgaruvchisiga bog'liq)."""
+def test_old_admin_css_still_serves_the_installer_panel() -> None:
+    """`admin.css` o'chirilmasin — unda hali bitta iste'molchi bor.
+
+    Ilgari uni admin paneli, o'rnatuvchi paneli va to'lov sahifasi
+    ishlatardi.  Admin panel yorug' brend uslubiga o'tdi, to'lov sahifasi
+    ham (mijoz aynan pul to'lash paytida qorong'u ekranga tushmasligi
+    kerak).  Qolgani — o'rnatuvchi paneli, u ichki vosita."""
     assert (STATIC / "admin.css").is_file()
-    for name in ("installer.html", "pay.html"):
-        assert "admin.css" in (STATIC / name).read_text(encoding="utf-8"), (
-            f"{name} uslubsiz qolib ketgan"
-        )
+    assert "admin.css" in (STATIC / "installer.html").read_text(encoding="utf-8"), (
+        "o'rnatuvchi paneli uslubsiz qolib ketgan"
+    )
 
 
 def test_admin_panel_is_responsive() -> None:
@@ -472,3 +475,104 @@ def test_admin_lists_all_have_empty_states() -> None:
     aytadigan matn bilan ochilsin."""
     html = (STATIC / "admin.html").read_text(encoding="utf-8")
     assert html.count("emptyState(") >= 7
+
+
+# ── Mijoz yo'li: sotuvni yo'qotadigan joylar ─────────────────────────────
+#
+# Bularning har biri mijozni to'xtatib qo'yadigan turdan: dastur to'g'ri
+# yuklab olinadi-yu, yo'riqnoma uni "noto'g'ri" deb ataydi; to'lov
+# sahifasida muammo chiqsa "menejerga murojaat qiling" deyiladi, lekin
+# menejerning hech qanday manzili yo'q.
+
+
+def test_the_install_guide_describes_the_real_file_name() -> None:
+    """Server fayl nomiga versiyani qo'shadi (`Chaqimchi_AI_Setup-0.6.2.exe`)
+    — mijoz yangi versiyani olganini shundan ko'radi.  Yo'riqnoma esa
+    aynan `Chaqimchi_AI_Setup.exe` bo'lishini talab qilardi va boshqasini
+    "manba kodi, o'rnatilmaydi" deb atardi.  Mijoz TO'G'RI faylni yuklab
+    olib, uni tashlab yuborardi — kritik yo'ldagi o'zi yaratgan xavotir.
+    """
+    guide = (STATIC / "install.html").read_text(encoding="utf-8")
+    assert "Fayl nomi: <code>Chaqimchi_AI_Setup.exe</code>" not in guide
+    assert "manba kodini yuklab olgansiz" not in guide
+
+
+def test_no_page_links_to_an_anchor_that_does_not_exist() -> None:
+    """Beshta tugma mavjud bo'lmagan langarga ketardi — shulardan biri
+    "o'zim uddalay olmadim, usta chaqiring" degan zaxira yo'l edi."""
+    site = (STATIC / "site.html").read_text(encoding="utf-8")
+    available = set(re.findall(r'id="([a-zA-Z][\w-]*)"', site))
+    for page in pages():
+        html = page.read_text(encoding="utf-8")
+        for anchor in set(re.findall(r'href="/#([\w-]+)"', html)):
+            assert anchor in available, f"{page.name}: `/#{anchor}` — bunday langar yo'q"
+
+
+def test_the_internal_codename_stays_off_customer_pages() -> None:
+    """«Sotqin» o'zbekchada *xoin* degani.  U ichki kod nomi va mijoz
+    ko'radigan sahifada turmasligi kerak."""
+    for name in ("connect.html", "pay.html", "install.html", "site.html", "aloqa.html"):
+        html = (STATIC / name).read_text(encoding="utf-8")
+        assert "Sotqin" not in html, f"{name}: ichki nom mijozga ko'rinyapti"
+
+
+def test_the_installer_guide_is_not_offered_to_search_engines() -> None:
+    """U ichki hujjat: mahsulotni 16 marta «Sotqin» deb ataydi va
+    `systemctl` buyruqlarini ko'rsatadi.  Brend nomini qidirgan mijoz
+    unga tushib qolmasin."""
+    html = (STATIC / "installer-guide.html").read_text(encoding="utf-8")
+    assert "index,follow" not in html
+    assert "noindex" in html
+
+
+def test_one_sku_has_one_name() -> None:
+    """Mijozga «Chaqimchi Lite» sotiladi, to'lov sahifasida esa
+    «Sotqin R1» yozilardi — bitta mahsulot, uch xil nom."""
+    for name in ("pay.html", "site.html", "owner.html", "admin.html"):
+        html = (STATIC / name).read_text(encoding="utf-8")
+        assert "Sotqin R1" not in html and "Sotqin Base" not in html
+
+
+def test_every_payment_dead_end_offers_a_way_out() -> None:
+    """To'lov sahifasi — pul oladigan yagona joy.  Onlayn to'lov
+    ulanmagan bo'lsa yoki hisob bekor qilingan bo'lsa mijoz shu yerda
+    qolib ketardi: na telefon, na Telegram, na orqaga qaytish."""
+    html = (STATIC / "pay.html").read_text(encoding="utf-8")
+    assert "menejer bilan bog'laning" not in html
+    assert "menejerga murojaat qiling" not in html
+    assert "__TELEGRAM_REGISTER_URL__" in html, "aloqa havolasi bo'lsin"
+    assert "__APP_URL__" in html, "panelga qaytish yo'li bo'lsin"
+
+
+def test_the_payment_page_is_not_a_dark_developer_screen() -> None:
+    """Mijoz yorug' paneldan bosadi va qorong'u sahifaga tushardi —
+    aynan pul to'lash paytida."""
+    html = (STATIC / "pay.html").read_text(encoding="utf-8")
+    assert "admin.css" not in html
+    assert "owner.css" in html
+
+
+def test_the_contact_page_has_a_working_channel_not_a_placeholder() -> None:
+    """Sahifada `+998 __ ___ __ __` turardi — pul to'lamoqchi bo'lgan
+    do'kon egasi telefon o'rnida chiziqchalarni ko'rardi."""
+    html = (STATIC / "aloqa.html").read_text(encoding="utf-8")
+    assert "__ ___ __ __" not in html, "soxta raqam o'rniga ishlaydigan kanal ko'rsatilsin"
+    assert "__TELEGRAM_REGISTER_URL__" in html
+
+
+def test_the_privacy_page_does_not_call_itself_unfinished() -> None:
+    """Sahifa o'z ichida «production'dan oldin qo'shilishi shart» deb
+    turardi — u esa ikkita rozilik belgisidan havola qilinadi va
+    production allaqachon ishlayapti."""
+    html = (STATIC / "privacy.html").read_text(encoding="utf-8")
+    assert "production domen ishga tushishidan oldin" not in html
+    assert "ishlab chiqarishdan oldin" not in html
+
+
+def test_every_page_has_a_favicon() -> None:
+    """Brauzer yorlig'ida bo'sh belgi turardi va har ochilishda 404
+    ketardi (olti soatda 44 marta)."""
+    assert (STATIC / "favicon.svg").is_file()
+    for page in pages():
+        html = (STATIC / page.name).read_text(encoding="utf-8")
+        assert 'rel="icon"' in html, f"{page.name}: favicon havolasi yo'q"

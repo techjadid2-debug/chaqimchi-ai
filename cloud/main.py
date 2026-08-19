@@ -1267,6 +1267,16 @@ async def public_platform_urls(request: Request) -> Dict[str, str]:
     }
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    """Brauzer sahifada `<link rel="icon">` bo'lsa ham ba'zan ildizdan
+    so'raydi.  Ilgari bu har safar 404 berardi (olti soatda 44 marta)."""
+    icon = STATIC_DIR / "favicon.svg"
+    if not icon.is_file():
+        raise HTTPException(404, "Favicon topilmadi")
+    return FileResponse(icon, media_type="image/svg+xml")
+
+
 @app.get("/robots.txt", include_in_schema=False)
 async def robots_txt(request: Request) -> Response:
     """Host bo'yicha: landing va docs indekslanadi, panellar/API — yo'q."""
@@ -4670,12 +4680,14 @@ async def admin_cancel_invoice(
 
 
 @app.get("/pay/{invoice_id}", include_in_schema=False)
-async def pay_page(invoice_id: str) -> FileResponse:
-    """Mijozga yuboriladigan sahifa: summa + Payme/Click tugmalari."""
-    page = STATIC_DIR / "pay.html"
-    if not page.is_file():
-        raise HTTPException(404, "To'lov sahifasi topilmadi")
-    return FileResponse(page)
+async def pay_page(invoice_id: str, request: Request) -> HTMLResponse:
+    """Mijozga yuboriladigan sahifa: summa + Payme/Click tugmalari.
+
+    `_render_public` orqali beriladi, chunki sahifada Telegram va panel
+    havolalari bor: to'lov ishlamay qolgan mijoz shu yerda qolib
+    ketmasligi kerak.
+    """
+    return _render_public("pay.html", request)
 
 
 @app.get("/api/v1/invoices/{invoice_id}")

@@ -1565,7 +1565,19 @@ async def _retry_lead_notifications() -> None:
         store.ensure_lead_notification_deliveries(str(lead["id"]), recipients)
     for delivery in store.pending_lead_notification_deliveries(limit=100):
         lead = {**delivery, "id": delivery["lead_id"]}
-        await _deliver_lead_notification(lead, str(delivery["chat_id"]))
+        try:
+            await _deliver_lead_notification(lead, str(delivery["chat_id"]))
+        except Exception:
+            # Bitta yozuv butun navbatni to'smasin.  Navbat `updated_at ASC`
+            # bo'yicha tartiblangan: xato chiqqan qatorning vaqti
+            # yangilanmaydi, ya'ni u boshda qolib, keyingi aylanishda ham
+            # aynan shu yerda to'xtatardi — ya'ni bitta nosoz chat butun
+            # sotuv voronkasini o'ldirardi.
+            logger.exception(
+                "Lead %s -> %s yetkazilmadi, navbat davom etadi",
+                delivery["lead_id"],
+                delivery["chat_id"],
+            )
 
 
 @app.post("/api/v1/public/leads")

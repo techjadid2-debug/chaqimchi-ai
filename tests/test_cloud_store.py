@@ -1,6 +1,6 @@
 import pytest
 
-from cloud.store import CloudStore
+from cloud.store import LEAD_DELIVERY_MAX_ATTEMPTS, CloudStore
 
 
 def test_create_site_and_heartbeat(tmp_path) -> None:
@@ -161,6 +161,102 @@ def test_lead_notification_delivery_is_persistent_and_retryable(tmp_path) -> Non
     assert failed["attempts"] == 1
     assert failed["next_attempt_at"] is not None
     assert store.recent_leads_without_notifications() == []
+
+
+def _lead_with_delivery(store: CloudStore, chat_id: str = "-1001") -> str:
+    lead = store.create_lead(
+        full_name="Ali Valiyev",
+        phone="+998 90 123 45 67",
+        company="Pilot",
+        city="Toshkent",
+        cameras=4,
+        message="Maslahat",
+        source_hash="ip-hash",
+    )
+    store.ensure_lead_notification_deliveries(lead["id"], [chat_id])
+    return str(lead["id"])
+
+
+def test_a_hopeless_chat_leaves_the_queue_instead_of_blocking_it(tmp_path) -> None:
+    """Bitta nosoz Telegram ID butun sotuv voronkasini o'ldirmasin.
+
+    8 urinishdan keyin yetkazish yopilishi kerak edi, lekin jadval sxemasi
+    `abandoned` holatini qabul qilmasdi.  `UPDATE` yiqilar, `updated_at`
+    o'zgarmas, ya'ni o'sha qator navbat boshida (`ORDER BY updated_at ASC`)
+    qolib ketardi va keyingi har bir aylanish aynan shu yerda yiqilardi —
+    saytdan kelgan boshqa hech qaysi ariza yetib bormasdi.
+    """
+    store = CloudStore(tmp_path / "cloud.db")
+    lead_id = _lead_with_delivery(store)
+
+    for _ in range(LEAD_DELIVERY_MAX_ATTEMPTS):
+        store.mark_lead_notification_delivery(
+            lead_id, "-1001", sent=False, error="chat not found"
+        )
+
+    delivery = store.lead_notification_delivery(lead_id, "-1001")
+    assert delivery["state"] == "abandoned"
+    assert delivery["attempts"] == LEAD_DELIVERY_MAX_ATTEMPTS
+    assert store.pending_lead_notification_deliveries() == [], "navbatni to'smasin"
+
+
+def test_a_blocked_chat_does_not_delay_the_next_lead(tmp_path) -> None:
+    """Voronka tirik qolgani — yakuniy tekshiruv."""
+    store = CloudStore(tmp_path / "cloud.db")
+    dead_lead = _lead_with_delivery(store)
+    for _ in range(LEAD_DELIVERY_MAX_ATTEMPTS):
+        store.mark_lead_notification_delivery(
+            dead_lead, "-1001", sent=False, error="chat not found"
+        )
+
+    fresh = store.create_lead(
+        full_name="Dilshod Karimov",
+        phone="+998 91 000 00 00",
+        company="Baraka",
+        city="Samarqand",
+        cameras=2,
+        message=None,
+        source_hash="boshqa-ip",
+    )
+    store.ensure_lead_notification_deliveries(fresh["id"], ["-1001"])
+
+    queue = store.pending_lead_notification_deliveries()
+    assert [item["lead_id"] for item in queue] == [fresh["id"]]
+
+
+def test_an_old_database_learns_the_abandoned_state(tmp_path) -> None:
+    """Ishlab turgan serverda jadval eski `CHECK` bilan yaratilgan —
+    yangilanish uni qayta qurishi kerak, aks holda tuzatish yetib bormaydi."""
+    import sqlite3
+
+    path = tmp_path / "cloud.db"
+    CloudStore(path)  # jadvallarni yaratadi
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """
+            DROP TABLE lead_notification_deliveries;
+            CREATE TABLE lead_notification_deliveries (
+                lead_id TEXT NOT NULL,
+                chat_id TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(state IN ('pending', 'sent', 'failed')),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                next_attempt_at TEXT,
+                sent_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (lead_id, chat_id)
+            );
+            """
+        )
+
+    store = CloudStore(path)  # migratsiya shu yerda ishlaydi
+    lead_id = _lead_with_delivery(store)
+    for _ in range(LEAD_DELIVERY_MAX_ATTEMPTS):
+        store.mark_lead_notification_delivery(lead_id, "-1001", sent=False, error="xato")
+
+    assert store.lead_notification_delivery(lead_id, "-1001")["state"] == "abandoned"
 
 
 def test_cloud_sqlite_directory_is_private(tmp_path) -> None:

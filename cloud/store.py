@@ -294,8 +294,12 @@ class CloudStore:
             CREATE TABLE IF NOT EXISTS lead_notification_deliveries (
                 lead_id TEXT NOT NULL,
                 chat_id TEXT NOT NULL,
+                -- `abandoned` — yetarlicha urinishdan keyin yopilgan.
+                -- U `CHECK` ro'yxatida bo'lishi SHART: bo'lmasa yakuniy
+                -- `UPDATE` yiqiladi, qator navbat boshida qolib ketadi va
+                -- keyingi har bir aylanish o'sha yerda to'xtaydi.
                 state TEXT NOT NULL DEFAULT 'pending'
-                    CHECK(state IN ('pending', 'sent', 'failed')),
+                    CHECK(state IN ('pending', 'sent', 'failed', 'abandoned')),
                 attempts INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT,
                 next_attempt_at TEXT,
@@ -980,6 +984,44 @@ class CloudStore:
         # Davomat tariflarida oylik to'lov shu songa bog'liq.
         if "billable_persons" not in columns("sites"):
             conn.execute("ALTER TABLE sites ADD COLUMN billable_persons INTEGER NOT NULL DEFAULT 0")
+
+        # Ishlab turgan bazada `lead_notification_deliveries` eski `CHECK`
+        # bilan yaratilgan bo'lishi mumkin — u `abandoned` ni rad etadi.
+        # SQLite'da `CHECK` ni `ALTER` bilan o'zgartirib bo'lmaydi, shuning
+        # uchun jadval qayta quriladi.
+        delivery_sql = str(
+            conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='lead_notification_deliveries'"
+            ).fetchone()[0]
+            or ""
+        )
+        if "abandoned" not in delivery_sql:
+            conn.executescript(
+                """
+                ALTER TABLE lead_notification_deliveries RENAME TO lead_delivery_old;
+                CREATE TABLE lead_notification_deliveries (
+                    lead_id TEXT NOT NULL,
+                    chat_id TEXT NOT NULL,
+                    state TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(state IN ('pending', 'sent', 'failed', 'abandoned')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT,
+                    next_attempt_at TEXT,
+                    sent_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (lead_id, chat_id),
+                    FOREIGN KEY (lead_id) REFERENCES leads(id)
+                );
+                INSERT INTO lead_notification_deliveries
+                    SELECT lead_id,chat_id,state,attempts,last_error,next_attempt_at,
+                           sent_at,created_at,updated_at FROM lead_delivery_old;
+                DROP TABLE lead_delivery_old;
+                CREATE INDEX IF NOT EXISTS idx_lead_delivery_retry
+                    ON lead_notification_deliveries(state, next_attempt_at, updated_at);
+                """
+            )
 
         # `alert_state` bir turdan (connection) ikki turga (kind) o'tdi.
         if "kind" not in columns("alert_state"):

@@ -82,7 +82,9 @@ p.lead { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
 .button.primary { background: var(--lime); border-color: var(--lime); color: var(--ink); }
 .button.ghost { background: transparent; color: var(--ink); }
 .button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
-.button.small { min-height: 34px; padding: 0 12px; font-size: 13px; }
+/* 40px — barmoq uchun eng kichik ishonchli o'lcham.  Ilgari 34px edi va
+ * telefonda "Rasm"/"Klip"/"O'chirish" tugmalariga tegish qiyin bo'lardi. */
+.button.small { min-height: 40px; padding: 0 14px; font-size: 13px; }
 
 label.field { display: grid; gap: 6px; margin-bottom: 12px; font-size: 13px; font-weight: 700; }
 label.field small { font-weight: 500; color: var(--muted); }
@@ -137,7 +139,8 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .filters select, .filters input { width: auto; flex: 1 1 140px; }
 .chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {
-  padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: #fff;
+  padding: 10px 16px; min-height: 40px; border: 1px solid var(--line);
+  border-radius: 999px; background: #fff;
   font-size: 13px; font-weight: 650; cursor: pointer;
 }
 .chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
@@ -215,3 +218,91 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
 /* Do'kon xaritasi (issiqlik) */
 .heat-wrap { width: 100%; max-width: 640px; }
 .heat-wrap canvas { width: 100%; height: auto; border-radius: 12px; background: rgba(127, 127, 127, .1); display: block; }
+
+/* ── Bo'limlar: pastdagi 4 ta tugma ──────────────────────────────────────
+ *
+ * Panel bitta uzun ustun edi: telefonda 13 400px — 16 ekran.  Do'kon
+ * egasi uni telefondan ochadi, barmoq esa ekranning PASTIDA turadi,
+ * shuning uchun tugmalar ham pastda.  Kompyuterda ular tepaga ko'chadi
+ * (900px dan boshlab) — u yerda pastki panel joyni behuda egallaydi.
+ */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(243, 240, 232, .96);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+}
+.tab {
+  min-height: 56px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  border: 0; background: none; color: var(--muted);
+  font-size: 12px; font-weight: 650; cursor: pointer;
+}
+.tab .icon { width: 22px; height: 22px; fill: currentColor; }
+.tab[aria-current="page"] { color: var(--green); font-weight: 700; }
+.tab-badge {
+  position: absolute; transform: translate(14px, -12px);
+  min-width: 8px; height: 8px; border-radius: 50%; background: var(--orange);
+}
+
+/* `minmax(0, 1fr)` SHART: oddiy `grid` trekining eni eng keng
+ * mazmunga qarab o'sadi, `.scroll-x` esa buni to'sa olmaydi (u faqat
+ * MIN-mazmunni cheklaydi).  Natijada davomat jadvali (min-width 560px)
+ * butun bo'limni kengaytirib, telefonda sahifa yon tomonga siljirdi. */
+.pane { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.pane[hidden] { display: none; }
+
+/* Hodisa kartochkalari — telefonda jadval o'rniga.
+ * `table.events{width:100%}` `.scroll-x` ni o'ldirardi: jadval hech
+ * qachon toshmasdi, o'rniga 5 ustun siqilib har katak 3-4 qatorga
+ * bo'linardi.  Endi jadval faqat keng ekranda va o'z eni bilan. */
+table.events { min-width: 560px; }
+
+.event-list { display: flex; flex-direction: column; gap: 8px; }
+.event-card {
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px;
+  background: #fff; font-size: 14px;
+}
+.event-card .what { flex: 1 1 190px; min-width: 0; }
+.event-card .what b { display: block; }
+.event-card .what small { display: block; color: var(--muted); }
+.event-card .actions { margin: 0; flex: none; }
+.event-card.warn { border-left: 4px solid #e9c46a; }
+.event-card.err { border-left: 4px solid var(--danger); }
+
+/* Bo'sh holat — "ma'lumot yo'q" va "xato" bir xil ko'rinmasin. */
+.empty-note { padding: 22px 16px; text-align: center; color: var(--muted); }
+.empty-note b { display: block; margin-bottom: 4px; color: var(--ink); }
+
+/* Barmoq bilan tahrirlash: `touch-action` bo'lmasa kanvasni sudrash
+ * o'rniga sahifa siljiydi.  Lokal panelda (`local.css`) bu to'g'ri
+ * qilingan, mijoz panelida esa unutilgan. */
+.heat-wrap canvas { touch-action: none; }
+
+@media (min-width: 900px) {
+  /* Kompyuterda tugmalar tepaga: pastki panel keng ekranda ortiqcha. */
+  .tabbar {
+    position: static; grid-template-columns: repeat(4, max-content);
+    gap: 6px; margin: 0 auto 16px; max-width: 1120px; padding: 0 16px;
+    border-top: 0; background: none; backdrop-filter: none;
+  }
+  .tab {
+    min-height: 44px; flex-direction: row; gap: 8px;
+    padding: 0 16px; border-radius: 999px; font-size: 14px;
+  }
+  .tab[aria-current="page"] { background: var(--ink); color: #fff; }
+  .shell { max-width: 1120px; padding-bottom: 40px; }
+  .pane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
+}
+
+@media (min-width: 1200px) {
+  .camera-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+}
+
+@media (max-width: 899px) {
+  /* Pastdagi panel kontentni yopib qolmasin. */
+  .shell { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+}

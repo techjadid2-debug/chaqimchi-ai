@@ -601,3 +601,89 @@ def test_the_owner_panel_shows_help_after_login_not_only_before() -> None:
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     body = html[html.index("<main") : html.index("</main>")]
     assert PHONE_HREF in body, "yordam bloki panel ichida bo'lsin"
+
+
+# ── Mijoz paneli: 4 bo'lim ───────────────────────────────────────────────
+#
+# Panel bitta uzun ustun edi: telefonda 13 400px — o'n olti ekran, va
+# uning taxminan 60% i 101 qatorli xom hodisa jadvali edi.  Do'kon egasi
+# uni telefondan ochadi.
+#
+# Bo'limlar STATIK markup: JS satrlaridan yasalsa quyidagi va yuqoridagi
+# matn-tekshiruvlar (masalan `class="card hidden" id="attendanceCard"`)
+# ishlamay qolardi.
+
+OWNER_TABS = ("bugun", "tahlil", "xavfsizlik", "dokon")
+
+
+def test_owner_panel_has_four_tabs_and_hash_routing() -> None:
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert 'class="tabbar"' in html
+    assert "hashchange" in html, "Orqaga tugmasi ishlashi kerak"
+    for tab in OWNER_TABS:
+        assert f'id: "{tab}"' in html, f"«{tab}» bo'limi yo'q"
+        assert f'id="pane{tab.capitalize()}"' in html or f'pane: "pane' in html
+
+
+def test_owner_tabs_fail_independently() -> None:
+    """Bitta so'rov yiqilsa butun panel bo'shab qolmasin.
+
+    Ilgari `refresh()` hamma so'rovni bitta `try` ichida bajarardi:
+    `/report` yiqilsa Hodisalar, Xavfsizlik, Kunlar va Davomat kartalari
+    ham bo'sh qolardi — uzilish "bugun mijoz yo'q" bilan bir xil
+    ko'rinardi.  Bu mahsulot uchun eng yomon aralashtirish.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "needSettled" in html
+    assert "allSettled" in html, "so'rovlar bir-birini yiqitmasin"
+    assert html.count("cardError(") >= 4, "har karta o'z xatosini ko'rsatsin"
+    assert "data-retry" in html, "qayta urinish tugmasi bo'lsin"
+
+
+def test_owner_event_list_is_not_a_hundred_rows() -> None:
+    """101 qator sahifaning 60% ini egallardi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert 'limit: "100"' not in html
+    assert "eventLimit = 25" in html
+    assert "event-card" in html, "telefonda jadval emas, kartochka"
+
+
+def test_owner_canvas_accepts_touch() -> None:
+    """`touch-action` bo'lmasa kanvasni sudrash o'rniga sahifa siljiydi —
+    ya'ni pol burchaklarini telefondan to'g'irlab bo'lmaydi.  Lokal
+    panelda bu allaqachon to'g'ri qilingan."""
+    css = (STATIC / "owner.css").read_text(encoding="utf-8")
+    assert "touch-action" in css
+
+
+def test_owner_drag_does_not_storm_the_server() -> None:
+    """Har `pointermove` da issiqlik xaritasi ham, kamera rasmi ham qayta
+    so'ralardi — bir soniyalik sudrash o'nlab so'rov tug'dirardi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    move = html[html.index('addEventListener("pointermove"') : html.index('addEventListener("pointerup"')]
+    assert "loadHeatmap()" not in move, "so'rov sudrash paytida emas, oxirida"
+    assert "requestAnimationFrame" in move
+
+
+def test_owner_tap_targets_are_big_enough() -> None:
+    """34px barmoq uchun kichik — 40px eng kichik ishonchli o'lcham."""
+    css = (STATIC / "owner.css").read_text(encoding="utf-8")
+    small = css[css.index(".button.small {") : css.index("}", css.index(".button.small {"))]
+    assert "min-height: 40px" in small
+    assert css.count("@media") >= 4, "telefon, planshet va kompyuter uchun qoidalar"
+
+
+def test_owner_deep_link_survives_the_login_redirect() -> None:
+    """`?key=` tozalanganda `location.hash` ham yo'qolardi — ya'ni
+    Telegramdan kelgan bo'limga havola har doim Bugun'ga tushardi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    scrub = html[html.index("params.delete(\"key\")") : html.index("showApp();", html.index("params.delete(\"key\")"))]
+    assert "location.hash" in scrub
+
+
+def test_owner_otp_box_opens_only_when_a_code_was_sent() -> None:
+    """Kod yuborilmagan bo'lsa ham kod maydoni ochilardi va mijoz
+    kelmaydigan kodni kutib turardi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    request = html[html.index("async function requestOtp") : html.index("async function verifyOtp")]
+    assert 'if (r.ok) $("verify").classList.remove("hidden")' in request

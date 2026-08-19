@@ -7,10 +7,15 @@ kechqurun bilasiz. Shuning uchun cloud o‘zi Telegramga yozadi.
 **Faqat holat o‘zgarganda** xabar ketadi (`alert_state` jadvali) — aks holda
 har 15 daqiqada o‘sha xabar takrorlanib, siz uni o‘qishni tashlab qo‘yasiz.
 
+Bu modul (va saytdan kelgan arizalar) **sotuv boti** orqali yozadi —
+mijozlarga hisobot yuboradigan botdan alohida.  Sabab oddiy: ikkalasi bitta
+botdan kelsa, ega uchun "yangi ariza" va "do'kon hisoboti" bir chatda
+aralashib ketadi va ikkalasi ham e'tibordan qoladi.
+
 Yoqish:
 
 ```bash
-export CHAQIMCHI_CLOUD_TELEGRAM_TOKEN="123456:ABC..."
+export CHAQIMCHI_SALES_TELEGRAM_TOKEN="123456:ABC..."   # sotuv boti
 export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
 make run-cloud
 ```
@@ -81,8 +86,13 @@ class AlertConfig:
             logger.warning("CHAQIMCHI_CLOUD_ALERT_INTERVAL_SEC son emas — standart qiymat")
             interval = DEFAULT_INTERVAL_SEC
         return AlertConfig(
+            # Ichki xabarlar (arizalar va qurilma aloqasi) **sotuv boti**dan
+            # ketadi: aks holda ular mijoz botidagi hisobotlar bilan bitta
+            # chatda aralashib, ikkalasi ham o'qilmay qolardi.  Sotuv boti
+            # sozlanmagan bo'lsa eski xatti-harakat saqlanadi.
             token=(
-                os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+                os.environ.get("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "").strip()
+                or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
                 or os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
                 or None
             ),

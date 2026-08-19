@@ -47,12 +47,26 @@ def _site(
 
 
 def test_alert_config_can_reuse_owner_bot_token(monkeypatch) -> None:
+    monkeypatch.delenv("CHAQIMCHI_SALES_TELEGRAM_TOKEN", raising=False)
     monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", raising=False)
     monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "owner-token")
     monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "123")
     config = AlertConfig.from_env()
     assert config.enabled
     assert config.token == "owner-token"
+
+
+def test_sales_bot_token_wins_over_the_customer_bot(monkeypatch) -> None:
+    """Arizalar va servis xabarlari SOTUV botidan ketadi.
+
+    Ikkalasi bitta botdan kelsa, ega uchun "yangi ariza" va "do'kon
+    hisoboti" bir chatda aralashib, ikkalasi ham e'tibordan qolardi.
+    """
+    monkeypatch.setenv("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "sotuv-token")
+    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "mijoz-token")
+    monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "123")
+
+    assert AlertConfig.from_env().token == "sotuv-token"
 
 
 # ── plan_alerts: kimga xabar ketadi ──────────────────────────────────────

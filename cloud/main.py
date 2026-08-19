@@ -2258,10 +2258,13 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
         },
         {
             "key": "lead_notifications",
-            "label": "Sayt arizalari Telegram yetkazilishi",
+            "label": "Sayt arizalari Telegram yetkazilishi (sotuv boti)",
             "ok": bool(get_alerts().config.token and lead_recipients),
             "required": True,
             "recipients": len(lead_recipients),
+            # Alohida sotuv boti bormi — arizalar mijoz hisobotlari bilan
+            # bitta chatda aralashib ketmasligi shundan ko'rinadi.
+            "separate_bot": bool(os.environ.get("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "").strip()),
         },
         {
             "key": "service_alerts",

@@ -31,12 +31,15 @@ def store_with(events: List[EdgeEvent], tmp_path: Path) -> EventStore:
     return store
 
 
-def crossing(hour: int, direction: str, minute: int = 0, **kwargs) -> EdgeEvent:
+def crossing(
+    hour: int, direction: str, minute: int = 0, *, track_id: int | None = None, **kwargs
+) -> EdgeEvent:
     return EdgeEvent(
         event_type="line_crossed",
         camera_id="eshik-01",
         direction=direction,
         line="eshik",
+        track_id=track_id,
         occurred_at=moment(hour, minute, **kwargs),
     )
 
@@ -646,21 +649,33 @@ def test_demography_is_aggregated_with_percentages_and_age_buckets(tmp_path: Pat
     assert report["traffic"]["entered"] == 4, "kirdi-chiqdi soni demografiyaga bog'liq emas"
 
 
-def test_employees_are_excluded_from_demography_but_not_from_footfall(
+def employee_mark(hour: int, minute: int, track: int, *, day: date = DAY) -> EdgeEvent:
+    """Yuz tanish xodimni topdi — shu (kamera, trek) mijoz emas."""
+    return EdgeEvent(
+        event_type="employee_seen",
+        camera_id="eshik-01",
+        severity="info",
+        track_id=track,
+        person_id="xodim-1",
+        occurred_at=moment(hour, minute, day=day),
+    )
+
+
+def test_employees_are_excluded_from_footfall_not_just_demography(
     tmp_path: Path,
 ) -> None:
-    """Xodim ertalab kirdi: yuz tanish uni topdi — demografiyaga kirmaydi."""
+    """Do'kon egasi «bugun nechta MIJOZ kirdi» degan raqamni sotib oladi.
+
+    Ilgari xodim kirishi shu raqamga qo'shilardi va faqat jins/yosh
+    hisobidan chiqarilardi.  Ikki xodim kuniga o'n besh martadan eshikdan
+    o'tsa, 200 mijozli do'konda hisobot ~15% shishadi — `docs/DOKON_MVP.md`
+    dagi ±10% mezonidan o'tmaydi.  Maxfiylik sahifasi esa mijozga
+    «Xodimlar bu statistikaga kirmaydi» deb va'da beradi.
+    """
     store = store_with(
         [
             demo_crossing(9, 0, 7, "erkak", 30),
-            EdgeEvent(
-                event_type="employee_seen",
-                camera_id="eshik-01",
-                severity="info",
-                track_id=7,
-                person_id="xodim-1",
-                occurred_at=moment(9, 1),
-            ),
+            employee_mark(9, 1, 7),
             demo_crossing(12, 0, 8, "ayol", 22),  # oddiy mijoz
         ],
         tmp_path,
@@ -670,31 +685,89 @@ def test_employees_are_excluded_from_demography_but_not_from_footfall(
 
     demo = report["demografiya"]
     assert demo["hisoblangan"] == 1, "faqat mijoz"
-    assert demo["xodim_chiqarilgan"] == 1
     assert demo["jins"] == {"ayol": 100, "erkak": 0}
-    assert report["traffic"]["entered"] == 2, "xodim kirdi-chiqdi sonida qoladi"
+
+    traffic = report["traffic"]
+    assert traffic["entered"] == 1, "xodim kirishi mijoz sanog'iga qo'shilmasin"
+    assert traffic["xodim_chiqarilgan"] == 1, "nechta xodim o'tishi chiqarilgani ko'rinsin"
+    assert traffic["hourly"][9]["entered"] == 0, "soatlik grafikda ham qolmasin"
+    assert traffic["hourly"][12]["entered"] == 1
+
+
+def test_employee_exit_is_excluded_too(tmp_path: Path) -> None:
+    """Faqat kirishni chiqarib tashlash `inside_estimate` ni buzardi:
+    xodim chiqishi qolsa do'konda «minus bir odam» bo'lib chiqadi."""
+    store = store_with(
+        [
+            crossing(9, "in", 0, track_id=3),
+            employee_mark(9, 1, 3),
+            crossing(21, "out", 0, track_id=4),
+            employee_mark(21, 1, 4),
+            crossing(12, "in", 0, track_id=9),  # mijoz
+        ],
+        tmp_path,
+    )
+
+    traffic = store.retail_report("site-1", day=DAY)["traffic"]
+
+    assert traffic["entered"] == 1
+    assert traffic["exited"] == 0, "xodim chiqishi ham hisobga olinmasin"
+    assert traffic["xodim_chiqarilgan"] == 2
+
+
+def test_yesterday_comparison_also_excludes_employees(tmp_path: Path) -> None:
+    """Kechagi raqam boshqa yo'l bilan hisoblanadi.  U xodimni chiqarmasa
+    «bugun 50% kam» degan yolg'on o'sish/pasayish chiqadi."""
+    yesterday = DAY - timedelta(days=1)
+    store = store_with(
+        [
+            crossing(10, "in", 0, day=yesterday, track_id=1),
+            employee_mark(10, 1, 1, day=yesterday),
+            crossing(11, "in", 0, day=yesterday, track_id=2),  # mijoz
+            crossing(10, "in", 0, track_id=5),  # bugun: bitta mijoz
+        ],
+        tmp_path,
+    )
+
+    traffic = store.retail_report("site-1", day=DAY)["traffic"]
+
+    assert traffic["entered_yesterday"] == 1, "kecha ham faqat mijoz sanalsin"
+    assert traffic["change_percent"] == 0
+
+
+def test_trend_days_also_exclude_employees(tmp_path: Path) -> None:
+    """«Kunlar bo'yicha» grafik uchinchi yo'l bilan hisoblanadi — u ham
+    kunlik hisobot bilan bitta raqamni ko'rsatishi kerak."""
+    store = store_with(
+        [
+            crossing(10, "in", 0, track_id=1),
+            employee_mark(10, 1, 1),
+            crossing(11, "in", 0, track_id=2),  # mijoz
+        ],
+        tmp_path,
+    )
+
+    trend = store.traffic_trend("site-1", days=1, until=DAY)
+    report = store.retail_report("site-1", day=DAY)
+
+    assert trend["daily"][-1]["entered"] == 1
+    assert trend["daily"][-1]["entered"] == report["traffic"]["entered"], (
+        "grafik va kunlik hisobot bitta raqamni ko'rsatsin"
+    )
 
 
 def test_recycled_track_id_outside_the_window_still_counts(tmp_path: Path) -> None:
     """Trek raqami qayta ishlatilgan: xodim belgisi 6 soat oldin — mijoz sanaladi."""
     store = store_with(
-        [
-            EdgeEvent(
-                event_type="employee_seen",
-                camera_id="eshik-01",
-                severity="info",
-                track_id=5,
-                person_id="xodim-1",
-                occurred_at=moment(9, 0),
-            ),
-            demo_crossing(15, 0, 5, "ayol", 40),
-        ],
+        [employee_mark(9, 0, 5), demo_crossing(15, 0, 5, "ayol", 40)],
         tmp_path,
     )
 
-    demo = store.retail_report("site-1", day=DAY)["demografiya"]
+    report = store.retail_report("site-1", day=DAY)
 
-    assert demo["hisoblangan"] == 1 and demo["xodim_chiqarilgan"] == 0
+    assert report["demografiya"]["hisoblangan"] == 1
+    assert report["traffic"]["entered"] == 1
+    assert report["traffic"]["xodim_chiqarilgan"] == 0
 
 
 def test_digest_gets_a_demography_line(tmp_path: Path) -> None:

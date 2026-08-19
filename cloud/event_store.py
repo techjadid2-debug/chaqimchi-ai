@@ -797,31 +797,36 @@ class EventStore:
             "restricted_zone": 0,
             "loitering": 0,
         }
-        # Demografiya (jins/yosh) — faqat mijozlar.  Xodim kirishlari
-        # `employee_seen` (kamera, trek) juftligi orqali chiqarib tashlanadi.
+        # Do'kon egasi sotib olgan raqam — «bugun nechta MIJOZ kirdi».  Xodim
+        # kuniga o'n martalab eshikdan o'tadi, shuning uchun uning o'tishlari
+        # kirdi-chiqdi sonidan ham, soatlik grafikdan ham, demografiyadan ham
+        # butunlay chiqariladi.  Xodimni `employee_seen` (kamera, trek)
+        # juftligi belgilaydi — uni cloud tomondagi yuz moslash yozadi.
         employee_marks = self._employee_marks_of_day(site_id, day, timezone_tashkent)
         gender_counts = {"ayol": 0, "erkak": 0}
         age_buckets = {"<18": 0, "18-30": 0, "31-45": 0, "46-60": 0, "60+": 0}
-        demo_total = demo_excluded = 0
+        demo_total = 0
+        staff_crossings = 0
 
         for row in rows:
             kind = row["event_type"]
             local = self._to_local(row["occurred_at"], timezone_tashkent)
             if kind == "line_crossed":
-                if row.get("direction") == "in":
+                direction = row.get("direction")
+                if direction not in ("in", "out"):
+                    continue
+                if self._matches_employee(row, employee_marks):
+                    staff_crossings += 1
+                    continue
+                if direction == "in":
                     entered += 1
                     hourly[local.hour]["entered"] += 1
                     demo = (row.get("metadata") or {}).get("demografiya") or {}
                     if demo.get("jins") in gender_counts:
-                        if self._matches_employee(row, employee_marks):
-                            # Xodim sanalmasin — kirdi-chiqdi SONI o'zgarmaydi,
-                            # faqat demografiya hisobidan chiqadi.
-                            demo_excluded += 1
-                        else:
-                            demo_total += 1
-                            gender_counts[str(demo["jins"])] += 1
-                            age_buckets[_age_bucket(demo.get("yosh"))] += 1
-                elif row.get("direction") == "out":
+                        demo_total += 1
+                        gender_counts[str(demo["jins"])] += 1
+                        age_buckets[_age_bucket(demo.get("yosh"))] += 1
+                else:
                     exited += 1
                     hourly[local.hour]["exited"] += 1
             elif kind == "dwell_exceeded" and row.get("dwell_sec") is not None:
@@ -849,6 +854,10 @@ class EventStore:
                 "change_percent": _change_percent(entered, yesterday),
                 "busiest_hour": busiest if busiest["entered"] else None,
                 "hourly": [hourly[hour] for hour in range(24)],
+                #: Yuz tanish xodim deb topgan va sanoqdan chiqarilgan
+                #: o'tishlar.  Ko'rsatiladi, chunki "kecha 210 edi, bugun 190"
+                #: degan farq xodim jadvalidan ham kelib chiqishi mumkin.
+                "xodim_chiqarilgan": staff_crossings,
             },
             "queue": {
                 "alerts": len(queue_lengths),
@@ -875,7 +884,6 @@ class EventStore:
             "security": security,
             "demografiya": {
                 "hisoblangan": demo_total,
-                "xodim_chiqarilgan": demo_excluded,
                 "jins": (
                     {
                         "ayol": round(gender_counts["ayol"] * 100 / demo_total),
@@ -1021,13 +1029,14 @@ class EventStore:
     #: eski trekni yangi mijoz bilan adashtirishning oldini oladi.
     EMPLOYEE_MATCH_WINDOW_SEC = 600
 
-    def _employee_marks_of_day(
-        self, site_id: str, day: date, zone: ZoneInfo
+    def _employee_marks_between(
+        self, site_id: str, start: str, end: str
     ) -> List[Dict[str, Any]]:
-        """Kun ichidagi `employee_seen` belgilari (kamera, trek, vaqt)."""
-        start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
-        start = start_local.astimezone(timezone.utc).isoformat()
-        end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        """Oraliqdagi `employee_seen` belgilari (kamera, trek, vaqt).
+
+        `employee_seen` `line_crossed`ga qaraganda o'nlab marta kam — kun
+        yoki hafta bo'yicha to'liq o'qish arzon.
+        """
         with self._connect() as conn:
             rows = conn.execute(
                 self._sql(
@@ -1038,6 +1047,17 @@ class EventStore:
                 (site_id, start, end),
             ).fetchall()
         return [self._dict(row) for row in rows]
+
+    def _employee_marks_of_day(
+        self, site_id: str, day: date, zone: ZoneInfo
+    ) -> List[Dict[str, Any]]:
+        """Kun ichidagi `employee_seen` belgilari (kamera, trek, vaqt)."""
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+        return self._employee_marks_between(
+            site_id,
+            start_local.astimezone(timezone.utc).isoformat(),
+            (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat(),
+        )
 
     def _matches_employee(self, row: Dict[str, Any], marks: List[Dict[str, Any]]) -> bool:
         if not marks or row.get("track_id") is None:
@@ -1117,10 +1137,12 @@ class EventStore:
     ) -> Dict[date, int]:
         """Oraliqdagi kunlar bo'yicha kirish soni.
 
-        Faqat `occurred_at` o'qiladi: 30 kunlik oraliqda bu o'n minglab
-        qatorni to'liq yuklashdan ancha yengil.  Kunga bo'lish Python'da,
-        chunki vaqt mintaqasi bo'yicha guruhlash SQLite va PostgreSQL'da
-        har xil yoziladi.
+        Faqat kerakli ustunlar o'qiladi: 30 kunlik oraliqda bu qatorni
+        to'liq yuklashdan ancha yengil.  Kunga bo'lish Python'da, chunki
+        vaqt mintaqasi bo'yicha guruhlash SQLite va PostgreSQL'da har xil
+        yoziladi.  Xodim o'tishlari kunlik hisobotdagi bilan **bir xil**
+        qoida bo'yicha chiqariladi — aks holda grafik va hisobot bir-biriga
+        zid raqam ko'rsatardi.
         """
         start_utc = datetime.combine(start, datetime.min.time(), tzinfo=zone).astimezone(
             timezone.utc
@@ -1131,15 +1153,21 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(
                 self._sql(
-                    "SELECT occurred_at FROM production_events WHERE site_id=? "
-                    "AND occurred_at>=? AND occurred_at<? AND event_type='line_crossed' "
-                    "AND direction='in'"
+                    "SELECT camera_id,track_id,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type='line_crossed' AND direction='in'"
                 ),
                 (site_id, start_utc.isoformat(), end_utc.isoformat()),
             ).fetchall()
+        marks = self._employee_marks_between(
+            site_id, start_utc.isoformat(), end_utc.isoformat()
+        )
         counts: Dict[date, int] = {}
         for row in rows:
-            day = self._to_local(dict(row)["occurred_at"], zone).date()
+            item = self._dict(row)
+            if self._matches_employee(item, marks):
+                continue
+            day = self._to_local(item["occurred_at"], zone).date()
             counts[day] = counts.get(day, 0) + 1
         return counts
 
@@ -1157,19 +1185,28 @@ class EventStore:
         return [self._decode_event(row) for row in rows]
 
     def _entered_count(self, site_id: str, day: date, zone: ZoneInfo) -> int:
+        """Bir kunlik mijoz kirishi — «kechaga nisbatan» taqqoslash uchun.
+
+        `COUNT(*)` emas: xodim o'tishlari kunlik hisobotdagi bilan bir xil
+        qoida bo'yicha chiqarilishi kerak, aks holda "bugun 50% kam" degan
+        yolg'on farq chiqadi.
+        """
         start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
         start = start_local.astimezone(timezone.utc).isoformat()
         end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
         with self._connect() as conn:
-            row = conn.execute(
+            rows = conn.execute(
                 self._sql(
-                    "SELECT COUNT(*) AS count FROM production_events WHERE site_id=? "
-                    "AND occurred_at>=? AND occurred_at<? AND event_type='line_crossed' "
-                    "AND direction='in'"
+                    "SELECT camera_id,track_id,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type='line_crossed' AND direction='in'"
                 ),
                 (site_id, start, end),
-            ).fetchone()
-        return int(dict(row)["count"]) if row else 0
+            ).fetchall()
+        marks = self._employee_marks_between(site_id, start, end)
+        return sum(
+            1 for row in rows if not self._matches_employee(self._dict(row), marks)
+        )
 
     @staticmethod
     def _to_local(occurred_at: str, zone: ZoneInfo) -> datetime:

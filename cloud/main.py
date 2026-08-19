@@ -4206,13 +4206,42 @@ async def owner_employee_face_image(
     return _face_image_response(str(face["photo_key"]))
 
 
+#: Bizning ichki pul ko'rsatkichlarimiz.  Ular admin javoblarida qoladi,
+#: mijoz javoblaridan esa OLIB TASHLANADI.  `public_pricing` bu qoidani
+#: allaqachon bajaradi; mijoz marshrutlari uni buzardi va do'kon egasi
+#: brauzerda biz qancha foyda olayotganimizni o'qiy olardi — aynan narx
+#: bo'yicha gaplashayotgan paytda.
+_INTERNAL_MONEY_KEYS = ("cost_usd_cents", "cost_total_usd_cents", "gross_margin_percent")
+
+
+def _without_internal_money(payload: Any) -> Any:
+    """Javobning istalgan chuqurligidan ichki narxni olib tashlaydi.
+
+    Rekursiv: `feature_quote` tannarxni ham yuqori darajada, ham har bir
+    `features[]` elementida qaytaradi, `site_feature_summary` esa uni
+    `assignments`, `drafts` va `active_quote` ichida uchta joyda beradi.
+    Bitta joyni unutib qo'yish oson — shuning uchun filtr umumiy.
+    """
+    if isinstance(payload, dict):
+        return {
+            key: _without_internal_money(value)
+            for key, value in payload.items()
+            if key not in _INTERNAL_MONEY_KEYS
+        }
+    if isinstance(payload, list):
+        return [_without_internal_money(item) for item in payload]
+    return payload
+
+
 @app.get("/api/v1/owner/features")
 async def owner_features(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
     """Mijoz o'z obunasi va tanlash mumkin bo'lgan funksiyalarni ko'radi."""
-    return {
-        "catalog": get_store().list_feature_catalog(),
-        "summary": get_store().site_feature_summary(owner.site_id),
-    }
+    return _without_internal_money(
+        {
+            "catalog": get_store().list_feature_catalog(),
+            "summary": get_store().site_feature_summary(owner.site_id),
+        }
+    )
 
 
 @app.post("/api/v1/owner/features/quote")
@@ -4220,9 +4249,10 @@ async def owner_feature_quote(
     body: FeatureDraftBody, owner: OwnerPrincipal = Depends(require_active_owner)
 ) -> Dict[str, Any]:
     try:
-        return get_store().feature_quote([item.model_dump() for item in body.selections])
+        quote = get_store().feature_quote([item.model_dump() for item in body.selections])
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    return _without_internal_money(quote)
 
 
 @app.put("/api/v1/owner/features/request")
@@ -4232,11 +4262,12 @@ async def owner_feature_request(
     """Mijoz so'rovi draft bo'ladi; narx o'zgarishini admin tasdiqlaydi."""
     require_owner_role(owner, "owner", "manager")
     try:
-        return get_store().replace_feature_draft(
+        summary = get_store().replace_feature_draft(
             owner.site_id, [item.model_dump() for item in body.selections]
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    return _without_internal_money(summary)
 
 
 @app.get("/api/v1/owner/members")

@@ -969,3 +969,85 @@ def test_kamera_sends_the_last_preview_and_requests_a_new_one(
     # Keyingi heartbeat'da yangi kadr kelsin.
     assert store.pending_preview_cameras(site["site_id"]) == ["camera-01"]
     assert any("Yangi rasm so'raldi" in m[1] for m in messages)
+
+
+# ── Ichki narx mijozga chiqmasin ─────────────────────────────────────────
+#
+# `public_pricing` izohida qoida aniq yozilgan: tannarx va marja "javobga
+# chiqmaydi — ular faqat admin endpointida qoladi".  Mijoz marshrutlari bu
+# qoidani buzardi: `list_feature_catalog()` `p.cost_usd_cents` ni tanlaydi,
+# `feature_quote()` esa `cost_usd_cents` bilan `gross_margin_percent` ni
+# qaytaradi, ikkalasi ham to'g'ridan-to'g'ri mijoz brauzeriga ketardi.
+#
+# Bu mavhum xavf emas: do'kon egasi F12 bosib biz qancha foyda
+# olayotganimizni o'qiy olardi — narx bo'yicha gaplashayotgan paytda.
+
+#: Mijoz javobida hech qachon uchramasligi kerak bo'lgan kalitlar.
+INTERNAL_MONEY_KEYS = ("cost_usd_cents", "cost_total_usd_cents", "gross_margin_percent")
+
+
+def _assert_no_internal_money(payload, where: str) -> None:
+    """Javobning ISTALGAN chuqurligida ichki narx bo'lmasin."""
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            assert key not in INTERNAL_MONEY_KEYS, f"{where}: `{key}` mijozga ketyapti"
+            _assert_no_internal_money(value, f"{where}.{key}")
+    elif isinstance(payload, list):
+        for index, item in enumerate(payload):
+            _assert_no_internal_money(item, f"{where}[{index}]")
+
+
+def test_owner_never_sees_our_cost_or_margin(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+
+    catalog = client.get("/api/v1/owner/features", headers=owner_headers)
+    assert catalog.status_code == 200
+    _assert_no_internal_money(catalog.json(), "/features")
+
+    quote = client.post(
+        "/api/v1/owner/features/quote",
+        headers=owner_headers,
+        json={"selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    )
+    assert quote.status_code == 200
+    _assert_no_internal_money(quote.json(), "/features/quote")
+
+    draft = client.put(
+        "/api/v1/owner/features/request",
+        headers=owner_headers,
+        json={"selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    )
+    assert draft.status_code == 200
+    _assert_no_internal_money(draft.json(), "/features/request")
+
+
+def test_the_owner_still_gets_the_price_they_need_to_decide(production_client) -> None:
+    """Tannarxni olib tashlash mijozga kerakli narxni ham o'chirmasin —
+    aks holda funksiya so'rash oynasi narxsiz qoladi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+
+    quote = client.post(
+        "/api/v1/owner/features/quote",
+        headers=owner_headers,
+        json={"selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    ).json()
+
+    assert quote["monthly_uzs"] > 0, "mijoz so'mdagi narxni ko'rishi kerak"
+    assert quote["monthly_usd_cents"] > 0
+    assert quote["features"][0]["feature_code"] == "person_count"
+
+    catalog = client.get("/api/v1/owner/features", headers=owner_headers).json()
+    assert catalog["catalog"]["features"][0]["monthly_usd_cents"] > 0
+
+
+def test_the_admin_still_sees_the_margin(production_client) -> None:
+    """Marja bizga KERAK — u faqat admin tomonda qolishi shart."""
+    client, _messages = production_client
+    admin = {"X-Cloud-Admin-Key": "test-admin"}
+
+    catalog = client.get("/api/v1/admin/features", headers=admin).json()
+    assert any("cost_usd_cents" in item for item in catalog["features"])

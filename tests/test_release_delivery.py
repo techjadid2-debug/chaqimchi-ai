@@ -127,3 +127,54 @@ def test_the_installer_endpoint_needs_a_published_release() -> None:
 
     assert "CHAQIMCHI_SOTQIN_RELEASE_URL=" in example
     assert "CHAQIMCHI_SOTQIN_RELEASE_SHA256=" in example
+
+
+# ── Global to'xtatuvchi: qurilmaga yetib bormasin ────────────────────────
+
+
+def test_a_paused_rollout_stops_the_device_from_updating(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Bayroq bazada turishi yetarli emas — u qurilmaga beriladigan
+    javobga ta'sir qilishi kerak.
+
+    Buzuq reliz chiqib ketganda har do'konni alohida `hold` ga
+    o'tkazishga ulgurib bo'lmaydi: qurilmalar har 15 daqiqada so'raydi.
+    """
+    import cloud.main as main
+
+    admin = {"X-Cloud-Admin-Key": "test-admin"}
+    site = client.post(
+        "/api/v1/admin/sites", headers=admin, json={"name": "Do'kon", "plan": "lite"}
+    ).json()
+    claimed = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"], "hardware_id": "hw-1"}
+    ).json()
+    device = {
+        "X-Site-Id": claimed["site_id"],
+        "X-Device-Id": claimed["device_id"],
+        "X-Device-Token": claimed["device_token"],
+    }
+    releases = tmp_path / "releases"
+    (releases / "chaqimchi-windows-9.9.9.exe").write_bytes(b"MZ soxta")
+    (releases / "chaqimchi-windows-9.9.9.json").write_text('{"version":"9.9.9"}', encoding="utf-8")
+
+    before = client.get("/api/v1/edge/update", headers=device).json()
+    assert before["available"] is True, "odatda yangilanish beriladi"
+
+    assert client.put("/api/v1/admin/updates-paused", headers=admin, json={"paused": True}).status_code == 200
+    after = client.get("/api/v1/edge/update", headers=device).json()
+
+    assert after["available"] is False
+    assert "to'xtatilgan" in after["reason"]
+
+    # Qayta yoqilganda yana beriladi — to'xtatuvchi qulf emas.
+    client.put("/api/v1/admin/updates-paused", headers=admin, json={"paused": False})
+    assert client.get("/api/v1/edge/update", headers=device).json()["available"] is True
+
+
+def test_only_an_admin_can_pause_the_rollout(client: TestClient) -> None:
+    assert client.put("/api/v1/admin/updates-paused", json={"paused": True}).status_code in (
+        401,
+        403,
+    )

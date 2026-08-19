@@ -349,6 +349,15 @@ Function .onInit
   ; ketardi va sabab topib bo'lmaydigan xato chiqardi.
   ReadRegStr $R0 HKLM "${REG_UNINSTALL}" "UninstallString"
   ${If} $R0 != ""
+    ; `/S` (jim) — bu masofadan yangilanish yo'li.  `MessageBox` u yerda
+    ; SYSTEM sessiyasida (`schtasks /RU SYSTEM`) ochiladi va uni HECH KIM
+    ; ko'rmaydi: o'rnatuvchi javob kutib abadiy osilib qoladi.  Yangilanish
+    ; tekshiruvi har 15 daqiqada takrorlangani uchun osilgan jarayonlar
+    ; yig'ilib boradi va do'kon hech qachon yangilanmaydi.
+    ;
+    ; O'chirish bo'limida bu himoya allaqachon bor edi — shu yerga
+    ; yozilmagan.  Savol faqat odam o'zi o'rnatayotganda beriladi.
+    IfSilent uninstall_old
     MessageBox MB_OKCANCEL|MB_ICONQUESTION \
       "${APP_NAME} allaqachon o'rnatilgan.$\r$\n$\r$\nYangilash uchun avval eski versiya o'chiriladi. Sozlamalaringiz va hisobotlaringiz saqlanib qoladi.$\r$\n$\r$\nDavom etamizmi?" \
       IDOK uninstall_old

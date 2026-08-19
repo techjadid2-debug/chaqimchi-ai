@@ -469,3 +469,131 @@ def test_unsigned_release_is_not_offered(tmp_path: Path, monkeypatch: pytest.Mon
     (tmp_path / "chaqimchi-windows-9.9.9.json").write_text("{}", encoding="utf-8")
     release = cloud_main.latest_windows_release()
     assert release is not None and release["version"] == "9.9.9"
+
+
+# ── Birinchi yangilanishda rollback nishoni ──────────────────────────────
+
+
+def test_the_first_ota_fetches_a_rollback_target(
+    updater, tmp_path: Path, keys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Birinchi masofaviy yangilanishda har do'konda rollback nishoni
+    BO'SH edi.
+
+    Nishon — "oldingi yangilanish qoldirgan fayl".  Birinchi o'rnatish
+    esa qo'lda yuklanadi va u yerga hech narsa qoldirmaydi.  Ya'ni
+    `docs/DOKON_MVP.md` va'da qilgan avto-rollback aynan eng kerakli
+    paytda — birinchi masofaviy yangilanishda — ishlamasdi va usta
+    do'konga borishi kerak bo'lardi.
+
+    Endi joriy versiyaning o'rnatuvchisi reliz serveridan olib qo'yiladi.
+    """
+    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    keep = updater._keep_dir()
+    assert not list(keep.glob("*.exe")), "boshida nishon yo'q"
+
+    current = tmp_path / f"chaqimchi-windows-{VERSION}.exe"
+    current.write_bytes(b"joriy o'rnatuvchi")
+    current_manifest = _sign(current, keys)
+
+    def fake_download(url: str, dest: Path, headers) -> None:
+        source = current if url.endswith(".exe") else current_manifest
+        dest.write_bytes(source.read_bytes())
+
+    monkeypatch.setattr(updater, "_download", fake_download)
+
+    ok = updater._ensure_rollback_target(
+        "https://api.example.uz/releases", {}, keep / current.name, keep / current_manifest.name
+    )
+
+    assert ok is True
+    assert (keep / current.name).is_file()
+    assert (keep / current_manifest.name).is_file()
+
+
+def test_a_rollback_target_that_fails_verification_is_not_kept(
+    updater, tmp_path: Path, keys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tekshiruvdan o'tmagan fayl nishon bo'lib qolsa, rollback paytida
+    imzosiz `.exe` ishga tushirilardi — qoida buzilardi."""
+    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    keep = updater._keep_dir()
+
+    current = tmp_path / f"chaqimchi-windows-{VERSION}.exe"
+    current.write_bytes(b"joriy o'rnatuvchi")
+    current_manifest = _sign(current, keys)
+    current.write_bytes(b"BUZILGAN")  # imzo endi mos kelmaydi
+
+    def fake_download(url: str, dest: Path, headers) -> None:
+        source = current if url.endswith(".exe") else current_manifest
+        dest.write_bytes(source.read_bytes())
+
+    monkeypatch.setattr(updater, "_download", fake_download)
+
+    ok = updater._ensure_rollback_target(
+        "https://api.example.uz/releases", {}, keep / current.name, keep / current_manifest.name
+    )
+
+    assert ok is False
+    assert not (keep / current.name).is_file(), "yaroqsiz nishon saqlanmasin"
+
+
+def test_a_missing_rollback_target_does_not_block_the_update(
+    updater, keys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Joriy versiya reliz serverida qolmagan bo'lishi mumkin (eski
+    versiya olib tashlangan).  Bu yangilanishni to'xtatmasin — xavfsizlik
+    tuzatishi yetib borishi rollback imkoniyatidan muhimroq."""
+    import httpx
+
+    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    keep = updater._keep_dir()
+
+    def fake_download(url: str, dest: Path, headers) -> None:
+        raise httpx.HTTPError("404")
+
+    monkeypatch.setattr(updater, "_download", fake_download)
+
+    ok = updater._ensure_rollback_target(
+        "https://api.example.uz/releases",
+        {},
+        keep / f"chaqimchi-windows-{VERSION}.exe",
+        keep / f"chaqimchi-windows-{VERSION}.json",
+    )
+
+    assert ok is False
+
+
+# ── Global to'xtatuvchi (buzuq reliz tarqalib ketmasin) ──────────────────
+
+
+def test_a_bad_release_can_be_stopped_for_every_shop_at_once(tmp_path: Path) -> None:
+    """Relizni nashr qilishning o'zi tarqatish edi.
+
+    Kanareyka ham, bosqichma-bosqich tarqatish ham yo'q: fayl papkaga
+    tushgan zahoti har do'kon uni 15 daqiqada oladi.  Buzuq reliz chiqib
+    ketsa yagona himoya har do'konni QO'LDA `hold` ga o'tkazish edi —
+    ya'ni mijoz soni qancha bo'lsa shuncha so'rov, aynan panika paytida.
+    """
+    from cloud.store import CloudStore
+
+    store = CloudStore(tmp_path / "cloud.db")
+
+    assert store.updates_paused() is False, "odatda yangilanish ochiq"
+
+    store.set_updates_paused(True)
+    assert store.updates_paused() is True
+
+    store.set_updates_paused(False)
+    assert store.updates_paused() is False
+
+
+def test_the_pause_survives_a_restart(tmp_path: Path) -> None:
+    """Bayroq bazada — konteyner qayta ishga tushsa ham saqlanadi.
+    Env o'zgaruvchisi bo'lganda deploy kerak bo'lardi."""
+    from cloud.store import CloudStore
+
+    path = tmp_path / "cloud.db"
+    CloudStore(path).set_updates_paused(True)
+
+    assert CloudStore(path).updates_paused() is True

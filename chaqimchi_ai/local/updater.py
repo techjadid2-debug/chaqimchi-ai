@@ -240,6 +240,49 @@ def download_and_verify(update: Dict[str, Any], workdir: Path) -> Path:
     return installer
 
 
+def _ensure_rollback_target(
+    releases_base: str, headers: Dict[str, str], exe: Path, manifest: Path
+) -> bool:
+    """Joriy versiyaning o'rnatuvchisini rollback nishoni sifatida oladi.
+
+    Nishon "oldingi yangilanish qoldirgan fayl" edi.  Birinchi o'rnatish
+    esa qo'lda yuklanadi va hech narsa qoldirmaydi — ya'ni **birinchi**
+    masofaviy yangilanishda har do'konda rollback yo'q edi va buzuq
+    reliz chiqsa usta do'konga borishi kerak bo'lardi.  Aynan eng
+    kerakli payt.
+
+    Yuklab bo'lmasa (eski versiya reliz serveridan olib tashlangan
+    bo'lishi mumkin) yangilanish TO'XTAMAYDI: xavfsizlik tuzatishi yetib
+    borishi rollback imkoniyatidan muhimroq.  Faqat jurnalga yoziladi.
+    """
+    if exe.is_file() and manifest.is_file():
+        return True
+    try:
+        _download(f"{releases_base}/{exe.name}", exe, headers)
+        _download(f"{releases_base}/{manifest.name}", manifest, headers)
+    except (httpx.HTTPError, OSError) as exc:
+        exe.unlink(missing_ok=True)
+        manifest.unlink(missing_ok=True)
+        logger.warning(
+            "Rollback nishoni olinmadi (%s) — yangilanish davom etadi, "
+            "lekin buzuq reliz chiqsa qo'lda qayta o'rnatish kerak bo'ladi",
+            exc,
+        )
+        return False
+    key = public_key_path()
+    try:
+        verify_release_manifest(exe, manifest, key)
+    except (UpdateVerificationError, OSError) as exc:
+        # Tekshiruvdan o'tmagan fayl nishon bo'lib qolsa, rollback paytida
+        # imzosiz `.exe` ishga tushirilardi.
+        exe.unlink(missing_ok=True)
+        manifest.unlink(missing_ok=True)
+        logger.warning("Rollback nishoni tekshiruvdan o'tmadi — saqlanmadi: %s", exc)
+        return False
+    logger.info("Rollback nishoni tayyor: %s", exe.name)
+    return True
+
+
 def install(installer: Path) -> None:
     """O'rnatuvchini jim rejimda ishga tushiradi.
 
@@ -387,6 +430,20 @@ def run_once(*, dry_run: bool = False) -> int:
         # disk yangilanish arxiviga aylanib ketmasin.
         prev_exe = keep / f"chaqimchi-windows-{__version__}.exe"
         prev_manifest = keep / f"chaqimchi-windows-{__version__}.json"
+        # Birinchi masofaviy yangilanishda nishon bo'lmaydi — uni reliz
+        # serveridan olib qo'yamiz, aks holda buzuq reliz chiqsa do'kon
+        # qo'lda tiklanishni kutib qolardi.
+        raw = _cloud()
+        _ensure_rollback_target(
+            str(update["download_url"]).rsplit("/", 1)[0],
+            {
+                "X-Site-Id": str(raw["site_id"]),
+                "X-Device-Id": str(raw["device_id"]),
+                "X-Device-Token": str(raw["device_token"]),
+            },
+            prev_exe,
+            prev_manifest,
+        )
         wanted = {final, keep / manifest_src.name, prev_exe, prev_manifest}
         for stale in keep.glob("chaqimchi-windows-*"):
             if stale not in wanted:

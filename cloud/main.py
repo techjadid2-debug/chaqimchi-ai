@@ -3283,6 +3283,15 @@ async def edge_update(
     policy = get_store().update_policy(device["site_id"])
     base = urls.dl_url().rstrip("/") or str(request.base_url).rstrip("/")
 
+    # Global to'xtatuvchi.  Buzuq reliz chiqib ketsa uni har do'konda
+    # alohida `hold` ga o'tkazishga ulgurib bo'lmaydi — qurilmalar har
+    # 15 daqiqada so'raydi.  Bu bayroq hammasini bir zumda to'xtatadi.
+    if get_store().updates_paused():
+        return {
+            "available": False,
+            "reason": "yangilanish vaqtincha to'xtatilgan",
+            "policy": policy,
+        }
     if release is None:
         return {"available": False, "reason": "nashr qilingan reliz yo'q", "policy": policy}
     if policy["channel"] == "hold":
@@ -3488,6 +3497,29 @@ async def admin_set_update_policy(
         return get_store().set_update_policy(site_id, channel=body.channel, version=body.version)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+class UpdatesPausedBody(BaseModel):
+    paused: bool
+
+
+@app.get("/api/v1/admin/updates-paused")
+async def admin_updates_paused(_: None = Depends(require_admin)) -> Dict[str, Any]:
+    return {"paused": get_store().updates_paused()}
+
+
+@app.put("/api/v1/admin/updates-paused")
+async def admin_set_updates_paused(
+    body: UpdatesPausedBody, _: None = Depends(require_admin)
+) -> Dict[str, Any]:
+    """Barcha do'konlarga yangilanish tarqatishni to'xtatadi yoki yoqadi.
+
+    Buzuq reliz chiqib ketganda har do'konni alohida `hold` ga
+    o'tkazishga ulgurib bo'lmaydi: qurilmalar har 15 daqiqada so'raydi.
+    """
+    paused = get_store().set_updates_paused(body.paused)
+    logger.warning("Yangilanish tarqatish %s", "TO'XTATILDI" if paused else "yoqildi")
+    return {"paused": paused}
 
 
 @app.get("/api/v1/admin/windows-releases")

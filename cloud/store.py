@@ -263,6 +263,14 @@ class CloudStore:
                 PRIMARY KEY (site_id, kind),
                 FOREIGN KEY (site_id) REFERENCES sites(id)
             );
+            -- Platforma darajasidagi kalitlar.  Hozircha bittasi bor:
+            -- `updates_paused` — barcha do'konlarga yangilanish tarqatishni
+            -- bir tugma bilan to'xtatish.
+            CREATE TABLE IF NOT EXISTS platform_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS leads (
                 id TEXT PRIMARY KEY,
                 full_name TEXT NOT NULL,
@@ -1884,6 +1892,37 @@ class CloudStore:
         conn.commit()
         conn.close()
         return self.site_detail(site_id)
+
+    def updates_paused(self) -> bool:
+        """Barcha do'konlarga yangilanish tarqatish to'xtatilganmi.
+
+        Nega kerak: relizni nashr qilishning o'zi tarqatish edi.
+        Kanareyka ham, bosqichma-bosqich tarqatish ham yo'q — fayl
+        papkaga tushgan zahoti har bir do'kon uni 15 daqiqa ichida
+        oladi.  Buzuq reliz chiqib ketsa yagona himoya har do'konni
+        qo'lda `hold` ga o'tkazish edi, ya'ni mijoz soni qancha bo'lsa
+        shuncha so'rov — aynan panika paytida.
+
+        Bu bayroq bitta tugma bilan hammasini to'xtatadi va deploy ham,
+        qayta ishga tushirish ham talab qilmaydi.
+        """
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT value FROM platform_settings WHERE key='updates_paused'"
+        ).fetchone()
+        conn.close()
+        return bool(row and str(row["value"]) == "1")
+
+    def set_updates_paused(self, paused: bool) -> bool:
+        conn = self._connect()
+        conn.execute(
+            "INSERT INTO platform_settings(key,value,updated_at) VALUES('updates_paused',?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
+            ("1" if paused else "0", _iso(_utc_now())),
+        )
+        conn.commit()
+        conn.close()
+        return bool(paused)
 
     def update_policy(self, site_id: str) -> Dict[str, Any]:
         site = self.get_site(site_id) or {}

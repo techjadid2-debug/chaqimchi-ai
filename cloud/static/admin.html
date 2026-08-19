@@ -315,7 +315,7 @@
     const S = {
       stats: null, sites: null, leads: null, invoices: null, providers: null,
       alerts: null, readiness: null, catalog: null, templates: null,
-      accounts: null, assignments: null,
+      accounts: null, assignments: null, updates: null,
     };
     const LOADERS = {
       stats: () => api("/api/v1/admin/stats"),
@@ -329,6 +329,7 @@
       templates: () => api("/api/v1/admin/business-templates"),
       accounts: () => api("/api/v1/admin/accounts").then((d) => d.accounts || []),
       assignments: () => api("/api/v1/admin/installer-assignments").then((d) => d.assignments || []),
+      updates: () => api("/api/v1/admin/updates-paused"),
     };
 
     async function need(keys) {
@@ -351,7 +352,8 @@
       { id: "arizalar", label: "Arizalar", deps: ["leads"], render: renderLeads,
         badge: () => (S.leads || []).filter((l) => l.status === "new").length },
       { id: "jamoa", label: "Jamoa", deps: ["accounts", "assignments", "sites"], render: renderTeam },
-      { id: "sozlamalar", label: "Sozlamalar", deps: ["readiness", "catalog", "providers", "alerts"], render: renderSettings },
+      { id: "sozlamalar", label: "Sozlamalar",
+        deps: ["readiness", "catalog", "providers", "alerts", "updates"], render: renderSettings },
     ];
 
     function currentRoute() {
@@ -867,6 +869,7 @@
       const alerts = S.alerts || {};
       const p = S.providers || {};
       const catalog = S.catalog || {};
+      const updatesPaused = Boolean((S.updates || {}).paused);
       const features = catalog.features || [];
       const book = catalog.price_book || {};
 
@@ -904,6 +907,21 @@
                 alerts.last_run ? ` · oxirgi tekshiruv ${esc(alerts.last_run.ran_at.slice(11, 16))} (UTC)` : ""}</div>
                <button class="button ghost" type="button" data-act="alert-test">Sinov xabarini yuborish</button>`
             : `<div class="note warn"><b>O'chiq</b>Do'kon ishlamay qolsa sizga xabar kelmaydi. Serverda Telegram sozlamalarini yoqing.</div>`}
+        </section>
+
+        <section class="card${updatesPaused ? " danger" : ""}">
+          <div class="card-head"><h2>Dasturni yangilash</h2></div>
+          ${updatesPaused
+            ? `<div class="note err"><b>To'xtatilgan</b>Hech bir do'kon yangi versiyani olmayapti.</div>`
+            : `<div class="note ok"><b>Yoqilgan</b>Yangi versiya nashr qilinsa do'konlar 15 daqiqada oladi.</div>`}
+          <p class="hint" style="margin-top: 0">Buzuq versiya chiqib ketsa shu tugma hammasini
+            bir zumda to'xtatadi — har do'konni alohida sozlash shart emas.</p>
+          <div class="action-row">
+            <button class="button ${updatesPaused ? "primary" : "danger"}" type="button"
+              data-act="updates-toggle" data-to="${updatesPaused ? "0" : "1"}">
+              ${updatesPaused ? "Yangilanishni qayta yoqish" : "Barcha yangilanishni to'xtatish"}
+            </button>
+          </div>
         </section>
 
         <section class="card">
@@ -944,6 +962,24 @@
         custFilter = el.dataset.id;
         el.parentElement.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === el));
         $("custList").innerHTML = customerCards();
+      },
+      // Buzuq reliz chiqib ketsa — bitta tugma bilan hammasini to'xtatish.
+      "updates-toggle": async (el) => {
+        const paused = el.dataset.to === "1";
+        const ok = await confirmDialog({
+          title: paused ? "Yangilanishni to'xtatish" : "Yangilanishni qayta yoqish",
+          text: paused
+            ? "Hech bir do'kon yangi versiyani olmaydi. Buzuq reliz tarqalayotganda shu kerak."
+            : "Do'konlar yangi versiyani 15 daqiqa ichida oladi.",
+          confirmLabel: paused ? "To'xtatish" : "Yoqish",
+          danger: paused,
+        });
+        if (!ok) return;
+        await api("/api/v1/admin/updates-paused", {
+          method: "PUT", body: JSON.stringify({ paused }),
+        });
+        notify(paused ? "Yangilanish to'xtatildi" : "Yangilanish yoqildi");
+        await reload("updates");
       },
       "alert-test": async () => {
         await api("/api/v1/admin/alerts/test", { method: "POST" });

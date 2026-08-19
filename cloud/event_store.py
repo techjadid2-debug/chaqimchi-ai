@@ -1245,6 +1245,46 @@ class EventStore:
             result.append(item)
         return result
 
+    def latest_health_by_site(self) -> Dict[str, Dict[str, Any]]:
+        """Har sayt uchun oxirgi heartbeat — bitta so'rovda.
+
+        Ogohlantirish tsikli har 15 daqiqada barcha saytlarni ko'radi;
+        har biri uchun alohida so'rov yuborish qimmat bo'lardi.  Bir
+        saytda bir necha qurilma bo'lsa eng yomon ko'rsatkich olinadi:
+        bitta qurilma sog'lom bo'lgani boshqasining yiqilganini
+        yashirmasligi kerak.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql("SELECT site_id,payload_json,received_at FROM device_health")
+            ).fetchall()
+        result: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            item = self._dict(row)
+            try:
+                payload = json.loads(item["payload_json"])
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            current = result.get(item["site_id"])
+            if current is None:
+                result[item["site_id"]] = payload
+                continue
+            for key in ("analysis_errors", "queue_errors"):
+                current[key] = max(int(current.get(key) or 0), int(payload.get(key) or 0))
+            current["analyzed"] = max(
+                int(current.get("analyzed") or 0), int(payload.get("analyzed") or 0)
+            )
+            free_values = [
+                int(value or 0)
+                for value in (current.get("disk_free_bytes"), payload.get("disk_free_bytes"))
+                if value
+            ]
+            if free_values:
+                current["disk_free_bytes"] = min(free_values)
+        return result
+
     def get_site_config(self, site_id: str) -> Dict[str, Any]:
         with self._connect() as conn:
             row = conn.execute(

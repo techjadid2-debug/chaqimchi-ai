@@ -173,6 +173,13 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         "cameras_active": int(status.get("cameras_active") or 0),
         "disk_free_bytes": int(free_bytes),
         "outbox_pending": int(_pending_events() or 0),
+        # Jimgina ishlamay qolishni cloud shu uchtasidan biladi:
+        # `analyzed`ga nisbatan `analysis_errors` ko'p bo'lsa tahlil
+        # zanjiri buzilgan, `queue_errors` noldan katta bo'lsa hodisa
+        # umuman saqlanmayapti.  Ularsiz qurilma "sog'lom" ko'rinardi.
+        "analyzed": int(status.get("analyzed") or 0),
+        "analysis_errors": int(status.get("errors") or 0),
+        "queue_errors": int(status.get("action_errors") or 0),
         "app_version": __version__,
         "product_name": "Chaqimchi Windows",
     }

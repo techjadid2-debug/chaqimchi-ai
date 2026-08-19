@@ -540,6 +540,15 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel buni
         # ko'rsatishi shart: "hodisa bor, lekin cloudga bormayapti".
         "plan_filtered": stats.get("plan_filtered", 0),
+        # Xato hisoblagichlari holat faylida BO'LISHI SHART.  Ular
+        # `stats()` da allaqachon bor edi, lekin bu yerga yozilmasdi va
+        # heartbeat'ga ham chiqmasdi.  Natijada `analyze()` har kadrda
+        # yiqilsa ham panel "4 kamera ishlayapti" deb turardi va hech kim
+        # hodisa yozilmayotganini bilmasdi.
+        "errors": stats.get("errors", 0),
+        # Hodisani navbatga yozib bo'lmadi (odatda disk to'lgan) — bu
+        # hodisa butunlay yo'qoldi degani, uni keyin tiklab bo'lmaydi.
+        "action_errors": stats.get("action_errors", 0),
         "pressure": stats.get("pressure") or {},
     }
     temporary = path.with_name(f".{path.name}.tmp")

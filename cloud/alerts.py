@@ -315,6 +315,100 @@ def plan_disk_alert(
     return [], []
 
 
+# ── Do'kon kompyuterining sog'ligi ──────────────────────────────────────
+#
+# Eng xavfli buzilish — tizim yashil ko'rinib, hodisa yozmay qo'yishi.
+# Aloqa uzilishini darhol ko'ramiz; buni esa faqat oy oxirida "hisobot
+# nega bo'sh?" degan savoldan bilib qolardik.
+
+#: Shundan kam bo'sh joy qolganda navbat va kliplar sig'may boshlaydi.
+DEVICE_DISK_LOW_BYTES = 3 * 1024**3
+
+#: Xato ulushi shundan oshsa tahlil zanjiri buzilgan hisoblanadi.
+ANALYSIS_ERROR_RATIO = 0.5
+
+#: Bundan kam kadr — bu hali statistika emas (dastur endi ko'tarildi).
+ANALYSIS_MIN_SAMPLE = 200
+
+
+def _device_problem(health: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """Eng og'ir muammoni qaytaradi: `(holat, tavsif)`.
+
+    Bitta xabar — bitta muammo.  Uchalasi bir vaqtda bo'lsa (disk to'ldi →
+    navbat yiqildi → tahlil ham xato bera boshladi) uchta alohida xabar
+    chatni ko'mib tashlaydi va eng muhimi ko'rinmay ketadi.
+    """
+    if int(health.get("queue_errors") or 0) > 0:
+        # Eng og'iri: hodisa diskka ham yozilmadi, ya'ni butunlay yo'qoldi.
+        # Uni keyin tiklab bo'lmaydi.
+        return "queue", "hodisalar saqlanmayapti va yo'qolyapti"
+
+    analyzed = int(health.get("analyzed") or 0)
+    errors = int(health.get("analysis_errors") or 0)
+    if analyzed >= ANALYSIS_MIN_SAMPLE and errors >= analyzed * ANALYSIS_ERROR_RATIO:
+        return "analysis", "tahlil ishlamayapti — kadrlar qayta ishlanmayapti"
+
+    free = int(health.get("disk_free_bytes") or 0)
+    if 0 < free < DEVICE_DISK_LOW_BYTES:
+        return "disk", f"kompyuterda joy tugayapti ({free / 1024**3:.1f} GB qoldi)"
+    return None
+
+
+def _device_text(site: Dict[str, Any], description: str) -> str:
+    return (
+        f"🔴 <b>{site.get('name', '?')}</b> — {description}\n"
+        f"Tizim tashqaridan sog'lom ko'rinadi, lekin hisobot to'planmayapti.\n"
+        f"Do'kon kompyuterini tekshirish kerak."
+    )
+
+
+def _device_recovery_text(site: Dict[str, Any]) -> str:
+    return f"✅ <b>{site.get('name', '?')}</b> — do'kon kompyuteri tuzaldi, hisobot yana to'planyapti."
+
+
+def plan_device_health_alerts(
+    sites: List[Dict[str, Any]],
+    health_by_site: Dict[str, Dict[str, Any]],
+    previous: Dict[str, str],
+) -> Tuple[List[Alert], List[str]]:
+    """Qurilma heartbeat'idagi sog'liq belgilarini tekshiradi.
+
+    `health_by_site` — sayt bo'yicha oxirgi heartbeat.  Aloqasi yo'q
+    saytlar tekshirilmaydi: ularning heartbeat'i eskirgan va aloqa
+    ogohlantirishi allaqachon ketgan.
+    """
+    alerts: List[Alert] = []
+    forget: List[str] = []
+
+    for site in sites:
+        site_id = site["id"]
+        prev = previous.get(site_id)
+        watched = site.get("license_status") in ("active", "grace") and site.get("connection") in (
+            "online",
+            "stale",
+        )
+        health = health_by_site.get(site_id)
+        if not watched or health is None:
+            if prev is not None:
+                forget.append(site_id)
+            continue
+
+        problem = _device_problem(health)
+        if problem is None:
+            if prev is not None:
+                alerts.append(
+                    Alert(site_id, "ok", _device_recovery_text(site), remember=None, kind="device")
+                )
+            continue
+        state, description = problem
+        if prev != state:
+            alerts.append(
+                Alert(site_id, state, _device_text(site, description), remember=state, kind="device")
+            )
+
+    return alerts, forget
+
+
 def plan_alerts(
     sites: List[Dict[str, Any]],
     previous: Dict[str, str],
@@ -420,6 +514,17 @@ class TelegramSender:
                 self._client = None
 
 
+def _latest_health() -> Dict[str, Dict[str, Any]]:
+    """Qurilma heartbeat'lari hodisa bazasida (cloud DB'da emas).
+
+    Import shu yerda: `alerts` moduli hodisa bazasidan mustaqil bo'lib
+    qolsin, testlarda esa uni almashtirish oson bo'lsin.
+    """
+    from cloud.main import get_event_store
+
+    return get_event_store().latest_health_by_site()
+
+
 async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
     """Bir marta tekshirish: holatlarni solishtirib, o‘zgarganlarini yuboradi."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -433,13 +538,26 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
     disk_alerts, _ = plan_disk_alert(
         disk_usage_percent(disk_watch_path()), store.alert_states("disk")
     )
+    # Qurilma sog'ligi hodisa bazasida — u yerdan bitta so'rov bilan
+    # olinadi.  Bazaga yetib bo'lmasa qolgan ogohlantirishlar baribir
+    # ketishi kerak.
+    device_alerts: List[Alert] = []
+    device_forget: List[str] = []
+    try:
+        device_alerts, device_forget = plan_device_health_alerts(
+            sites, _latest_health(), store.alert_states("device")
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Qurilma sog'ligi tekshirilmadi")
 
     for site_id in conn_forget:
         store.clear_alert_state(site_id, kind="connection")
     for site_id in cam_forget:
         store.clear_alert_state(site_id, kind="cameras")
+    for site_id in device_forget:
+        store.clear_alert_state(site_id, kind="device")
 
-    for alert in conn_alerts + cam_alerts + disk_alerts:
+    for alert in conn_alerts + cam_alerts + device_alerts + disk_alerts:
         if await sender.send(alert.text):
             run.sent += 1
             run.messages.append(alert.text)

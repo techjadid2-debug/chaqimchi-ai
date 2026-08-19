@@ -362,6 +362,12 @@ class EdgeHeartbeatBody(BaseModel):
     #: Qurilma umidsiz deb tashlagan hodisalar.  Nolga teng bo'lmasa cloud
     #: biror narsani doimiy rad etyapti — bu kod xatosi, tarmoq emas.
     outbox_poisoned: int = Field(default=0, ge=0)
+    #: Jimgina ishlamay qolishni aniqlash uchun (`plan_device_health_alerts`).
+    #: `analysis_errors` `analyzed`ga nisbatan ko'p bo'lsa tahlil zanjiri
+    #: buzilgan; `queue_errors` noldan katta bo'lsa hodisa saqlanmayapti.
+    analyzed: int = Field(default=0, ge=0)
+    analysis_errors: int = Field(default=0, ge=0)
+    queue_errors: int = Field(default=0, ge=0)
     app_version: str = Field(default="unknown", max_length=64)
     model_version: Optional[str] = Field(default=None, max_length=128)
     product_name: str = Field(default="Sotqin", max_length=64)

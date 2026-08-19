@@ -622,7 +622,7 @@ def test_owner_panel_has_four_tabs_and_hash_routing() -> None:
     assert "hashchange" in html, "Orqaga tugmasi ishlashi kerak"
     for tab in OWNER_TABS:
         assert f'id: "{tab}"' in html, f"«{tab}» bo'limi yo'q"
-        assert f'id="pane{tab.capitalize()}"' in html or f'pane: "pane' in html
+        assert f'id="pane{tab.capitalize()}"' in html, f"«{tab}» uchun bo'lim markupi yo'q"
 
 
 def test_owner_tabs_fail_independently() -> None:
@@ -681,12 +681,39 @@ def test_owner_deep_link_survives_the_login_redirect() -> None:
     assert "location.hash" in scrub
 
 
-def test_owner_otp_box_opens_only_when_a_code_was_sent() -> None:
-    """Kod yuborilmagan bo'lsa ham kod maydoni ochilardi va mijoz
-    kelmaydigan kodni kutib turardi."""
+def test_owner_login_screen_offers_exactly_one_way_in() -> None:
+    """Kirish ekranida UCHTA yo'l bor edi — Telegram tugmasi, login/parol
+    va Telegram kod — mijoz esa qaysi biri o'ziniki ekanini bilmasdi.
+
+    Endi bitta asosiy yo'l: login va parol.  Telegram kodi butunlay
+    olib tashlandi (bu yerda emas, kirgandan keyin ulanadi)."""
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
-    request = html[html.index("async function requestOtp") : html.index("async function verifyOtp")]
-    assert 'if (r.ok) $("verify").classList.remove("hidden")' in request
+    login = html[html.index('<section id="login"') : html.index("</section>")]
+    assert login.count("<button") == 1, "kirish ekranida bitta asosiy tugma qolsin"
+    for gone in ("otpRequestBtn", "otpVerifyBtn", "requestOtp", "verifyOtp", "auth/request", "auth/verify"):
+        assert gone not in html, f"eski kod bilan kirish qoldiqlari: {gone}"
+
+
+def test_owner_login_submits_as_a_form() -> None:
+    """Telefon klaviaturasidagi "Kirish" tugmasi ham ishlashi kerak —
+    `click` tinglovchisi buni qo'llab-quvvatlamaydi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert '<form id="loginForm"' in html
+    assert '$("loginForm").addEventListener("submit"' in html
+    assert "event.preventDefault()" in html
+
+
+def test_owner_never_asks_the_shopkeeper_for_a_telegram_id() -> None:
+    """A'zo qo'shish uchun RAQAMLI Telegram ID so'ralardi.  Do'kon egasi
+    na o'ziniki, na xodiminikini biladi — ya'ni funksiya amalda ishlamasdi.
+    Endi panel bir martalik havola beradi, bot o'zi qo'shadi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "newMemberId" not in html
+    assert 'inputmode="numeric" placeholder="Masalan: 123456789"' not in html
+    assert "/api/v1/owner/telegram-invite" in html
+    # Yangi oyna ochilmaydi: telefonda u bo'sh varaq bo'lib qolardi.
+    connect = html[html.index("async function connectMyTelegram") : html.index("async function inviteStaff")]
+    assert "location.href = data.url" in connect
 
 
 def test_owner_uses_the_shop_day_not_utc() -> None:

@@ -4281,6 +4281,57 @@ async def owner_members(owner: OwnerPrincipal = Depends(require_active_owner)) -
     }
 
 
+#: `secrets.token_urlsafe(24)` — aynan 32 ta belgi.  Boshqa uzunlikdagi
+#: `/start` payload'lari (masalan `register`) taklif emas.
+INVITE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{32}")
+
+
+class TelegramInviteBody(BaseModel):
+    #: `owner` — mijozning o'zi (kirgan hisobiga Telegramni bog'laydi).
+    #: `manager` — xodim: hisobot va ogohlantirish oladi, sozlamaga tegmaydi.
+    role: Literal["owner", "manager"] = "manager"
+    display_name: Optional[str] = Field(default=None, max_length=120)
+
+
+@app.post("/api/v1/owner/telegram-invite")
+async def owner_telegram_invite(
+    body: TelegramInviteBody,
+    request: Request,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Telegramni ulash yoki xodim taklif qilish uchun bir martalik havola.
+
+    Nega kerak: a'zo qo'shish uchun panelda RAQAMLI Telegram ID so'ralardi.
+    Do'kon egasi o'z ID sini ham, xodimining ID sini ham bilmaydi va uni
+    topish yo'li ko'rsatilmagan edi — ya'ni funksiya amalda ishlamasdi.
+
+    Havola credential: uni bosgan odam panelga kiradi.  Shuning uchun
+    bir martalik va 30 daqiqada eskiradi.
+    """
+    require_owner_role(owner, "owner", "service_admin")
+    ratelimit.check(
+        "tg-invite",
+        owner.site_id,
+        limit=10,
+        window_sec=3_600,
+        message="Juda ko'p havola yaratildi. Bir soatdan keyin urinib ko'ring.",
+    )
+    bot = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot):
+        raise HTTPException(503, "Telegram bot sozlanmagan — administrator bilan bog'laning")
+    invite = get_event_store().create_telegram_invite(
+        owner.site_id,
+        secret=_owner_secret(),
+        role=body.role,
+        display_name=body.display_name,
+    )
+    return {
+        "url": f"https://t.me/{bot}?start={invite['token']}",
+        "expires_minutes": invite["expires_minutes"],
+        "role": body.role,
+    }
+
+
 @app.post("/api/v1/owner/members")
 async def owner_add_member(
     body: MemberBody,
@@ -4394,6 +4445,52 @@ async def owner_telegram_webhook(
     command = BOT_COMMAND_ALIASES.get(command, command)
     members = get_event_store().members_for_telegram(telegram_id)
     base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+
+    # `/start <token>` — panelda yaratilgan taklif havolasi.  Do'kon egasi
+    # o'z Telegramini ulaydi yoki xodimini qo'shadi, RAQAM YOZMASDAN.
+    # Telegram payload'ni aynan shu ko'rinishda uzatadi.
+    #
+    # Faqat taklif tokeniga o'xshagan payload ushlanadi.  `/start register`
+    # kabi mavjud so'zlar pastdagi odatiy yo'lga o'tishi SHART — aks holda
+    # ro'yxatdan o'tish tugmasi ishlamay qoladi.
+    payload = text.split(maxsplit=1)[1].strip() if command == "/start" and " " in text else ""
+    if not INVITE_TOKEN_RE.fullmatch(payload):
+        payload = ""
+    if telegram_id and chat.get("type") == "private" and payload:
+        if not ratelimit.limiter().hit("tg-invite-use", telegram_id, limit=10, window_sec=600):
+            return {"ok": True}
+        redeemed = get_event_store().redeem_telegram_invite(
+            payload, telegram_id, secret=_owner_secret()
+        )
+        members = get_event_store().members_for_telegram(telegram_id)
+        # Havola ISHLATILGAN, lekin a'zolik allaqachon bor — bu odam
+        # ikkinchi marta bosgan yoki Telegram xabarni qayta yuborgan.
+        # Unga "eskirgan" deyish yolg'on bo'lardi: u ulangan.
+        if redeemed or members:
+            site = get_store().get_site(redeemed["site_id"]) if redeemed else {}
+            name = str((site or {}).get("name") or "Do‘kon")
+            try:
+                await _send_owner_telegram(
+                    telegram_id,
+                    f"✅ <b>{botfmt.escape(name)}</b> ulandi.\n"
+                    "Endi kunlik hisobot va muhim ogohlantirishlar shu yerga keladi.",
+                    reply_markup=botfmt.panel_button(base),
+                )
+            except Exception:
+                # Xabar ketmasa ham a'zolik saqlanib qoldi.  Bu yerda
+                # xato qaytarsak Telegram update'ni qayta yuboradi va
+                # o'sha odam "havola eskirgan" degan yolg'on javob oladi.
+                logger.warning("taklif tasdig'i yuborilmadi", extra={"telegram_id": telegram_id})
+            return {"ok": True}
+        try:
+            await _send_owner_telegram(
+                telegram_id,
+                "Havola eskirgan yoki allaqachon ishlatilgan.\n"
+                "Do‘kon panelidan yangi havola oling.",
+            )
+        except Exception:
+            logger.warning("taklif rad javobi yuborilmadi", extra={"telegram_id": telegram_id})
+        return {"ok": True}
 
     if (
         telegram_id

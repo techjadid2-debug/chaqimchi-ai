@@ -16,36 +16,30 @@
       <span>Chaqimchi <b>AI</b></span>
     </a>
 
+    <!-- Ilgari bu ekranda UCHTA kirish yo'li bor edi: Telegram tugmasi,
+         login/parol va Telegram kod.  Mijoz qaysi birini bosishni
+         bilmasdi.  Endi bitta asosiy yo'l — login va parol; Telegram
+         esa kirgandan KEYIN, panel ichidan bir bosishda ulanadi. -->
     <div class="card">
       <h2>Do‘kon paneliga kirish</h2>
-      <p class="lead" style="margin-bottom:10px">
-        Eng osoni — <b>kirish havolasi</b>: Telegram botimizga
-        <code>/start</code> yozsangiz, bot sizga shaxsiy havola beradi.
-        Havola bosilishi bilan panel ochiladi.
-      </p>
-      <a class="button primary" id="botLink" href="__TELEGRAM_BOT_URL__" target="_blank" rel="noopener noreferrer">Telegram botni ochish</a>
-
-      <details class="alt-login">
-        <summary>Login va parolim bor</summary>
-        <div style="display:grid;gap:10px;margin-top:12px">
-          <input id="portalUsername" type="text" autocomplete="username" placeholder="Login">
-          <input id="portalPassword" type="password" autocomplete="current-password" placeholder="Parol">
-          <button class="button" id="passwordBtn" type="button">Kirish</button>
-        </div>
-      </details>
-
-      <details class="alt-login">
-        <summary>Telegram kod bilan kirish</summary>
-        <div style="display:grid;gap:10px;margin-top:12px">
-          <input id="telegram" type="text" inputmode="numeric" placeholder="Telegram ID (botdan: /start)">
-          <button class="button ghost" id="otpRequestBtn" type="button">Kod olish</button>
-          <div id="verify" class="hidden" style="display:grid;gap:10px">
-            <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="6 xonali kod">
-            <button class="button" id="otpVerifyBtn" type="button">Kirish</button>
-          </div>
-        </div>
-      </details>
+      <form id="loginForm" style="display:grid;gap:12px;margin-top:14px" novalidate>
+        <label class="field" for="portalUsername">Login
+          <input id="portalUsername" type="text" autocomplete="username">
+        </label>
+        <label class="field" for="portalPassword">Parol
+          <input id="portalPassword" type="password" autocomplete="current-password">
+        </label>
+        <button class="button primary" id="passwordBtn" type="submit">Kirish</button>
+      </form>
       <p id="loginMsg" class="hint" role="status" aria-live="polite"></p>
+
+      <details class="alt-login">
+        <summary>Login va parolim yo‘q</summary>
+        <p class="hint">Telegram botimizga <code>/start</code> yozing — bot sizga
+          kirish havolasini beradi. Havola bosilishi bilan panel ochiladi.</p>
+        <a class="button ghost" id="botLink" href="__TELEGRAM_BOT_URL__" target="_blank" rel="noopener noreferrer">Telegram botni ochish</a>
+        <p class="hint">Yordam kerak bo‘lsa: <a href="tel:+998932225070">+998 93 222 50 70</a></p>
+      </details>
     </div>
   </section>
 
@@ -234,18 +228,32 @@
 
       <div class="card">
         <h2>Bildirishnomalar</h2>
-        <label class="switch" style="margin-bottom:14px">
+        <label class="switch">
           <input type="checkbox" id="digestToggle">
           <span class="track"></span>
           <span>Har kuni kechqurun kunlik hisobot kelsin</span>
         </label>
+        <p id="digestHint" class="hint" style="margin-top:4px"></p>
         <div id="memberList"></div>
-        <div class="grid-2" style="align-items:end">
-          <label class="field">Yangi a’zo (Telegram ID) <small>u avval botga /start yozgan bo‘lsin</small>
-            <input id="newMemberId" type="text" inputmode="numeric" placeholder="Masalan: 123456789">
+
+        <!-- Ilgari bu yerda "Yangi a'zo (Telegram ID)" degan maydon bor edi.
+             Do'kon egasi o'z Telegram ID sini ham, xodiminikini ham
+             bilmaydi — ya'ni tugma bor edi, foyda yo'q.  Endi panel
+             havola beradi, odam uni bosadi, bot o'zi qo'shadi. -->
+        <div class="actions" style="margin:0">
+          <button class="button" id="connectTelegramBtn" type="button">Telegramimni ulash</button>
+          <button class="button ghost" id="inviteStaffBtn" type="button">Xodim taklif qilish</button>
+        </div>
+        <div id="inviteBox" class="hidden" style="margin-top:12px">
+          <p class="hint" style="margin-top:0">Bu havolani xodimingizga yuboring. U havolani bossa,
+            kunlik hisobot va ogohlantirishlar unga ham boradi. Havola <b>30 daqiqa</b> yashaydi
+            va faqat bir marta ishlaydi.</p>
+          <label class="field" for="inviteLink">Taklif havolasi
+            <input id="inviteLink" type="text" readonly onclick="this.select()">
           </label>
-          <div class="actions" style="margin:0 0 12px">
-            <button class="button ghost" id="addMemberBtn" type="button">Qo‘shish</button>
+          <div class="actions" style="margin:0">
+            <button class="button small" id="inviteCopyBtn" type="button">Nusxa olish</button>
+            <a class="button ghost small" id="inviteShareBtn" href="#" target="_blank" rel="noopener noreferrer">Telegramda yuborish</a>
           </div>
         </div>
         <div id="memberStatus"></div>
@@ -471,53 +479,33 @@
   }
 
   async function passwordLogin() {
+    const username = $("portalUsername").value.trim();
+    const password = $("portalPassword").value;
+    if (!username || !password) {
+      $("loginMsg").textContent = "Login va parolni kiriting.";
+      return;
+    }
+    const button = $("passwordBtn");
+    button.disabled = true;
+    $("loginMsg").textContent = "Kirmoqda…";
     try {
       const r = await fetch("/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: $("portalUsername").value.trim(), password: $("portalPassword").value }),
+        body: JSON.stringify({ username, password }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "Kirish xatosi");
+      if (!r.ok) throw new Error(d.detail || "Login yoki parol noto‘g‘ri.");
       if (!d.account || d.account.role !== "customer") throw new Error("Bu login mijoz akkaunti emas.");
       token = d.access_token;
       localStorage.setItem("chaqimchi_owner_token", token);
+      $("loginMsg").textContent = "";
       showApp();
-    } catch (err) { $("loginMsg").textContent = err.message; }
-  }
-
-  async function requestOtp() {
-    const params = new URLSearchParams(location.search);
-    const body = { telegram_id: $("telegram").value.trim() };
-    if (params.get("site")) body.site_id = params.get("site");
-    try {
-      const r = await fetch("/api/v1/owner/auth/request", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      const d = await r.json().catch(() => ({}));
-      $("loginMsg").textContent = d.message || d.detail || (r.ok ? "" : "Kod yuborilmadi.");
-      // Kod maydoni faqat kod HAQIQATAN yuborilganda ochiladi.  Ilgari u
-      // har doim ochilardi va mijoz javob kelmagan kodni kutib turardi.
-      if (r.ok) $("verify").classList.remove("hidden");
     } catch (err) {
-      $("loginMsg").textContent = "Internet bilan aloqa yo‘q.";
+      $("loginMsg").textContent = err.message || "Server bilan aloqa yo‘q.";
+    } finally {
+      button.disabled = false;
     }
-  }
-
-  async function verifyOtp() {
-    const params = new URLSearchParams(location.search);
-    const body = { telegram_id: $("telegram").value.trim(), code: $("code").value.trim() };
-    if (params.get("site")) body.site_id = params.get("site");
-    try {
-    const r = await fetch("/api/v1/owner/auth/verify", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    });
-    const d = await r.json();
-    if (!r.ok) { $("loginMsg").textContent = d.detail || "Kirish xatosi"; return; }
-    token = d.access_token;
-    localStorage.setItem("chaqimchi_owner_token", token);
-    showApp();
-    } catch (err) { $("loginMsg").textContent = "Internet bilan aloqa yo‘q."; }
   }
 
   function logout() {
@@ -1369,15 +1357,20 @@
     {
       const me = data.me;
       const mine = data.members.find((member) => String(member.id) === String(me));
-      $("digestToggle").checked = !(mine && Number(mine.digest_muted));
-      $("memberList").innerHTML = data.members.map((member) => `
+      // Login/parol bilan kirganda tokenda a'zo yo'q — server digest
+      // so'rovini rad etadi.  Tumblerni ishlaydigandek ko'rsatmaymiz.
+      const toggle = $("digestToggle");
+      toggle.disabled = !mine;
+      toggle.checked = !!mine && !Number(mine.digest_muted);
+      $("digestHint").textContent = mine ? "" : "Buni yoqish uchun avval Telegramingizni ulang.";
+      $("memberList").innerHTML = (data.members || []).map((member) => `
         <div class="member-row">
-          <div class="who"><b>${esc(member.display_name || member.telegram_id)}</b>
-            <small>Telegram ID: ${esc(member.telegram_id)} · ${member.role === "owner" ? "egasi" : "xodim"}${Number(member.notify_failures) >= 3 ? " · <span style=\"color:var(--danger)\">botga /start bosmagan</span>" : ""}</small>
+          <div class="who"><b>${esc(member.display_name || "Telegram a’zosi")}</b>
+            <small>${member.role === "owner" ? "egasi" : "xodim"}${Number(member.notify_failures) >= 3 ? " · <span style=\"color:var(--danger)\">botni bloklagan — xabar bormayapti</span>" : " · xabarlar boradi"}</small>
           </div>
           ${String(member.id) === String(me) ? '<span class="hint" style="margin:0">siz</span>'
             : `<button class="button danger small" type="button" data-remove="${esc(member.id)}">O‘chirish</button>`}
-        </div>`).join("");
+        </div>`).join("") || '<p class="empty-note">Hali hech kim ulanmagan — hisobot Telegramga bormayapti.</p>';
       $("memberList").querySelectorAll("[data-remove]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           try {
@@ -1389,15 +1382,53 @@
     }
   }
 
-  async function addMember() {
-    const telegramId = $("newMemberId").value.trim();
-    if (!/^[-0-9]{3,32}$/.test(telegramId)) { note("memberStatus", "err", "Telegram ID noto‘g‘ri."); return; }
+  async function inviteLink(role) {
+    return api("/api/v1/owner/telegram-invite", {
+      method: "POST", body: JSON.stringify({ role }),
+    });
+  }
+
+  // O'zini ulash: havola olinadi va SHU oynada Telegramga o'tiladi.
+  // Yangi oyna ochilmaydi — telefonda u bo'sh varaq bo'lib qolardi,
+  // "Orqaga" esa panelga qaytaradi.
+  async function connectMyTelegram() {
+    const button = $("connectTelegramBtn");
+    button.disabled = true;
+    note("memberStatus", "ok", "Havola tayyorlanmoqda…");
     try {
-      await api("/api/v1/owner/members", { method: "POST", body: JSON.stringify({ telegram_id: telegramId, role: "manager" }) });
-      $("newMemberId").value = "";
-      note("memberStatus", "ok", "Qo‘shildi. U botga /start yozsa, xabarlar boradi.");
-      await reload("members");
+      const data = await inviteLink("owner");
+      note("memberStatus", "ok", "Telegram ochilmoqda — u yerda “Start” tugmasini bosing.");
+      location.href = data.url;
+    } catch (err) {
+      note("memberStatus", "err", err.message);
+      button.disabled = false;
+    }
+  }
+
+  async function inviteStaff() {
+    const button = $("inviteStaffBtn");
+    button.disabled = true;
+    try {
+      const data = await inviteLink("manager");
+      $("inviteLink").value = data.url;
+      $("inviteShareBtn").href = `https://t.me/share/url?url=${encodeURIComponent(data.url)}`;
+      $("inviteBox").classList.remove("hidden");
+      note("memberStatus", "ok", "");
     } catch (err) { note("memberStatus", "err", err.message); }
+    button.disabled = false;
+  }
+
+  async function copyInvite() {
+    const field = $("inviteLink");
+    try {
+      await navigator.clipboard.writeText(field.value);
+      note("memberStatus", "ok", "Havola nusxalandi.");
+    } catch (err) {
+      // Eski brauzer yoki ruxsat berilmagan — hech bo'lmasa belgilaymiz,
+      // mijoz qo'lda nusxa oladi.
+      field.select();
+      note("memberStatus", "ok", "Havolani belgilab oldik — nusxa oling.");
+    }
   }
 
   async function toggleDigest() {
@@ -1549,9 +1580,11 @@
 
   /* ── Ulanishlar ─────────────────────────────────────────────────────── */
 
-  $("passwordBtn").addEventListener("click", passwordLogin);
-  $("otpRequestBtn").addEventListener("click", requestOtp);
-  $("otpVerifyBtn").addEventListener("click", verifyOtp);
+  // `submit` — shunda telefon klaviaturasidagi "Kirish" tugmasi ham ishlaydi.
+  $("loginForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    passwordLogin();
+  });
   $("logoutBtn").addEventListener("click", logout);
   $("refreshBtn").addEventListener("click", () => reload("events", "report"));
   $("eventMoreBtn").addEventListener("click", () => { eventLimit += 25; reload("events"); });
@@ -1587,7 +1620,9 @@
     }
   });
   $("saveConfigBtn").addEventListener("click", saveConfig);
-  $("addMemberBtn").addEventListener("click", addMember);
+  $("connectTelegramBtn").addEventListener("click", connectMyTelegram);
+  $("inviteStaffBtn").addEventListener("click", inviteStaff);
+  $("inviteCopyBtn").addEventListener("click", copyInvite);
   $("digestToggle").addEventListener("change", toggleDigest);
   $("invoiceBtn").addEventListener("click", createInvoice);
   $("typeFilter").addEventListener("change", () => reload("events"));

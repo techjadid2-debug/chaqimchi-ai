@@ -183,6 +183,19 @@ class EventStore:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS telegram_invites (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                display_name TEXT,
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                used_by TEXT,
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS daily_digests (
                 site_id TEXT NOT NULL,
                 digest_date TEXT NOT NULL,
@@ -286,6 +299,8 @@ class EventStore:
             "ON owner_members(telegram_id,active)",
             "CREATE INDEX IF NOT EXISTS idx_owner_login_links_hash "
             "ON owner_login_links(token_hash,revoked)",
+            "CREATE INDEX IF NOT EXISTS idx_telegram_invites_hash "
+            "ON telegram_invites(token_hash,used_at)",
             "CREATE INDEX IF NOT EXISTS idx_employees_site_active ON employees(site_id,active)",
             "CREATE INDEX IF NOT EXISTS idx_attendance_site_date "
             "ON attendance_daily(site_id,work_date)",
@@ -2151,6 +2166,88 @@ class EventStore:
     def _login_link_digest(self, token: str, secret: str) -> str:
         # "login-link:" prefiksi — OTP hash'lari bilan domen ajratish.
         return hmac.new(secret.encode(), f"login-link:{token}".encode(), hashlib.sha256).hexdigest()
+
+    # ── Telegramni bir bosishda ulash ───────────────────────────────────
+    #
+    # Mijozdan Telegram ID raqamini so'rash ishlamaydi: u raqamni bilmaydi
+    # va topish yo'lini ham bilmaydi.  Buning o'rniga panel havola beradi
+    # (`t.me/bot?start=<token>`), odam uni bosadi va bot uni a'zo qiladi.
+    # Xuddi shu mexanizm xodim taklif qilish uchun ham ishlatiladi.
+    #
+    # Havola — CREDENTIAL: uni bosgan odam do'kon paneliga kiradi.
+    # Shuning uchun muddati qisqa va bir martalik.  (Taqqoslash uchun:
+    # `owner_login_links` 30 kun yashaydi, chunki u aniq bir a'zo uchun
+    # yaratiladi; bu esa "kim bossa o'sha" turidan.)
+    INVITE_TTL_MINUTES = 30
+
+    def _invite_digest(self, token: str, secret: str) -> str:
+        return hmac.new(secret.encode(), f"tg-invite:{token}".encode(), hashlib.sha256).hexdigest()
+
+    def create_telegram_invite(
+        self,
+        site_id: str,
+        *,
+        secret: str,
+        role: str = "manager",
+        display_name: Optional[str] = None,
+        ttl_minutes: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        token = secrets.token_urlsafe(24)
+        now = _now()
+        minutes = int(ttl_minutes or self.INVITE_TTL_MINUTES)
+        expires = now + timedelta(minutes=minutes)
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO telegram_invites "
+                    "(id,site_id,token_hash,role,display_name,expires_at,created_at) "
+                    "VALUES (?,?,?,?,?,?,?)"
+                ),
+                (
+                    str(uuid.uuid4()),
+                    site_id,
+                    self._invite_digest(token, secret),
+                    role,
+                    display_name,
+                    expires.isoformat(),
+                    now.isoformat(),
+                ),
+            )
+        return {"token": token, "expires_at": expires.isoformat(), "expires_minutes": minutes}
+
+    def redeem_telegram_invite(
+        self, token: str, telegram_id: str, *, secret: str
+    ) -> Optional[Dict[str, Any]]:
+        """Havolani a'zolikka aylantiradi.  Muddati o'tgan yoki ishlatilgan
+        bo'lsa `None` — chaqiruvchi buni "havola eskirgan" deb aytadi."""
+        digest = self._invite_digest(token, secret)
+        now = _now()
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT * FROM telegram_invites WHERE token_hash=? AND used_at IS NULL"
+                ),
+                (digest,),
+            ).fetchone()
+            if not row:
+                return None
+            invite = self._dict(row)
+            try:
+                if datetime.fromisoformat(str(invite["expires_at"])) < now:
+                    return None
+            except (TypeError, ValueError):
+                return None
+            conn.execute(
+                self._sql("UPDATE telegram_invites SET used_at=?,used_by=? WHERE id=?"),
+                (now.isoformat(), str(telegram_id), invite["id"]),
+            )
+        self.add_member(
+            invite["site_id"],
+            str(telegram_id),
+            role=str(invite["role"] or "manager"),
+            display_name=invite.get("display_name") or None,
+        )
+        return {"site_id": invite["site_id"], "role": invite["role"]}
 
     def create_login_link(
         self, site_id: str, telegram_id: str, *, secret: str, ttl_days: int = 30

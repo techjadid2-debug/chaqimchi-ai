@@ -141,8 +141,6 @@ def test_a_paused_rollout_stops_the_device_from_updating(
     Buzuq reliz chiqib ketganda har do'konni alohida `hold` ga
     o'tkazishga ulgurib bo'lmaydi: qurilmalar har 15 daqiqada so'raydi.
     """
-    import cloud.main as main
-
     admin = {"X-Cloud-Admin-Key": "test-admin"}
     site = client.post(
         "/api/v1/admin/sites", headers=admin, json={"name": "Do'kon", "plan": "lite"}

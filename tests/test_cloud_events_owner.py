@@ -1051,3 +1051,212 @@ def test_the_admin_still_sees_the_margin(production_client) -> None:
 
     catalog = client.get("/api/v1/admin/features", headers=admin).json()
     assert any("cost_usd_cents" in item for item in catalog["features"])
+
+
+# ── Telegramni bir bosishda ulash ────────────────────────────────────────
+#
+# Panelda a'zo qo'shish uchun RAQAMLI Telegram ID so'ralardi.  Do'kon
+# egasi o'z ID sini ham, xodimining ID sini ham bilmaydi, panel esa uni
+# topish yo'lini ko'rsatmasdi — ya'ni funksiya amalda ishlamasdi.
+#
+# Endi panel havola beradi, odam uni bosadi, bot uni a'zo qiladi.
+
+
+#: Webhook siri — Telegram har so'rovda shu sarlavhani yuboradi.
+BOT_SECRET = "webhook-secret-for-tests"
+
+
+def _bot_start(client, telegram_id: str, payload: str = ""):
+    text = f"/start {payload}".strip()
+    return client.post(
+        "/api/v1/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": BOT_SECRET},
+        json={"message": {"chat": {"id": int(telegram_id), "type": "private"}, "text": text}},
+    )
+
+
+def test_a_customer_connects_telegram_without_typing_any_id(
+    production_client, monkeypatch
+) -> None:
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="900")
+
+    invite = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={"role": "manager"}
+    )
+    assert invite.status_code == 200
+    url = invite.json()["url"]
+    assert url.startswith("https://t.me/chaqimchi_ai_bot?start=")
+    token = url.split("start=")[1]
+
+    # Xodim havolani bosadi — hech qanday raqam yozmaydi.
+    assert _bot_start(client, "901", token).status_code == 200
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert {str(m["telegram_id"]) for m in members} == {"900", "901"}
+    assert next(m for m in members if str(m["telegram_id"]) == "901")["role"] == "manager"
+
+
+def test_an_invite_works_only_once(production_client, monkeypatch) -> None:
+    """Havola credential: uni bosgan odam panelga kiradi.  Bir marta
+    ishlatilgach boshqa hech kimni ichkariga kiritmasin."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="910")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    _bot_start(client, "911", token)
+    _bot_start(client, "912", token)   # o'sha havola, boshqa odam
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "912" not in {str(m["telegram_id"]) for m in members}
+
+
+def test_an_expired_invite_is_refused(production_client, monkeypatch) -> None:
+    import cloud.main as main
+
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="920")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    store = main.get_event_store()
+    with store._connect() as conn:
+        conn.execute(
+            store._sql("UPDATE telegram_invites SET expires_at=?"),
+            ("2020-01-01T00:00:00+00:00",),
+        )
+
+    _bot_start(client, "921", token)
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "921" not in {str(m["telegram_id"]) for m in members}
+
+
+def test_a_random_start_payload_does_not_grant_access(
+    production_client, monkeypatch
+) -> None:
+    """Botga tasodifiy matn bilan `/start` bosgan odam a'zo bo'lib
+    qolmasin."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="930")
+
+    _bot_start(client, "931", "oddiy-matn")
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "931" not in {str(m["telegram_id"]) for m in members}
+
+
+def test_a_second_tap_does_not_say_the_link_expired(
+    production_client, monkeypatch
+) -> None:
+    """Telegram javob kelmasa update'ni QAYTA yuboradi.  Havola esa bir
+    martalik — ikkinchi urinishda "eskirgan" deb yozilardi, holbuki
+    o'sha odam allaqachon ulangan edi.
+
+    Ayni holat mijoz havolani ikki marta bosganda ham yuz beradi."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="960")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    _bot_start(client, "961", token)
+    _bot_start(client, "961", token)
+
+    assert "eskirgan" not in messages[-1][1].lower(), messages[-1][1]
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert sum(1 for m in members if str(m["telegram_id"]) == "961") == 1
+
+
+def test_a_failed_telegram_reply_does_not_undo_the_invite(
+    production_client, monkeypatch
+) -> None:
+    """Tasdiq xabari ketmasa ham a'zolik saqlanib qolsin va webhook 200
+    qaytarsin — aks holda Telegram cheksiz qayta urinadi."""
+    import cloud.main as main
+
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="970")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    async def broken_send(chat_id, text, *, reply_markup=None):
+        raise RuntimeError("Telegram javob bermadi")
+
+    monkeypatch.setattr(main, "_send_owner_telegram", broken_send)
+    response = _bot_start(client, "971", token)
+
+    assert response.status_code == 200
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "971" in {str(m["telegram_id"]) for m in members}
+
+
+def test_the_register_button_still_works(production_client, monkeypatch) -> None:
+    """Taklif tokenini o'qiyotgan kod `/start register` ni ham yutib
+    yuborardi — saytdagi "Ro'yxatdan o'tish" tugmasi javob bermay qolgandi.
+
+    Taklif tokeni har doim 32 belgi; `register` esa emas."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, messages = production_client
+
+    before = len(messages)
+    response = _bot_start(client, "9501", "register")
+
+    assert response.status_code == 200
+    assert len(messages) > before, "botdan javob kelmadi"
+    assert "eskirgan" not in messages[-1][1].lower()
+
+
+def test_a_manager_cannot_invite_more_people(production_client, monkeypatch) -> None:
+    """Xodim yangi odam taklif qila olmasin — aks holda bitta taklif
+    butun do'konni ochib yuborardi."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="940")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+    _bot_start(client, "941", token)
+
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "941"})
+    manager = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "941", "site_id": site["site_id"], "code": "123456"},
+    ).json()["access_token"]
+
+    refused = client.post(
+        "/api/v1/owner/telegram-invite",
+        headers={"Authorization": f"Bearer {manager}"},
+        json={},
+    )
+    assert refused.status_code == 403

@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 from chaqimchi_ai.event_models import EdgeEvent
@@ -5,6 +6,7 @@ from chaqimchi_ai.outbox import (
     BASE_RETRY_DELAY_SEC,
     MAX_ATTEMPTS,
     MAX_RETRY_DELAY_SEC,
+    SENT_KEEP_DAYS,
     EventOutbox,
     retry_delay,
 )
@@ -195,6 +197,80 @@ def test_successful_delivery_clears_everything(tmp_path: Path) -> None:
 
     assert outbox.acknowledge(["evt-1"]) == 1
     assert outbox.stats() == {"pending": 0, "bytes": 0, "waiting": 0, "poisoned": 0}
+
+
+def test_delivered_events_stay_readable_for_the_local_panel(tmp_path: Path) -> None:
+    """Yuborilgan hodisa navbatdan chiqadi, lekin bazadan **o'chmaydi**.
+
+    Do'kon kompyuteridagi panel kunlik hisobotni shu bazadan o'qiydi.
+    Ilgari yuborilgan yozuv darhol o'chirilardi va do'kon internetda
+    bo'lsa panel kun bo'yi nol ko'rsatardi.
+    """
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("evt-1"))
+    outbox.acknowledge(["evt-1"])
+
+    assert outbox.pending() == [], "qayta yuborilmasin"
+    assert outbox.stats()["pending"] == 0
+
+    with sqlite3.connect(tmp_path / "outbox.db") as conn:
+        rows = conn.execute("SELECT event_id, sent_at FROM outbox").fetchall()
+    assert len(rows) == 1 and rows[0][1], "yozuv qoldi va yuborilgan deb belgilandi"
+
+
+def test_a_late_clip_is_sent_even_after_the_event_was_delivered(tmp_path: Path) -> None:
+    """Klip hodisadan keyin tayyor bo'ladi.  Yozuv o'chirilmagani uchun
+    endi u yangilanadi — va qaytadan yuborilishi kerak."""
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    event = _event("evt-1")
+    outbox.enqueue(event)
+    outbox.acknowledge(["evt-1"])
+
+    clip = tmp_path / "klip.mp4"
+    clip.write_bytes(b"video")
+    event.clip_path = str(clip)
+    outbox.enqueue(event)
+
+    rows = outbox.pending()
+    assert len(rows) == 1 and rows[0]["clip_path"] == str(clip)
+
+
+def test_delivered_events_do_not_pile_up_forever(tmp_path: Path) -> None:
+    """Ular faqat bugungi hisobot uchun kerak — arxiv uchun emas."""
+    from datetime import datetime, timedelta, timezone
+
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("eski"))
+    outbox.acknowledge(["eski"])
+    old = (datetime.now(timezone.utc) - timedelta(days=SENT_KEEP_DAYS + 1)).isoformat()
+    with sqlite3.connect(tmp_path / "outbox.db") as conn:
+        conn.execute("UPDATE outbox SET sent_at=?", (old,))
+
+    outbox.prune()
+
+    with sqlite3.connect(tmp_path / "outbox.db") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0] == 0
+
+
+def test_a_full_disk_drops_delivered_events_before_unsent_ones(tmp_path: Path) -> None:
+    """Yuborilgani cloudda saqlangan; yuborilmagani esa faqat shu yerda.
+    Disk to'lganda avval xavfsizrog'i tashlanadi."""
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("yuborilgan-1"))
+    outbox.enqueue(_event("yuborilgan-2"))
+    outbox.acknowledge(["yuborilgan-1", "yuborilgan-2"])
+    outbox.enqueue(_event("yuborilmagan-1"))
+    one_event = outbox.stats()["bytes"]
+    outbox.enqueue(_event("yuborilmagan-2"))
+
+    outbox.max_bytes = one_event  # faqat bittasiga joy qoldi
+    outbox.prune()
+
+    with sqlite3.connect(tmp_path / "outbox.db") as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM outbox WHERE sent_at IS NOT NULL"
+        ).fetchone()[0] == 0, "yuborilganlari birinchi bo'lib tashlansin"
+    assert len(outbox.pending()) == 1, "yuborilmaganidan biri saqlanib qoldi"
 
 
 def test_dead_letters_do_not_pile_up_forever(tmp_path: Path) -> None:

@@ -36,6 +36,11 @@ BASE_RETRY_DELAY_SEC = 5.0
 #: nosozligi shu vaqt ichida albatta tuzaladi.
 MAX_ATTEMPTS = 20
 
+#: Cloudga yuborilgan yozuv shuncha kun bazada qoladi.  U faqat do'kon
+#: kompyuteridagi panelning **bugungi** hisoboti uchun kerak, shuning
+#: uchun ikki kun yetarli — kechagi kun bilan taqqoslash ham sig'adi.
+SENT_KEEP_DAYS = 2
+
 
 def retry_delay(attempts: int) -> float:
     """Necha soniyadan keyin qayta urinamiz.
@@ -69,7 +74,11 @@ class EventOutbox:
                     last_error TEXT,
                     -- Shu vaqtdan oldin qayta urinilmaydi.  `NULL` — hali
                     -- urinilmagan, ya'ni darhol yuboriladi.
-                    next_attempt_at TEXT
+                    next_attempt_at TEXT,
+                    -- Cloud qabul qilgan vaqt.  `NULL` — hali yuborilmagan.
+                    -- Yozuv o'chirilmasligining sababi: do'kon kompyuteridagi
+                    -- panel kunlik hisobotni shu bazadan o'qiydi.
+                    sent_at TEXT
                 )
                 """
             )
@@ -94,6 +103,8 @@ class EventOutbox:
                 conn.execute("ALTER TABLE outbox ADD COLUMN clip_size INTEGER NOT NULL DEFAULT 0")
             if "next_attempt_at" not in columns:
                 conn.execute("ALTER TABLE outbox ADD COLUMN next_attempt_at TEXT")
+            if "sent_at" not in columns:
+                conn.execute("ALTER TABLE outbox ADD COLUMN sent_at TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30)
@@ -131,7 +142,10 @@ class EventOutbox:
                 # Payload o'zgardi (masalan klip tayyor bo'ldi) — bu yangi
                 # imkoniyat, shuning uchun backoff nolga tushadi.  `attempts`
                 # esa saqlanadi: umidsiz hodisa cheksiz qayta urinmasin.
-                "next_attempt_at=NULL",
+                "next_attempt_at=NULL,"
+                # Allaqachon yuborilgan bo'lsa ham qaytadan navbatga tushadi:
+                # klip aynan hodisadan keyin tayyor bo'ladi.
+                "sent_at=NULL",
                 (
                     event.event_id,
                     payload,
@@ -154,8 +168,8 @@ class EventOutbox:
         moment = (now or datetime.now(timezone.utc)).isoformat()
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM outbox "
-                "WHERE next_attempt_at IS NULL OR next_attempt_at <= ? "
+                "SELECT * FROM outbox WHERE sent_at IS NULL "
+                "AND (next_attempt_at IS NULL OR next_attempt_at <= ?) "
                 "ORDER BY priority DESC,created_at,event_id LIMIT ?",
                 (moment, int(limit)),
             ).fetchall()
@@ -168,12 +182,23 @@ class EventOutbox:
         ]
 
     def acknowledge(self, event_ids: List[str]) -> int:
+        """Cloud qabul qildi — navbatdan chiqadi, lekin bazada qoladi.
+
+        Ilgari yozuv darhol o'chirilardi.  Do'kon kompyuteridagi panel esa
+        kunlik hisobotni aynan shu bazadan o'qiydi: internet ishlab tursa
+        navbat har besh soniyada bo'shar va panelning "Bugun kirdi" raqami
+        kun bo'yi nolga yaqin turardi.  Yozuvlar `prune()` bilan
+        `SENT_KEEP_DAYS` dan keyin tozalanadi.
+        """
         if not event_ids:
             return 0
         placeholders = ",".join("?" for _ in event_ids)
+        moment = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             cursor = conn.execute(
-                f"DELETE FROM outbox WHERE event_id IN ({placeholders})", tuple(event_ids)
+                f"UPDATE outbox SET sent_at=? WHERE event_id IN ({placeholders}) "
+                "AND sent_at IS NULL",
+                (moment, *event_ids),
             )
             return int(cursor.rowcount)
 
@@ -216,11 +241,15 @@ class EventOutbox:
     def stats(self, *, now: Optional[datetime] = None) -> Dict[str, int]:
         moment = (now or datetime.now(timezone.utc)).isoformat()
         with self._connect() as conn:
+            # Faqat yuborilmaganlar: bu sonlar "navbat qanchalik uzun"
+            # degan savolga javob beradi va heartbeat orqali cloudga
+            # ketadi.  Yuborilgan yozuvlar navbat emas — ular panelning
+            # bugungi hisoboti uchun qolgan nusxa.
             row = conn.execute(
                 "SELECT COUNT(*) AS count,"
                 "COALESCE(SUM(snapshot_size+clip_size+length(payload)),0) AS bytes,"
                 "COALESCE(SUM(next_attempt_at IS NOT NULL AND next_attempt_at > ?),0) AS waiting "
-                "FROM outbox",
+                "FROM outbox WHERE sent_at IS NULL",
                 (moment,),
             ).fetchone()
             poisoned = int(conn.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0])
@@ -243,23 +272,33 @@ class EventOutbox:
         return [dict(row) for row in rows]
 
     def prune(self) -> int:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=self.retention_days)).isoformat()
+        now = datetime.now(timezone.utc)
+        cutoff = (now - timedelta(days=self.retention_days)).isoformat()
+        sent_cutoff = (now - timedelta(days=SENT_KEEP_DAYS)).isoformat()
         removed = 0
         with self._connect() as conn:
             cursor = conn.execute("DELETE FROM outbox WHERE created_at < ?", (cutoff,))
+            removed += int(cursor.rowcount)
+            # Yuborilgani cloudda saqlangan — bu yerda faqat panelning
+            # bugungi hisoboti uchun turadi, ya'ni tez tozalanadi.
+            cursor = conn.execute("DELETE FROM outbox WHERE sent_at < ?", (sent_cutoff,))
             removed += int(cursor.rowcount)
             # Tashlangan hodisalar ham abadiy saqlanmaydi — ular diagnostika
             # uchun, arxiv uchun emas.
             conn.execute("DELETE FROM dead_letter WHERE failed_at < ?", (cutoff,))
             total = int(
                 conn.execute(
-                    "SELECT COALESCE(SUM(snapshot_size+clip_size+length(payload)),0) FROM outbox"
+                    "SELECT COALESCE(SUM(snapshot_size+clip_size+length(payload)),0) "
+                    "FROM outbox WHERE sent_at IS NULL"
                 ).fetchone()[0]
             )
             if total > self.max_bytes:
+                # Disk to'ldi.  Avval yuborilganlar tashlanadi — ular
+                # cloudda bor; yuborilmagani esa faqat shu yerda.
+                conn.execute("DELETE FROM outbox WHERE sent_at IS NOT NULL")
                 rows = conn.execute(
                     "SELECT event_id,snapshot_size+clip_size+length(payload) AS size "
-                    "FROM outbox "
+                    "FROM outbox WHERE sent_at IS NULL "
                     "ORDER BY priority ASC,created_at,event_id"
                 ).fetchall()
                 for row in rows:

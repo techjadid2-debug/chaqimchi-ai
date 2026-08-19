@@ -199,19 +199,32 @@ def test_service_reports_a_missing_model_in_plain_language(client: TestClient) -
 # ── Hisobot ──────────────────────────────────────────────────────────────
 
 
-def _seed_outbox(tmp_path: Path, events: list[Dict[str, Any]]) -> None:
-    """Zanjir yozadigan navbatni taqlid qiladi (panel faqat o'qiydi)."""
+def _seed_outbox(
+    tmp_path: Path, events: list[Dict[str, Any]], *, sent: bool = False
+) -> None:
+    """Zanjir yozadigan navbatni taqlid qiladi (panel faqat o'qiydi).
+
+    `sent=True` — hodisalar cloudga yuborilib bo'lingan holat.  Do'kon
+    internetda bo'lsa navbat bir necha soniyada shu holatga o'tadi, ya'ni
+    bu **oddiy** holat, istisno emas.
+    """
     db = tmp_path / "data" / "outbox.db"
     db.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS outbox ("
-        "event_id TEXT PRIMARY KEY, payload TEXT, created_at TEXT, priority INTEGER DEFAULT 0)"
+        "event_id TEXT PRIMARY KEY, payload TEXT, created_at TEXT, "
+        "priority INTEGER DEFAULT 0, sent_at TEXT)"
     )
     for index, event in enumerate(events):
         conn.execute(
-            "INSERT INTO outbox (event_id, payload, created_at) VALUES (?,?,?)",
-            (f"e{index}", json.dumps(event), event["occurred_at"]),
+            "INSERT INTO outbox (event_id, payload, created_at, sent_at) VALUES (?,?,?,?)",
+            (
+                f"e{index}",
+                json.dumps(event),
+                event["occurred_at"],
+                event["occurred_at"] if sent else None,
+            ),
         )
     conn.commit()
     conn.close()
@@ -256,6 +269,88 @@ def test_report_counts_only_todays_local_day(client: TestClient, tmp_path: Path)
     assert report["entered"] == 2
     assert report["exited"] == 1
     assert report["inside_estimate"] == 1
+
+
+def test_report_still_counts_after_the_queue_was_uploaded(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Ish stolidagi panelning bosh raqami — «Bugun kirdi».
+
+    U navbatdan o'qiladi, cloudga yuborilgan hodisalar esa navbatdan
+    o'chirilardi.  Do'kon internetda bo'lsa navbat har besh soniyada
+    bo'shaydi — ya'ni raqam faqat internet **yo'q** paytda to'g'ri edi.
+    Aynan teskarisi: mijoz uni har kuni ko'radi.
+    """
+    now = datetime.now().astimezone()
+    _seed_outbox(
+        tmp_path,
+        [
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": now.isoformat(),
+            }
+            for _ in range(6)
+        ],
+        sent=True,
+    )
+
+    report = client.get("/api/report").json()
+
+    assert report["entered"] == 6, "yuborilgan hodisalar ham hisobotda qolsin"
+
+
+def test_report_does_not_truncate_a_busy_day(client: TestClient, tmp_path: Path) -> None:
+    """Ilgari eng yangi 500 ta olinib, **keyin** bugungi kunga filtrlanardi.
+
+    Gavjum do'konda kuniga mingdan ortiq hodisa bo'ladi — ertalabki
+    kirishlar ro'yxat oxiridan tushib qolardi va panel kam ko'rsatardi.
+    """
+    now = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+    _seed_outbox(
+        tmp_path,
+        [
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": (now - timedelta(seconds=index)).isoformat(),
+            }
+            for index in range(700)
+        ],
+        sent=True,
+    )
+
+    report = client.get("/api/report").json()
+
+    assert report["entered"] == 700
+
+
+def test_events_endpoint_returns_the_newest_first_and_honours_the_limit(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """`/api/events` hech qanday test bilan qoplanmagandi — shu sabab
+    `_read_events` imzosi o'zgarganda buzilishi sezilmasdi."""
+    now = datetime.now().astimezone()
+    _seed_outbox(
+        tmp_path,
+        [
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": f"camera-{index:02d}",
+                "occurred_at": (now - timedelta(minutes=index)).isoformat(),
+            }
+            for index in range(5)
+        ],
+        sent=True,
+    )
+
+    body = client.get("/api/events", params={"limit": 2}).json()
+
+    assert len(body["events"]) == 2
+    assert body["events"][0]["camera_id"] == "camera-00", "eng yangisi birinchi"
 
 
 def test_report_collects_alerts(client: TestClient, tmp_path: Path) -> None:

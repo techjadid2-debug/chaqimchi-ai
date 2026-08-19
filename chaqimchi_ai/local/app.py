@@ -24,7 +24,7 @@ import threading
 import time
 import webbrowser
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -880,12 +880,23 @@ async def service_log() -> Dict[str, Any]:
 # ── Hisobot ──────────────────────────────────────────────────────────────
 
 
-def _read_events(limit: int = 500) -> List[Dict[str, Any]]:
+#: Bir kunlik hodisalar uchun ortig'i bilan yetadi (gavjum do'kon kuniga
+#: ming atrofida yozadi).  Chegara faqat xotira uchun — buzuq baza panelni
+#: yiqitmasin.
+_REPORT_ROW_CAP = 20_000
+
+
+def _read_events(since: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Hodisalarni outbox'dan o'qiydi.
 
-    Outbox — zanjir yozadigan yagona joy, ya'ni panel ham, kelajakdagi
-    Telegram yuboruvchi ham bitta manbadan oladi.  Faqat o'qiymiz va hech
-    narsani o'chirmaymiz: o'chirish cloudga yuborilgandan keyin bo'ladi.
+    Outbox — zanjir yozadigan yagona joy, ya'ni panel ham, Telegram
+    yuboruvchi ham bitta manbadan oladi.  Panel faqat o'qiydi; cloudga
+    yuborilgan yozuvlar ham shu yerda qoladi (`outbox.acknowledge` ularni
+    o'chirmaydi, "yuborildi" deb belgilaydi).
+
+    `since` — shu vaqtdan keyingi yozuvlar.  Ilgari eng yangi 500 tasi
+    olinib, **keyin** bugungi kunga filtrlanardi: gavjum do'konda ertalabki
+    kirishlar ro'yxat oxiridan tushib qolardi va panel kam ko'rsatardi.
     """
     db = paths.outbox_path()
     if not db.is_file():
@@ -895,9 +906,17 @@ def _read_events(limit: int = 500) -> List[Dict[str, Any]]:
         conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2.0)
         conn.row_factory = sqlite3.Row
         try:
-            rows = conn.execute(
-                "SELECT payload FROM outbox ORDER BY created_at DESC LIMIT ?", (int(limit),)
-            ).fetchall()
+            if since is None:
+                rows = conn.execute(
+                    "SELECT payload FROM outbox ORDER BY created_at DESC LIMIT ?",
+                    (_REPORT_ROW_CAP,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT payload FROM outbox WHERE created_at >= ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (since.astimezone(timezone.utc).isoformat(), _REPORT_ROW_CAP),
+                ).fetchall()
         finally:
             conn.close()
     except sqlite3.Error as exc:
@@ -923,8 +942,14 @@ async def report() -> Dict[str, Any]:
     bo'lgani uchun ertalabki savdo UTC bo'yicha kechagi kunga tushib qolardi
     va do'kon egasi ochilishdan keyin ham nol ko'rardi.
     """
-    events = _read_events()
-    today = datetime.now().astimezone().date()
+    now_local = datetime.now().astimezone()
+    today = now_local.date()
+    # Kun boshidan bir soat oldin: `created_at` (navbatga qo'yilgan vaqt) va
+    # `occurred_at` (hodisa vaqti) biroz farq qilishi mumkin.
+    day_start = datetime.combine(
+        today, datetime.min.time(), tzinfo=now_local.tzinfo
+    ) - timedelta(hours=1)
+    events = _read_events(since=day_start)
     entered = exited = 0
     hourly = Counter()
     alerts: List[Dict[str, Any]] = []
@@ -986,7 +1011,8 @@ async def events(limit: int = 50) -> Dict[str, Any]:
                 "direction": event.get("direction"),
                 "queue_length": event.get("queue_length"),
             }
-            for event in _read_events(limit)
+            # Eng yangisi birinchi — `_read_events` shu tartibda qaytaradi.
+            for event in _read_events()[:limit]
         ]
     }
 

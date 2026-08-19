@@ -687,3 +687,33 @@ def test_owner_otp_box_opens_only_when_a_code_was_sent() -> None:
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     request = html[html.index("async function requestOtp") : html.index("async function verifyOtp")]
     assert 'if (r.ok) $("verify").classList.remove("hidden")' in request
+
+
+def test_owner_uses_the_shop_day_not_utc() -> None:
+    """«Kecha» tugmasi `Date.now() - 86400000` ni UTC sanaga aylantirardi.
+
+    Toshkent UTC+5: yarim tundan 05:00 gacha bu IKKI kun oldingi
+    hisobotni so'rardi va panel bo'sh ko'rinardi.  Server esa kunni
+    `Asia/Tashkent` bo'yicha ajratadi — ikkalasi bitta kunni tushunishi
+    shart.  Brauzerda o'lchandi: `?date=2026-08-18` o'rniga `2026-08-19`.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert 'timeZone: "Asia/Tashkent"' in html
+    assert "toISOString().slice(0, 10)" not in html, "UTC sanasi qaytib kelmasin"
+
+
+def test_owner_shows_the_data_it_already_fetches() -> None:
+    """Server bu maydonlarni qaytarardi, panel esa tashlab yuborardi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    for field in ("xodim_chiqarilgan", "queue.average", "quietest_day", "previous_total"):
+        assert field in html, f"`{field}` hali ko'rsatilmayapti"
+    assert "drawDwell" in html, "«qayerda uzoq turishadi» ro'yxati"
+
+
+def test_owner_hourly_chart_can_show_occupancy() -> None:
+    """`hourly[].exited` olinardi va ishlatilmasdi.  Kirganlar minus
+    chiqqanlar — «soat 15:00 da do'konda nechta odam bor edi» degan
+    savolning javobi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert 'data-hourmode="inside"' in html
+    assert "h.exited" in html

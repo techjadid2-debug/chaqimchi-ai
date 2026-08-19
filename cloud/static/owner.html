@@ -90,13 +90,34 @@
           <div class="stat"><small>Kirdi</small><strong id="entered">0</strong><span id="enteredChange">—</span></div>
           <div class="stat"><small>Chiqdi</small><strong id="exited">0</strong><span id="inside">—</span></div>
           <div class="stat"><small>Gavjum soat</small><strong id="busiest">—</strong><span id="busiestCount">—</span></div>
-          <div class="stat"><small>Eng uzun navbat</small><strong id="queueLongest">—</strong><span id="queueDetail">—</span></div>
         </div>
+        <!-- Xodim o'tishlari sanoqdan chiqariladi.  Buni AYTISH kerak:
+             aks holda "nega bugun kamroq?" degan savol javobsiz qoladi. -->
+        <p class="hint" id="staffNote" style="margin-top:8px"></p>
         <!-- Mijoz demografiyasi: xodimlar hisobga kirmaydi (ular davomatda).
              Ma'lumot yo'q kunda butun blok yashirin. -->
         <div class="stats hidden" id="demoStats" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card wide">
+        <div class="card-head">
+          <h2>Soat bo‘yicha</h2>
+          <div class="chip-row">
+            <button class="chip active" type="button" data-hourmode="in">Kirganlar</button>
+            <button class="chip" type="button" data-hourmode="inside">Ichkaridagilar</button>
+          </div>
+        </div>
         <div id="hourly" class="bars"></div>
         <div id="hourReadout" class="bar-readout"></div>
+        <p class="hint" id="hourHint" style="margin-top:0"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Navbat</h2></div>
+        <div class="stats">
+          <div class="stat"><small>Eng uzun navbat</small><strong id="queueLongest">—</strong><span id="queueDetail">—</span></div>
+          <div class="stat"><small>O‘rtacha uzunlik</small><strong id="queueAverage">—</strong><span id="queueAlerts">—</span></div>
+        </div>
       </div>
 
       </div><!-- /paneBugun -->
@@ -106,7 +127,7 @@
 
       <!-- Do'kon xaritasi: odamlar ko'p yuradigan joylar kamera rasmi
            ustida och-to'q qizil bilan.  Rasm emas, sonlar keladi. -->
-      <div class="card">
+      <div class="card wide">
         <div class="card-head">
           <h2>Do‘kon xaritasi</h2>
           <div class="chip-row">
@@ -126,7 +147,7 @@
         <p class="hint" id="heatSummary">—</p>
       </div>
 
-      <div class="card">
+      <div class="card wide">
         <div class="card-head">
           <h2>Kunlar bo‘yicha</h2>
           <div class="chip-row" id="trendChips">
@@ -140,12 +161,20 @@
         <p class="hint" id="trendSummary">—</p>
       </div>
 
+      <!-- "Qayerda uzoq turishadi" — do'konga eng xos ma'lumot: qaysi
+           tokcha oldida odam to'xtaydi.  Server buni to'liq qaytaradi,
+           panel esa umuman ko'rsatmasdi. -->
+      <div class="card">
+        <div class="card-head"><h2>Qayerda uzoq turishadi</h2></div>
+        <div id="dwellList"></div>
+      </div>
+
       </div><!-- /paneTahlil -->
 
       <!-- ── XAVFSIZLIK ───────────────────────────────────────────── -->
       <div class="pane" id="paneXavfsizlik" hidden>
 
-      <div class="card">
+      <div class="card wide">
         <div class="card-head">
           <h2>Do‘konni ko‘rish</h2>
           <span class="hint" id="cameraHint" style="margin:0"></span>
@@ -162,7 +191,7 @@
         <div id="securityEvents"></div>
       </div>
 
-      <div class="card">
+      <div class="card wide">
         <div class="card-head">
           <h2>Hodisalar</h2>
           <button class="button ghost small" id="refreshBtn" type="button">Yangilash</button>
@@ -184,7 +213,7 @@
       <!-- ── DO'KON ───────────────────────────────────────────────── -->
       <div class="pane" id="paneDokon" hidden>
 
-      <div class="card">
+      <div class="card wide">
         <h2>Do‘kon sozlamalari</h2>
         <div class="grid-3">
           <label class="field">Odam limiti<input id="occupancy" type="number" min="1"></label>
@@ -383,7 +412,7 @@
     { id: "bugun", label: "Bugun", icon: "odamlar", pane: "paneBugun",
       deps: ["health", "cameras", "report"] },
     { id: "tahlil", label: "Tahlil", icon: "soat", pane: "paneTahlil",
-      deps: ["health", "cameras", "trend", "config"] },
+      deps: ["health", "cameras", "trend", "config", "report"] },
     { id: "xavfsizlik", label: "Xavfsizlik", icon: "qalqon", pane: "paneXavfsizlik",
       deps: ["health", "cameras", "report", "events"] },
     { id: "dokon", label: "Do‘kon", icon: "dokon", pane: "paneDokon",
@@ -941,6 +970,20 @@
 
   /* ── Kunlik hisobot ─────────────────────────────────────────────────── */
 
+  //: "Kirganlar" yoki "Ichkaridagilar".  Ikkinchisi savolga boshqacha
+  //: javob beradi: soat 15:00 da do'konda NECHTA odam bor edi.  U
+  //: `hourly[].exited` dan hisoblanadi — server buni allaqachon
+  //: yuboradi, panel esa faqat kirganlarni chizardi.
+  let hourMode = "in";
+
+  // Do'kon kuni — Toshkent bo'yicha, UTC emas.  Ilgari "Kecha" tugmasi
+  // `Date.now() - 86400000` ni UTC sanaga aylantirardi: Toshkentda
+  // yarim tundan 05:00 gacha bu IKKI kun oldingi hisobotni so'rardi va
+  // panel bo'sh ko'rinardi.  Server esa kunni Asia/Tashkent bo'yicha
+  // ajratadi — ikkalasi bir xil kunni tushunishi shart.
+  const SHOP_TZ = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tashkent" });
+  const shopDate = (offsetDays = 0) => SHOP_TZ.format(new Date(Date.now() + offsetDays * 86400000));
+
   function drawReport(report) {
     const traffic = report.traffic;
     $("entered").textContent = traffic.entered;
@@ -951,30 +994,86 @@
     $("inside").textContent = `Hozir ichkarida ~${traffic.inside_estimate} kishi`;
     $("busiest").textContent = traffic.busiest_hour ? `${String(traffic.busiest_hour.hour).padStart(2, "0")}:00` : "—";
     $("busiestCount").textContent = traffic.busiest_hour ? `${traffic.busiest_hour.entered} kishi kirdi` : "hali kirish yo‘q";
+
+    // "Nega bugun kamroq?" degan savolni oldindan yopadi.
+    const staff = Number(traffic.xodim_chiqarilgan || 0);
+    $("staffNote").textContent = staff
+      ? `Yuqoridagi songa xodimlar kirmaydi — bugun ularning ${staff} ta o‘tishi hisobga olinmadi.`
+      : "";
+
     $("queueLongest").textContent = report.queue.longest ? `${report.queue.longest} kishi` : "—";
     $("queueDetail").textContent = report.queue.longest
-      ? `${report.queue.longest_at} da · ${report.queue.alerts} marta uzun navbat`
+      ? `${report.queue.longest_at} da`
       : "navbat chegaradan oshmadi";
+    $("queueAverage").textContent = report.queue.average ? `${report.queue.average} kishi` : "—";
+    $("queueAlerts").textContent = report.queue.alerts
+      ? `${report.queue.alerts} marta chegaradan oshdi`
+      : "bugun tinch";
 
-    const peak = Math.max(1, ...traffic.hourly.map((h) => h.entered));
-    $("hourly").innerHTML = traffic.hourly.map((h) => `
-      <div class="${traffic.busiest_hour && h.hour === traffic.busiest_hour.hour && h.entered ? "peak" : ""}"
-           data-hour="${h.hour}" data-in="${h.entered}" data-out="${h.exited}">
-        <i style="height:${Math.round((h.entered / peak) * 100)}%"></i>
+    drawHourly(traffic);
+    drawDemography(report.demografiya);
+    drawSecurity(report.security);
+  }
+
+  function drawHourly(traffic) {
+    // Ichkaridagilar: kirganlar minus chiqqanlar, to'planib boradi.
+    // Manfiy bo'lib ketmasin — kamera ba'zi o'tishni ko'rmay qolishi
+    // mumkin, `inside_estimate` ham shu sababdan "taxminiy".
+    let running = 0;
+    const values = traffic.hourly.map((h) => {
+      running = Math.max(0, running + Number(h.entered || 0) - Number(h.exited || 0));
+      return hourMode === "inside" ? running : Number(h.entered || 0);
+    });
+    const peak = Math.max(1, ...values);
+    $("hourly").innerHTML = traffic.hourly.map((h, index) => {
+      const value = values[index];
+      const isPeak = hourMode === "in" && traffic.busiest_hour
+        && h.hour === traffic.busiest_hour.hour && h.entered;
+      const label = `${String(h.hour).padStart(2, "0")}:00 — ${
+        hourMode === "inside" ? `taxminan ${value} kishi ichkarida` : `${h.entered} kirdi, ${h.exited} chiqdi`}`;
+      return `
+      <button type="button" class="${isPeak ? "peak" : ""}" aria-label="${esc(label)}"
+              data-hour="${h.hour}" data-readout="${esc(label)}">
+        <i style="height:${Math.round((value / peak) * 100)}%"></i>
         <b>${h.hour % 3 === 0 ? h.hour : ""}</b>
-      </div>`).join("");
+      </button>`;
+    }).join("");
+    $("hourHint").textContent = hourMode === "inside"
+      ? "Kirganlar minus chiqqanlar — do‘konda o‘sha soatda taxminan nechta odam bo‘lgani."
+      : "Ustunni bossangiz — o‘sha soat raqamlari chiqadi.";
+    $("hourReadout").textContent = "";
     // Teginish/bosish bilan qiymat: `title` tooltip telefonlarda ishlamaydi.
     $("hourly").querySelectorAll("[data-hour]").forEach((bar) => {
       bar.addEventListener("click", () => {
         $("hourly").querySelectorAll(".selected").forEach((el) => el.classList.remove("selected"));
         bar.classList.add("selected");
-        $("hourReadout").textContent =
-          `${String(bar.dataset.hour).padStart(2, "0")}:00 — ${bar.dataset.in} kirdi, ${bar.dataset.out} chiqdi`;
+        $("hourReadout").textContent = bar.dataset.readout;
       });
     });
+  }
 
-    drawDemography(report.demografiya);
-    drawSecurity(report.security);
+  function dwellLabel(seconds) {
+    const value = Math.round(Number(seconds) || 0);
+    if (value < 60) return `${value} soniya`;
+    const minutes = Math.floor(value / 60);
+    const rest = value % 60;
+    return rest ? `${minutes} daq ${rest} s` : `${minutes} daqiqa`;
+  }
+
+  function drawDwell(dwell) {
+    const box = $("dwellList");
+    const rows = Array.isArray(dwell) ? dwell : [];
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty-note"><b>Hali ma’lumot yo‘q</b>' +
+        'Zonalar chizilgach, qaysi tokcha oldida odam to‘xtashi shu yerda ko‘rinadi.</div>';
+      return;
+    }
+    box.innerHTML = rows.map((row) => `
+      <div class="member-row">
+        <div class="who"><b>${esc(row.zone === "—" ? "Zona ko‘rsatilmagan" : row.zone)}</b>
+          <small>o‘rtacha ${esc(dwellLabel(row.average_sec))} · eng uzuni ${esc(dwellLabel(row.longest_sec))}</small></div>
+        <span class="hint" style="margin:0">${Number(row.count)} marta</span>
+      </div>`).join("");
   }
 
   function drawDemography(demo) {
@@ -1122,9 +1221,16 @@
           $("trendSummary").textContent = `${bar.dataset.hour}: ${bar.dataset.in} kishi kirdi`;
         });
       });
+      // Xodim jadvali uchun eng foydali juftlik: qaysi kun gavjum va
+      // qaysi kun bo'sh.  Ikkalasi ham serverdan keladi, panel esa
+      // faqat birinchisini ko'rsatardi.
       const parts = [`Jami ${trend.total} kishi, kuniga o‘rtacha ${trend.average}`];
-      if (trend.busiest_day) parts.push(`eng gavjum kun — ${trend.busiest_day.weekday} (${trend.busiest_day.entered})`);
-      if (trend.change_percent !== null) parts.push(`oldingi davrga nisbatan ${trend.change_percent >= 0 ? "▲" : "▼"} ${Math.abs(trend.change_percent)}%`);
+      if (trend.busiest_day) parts.push(`eng gavjum — ${trend.busiest_day.weekday} (${trend.busiest_day.entered})`);
+      if (trend.quietest_day) parts.push(`eng bo‘sh — ${trend.quietest_day.weekday} (${trend.quietest_day.entered})`);
+      if (trend.change_percent !== null) {
+        parts.push(`oldingi ${trend.days} kunga nisbatan ${
+          trend.change_percent >= 0 ? "▲" : "▼"} ${Math.abs(trend.change_percent)}% (${trend.previous_total} edi)`);
+      }
       $("trendSummary").textContent = parts.join(" · ");
     }
   }
@@ -1399,6 +1505,8 @@
       else cardError("hourReadout", S.report, "report");
     } else if (tab.id === "tahlil") {
       loadTrend();
+      if (S.report.ok) drawDwell(S.report.data.dwell);
+      else cardError("dwellList", S.report, "report");
       if (S.config.ok) { currentConfig = S.config.data.config; fillHeatControls(); loadHeatmap(); }
       else cardError("heatSummary", S.config, "config");
     } else if (tab.id === "xavfsizlik") {
@@ -1447,6 +1555,14 @@
   $("logoutBtn").addEventListener("click", logout);
   $("refreshBtn").addEventListener("click", () => reload("events", "report"));
   $("eventMoreBtn").addEventListener("click", () => { eventLimit += 25; reload("events"); });
+  document.querySelectorAll("[data-hourmode]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("[data-hourmode]").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      hourMode = chip.dataset.hourmode;
+      if (S.report && S.report.ok) drawHourly(S.report.data.traffic);
+    });
+  });
 
   // Bo'lim almashishi va "Qayta urinish" tugmalari.
   window.addEventListener("hashchange", () => { window.scrollTo(0, 0); renderCurrent(); });
@@ -1509,8 +1625,7 @@
       chip.classList.add("active");
       if (chip.dataset.day === "today") { reportDay = ""; $("reportDate").value = ""; }
       else {
-        const d = new Date(Date.now() - 86400000);
-        reportDay = d.toISOString().slice(0, 10);
+        reportDay = shopDate(-1);
         $("reportDate").value = reportDay;
       }
       reload("report");

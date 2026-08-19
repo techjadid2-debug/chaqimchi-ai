@@ -128,8 +128,13 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .up { color: #1d8348; } .down { color: var(--danger); }
 
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 10px; }
-.bars > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; border-radius: 4px; cursor: pointer; }
-.bars > div:hover, .bars > div.selected { background: rgba(19,35,29,.06); }
+.bars > div, .bars > button {
+  flex: 1; display: flex; flex-direction: column; justify-content: flex-end;
+  height: 100%; border-radius: 4px; cursor: pointer;
+  border: 0; background: none; padding: 0; font: inherit; color: inherit;
+}
+.bars > div:hover, .bars > div.selected,
+.bars > button:hover, .bars > button.selected { background: rgba(19, 35, 29, .06); }
 .bars i { display: block; background: var(--green); border-radius: 3px 3px 0 0; min-height: 2px; }
 .bars .peak i { background: var(--orange); }
 .bars b { font-weight: 400; font-size: 10px; color: var(--muted); text-align: center; padding-top: 4px; }
@@ -295,7 +300,9 @@ table.events { min-width: 560px; }
   }
   .tab[aria-current="page"] { background: var(--ink); color: #fff; }
   .shell { max-width: 1120px; padding-bottom: 40px; }
-  .pane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
+  .pane { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; align-items: start; }
+  /* Keng kartalar (grafik, xarita, ro'yxatlar) ikkala ustunni egallaydi. */
+  .pane > .wide { grid-column: 1 / -1; }
 }
 
 @media (min-width: 1200px) {

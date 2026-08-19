@@ -444,7 +444,11 @@ class FeatureDraftBody(BaseModel):
 
 
 class PublicLeadBody(BaseModel):
-    full_name: str = Field(min_length=2, max_length=120)
+    #: Ism SO'RALMAYDI: saytdagi formada endi faqat telefon bor.  Har bir
+    #: qo'shimcha maydon formani tashlab ketadiganlar sonini oshiradi, ism
+    #: esa baribir qo'ng'iroq paytida aniqlanadi.  Eski forma va bot yo'li
+    #: ism yuborsa — saqlanadi.
+    full_name: Optional[str] = Field(default=None, max_length=120)
     phone: str = Field(min_length=5, max_length=32)
     company: Optional[str] = Field(default=None, max_length=160)
     city: Optional[str] = Field(default=None, max_length=120)
@@ -1516,7 +1520,9 @@ def _lead_notification_text(lead: Dict[str, Any], *, duplicate: bool = False) ->
     )
     return (
         f"📥 <b>{title}</b>\n"
-        f"Ism: {html.escape(str(lead['full_name']))}\n"
+        # Saytdagi forma ism so'ramaydi — bo'sh joyda "—" turadi,
+        # yolg'on ism o'ylab topilmaydi.
+        f"Ism: {html.escape(str(lead.get('full_name') or '—'))}\n"
         f"Telefon: {html.escape(str(lead['phone']))}\n"
         f"Tashkilot: {html.escape(str(lead.get('company') or '—'))}\n"
         f"Hudud: {html.escape(str(lead.get('city') or '—'))}\n"
@@ -1614,7 +1620,7 @@ async def public_create_lead(
     )
     if not body.consent:
         raise HTTPException(422, "Bog'lanish uchun rozilik talab qilinadi")
-    full_name = " ".join(body.full_name.split())
+    full_name = " ".join((body.full_name or "").split())
     phone = " ".join(body.phone.split())
     if sum(char.isdigit() for char in phone) < 5:
         raise HTTPException(422, "Telefon raqami noto'g'ri")
@@ -2230,22 +2236,74 @@ async def admin_update_lead(
 async def admin_convert_lead(
     lead_id: str,
     body: ConvertLeadBody,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     lead = get_store().get_lead(lead_id)
     if not lead:
         raise HTTPException(404, "Ariza topilmadi")
     if lead.get("site_id"):
         raise HTTPException(409, "Bu ariza allaqachon mijozga aylantirilgan")
+    name = lead.get("company") or lead.get("full_name") or f"Do'kon {lead['phone']}"
     site = get_store().create_site(
-        lead.get("company") or lead["full_name"],
+        name,
         "lite",
         subscription_months=body.subscription_months,
         contact_phone=lead["phone"],
         address=lead.get("city"),
     )
     get_store().link_lead_site(lead_id, site["site_id"])
+    # Do'kon ochilishining o'zi yetarli emas edi: mijozning paneliga
+    # kirish yo'li yo'q qolardi.  Endi login/parol shu yerda tug'iladi
+    # va javobda BIR MARTA qaytariladi.
+    try:
+        login = get_store().create_customer_login(
+            site["site_id"],
+            full_name=lead.get("full_name") or name,
+            phone=lead["phone"],
+            created_by=admin.account_id if admin else None,
+        )
+        site["login"] = {"username": login["username"], "password": login["password"]}
+    except ValueError as exc:
+        # Do'kon allaqachon ochildi — buni orqaga qaytarmaymiz.  Admin
+        # login'ni mijoz sahifasidan qo'lda yaratadi.
+        logger.warning("mijoz login'i yaratilmadi: %s", exc)
+        site["login_error"] = str(exc)
     return site
+
+
+@app.post("/api/v1/admin/sites/{site_id}/login")
+async def admin_create_site_login(
+    site_id: str,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Do'kon egasiga panelga kirish uchun login va parol yaratadi.
+
+    Parol javobda faqat SHU SAFAR ko'rinadi — bazada scrypt hash'i
+    saqlanadi.  Yo'qolsa yangisi yaratiladi (`.../password`).
+    """
+    site = get_store().get_site(site_id)
+    if not site:
+        raise HTTPException(404, "Do'kon topilmadi")
+    existing = get_store().customer_account_for_site(site_id)
+    if existing:
+        raise HTTPException(409, f"Bu do'konda login allaqachon bor: {existing['username']}")
+    try:
+        login = get_store().create_customer_login(
+            site_id,
+            full_name=str(site.get("name") or "Do'kon egasi"),
+            phone=site.get("contact_phone"),
+            created_by=admin.account_id if admin else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    get_store().audit_portal_action(
+        "account.created",
+        actor_id=admin.account_id if admin else None,
+        target_type="account",
+        target_id=login["account"]["id"],
+        detail={"role": "customer", "site_id": site_id},
+    )
+    return {"username": login["username"], "password": login["password"]}
 
 
 @app.get("/api/v1/admin/readiness")

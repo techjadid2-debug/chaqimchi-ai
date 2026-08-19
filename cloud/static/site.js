@@ -12,7 +12,9 @@
     status.textContent = "So‘rov yuborilmoqda…";
     const data = new FormData(form);
     const payload = {
-      full_name: String(data.get("full_name") || "").trim(),
+      // Asosiy formada ism maydoni yo'q; yuklab olish formasi uni hali
+      // yashirin maydonda yuboradi.
+      full_name: String(data.get("full_name") || "").trim() || null,
       phone: String(data.get("phone") || "").trim(),
       company: String(data.get("company") || "").trim() || null,
       city: null,

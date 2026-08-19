@@ -1118,6 +1118,77 @@ class CloudStore:
             raise RuntimeError("Akkaunt yozilmadi")
         return account
 
+    # ── Mijozning kirish ma'lumotlari ───────────────────────────────────
+    #
+    # Do'kon egasi paneliga login va parol bilan kiradi.  Bu ma'lumot
+    # unga TELEFON ORQALI aytiladi — SMS shlyuzi yo'q.  Shuning uchun:
+    #
+    #   login  — o'z telefon raqami: yodlash shart emas, u allaqachon biladi
+    #   parol  — ikkita oddiy so'z + to'rt raqam: telefonda aytib berish
+    #            mumkin.  `Xk9$mQ2!` ni telefonda aytib bo'lmaydi.
+    #
+    # Parol xotirada emas, faqat yaratilgan payt bir marta qaytariladi.
+    _PASSWORD_WORDS = (
+        "olma", "anor", "uzum", "bodom", "shakar", "asal", "chinor", "lola",
+        "qaymoq", "gilos", "yong'oq", "nok", "shaftoli", "behi", "tut", "anjir",
+    )
+
+    def generate_customer_password(self) -> str:
+        first, second = secrets.choice(self._PASSWORD_WORDS), secrets.choice(self._PASSWORD_WORDS)
+        while second == first:
+            second = secrets.choice(self._PASSWORD_WORDS)
+        # `'` faqat "yong'oq" da uchraydi va telefonda aytishda chalkashadi.
+        pair = f"{first}{second}".replace("'", "")
+        return f"{pair}{secrets.randbelow(9000) + 1000}"
+
+    def suggest_customer_username(self, phone: str) -> str:
+        digits = "".join(char for char in str(phone or "") if char.isdigit())
+        base = digits[-12:] if len(digits) >= 6 else ""
+        if not base:
+            base = f"dokon{secrets.randbelow(900000) + 100000}"
+        candidate = base
+        for attempt in range(2, 60):
+            if not self.account_by_username(candidate):
+                return candidate
+            candidate = f"{base}-{attempt}"
+        raise ValueError("Login tanlanmadi — telefon raqamini tekshiring")
+
+    def create_customer_login(
+        self,
+        site_id: str,
+        *,
+        full_name: str,
+        phone: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Do'kon uchun kirish ma'lumotlarini yaratadi va parolni QAYTARADI.
+
+        Parol shu yerdan boshqa hech qayerda ochiq saqlanmaydi: chaqiruvchi
+        uni mijozga yetkazishi shart, aks holda parolni tiklash kerak
+        bo'ladi.
+        """
+        password = self.generate_customer_password()
+        account = self.create_account(
+            username=self.suggest_customer_username(phone or ""),
+            password=password,
+            role="customer",
+            status="active",
+            full_name=full_name,
+            phone=phone,
+            site_id=site_id,
+            created_by=created_by,
+        )
+        return {"account": account, "username": account["username"], "password": password}
+
+    def customer_account_for_site(self, site_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM portal_accounts WHERE role='customer' AND site_id=? "
+                "ORDER BY created_at LIMIT 1",
+                (site_id,),
+            ).fetchone()
+        return self._public_account(row) if row else None
+
     def ensure_bootstrap_admin(self, username: str, password: str) -> Dict[str, Any]:
         """Birinchi adminni faqat adminlar hali yo'q bo'lsa yaratadi."""
         existing = self.list_accounts(role="admin")

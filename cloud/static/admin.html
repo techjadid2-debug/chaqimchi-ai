@@ -88,7 +88,7 @@
     // ── Platforma manzillari ───────────────────────────────────────────
     // Yuklab olish dl'dan, qurilma buyrug'i api'dan keladi.  location.origin
     // admin subdomenini ko'rsatadi — u bu ishlarga to'g'ri kelmaydi.
-    const PLATFORM = { apex: location.origin, api: location.origin, dl: location.origin };
+    const PLATFORM = { apex: location.origin, app: location.origin, api: location.origin, dl: location.origin };
     fetch("/api/v1/public/urls")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data) Object.assign(PLATFORM, data); })
@@ -347,7 +347,9 @@
     // ── Navigatsiya ────────────────────────────────────────────────────
     const NAV = [
       { id: "boshqaruv", label: "Boshqaruv", deps: ["stats", "sites", "leads", "invoices", "readiness"], render: renderDashboard },
-      { id: "mijozlar", label: "Mijozlar", deps: ["sites"],
+      // `accounts` mijoz sahifasida ham kerak: do'kon egasining panel
+      // logini bor-yo'qligi shundan bilinadi.
+      { id: "mijozlar", label: "Mijozlar", deps: ["sites", "accounts"],
         render: (el, param) => (param ? renderCustomerDetail(el, param) : renderCustomers(el)) },
       { id: "tolovlar", label: "To'lovlar", deps: ["invoices", "providers"], render: renderPayments },
       { id: "arizalar", label: "Arizalar", deps: ["leads"], render: renderLeads,
@@ -443,7 +445,7 @@
       (S.leads || []).filter((l) => l.status === "new").forEach((lead) => {
         fresh.push({
           level: "warn", href: "#/arizalar",
-          text: `Yangi ariza: ${lead.full_name}`,
+          text: `Yangi ariza: ${leadTitle(lead)}`,
           sub: `${lead.phone || ""} · ${lead.city || "shahar ko'rsatilmagan"}`,
         });
       });
@@ -623,6 +625,9 @@
              <div style="margin-top: 10px">${doneSteps.map(stepRow).join("")}</div></details>` : ""}`
         : `<p class="hint">Bosqichlar ma'lumoti kelmadi.</p>`;
 
+      const portalLogin = (S.accounts || []).find(
+        (a) => a.role === "customer" && a.site_id === d.id && a.status !== "disabled");
+
       const codes = (d.active_pairing_codes || []).length
         ? d.active_pairing_codes.map((c) => `<div class="mono">${esc(c.code)} <span class="hint">(${esc(c.expires_at.slice(0, 16))} gacha)</span></div>`).join("")
         : '<span class="hint">Faol kod yo\'q</span>';
@@ -652,7 +657,17 @@
         <section class="card">
           <div class="card-head"><h2>Kirish va a'zolar</h2></div>
           ${steps}
+          <div class="member-row">
+            <span class="who"><b>Panel logini</b>
+              <small>${portalLogin
+                ? `${esc(portalLogin.username)} — mijoz shu login bilan kiradi`
+                : "yaratilmagan — mijoz panelga kira olmaydi"}</small></span>
+            ${badge(portalLogin ? "Bor" : "Yo'q", portalLogin ? "ok" : "warn")}
+          </div>
           <div class="action-row">
+            ${portalLogin
+              ? `<button class="button ghost" type="button" data-act="site-login-reset" data-id="${esc(portalLogin.id)}">Parolni yangilash</button>`
+              : `<button class="button primary" type="button" data-act="site-login" data-id="${esc(d.id)}">Login va parol yaratish</button>`}
             <button class="button ghost" type="button" data-act="owner-add" data-id="${esc(d.id)}">Telegram egasini qo'shish</button>
             <button class="button ghost" type="button" data-act="owner-link" data-id="${esc(d.id)}">Kirish havolasi yaratish</button>
           </div>
@@ -746,12 +761,19 @@
     }
 
     // ── Arizalar ───────────────────────────────────────────────────────
+    //
+    // Saytdagi forma endi faqat telefon so'raydi, ya'ni ism ko'pincha
+    // bo'sh keladi.  Sarlavhada telefonni ko'rsatamiz — bo'sh qator yoki
+    // "Noma'lum" degan yozuvdan foydali.
+    const leadTitle = (lead) =>
+      (lead && (lead.full_name || lead.company || lead.phone)) || "Ariza";
+
     async function renderLeads(el) {
       const list = S.leads || [];
       const cards = list.length
         ? list.map((lead) => `
           <div class="cust-card">
-            <span class="who"><b>${esc(lead.full_name)}</b>
+            <span class="who"><b>${esc(leadTitle(lead))}</b>
               <small><a href="tel:${esc(lead.phone)}">${esc(lead.phone)}</a>
                 · ${esc(lead.company || "do'kon nomi yo'q")} · ${esc(lead.city || "shahar yo'q")}
                 · ${esc(lead.cameras)} kamera · ${day(lead.created_at)}</small></span>
@@ -989,6 +1011,8 @@
       "extend": (el) => askExtend(el.dataset.id),
       "status": (el) => askStatus(el.dataset.id, el.dataset.to),
       "pairing": (el) => newPairing(el.dataset.id),
+      "site-login": (el) => createSiteLogin(el.dataset.id),
+      "site-login-reset": (el) => askPassword(el.dataset.id),
       "owner-add": (el) => askOwner(el.dataset.id),
       "owner-link": (el) => askOwnerLink(el.dataset.id),
       "cameras": (el) => askExpectedCameras(el.dataset.id),
@@ -1108,6 +1132,44 @@
             <p class="hint">Bir martalik, ${esc((expires || "").slice(0, 16))} (UTC) gacha amal qiladi.</p>
           </details>`,
       });
+    }
+
+    // Parol serverda scrypt hash bo'lib yotadi — bu oyna uni OXIRGI
+    // marta ko'rsatadi.  Yopilgach faqat yangisini yaratish mumkin.
+    function showLogin(name, phone, login) {
+      const url = `${PLATFORM.app}/owner`;
+      const message =
+        `Chaqimchi AI paneli: ${url}\n` +
+        `Login: ${login.username}\n` +
+        `Parol: ${login.password}\n\n` +
+        `Kirgach "Telegramimni ulash" tugmasini bosing — hisobotlar Telegramga keladi.`;
+      return openModal({
+        title: `${name} — kirish ma'lumotlari`,
+        html: `
+          <div class="note warn" style="margin: 0 0 12px">
+            <b>Parol shu oynadan keyin ko'rinmaydi.</b> Hozir mijozga yuboring.
+          </div>
+          <dl class="kv" style="margin-bottom: 12px">
+            <dt>Login</dt><dd class="mono">${esc(login.username)}</dd>
+            <dt>Parol</dt><dd class="mono">${esc(login.password)}</dd>
+            <dt>Manzil</dt><dd class="mono">${esc(url)}</dd>
+          </dl>
+          <div class="action-row" style="margin-top: 0">
+            <button class="button primary" type="button" data-act="copy" data-copy="${esc(message)}">Tayyor xabarni nusxalash</button>
+          </div>
+          ${phone ? `<p class="hint">Mijoz raqami: <a href="tel:${esc(phone)}">${esc(phone)}</a></p>` : ""}
+          <p class="hint">Parol telefonda aytib berish uchun tanlangan — ikkita so'z va to'rt raqam.</p>`,
+      });
+    }
+
+    async function createSiteLogin(siteId) {
+      const site = siteById(siteId);
+      try {
+        const login = await api(`/api/v1/admin/sites/${encodeURIComponent(siteId)}/login`, { method: "POST" });
+        invalidate("accounts");
+        await showLogin(site ? site.name : "Mijoz", site ? site.contact_phone : "", login);
+        await renderCurrent();
+      } catch (err) { notify(err.message, false); }
     }
 
     async function newPairing(siteId) {
@@ -1440,7 +1502,8 @@
       let readMonths;
       await openModal({
         title: "Arizadan mijoz ochish",
-        html: `<p class="hint" style="margin: 0 0 12px">${esc(lead ? lead.full_name : "Ariza")} uchun do'kon ochiladi va ulanish havolasi beriladi.</p>
+        html: `<p class="hint" style="margin: 0 0 12px">${esc(leadTitle(lead))} uchun do'kon ochiladi,
+                 panelga kirish ma'lumotlari va o'rnatish havolasi beriladi.</p>
                ${monthPicker(1)}`,
         submitLabel: "Mijoz ochish",
         onReady: (form) => { readMonths = wireMonthPicker(form); },
@@ -1448,7 +1511,11 @@
           const site = await api(`/api/v1/admin/leads/${encodeURIComponent(leadId)}/convert`, {
             method: "POST", body: JSON.stringify({ subscription_months: readMonths() }),
           });
-          invalidate("leads", "sites", "stats");
+          invalidate("leads", "sites", "stats", "accounts");
+          // Avval login: parol faqat shu javobda keladi va oyna yopilsa
+          // yo'qoladi.  O'rnatish havolasini keyin ham olish mumkin.
+          if (site.login) await showLogin(site.name, lead ? lead.phone : "", site.login);
+          else if (site.login_error) notify(`Login yaratilmadi: ${site.login_error}`, false);
           await showPairing(site.name, site.pairing_code, site.pairing_expires_at);
           await renderCurrent();
         },
@@ -1470,6 +1537,19 @@
       return [...bytes].map((n) => alphabet[n % alphabet.length]).join("");
     }
 
+    // Do'kon egasiga parol TELEFONDA aytiladi — SMS shlyuzi yo'q.
+    // `k7Qm2xW9pL` ni telefonda aytib bo'lmaydi, "olma anor 4821" ni esa
+    // bo'ladi.  Server ham aynan shu shaklda yaratadi.
+    const PASSWORD_WORDS = ["olma", "anor", "uzum", "bodom", "shakar", "asal",
+      "chinor", "lola", "qaymoq", "gilos", "nok", "shaftoli", "behi", "tut", "anjir"];
+    function readablePassword() {
+      const pick = () => PASSWORD_WORDS[crypto.getRandomValues(new Uint32Array(1))[0] % PASSWORD_WORDS.length];
+      let first = pick(), second = pick();
+      while (second === first) second = pick();
+      const digits = 1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000);
+      return `${first}${second}${digits}`;
+    }
+
     async function askPassword(accountId) {
       const account = (S.accounts || []).find((a) => a.id === accountId);
       await openModal({
@@ -1487,8 +1567,9 @@
         submitLabel: "Saqlash",
         onReady: (form) => {
           const input = form.querySelector("[data-pass]");
+          const isCustomer = account && account.role === "customer";
           form.querySelector("[data-gen]").addEventListener("click", () => {
-            input.value = randomPassword();
+            input.value = isCustomer ? readablePassword() : randomPassword();
             input.type = "text";
           });
           form.querySelector("[data-show]").addEventListener("click", () => {

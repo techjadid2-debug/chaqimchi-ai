@@ -563,3 +563,115 @@ def test_windows_release_version_comes_from_the_file_not_the_server(tmp_path, mo
     assert body["available"] is True
     assert body["version"] == "9.9.9", "versiya relizdan olinishi kerak"
     assert body["version"] != cloud_main.__version__
+
+
+# ── Faqat telefon bilan ariza → tasdiqlash → panelga kirish ─────────────
+#
+# Mijoz saytda ISM yozmaydi: har bir qo'shimcha maydon formani tashlab
+# ketadiganlar sonini oshiradi va ism baribir qo'ng'iroqda aniqlanadi.
+# Admin arizani tasdiqlaganda do'kon HAM, panelga kirish ma'lumoti HAM
+# yaratiladi — aks holda mijozning paneliga kirish yo'li qolmasdi.
+
+
+def test_a_phone_number_alone_is_enough_to_apply(cloud_client) -> None:
+    response = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998 93 222 50 70", "consent": True}
+    )
+
+    assert response.status_code == 200, response.text
+    lead = cloud_client.get("/api/v1/admin/leads", headers=ADMIN).json()[0]
+    assert lead["phone"] == "+998 93 222 50 70"
+    assert not lead["full_name"], "yo'q ismni o'ylab topmaymiz"
+
+
+def test_the_site_form_asks_for_nothing_but_a_phone_number(cloud_client) -> None:
+    """Forma maydonlari kodda ham, sahifada ham bir xil bo'lsin."""
+    page = cloud_client.get("/").text
+    form = page[page.index('id="leadForm"') : page.index("</form>", page.index('id="leadForm"'))]
+
+    visible = [line for line in form.splitlines() if "<input" in line and 'type="hidden"' not in line]
+    assert len(visible) == 3, visible  # telefon, honeypot, rozilik
+    assert 'name="full_name"' not in form
+
+
+def test_approving_an_application_hands_over_a_working_login(
+    cloud_client, monkeypatch
+) -> None:
+    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
+    lead_id = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998901112233", "consent": True}
+    ).json()["lead_id"]
+
+    site = cloud_client.post(
+        f"/api/v1/admin/leads/{lead_id}/convert", headers=ADMIN, json={"subscription_months": 1}
+    ).json()
+
+    assert site["login"]["username"] == "998901112233", "login — o'z telefon raqami"
+    signed_in = cloud_client.post(
+        "/api/v1/auth/login",
+        json={"username": site["login"]["username"], "password": site["login"]["password"]},
+    )
+    assert signed_in.status_code == 200, signed_in.text
+    assert signed_in.json()["account"]["role"] == "customer"
+    assert signed_in.json()["account"]["site_id"] == site["site_id"]
+
+
+def test_the_password_can_be_read_out_over_the_phone(cloud_client) -> None:
+    """Parol mijozga TELEFONDA aytiladi — SMS shlyuzi yo'q.
+    `k7Qm2xW9pL` ni aytib bo'lmaydi, "olma anor 4821" ni bo'ladi."""
+    lead_id = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998901112244", "consent": True}
+    ).json()["lead_id"]
+
+    password = cloud_client.post(
+        f"/api/v1/admin/leads/{lead_id}/convert", headers=ADMIN, json={"subscription_months": 1}
+    ).json()["login"]["password"]
+
+    assert password.isascii() and password.isalnum(), password
+    assert password[-4:].isdigit() and password[:-4].isalpha(), password
+
+
+def test_two_shops_on_one_phone_get_different_logins(cloud_client) -> None:
+    """Bitta odam ikkinchi do'kon ochsa login to'qnashadi va ikkinchi
+    do'kon panelsiz qolardi."""
+    logins = []
+    for index in range(2):
+        site = cloud_client.post(
+            "/api/v1/admin/sites",
+            headers=ADMIN,
+            json={"name": f"Do'kon {index}", "contact_phone": "+998900000001"},
+        ).json()
+        created = cloud_client.post(
+            f"/api/v1/admin/sites/{site['site_id']}/login", headers=ADMIN
+        )
+        assert created.status_code == 200, created.text
+        logins.append(created.json()["username"])
+
+    assert logins[0] != logins[1], logins
+
+
+def test_a_shop_cannot_end_up_with_two_logins(cloud_client) -> None:
+    site = cloud_client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Yagona", "contact_phone": "+998900000002"}
+    ).json()
+    cloud_client.post(f"/api/v1/admin/sites/{site['site_id']}/login", headers=ADMIN)
+
+    again = cloud_client.post(f"/api/v1/admin/sites/{site['site_id']}/login", headers=ADMIN)
+
+    assert again.status_code == 409
+    assert "998900000002" in again.json()["detail"], "mavjud login aytilsin"
+
+
+def test_a_lead_without_a_name_still_gets_a_readable_shop_name(cloud_client) -> None:
+    """Do'kon nomi `lead["full_name"]` dan olinardi — ism yo'q bo'lgach
+    nomi bo'sh do'kon ochilardi."""
+    lead_id = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998905550505", "consent": True}
+    ).json()["lead_id"]
+
+    site = cloud_client.post(
+        f"/api/v1/admin/leads/{lead_id}/convert", headers=ADMIN, json={"subscription_months": 1}
+    ).json()
+
+    assert site["name"].strip()
+    assert "998905550505" in site["name"]

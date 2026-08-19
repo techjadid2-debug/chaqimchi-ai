@@ -576,3 +576,28 @@ def test_every_page_has_a_favicon() -> None:
     for page in pages():
         html = (STATIC / page.name).read_text(encoding="utf-8")
         assert 'rel="icon"' in html, f"{page.name}: favicon havolasi yo'q"
+
+
+#: Rasmiy telefon.  Bitta joyda yozilsin — o'zgarganda hammasi bir vaqtda
+#: yangilanishi kerak, aks holda sahifalar bir-biriga zid raqam ko'rsatadi.
+PHONE_HREF = "tel:+998932225070"
+
+
+def test_the_customer_can_reach_a_human_from_every_dead_end() -> None:
+    """Mijozga "bizga yozing" deyiladigan har joyda aloqa yo'li bo'lsin.
+
+    Mijoz panelida bu gap to'rt marta uchraydi, aloqa havolasi esa faqat
+    KIRISH ekranida edi — u kirgandan keyin butunlay yashiriladi.  Ya'ni
+    "yozing" deb aytilardi-yu, qayerga yozishni ko'rsatilmasdi.
+    """
+    for name in ("aloqa.html", "pay.html", "site.html", "owner.html"):
+        html = (STATIC / name).read_text(encoding="utf-8")
+        assert PHONE_HREF in html, f"{name}: telefon havolasi yo'q"
+
+
+def test_the_owner_panel_shows_help_after_login_not_only_before() -> None:
+    """Yordam bloki `#app` ichida bo'lsin: kirish ekranidagi havola
+    kirgandan keyin `display:none` bo'lib qoladi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    body = html[html.index("<main") : html.index("</main>")]
+    assert PHONE_HREF in body, "yordam bloki panel ichida bo'lsin"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -16,6 +17,8 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from chaqimchi_ai.event_models import EdgeEvent
+
+logger = logging.getLogger(__name__)
 
 #: Kunlik hisobot uchun o'qiladigan turlar.  `person_detected` ataylab yo'q:
 #: u eng katta hajmli tur va hisobotda ishlatilmaydi — uni ham o'qish
@@ -339,6 +342,58 @@ class EventStore:
     def _dict(row: Any) -> Dict[str, Any]:
         return dict(row)
 
+    #: Qurilma soati serverdan shuncha oldinda bo'lishi mumkin.  Bir necha
+    #: daqiqalik farq normal va uni "tuzatish" hodisani noto'g'ri soatga
+    #: surib qo'yardi.
+    CLOCK_FUTURE_TOLERANCE = timedelta(minutes=5)
+
+    #: Shundan orqada qolgan soat — deyarli aniq BIOS batareyasi o'lgan
+    #: (o'sha davr kompyuterlari 2010-2016 ga tushadi).  Bunday hodisa
+    #: **surilmaydi**, faqat jurnalga yoziladi: quyidagi izohga qarang.
+    CLOCK_PAST_WARN = timedelta(days=730)
+
+    def _normalise_occurred_at(self, raw: Any, *, now: Optional[datetime] = None) -> str:
+        """Qurilma vaqtini ishonchli holga keltiradi.
+
+        `occurred_at` do'kon kompyuterining devor soatidan olinadi.  U
+        2014-yilgi kompyuter, CMOS batareyasi o'lishi odatiy hol va NTP
+        hech qayerda majburiy emas.  Bu qiymat esa **retention**, kunlik
+        hisobot va grafikni boshqaradi:
+
+        * kelajakdagi sana hech qachon o'chmaydi va ro'yxat boshida
+          abadiy turib oladi — u **serverning vaqtiga tortiladi**;
+        * ochib bo'lmaydigan satr hisobotni butunlay yiqitadi — unda
+          hech qanday ma'lumot yo'q, shuning uchun server vaqti qo'yiladi.
+
+        Orqada qolgan soat esa ATAYLAB surilmaydi.  Bir yillik arxiv
+        sotilgan mijozda eski hodisa qonuniy holat (`enterprise` tarifi
+        365 kun), va butun kunlik yuklamani "hozir" ga surish do'kon
+        egasiga **soxta mijozlar** ko'rsatardi: soatlik grafik yuklash
+        daqiqasiga yig'ilib qolardi.  Buzuq soat jurnalga yoziladi.
+
+        Internet bir hafta yo'q bo'lgandan keyingi kechikkan yuklash ham
+        shu sabab haqiqiy vaqtini saqlaydi.
+        """
+        moment = (now or _now()).astimezone(timezone.utc)
+        try:
+            parsed = datetime.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            logger.warning("Qurilma vaqti o'qilmadi (%r) — server vaqti qo'yildi", raw)
+            return moment.isoformat()
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.astimezone(timezone.utc)
+        if parsed > moment + self.CLOCK_FUTURE_TOLERANCE:
+            logger.warning("Qurilma soati oldinda (%s) — server vaqti qo'yildi", parsed)
+            return moment.isoformat()
+        if parsed < moment - self.CLOCK_PAST_WARN:
+            logger.warning(
+                "Qurilma soati juda orqada (%s) — hodisa o'z vaqtida saqlandi, "
+                "lekin do'kon kompyuterining soatini to'g'rilash kerak",
+                parsed,
+            )
+        return parsed.isoformat()
+
     def ingest(self, site_id: str, device_id: str, events: List[EdgeEvent]) -> List[str]:
         accepted: List[str] = []
         query = self._sql(
@@ -376,7 +431,7 @@ class EventStore:
                         event.event_type,
                         event.severity,
                         event.camera_id,
-                        event.occurred_at,
+                        self._normalise_occurred_at(event.occurred_at),
                         event.ended_at,
                         event.track_id,
                         event.person_id,
@@ -811,6 +866,8 @@ class EventStore:
         for row in rows:
             kind = row["event_type"]
             local = self._to_local(row["occurred_at"], timezone_tashkent)
+            if local is None:
+                continue  # yaroqsiz vaqt — bitta qator hisobotni yiqitmasin
             if kind == "line_crossed":
                 direction = row.get("direction")
                 if direction not in ("in", "out"):
@@ -1167,8 +1224,10 @@ class EventStore:
             item = self._dict(row)
             if self._matches_employee(item, marks):
                 continue
-            day = self._to_local(item["occurred_at"], zone).date()
-            counts[day] = counts.get(day, 0) + 1
+            local = self._to_local(item["occurred_at"], zone)
+            if local is None:
+                continue
+            counts[local.date()] = counts.get(local.date(), 0) + 1
         return counts
 
     def _events_of_day(self, site_id: str, day: date, zone: ZoneInfo) -> List[Dict[str, Any]]:
@@ -1209,8 +1268,18 @@ class EventStore:
         )
 
     @staticmethod
-    def _to_local(occurred_at: str, zone: ZoneInfo) -> datetime:
-        moment = datetime.fromisoformat(str(occurred_at))
+    def _to_local(occurred_at: str, zone: ZoneInfo) -> Optional[datetime]:
+        """Mahalliy vaqtga o'giradi; ochib bo'lmasa `None`.
+
+        Ilgari bu yerda himoya yo'q edi va bitta yaroqsiz qator butun
+        do'konning kunlik hisobotini va grafigini 500 qilardi.  Yangi
+        yozuvlar `_normalise_occurred_at` bilan kirishda to'g'rilanadi,
+        bu esa bazada allaqachon turgan qatorlar uchun.
+        """
+        try:
+            moment = datetime.fromisoformat(str(occurred_at))
+        except (TypeError, ValueError):
+            return None
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=timezone.utc)
         return moment.astimezone(zone)
@@ -1707,12 +1776,16 @@ class EventStore:
         while cursor <= end:
             day_events = self._employee_events_of_day(site_id, cursor, zone)
             for employee in employees:
-                created_day = self._to_local(str(employee["created_at"]), zone).date()
-                deactivated_day = (
-                    self._to_local(str(employee["deactivated_at"]), zone).date()
+                # Bu vaqtlarni server o'zi yozadi, ya'ni ular doim to'g'ri;
+                # `or cursor` faqat sxema buzilgan holat uchun himoya.
+                created_local = self._to_local(str(employee["created_at"]), zone)
+                created_day = created_local.date() if created_local else cursor
+                deactivated_local = (
+                    self._to_local(str(employee["deactivated_at"]), zone)
                     if employee.get("deactivated_at")
                     else None
                 )
+                deactivated_day = deactivated_local.date() if deactivated_local else None
                 if cursor < created_day or (
                     deactivated_day is not None and cursor > deactivated_day
                 ):
@@ -1777,12 +1850,10 @@ class EventStore:
         grouped: Dict[str, List[Tuple[datetime, str]]] = {}
         for item in raw:
             row = self._dict(item)
-            if row.get("person_id"):
+            local = self._to_local(str(row["occurred_at"]), zone)
+            if row.get("person_id") and local is not None:
                 grouped.setdefault(str(row["person_id"]), []).append(
-                    (
-                        self._to_local(str(row["occurred_at"]), zone),
-                        str(row["camera_id"]),
-                    )
+                    (local, str(row["camera_id"]))
                 )
         return grouped
 

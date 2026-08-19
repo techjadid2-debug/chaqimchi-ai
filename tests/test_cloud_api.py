@@ -241,7 +241,10 @@ def test_admin_panel_page_is_served(cloud_client) -> None:
     r = cloud_client.get("/admin")
     assert r.status_code == 200
     assert "Chaqimchi Cloud" in r.text
-    assert cloud_client.get("/assets/admin.css").status_code == 200
+    # Panel ikkita uslub faylida keladi: umumiy dizayn tizimi (owner.css) va
+    # admin qismlari (panel.css).  Biri yetib bormasa panel uslubsiz ochiladi.
+    assert cloud_client.get("/assets/owner.css").status_code == 200
+    assert cloud_client.get("/assets/panel.css").status_code == 200
 
 
 def test_sotqin_bootstrap_is_only_served_for_a_published_hashed_release(

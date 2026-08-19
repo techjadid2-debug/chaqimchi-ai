@@ -1,0 +1,200 @@
+/* Admin panel uslubi — chap yon menyu, yorug' brend.
+ *
+ * `owner.css` bilan birga keladi va faqat admin panelga xos qismlarni
+ * qo'shadi: yon menyu, ko'rsatkich plitkalari, "diqqat talab qiladi"
+ * ro'yxati, mijoz kartochkalari, suzuvchi xabarnoma.  Ranglar, `.card`,
+ * `.button`, `.stat`, `.note`, `.chip`, `.modal`, `label.field` — hammasi
+ * `owner.css` dan, ya'ni mijoz paneli bilan bitta til.
+ *
+ * `admin.css` ga TEGILMAYDI: uni `installer.html` (o'rnatuvchi paneli) va
+ * `pay.html` ishlatadi, ular qorong'u uslubda qoladi.
+ */
+
+/* ── Karkas ──────────────────────────────────────────────────────────── */
+.admin-shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
+
+.sidenav {
+  position: sticky; top: 0; align-self: start;
+  display: flex; flex-direction: column; gap: 4px;
+  height: 100vh; padding: 18px 12px;
+  background: var(--paper-2); border-right: 1px solid var(--line);
+}
+.sidenav .brand { margin: 4px 6px 18px; font-size: 15px; }
+.sidenav nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+.nav-foot .button { width: 100%; }
+
+.nav-link {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 14px; border-radius: 12px;
+  font-size: 15px; font-weight: 650; text-decoration: none; color: var(--ink);
+}
+.nav-link:hover { background: rgba(19, 35, 29, .07); }
+.nav-link.active { background: var(--ink); color: #fff; }
+.nav-badge {
+  margin-left: auto; min-width: 22px; padding: 1px 7px; border-radius: 999px;
+  background: var(--orange); color: #fff; font-size: 12px; font-weight: 700; text-align: center;
+}
+.nav-link.active .nav-badge { background: var(--lime); color: var(--ink); }
+
+.content { max-width: 940px; padding: 22px 22px 90px; }
+.content > h1 { margin-bottom: 16px; }
+
+/* Telefon uchun tepa lenta — kompyuterda ko'rinmaydi. */
+.topbar-mobile { display: none; }
+.drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(13, 17, 23, .45); }
+
+/* ── Ko'rsatkich plitkalari ──────────────────────────────────────────── */
+.stat.alert { background: #fdecea; border-color: #e79a92; }
+.stat strong.long { font-size: 22px; }
+a.stat { display: block; text-decoration: none; color: inherit; }
+a.stat:hover { border-color: var(--ink); }
+
+/* ── "Diqqat talab qiladi" ───────────────────────────────────────────── */
+.attention { display: flex; flex-direction: column; gap: 8px; }
+.attention-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border: 1px solid var(--line); border-radius: 14px;
+  background: #fff; font-size: 14px; text-decoration: none; color: inherit;
+}
+.attention-row:hover { border-color: var(--ink); }
+.attention-row .what { flex: 1 1 auto; min-width: 0; }
+.attention-row .what small { display: block; color: var(--muted); font-size: 12px; }
+.attention-row .go { color: var(--muted); font-weight: 700; flex: none; }
+.attention-row.err { border-left: 4px solid var(--danger); }
+.attention-row.warn { border-left: 4px solid #e9c46a; }
+
+/* ── Mijoz kartochkasi ───────────────────────────────────────────────── */
+.cust-list { display: flex; flex-direction: column; gap: 8px; }
+.cust-card {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px;
+  background: #fff; text-decoration: none; color: inherit;
+}
+.cust-card:hover { border-color: var(--ink); }
+.cust-card .who { flex: 1 1 220px; min-width: 0; }
+.cust-card .who b { display: block; font-size: 15px; }
+.cust-card .who small { display: block; color: var(--muted); font-size: 13px; }
+.cust-card .marks { display: flex; gap: 6px; flex-wrap: wrap; flex: none; }
+
+/* ── Belgilar (holat) ────────────────────────────────────────────────── */
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+  background: var(--paper-2); border: 1px solid var(--line); color: var(--ink);
+}
+.badge.ok { background: #e8f7e4; border-color: #9bd48a; }
+.badge.warn { background: #fff4d9; border-color: #e9c46a; }
+.badge.err { background: #fdecea; border-color: #e79a92; color: #8e2b20; }
+.badge.mute { color: var(--muted); }
+
+/* ── Mijoz sahifasi ──────────────────────────────────────────────────── */
+.back-link { display: inline-block; margin-bottom: 10px; color: var(--muted); font-weight: 650; font-size: 14px; }
+.detail-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.detail-head h1 { margin: 0; }
+.detail-sub { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.action-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.card.danger { border-color: #e79a92; background: #fffaf9; }
+
+/* Ma'lumot juftliklari — jadval o'rniga, telefonda ham buzilmaydi. */
+.kv { display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
+
+/* Yopiq bo'limlar (yangi mijoz formasi, texnik ma'lumot, narx jadvali). */
+summary { cursor: pointer; font-size: 15px; }
+summary::marker { color: var(--muted); }
+.card > summary { font-size: 16px; }
+
+/* ── Bo'sh holat ─────────────────────────────────────────────────────── */
+.empty { padding: 28px 20px; text-align: center; color: var(--muted); }
+.empty b { display: block; margin-bottom: 4px; color: var(--ink); font-size: 15px; }
+.empty .button { margin-top: 14px; }
+
+/* ── Xabarnoma: sahifaning qayerida bo'lsangiz ham ko'rinadi ─────────── */
+#toast {
+  position: fixed; left: 50%; bottom: 22px; z-index: 60; transform: translateX(-50%);
+  max-width: min(520px, 92vw); padding: 13px 18px; border-radius: 14px;
+  font-size: 14px; font-weight: 650; box-shadow: 0 8px 28px rgba(13, 17, 23, .22);
+}
+#toast.ok { background: #e8f7e4; border: 1px solid #9bd48a; }
+#toast.err { background: #fdecea; border: 1px solid #e79a92; }
+
+/* ── Oynalar (prompt o'rniga) ────────────────────────────────────────── */
+.modal.form-modal { width: min(480px, 100%); }
+.modal .modal-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.modal .modal-foot .button { flex: 0 1 auto; }
+
+/* Tanlov qatorlari — yozish o'rniga bosish. */
+.choice {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: 12px; background: #fff;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.choice:hover { border-color: var(--ink); }
+.choice input { margin-top: 3px; flex: none; }
+.choice small { display: block; color: var(--muted); font-weight: 500; }
+.choice.on { border-color: var(--ink); background: var(--paper-2); }
+
+/* Nusxalanadigan matn (havola, kod, parol). */
+.copy-field { display: flex; gap: 8px; align-items: stretch; margin: 8px 0; }
+.copy-field input { flex: 1 1 auto; min-width: 0; }
+.code-box {
+  padding: 14px; border: 1px dashed var(--line); border-radius: 12px; background: var(--paper-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px; font-weight: 700; letter-spacing: .12em; text-align: center;
+}
+
+/* owner.css bare `<input>` va fayl/URL maydonlarini qamramaydi. */
+input[type=url], input[type=tel], input[type=email], input:not([type]), textarea {
+  width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px;
+  background: #fff; color: var(--ink); font: inherit;
+}
+input[type=file] { font-size: 13px; }
+
+/* ── Yuz tanish (yopiq pilot) ────────────────────────────────────────── */
+.face-card { padding: 14px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.face-card.off { opacity: .55; }
+.face-card .who b { font-size: 15px; }
+.face-card .who small { display: block; color: var(--muted); font-size: 13px; }
+.face-photos { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.face-photo { position: relative; display: inline-block; }
+.face-thumb {
+  display: block; width: 72px; height: 72px; object-fit: cover;
+  border-radius: 10px; background: var(--paper-2); border: 1px solid var(--line);
+}
+.face-photo .button { position: absolute; top: -6px; right: -6px; min-height: 24px; padding: 0 8px; background: #fff; }
+
+/* ── Telefon va planshet ─────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .admin-shell { grid-template-columns: 1fr; }
+  .topbar-mobile {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: rgba(243, 240, 232, .95); border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(12px);
+  }
+  .topbar-mobile .brand { font-size: 15px; }
+  .sidenav {
+    position: fixed; top: 0; left: 0; z-index: 45;
+    width: 250px; transform: translateX(-100%);
+    transition: transform .18s ease;
+    box-shadow: 0 0 40px rgba(13, 17, 23, .25);
+  }
+  .sidenav.open { transform: translateX(0); }
+  .content { padding: 16px 14px 80px; }
+}
+
+@media (min-width: 901px) {
+  .drawer-backdrop { display: none; }
+}
+
+@media (max-width: 620px) {
+  .kv { grid-template-columns: 1fr; gap: 2px 0; }
+  .kv dd { margin-bottom: 8px; }
+  .cust-card .marks { width: 100%; }
+  #toast { left: 12px; right: 12px; bottom: 12px; max-width: none; transform: none; }
+}

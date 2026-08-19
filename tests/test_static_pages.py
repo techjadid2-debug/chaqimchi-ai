@@ -355,3 +355,120 @@ def test_owner_panel_does_not_say_sotqin() -> None:
     """Ichki kod nomi mijozga ko'rinmasin."""
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     assert "Sotqin" not in html
+
+
+# ── Admin panel qoidalari ────────────────────────────────────────────────
+#
+# Qaror (2026-08-19): panel chap yon menyuli, olti bo'limli va yorug'
+# brend uslubida.  Sabab foydalanuvchining o'z so'zi bilan: sakkizta karta
+# bitta uzun ustunda turardi, navigatsiya yo'q edi, muhim amallar esa
+# brauzerning oddiy `prompt` oynasida "auto" yoki "naqd" deb **yozishni**
+# talab qilardi.  Quyidagi testlar eski holat qaytib kelmasligini
+# qo'riqlaydi.
+
+#: Menyudagi bo'limlar — manzil ham shular ustiga qurilgan (`#/mijozlar`).
+ADMIN_SECTIONS = ("boshqaruv", "mijozlar", "tolovlar", "arizalar", "jamoa", "sozlamalar")
+
+
+def test_admin_panel_has_a_left_sidebar_with_six_sections() -> None:
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    assert 'class="sidenav"' in html, "chap yon menyu bo'lsin"
+    assert 'id="navList"' in html, "menyu ro'yxati bo'lsin"
+    for section in ADMIN_SECTIONS:
+        assert f'id: "{section}"' in html, f"«{section}» bo'limi yo'qolgan"
+
+
+def test_admin_panel_has_no_native_dialogs() -> None:
+    """`prompt()`/`confirm()` — bu yerda chalkashlikning asosiy sababi edi:
+    yangilanish siyosati uchun `auto` yoki `0.6.0` deb yozish, to'lov uchun
+    aynan `naqd` deb yozish kerak bo'lardi.  Bitta harf xato — amal
+    bajarilmasdi.  (`confirmDialog(` bu qoidaga tushmaydi.)"""
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    found = re.search(r"(?<![\w.])(prompt|confirm)\s*\(", html)
+    assert found is None, f"brauzer oynasi qaytib kelgan: {found.group(0) if found else ''}"
+
+
+def test_admin_panel_has_no_inline_event_handlers() -> None:
+    """`onclick="..."` bilan ID string ichiga qo'yilardi — qochirish
+    unutilsa buziladi.  Endi hamma narsa `data-act` jadvali orqali."""
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    assert re.search(r'\son\w+\s*=\s*"', html) is None, "inline hodisa ishlovchisi qolmasin"
+
+
+def test_admin_panel_is_light_and_reuses_the_customer_design_system() -> None:
+    """Panel mijoz paneli bilan bitta dizayn tilida bo'lsin."""
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    assert "owner.css" in html, "umumiy dizayn tizimi ulansin"
+    assert "panel.css" in html, "admin qismlari alohida faylda"
+    assert "admin.css" not in html, "eski qorong'u uslub qaytib kelmasin"
+    css = (STATIC / "panel.css").read_text(encoding="utf-8")
+    assert "#0a0c10" not in css, "qorong'u fon qaytib kelmasin"
+
+
+def test_old_admin_css_still_serves_the_other_panels() -> None:
+    """`admin.css` o'chirilmasin: uni o'rnatuvchi paneli va to'lov sahifasi
+    ishlatadi (pay.html hatto `--glass-border` o'zgaruvchisiga bog'liq)."""
+    assert (STATIC / "admin.css").is_file()
+    for name in ("installer.html", "pay.html"):
+        assert "admin.css" in (STATIC / name).read_text(encoding="utf-8"), (
+            f"{name} uslubsiz qolib ketgan"
+        )
+
+
+def test_admin_panel_is_responsive() -> None:
+    """Ilgari `admin.css` da bitta ham `@media` yo'q edi va 10 ustunli
+    jadval telefonda yon tomonga cheksiz siljirdi."""
+    css = (STATIC / "panel.css").read_text(encoding="utf-8")
+    assert css.count("@media") >= 2, "telefon va planshet uchun qoidalar bo'lsin"
+    assert ".sidenav.open" in css, "telefonda menyu chiqib chiquvchi bo'lsin"
+
+
+def test_admin_toast_floats_above_the_page() -> None:
+    """Xabarnoma sahifa tepasida turardi: pastdagi tugmani bosgan
+    foydalanuvchi javobni umuman ko'rmasdi."""
+    css = (STATIC / "panel.css").read_text(encoding="utf-8")
+    toast = css[css.index("#toast {") : css.index("}", css.index("#toast {"))]
+    assert "position: fixed" in toast
+
+
+def test_admin_customer_page_is_deep_linkable() -> None:
+    """Boshqaruvdagi «diqqat talab qiladi» ro'yxati to'g'ridan-to'g'ri
+    mijozga olib borishi va brauzerning Orqasi ishlashi kerak."""
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    assert "hashchange" in html
+    assert "#/mijozlar/" in html
+
+
+def test_admin_panel_speaks_plain_uzbek() -> None:
+    """Ichki jargon ekranga chiqmasin."""
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    for word in (
+        "Production tayyorligi",
+        "Tannarx",
+        "Draftni",
+        "Biznes preset",
+        "Onboarding",
+        "Legacy",
+        "CHAQIMCHI_PUBLIC_URL",
+        "poll'da",
+    ):
+        assert word not in html, f"jargon qaytib kelgan: «{word}»"
+
+
+def test_admin_panel_translates_raw_api_codes() -> None:
+    """API xom kod qaytaradi (`probe_status: "online"`, `status:
+    "assigned"`).  Ular to'g'ridan-to'g'ri chizilsa foydalanuvchi
+    inglizcha holat nomlarini ko'radi — har biri lug'atdan o'tsin."""
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    for table in ("PROBE_LABEL", "ASSIGN_LABEL", "CONFIG_LABEL", "CONN_LABEL", "STATUS_LABEL"):
+        assert f"const {table} = {{" in html, f"{table} lug'ati yo'q"
+    # Xom qiymat lug'atdan o'tmasdan chizilmasin.
+    assert "esc(c.probe_status)" not in html
+    assert "esc(a.status)}</span>" not in html
+
+
+def test_admin_lists_all_have_empty_states() -> None:
+    """Yangi bazada bo'limlar bo'm-bo'sh emas, nima qilish kerakligini
+    aytadigan matn bilan ochilsin."""
+    html = (STATIC / "admin.html").read_text(encoding="utf-8")
+    assert html.count("emptyState(") >= 7

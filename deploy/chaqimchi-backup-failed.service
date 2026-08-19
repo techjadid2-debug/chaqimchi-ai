@@ -1,0 +1,16 @@
+# `chaqimchi-backup.service` yiqilganda ishga tushadi (OnFailure=).
+#
+# Busiz kunlik zaxira jimgina yiqilib turardi: `Type=oneshot` xatosi
+# faqat jurnalga tushadi, papkada esa eski arxiv qolgani uchun hammasi
+# joyidaday ko'rinadi.  Zaxira — oxirgi himoya chizig'i, uning yo'qligi
+# server yo'qolgandan keyin emas, o'sha kuniyoq bilinishi kerak.
+
+[Unit]
+Description=Chaqimchi backup xatosi haqida Telegram xabari
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/chaqimchi-ai
+ExecStart=/home/deploy/chaqimchi-ai/scripts/notify_backup_failure.sh
+Nice=10

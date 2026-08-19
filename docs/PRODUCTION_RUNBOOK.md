@@ -106,26 +106,46 @@ Holatni tekshirish: `journalctl -u chaqimchi-backup.service -n 20`.
 
 ### 2.2 Restore mashqi (oyiga 1 marta)
 
+Mashq **production'ga tegmaydi**: arxiv ochiladi va mazmuni tekshiriladi.
+
 ```bash
-# 1. Oxirgi arxivni oching
-openssl enc -d -aes-256-cbc -pbkdf2 -pass env:CHAQIMCHI_BACKUP_PASSWORD \
-  -in chaqimchi-<sana>.tar.gz.enc | tar -xz -C /tmp/restore-drill
-
-# 2. Ichida uchtasi ham borligini tekshiring:
-#    postgres.dump (pg_restore --list bilan ochiladimi),
-#    cloud-state/cloud.db (sqlite3 "PRAGMA integrity_check"),
-#    minio/ (snapshot fayllari bor)
-pg_restore --list /tmp/restore-drill/postgres.dump | head
-sqlite3 /tmp/restore-drill/cloud-state/cloud.db "PRAGMA integrity_check;"
-
-# 3. Natijani sana bilan shu faylning ostiga yozib qo'ying.
+cd /home/deploy/chaqimchi-ai
+export CHAQIMCHI_BACKUP_PASSWORD='...'          # parol menejeridan
+export CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml
+./scripts/restore_production.sh --check \
+  /home/deploy/chaqimchi-backups/chaqimchi-<sana>.tar.gz.enc
 ```
+
+Skript to'rt narsani tekshiradi va bittasi ham yetishmasa xato beradi:
+
+| Tekshiruv | Nega |
+|---|---|
+| PostgreSQL dump ochiladimi, nechta jadval bor | bo'sh dump ham "sog'lom" ko'rinadi |
+| `cloud.db` yaxlitmi, ichida sayt/hisob/login bormi | hisob-faktura va obunalar shu yerda |
+| MinIO obyektlari soni | rasm va kliplar |
+| **Shifrlash kalitlari** (`CHAQIMCHI_CAMERA_SECRET_KEY`, `CHAQIMCHI_SNAPSHOT_KEY`) | ularsiz kamera parollari va barcha media o'qib bo'lmaydi |
+
+Natijani sana bilan quyidagi jadvalga yozing.
+
+### 2.3 Haqiqiy tiklash (server yo'qolganda)
+
+```bash
+./scripts/restore_production.sh --restore <arxiv.tar.gz.enc>
+```
+
+Skript `TIKLASH` deb yozishni so'raydi, so'ng joriy `.env.production` ni
+zaxiralab, sozlamalarni, PostgreSQL'ni, `cloud.db` ni va MinIO'ni
+arxivdagisiga almashtiradi. Undan keyin qo'lda ikki ish qoladi:
+
+1. Yuz modellari — `python scripts/fetch_face_models.py` (ular arxivga
+   ataylab kirmaydi: o'zgarmaydi va ~180 MB joy egallaydi)
+2. Telegram webhook — `python scripts/set_telegram_webhook.py`
 
 Restore mashqlari jurnali:
 
 | Sana | Kim | Natija |
 |---|---|---|
-| _hali o‘tkazilmagan_ | | |
+| 2026-08-19 | Abdulvosit | ✓ 12 jadval, `cloud.db` butun, kalitlar joyida. Mashq ikkita xatoni topdi: `docker cp` konteynerning tmpfs `/tmp` idan o‘qiy olmasdi, va hostda `pg_restore` yo‘qligi “dump bo‘sh” deb ko‘rinardi — ikkalasi tuzatildi. |
 
 ## 3. Deploydan keyingi tekshiruv
 

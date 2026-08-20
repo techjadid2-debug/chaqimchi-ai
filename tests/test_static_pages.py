@@ -816,3 +816,45 @@ def test_the_landing_shows_the_real_panel_not_a_drawing() -> None:
     # Ekrandan pastda — birinchi ochilishni sekinlashtirmasin.
     proof = site[site.index('id="imkoniyat"') : site.index('id="narx"')]
     assert proof.count('loading="lazy"') == 2
+
+
+def test_shared_pages_keep_the_styles_they_use() -> None:
+    """`site.css` ni TO'QQIZTA sahifa bo'lishadi.
+
+    Bosh sahifa qayta qurilganda o'lik qoidalar tozalandi (38 KB → 21 KB).
+    Xavf aniq edi: `install.html` yoki `installer-guide.html` ishlatadigan
+    sinf ham "landingda ishlatilmayapti" degan sabab bilan o'chib
+    ketishi mumkin — va buni hech qanday test ushlamasdi, sahifa
+    shunchaki uslubsiz ochilardi.
+
+    Shu sabab tekshiruv ro'yxatga emas, HAQIQATGA tayanadi: har sahifada
+    uchraydigan har bir sinf uchun `site.css` da qoida bo'lishi shart.
+    """
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    pages = [
+        page
+        for page in STATIC.glob("*.html")
+        if "site.css" in page.read_text(encoding="utf-8")
+    ]
+    assert len(pages) >= 8, "site.css ni ko'p sahifa bo'lishadi"
+
+    #: Qoidasiz ishlatiladigan sinflar: `icon` — sprayt uchun belgi,
+    #: `hidden` — atribut, `hero-copy`/`proof` esa grid bolasi va
+    #: ularning ko'rinishi ota-elementdan keladi.
+    exempt = {"icon", "hidden", "hero-copy", "proof"}
+
+    shared = set(re.findall(r"\.([a-zA-Z][\w-]*)", css))
+    missing: dict[str, set[str]] = {}
+    for page in pages:
+        markup = page.read_text(encoding="utf-8")
+        # Sahifaning O'Z `<style>` bloki ham hisobga olinadi: ba'zi
+        # sahifalar (yo'riqnoma, rozilik shabloni) uslubini o'zida
+        # olib yuradi.
+        inline = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", markup, re.S))
+        known = shared | set(re.findall(r"\.([a-zA-Z][\w-]*)", inline))
+        for attr in re.findall(r'class="([^"]+)"', markup):
+            for name in attr.split():
+                if name in exempt or name in known:
+                    continue
+                missing.setdefault(page.name, set()).add(name)
+    assert not missing, f"uslubi yo'q sinflar: {missing}"

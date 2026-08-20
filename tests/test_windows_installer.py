@@ -484,3 +484,43 @@ def test_the_service_launcher_never_opens_a_browser_or_pauses() -> None:
 
 def test_the_autostart_task_runs_the_service_launcher() -> None:
     assert "Chaqimchi_AI_xizmat.bat" in _autostart_block()
+
+
+# ── Masofadan yangilash fayllarni band holda topmasin ───────────────────
+#
+# Nazorat endi rejalashtirilgan vazifa orqali, SYSTEM nomidan, OYNASIZ
+# ishlaydi.  Yangi o'rnatuvchi `.onInit` da eskisini `/S` bilan chaqiradi,
+# eski o'chiruvchi esa jarayonni oyna sarlavhasi bo'yicha qidirardi —
+# oynasiz jarayonda bunday sarlavha yo'q.  Topilmasa `python.exe` band
+# bo'lib qoladi, yangi versiya fayllarni ustiga yoza olmaydi va
+# masofadan yangilanish JIMGINA ishlamay qo'yadi.
+
+
+def _uninstall_block() -> str:
+    source = _nsis_code()
+    return source[source.index('Section "Uninstall"') :]
+
+
+def test_the_task_is_stopped_before_the_process() -> None:
+    """Teskari tartibda vazifa o'ldirilgan dasturni qayta ko'tarardi."""
+    block = _uninstall_block()
+    assert block.index('schtasks /End /TN "Chaqimchi AI"') < block.index("Stop-Process"), (
+        "avval vazifa to'xtatilsin, keyin jarayon"
+    )
+
+
+def test_processes_are_matched_by_path_not_window_title() -> None:
+    block = _uninstall_block()
+    assert "Get-Process python" in block and "$INSTDIR" in block, (
+        "jarayon o'rnatish papkasi bo'yicha topilsin"
+    )
+    # Eski usul zaxira sifatida qolishi mumkin, lekin yagona yo'l bo'lmasin.
+    assert block.index("Stop-Process") < block.index("WINDOWTITLE"), (
+        "yo'l bo'yicha to'xtatish birinchi bo'lsin"
+    )
+
+
+def test_the_updater_task_is_also_stopped() -> None:
+    """O'chirilgan dasturni qayta o'rnatishga urinmasin."""
+    block = _uninstall_block()
+    assert 'schtasks /Delete /F /TN "Chaqimchi AI Update"' in block

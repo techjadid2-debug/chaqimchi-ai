@@ -103,7 +103,7 @@ Ichiga cloud manzili yoziladi — YANGI api manzil bilan qayta build shart:
 
 ```bash
 make windows-release CLOUD_URL=https://api.chaqimchi.uz PY=.venv/bin/python
-scp releases/chaqimchi-windows-0.6.7.{exe,json} deploy@SERVER_IP:/home/deploy/chaqimchi-ai/releases/
+scp releases/chaqimchi-windows-0.6.8.{exe,json} deploy@SERVER_IP:/home/deploy/chaqimchi-ai/releases/
 ```
 
 ## 7. status.chaqimchi.uz (UptimeRobot, bepul)
@@ -122,7 +122,7 @@ Do'kon kompyuteri eski manzilga qarab turibdi (hodisalar diskda yig'ilgan,
    oching). YOKI `config.yaml` da `cloud_sync.url` va `cloud.url` ni
    `https://api.chaqimchi.uz` ga almashtirib dasturni qayta ishga tushiring.
 2. Ulangach yig'ilgan hodisalar o'zi yetib boradi.
-3. Yangilanish siyosati `auto` bo'lsa 0.6.7 ni 15 daqiqada o'zi oladi.
+3. Yangilanish siyosati `auto` bo'lsa 0.6.8 ni 15 daqiqada o'zi oladi.
 
 ## 9. Yakuniy tekshiruv ro'yxati
 

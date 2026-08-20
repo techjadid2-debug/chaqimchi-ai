@@ -409,17 +409,40 @@ FunctionEnd
 ; ── O'chirish ───────────────────────────────────────────────────────────
 
 Section "Uninstall"
-  ; Ishlab turgan dasturni to'xtatamiz, aks holda fayllar band bo'lib
-  ; o'chmay qoladi va papka "yarim o'chirilgan" holatda qolardi.
-  ExecWait 'taskkill /F /IM python.exe /FI "WINDOWTITLE eq Chaqimchi*"'
+  ; Bu bo'lim masofadan yangilashda ham ishlaydi: yangi o'rnatuvchi
+  ; `.onInit` da eskisini `/S` bilan chaqiradi.  Ya'ni bu yerdagi tartib
+  ; "yangilanish o'tadimi yoki fayl band bo'lib qoladimi" degan savolga
+  ; javob beradi.
 
-  ; Yangilanish vazifasi ham olib tashlanadi: qolib ketsa o'chirilgan
-  ; dasturni har olti soatda qayta o'rnatishga urinardi.
-  nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI Update"'
-  ; Avtostart vazifasi ham: qolib ketsa o'chirilgan dasturni har yonishda
-  ; ishga tushirishga urinib, xato jurnalini to'ldirardi.
+  ; 1. Avval VAZIFANI to'xtatamiz, keyin jarayonni.  Teskarisi bo'lsa
+  ;    vazifa o'ldirilgan dasturni qayta ko'tarib yuborardi.
   nsExec::ExecToLog 'schtasks /End /TN "Chaqimchi AI"'
   nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI"'
+  ; Yangilanish vazifasi ham olib tashlanadi: qolib ketsa o'chirilgan
+  ; dasturni qayta o'rnatishga urinardi.
+  nsExec::ExecToLog 'schtasks /End /TN "Chaqimchi AI Update"'
+  nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI Update"'
+
+  ; 2. Jarayonni YO'L bo'yicha to'xtatamiz, oyna sarlavhasi bo'yicha emas.
+  ;
+  ;    Bu muhim o'zgarish: nazorat endi rejalashtirilgan vazifa orqali,
+  ;    SYSTEM nomidan, OYNASIZ ishlaydi.  Eski
+  ;    `taskkill /FI "WINDOWTITLE eq Chaqimchi*"` bunday jarayonni umuman
+  ;    topa olmaydi — sarlavha yo'q.  Topilmasa `python.exe` band bo'lib
+  ;    qolardi va yangi versiya fayllarni ustiga yoza olmasdi, ya'ni
+  ;    masofadan yangilanish jimgina ishlamay qo'yardi.
+  ;
+  ;    Yo'l bo'yicha filtr AI zanjirini ham (`retail.service`) ushlaydi —
+  ;    u ham shu papkadagi `python.exe`.  Boshqa dasturlarning Python'iga
+  ;    tegmaydi.
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command \
+    "Get-Process python -ErrorAction SilentlyContinue | \
+     Where-Object { $$_.Path -like $\"$INSTDIR\*$\" } | \
+     Stop-Process -Force -ErrorAction SilentlyContinue"'
+  ; Zaxira: PowerShell bo'lmagan/cheklangan mashinada eski usul.
+  ExecWait 'taskkill /F /IM python.exe /FI "WINDOWTITLE eq Chaqimchi*"'
+  ; Fayl tutqichlari bo'shashiga bir lahza beramiz.
+  Sleep 2000
   ; Fayrvol qoidasi ham olib tashlanadi: o'chirilgan dasturdan keyin
   ; ochiq port qolib ketmasligi kerak.
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule \

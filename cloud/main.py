@@ -1879,9 +1879,23 @@ async def public_download_installer(code: str = "") -> Response:
     filename = "-".join(parts) + ".exe"
 
     url = _windows_installer_url()
-    if url:
-        return RedirectResponse(url, status_code=307)
     installer = _windows_installer_file()
+
+    # Kodli havolada fayl NOMI muhim: o'rnatuvchi pairing kodni aynan
+    # nomdan o'qiydi.  Redirect esa nomni yo'qotadi — brauzer manzildagi
+    # nomni saqlaydi (`chaqimchi-windows-0.6.8.exe`), kod esa yo'qoladi va
+    # mijoz sehrgarda kodni QO'LDA kiritishga majbur bo'ladi.
+    #
+    # Shuning uchun kod berilgan bo'lsa faylni o'zimiz beramiz — bu
+    # kamdan-kam so'rov (har mijozga bir marta), kodsiz havola esa
+    # statik manzilga yo'naltiriladi.
+    if url and (len(safe_code) != 6 or installer is None):
+        if len(safe_code) == 6:
+            logger.warning(
+                "Kodli yuklab olish redirect bilan berildi — fayl lokal "
+                "topilmadi, kod fayl nomida ketmaydi"
+            )
+        return RedirectResponse(url, status_code=307)
     if installer is None:
         raise HTTPException(
             503,

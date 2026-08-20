@@ -675,3 +675,50 @@ def test_a_lead_without_a_name_still_gets_a_readable_shop_name(cloud_client) -> 
 
     assert site["name"].strip()
     assert "998905550505" in site["name"]
+
+
+def test_a_coded_link_keeps_the_code_even_when_a_public_url_is_set(
+    cloud_client, tmp_path, monkeypatch
+) -> None:
+    """Serverga `CHAQIMCHI_WINDOWS_INSTALLER_URL` qo'yilgach kodli havola
+    JIMGINA buzilgan edi.
+
+    Redirect brauzerga manzildagi nomni saqlatadi
+    (`chaqimchi-windows-0.6.8.exe`) — kod yo'qoladi va mijoz sehrgarda
+    6 ta belgini qo'lda kiritishga majbur bo'ladi.  Ya'ni "bir bosishda
+    ulanish" va'dasi bitta env o'zgaruvchisi bilan o'chib qolardi.
+    """
+    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.setenv(
+        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "https://dl.example.uz/releases/chaqimchi-windows-0.6.8.exe",
+    )
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    response = cloud_client.get(
+        "/api/v1/public/download-installer?code=13204e", follow_redirects=False
+    )
+
+    assert response.status_code == 200, "kodli havola redirect bo'lmasin"
+    assert response.headers["content-disposition"].endswith('-13204E.exe"')
+
+
+def test_a_coded_link_still_works_when_the_file_is_only_remote(
+    cloud_client, monkeypatch
+) -> None:
+    """Fayl faqat tashqarida bo'lsa kodni saqlab qololmaymiz — lekin
+    yuklab olish baribir ishlashi kerak (sehrgar kodni so'raydi)."""
+    monkeypatch.setenv(
+        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
+    )
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    response = cloud_client.get(
+        "/api/v1/public/download-installer?code=13204e", follow_redirects=False
+    )
+
+    assert response.status_code == 307

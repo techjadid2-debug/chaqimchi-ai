@@ -12,6 +12,7 @@ yuboriladi — u yerda ham yolg'on "o'tdi" bo'lmasligi uchun sabab yoziladi.
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -858,3 +859,24 @@ def test_shared_pages_keep_the_styles_they_use() -> None:
                     continue
                 missing.setdefault(page.name, set()).add(name)
     assert not missing, f"uslubi yo'q sinflar: {missing}"
+
+
+def test_the_cloud_image_carries_the_model_manifests() -> None:
+    """Manifestsiz `fetch_face_models.py` konteynerda ishlamaydi.
+
+    Bu aynan jonli deployda ushlangan: skript manifestni repodan
+    o'qiydi, Dockerfile esa `models/` ni ko'chirmasdi — natijada
+    modelni o'rnatib bo'lmasdi va davomat jimgina ishlamay qolardi.
+    Eski skript checksumlarni o'z ichida saqlagani ham shu sababdan
+    edi.
+    """
+    root = STATIC.parents[1]
+    dockerfile = (root / "Dockerfile.cloud").read_text(encoding="utf-8")
+    assert "COPY models ./models" in dockerfile
+
+    ignored = (root / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert "models/" not in [line.strip() for line in ignored]
+
+    manifest = json.loads((root / "models" / "faces_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["license"] == "Apache-2.0"
+    assert len(manifest["files"]) == 6, "har model uchun .xml va .bin"

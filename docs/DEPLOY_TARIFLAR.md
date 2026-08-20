@@ -41,11 +41,26 @@ Ikkalasi ham toza bo'lishi shart. Toza bo'lmasa — deploy qilinmaydi.
 `employee_faces` jadvalidagi embeddinglar **qayta yoziladi**. Xato
 bo'lsa orqaga qaytishning yagona yo'li — zaxira.
 
+Skript parol va papkani `/etc/chaqimchi/backup.env` dan oladi — uni
+**qo'lda yuklash shart**, aks holda "CHAQIMCHI_BACKUP_DIR shart" deb
+to'xtaydi:
+
 ```bash
 ssh -i .deploy_keys/chaqimchi_prod root@169.58.198.111
-/home/deploy/chaqimchi-ai/scripts/backup_production.sh
-ls -la /var/backups/chaqimchi/   # bugungi fayl turibdimi
+cd /home/deploy/chaqimchi-ai
+set -a && . /etc/chaqimchi/backup.env && set +a
+./scripts/backup_production.sh
 ```
+
+So'ng arxiv haqiqatan butunligini tekshiring — "backup bor" degani
+"tiklanadi" degani emas:
+
+```bash
+./scripts/restore_production.sh --check \
+  /home/deploy/chaqimchi-backups/chaqimchi-<SANA>.tar.gz.enc
+```
+
+Kutiladigan javob: `✓ Arxiv butun.` va jadval sanog'i (`sites=…`).
 
 ---
 
@@ -56,12 +71,32 @@ ls -la /var/backups/chaqimchi/   # bugungi fayl turibdimi
 cd "/Users/abdulvosit/Desktop/Chaqimchi AI"
 rsync -az --delete \
   --exclude '.git' --exclude '.venv' --exclude 'build' --exclude 'releases' \
+  --exclude '.deploy_keys' --exclude 'data' \
+  --exclude '.env' --exclude '.env.production' \
+  --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.ruff_cache' \
+  --exclude '.DS_Store' \
   -e "ssh -i .deploy_keys/chaqimchi_prod" \
   ./ root@169.58.198.111:/home/deploy/chaqimchi-ai/
 ```
 
 `root@` ataylab: `/home/deploy/chaqimchi-ai` fayllari uid 501 egaligida
 va `deploy` foydalanuvchisi ularga yoza olmaydi.
+
+**Har bir `--exclude` ning sababi bor, hech qaysisi olib tashlanmasin:**
+
+| Chetlatilgan | Nima uchun |
+|---|---|
+| `.deploy_keys` | **Serverning o'z maxfiy SSH kaliti** — u serverga tushmasligi kerak |
+| `.env`, `.env.production` | Serverdagi nusxa `deploy` egaligida va boshqacha |
+| `releases` | 619 MB, bind mount; o'chsa yuklab olish 404 beradi |
+| `data` | Lokal ishlab chiqish ma'lumoti; production `cloud_state` volumeda |
+
+Birinchi marta ishlatishdan oldin **quruq mashq** qiling — nima
+o'chishini ko'rasiz:
+
+```bash
+rsync -azn --delete --itemize-changes ...  # yuqoridagi bilan bir xil, faqat -n
+```
 
 ---
 
@@ -74,6 +109,11 @@ cd /home/deploy/chaqimchi-ai
 docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
   exec cloud python scripts/fetch_face_models.py
 ```
+
+Skript manifestni konteyner ichidan o'qiydi (`/app/models/faces_manifest.json`),
+ya'ni `Dockerfile.cloud` da `COPY models ./models` bo'lishi SHART.
+Bu 2026-08-21 deployida aynan shu joyda yiqilgan edi va endi test bilan
+qulflangan (`test_the_cloud_image_carries_the_model_manifests`).
 
 Kutiladigan natija — oltita fayl (`.xml` + `.bin`), har biri sha256 dan
 o'tadi:
@@ -95,8 +135,15 @@ to'g'ri xatti-harakat, qayta ishga tushiring.
 ## 5. Deploy
 
 ```bash
-CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh
+cd /home/deploy/chaqimchi-ai
+set -a && . /etc/chaqimchi/backup.env && set +a
+export CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml
+./scripts/deploy_cloud.sh
 ```
+
+Skript o'zi yana bir zaxira oladi (2-qadamdagisidan tashqari) — shuning
+uchun backup env bu yerda ham kerak. Health tekshiruvi o'tmasa oldingi
+image'ni **o'zi qaytaradi**.
 
 Ko'tarilgach:
 
@@ -196,13 +243,18 @@ avval o'z qurilmangiz, 24 soatdan keyin hammaga.
 
 ## Orqaga qaytarish
 
-Agar biror narsa buzilsa:
+**Serverda git YO'Q** — deploy faqat rsync orqali. Ya'ni orqaga qaytarish
+lokal mashinadan boshlanadi:
 
 ```bash
-cd /home/deploy/chaqimchi-ai
-git checkout soddalashtirish-bosqich-0     # oldingi holat
-CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh
+# Lokal mashinada
+git checkout soddalashtirish-bosqich-0
+rsync -az --delete ...   # yuqoridagi bilan bir xil buyruq
 ```
+
+Keyin serverda qayta yig'ish. **Ko'p hollarda bunga hojat ham yo'q:**
+`deploy_cloud.sh` health tekshiruvi o'tmasa oldingi image'ni O'ZI
+qaytaradi (`rollback_cloud`), ya'ni sayt ishlab turaveradi.
 
 **DIQQAT:** kod orqaga qaytsa, `reembed_faces.py` yozgan 256 o'lchamli
 embeddinglar eski kod uchun yaroqsiz bo'lib qoladi — davomat ishlamaydi.

@@ -3704,7 +3704,32 @@ async def edge_site_config(
     # qilinganda `lite` sotuvdan chiqdi, ya'ni `is_sellable("lite")` False
     # bo'ldi.  Eski tekshiruv qolganda mavjud to'lovchi mijozning qurilmasi
     # hamma funksiyani jimgina yo'qotardi va do'kon nazoratsiz qolardi.
-    if not config["cloud_features"]:
+    # Obuna tugagan bo'lsa funksiyalar berilmaydi.
+    #
+    # Bungacha obuna muddati QURILMADA umuman majburlanmasdi:
+    # `require_device` faqat tokenni tekshirardi, `/edge/heartbeat` esa
+    # litsenziya maydonlarini tashlab yuborardi.  Bitta tarif va tekin
+    # sinov paytida bu yumshoq oqim edi; uch xil narx e'lon qilingach —
+    # to'lashni to'xtatishning eng oson yo'li.
+    #
+    # `grace` (14 kun) ATAYLAB to'xtatilmaydi: sayt va FAQ aynan shuni
+    # va'da qiladi — "obuna tugagach tizim yana 14 kun ishlaydi".
+    # Kamera sog'ligi hodisalari baribir chiqaveradi (`HEALTH_EVENTS`
+    # qurilmada filtrdan o'tmaydi), ya'ni do'kon "kamerangiz o'chdi"
+    # xabarini yo'qotmaydi.
+    subscription = get_store().subscription_status(device["site_id"])
+    config["subscription"] = {
+        "status": subscription["status"],
+        "days_left": subscription["days_left"],
+        "message": subscription["message"],
+    }
+    expired = subscription["status"] in {"expired", "suspended"}
+    if expired:
+        # Erta `return` QILINMAYDI: quyida `attendance` va boshqa
+        # maydonlar to'ldiriladi va yarim javob qurilmani chalg'itardi.
+        config["cloud_features"] = []
+
+    if not expired and not config["cloud_features"]:
         site = get_store().get_site(device["site_id"])
         plan_key = str((site or {}).get("plan") or "")
         allowed = set(plan_feature_codes(plan_key))
@@ -3720,7 +3745,9 @@ async def edge_site_config(
                 if code in allowed
             ]
     config["attendance"] = {
-        "enabled": _attendance_enabled(),
+        # Obuna tugagan bo'lsa davomat ham to'xtaydi — u ham sotiladigan
+        # funksiya, faqat boshqa yo'l bilan yetkaziladi.
+        "enabled": _attendance_enabled() and not expired,
         "mode": (
             "commercial"
             if faces.MODELS_LICENSED_FOR_COMMERCIAL_USE

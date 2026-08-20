@@ -1461,3 +1461,61 @@ def test_heatmap_and_demography_follow_the_plan(production_client) -> None:
     client.post(f"/api/v1/admin/sites/{site['site_id']}/plan", headers=admin, json={"plan": "biznes"})
     assert client.get("/api/v1/owner/heatmap?camera_id=camera-01", headers=owner).status_code == 200
     assert "demografiya" in client.get("/api/v1/owner/report", headers=owner).json()
+
+
+def test_an_expired_subscription_stops_the_features_but_not_the_camera_alarm(
+    production_client,
+) -> None:
+    """To'lamagan mijozning qurilmasi ishlab turaverishi kerak emas.
+
+    Bungacha obuna muddati qurilmada UMUMAN majburlanmasdi:
+    `require_device` faqat tokenni tekshirardi, `/edge/heartbeat` esa
+    litsenziya maydonlarini tashlab yuborardi.  Bitta tarif va tekin
+    sinov paytida bu yumshoq oqim edi; uch xil narx e'lon qilingach —
+    to'lashni to'xtatishning eng oson yo'li.
+
+    Lekin kamera sog'ligi hodisalari qurilmada filtrdan o'tmaydi
+    (`HEALTH_EVENTS`), ya'ni "kamerangiz o'chdi" xabari baribir keladi.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, headers = _site_on(client, "biznes")
+    store = main.get_store()
+
+    assert client.get("/api/v1/sotqin/config", headers=headers).json()["cloud_features"]
+
+    # Obunani orqaga suramiz: grace (14 kun) ham o'tib ketsin.
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE sites SET subscription_until = ? WHERE id = ?",
+            ("2020-01-01 00:00:00", site["site_id"]),
+        )
+        conn.commit()
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert config["subscription"]["status"] == "expired"
+    assert config["cloud_features"] == []
+    assert config["attendance"]["enabled"] is False
+    # Javob YARIM emas: qurilma kutadigan maydonlar joyida qoladi.
+    assert "product" in config and "cameras" in config
+
+
+def test_the_grace_period_promised_on_the_site_is_honoured(production_client) -> None:
+    """Sayt FAQ'i: "obuna tugagach tizim yana 14 kun ishlaydi"."""
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, headers = _site_on(client, "biznes")
+    store = main.get_store()
+
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE sites SET subscription_until = datetime('now', '-3 days') WHERE id = ?",
+            (site["site_id"],),
+        )
+        conn.commit()
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert config["subscription"]["status"] == "grace"
+    assert config["cloud_features"], "grace davrida tizim ishlashda davom etadi"

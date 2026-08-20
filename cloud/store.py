@@ -1905,6 +1905,18 @@ class CloudStore:
             out.append(site)
         return out
 
+    def subscription_status(self, site_id: str) -> Dict[str, Any]:
+        """Obuna holati — hisob-kitobsiz, faqat holat.
+
+        `site_detail()` butun obyektni (qurilmalar, kodlar, funksiya
+        shartnomasi) yig'adi va u har 20 soniyada chaqiriladigan yo'l
+        uchun qimmat.
+        """
+        site = self.get_site(site_id)
+        if not site:
+            raise ValueError("Sayt topilmadi")
+        return _compute_status(site)
+
     def site_detail(self, site_id: str) -> Dict[str, Any]:
         """Bitta sayt: holat, tarif cheklovlari, qurilmalar va faol pairing kodlar."""
         site = self.get_site(site_id)

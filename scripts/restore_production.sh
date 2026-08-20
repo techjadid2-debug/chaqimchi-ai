@@ -125,17 +125,34 @@ print(" ".join(counts))
 PY
 )"
   note "cloud.db" "$summary"
-  [[ "$summary" == *"BUZUQ"* || "$summary" == *"JADVAL YO'Q"* ]] && fail=1
+  # `if` bilan, `&&` bilan emas: `set -e` ostida `[[ ... ]] && fail=1`
+  # shakli test YOLG'ON bo'lganda (ya'ni arxiv SOG'LOM bo'lganda) butun
+  # skriptni to'xtatardi.  Natijada mashq kalitlar tekshiruvigacha
+  # yetmasdan 1 kod bilan chiqardi — sog'lom zaxira "yaroqsiz" bo'lib
+  # ko'rinardi.
+  if [[ "$summary" == *"BUZUQ"* || "$summary" == *"JADVAL YO'Q"* ]]; then
+    fail=1
+  fi
 else
   note "cloud.db" "YO'Q"; fail=1
 fi
 
-objects="$(find "$stage/minio" -type f 2>/dev/null | wc -l | tr -d ' ')"
+# `find` mavjud bo'lmagan papkada 1 qaytaradi, `set -o pipefail` esa uni
+# butun quvurning kodi qilib beradi — ya'ni `set -e` skriptni JIMGINA
+# to'xtatardi.  Kunlik arxivda `minio/` ataylab yo'q, shuning uchun bu
+# yo'l endi odatiy holat.  (Bungacha arxivda bo'sh bo'lsa ham papka
+# turardi va nuqson ko'rinmasdi.)
+objects=0
+if [[ -d "$stage/minio" ]]; then
+  objects="$(find "$stage/minio" -type f | wc -l | tr -d ' ')"
+fi
 if [[ "$kind" == "media" ]]; then
-  note "MinIO obyektlari" "$objects ta"
   if [[ "$objects" -eq 0 ]]; then
-    note "MinIO obyektlari" "BO'SH — media arxivi ma'nosiz"
-    fail=1
+    # Yangi tizimda (hali do'kon ulanmagan) bu NORMAL holat, xato emas:
+    # aks holda haftalik unit har hafta yolg'on ogohlantirish yuborardi.
+    note "MinIO obyektlari" "0 ta — hali media yo'q (yangi tizimda normal)"
+  else
+    note "MinIO obyektlari" "$objects ta"
   fi
 else
   # Kunlik arxivda media ATAYLAB yo'q (disk 15 barobar shishmasligi uchun).

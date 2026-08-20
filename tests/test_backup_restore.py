@@ -181,3 +181,46 @@ def test_missing_offsite_copy_is_reported() -> None:
     preflight = (SCRIPTS / "production_preflight.py").read_text(encoding="utf-8")
     assert "def check_backup(" in preflight
     assert "RESTIC_REPOSITORY" in preflight
+
+
+def test_a_healthy_archive_does_not_abort_the_drill() -> None:
+    """`set -e` ostida `[[ ... ]] && fail=1` shakli test YOLG'ON bo'lganda —
+    ya'ni arxiv SOG'LOM bo'lganda — butun skriptni to'xtatardi.
+
+    Natija: mashq shifrlash kalitlari tekshiruvigacha yetmasdan 1 kod
+    bilan chiqardi va sog'lom zaxira "yaroqsiz" bo'lib ko'rinardi.
+    """
+    code = [
+        line
+        for line in RESTORE.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    assert not [line for line in code if "&& fail=1" in line], (
+        "`if` bilan yozilsin — `&&` bilan emas"
+    )
+
+
+def test_an_empty_media_archive_is_not_a_failure() -> None:
+    """Hali do'kon ulanmagan tizimda media bo'sh bo'lishi normal.
+
+    Aks holda haftalik unit har hafta yolg'on ogohlantirish yuborardi.
+    """
+    source = RESTORE.read_text(encoding="utf-8")
+    block = source[source.index('if [[ "$kind" == "media" ]]; then', source.index("objects=")) :]
+    block = block[: block.index("\nfi")]
+    assert "fail=1" not in block
+
+
+def test_the_drill_survives_an_archive_without_media() -> None:
+    """`find` mavjud bo'lmagan papkada 1 qaytaradi, `set -o pipefail` esa
+    uni butun quvurning kodi qiladi — `set -e` skriptni JIMGINA
+    to'xtatardi.
+
+    Kunlik arxivda `minio/` ataylab yo'q, ya'ni bu endi ODATIY yo'l:
+    mashq shifrlash kalitlarini tekshirmasdan 1 kod bilan chiqib
+    ketardi va sog'lom zaxira "yaroqsiz" bo'lib ko'rinardi.
+    """
+    source = RESTORE.read_text(encoding="utf-8")
+    assert 'if [[ -d "$stage/minio" ]]; then' in source, "papka bor-yo'qligi tekshirilsin"
+    guard = source.index('if [[ -d "$stage/minio" ]]; then')
+    assert source.index('find "$stage/minio"') > guard, "`find` shart ichida bo'lsin"

@@ -38,19 +38,93 @@
     } finally { button.disabled = false; }
   }
 
-  // ── Yagona lead forma ─────────────────────────────────────────────────
+  // ── Ro'yxatdan o'tish: do'kon o'zi ochiladi ───────────────────────────
+  //
+  // Ilgari bu forma faqat telefon raqamini yuborardi va qolgan hammasi
+  // qo'lda edi: admin do'kon ochib, parol yaratib, uni Telegramda
+  // yuborardi.  Endi mijoz login/parolni o'zi tanlaydi va javobda darhol
+  // ULANISH KODI bilan yuklab olish havolasini oladi — dastur cloudga
+  // o'zi ulanadi.
   const leadForm = document.getElementById("leadForm");
   const leadMessage = document.getElementById("leadMessage");
+  const trialResult = document.getElementById("trialResult");
+
+  function showTrial(data) {
+    const link = document.getElementById("trialDownload");
+    const hint = document.getElementById("trialHint");
+    if (link) link.href = data.download_windows_url || "/api/v1/public/download-installer";
+    if (hint) {
+      const login = data.login_error
+        ? "Panel logini tayyor emas — biz bog‘lanamiz."
+        : `Panel: <b>${esc(data.owner_url || "")}</b> · login: <b>${esc(data.username || "")}</b>`;
+      hint.innerHTML =
+        `Fayl nomida ulanish kodi bor — o‘rnatgach dastur cloudga <b>o‘zi</b> ulanadi. ` +
+        `${login}. Parolni faqat siz bilasiz: yo‘qotsangiz biz tiklaymiz. ` +
+        `<b>${Number(data.months) || 3} oy bepul</b>, karta kerak emas.`;
+    }
+    if (leadForm) leadForm.hidden = true;
+    if (trialResult) trialResult.hidden = false;
+  }
+
+  /** Matnni HTML'ga xavfsiz qo'yish (login mijozdan keladi). */
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
+    );
+  }
+
+  async function startTrial(form, status, button) {
+    if (!form.reportValidity()) return;
+    button.disabled = true;
+    status.className = "form-status";
+    status.textContent = "Do‘kon ochilmoqda…";
+    const data = new FormData(form);
+    const payload = {
+      phone: String(data.get("phone") || "").trim(),
+      username: String(data.get("username") || "").trim().toLowerCase(),
+      password: String(data.get("password") || ""),
+      company: String(data.get("company") || "").trim() || null,
+      consent: data.get("consent") === "on",
+      website: String(data.get("website") || ""),
+    };
+    try {
+      const response = await fetch("/api/v1/public/quick-trial", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      const body = await response.json();
+      if (response.status === 503) {
+        // Sinov o'rinlari to'ldi — berk ko'cha bo'lmasin: o'sha raqam
+        // bilan odatdagi ariza yuboriladi.
+        status.className = "form-status";
+        status.textContent = body.detail || "O‘rinlar to‘ldi — so‘rovingiz yuborilmoqda…";
+        button.disabled = false;
+        submitLead(form, status, button, "Sinov o'rinlari to'lgan paytdagi so'rov",
+          "So‘rovingiz qabul qilindi. Joy ochilishi bilan bog‘lanamiz.");
+        return;
+      }
+      if (!response.ok) throw new Error(body.detail || "Ro‘yxatdan o‘tib bo‘lmadi");
+      status.className = "form-status ok";
+      status.textContent = body.message || "Do‘koningiz ochildi.";
+      showTrial(body);
+    } catch (error) {
+      status.className = "form-status error";
+      status.textContent = error.message || "Xatolik yuz berdi. Qayta urinib ko‘ring.";
+    } finally { button.disabled = false; }
+  }
+
   if (leadForm) {
     leadForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      submitLead(
-        leadForm,
-        document.getElementById("formStatus"),
-        leadForm.querySelector("button[type=submit]"),
-        leadMessage ? leadMessage.value : null,
-        "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.",
-      );
+      const status = document.getElementById("formStatus");
+      const button = leadForm.querySelector("button[type=submit]");
+      // Login maydoni bo'lmasa (eski keshdagi sahifa) — eski yo'l bilan
+      // ariza yuboriladi, tugma baribir ishlaydi.
+      if (leadForm.querySelector("#username")) {
+        startTrial(leadForm, status, button);
+      } else {
+        submitLead(leadForm, status, button, leadMessage ? leadMessage.value : null,
+          "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.");
+      }
     });
   }
 

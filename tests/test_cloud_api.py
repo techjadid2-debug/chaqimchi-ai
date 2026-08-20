@@ -412,17 +412,107 @@ def test_admin_readiness_requires_admin_key(cloud_client) -> None:
     assert lead_item["required"] is True
 
 
+QUICK_TRIAL = {
+    "phone": "+998 90 123 45 67",
+    "company": "Test Market",
+    "consent": True,
+    "username": "testmarket",
+    "password": "mening-parolim1",
+}
+
+
 def test_quick_trial_creates_a_site(cloud_client) -> None:
-    res = cloud_client.post(
-        "/api/v1/public/quick-trial",
-        json={"phone": "+998 90 123 45 67", "company": "Test Market", "consent": True},
-    )
+    res = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL)
     assert res.status_code == 200
     data = res.json()
     assert data["ok"] is True
     assert data["site_id"]
     assert data["pairing_code"]
     assert data["owner_url"]
+
+
+# ── Mijoz o'zi ro'yxatdan o'tadi ────────────────────────────────────────
+#
+# Bungacha login va parolni admin qo'lda yaratib, qo'lda yuborardi.  Ya'ni
+# har bir mijoz operatorning ish vaqtini kutardi va saytdan o'z-o'zidan
+# ulanishning yo'li yo'q edi.
+
+
+def test_the_customer_can_log_in_with_the_password_they_chose(cloud_client, monkeypatch) -> None:
+    """Butun ma'no shu: ro'yxatdan o'tdi — darrov panelga kira oladi."""
+    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
+    created = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).json()
+    assert created["username"] == "testmarket"
+    assert created["login_error"] is None
+
+    login = cloud_client.post(
+        "/api/v1/auth/login",
+        json={"username": "testmarket", "password": "mening-parolim1"},
+    )
+
+    assert login.status_code == 200, login.text
+    assert login.json()["account"]["site_id"] == created["site_id"]
+
+
+def test_the_password_never_comes_back_in_the_response(cloud_client) -> None:
+    body = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).text
+
+    assert "mening-parolim1" not in body
+
+
+def test_a_taken_login_does_not_leave_an_orphan_shop(cloud_client) -> None:
+    """`create_site` ni orqaga qaytarib bo'lmaydi (o'chirish funksiyasi
+    yo'q), shuning uchun login band ekani DO'KON YARATILISHIDAN OLDIN
+    tekshirilishi kerak."""
+    from cloud import ratelimit
+
+    ratelimit.limiter().reset()
+    assert cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).status_code == 200
+    before = len(cloud_client.get("/api/v1/admin/sites", headers=ADMIN).json())
+
+    second = cloud_client.post(
+        "/api/v1/public/quick-trial", json={**QUICK_TRIAL, "phone": "+998 90 999 88 77"}
+    )
+
+    assert second.status_code == 409
+    after = len(cloud_client.get("/api/v1/admin/sites", headers=ADMIN).json())
+    assert after == before, "xato ketgan so'rovdan egasiz do'kon qolmasin"
+
+
+def test_a_weak_password_is_refused_with_a_readable_reason(cloud_client) -> None:
+    res = cloud_client.post(
+        "/api/v1/public/quick-trial", json={**QUICK_TRIAL, "password": "parolparol"}
+    )
+
+    assert res.status_code == 422
+    assert "raqam" in res.json()["detail"], res.text
+
+
+def test_the_trial_seats_are_limited(cloud_client, monkeypatch) -> None:
+    """Mahsulot hali 72 soatlik qabul sinovidan o'tmagan — nosozlik
+    chiqsa u o'nlab do'konga tarqalmasligi kerak."""
+    from cloud import ratelimit
+
+    ratelimit.limiter().reset()
+    monkeypatch.setenv("CHAQIMCHI_SELF_SERVICE_LIMIT", "1")
+
+    first = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL)
+    second = cloud_client.post(
+        "/api/v1/public/quick-trial",
+        json={**QUICK_TRIAL, "username": "boshqadokon", "phone": "+998 90 222 33 44"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 503
+    assert "raqamingizni qoldiring" in second.json()["detail"], "berk ko'cha bo'lmasin"
+
+
+def test_the_trial_runs_long_enough_not_to_expire_mid_pilot(cloud_client) -> None:
+    """Bir oy kam: sinov o'rtasida obuna tugab, mijoz "ishlamay qoldi"
+    deb o'ylardi."""
+    data = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).json()
+
+    assert data["months"] >= 3
 
 
 def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch) -> None:
@@ -519,7 +609,12 @@ def test_quick_trial_requires_consent(cloud_client) -> None:
     """
     res = cloud_client.post(
         "/api/v1/public/quick-trial",
-        json={"phone": "+998 90 123 45 67", "company": "Rozilik yo'q"},
+        json={
+            "phone": "+998 90 123 45 67",
+            "company": "Rozilik yo'q",
+            "username": "dokonchi",
+            "password": "parol12345",
+        },
     )
     assert res.status_code == 422
 
@@ -529,9 +624,19 @@ def test_quick_trial_is_rate_limited(cloud_client) -> None:
     from cloud import ratelimit
 
     ratelimit.limiter().reset()
-    payload = {"phone": "+998 90 111 22 33", "consent": True}
     codes = [
-        cloud_client.post("/api/v1/public/quick-trial", json=payload).status_code for _ in range(5)
+        cloud_client.post(
+            "/api/v1/public/quick-trial",
+            json={
+                "phone": "+998 90 111 22 33",
+                "consent": True,
+                # Har so'rovda boshqa login: aks holda ikkinchisi 409
+                # ("login band") bo'lib, cheklov sinovi ma'nosini yo'qotardi.
+                "username": f"dokon{index}",
+                "password": "parol12345",
+            },
+        ).status_code
+        for index in range(5)
     ]
     assert codes.count(200) == 3, codes
     assert codes[-1] == 429
@@ -584,14 +689,41 @@ def test_a_phone_number_alone_is_enough_to_apply(cloud_client) -> None:
     assert not lead["full_name"], "yo'q ismni o'ylab topmaymiz"
 
 
-def test_the_site_form_asks_for_nothing_but_a_phone_number(cloud_client) -> None:
-    """Forma maydonlari kodda ham, sahifada ham bir xil bo'lsin."""
+def test_the_site_form_asks_only_what_self_service_needs(cloud_client) -> None:
+    """Forma maydonlari kodda ham, sahifada ham bir xil bo'lsin.
+
+    Ilgari faqat telefon so'ralardi — chunki qolgan hammasini admin qo'lda
+    qilardi: do'kon ochish, parol yaratish, uni Telegramda yuborish.  Endi
+    mijoz login va parolni O'ZI tanlaydi, ya'ni operatorni kutmaydi.
+    Ko'proq maydon qo'shilmasin: ism ham, do'kon nomi ham baribir keyin
+    aniqlanadi.
+    """
     page = cloud_client.get("/").text
     form = page[page.index('id="leadForm"') : page.index("</form>", page.index('id="leadForm"'))]
 
     visible = [line for line in form.splitlines() if "<input" in line and 'type="hidden"' not in line]
-    assert len(visible) == 3, visible  # telefon, honeypot, rozilik
+    assert len(visible) == 5, visible  # telefon, login, parol, honeypot, rozilik
     assert 'name="full_name"' not in form
+    assert 'name="username"' in form and 'name="password"' in form
+    assert 'type="password"' in form, "parol ekranda ochiq turmasin"
+
+
+def test_the_form_sends_the_customer_to_self_service(cloud_client) -> None:
+    """Tugma ariza emas, haqiqiy ro'yxatdan o'tishni ishga tushirsin."""
+    js = cloud_client.get("/assets/site.js").text
+
+    assert "/api/v1/public/quick-trial" in js
+    assert "trialDownload" in js, "yuklab olish havolasi ko'rsatilsin"
+
+
+def test_a_full_trial_queue_still_takes_the_phone_number(cloud_client) -> None:
+    """Chegara to'lganda forma "yo'q" demasin: berk ko'cha eng yomon
+    variant — mijoz ketadi va qaytmaydi."""
+    js = cloud_client.get("/assets/site.js").text
+    block = js[js.index("startTrial") :]
+
+    assert "response.status === 503" in block
+    assert "submitLead(" in block, "o'sha raqam bilan odatdagi ariza yuborilsin"
 
 
 def test_approving_an_application_hands_over_a_working_login(

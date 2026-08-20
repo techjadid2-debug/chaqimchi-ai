@@ -1802,6 +1802,19 @@ class CloudStore:
         )
         return code, expires
 
+    def count_sites(self) -> int:
+        """Nechta do'kon ochilgan.
+
+        `list_sites()` har sayt uchun qo'shimcha so'rov qiladi — bu yerda
+        esa faqat son kerak (self-service chegarasini tekshirish uchun),
+        shuning uchun bitta arzon so'rov.
+        """
+        conn = self._connect()
+        try:
+            return int(conn.execute("SELECT COUNT(*) FROM sites").fetchone()[0])
+        finally:
+            conn.close()
+
     def list_sites(self) -> List[Dict[str, Any]]:
         """Barcha saytlar — har biriga hisoblangan holat, tarif narxi va qurilma soni bilan."""
         conn = self._connect()

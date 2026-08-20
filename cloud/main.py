@@ -73,6 +73,8 @@ from cloud.portal_auth import (
     bearer_token,
     decode_portal_token,
     issue_portal_token,
+    normalize_username,
+    validate_password,
 )
 from cloud.snapshots import SnapshotStore, snapshot_store_from_env
 from cloud.store import DEFAULT_FEATURES, CloudStore, available_feature_codes
@@ -1657,12 +1659,43 @@ class QuickTrialBody(BaseModel):
     phone: str = Field(min_length=5, max_length=40)
     full_name: Optional[str] = "Do'kondor"
     company: Optional[str] = "Mening Do'konim"
+    #: Mijoz panelga kirish uchun **o'zi** tanlaydi.  Ilgari parolni admin
+    #: yaratib, qo'lda yuborardi — ya'ni har mijoz operatorning ish
+    #: vaqtini kutardi va o'z-o'zidan ulanish yo'li yo'q edi.
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=10, max_length=128)
     #: Standart qiymat **yo'q**: bu endpoint haqiqiy `site` yozuvi yaratadi va
     #: telefon raqamini saqlaydi, ya'ni `/public/leads` bilan bir xil roziliq
     #: talab qiladi. Oldin `True` turardi — forma katagi belgilanmasa ham
     #: ma'lumot yozilaverardi.
     consent: bool = False
     website: Optional[str] = ""
+
+
+#: Nechta do'kon o'z-o'zidan ochilishi mumkin.  Mahsulot hali 72 soatlik
+#: qabul sinovidan o'tmagan, shuning uchun birinchi mijozlar soni ataylab
+#: cheklangan: nosozlik chiqsa u o'nta do'kondan nariga tarqalmaydi.
+SELF_SERVICE_LIMIT_DEFAULT = 10
+
+#: Birinchi mijozlar to'lovsiz ishlatadi — obuna shu muddatga ochiladi.
+SELF_SERVICE_MONTHS_DEFAULT = 3
+
+
+def _self_service_limit() -> int:
+    raw = os.environ.get("CHAQIMCHI_SELF_SERVICE_LIMIT", "").strip()
+    try:
+        return max(0, int(raw)) if raw else SELF_SERVICE_LIMIT_DEFAULT
+    except ValueError:
+        logger.warning("CHAQIMCHI_SELF_SERVICE_LIMIT son emas — standart qiymat")
+        return SELF_SERVICE_LIMIT_DEFAULT
+
+
+def _self_service_months() -> int:
+    raw = os.environ.get("CHAQIMCHI_SELF_SERVICE_MONTHS", "").strip()
+    try:
+        return max(1, int(raw)) if raw else SELF_SERVICE_MONTHS_DEFAULT
+    except ValueError:
+        return SELF_SERVICE_MONTHS_DEFAULT
 
 
 @app.post("/api/v1/public/quick-trial")
@@ -1694,6 +1727,29 @@ async def public_quick_trial(
     name = (body.company or "Do'kon").strip()
     full_name = (body.full_name or "Mijoz").strip()
 
+    # Login va parolni do'kon YARATILISHIDAN OLDIN tekshiramiz: `create_site`
+    # ni orqaga qaytarib bo'lmaydi (o'chirish funksiyasi yo'q), ya'ni
+    # keyinroq chiqqan xato egasiz do'kon yozuvini qoldirardi.
+    try:
+        username = normalize_username(body.username)
+        validate_password(body.password)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if get_store().account_by_username(username):
+        raise HTTPException(409, "Bu login band — boshqasini tanlang")
+
+    # Sinov o'rinlari cheklangan: mahsulot hali 72 soatlik qabul sinovidan
+    # o'tmagan, shuning uchun nosozlik chiqsa u o'nta do'kondan nariga
+    # tarqalmaydi.  Chegara to'lganda mijoz "yo'q" degan javob emas,
+    # odatdagi ariza yo'lini ko'radi.
+    limit = _self_service_limit()
+    if get_store().count_sites() >= limit:
+        raise HTTPException(
+            503,
+            "Sinov o'rinlari hozircha to'ldi. Telefon raqamingizni qoldiring — "
+            "joy ochilishi bilan o'zimiz bog'lanamiz.",
+        )
+
     site = get_store().create_site(
         name=f"{name} ({phone[-4:] if len(phone) >= 4 else phone})",
         # "lite" — yagona sotiladigan tarif.  Ilgari "starter" edi: u
@@ -1701,11 +1757,32 @@ async def public_quick_trial(
         # boshdanoq nogiron konfiguratsiya olardi.
         plan="lite",
         contact_phone=phone,
-        subscription_months=1,
+        # Birinchi mijozlar to'lovsiz ishlatadi.  Bir oy kam: sinov davri
+        # o'rtasida obuna tugab, mijoz "ishlamay qoldi" deb o'ylardi.
+        subscription_months=_self_service_months(),
     )
 
     site_id = site["site_id"]
     code = site["pairing_code"]
+
+    login_error: Optional[str] = None
+    try:
+        get_store().create_account(
+            username=username,
+            password=body.password,
+            role="customer",
+            status="active",
+            full_name=full_name,
+            phone=phone,
+            company=name,
+            site_id=site_id,
+        )
+    except ValueError as exc:
+        # Do'kon allaqachon ochildi va pairing kod berildi — buni orqaga
+        # qaytarmaymiz.  Mijoz dasturni o'rnatib, ishlatishda davom etadi;
+        # panel logini esa admin yaratadi.
+        logger.warning("Self-service login yaratilmadi: %s", exc)
+        login_error = str(exc)
 
     try:
         created = get_store().create_lead(
@@ -1728,10 +1805,17 @@ async def public_quick_trial(
         "ok": True,
         "site_id": site_id,
         "pairing_code": code,
+        # Kod fayl NOMIGA tushadi — o'rnatuvchi uni o'qib, dastur cloudga
+        # o'zi ulanadi.  Mijoz 6 ta belgini qo'lda ko'chirmaydi.
         "download_windows_url": f"/api/v1/public/download-installer?os=windows&code={code}&site_id={site_id}",
         "linux_command": f"curl -fsSL {dl_base}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud {api_base} --code {code}",
-        "owner_url": f"{app_base}/owner?site={site_id}",
-        "message": "14 kunlik bepul sinov do'koningiz ochildi!",
+        "owner_url": f"{app_base}/owner",
+        # Parol javobda YO'Q: uni mijozning o'zi tanladi va bazada faqat
+        # hash saqlanadi.
+        "username": username,
+        "login_error": login_error,
+        "months": _self_service_months(),
+        "message": "Do'koningiz ochildi — endi dasturni yuklab oling.",
     }
 
 

@@ -15,7 +15,7 @@
        ham qaytgan mijoz brauzer keshidan **eskisini** olardi va tuzatish
        unga yetib bormasdi.  Endi qiymat mazmundan kelib chiqadi va
        `test_static_pages.py` mos kelishini tekshiradi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=77048402a2">
+  <link rel="stylesheet" href="/assets/site.css?v=c31c428c1c">
 </head>
 <body>
   <!-- Sahifa ataylab qisqa: hero (bitta asosiy tugma) → narx (tayyor
@@ -150,12 +150,12 @@
     <!-- ── ALOQA: yagona forma ── -->
     <section id="aloqa" class="pilot section-pad">
       <div class="pilot-copy">
-        <p class="eyebrow"><span></span> Bog‘lanish</p>
-        <h2>Raqamingizni qoldiring</h2>
+        <p class="eyebrow"><span></span> Bepul boshlash</p>
+        <h2>O‘zingiz ulanasiz</h2>
         <p>
-          Paket tanlagan bo‘lsangiz — narxni tasdiqlab, o‘rnatishni kelishamiz.
-          Kompyuteringiz bo‘lmasa ham yozing: vaziyatingizga mos yechim taklif
-          qilamiz.
+          Raqamingizni yozib, o‘zingizga login va parol tanlaysiz — shu
+          zahoti dasturni yuklab olasiz. Karta ham, to‘lov ham kerak emas:
+          <b>birinchi mijozlar 3 oy bepul</b> ishlatadi.
         </p>
         <div class="contact-points">
           <span><b>Telegram:</b> <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> · Abdulvosit Zokirjonov</span>
@@ -164,14 +164,26 @@
         </div>
       </div>
 
-      <!-- Ilgari bu yerda ism, telefon va do'kon nomi so'ralardi.  Har bir
-           qo'shimcha maydon telefonda formani tashlab ketadiganlar sonini
-           oshiradi; ism va do'kon nomi esa baribir qo'ng'iroq paytida
-           aniqlanadi.  Qoldi: bitta maydon. -->
+      <!-- Uchta maydon: telefon, login, parol.  Ilgari faqat telefon
+           so'ralardi va qolgan hammasi qo'lda edi — admin do'kon ochib,
+           parol yaratib, uni Telegramda yuborardi.  Ya'ni har bir mijoz
+           operatorning ish vaqtini kutardi.  Login va parolni mijozning
+           o'zi tanlashi shu kutishni butunlay yo'q qiladi.
+
+           Chegara to'lganda forma "yo'q" demaydi: o'sha telefon raqami
+           bilan odatdagi ariza yuboriladi (site.js, `fallbackToLead`). -->
       <form id="leadForm" class="lead-form" novalidate>
         <div class="field">
           <label for="phone">Telefon raqamingiz</label>
           <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="+998 90 000 00 00">
+        </div>
+        <div class="field field-half">
+          <label for="username">Login <small>o‘zingiz tanlaysiz</small></label>
+          <input id="username" name="username" autocomplete="username" required minlength="3" maxlength="64" placeholder="dokonim" spellcheck="false">
+        </div>
+        <div class="field field-half">
+          <label for="password">Parol <small>kamida 10 belgi, harf va raqam</small></label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128" placeholder="••••••••••">
         </div>
         <input id="cameras" name="cameras" type="hidden" value="4">
         <input id="leadMessage" name="message" type="hidden" value="Saytdan so'rov">
@@ -181,11 +193,19 @@
         </div>
         <label class="consent">
           <input id="consent" name="consent" type="checkbox" required>
-          <span>Arizam bo‘yicha bog‘lanish uchun ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
+          <span>Ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
         </label>
-        <button class="button form-button button-light" type="submit">So‘rov yuborish</button>
+        <button class="button form-button button-light" type="submit">Bepul boshlash</button>
         <p id="formStatus" class="form-status" role="status" aria-live="polite"></p>
       </form>
+
+      <!-- Ro'yxatdan o'tgandan keyin: yuklab olish havolasi fayl nomiga
+           ulanish kodini qo'shadi, ya'ni dastur cloudga o'zi ulanadi. -->
+      <div id="trialResult" class="trial-result" hidden>
+        <p class="trial-title">Do‘koningiz ochildi</p>
+        <a class="button button-light" id="trialDownload" href="#" rel="nofollow">Dasturni yuklab olish</a>
+        <p class="trial-hint" id="trialHint"></p>
+      </div>
     </section>
 
     <!-- ── FAQ: 5 ta eng ko'p so'raladigan savol ── -->
@@ -240,6 +260,6 @@
     </div>
   </footer>
 
-  <script src="/assets/site.js?v=ba8a6a13ac" defer></script>
+  <script src="/assets/site.js?v=3e9c4a6209" defer></script>
 </body>
 </html>

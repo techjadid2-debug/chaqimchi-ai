@@ -177,10 +177,13 @@ def test_restore_understands_both_archive_kinds() -> None:
 def test_missing_offsite_copy_is_reported() -> None:
     """Zaxira faqat serverda yotsa — bu jim qolmasin."""
     source = BACKUP.read_text(encoding="utf-8")
-    assert "RESTIC_REPOSITORY sozlanmagan" in source
+    assert "tashqi nusxa sozlanmagan" in source, "hech qaysi yo'l yoqilmasa aytilsin"
     preflight = (SCRIPTS / "production_preflight.py").read_text(encoding="utf-8")
     assert "def check_backup(" in preflight
     assert "RESTIC_REPOSITORY" in preflight
+    assert "CHAQIMCHI_BACKUP_TELEGRAM_TOKEN" in preflight, (
+        "Telegram yo'li ham tashqi nusxa hisoblansin"
+    )
 
 
 def test_a_healthy_archive_does_not_abort_the_drill() -> None:
@@ -224,3 +227,39 @@ def test_the_drill_survives_an_archive_without_media() -> None:
     assert 'if [[ -d "$stage/minio" ]]; then' in source, "papka bor-yo'qligi tekshirilsin"
     guard = source.index('if [[ -d "$stage/minio" ]]; then')
     assert source.index('find "$stage/minio"') > guard, "`find` shart ichida bo'lsin"
+
+
+# ── Tashqi nusxa ────────────────────────────────────────────────────────
+
+
+def test_the_archive_can_leave_the_server_without_an_account() -> None:
+    """Server yo'qolsa zaxira ham u bilan yo'qoladi.
+
+    Telegram yo'li ataylab qo'shilgan: hisob ham, karta ham kerak emas —
+    bot allaqachon bor va arxiv AES-256 bilan shifrlangan.
+    """
+    source = BACKUP.read_text(encoding="utf-8")
+    assert "CHAQIMCHI_BACKUP_TELEGRAM_TOKEN" in source
+    assert "sendDocument" in source
+
+
+def test_the_bot_token_stays_out_of_the_process_list() -> None:
+    """`curl https://api.telegram.org/bot<TOKEN>/...` argv'da qolardi va
+    uni serverdagi har bir jarayon ro'yxati ko'rsatardi."""
+    source = BACKUP.read_text(encoding="utf-8")
+    assert "curl -sS -f -m 300 -K -" in source, "token stdin orqali berilsin"
+
+
+def test_media_is_never_pushed_to_telegram() -> None:
+    """Media o'nlab GB — 50 MB chegarasiga baribir sig'maydi."""
+    source = BACKUP.read_text(encoding="utf-8")
+    block = source[source.index("telegram_token=") :]
+    assert '"$with_media" != "1"' in block[: block.index("\n")] or (
+        '"$with_media" != "1"' in block[:400]
+    )
+
+
+def test_an_oversized_archive_warns_instead_of_failing_silently() -> None:
+    source = BACKUP.read_text(encoding="utf-8")
+    assert "45 * 1024 * 1024" in source
+    assert "Telegram chegarasidan" in source

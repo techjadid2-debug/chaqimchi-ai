@@ -152,13 +152,51 @@ tar -C "$stage" -czf - "${contents[@]}" | \
   -out "$archive"
 chmod 600 "$archive"
 
+# ── Tashqi nusxa ────────────────────────────────────────────────────────
+#
+# Serverning o'zida yotgan zaxira — server yo'qolganda foydasiz.  Ikki yo'l
+# qo'llab-quvvatlanadi va ikkalasi ham ixtiyoriy:
+#
+#   restic    — to'g'ri yechim, lekin tashqi ombor (hisob) talab qiladi;
+#   Telegram  — hisob ham, karta ham kerak emas: bot allaqachon bor.
+#               Bot orqali fayl chegarasi 50 MB, shuning uchun faqat BAZA
+#               arxivi yuboriladi (media o'nlab GB va baribir sig'maydi).
+offsite=0
+
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   restic backup "$archive"
-else
+  offsite=1
+fi
+
+telegram_token="${CHAQIMCHI_BACKUP_TELEGRAM_TOKEN:-}"
+telegram_chat="${CHAQIMCHI_BACKUP_TELEGRAM_CHAT_ID:-}"
+if [[ -n "$telegram_token" && -n "$telegram_chat" && "$with_media" != "1" ]]; then
+  bytes="$(wc -c < "$archive" | tr -d ' ')"
+  if (( bytes > 45 * 1024 * 1024 )); then
+    echo "OGOHLANTIRISH: arxiv $((bytes / 1024 / 1024)) MB — Telegram chegarasidan" >&2
+    echo "(50 MB) katta, yuborilmadi.  Endi haqiqiy tashqi ombor kerak" >&2
+    echo "(RESTIC_REPOSITORY, deploy/backup.env.example ga qarang)." >&2
+  else
+    # Token buyruq qatoriga tushmasin: `ps` da har kim ko'rardi.
+    # `curl -K -` sozlamani stdin'dan o'qiydi.
+    if printf 'url = "https://api.telegram.org/bot%s/sendDocument"\n' "$telegram_token" \
+      | curl -sS -f -m 300 -K - \
+          -F "chat_id=$telegram_chat" \
+          -F "document=@$archive" \
+          -F "caption=Chaqimchi zaxira · $(hostname -s) · $stamp · $((bytes / 1024)) KB" \
+          -o /dev/null; then
+      offsite=1
+    else
+      echo "OGOHLANTIRISH: zaxira Telegramga yuborilmadi" >&2
+    fi
+  fi
+fi
+
+if [[ "$offsite" == "0" ]]; then
   # Server yo'qolsa zaxira ham u bilan yo'qoladi.  Bu jim qolmasin.
-  echo "OGOHLANTIRISH: RESTIC_REPOSITORY sozlanmagan — zaxira faqat shu" >&2
-  echo "serverda yotibdi.  Server o'lsa hisob-faktura va akkauntlar bilan" >&2
-  echo "birga zaxira ham yo'qoladi (deploy/backup.env.example ga qarang)." >&2
+  echo "OGOHLANTIRISH: tashqi nusxa sozlanmagan — zaxira faqat shu serverda" >&2
+  echo "yotibdi.  Server o'lsa hisob-faktura va akkauntlar bilan birga" >&2
+  echo "zaxira ham yo'qoladi (deploy/backup.env.example ga qarang)." >&2
 fi
 
 size="$(du -h -- "$archive" | cut -f1)"

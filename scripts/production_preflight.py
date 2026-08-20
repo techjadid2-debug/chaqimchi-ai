@@ -186,12 +186,17 @@ def check_backup(path: Path) -> List[str]:
         ]
     values = read_env(path)
     warnings: List[str] = []
-    if not values.get("RESTIC_REPOSITORY", "").strip():
+    restic = bool(values.get("RESTIC_REPOSITORY", "").strip())
+    telegram = bool(
+        values.get("CHAQIMCHI_BACKUP_TELEGRAM_TOKEN", "").strip()
+        and values.get("CHAQIMCHI_BACKUP_TELEGRAM_CHAT_ID", "").strip()
+    )
+    if not restic and not telegram:
         warnings.append(
-            "RESTIC_REPOSITORY sozlanmagan: zaxira faqat shu serverda yotibdi. "
+            "Tashqi nusxa sozlanmagan: zaxira faqat shu serverda yotibdi. "
             "Server yo'qolsa hisob-faktura va akkauntlar bilan birga zaxira ham yo'qoladi"
         )
-    elif not values.get("RESTIC_PASSWORD", "").strip():
+    if restic and not values.get("RESTIC_PASSWORD", "").strip():
         warnings.append("RESTIC_REPOSITORY bor, lekin RESTIC_PASSWORD yo'q — nusxa chiqmaydi")
     return warnings
 

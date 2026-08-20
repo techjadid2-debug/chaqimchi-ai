@@ -73,6 +73,9 @@ class SceneZoneSettings(BaseModel):
     #: Shu zonada shuncha soniyadan uzoq turgan mijoz uchun `dwell_exceeded`.
     #: `None` — zona uchun dwell o'lchanmaydi (yo'lak, kirish maydoni).
     dwell_sec: Optional[int] = Field(default=None, ge=5, le=86400)
+    #: Mahsulot javoni.  Zonadagi chekka zichligi o'rganilgan etalondan
+    #: keskin pasaysa `shelf_empty` chiqadi (`retail/shelf.py`).
+    shelf: bool = False
 
     @field_validator("polygon")
     @classmethod
@@ -128,6 +131,12 @@ class SceneSettings(BaseModel):
     #: Kassa zonasi shuncha soniya bo'sh qolsa `checkout_unattended`.
     #: 5 daqiqa — kassir bir daqiqaga chetga chiqqani signal bo'lmasin.
     checkout_idle_sec: int = Field(default=300, ge=60, le=3600)
+    #: Javondagi chekka zichligi etalonning shu ulushidan pastga tushsa
+    #: "bo'shab qolgan" deb hisoblanadi.  0.45 — yarmidan ko'pi ketgan.
+    shelf_empty_ratio: float = Field(default=0.45, ge=0.05, le=0.95)
+    #: Javon shuncha soniya past turishi kerak.  15 daqiqa — mijoz
+    #: mahsulotni olib, keyin qaytarib qo'ygani signal bo'lmasin.
+    shelf_empty_sec: int = Field(default=900, ge=60, le=7200)
     zones: List[SceneZoneSettings] = Field(default_factory=list)
     lines: List[SceneLineSettings] = Field(default_factory=list)
     #: Mijoz demografiyasi (jins/yosh) — faqat kirish chizig'i bor kamerada,

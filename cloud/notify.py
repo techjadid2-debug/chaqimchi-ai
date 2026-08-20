@@ -57,6 +57,9 @@ EVENT_LABELS: Dict[str, str] = {
     # "kassada hech kim yo'q" o'lchanadigan fakt, "kassir ketdi" taxmin.
     "checkout_unattended": "Kassada hech kim yo'q",
     "checkout_second_till": "Ikkinchi kassani oching",
+    # "Bo'sh" emas, "bo'shab qolgan": o'lchanadigan narsa — javondagi
+    # o'zgarish, mahsulotning aniq soni emas.
+    "shelf_empty": "Javon bo'shab qolgan",
     "after_hours_presence": "Ish vaqtidan tashqari harakat",
     "camera_tampered": "Kamera yopildi yoki burildi",
     # Sog'liq hodisalari do'kon egasi uchun aniq tilda: u nima buzilganini

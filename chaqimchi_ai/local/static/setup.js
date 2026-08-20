@@ -589,6 +589,12 @@
       ["presetLineBtn", "entrance", "Kirish chizig‘i qo‘shildi — uni eshik oldiga suring."],
       ["presetQueueBtn", "queue", "Navbat zonasi qo‘shildi — burchaklarini kassa oldiga suring."],
       ["presetRestrictedBtn", "restricted", "Taqiqlangan zona qo‘shildi — kerakli joyga suring."],
+      // Javon zonasi: tizim "to'la javon" ko'rinishini bir necha soat
+      // davomida o'zi o'rganadi, shuning uchun birinchi kunda signal
+      // chiqmaydi — buni mijozga aytib qo'yish shart.
+      ["presetShelfBtn", "shelf",
+       "Javon zonasi qo‘shildi — javon oldiga suring. Tizim bir necha soat kuzatib, "
+       + "«to‘la javon» ko‘rinishini o‘zi o‘rganadi."],
     ];
     presets.forEach(([buttonId, type, message]) => {
       const button = $(buttonId);

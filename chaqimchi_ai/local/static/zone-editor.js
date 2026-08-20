@@ -81,6 +81,7 @@
         }),
         restricted: !!zone.restricted,
         queue: !!zone.queue,
+        shelf: !!zone.shelf,
         dwell_sec: zone.dwell_sec == null ? null : Number(zone.dwell_sec),
       };
     });
@@ -217,6 +218,7 @@
       polygon: this.draft.slice(),
       restricted: false,
       queue: false,
+      shelf: false,
       dwell_sec: null,
     });
     this.draft = [];
@@ -336,7 +338,27 @@
         ],
         restricted: false,
         queue: true,
+        shelf: false,
         dwell_sec: 180,
+      });
+    } else if (type === "shelf") {
+      // Javon zonasi: bo'shab qolganini sezish uchun.  `dwell_sec` yo'q —
+      // javon oldida uzoq turgan mijoz qoidabuzarlik emas, u shunchaki
+      // mahsulot tanlayapti.
+      name = name || "javon";
+      this.zones.push({
+        name: name,
+        camera_id: this.cameraId,
+        polygon: [
+          [0.10, 0.20],
+          [0.55, 0.20],
+          [0.55, 0.70],
+          [0.10, 0.70],
+        ],
+        restricted: false,
+        queue: false,
+        shelf: true,
+        dwell_sec: null,
       });
     } else if (type === "restricted") {
       name = name || "taqiqlangan_zona";
@@ -351,6 +373,7 @@
         ],
         restricted: true,
         queue: false,
+        shelf: false,
         dwell_sec: null,
       });
     } else if (type === "entrance") {

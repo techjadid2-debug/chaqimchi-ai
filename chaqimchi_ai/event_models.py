@@ -35,6 +35,10 @@ EventType = Literal[
     "checkout_unattended",
     #: Bir kassada navbat chegaradan oshgan, boshqasi esa bo'sh.
     "checkout_second_till",
+    #: Javondagi mahsulot keskin kamaydi (`retail/shelf.py`).  "Bo'sh"
+    #: deyilmaydi: o'lchanadigan narsa — chekka zichligining etalonga
+    #: nisbati, ya'ni "javon ancha bo'shab qolgan".
+    "shelf_empty",
     #: Ish vaqtidan tashqari harakat.
     "after_hours_presence",
     #: Kamera yopildi, burildi yoki ko'rinishi buzildi.

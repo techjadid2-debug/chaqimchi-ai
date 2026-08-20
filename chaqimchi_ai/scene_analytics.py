@@ -12,6 +12,7 @@ import numpy as np
 
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.retail.lines import CountingLine, DwellTracker, LineCounter
+from chaqimchi_ai.retail.shelf import ShelfWatcher, crop_polygon
 from chaqimchi_ai.retail.tracker import MotionTracker
 from chaqimchi_ai.settings import SceneSettings, SceneZoneSettings
 
@@ -225,6 +226,10 @@ class SceneAnalyzer:
         self._checkout_empty_since: Dict[str, float] = {}
         self._checkout_alerted: Dict[str, bool] = {}
         self._second_till_alerted = False
+        self.shelves = ShelfWatcher(
+            empty_ratio=settings.shelf_empty_ratio,
+            empty_sec=float(settings.shelf_empty_sec),
+        )
         self._last_analysis = 0.0
         self._track_first_seen: Dict[int, float] = {}
         self._track_last_seen: Dict[int, float] = {}
@@ -308,6 +313,40 @@ class SceneAnalyzer:
                     )
             else:
                 self._second_till_alerted = False
+        return events
+
+    def _shelf_events(
+        self, frame: np.ndarray, zone_counts: Dict[str, int], now: float
+    ) -> List[EdgeEvent]:
+        """Javon bo'shab qolganini aytadi.
+
+        Model ishlatilmaydi — sabab va cheklovlar `retail/shelf.py` da.
+        Bu yerda faqat ulanish: qaysi zona javon, kim uni yopib turibdi.
+        """
+        events: List[EdgeEvent] = []
+        for zone in self.zones:
+            if not zone.shelf:
+                continue
+            found = self.shelves.observe(
+                zone.name,
+                crop_polygon(frame, zone.polygon),
+                # Zonada odam bor — o'lchov ishonchsiz.  Mijoz javonni
+                # yopib turgani ham, uning kiyimi ham chekka zichligini
+                # o'zgartiradi va ikkala tomonga ham yolg'on beradi.
+                blocked=zone_counts.get(zone.name, 0) > 0,
+                now=now,
+            )
+            if found is None:
+                continue
+            events.append(
+                EdgeEvent(
+                    event_type="shelf_empty",
+                    severity="warning",
+                    camera_id=self.camera_id,
+                    zone=zone.name,
+                    metadata=found,
+                )
+            )
         return events
 
     def _estimate_demography(
@@ -510,6 +549,8 @@ class SceneAnalyzer:
                 self._queue_alerted = False
 
             events.extend(self._checkout_events(zone_counts, queue_zones, len(detections), now))
+
+        events.extend(self._shelf_events(frame, zone_counts, now))
 
         occupancy = len(detections)
         if occupancy >= self.settings.occupancy_limit and not self._occupancy_alerted:

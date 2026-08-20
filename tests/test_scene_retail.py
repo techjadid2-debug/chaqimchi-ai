@@ -476,3 +476,74 @@ def test_a_single_till_shop_never_gets_the_advice() -> None:
     detector.people = [(0.1, 0.5), (0.2, 0.5), (0.3, 0.5)]
 
     assert _checkout_events(analyzer, 1.0, "checkout_second_till") == []
+
+
+# ── Javon nazorati ───────────────────────────────────────────────────────
+
+
+def test_shelf_zone_reports_only_after_learning_and_only_when_free() -> None:
+    """Analizator bilan ulanish: qaysi zona javon, kim uni yopib turibdi.
+
+    Usulning o'zi `tests/test_retail_shelf.py` da tekshiriladi — bu yerda
+    faqat zanjirga ulangani muhim.
+    """
+    from chaqimchi_ai.retail.shelf import MIN_SAMPLES
+
+    analyzer, detector = analyzer_for(
+        occupancy_limit=9999,
+        loitering_sec=86400,
+        shelf_empty_ratio=0.5,
+        shelf_empty_sec=120,
+        zones=[
+            {
+                "name": "javon",
+                "camera_id": "cam-1",
+                "shelf": True,
+                "polygon": [[0.0, 0.0], [0.6, 0.0], [0.6, 1.0], [0.0, 1.0]],
+            }
+        ],
+    )
+    detector.people = []
+
+    # "To'la javon": kadrda ko'p chekka.
+    full = np.zeros((100, 100, 3), dtype=np.uint8)
+    for column in range(5, 55, 8):
+        full[20:80, column:column + 4] = 220
+
+    now = 1.0
+    for _ in range(MIN_SAMPLES + 2):
+        analyzer.process(full, now=now)
+        now += 60.0
+
+    empty = np.full((100, 100, 3), 120, dtype=np.uint8)
+    assert [e for e in analyzer.process(empty, now=now) if e.event_type == "shelf_empty"] == []
+
+    alerts = [
+        e for e in analyzer.process(empty, now=now + 200) if e.event_type == "shelf_empty"
+    ]
+    assert len(alerts) == 1
+    assert alerts[0].zone == "javon"
+    assert alerts[0].severity == "warning"
+    assert alerts[0].metadata["ratio"] < 0.5
+
+
+def test_a_zone_without_the_shelf_flag_is_never_measured() -> None:
+    analyzer, detector = analyzer_for(
+        occupancy_limit=9999,
+        loitering_sec=86400,
+        zones=[
+            {
+                "name": "zal",
+                "camera_id": "cam-1",
+                "polygon": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            }
+        ],
+    )
+    detector.people = []
+    now = 1.0
+    for _ in range(60):
+        assert [
+            e for e in analyzer.process(FRAME, now=now) if e.event_type == "shelf_empty"
+        ] == []
+        now += 60.0
+    assert analyzer.shelves.states == {}

@@ -121,6 +121,20 @@ rules:
     cooldown_sec: 600
     actions: [cloud_sync, telegram_alert]
 
+  # ── Javon nazorati (sinov bosqichi) ──────────────────────────────────
+  #
+  # Usul modelsiz: javon zonasidagi chekka zichligi o'rganilgan etalondan
+  # keskin pasaysa signal (`chaqimchi_ai/retail/shelf.py`).  Hali haqiqiy
+  # do'konda sinalmagan, shuning uchun ATAYLAB faqat `cloud_sync`:
+  # yolg'on signal bo'lsa u panelda ko'rinadi, lekin telefonni
+  # jiringlatmaydi.  Sinovdan o'tgach `telegram_alert` qo'shiladi.
+  - name: Javon bo'shab qolgan
+    event_type: shelf_empty
+    schedule: ish-vaqti
+    severity: warning
+    cooldown_sec: 3600
+    actions: [cloud_sync]
+
   # Kirish/chiqish sanog'i hisobot uchun kerak, lekin xabar qilinmaydi —
   # aks holda telefon kun bo'yi jiringlaydi.
   - name: Kirish-chiqish

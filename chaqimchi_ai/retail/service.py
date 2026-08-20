@@ -281,6 +281,11 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
         "queue_threshold_exceeded",
         "checkout_unattended",
         "checkout_second_till",
+        # Javon nazorati ham shu paketda va bu VAQTINCHA qaror: usul
+        # (modelsiz, chekka zichligi) hali haqiqiy do'konda sinalmagan.
+        # Yangi narxlanadigan kod ochish uni sotuvga chiqarish bo'lardi
+        # — ishonchliligi tasdiqlangunicha erta.
+        "shelf_empty",
     }
     security = {
         "zone_entered",

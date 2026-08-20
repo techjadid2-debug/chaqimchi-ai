@@ -550,3 +550,54 @@ def faces_now():
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc)
+
+
+# ── Tarif chegarasi ─────────────────────────────────────────────────────
+
+
+def test_attendance_is_closed_on_the_entry_plan(pilot_client) -> None:
+    """Boshlang'ich tarifida xodim davomati umuman yo'q.
+
+    Chegara nol.  Bungacha `_check_employee_limit` "ko'pi bilan 0 ta
+    xodim" deb javob berardi va mijoz kimnidir o'chirish kerak deb
+    o'ylardi — holbuki tarifni ko'tarish kerak edi.
+    """
+    site = pilot_client.post(
+        "/api/v1/admin/sites",
+        headers=ADMIN,
+        json={"name": "Kichik do'kon", "plan": "boshlangich"},
+    ).json()
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    listing = pilot_client.get("/api/v1/owner/faces", headers=owner)
+    assert listing.status_code == 200
+    assert listing.json()["max_employees"] == 0
+
+    response = pilot_client.post(
+        "/api/v1/owner/employees",
+        headers=owner,
+        json={"name": "Ali", "consent": True},
+    )
+    assert response.status_code == 422
+    assert "Biznes tarifidan" in response.json()["detail"]
+
+
+def test_upgrading_the_plan_opens_attendance(pilot_client) -> None:
+    site = pilot_client.post(
+        "/api/v1/admin/sites",
+        headers=ADMIN,
+        json={"name": "O'sayotgan do'kon", "plan": "boshlangich"},
+    ).json()
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    pilot_client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/plan", headers=ADMIN, json={"plan": "biznes"}
+    )
+
+    assert pilot_client.get("/api/v1/owner/faces", headers=owner).json()["max_employees"] == 10
+    created = pilot_client.post(
+        "/api/v1/owner/employees",
+        headers=owner,
+        json={"name": "Ali", "consent": True},
+    )
+    assert created.status_code == 200, created.text

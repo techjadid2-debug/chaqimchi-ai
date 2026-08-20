@@ -909,3 +909,58 @@ def test_a_broken_date_is_refused_clearly(client: TestClient) -> None:
 def test_a_future_day_has_no_report(client: TestClient) -> None:
     tomorrow = (datetime.now().astimezone() + timedelta(days=1)).date()
     assert client.get(f"/api/report?date={tomorrow.isoformat()}").status_code == 422
+
+
+# ── Tarifdagi kamera chegarasi ──────────────────────────────────────────
+
+
+def test_the_wizard_honours_the_camera_limit_sent_by_the_cloud(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Boshlang'ich tarifidagi mijozga uchinchi kamera taklif qilinmasin.
+
+    Bungacha chegara modul darajasidagi doimiy edi va HAR DOIM 4 qaytardi:
+    2 kameralik tarifni sotgan bo'lsak ham sehrgar to'rttasini qabul
+    qilardi va mijoz farqni hech qachon sezmasdi.
+    """
+    from chaqimchi_ai.local import cloud_config
+
+    cloud_config.apply({"product": {"max_cameras": 2}, "cameras": [], "config": {}})
+
+    assert client.get("/api/setup/summary").json()["max_cameras"] == 2
+
+    for index in (1, 2):
+        response = client.post(
+            "/api/setup/cameras",
+            json={"camera_id": "", "rtsp_url": f"rtsp://10.0.0.{index}/1", "label": f"K{index}"},
+        )
+        assert response.status_code == 200, response.text
+
+    third = client.post(
+        "/api/setup/cameras",
+        json={"camera_id": "", "rtsp_url": "rtsp://10.0.0.3/1", "label": "K3"},
+    )
+    assert third.status_code == 422
+    assert "2 kamera" in third.json()["detail"]
+
+
+def test_a_broken_cloud_limit_cannot_raise_the_hardware_cap(client: TestClient) -> None:
+    """Cloud noto'g'ri qiymat yuborsa ham apparat chegarasi buzilmasin.
+
+    Sig'im o'lchangan: i5-4590 da to'rt yadroning bittasi RTSP dekodlashga
+    ketadi.  Cloud xatosi sabab 8 kamera ochilsa do'kon sekinlashadi va
+    sababi hech qayerda ko'rinmaydi.
+    """
+    from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
+    from chaqimchi_ai.local import cloud_config
+
+    cloud_config.apply({"product": {"max_cameras": 99}, "cameras": [], "config": {}})
+
+    assert client.get("/api/setup/summary").json()["max_cameras"] == SHOP_MAX_CAMERAS
+
+
+def test_an_offline_device_keeps_the_hardware_limit(client: TestClient) -> None:
+    """Cloud hali gapirmagan qurilma ishlashda davom etsin."""
+    from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
+
+    assert client.get("/api/setup/summary").json()["max_cameras"] == SHOP_MAX_CAMERAS

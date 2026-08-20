@@ -493,6 +493,21 @@ class CloudStore:
             raise ValueError(
                 f"Pilot kamera ID camera-01..camera-{GUARANTEED_CAMERAS:02d} bo'lishi kerak"
             )
+        # Tarifdagi kamera SONI.  ID oralig'i emas: 2 kameralik mijoz
+        # `camera-01` va `camera-03` ni ulashi mumkin — bu to'g'ri.
+        # Chegara nechta kamera borligida.
+        #
+        # Bu yagona haqiqiy nazorat nuqtasi: qurilmadagi tekshiruv
+        # mijozning o'z kompyuterida turadi va tahrirlanishi mumkin,
+        # cloud esa bizda.
+        existing = self.list_cameras(site_id)
+        if camera_id not in {item["camera_id"] for item in existing}:
+            limit = get_plan(str(self.get_site(site_id)["plan"])).max_cameras
+            if len(existing) >= limit:
+                raise ValueError(
+                    f"Tarifingizda ko'pi bilan {limit} ta kamera. "
+                    "Yana kamera ulash uchun tarifni ko'taring."
+                )
         source = rtsp_url.strip()
         if not source.startswith(("rtsp://", "rtsps://")):
             raise ValueError("Kamera manzili rtsp:// yoki rtsps:// bilan boshlanishi kerak")
@@ -1786,6 +1801,33 @@ class CloudStore:
 
         conn = self._connect()
         conn.execute("UPDATE sites SET billable_persons = ? WHERE id = ?", (int(persons), site_id))
+        conn.commit()
+        conn.close()
+        return self.site_detail(site_id)
+
+    def set_plan(self, site_id: str, plan: str) -> Dict[str, Any]:
+        """Obyektning tarifini almashtiradi.
+
+        Bungacha tarifni o'zgartirishning umuman yo'li yo'q edi — qo'lda
+        `UPDATE sites SET plan=...` yozilardi.  Uch tarif bilan bu kundalik
+        amal bo'lib qoladi: mijoz Boshlang'ichdan Biznesga ko'tariladi yoki
+        eski `lite` mijozi yangi narxga o'z roziligi bilan ko'chadi.
+
+        Config revizyasi ataylab surib qo'yiladi: tarif qurilmadagi
+        funksiya to'plamini va kamera chegarasini belgilaydi, qurilma esa
+        o'zgarishni faqat revizya raqami bo'yicha sezadi (20 soniyalik
+        poll).  Usiz mijoz pul to'lab, funksiyani keyingi qayta ishga
+        tushishgacha kutib turardi.
+        """
+        key = str(plan).lower().strip()
+        # `get_plan` noma'lum tarifda ValueError ko'taradi — bazaga faqat
+        # hisob-kitob qila oladigan qiymat tushsin.
+        get_plan(key)
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+
+        conn = self._connect()
+        conn.execute("UPDATE sites SET plan = ? WHERE id = ?", (key, site_id))
         conn.commit()
         conn.close()
         return self.site_detail(site_id)

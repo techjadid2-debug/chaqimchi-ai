@@ -40,7 +40,10 @@ from chaqimchi_ai.licensing.plans import (
     cheapest_plan_for,
     get_plan,
     is_sellable,
+    plan_display_name,
+    plan_feature_codes,
     usd_rate_uzs,
+    uzs_from_cents,
 )
 from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
 from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
@@ -281,7 +284,7 @@ class InstallerAssignmentUpdateBody(BaseModel):
 
 class CreateSiteBody(BaseModel):
     name: str
-    plan: PlanTier = "lite"
+    plan: PlanTier = "biznes"
     subscription_months: int = Field(default=1, ge=1, le=60)
     contact_phone: Optional[str] = None
     address: Optional[str] = None
@@ -1442,19 +1445,76 @@ async def list_plans() -> Dict[str, Any]:
 #: ham shu bitta qoidani ishlatadi.
 YEARLY_MONTHS_CHARGED = billable_months(12)
 
-#: Chaqimchi Lite tarifiga kiradigan HAMMA narsa (2026-08-17 qarori:
-#: bitta tarif, hammasi ichida — alohida narxlangan funksiyalar yo'q).
-#: Sayt shu ro'yxatni ko'rsatadi.
-BASE_PLAN_INCLUDES = (
-    "4 kameragacha ulash",
-    "Kirish-chiqish sanash va bandlik",
-    "Kassa navbati nazorati",
-    "Xavfsizlik: tungi harakat, taqiqlangan zona, kamera buzilishi",
-    "Mijoz paneli (telefonda) va kunlik hisobot",
-    "Telegram ogohlantirishlari",
-    "Hodisa arxivi 30 kun",
-    "Imzolangan avtomatik yangilanishlar",
-)
+#: Bazaviy paketga kiradigan narsalar.
+#:
+#: Endi manba `plans.py` — matn ikki joyda yozilib, bir-biridan uzoqlashib
+#: ketmasin.  Ilgari bu ro'yxat HAMMA mijozga "Kassa navbati nazorati" va
+#: "Xavfsizlik" ni va'da qilardi; uch tarif joriy qilingach bu Boshlang'ich
+#: mijoziga yolg'on bo'lib qolardi.
+BASE_PLAN_INCLUDES = PLANS["biznes"].includes
+
+#: Saytda ko'rsatiladigan tariflar tartibi.  O'rtadagisi ajratiladi:
+#: uchta teng ustun qaror qabul qilishni qiyinlashtiradi, ajratilgan
+#: o'rta esa ko'zni birinchi o'ziga tortadi.
+PUBLIC_PLAN_ORDER = ("boshlangich", "biznes")
+
+#: Tarmoq — bazadagi tarif emas, saytdagi qator.  Har do'kon o'zining
+#: `biznes` obyekti sifatida ochiladi, shartlar qo'lda kelishiladi.
+#: Narxsiz tarif `PLANS` ga qo'shilsa `create_invoice` unga 0 so'mlik
+#: hisob-faktura yozib qo'yardi.
+NETWORK_PLAN_CARD = {
+    "code": "tarmoq",
+    "name": "Tarmoq",
+    "price_kind": "on_request",
+    "price_label": "So'rov bo'yicha",
+    "monthly_usd_cents": None,
+    "monthly_uzs": None,
+    "max_cameras": None,
+    "max_shops": None,
+    "retention_days": 90,
+    "highlight": False,
+    "badge": None,
+    "includes": (
+        "Bir nechta do'kon",
+        "Har do'konda 4 kameragacha",
+        "Biznesdagi hammasi",
+        "Hodisa arxivi 90 kun",
+        "Ulash va sozlashda biz yordam beramiz",
+    ),
+    # Halollik: bitta login bilan hamma do'konni ko'rish kodi HALI YO'Q
+    # (`portal_accounts.site_id` bitta).  Buni sayt va'da qilmasin.
+    "note": (
+        "Hozircha har do'kon alohida panelda ochiladi. "
+        "Bitta logindan hammasini ko'rish ustida ishlayapmiz."
+    ),
+    "cta": "Bog'lanish",
+}
+
+
+def _public_plan_card(code: str) -> Dict[str, Any]:
+    """Saytdagi tarif kartasi.
+
+    So'm summasi shu yerda hisoblanadi va JS uni QAYTA hisoblamaydi —
+    formula ikki joyda turgan paytda ular bir-biridan uzoqlashib ketishi
+    mumkin edi va sayt hisob-fakturadan boshqa narx ko'rsatardi.
+    """
+    limits = PLANS[code]  # type: ignore[index]
+    return {
+        "code": code,
+        "name": limits.display_name or code,
+        "price_kind": "fixed",
+        "price_label": None,
+        "monthly_usd_cents": limits.monthly_price_usd_cents,
+        "monthly_uzs": limits.monthly_price(),
+        "max_cameras": limits.max_cameras,
+        "max_shops": 1,
+        "retention_days": limits.retention_days,
+        "highlight": code == "biznes",
+        "badge": "Eng ommabop" if code == "biznes" else None,
+        "includes": list(limits.includes),
+        "note": None,
+        "cta": f"{limits.display_name or code}ni tanlash",
+    }
 
 
 @app.get("/api/v1/public/pricing")
@@ -1473,9 +1533,15 @@ async def public_pricing() -> Dict[str, Any]:
         "currency_default": "uzs",
         "usd_rate_uzs": rate,
         "yearly_months_charged": YEARLY_MONTHS_CHARGED,
+        # Uchta tarif kartasi.  Sayt shu ro'yxatni chizadi va so'm
+        # summasini o'zi hisoblamaydi.
+        "plans": [_public_plan_card(code) for code in PUBLIC_PLAN_ORDER]
+        + [dict(NETWORK_PLAN_CARD, includes=list(NETWORK_PLAN_CARD["includes"]))],
+        # `base` — alohida funksiya shartnomalari (`feature_quote`) uchun
+        # platforma bazasi.  Tarif narxi endi `plans` dan olinadi.
         "base": {
             "monthly_usd_cents": base_cents,
-            "monthly_uzs": (base_cents * rate + 99) // 100,
+            "monthly_uzs": uzs_from_cents(base_cents),
             "includes": list(BASE_PLAN_INCLUDES),
         },
         "features": [
@@ -1485,7 +1551,7 @@ async def public_pricing() -> Dict[str, Any]:
                 "category": item["category"],
                 "queue_kind": item["queue_kind"],
                 "monthly_usd_cents": int(item["monthly_usd_cents"]),
-                "monthly_uzs": (int(item["monthly_usd_cents"]) * rate + 99) // 100,
+                "monthly_uzs": uzs_from_cents(int(item["monthly_usd_cents"])),
                 "available": item["code"] in available,
             }
             for item in catalog["features"]
@@ -1493,8 +1559,9 @@ async def public_pricing() -> Dict[str, Any]:
             # yopiq pilot) — saytda ko'rinmasin.
             if item["active"] and item["category"] != "attendance"
         ],
-        # 8 kamera apparat maksimumi, lekin public sotuv va'dasi 72 soatlik
-        # soak-test tugamaguncha faqat 4 kamera.
+        # Eng katta tarifdagi kamera soni.  8 kamera apparat maksimumi,
+        # lekin public sotuv va'dasi 72 soatlik soak-test tugamaguncha
+        # faqat 4 kamera.
         "max_cameras": GUARANTEED_CAMERAS,
     }
 
@@ -1670,6 +1737,10 @@ class QuickTrialBody(BaseModel):
     #: ma'lumot yozilaverardi.
     consent: bool = False
     website: Optional[str] = ""
+    #: Saytdagi tarif kartasi qaysi tugmani bosgani.  Boshlang'ichni
+    #: tanlagan mijoz Biznes obyektini olib qolmasin — u 4 kamera ulab,
+    #: keyin "nega chegara" deb so'raydi.  Faqat sotiladigan ikkitasi.
+    plan: Literal["boshlangich", "biznes"] = "biznes"
 
 
 #: Nechta do'kon o'z-o'zidan ochilishi mumkin.  Mahsulot hali 72 soatlik
@@ -1752,10 +1823,10 @@ async def public_quick_trial(
 
     site = get_store().create_site(
         name=f"{name} ({phone[-4:] if len(phone) >= 4 else phone})",
-        # "lite" — yagona sotiladigan tarif.  Ilgari "starter" edi: u
-        # sotilmaydigan va telegram_allowed=False, ya'ni sinov mijozi
-        # boshdanoq nogiron konfiguratsiya olardi.
-        plan="lite",
+        # Mijoz saytda qaysi kartani bosgan bo'lsa — o'sha.  Standart
+        # "biznes": tarif tanlanmagan yo'l (masalan to'g'ridan-to'g'ri
+        # forma) mijozni cheklangan tarifga tushirib qo'ymasin.
+        plan=body.plan,
         contact_phone=phone,
         # Birinchi mijozlar to'lovsiz ishlatadi.  Bir oy kam: sinov davri
         # o'rtasida obuna tugab, mijoz "ishlamay qoldi" deb o'ylardi.
@@ -2344,7 +2415,7 @@ async def admin_convert_lead(
     name = lead.get("company") or lead.get("full_name") or f"Do'kon {lead['phone']}"
     site = get_store().create_site(
         name,
-        "lite",
+        "biznes",
         subscription_months=body.subscription_months,
         contact_phone=lead["phone"],
         address=lead.get("city"),
@@ -2484,6 +2555,32 @@ async def admin_set_persons(
         return get_store().set_billable_persons(site_id, body.persons)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+
+
+class PlanBody(BaseModel):
+    plan: str = Field(min_length=2, max_length=32)
+
+
+@app.post("/api/v1/admin/sites/{site_id}/plan")
+async def admin_set_plan(
+    site_id: str,
+    body: PlanBody,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Obyekt tarifini almashtirish.
+
+    Sotilmaydigan tarif ham qabul qilinadi (`lite` kabi) — sotuvchi eski
+    mijozni kerak bo'lsa o'z tarifida qoldira olishi kerak.  Yangi obyekt
+    yaratishda esa faqat `SELLABLE_PLANS` ko'rsatiladi.
+    """
+    try:
+        detail = get_store().set_plan(site_id, body.plan)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    # Qurilma yangi funksiya to'plamini va kamera chegarasini keyingi
+    # config poll'ida (20 soniya) olishi uchun revizya suriladi.
+    get_event_store().touch_site_config(site_id)
+    return detail
 
 
 @app.get("/api/v1/quote")
@@ -3515,12 +3612,20 @@ async def edge_site_config(
     # 40 GB bufer siyosati ketardi — Windows do'kon kompyuteri o'zini
     # "Intel N100" deb hisoblab, yarim bo'sh 250 GB diskda 20 GB bo'sh joy
     # talab qilardi.
+    #
+    # Kamera soni tarifdan keladi: Boshlang'ich mijozining sehrgari 3-chi
+    # kamerani taklif qilmasligi kerak.  Apparat maksimumidan yuqoriga
+    # chiqmaydi — `min` shu uchun.
+    site_plan = str((get_store().get_site(device["site_id"]) or {}).get("plan") or "")
+    plan_cameras = SHOP_MAX_CAMERAS
+    if site_plan:
+        plan_cameras = min(SHOP_MAX_CAMERAS, get_plan(site_plan).max_cameras)
     if str(device.get("product_name") or "").lower().startswith("chaqimchi windows"):
         config["product"] = {
             "name": "Chaqimchi Windows",
             "hardware_profile": "WINDOWS-SHOP-PC",
-            "guaranteed_cameras": SHOP_MAX_CAMERAS,
-            "max_cameras": SHOP_MAX_CAMERAS,
+            "guaranteed_cameras": plan_cameras,
+            "max_cameras": plan_cameras,
         }
         # Windows'da bufer chegaralarini qurilmaning o'zi diskiga qarab
         # boshqaradi (`chaqimchi_ai/outbox.py` prune + settings).
@@ -3529,7 +3634,12 @@ async def edge_site_config(
             "full_video_storage": "nvr",
         }
     else:
-        config["product"] = product_payload()
+        # Box (Sotqin) ham xuddi shu tarifga bo'ysunadi: apparat 8 kamera
+        # ko'tarsa ham, sotilgan tarif nechta bo'lsa shuncha.
+        config["product"] = {**product_payload(), "guaranteed_cameras": plan_cameras}
+        config["product"]["max_cameras"] = min(
+            int(config["product"]["max_cameras"]), plan_cameras
+        )
         config["buffer_policy"] = {
             "max_days": BUFFER_RETENTION_DAYS,
             "max_bytes": BUFFER_MAX_BYTES,
@@ -3547,24 +3657,30 @@ async def edge_site_config(
         for item in features["assignments"]
         if item["status"] == "active"
     ]
-    # Yagona tarif (Chaqimchi Lite, 2026-08-17): sotiladigan tarifda HAMMA
-    # funksiya ichida.  Ilgari kodlar faqat qo'lda approve qilingan
-    # assignmentlardan kelardi va hech bir saytga avto-biriktirilmasdi —
-    # pullik mijozning qurilmasi litsenziya filtri sabab hodisalarni
-    # jimgina tashlab yuborardi.  Assignmentlar bo'lsa ular ustun
-    # (kelajakdagi maxsus tariflar uchun), bo'lmasa tarifdan keladi.
+    # Funksiyalar tarifdan keladi.  Ilgari kodlar faqat qo'lda approve
+    # qilingan assignmentlardan kelardi va hech bir saytga
+    # avto-biriktirilmasdi — pullik mijozning qurilmasi litsenziya filtri
+    # sabab hodisalarni jimgina tashlab yuborardi.  Assignmentlar bo'lsa
+    # ular ustun (maxsus shartnomalar uchun), bo'lmasa tarifdan keladi.
+    #
+    # `is_sellable()` EMAS, `plan_feature_codes()`: uch tarif joriy
+    # qilinganda `lite` sotuvdan chiqdi, ya'ni `is_sellable("lite")` False
+    # bo'ldi.  Eski tekshiruv qolganda mavjud to'lovchi mijozning qurilmasi
+    # hamma funksiyani jimgina yo'qotardi va do'kon nazoratsiz qolardi.
     if not config["cloud_features"]:
         site = get_store().get_site(device["site_id"])
-        if site is not None and is_sellable(str(site.get("plan") or "")):
+        plan_key = str((site or {}).get("plan") or "")
+        allowed = set(plan_feature_codes(plan_key))
+        if allowed:
+            limits = get_plan(plan_key)
             config["cloud_features"] = [
                 {
                     "code": code,
-                    "camera_count": SHOP_MAX_CAMERAS,
+                    "camera_count": limits.max_cameras,
                     "queue_kind": queue_kind,
                 }
-                for code, _name, category, queue_kind, _price in DEFAULT_FEATURES
-                # Davomat tarifga kirmaydi — u alohida pullik qo'shimcha.
-                if category != "attendance"
+                for code, _name, _category, queue_kind, _price in DEFAULT_FEATURES
+                if code in allowed
             ]
     config["attendance"] = {
         "enabled": _attendance_enabled(),
@@ -3903,6 +4019,19 @@ async def owner_health(owner: OwnerPrincipal = Depends(require_active_owner)) ->
         "site_name": detail.get("name"),
         "minutes_since_seen": detail.get("minutes_since_seen"),
         "cameras_active": detail.get("cameras_active"),
+        # Tarif — panel qaysi bo'limni ochishini shundan biladi.  `health`
+        # baribir hamma tabning bog'liqligida turadi, ya'ni bu qo'shimcha
+        # so'rov emas.  Bazadagi kod emas, MIJOZGA ko'rinadigan nom:
+        # eski `lite` obyekti ham panelda "Biznes" bo'lib turadi.
+        "plan": {
+            "code": str(detail.get("plan") or ""),
+            "name": plan_display_name(str(detail.get("plan") or "")),
+            "max_cameras": get_plan(str(detail["plan"])).max_cameras,
+            "max_employees": get_plan(str(detail["plan"])).effective_max_persons(
+                int(detail.get("billable_persons") or 0)
+            ),
+            "panel_features": list(get_plan(str(detail["plan"])).panel_features),
+        },
     }
 
 
@@ -4009,6 +4138,15 @@ def _check_employee_limit(site_id: str) -> None:
     limit = get_plan(str(site.get("plan") or "lite")).effective_max_persons(
         int(site.get("billable_persons") or 0)
     )
+    if limit <= 0:
+        # Boshlang'ich tarifida davomat umuman yo'q.  "Ko'pi bilan 0 ta
+        # xodim" degan xabar mijozni chalg'itardi — u chegarani oshirish
+        # kerak deb o'ylardi, holbuki tarifni ko'tarish kerak.
+        raise HTTPException(
+            422,
+            "Xodim davomati Biznes tarifidan boshlab ishlaydi. "
+            "Tarifni ko'tarish uchun biz bilan bog'laning.",
+        )
     current = len(get_event_store().list_employees(site_id))
     if current >= limit:
         raise HTTPException(

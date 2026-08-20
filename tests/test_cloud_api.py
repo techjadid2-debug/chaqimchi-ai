@@ -29,16 +29,22 @@ def test_cloud_plans_and_site(cloud_client) -> None:
     assert data["pairing_code"]
 
 
-def test_new_site_defaults_to_lite(cloud_client) -> None:
+def test_new_site_defaults_to_biznes(cloud_client) -> None:
+    """Tarif berilmasa — asosiy tarif, cheklangani emas.
+
+    Standart `boshlangich` bo'lsa, tarif ko'rsatilmagan yo'ldan
+    (masalan ariza konvertatsiyasi) kelgan mijoz 2 kamera chegarasiga
+    tushib qolardi va sababi hech qayerda yozilmasdi.
+    """
     response = cloud_client.post(
         "/api/v1/admin/sites",
         headers={"X-Cloud-Admin-Key": "test-admin"},
-        json={"name": "Lite Pilot", "subscription_months": 1},
+        json={"name": "Biznes Pilot", "subscription_months": 1},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["plan"] == "lite"
-    assert body["limits"]["monthly_price_usd"] == 20
+    assert body["plan"] == "biznes"
+    assert body["limits"]["monthly_price_usd"] == 23
 
 
 def test_feature_catalog_draft_quote_and_approval(cloud_client) -> None:
@@ -300,7 +306,7 @@ def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     )
     assert converted.status_code == 200
     site = converted.json()
-    assert site["plan"] == "lite"
+    assert site["plan"] == "biznes"
     assert site["name"] == "Pilot Savdo"
 
     onboarding = cloud_client.get(

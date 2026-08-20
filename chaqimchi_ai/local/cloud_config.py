@@ -33,6 +33,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from chaqimchi_ai import __version__
+from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
 from chaqimchi_ai.local import config_store, paths
 
 logger = logging.getLogger(__name__)
@@ -171,6 +172,18 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
     if limits:
         config_store.update("scene", limits)
+        changed["limits"] = True
+
+    # Tarifdagi kamera soni.  Bungacha sehrgar har doim 4 ta taklif qilardi
+    # va 2 kameralik tarifdagi mijoz uchinchisini qo'sha olardi.
+    #
+    # `min` ataylab: cloud noto'g'ri (yoki buzilgan) qiymat yuborsa ham
+    # chegara apparat profilidan YUQORIGA ko'tarilmaydi.  Nol yoki
+    # yo'q qiymat e'tiborsiz qoldiriladi — oflayn qurilma o'zining
+    # ishlab turgan chegarasini yo'qotmasin.
+    allowed = int((payload.get("product") or {}).get("max_cameras") or 0)
+    if allowed > 0:
+        config_store.update("retail", {"max_cameras": min(SHOP_MAX_CAMERAS, allowed)})
         changed["limits"] = True
 
     # Ish vaqti: ikkalasi ham berilgan bo'lsagina.  Yarmi bo'lsa

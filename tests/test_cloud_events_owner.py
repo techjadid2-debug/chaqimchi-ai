@@ -1260,3 +1260,145 @@ def test_a_manager_cannot_invite_more_people(production_client, monkeypatch) -> 
         json={},
     )
     assert refused.status_code == 403
+
+
+# ── Uch tarif: chegara va funksiya to'plami ─────────────────────────────
+#
+# Uch tarif e'lon qilingach eng katta xavf — sotilgan farqning aslida
+# yo'qligi.  Bungacha kamera soni qurilmada QOTIRILGAN doimiy edi va
+# funksiyalar "sotiladigan har qanday tarifga hammasi" tamoyili bilan
+# tarqatilardi: 149 000 to'lagan mijoz 299 000 lik mijoz bilan bir xil
+# tizim olardi.  Quyidagilar shu farqni ushlab turadi.
+
+
+def _site_on(client: TestClient, plan: str, name: str = "Tarif do'koni"):
+    site = client.post(
+        "/api/v1/admin/sites",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"name": name, "plan": plan},
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
+    return site, {
+        "X-Site-Id": device["site_id"],
+        "X-Device-Id": device["device_id"],
+        "X-Device-Token": device["device_token"],
+    }
+
+
+def test_boshlangich_device_only_gets_person_counting(production_client) -> None:
+    client, _messages = production_client
+    _site, headers = _site_on(client, "boshlangich")
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    codes = {item["code"] for item in config["cloud_features"]}
+    assert codes == {"person_count"}
+    assert all(item["camera_count"] == 2 for item in config["cloud_features"])
+
+
+def test_biznes_device_gets_queue_and_security(production_client) -> None:
+    client, _messages = production_client
+    _site, headers = _site_on(client, "biznes")
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    codes = {item["code"] for item in config["cloud_features"]}
+    assert codes == {"person_count", "queue_length", "store_security"}
+
+
+def test_edge_config_camera_limit_follows_the_plan(production_client) -> None:
+    """Qurilma tarifdagi kamera sonini bilishi kerak.
+
+    Ilgari `product.max_cameras` har doim 4 edi va lokal sehrgar shu
+    raqamga qarardi — ya'ni 2 kameralik tarifdagi mijoz uchinchi kamerani
+    bemalol ulardi.
+    """
+    client, _messages = production_client
+    for plan, expected in (("boshlangich", 2), ("biznes", 4), ("lite", 4)):
+        _site, headers = _site_on(client, plan, name=f"Do'kon {plan}")
+        config = client.get("/api/v1/sotqin/config", headers=headers).json()
+        assert config["product"]["max_cameras"] == expected, plan
+        assert config["product"]["guaranteed_cameras"] == expected, plan
+
+
+def test_boshlangich_site_cannot_add_a_third_camera(production_client) -> None:
+    """Haqiqiy nazorat cloudda: qurilmadagi fayl mijozning o'zida turadi.
+
+    Shu sabab tekshiruv yozish yo'lining o'zida — `upsert_camera` da —
+    turadi va o'rnatuvchi paneli ham, admin ham, kelajakdagi yo'llar ham
+    shu bitta joydan o'tadi.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _headers = _site_on(client, "boshlangich")
+    store = main.get_store()
+
+    for index in (1, 2):
+        store.upsert_camera(
+            site["site_id"],
+            f"camera-{index:02d}",
+            label=f"Kamera {index}",
+            rtsp_url=f"rtsp://10.0.0.{index}/1",
+        )
+
+    with pytest.raises(ValueError, match="2 ta kamera"):
+        store.upsert_camera(
+            site["site_id"], "camera-03", label="Uchinchi", rtsp_url="rtsp://10.0.0.3/1"
+        )
+
+    # Mavjud kamerani TAHRIRLASH chegaraga urilmaydi — aks holda 2
+    # kamerali mijoz RTSP parolini ham yangilay olmasdi.
+    store.upsert_camera(
+        site["site_id"], "camera-01", label="Kirish", rtsp_url="rtsp://10.0.0.9/1"
+    )
+
+    # Tarif ko'tarilsa uchinchisi ochiladi.
+    store.set_plan(site["site_id"], "biznes")
+    store.upsert_camera(
+        site["site_id"], "camera-03", label="Uchinchi", rtsp_url="rtsp://10.0.0.3/1"
+    )
+    assert len(store.list_cameras(site["site_id"])) == 3
+
+
+def test_changing_the_plan_reaches_the_device(production_client) -> None:
+    """Mijoz pul to'lagach funksiya keyingi pollda kelsin.
+
+    Tarif qurilmadagi funksiya to'plamini belgilaydi, qurilma esa
+    o'zgarishni faqat config revizyasi bo'yicha sezadi.  Revizya
+    surilmasa mijoz qayta ishga tushirishgacha kutib qolardi.
+    """
+    client, _messages = production_client
+    site, headers = _site_on(client, "boshlangich")
+    admin = {"X-Cloud-Admin-Key": "test-admin"}
+
+    before = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    upgraded = client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/plan", headers=admin, json={"plan": "biznes"}
+    )
+    assert upgraded.status_code == 200
+    assert upgraded.json()["plan"] == "biznes"
+
+    after = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert after["revision"] > before["revision"]
+    assert {item["code"] for item in after["cloud_features"]} == {
+        "person_count",
+        "queue_length",
+        "store_security",
+    }
+    assert after["product"]["max_cameras"] == 4
+
+
+def test_an_unknown_plan_is_refused(production_client) -> None:
+    client, _messages = production_client
+    site, _headers = _site_on(client, "biznes")
+
+    response = client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/plan",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"plan": "oltin"},
+    )
+    assert response.status_code == 422

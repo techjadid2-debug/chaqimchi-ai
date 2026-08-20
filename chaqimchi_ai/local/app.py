@@ -57,6 +57,26 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 #: Qiymat yagona manbadan: `chaqimchi_ai/limits.py`.
 MAX_CAMERAS = SHOP_MAX_CAMERAS
 
+
+def max_cameras() -> int:
+    """Shu qurilmada nechta kamera ulash mumkin.
+
+    Ilgari bu modul darajasidagi doimiy edi va har doim 4 qaytarardi —
+    ya'ni 2 kameralik tarifdagi mijozning sehrgari uchinchi kamerani
+    bemalol qabul qilardi.  Endi chegara cloud yuborgan tarifdan keladi
+    (`retail.max_cameras`, `cloud_config.apply()` yozadi).
+
+    Cloud hali gapirmagan yoki qurilma oflayn bo'lsa — apparat chegarasi.
+    Oflayn do'kon o'zining ishlab turgan sozlamasini yo'qotmasin.
+    """
+    try:
+        allowed = config_store.load_settings().retail.max_cameras
+    except Exception:  # noqa: BLE001 — config buzuq bo'lsa ham sehrgar ochilsin
+        return MAX_CAMERAS
+    if not allowed or allowed < 1:
+        return MAX_CAMERAS
+    return min(MAX_CAMERAS, int(allowed))
+
 supervisor = RetailSupervisor()
 
 app = FastAPI(title="Chaqimchi AI — lokal", docs_url=None, redoc_url=None)
@@ -105,7 +125,7 @@ async def health() -> Dict[str, Any]:
 
 @app.get("/api/setup/summary")
 async def setup_summary() -> Dict[str, Any]:
-    return {**config_store.summary(), "max_cameras": MAX_CAMERAS}
+    return {**config_store.summary(), "max_cameras": max_cameras()}
 
 
 @app.get("/api/setup/hardware")
@@ -651,7 +671,7 @@ async def list_cameras() -> Dict[str, Any]:
             }
             for item in config_store.cameras()
         ],
-        "max_cameras": MAX_CAMERAS,
+        "max_cameras": max_cameras(),
     }
 
 
@@ -662,8 +682,9 @@ async def save_camera(body: CameraSaveBody) -> Dict[str, Any]:
     if not re.fullmatch(r"[a-z0-9\-]{3,32}", camera_id):
         raise HTTPException(422, "Kamera ID faqat lotin harfi, raqam va chiziqchadan iborat")
     is_new = all(item.get("id") != camera_id for item in existing)
-    if is_new and len(existing) >= MAX_CAMERAS:
-        raise HTTPException(422, f"Ko'pi bilan {MAX_CAMERAS} kamera qo'shish mumkin")
+    limit = max_cameras()
+    if is_new and len(existing) >= limit:
+        raise HTTPException(422, f"Tarifingizda ko'pi bilan {limit} kamera qo'shish mumkin")
 
     # Klip yozish uchun asosiy oqim: mijoz bermagan bo'lsa substream
     # manzilidan o'zimiz chiqaramiz va tezgina tekshiramiz.  Bungacha
@@ -706,6 +727,10 @@ def _verified_record_url(stream_url: str) -> Optional[str]:
 
 def _next_camera_id(existing: List[Dict[str, Any]]) -> str:
     used = {str(item.get("id")) for item in existing}
+    # ID oralig'i apparat chegarasi bo'yicha qoladi (camera-01..camera-04):
+    # tarifi 2 kamera bo'lgan mijoz `camera-01` va `camera-03` ni ishlatgan
+    # bo'lishi mumkin — bo'sh ID topilishi kerak.  SONI esa `save_camera`
+    # da tekshiriladi.
     for index in range(1, MAX_CAMERAS + 1):
         candidate = f"camera-{index:02d}"
         if candidate not in used:

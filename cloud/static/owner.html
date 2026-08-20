@@ -1334,7 +1334,11 @@
     faceUrls = [];
 
     const employees = data.employees || [];
-    const limit = Number(data.max_employees) || 10;
+    // `|| 10` EMAS: Boshlang'ich tarifida chegara 0 va u yolg'on qiymat,
+    // ya'ni panel "0 / 10" ko'rsatib, qo'shish tugmasini ochiq qoldirardi —
+    // mijoz bosardi va server 422 qaytarardi.
+    const raw = Number(data.max_employees);
+    const limit = Number.isFinite(raw) ? raw : 10;
     $("staffCount").textContent = `${employees.length} / ${limit}`;
     $("staffAddBtn").disabled = employees.length >= limit;
 

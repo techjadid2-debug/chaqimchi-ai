@@ -90,3 +90,71 @@ def test_lead_form_is_rate_limited(client) -> None:
     blocked = client.post("/api/v1/public/leads", json=payload)
     assert blocked.status_code == 429
     assert "ariza" in blocked.json()["detail"].lower()
+
+
+# ── Uch tarif ───────────────────────────────────────────────────────────
+
+
+def test_pricing_serves_three_cards_with_the_middle_one_highlighted(client) -> None:
+    """Sayt uchta kartani serverdan oladi, narxni o'zi hisoblamaydi."""
+    data = client.get("/api/v1/public/pricing").json()
+
+    codes = [item["code"] for item in data["plans"]]
+    assert codes == ["boshlangich", "biznes", "tarmoq"]
+
+    boshlangich, biznes, tarmoq = data["plans"]
+
+    assert boshlangich["monthly_uzs"] == 149_000
+    assert boshlangich["max_cameras"] == 2
+    assert boshlangich["highlight"] is False
+
+    assert biznes["monthly_uzs"] == 299_000
+    assert biznes["max_cameras"] == 4
+    # O'rtadagisi ajratiladi: uchta teng ustun qaror qabul qilishni
+    # qiyinlashtiradi.
+    assert biznes["highlight"] is True
+    assert biznes["badge"] == "Eng ommabop"
+
+    # Tarmoqda son yo'q — bo'lsa `create_invoice` unga 0 so'mlik hisob
+    # yozib qo'yardi.
+    assert tarmoq["price_kind"] == "on_request"
+    assert tarmoq["monthly_uzs"] is None
+    assert tarmoq["monthly_usd_cents"] is None
+    assert tarmoq["price_label"] == "So'rov bo'yicha"
+
+
+def test_the_network_card_does_not_promise_a_single_login(client) -> None:
+    """Bitta login bilan ko'p do'konni ko'rish kodi HALI YO'Q.
+
+    `portal_accounts.site_id` bitta va `owner_auth.py` bitta saytga
+    bog'langan.  Sayt buni va'da qilsa — sotilgan narsa yo'q bo'lib
+    chiqadi.
+    """
+    tarmoq = next(
+        item for item in client.get("/api/v1/public/pricing").json()["plans"]
+        if item["code"] == "tarmoq"
+    )
+    assert tarmoq["note"], "Tarmoq kartasida halollik izohi bo'lishi shart"
+    assert "alohida panelda" in tarmoq["note"]
+
+
+def test_plan_prices_match_the_invoice_exactly(client) -> None:
+    """Saytdagi narx va hisob-faktura bitta funksiyadan chiqsin.
+
+    Ilgari `site.js` so'mga o'girish formulasini qaytadan yozgan edi —
+    ikki joyda turgan formula bir-biridan uzoqlashishi mumkin.
+    """
+    from chaqimchi_ai.licensing.plans import PLANS
+
+    for card in client.get("/api/v1/public/pricing").json()["plans"]:
+        if card["price_kind"] != "fixed":
+            continue
+        assert card["monthly_uzs"] == PLANS[card["code"]].monthly_price(), card["code"]
+
+
+def test_base_includes_come_from_the_biznes_plan(client) -> None:
+    """Bitta ro'yxat ikki joyda yozilib, bir-biridan uzoqlashmasin."""
+    from chaqimchi_ai.licensing.plans import PLANS
+
+    data = client.get("/api/v1/public/pricing").json()
+    assert data["base"]["includes"] == list(PLANS["biznes"].includes)

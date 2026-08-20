@@ -18,8 +18,8 @@ def main() -> int:
     parser.add_argument("name", help="Mijoz / joy nomi")
     parser.add_argument(
         "--plan",
-        choices=["lite", "starter", "business", "enterprise"],
-        default="lite",
+        choices=["boshlangich", "biznes", "lite", "starter", "business", "enterprise"],
+        default="biznes",
     )
     parser.add_argument("--months", type=int, default=1)
     parser.add_argument("--cloud-url", default=DEFAULT_URL)

@@ -159,6 +159,15 @@ class RetailCameraSettings(BaseModel):
 
 class RetailSettings(BaseModel):
     enabled: bool = False
+    #: Tarifda ruxsat etilgan kamera soni.  Cloud `/api/v1/edge/config`
+    #: javobida yuboradi (`product.max_cameras`), `cloud_config.apply()`
+    #: shu yerga yozadi.  `None` — cloud hali gapirmagan yoki qurilma
+    #: oflayn: bunda apparat chegarasi (`SHOP_MAX_CAMERAS`) ishlaydi.
+    #:
+    #: Bu **qulaylik chegarasi**, litsenziya chegarasi emas: fayl
+    #: mijozning o'z kompyuterida turadi.  Haqiqiy nazorat cloudda
+    #: (`CloudStore.upsert_camera`).
+    max_cameras: Optional[int] = Field(default=None, ge=1, le=16)
     #: Qurilma sekundiga nechta inferens ko'taradi.  Bu **boshlang'ich taxmin**:
     #: byudjet o'lchangan latency bo'yicha o'zini tuzatadi.
     target_fps: float = Field(default=30.0, ge=1, le=240)

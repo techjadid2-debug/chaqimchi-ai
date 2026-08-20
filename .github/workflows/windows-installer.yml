@@ -37,7 +37,22 @@ jobs:
           sudo apt-get install -y nsis nsis-doc
 
       - name: Payload yig'ish
+        env:
+          # Paket ichida cloud manzili turishi SHART: mijoz uni bilmaydi.
+          # Bir marta bu o'zgaruvchisiz reliz chiqqan va o'sha `.exe` auto-pair
+          # qila olmagan.  Endi manzil bo'lmasa qurish to'xtaydi.
+          # Repo o'zgaruvchisi (Settings → Variables) bilan boshqa cloudga
+          # yo'naltirish mumkin.
+          CHAQIMCHI_DEFAULT_CLOUD_URL: ${{ vars.CHAQIMCHI_DEFAULT_CLOUD_URL || 'https://api.chaqimchi.uz' }}
         run: python scripts/build_windows_payload.py
+
+      - name: Cloud manzili paket ichida ekanini tekshirish
+        run: |
+          set -euo pipefail
+          grep -q "^set CHAQIMCHI_DEFAULT_CLOUD_URL=https://" \
+            build/payload/Chaqimchi_AI.bat
+          echo "Cloud manzili joyida:"
+          grep "^set CHAQIMCHI_DEFAULT_CLOUD_URL=" build/payload/Chaqimchi_AI.bat
 
       - name: O'rnatuvchini kompilyatsiya qilish
         run: makensis -V2 scripts/windows_installer.nsi

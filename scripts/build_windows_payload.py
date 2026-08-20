@@ -285,6 +285,12 @@ def step_code() -> None:
 #: yodda tutmaydi va sehrgarda uni qo'lda yozishi ham kerak emas.
 #: Qurish paytida beriladi:
 #:   CHAQIMCHI_DEFAULT_CLOUD_URL=https://... python scripts/build_windows_payload.py
+#:
+#: Bo'sh qolsa qurish **to'xtaydi** (`--lokal-qurish` bundan mustasno).
+#: Sabab: CI bir marta bu o'zgaruvchisiz ishlagan va GitHub Releases'ga
+#: cloud manzili bo'sh `.exe` chiqib ketgan — bunday paket auto-pair qila
+#: olmaydi va sehrgar do'kon egasidan server manzilini so'raydi, u esa uni
+#: bilmaydi.  Ogohlantirish yetarli emas ekan: CI logini hech kim o'qimaydi.
 DEFAULT_CLOUD_URL = os.environ.get("CHAQIMCHI_DEFAULT_CLOUD_URL", "").strip().rstrip("/")
 
 LAUNCHER = """@echo off
@@ -309,7 +315,9 @@ echo.
 echo   Chaqimchi AI ishga tushmoqda...
 echo   Boshqaruv paneli brauzerda ochiladi: http://localhost:8760
 echo.
-echo   Bu oynani YOPMANG - yopilsa nazorat to'xtaydi.
+echo   Bu oynani yopmang - nazorat shu oynada ishlayapti.
+echo   (Kompyuter yonganda avtomatik ishga tushirish yoqilgan bo'lsa,
+echo    kompyuter qayta yonganda nazorat o'zi tiklanadi.)
 echo.
 
 "python\\python.exe" -m chaqimchi_ai.local.app
@@ -322,6 +330,24 @@ echo   Dastur to'xtadi. Yuqoridagi xabarni o'qing.
 pause
 """
 
+# Avtomatik ishga tushirish (rejalashtirilgan vazifa, SYSTEM nomidan)
+# uchun alohida launcher.  Oddiy `Chaqimchi_AI.bat` dan ikki farqi bor va
+# ikkalasi ham majburiy:
+#
+#   1. brauzer ochilmaydi — SYSTEM sessiyasida ochiladigan brauzerni
+#      hech kim ko'rmaydi, u shunchaki jarayon bo'lib osilib qoladi;
+#   2. oxirida `pause` YO'Q — `pause` bo'lsa yiqilgan dastur "hali ham
+#      ishlayapti" bo'lib ko'rinardi va vazifa uni qayta ko'tarmasdi.
+SERVICE_LAUNCHER = """@echo off
+chcp 65001 > nul
+cd /d "%~dp0"
+
+set CHAQIMCHI_DEFAULT_CLOUD_URL=__CLOUD_URL__
+set CHAQIMCHI_LOCAL_NO_BROWSER=1
+
+"python\\python.exe" -m chaqimchi_ai.local.app
+"""
+
 READ_ME = """Chaqimchi AI - do'kon nazorati
 ==============================
 
@@ -329,6 +355,11 @@ Ishga tushirish
 ---------------
 Ish stolidagi "Chaqimchi AI" yorlig'ini bosing.
 Brauzerda sozlash oynasi ochiladi: http://localhost:8760
+
+Nazorat kompyuter yonganda o'zi ishga tushadi (o'rnatishda "Kompyuter
+yonganda avtomatik ishga tushsin" belgilangan bo'lsa).  Tizimga kirish
+ham shart emas.  Yorliqni bosganingizda dastur allaqachon ishlayotgan
+bo'lsa, ikkinchi nusxa ochilmaydi - shunchaki panel ko'rinadi.
 
 Birinchi marta nima qilish kerak
 --------------------------------
@@ -347,15 +378,41 @@ Telegram: @fibotai
 """
 
 
+def check_cloud_url(*, allow_no_cloud: bool = False) -> None:
+    """Cloud manzili joyidami — **yuklab olishdan oldin** tekshiriladi.
+
+    Qurish ~10 daqiqa va ~300 MB.  Bu tekshiruv oxirida bo'lsa, xato faqat
+    hammasi yuklab bo'lingandan keyin chiqardi.
+    """
+    if not DEFAULT_CLOUD_URL:
+        if not allow_no_cloud:
+            raise SystemExit(
+                "CHAQIMCHI_DEFAULT_CLOUD_URL berilmadi.\n"
+                "Bunday paket cloudga o'zi ulana olmaydi: mijozdan server "
+                "manzili so'raladi va u javob bera olmaydi.\n"
+                "Reliz qurishda:\n"
+                "  CHAQIMCHI_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \\\n"
+                "    python scripts/build_windows_payload.py\n"
+                "Ataylab cloudsiz (faqat lokal sinov) paket kerak bo'lsa: "
+                "--lokal-qurish"
+            )
+        log.warning("Cloudsiz paket quriladi (--lokal-qurish) — mijozga BERILMASIN")
+        return
+    if not DEFAULT_CLOUD_URL.startswith("https://"):
+        # http:// bilan qurilgan paket mijoz tarmog'ida jimgina ishlamaydi:
+        # pairing tokeni ochiq kanaldan o'tadi va cloud uni rad etadi.
+        raise SystemExit(
+            f"CHAQIMCHI_DEFAULT_CLOUD_URL https:// bilan boshlanishi kerak: {DEFAULT_CLOUD_URL}"
+        )
+
+
 def step_launcher() -> None:
     log.info("[6/6] Ishga tushirish fayllari")
-    if not DEFAULT_CLOUD_URL:
-        log.warning(
-            "CHAQIMCHI_DEFAULT_CLOUD_URL berilmadi — dastur cloudga o'zi "
-            "ulana olmaydi va sehrgar manzilni so'raydi"
-        )
     (PAYLOAD / "Chaqimchi_AI.bat").write_text(
         LAUNCHER.replace("__CLOUD_URL__", DEFAULT_CLOUD_URL), encoding="utf-8"
+    )
+    (PAYLOAD / "Chaqimchi_AI_xizmat.bat").write_text(
+        SERVICE_LAUNCHER.replace("__CLOUD_URL__", DEFAULT_CLOUD_URL), encoding="utf-8"
     )
     # Windows Notepad CRLF kutadi; LF bilan yozilsa matn bitta qatorga
     # yopishib qoladi va mijoz o'qiy olmaydi.
@@ -413,10 +470,18 @@ def main() -> int:
         help="yuklab olingan fayllar keshi (qayta qurishda tezlashtiradi)",
     )
     parser.add_argument("--keep", action="store_true", help="eski payloadni o'chirmaslik")
+    parser.add_argument(
+        "--lokal-qurish",
+        dest="allow_no_cloud",
+        action="store_true",
+        help="cloud manzilisiz qurish (faqat dasturchi sinovi uchun)",
+    )
     args = parser.parse_args()
 
     if not REQUIREMENTS.is_file():
         raise SystemExit(f"Topilmadi: {REQUIREMENTS}")
+
+    check_cloud_url(allow_no_cloud=args.allow_no_cloud)
 
     if PAYLOAD.exists() and not args.keep:
         shutil.rmtree(PAYLOAD)

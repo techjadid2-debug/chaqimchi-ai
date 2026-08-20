@@ -225,7 +225,46 @@ Section "Kompyuter yonganda avtomatik ishga tushsin" SecAutostart
   ; Do'kon kompyuteri kechqurun o'chirilib ertalab yoqiladi.  Avtostartsiz
   ; nazorat jimgina to'xtab qolardi va buni faqat hisobot bo'sh chiqqanda
   ; sezishardi.
-  WriteRegStr HKLM "${REG_RUN}" "ChaqimchiAI" '"$INSTDIR\Chaqimchi_AI.bat"'
+  ;
+  ; Ilgari bu `HKLM\...\Run` kaliti edi.  Uning ikkita jiddiy kamchiligi
+  ; bor edi va ikkalasi ham do'konda haqiqatan uchraydi:
+  ;
+  ;   1. Run kaliti kompyuter YONGANDA emas, kimdir tizimga KIRGANDA
+  ;      ishlaydi.  Do'kon kompyuteri yonib qulf ekranida tursa (masalan
+  ;      kechasi elektr uzilib qayta kelgan bo'lsa) nazorat umuman
+  ;      boshlanmasdi.
+  ;   2. Dastur kassirning ekranida qora oyna bo'lib turardi.  "Bu oynani
+  ;      YOPMANG" yozuviga qaramay u yopiladi.
+  ;
+  ; Rejalashtirilgan vazifa ikkalasini ham yopadi: SYSTEM nomidan, kirishdan
+  ; qat'i nazar, ko'rinmas holda ishlaydi.
+  DetailPrint "Avtomatik ishga tushirish vazifasi..."
+  nsExec::ExecToLog 'schtasks /Create /F /TN "Chaqimchi AI" \
+    /TR "\"$INSTDIR\Chaqimchi_AI_xizmat.bat\"" \
+    /SC ONSTART /DELAY 0000:30 /RU SYSTEM /RL HIGHEST'
+  Pop $0
+  ${If} $0 != 0
+    ; Zaxira yo'l: vazifa yaratilmasa hech bo'lmasa eski usul ishlasin.
+    DetailPrint "Ogohlantirish: vazifa qo'shilmadi (kod $0)."
+    DetailPrint "Eski usul ishlatiladi: dastur tizimga kirgandan keyin ochiladi."
+    WriteRegStr HKLM "${REG_RUN}" "ChaqimchiAI" '"$INSTDIR\Chaqimchi_AI.bat"'
+  ${Else}
+    ; `schtasks` yaratgan vazifa standart bo'yicha 72 soatdan keyin
+    ; TO'XTATILADI (`ExecutionTimeLimit=PT72H`).  24/7 nazorat uchun bu
+    ; jimgina o'chish degani — va aynan 72 soatlik barqarorlik sinovining
+    ; oxirida.  Cheklovni olib tashlaymiz va yiqilsa qayta ko'tarilsin.
+    DetailPrint "Vazifa sozlanmoqda (vaqt cheklovisiz, qayta ko'tarish bilan)..."
+    nsExec::ExecToLog "powershell -NoProfile -ExecutionPolicy Bypass -Command $\"$$t = Get-ScheduledTask -TaskName 'Chaqimchi AI'; $$t.Settings.ExecutionTimeLimit = 'PT0S'; $$t.Settings.RestartCount = 3; $$t.Settings.RestartInterval = 'PT1M'; $$t.Settings.DisallowStartIfOnBatteries = $$false; $$t.Settings.StopIfGoingOnBatteries = $$false; Set-ScheduledTask -InputObject $$t | Out-Null$\""
+    Pop $0
+    ${If} $0 != 0
+      DetailPrint "Ogohlantirish: vazifa sozlamalari o'zgartirilmadi (kod $0)."
+      DetailPrint "Dastur ishlaydi, lekin 72 soatdan keyin qayta yoqish kerak bo'lishi mumkin."
+    ${EndIf}
+    ; Vazifani hoziroq ishga tushiramiz — mijoz kompyuterni qayta
+    ; yoqmasdan ham nazorat boshlansin.
+    nsExec::ExecToLog 'schtasks /Run /TN "Chaqimchi AI"'
+    Pop $0
+  ${EndIf}
 SectionEnd
 
 Section "Yangilanishlarni o'zi olsin" SecUpdater
@@ -377,6 +416,10 @@ Section "Uninstall"
   ; Yangilanish vazifasi ham olib tashlanadi: qolib ketsa o'chirilgan
   ; dasturni har olti soatda qayta o'rnatishga urinardi.
   nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI Update"'
+  ; Avtostart vazifasi ham: qolib ketsa o'chirilgan dasturni har yonishda
+  ; ishga tushirishga urinib, xato jurnalini to'ldirardi.
+  nsExec::ExecToLog 'schtasks /End /TN "Chaqimchi AI"'
+  nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI"'
   ; Fayrvol qoidasi ham olib tashlanadi: o'chirilgan dasturdan keyin
   ; ochiq port qolib ketmasligi kerak.
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule \

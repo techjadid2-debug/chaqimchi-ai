@@ -33,6 +33,30 @@ Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
 | Dastur | `C:\Program Files\Chaqimchi AI` (faqat o‘qish) |
 | Sozlama, log, hodisalar | `C:\ProgramData\Chaqimchi` |
 | Panel | `http://localhost:8760` (faqat shu kompyuterda) |
+| Avtostart | Rejalashtirilgan vazifa `Chaqimchi AI` (SYSTEM, `ONSTART`) |
+
+### Avtomatik ishga tushish qanday ishlaydi
+
+Nazorat **kompyuter yonganda** ishga tushadi — tizimga kirish shart emas.
+Buni rejalashtirilgan vazifa qiladi: `Chaqimchi AI`, SYSTEM nomidan,
+30 soniyalik kechikish bilan, `Chaqimchi_AI_xizmat.bat` ni ishga tushiradi
+(u brauzerni ochmaydi va oxirida `pause` qilmaydi).
+
+Bungacha bu `HKLM\...\Run` kaliti edi va ikkita muammosi bor edi:
+Run kaliti kompyuter yonganda emas, **kimdir tizimga kirganda** ishlaydi
+(do‘kon kompyuteri qulf ekranida tursa nazorat umuman boshlanmasdi), va
+dastur kassirning ekranida qora oyna bo‘lib turardi.
+
+Vazifaning vaqt cheklovi ataylab olib tashlangan
+(`ExecutionTimeLimit=PT0S`): `schtasks` standart bo‘yicha vazifani
+**72 soatdan keyin to‘xtatadi** — ya’ni aynan 72 soatlik barqarorlik
+sinovining oxirida nazorat jimgina o‘chib qolardi.
+
+Tekshirish (do‘kon kompyuterida):
+
+```powershell
+schtasks /Query /TN "Chaqimchi AI" /V /FO LIST
+```
 
 Bu rejimda kamera ro‘yxati lokal `config.yaml` da turadi
 (`retail.cameras_source: config`) va cloud ulanmasa ham tahlil ishlaydi.

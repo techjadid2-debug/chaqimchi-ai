@@ -787,3 +787,72 @@ def test_scan_response_carries_onvif_details(
 
     assert data["devices"][0]["onvif_port"] == 8899
     assert "8899" in data["devices"][0]["xaddrs"]
+
+
+# ── Ikkinchi nusxa ──────────────────────────────────────────────────────
+#
+# Nazorat endi kompyuter yonganda avtomatik vazifa orqali ishga tushadi
+# (SYSTEM nomidan, ko'rinmas holda).  Mijoz keyin ish stolidagi yorliqni
+# bosadi — bungacha ikkinchi nusxa "port band" xatosi bilan yiqilib,
+# oynada Python traceback ko'rsatardi.
+
+
+def test_the_port_is_reserved_before_anything_else_starts() -> None:
+    import socket
+
+    from chaqimchi_ai.local import app as app_module
+
+    taken = socket.socket()
+    taken.bind(("127.0.0.1", 0))
+    taken.listen(1)
+    port = taken.getsockname()[1]
+    try:
+        assert app_module._reserve_panel_port(port=port) is None, (
+            "band port ikkinchi nusxaga berilmasin"
+        )
+    finally:
+        taken.close()
+
+    mine = app_module._reserve_panel_port(port=port)
+    assert mine is not None, "bo'sh port egallanishi kerak"
+    try:
+        # Endi u haqiqatan band: ikkinchi urinish None qaytaradi.
+        assert app_module._reserve_panel_port(port=port) is None
+    finally:
+        mine.close()
+
+
+def test_second_copy_opens_the_panel_instead_of_crashing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from chaqimchi_ai.local import app as app_module
+
+    # Log fayli haqiqiy uy katalogiga yozilmasin.
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    opened: list[str] = []
+    started: list[str] = []
+    monkeypatch.setattr(app_module, "_reserve_panel_port", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_module, "webbrowser", type("W", (), {"open": staticmethod(opened.append)})
+    )
+    monkeypatch.setattr(app_module, "_write_alive", lambda *a, **k: started.append("alive"))
+    monkeypatch.delenv("CHAQIMCHI_LOCAL_NO_BROWSER", raising=False)
+
+    app_module.main()
+
+    assert opened, "ishlab turgan nusxaning paneli ochilishi kerak"
+    assert not started, "ikkinchi nusxa holat belgisiga tegmasin"
+
+
+def test_service_launcher_does_not_open_a_browser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Avtostart vazifasi SYSTEM nomidan ishlaydi — u yerdagi brauzerni
+    hech kim ko'rmaydi, jarayon esa osilib qoladi."""
+    from chaqimchi_ai.local import app as app_module
+
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_NO_BROWSER", "1")
+    assert app_module._browser_enabled() is False
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_NO_BROWSER", "0")
+    assert app_module._browser_enabled() is True

@@ -347,3 +347,140 @@ def test_ffmpeg_is_bundled_with_a_pinned_hash() -> None:
     assert "download(FFMPEG_URL, archive, FFMPEG_SHA256)" in source
     assert "step_ffmpeg(cache)" in source, "qadam main() da chaqirilmagan"
     assert "bin/ffmpeg.exe" in source, "faqat ffmpeg.exe ajratib olinadi"
+
+
+# ── Cloud manzili paket ichida ──────────────────────────────────────────
+#
+# Haqiqiy nosozlik: CI `CHAQIMCHI_DEFAULT_CLOUD_URL` siz ishlagan va
+# GitHub Releases'ga cloud manzili BO'SH `.exe` chiqib ketgan.  Bunday
+# paket auto-pair qila olmaydi — sehrgar do'kon egasidan server manzilini
+# so'raydi, u esa uni bilmaydi.  Qurish skripti faqat `log.warning`
+# yozardi, CI logini esa hech kim o'qimaydi.
+
+WORKFLOW = ROOT / ".github" / "workflows" / "windows-installer.yml"
+
+
+def test_ci_gives_the_build_a_cloud_address() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "CHAQIMCHI_DEFAULT_CLOUD_URL:" in workflow, (
+        "CI qurishga cloud manzilini bermasa, reliz cloudsiz chiqadi"
+    )
+    assert "https://api.chaqimchi.uz" in workflow, "zaxira qiymat bo'lsin"
+
+
+def test_ci_checks_the_address_landed_in_the_package() -> None:
+    """Env berilgani yetarli emas — u haqiqatan `.bat` ichiga tushishi kerak."""
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "build/payload/Chaqimchi_AI.bat" in workflow
+    assert "^set CHAQIMCHI_DEFAULT_CLOUD_URL=https://" in workflow
+
+
+def test_build_stops_without_a_cloud_address() -> None:
+    """Manzilsiz qurish **to'xtashi** kerak, ogohlantirib o'tib ketmasin."""
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if k != "CHAQIMCHI_DEFAULT_CLOUD_URL"}
+    result = subprocess.run(
+        [sys.executable, str(BUILDER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=ROOT,
+        timeout=120,
+    )
+    assert result.returncode != 0, "manzilsiz qurish muvaffaqiyatli tugamasligi kerak"
+    assert "CHAQIMCHI_DEFAULT_CLOUD_URL" in result.stderr + result.stdout
+
+
+def test_build_rejects_a_plain_http_address() -> None:
+    """`http://` bilan pairing tokeni ochiq kanaldan o'tardi."""
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ, CHAQIMCHI_DEFAULT_CLOUD_URL="http://api.chaqimchi.uz")
+    result = subprocess.run(
+        [sys.executable, str(BUILDER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=ROOT,
+        timeout=120,
+    )
+    assert result.returncode != 0
+    assert "https://" in result.stderr + result.stdout
+
+
+def test_local_only_build_is_still_possible() -> None:
+    """Dasturchi cloudsiz qura olsin — lekin buni ataylab aytishi kerak."""
+    source = BUILDER.read_text(encoding="utf-8")
+    assert "--lokal-qurish" in source
+    assert "allow_no_cloud" in source
+
+
+# ── Kompyuter yonganda o'zi ishga tushsin ───────────────────────────────
+#
+# Haqiqiy nosozlik: avtostart `HKLM\...\Run` kaliti edi.  U kompyuter
+# YONGANDA emas, kimdir tizimga KIRGANDA ishlaydi — do'kon kompyuteri
+# yonib qulf ekranida tursa nazorat umuman boshlanmasdi.  Dastur esa
+# kassirning ekranida qora oyna bo'lib turardi va yopilardi.
+
+
+def _autostart_block() -> str:
+    source = _nsis_code()
+    start = source.index("Section \"Kompyuter yonganda")
+    return source[start : source.index("SectionEnd", start)]
+
+
+def test_autostart_runs_at_boot_not_at_logon() -> None:
+    block = _autostart_block()
+    assert "/SC ONSTART" in block, "vazifa kompyuter yonganda ishlasin"
+    assert "/RU SYSTEM" in block, "tizimga kirish shart bo'lmasin"
+
+
+def test_autostart_task_has_no_time_limit() -> None:
+    """`schtasks` standart bo'yicha vazifani 72 soatdan keyin to'xtatadi.
+
+    24/7 nazorat uchun bu jimgina o'chish degani — va aynan 72 soatlik
+    barqarorlik sinovining oxirida.
+    """
+    block = _autostart_block()
+    assert "ExecutionTimeLimit" in block and "PT0S" in block
+    assert "RestartCount" in block, "yiqilsa qayta ko'tarilsin"
+
+
+def test_the_run_key_is_only_a_fallback() -> None:
+    block = _autostart_block()
+    task = block.index("/SC ONSTART")
+    run_key = block.index("${REG_RUN}")
+    assert run_key > task, "Run kaliti faqat vazifa yaratilmagandagi zaxira bo'lsin"
+
+
+def test_uninstall_removes_the_autostart_task() -> None:
+    source = _nsis_code()
+    uninstall = source[source.index('Section "Uninstall"') :]
+    assert 'schtasks /Delete /F /TN "Chaqimchi AI"' in uninstall
+
+
+def test_the_service_launcher_never_opens_a_browser_or_pauses() -> None:
+    """Avtostart launcheri SYSTEM nomidan ishlaydi.
+
+    `pause` bo'lsa yiqilgan dastur "hali ishlayapti" bo'lib ko'rinardi va
+    vazifa uni qayta ko'tarmasdi; brauzer esa SYSTEM sessiyasida ochilib
+    osilib qolardi.
+    """
+    source = BUILDER.read_text(encoding="utf-8")
+    start = source.index("SERVICE_LAUNCHER = ")
+    launcher = source[start : source.index('"""', source.index('"""', start) + 3)]
+    assert "CHAQIMCHI_LOCAL_NO_BROWSER=1" in launcher
+    assert "pause" not in launcher
+    assert "CHAQIMCHI_DEFAULT_CLOUD_URL=__CLOUD_URL__" in launcher, (
+        "xizmat launcheri ham cloud manzilini bilishi kerak"
+    )
+    assert "Chaqimchi_AI_xizmat.bat" in source, "launcher payloadga yozilsin"
+
+
+def test_the_autostart_task_runs_the_service_launcher() -> None:
+    assert "Chaqimchi_AI_xizmat.bat" in _autostart_block()

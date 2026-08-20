@@ -1020,6 +1020,46 @@ async def events(limit: int = 50) -> Dict[str, Any]:
 # ── Ishga tushirish ──────────────────────────────────────────────────────
 
 
+def _browser_enabled() -> bool:
+    """Avtomatik ishga tushirish vazifasi SYSTEM nomidan ishlaydi — u
+    yerda ochilgan brauzerni hech kim ko'rmaydi, jarayon esa osilib
+    qoladi.  Xizmat launcheri shu sababli `CHAQIMCHI_LOCAL_NO_BROWSER=1`
+    qo'yadi."""
+    return os.environ.get("CHAQIMCHI_LOCAL_NO_BROWSER", "").lower() not in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _reserve_panel_port(port: int = PORT) -> Optional[Any]:
+    """Panel portini **darhol** band qiladi; band bo'lsa `None` qaytaradi.
+
+    Ikkinchi nusxa endi ODATIY holat: nazorat kompyuter yonganda avtomatik
+    vazifa orqali ishga tushadi, mijoz esa keyin ish stolidagi yorliqni
+    bosadi.  Bungacha ikkinchi nusxa uvicorn "port band" xatosi bilan
+    yiqilardi va oynada Python traceback chiqardi — do'kon egasi buni
+    "dastur buzildi" deb tushunardi.
+
+    Nega "ulanib ko'rish" emas, aynan band qilish: tekshiruv bilan
+    uvicorn'ning haqiqiy bind'i orasida bir necha soniya bor.  Aynan o'sha
+    oraliqda ikkinchi nusxa AI zanjirini ishga tushirib ulgurardi — ya'ni
+    ikkita jarayon bitta kamerani o'qiy boshlardi.  Port oldindan
+    egallansa bunday oraliq umuman qolmaydi.
+    """
+    import socket
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("127.0.0.1", port))
+        sock.listen(2048)
+    except OSError:
+        sock.close()
+        return None
+    return sock
+
+
 def _open_browser(url: str, delay_sec: float = 1.5) -> None:
     """Server ko'tarilgach brauzerni ochadi.
 
@@ -1152,10 +1192,27 @@ def main() -> None:
     )
     import uvicorn
 
+    url = f"http://127.0.0.1:{PORT}"
+
+    # Ikkinchi nusxani ishga tushirmaymiz — panelni ochib beramiz.
+    # Hamma narsadan OLDIN: `_write_alive` ishlab turgan nusxaning holat
+    # belgisini "starting" ga qaytarib, yangilovchining rollback mantig'ini
+    # chalg'itardi; `_autostart_if_ready` esa ikkinchi AI zanjirini
+    # ko'tarardi.
+    listener = _reserve_panel_port()
+    if listener is None:
+        print("Chaqimchi AI allaqachon ishlab turibdi — yangi nusxa kerak emas.")
+        print(f"Boshqaruv paneli: {url}")
+        if _browser_enabled():
+            try:
+                webbrowser.open(url)
+            except Exception:  # noqa: BLE001 — brauzersiz ham to'g'ri tugasin
+                pass
+        return
+
     # Updater uchun: dastur hech bo'lmasa shu nuqtagacha yetib keldi.
     _write_alive("starting")
 
-    url = f"http://127.0.0.1:{PORT}"
     print("=" * 62)
     print("  Chaqimchi AI — do'kon nazorati")
     print(f"  Boshqaruv paneli: {url}")
@@ -1173,13 +1230,17 @@ def main() -> None:
         logger.exception("Boshlang'ich cloud sozlamasi olinmadi")
     _autostart_if_ready()
     _start_config_sync()
-    if os.environ.get("CHAQIMCHI_LOCAL_NO_BROWSER", "").lower() not in {"1", "true", "yes"}:
+    if _browser_enabled():
         _open_browser(url)
 
     try:
-        uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
+        # Oldindan band qilingan soket bilan: uvicorn qaytadan bind
+        # qilmaydi, ya'ni orada boshqa jarayon portni olib qo'ya olmaydi.
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        server.run(sockets=[listener])
     finally:
         supervisor.stop()
+        listener.close()
 
 
 if __name__ == "__main__":

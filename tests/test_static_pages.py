@@ -772,3 +772,47 @@ def test_owner_hourly_chart_can_show_occupancy() -> None:
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
     assert 'data-hourmode="inside"' in html
     assert "h.exited" in html
+
+
+def test_the_hero_scene_is_inline_so_the_stylesheet_can_reach_it() -> None:
+    """Sahna SVG'si sahifa ICHIDA bo'lishi shart.
+
+    Alohida `.svg` fayl `<img>` orqali ulansa ota-sahifadagi CSS uning
+    ichiga yeta olmaydi — ya'ni `prefers-reduced-motion` qoidasi unga
+    ta'sir qilmaydi va harakatni o'chirgan foydalanuvchi baribir
+    animatsiya ko'radi.
+    """
+    site = (STATIC / "site.html").read_text(encoding="utf-8")
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+
+    assert 'id="scene-beam"' in site, "sahna sahifa ichida bo'lsin"
+    assert "scene.svg" not in site, "sahna alohida faylga chiqarilmasin"
+    assert "#scene-beam" in css, "animatsiya uslub faylidan boshqarilsin"
+    # Haqiqiy 3D ataylab yo'q: yopishqoq sarlavhadagi `backdrop-filter`
+    # bilan yonma-yon turganda u arzon telefonlarda sahifani silkitadi.
+    assert "rotateX" not in css
+    assert "perspective" not in css
+
+
+def test_reduced_motion_stops_animations_not_just_transitions() -> None:
+    """Ilgari faqat `transition` to'xtardi — `animation` davom etardi."""
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    block = css[css.index("@media (prefers-reduced-motion: reduce)") :]
+    block = block[: block.index("\n}") + 2]
+    assert "animation: none" in block
+
+
+def test_the_landing_shows_the_real_panel_not_a_drawing() -> None:
+    """Bosh sahifada mahsulotning O'ZI ko'rinsin.
+
+    Rasmlar `scripts/make_panel_screenshots.py` bilan olinadi: interfeys
+    haqiqiy, raqamlar namunaviy.  Hajm chegarasi yuqoridagi umumiy
+    test bilan tekshiriladi.
+    """
+    site = (STATIC / "site.html").read_text(encoding="utf-8")
+    for image in ("panel-bugun-v1.webp", "panel-xarita-v1.webp"):
+        assert image in site, image
+        assert (STATIC / image).is_file(), image
+    # Ekrandan pastda — birinchi ochilishni sekinlashtirmasin.
+    proof = site[site.index('id="imkoniyat"') : site.index('id="narx"')]
+    assert proof.count('loading="lazy"') == 2

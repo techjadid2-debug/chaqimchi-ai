@@ -15,13 +15,18 @@
        ham qaytgan mijoz brauzer keshidan **eskisini** olardi va tuzatish
        unga yetib bormasdi.  Endi qiymat mazmundan kelib chiqadi va
        `test_static_pages.py` mos kelishini tekshiradi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=c31c428c1c">
+  <link rel="stylesheet" href="/assets/site.css?v=dd581ebbcf">
 </head>
 <body>
-  <!-- Sahifa ataylab qisqa: hero (bitta asosiy tugma) → narx (tayyor
-       paketlar) → bitta forma → 5 savol.  Ilgari 9 bo'lim, 3 forma va
-       9 ta raqobatlashuvchi tugma bor edi — mijoz nima bosishni
-       bilmasdi. -->
+  <!-- Sahifa ataylab qisqa: hero (bitta asosiy tugma) → mahsulot
+       ekrani → uchta tarif → bitta forma → savollar.  Ilgari 9 bo'lim,
+       3 forma va 9 ta raqobatlashuvchi tugma bor edi — mijoz nima
+       bosishni bilmasdi.
+
+       2026-08-21: bitta tarif o'rniga uchta.  Uchta TENG ustun qarorni
+       qiyinlashtiradi, shuning uchun o'rtadagisi ajratilgan.  Kartalar
+       serverdan keladi (`/api/v1/public/pricing`) — narx sahifaga
+       yozilmaydi. -->
   <header class="nav-shell">
     <nav class="nav" aria-label="Asosiy navigatsiya">
       <a class="brand" href="/">
@@ -29,6 +34,7 @@
         <span>Chaqimchi <b>AI</b></span>
       </a>
       <div class="nav-links">
+        <a href="#imkoniyat">Imkoniyatlar</a>
         <a href="#narx">Narxlar</a>
         <a href="#faq">Savollar</a>
       </div>
@@ -54,13 +60,24 @@
         </p>
 
         <div class="hero-actions">
-          <!-- Dastur nashr qilingan bo'lsa tugma, aks holda pastdagi
+          <!-- Asosiy harakat — RO'YXATDAN O'TISH, yuklab olish emas.
+               Ilgari birinchi tugma "Windows uchun yuklab olish" edi:
+               mijoz hali ishonmagan paytda undan eng og'ir qadam
+               so'ralardi (fayl yuklash, o'rnatish, kamera ulash).
+               Endi u ikkinchi darajali havola, ro'yxatdan o'tgach esa
+               kodli havola o'zi chiqadi. -->
+          <a class="button button-light" href="#aloqa" id="startCta">
+            <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#dokon"></use></svg>
+            Bepul boshlash
+          </a>
+
+          <!-- Dastur nashr qilingan bo'lsa havola, aks holda pastdagi
                "xabar bering" formasi.  Qaysi biri — serverdan so'raladi
                (`/api/v1/public/windows-release`), sahifaga qo'lda
                yozilmaydi. -->
           <div id="downloadReady" class="download-action" hidden>
-            <a class="button button-light" id="downloadBtn" href="/api/v1/public/download-installer">
-              <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kompyuter"></use></svg>
+            <a class="button button-ghost" id="downloadBtn" href="/api/v1/public/download-installer">
+              <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#yuklash"></use></svg>
               Windows uchun yuklab olish
             </a>
             <!-- Versiya ko‘rinib turishi shart: usiz mijoz (va biz) yangi
@@ -102,45 +119,160 @@
         </div>
       </div>
 
-      <div class="hero-photo" aria-label="Do‘kon kameralarining sun’iy intellekt tahlili">
-        <img src="/assets/face-ai-hero-v1.webp" alt="Savdo do‘konida mijozlar va kameralar tahlili" fetchpriority="high">
-        <div class="hero-photo-badge">
-          <span></span> Jonli AI tahlil · Telegram alertlar
-        </div>
+      <!-- Izometrik sahna — SVG SAHIFA ICHIDA, alohida fayl emas.
+           Sabab: alohida `.svg` `<img>` orqali ulansa ota-sahifadagi CSS
+           uning ichiga yeta olmaydi, ya'ni `site.css` dagi
+           `prefers-reduced-motion` qoidasi unga TA'SIR QILMAYDI va
+           harakatni o'chirgan foydalanuvchi baribir animatsiya ko'radi.
+           Ichkarida esa hamma narsa bitta uslub faylidan boshqariladi.
+
+           `icons.svg` sprayti ham to'g'ri joy emas — u to'qqizta sahifaga
+           yuklanadi, sahna esa faqat shu yerda kerak.
+
+           Haqiqiy 3D (`rotateX`, `perspective`) ATAYLAB yo'q: yopishqoq
+           sarlavhadagi `backdrop-filter` bilan yonma-yon turganda u
+           arzon Android va eski iOS Safari'da qatlam yaratib, sahifani
+           silkitadi.  Izometriya koordinatalarning o'zida. -->
+      <figure class="scene" id="scene">
+        <svg viewBox="0 0 640 420" role="img" aria-labelledby="sceneTitle sceneDesc"
+             xmlns="http://www.w3.org/2000/svg">
+          <title id="sceneTitle">Do‘kon sxemasi</title>
+          <desc id="sceneDesc">Kamera mijozni ko‘radi, tizim uni sanaydi va
+            Telegramga xabar yuboradi.</desc>
+
+          <!-- Pol: izometrik romb va to'r -->
+          <g id="scene-floor">
+            <path d="M320 92 L612 246 L320 400 L28 246 Z" fill="#173d2d" opacity="0.92"/>
+            <g stroke="#f3f0e8" stroke-opacity="0.13" stroke-width="1.5" fill="none">
+              <path d="M174 169 L466 323"/><path d="M247 130 L539 284"/>
+              <path d="M393 130 L101 284"/><path d="M466 169 L174 323"/>
+            </g>
+          </g>
+
+          <!-- Javonlar (chap tomonda) -->
+          <g id="scene-shelves">
+            <g>
+              <path d="M150 196 L206 226 L206 262 L150 232 Z" fill="#0e2a1e"/>
+              <path d="M206 226 L258 198 L258 234 L206 262 Z" fill="#123527"/>
+              <path d="M150 196 L202 168 L258 198 L206 226 Z" fill="#1c4a37"/>
+            </g>
+            <g>
+              <path d="M246 245 L302 275 L302 311 L246 281 Z" fill="#0e2a1e"/>
+              <path d="M302 275 L354 247 L354 283 L302 311 Z" fill="#123527"/>
+              <path d="M246 245 L298 217 L354 247 L302 275 Z" fill="#1c4a37"/>
+            </g>
+          </g>
+
+          <!-- Kassa (o'ng past) -->
+          <g id="scene-counter">
+            <path d="M392 268 L448 298 L448 330 L392 300 Z" fill="#0e2a1e"/>
+            <path d="M448 298 L512 264 L512 296 L448 330 Z" fill="#123527"/>
+            <path d="M392 268 L456 234 L512 264 L448 298 Z" fill="#d9f55f" opacity="0.85"/>
+          </g>
+
+          <!-- Kamera va ko'rish konusi -->
+          <g id="scene-camera">
+            <path d="M96 128 L136 108 L136 132 L96 152 Z" fill="#13231d"/>
+            <path d="M96 128 L124 114 L136 108 L108 122 Z" fill="#2b4a3c"/>
+            <circle cx="130" cy="122" r="6" fill="#d9f55f"/>
+          </g>
+          <path id="scene-beam" d="M126 132 L392 214 L236 306 Z" fill="#d9f55f" opacity="0.26"/>
+
+          <!-- Mijozlar -->
+          <g id="scene-people">
+            <g class="person" transform="translate(0 0)">
+              <ellipse cx="266" cy="252" rx="13" ry="6" fill="#0b1f16" opacity="0.5"/>
+              <path d="M259 252 q7 -30 14 0 z" fill="#f3f0e8"/>
+              <circle cx="266" cy="219" r="8" fill="#f3f0e8"/>
+            </g>
+            <g class="person" transform="translate(0 0)">
+              <ellipse cx="352" cy="300" rx="13" ry="6" fill="#0b1f16" opacity="0.5"/>
+              <path d="M345 300 q7 -30 14 0 z" fill="#e7e4da"/>
+              <circle cx="352" cy="267" r="8" fill="#e7e4da"/>
+            </g>
+            <g class="person" transform="translate(0 0)">
+              <ellipse cx="430" cy="262" rx="13" ry="6" fill="#0b1f16" opacity="0.5"/>
+              <path d="M423 262 q7 -30 14 0 z" fill="#e7e4da"/>
+              <circle cx="430" cy="229" r="8" fill="#e7e4da"/>
+            </g>
+          </g>
+
+          <!-- Aniqlash ramkasi -->
+          <g id="scene-pulse">
+            <rect x="242" y="203" width="48" height="62" rx="6" fill="none"
+                  stroke="#d9f55f" stroke-width="3"/>
+            <rect x="242" y="188" width="62" height="14" rx="7" fill="#d9f55f"/>
+            <text x="248" y="199" font-size="10" font-weight="700" fill="#13231d">+1 kirdi</text>
+          </g>
+
+          <!-- Telegram xabari -->
+          <g id="scene-phone">
+            <rect x="404" y="60" width="212" height="86" rx="18" fill="#f3f0e8"
+                  stroke="#13231d" stroke-opacity="0.12"/>
+            <circle cx="430" cy="88" r="12" fill="#173d2d"/>
+            <path d="M424 88 l12 -5 -4 12 -3 -4 -5 -3z" fill="#d9f55f"/>
+            <text x="452" y="84" font-size="13" font-weight="700" fill="#13231d">Chaqimchi AI</text>
+            <text x="452" y="104" font-size="12" fill="#4d5c55">Kassada navbat: 6 kishi</text>
+            <text x="452" y="124" font-size="12" fill="#4d5c55">Bugun kirdi: 268</text>
+          </g>
+        </svg>
+        <figcaption class="scene-badge"><span></span> Jonli tahlil · Telegram xabari</figcaption>
+      </figure>
+    </section>
+
+    <!-- ── NIMA KO'RASIZ: haqiqiy panel ekrani ── -->
+    <!--
+         Chizilgan illyustratsiya emas, MAHSULOTNING O'ZI.  Bozor
+         tadqiqotlari ham shuni ko'rsatadi: haqiqiy panel ekrani 3D
+         grafikadan ko'ra ko'proq mijoz keltiradi — chunki do'kon egasi
+         nima sotib olayotganini ko'radi.
+
+         Rasmlar `scripts/make_panel_screenshots.py` bilan olinadi:
+         interfeys haqiqiy, raqamlar namunaviy.  Haqiqiy mijozning nomi
+         yoki telefoni ishlatilmaydi.
+    -->
+    <section id="imkoniyat" class="proof section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> Nima ko‘rasiz</p>
+        <h2>Panelni telefoningizdan ochasiz</h2>
+        <p>Do‘konda bo‘lmasangiz ham: nechta odam kirdi, qaysi soat gavjum,
+          kassada navbat qancha bo‘ldi.</p>
+      </div>
+      <div class="proof-grid">
+        <figure>
+          <img src="/assets/panel-bugun-v1.webp" alt="Kunlik hisobot: kirdi, chiqdi va gavjum soat"
+               width="820" height="900" loading="lazy" decoding="async">
+          <figcaption>Kunlik hisobot: kirdi, chiqdi, gavjum soat</figcaption>
+        </figure>
+        <figure>
+          <img src="/assets/panel-xarita-v1.webp" alt="Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar"
+               width="820" height="480" loading="lazy" decoding="async">
+          <figcaption>Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar</figcaption>
+        </figure>
       </div>
     </section>
 
-    <!-- ── NARX: bitta oddiy tarif ── -->
-    <!-- Qaror (2026-08-17): 3 ta paket o'rniga bitta "Chaqimchi Lite" —
-         $20/oy, HAMMASI ichida.  Tanlov qancha ko'p bo'lsa, qaror
-         shuncha qiyin; do'kon egasiga bitta halol narx kerak. -->
+    <!-- ── NARX: uchta tarif ── -->
     <section id="narx" class="configurator section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> Bitta oddiy tarif</p>
-        <h2>Chaqimchi Lite</h2>
-        <p>Hammasi ichida — yashirin qo‘shimcha to‘lovlar yo‘q.</p>
+        <p class="eyebrow"><span></span> Uchta oddiy tarif</p>
+        <h2>Do‘koningizga mos tarifni tanlang</h2>
+        <p>Yashirin qo‘shimcha to‘lovlar yo‘q. Yillik to‘lovda 2 oy bepul.</p>
       </div>
 
-      <!-- Narx sahifaga yozilmaydi — JS uni /api/v1/public/pricing dan
-           hisoblaydi (so'm kursi ham serverdan). -->
-      <div id="liteCard" class="preset preset-featured" style="max-width: 460px; margin: 0 auto;">
-        <span class="preset-badge">Do‘konlar uchun</span>
-        <h3>Chaqimchi Lite</h3>
-        <p class="preset-price"><b id="litePrice">…</b><span>/oy</span></p>
-        <p class="preset-note" id="litePriceUsd"></p>
-        <ul class="preset-items" id="liteIncludes"></ul>
-        <p class="preset-cameras">4 kameragacha · bitta do‘kon</p>
-        <button class="button button-light" type="button" id="liteCta">Shu tarifga yozilish</button>
-        <p class="preset-hint" style="margin: 12px 0 0; text-align: left;">Yillik to‘lovda 2 oy bepul.</p>
-      </div>
+      <!-- Kartalar JS bilan chiziladi: narx ham, ro'yxat ham serverdan
+           (`/api/v1/public/pricing`).  Sahifaga qo'lda yozilsa katalog
+           o'zgarganda sayt eski narxni ko'rsatib turaverardi. -->
+      <div id="planGrid" class="preset-grid"></div>
 
       <noscript>
         <div class="preset-hint" style="text-align:left">
           <b>Narxni ko‘rish uchun brauzerda JavaScript yoqilgan bo‘lishi kerak.</b><br>
           Yoqa olmasangiz bizga yozing:
-          <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>.
-          Chaqimchi Lite — oyiga $20 (so‘mda kurs bo‘yicha), 4 kamera va
-          barcha funksiyalar ichida.
+          <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>.<br>
+          Boshlang‘ich — 2 kamera, oyiga 149 000 so‘m.
+          Biznes — 4 kamera va to‘liq tahlil, oyiga 299 000 so‘m.
+          Tarmoq (bir nechta do‘kon) — so‘rov bo‘yicha.
         </div>
       </noscript>
 
@@ -186,6 +318,10 @@
           <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128" placeholder="••••••••••">
         </div>
         <input id="cameras" name="cameras" type="hidden" value="4">
+        <!-- Qaysi tarif kartasi bosilgan.  Usiz Boshlang'ichni tanlagan
+             mijoz Biznes obyektini olib qolardi va keyin "nega 4 kamera
+             ulanmayapti" deb so'ramasdi — ulanib ketaverardi. -->
+        <input id="plan" name="plan" type="hidden" value="biznes">
         <input id="leadMessage" name="message" type="hidden" value="Saytdan so'rov">
         <div class="field honey" aria-hidden="true">
           <label for="website">Website</label>
@@ -232,6 +368,14 @@
           <p>To‘liq video arxiv sizning shaxsiy NVR yoki kompyuteringizda qoladi. Cloudga faqat aniqlangan hodisalar statistikasi va qisqa video parchalar xavfsiz shifrlangan holda yuboriladi.</p>
         </details>
         <details>
+          <summary>Qaysi tarifni tanlay?</summary>
+          <p>Bitta kassa va bitta kirish eshigi bo‘lsa <b>Boshlang‘ich</b> yetadi:
+            nechta odam kirdi va chiqdi — shuni ko‘rasiz. Navbat, xavfsizlik,
+            do‘kon xaritasi va xodim davomati kerak bo‘lsa — <b>Biznes</b>.
+            Ikkitadan ko‘p do‘koningiz bo‘lsa <b>Tarmoq</b> bo‘yicha bog‘laning.
+            Tarifni keyin ham o‘zgartirsa bo‘ladi.</p>
+        </details>
+        <details>
           <summary>Qanday to‘layman? Keyin bekor qilsam-chi?</summary>
           <p><b>Payme</b> yoki <b>Click</b> orqali kartadan, naqd yoki bank o‘tkazmasi bilan. Majburiy uzoq muddatli shartnoma yo‘q — oylik to‘lovni to‘xtatsangiz kifoya. Obuna tugagach tizim yana <b>14 kun</b> ishlaydi, shu vaqtda hisobotlaringizni yuklab olasiz.</p>
         </details>
@@ -260,6 +404,6 @@
     </div>
   </footer>
 
-  <script src="/assets/site.js?v=3e9c4a6209" defer></script>
+  <script src="/assets/site.js?v=b8fd03fb01" defer></script>
 </body>
 </html>

@@ -187,39 +187,84 @@
       });
   }
 
-  // ── Tarif: bitta "Chaqimchi Lite" kartasi ─────────────────────────────
+  // ── Tariflar: uchta karta ─────────────────────────────────────────────
   //
-  // Qaror (2026-08-17): 3 ta paket o'rniga bitta tarif — $20/oy, hammasi
-  // ichida.  Narx sahifaga yozilmaydi: serverdan keladi (kurs bilan),
-  // ya'ni narx o'zgarsa sayt o'zi yangilanadi.
+  // Qaror (2026-08-21): bitta tarif o'rniga uchta — Boshlang'ich, Biznes,
+  // Tarmoq.  Bitta tarif ikki tomondan zarar keltirardi: kichik do'kon
+  // uchun kirish nuqtasi yo'q edi, katta mijozdan ko'proq pul olishning
+  // yo'li ham yo'q edi.
+  //
+  // Uchta TENG ustun qaror qabul qilishni qiyinlashtiradi, shuning uchun
+  // o'rtadagisi ajratilgan ("Eng ommabop") va ko'z birinchi o'shanga
+  // tushadi.
+  //
+  // So'm summasi bu yerda HISOBLANMAYDI — serverdan tayyor keladi.  Ilgari
+  // formula (`cents * rate + 99) / 100`) shu faylda qaytadan yozilgan edi
+  // va u hisob-faktura formulasidan uzoqlashib ketishi mumkin edi: sayt
+  // bir narxni, hisob boshqasini ko'rsatardi.
   let pricing = null;
 
   const groups = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  // Serverdagi `(cents * rate + 99) // 100` bilan bir xil: sayt va
-  // hisob-faktura bitta so'mni ham farq qilmasligi kerak.
-  const toUzs = (cents) => Math.floor((cents * pricing.usd_rate_uzs + 99) / 100);
-  const money = (cents) => `${groups(toUzs(cents))} so‘m`;
+  const money = (uzs) => `${groups(uzs)} so‘m`;
 
-  function renderLite() {
-    const cents = pricing.base.monthly_usd_cents;
-    const usd = cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100);
-    const priceEl = document.getElementById("litePrice");
-    if (priceEl) priceEl.textContent = money(cents);
-    const usdEl = document.getElementById("litePriceUsd");
-    if (usdEl) usdEl.textContent = `Bu — oyiga $${usd}. So‘m narxi kurs bo‘yicha hisoblanadi.`;
-    const list = document.getElementById("liteIncludes");
-    if (list) {
-      list.innerHTML = (pricing.base.includes || [])
-        .map((item) => `<li>${String(item).replace(/[&<>"]/g, (c) => (
-          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]
-        ))}</li>`)
-        .join("");
-    }
-    const cta = document.getElementById("liteCta");
-    if (cta) {
-      cta.addEventListener("click", () => {
-        goToForm(`Tarif: Chaqimchi Lite | Oyiga ${money(cents)} ($${usd})`);
+  function planCard(plan) {
+    const featured = plan.highlight ? " preset-featured" : "";
+    const badge = plan.badge
+      ? `<span class="preset-badge">${esc(plan.badge)}</span>`
+      : "";
+    const price = plan.price_kind === "on_request"
+      ? `<p class="preset-price"><b>${esc(plan.price_label || "So‘rov bo‘yicha")}</b></p>`
+      : `<p class="preset-price"><b>${esc(money(plan.monthly_uzs))}</b><span>/oy</span></p>`;
+    const note = plan.note
+      ? `<p class="preset-note">${esc(plan.note)}</p>`
+      : "";
+    const items = (plan.includes || [])
+      .map((item) => `<li>${esc(item)}</li>`)
+      .join("");
+    return `
+      <article class="preset${featured}" data-plan="${esc(plan.code)}">
+        ${badge}
+        <h3>${esc(plan.name)}</h3>
+        ${price}
+        <ul class="preset-items">${items}</ul>
+        ${note}
+        <button class="button ${plan.highlight ? "button-light" : "button-ghost"}" type="button"
+                data-plan-cta="${esc(plan.code)}">${esc(plan.cta || "Tanlash")}</button>
+      </article>`;
+  }
+
+  function renderPlans() {
+    const grid = document.getElementById("planGrid");
+    if (!grid) return;
+    const plans = pricing.plans || [];
+    grid.innerHTML = plans.map(planCard).join("");
+
+    // Uchala tugma ham BITTA formaga olib boradi — sahifada bir nechta
+    // raqobatlashuvchi harakat bo'lmasin.  Tanlangan tarif yashirin
+    // maydonga yoziladi, ya'ni Boshlang'ichni bosgan mijoz Biznes
+    // obyektini olib qolmaydi.
+    const planInput = document.getElementById("plan");
+    grid.querySelectorAll("[data-plan-cta]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const code = button.getAttribute("data-plan-cta");
+        const plan = plans.find((item) => item.code === code);
+        if (!plan) return;
+        if (plan.price_kind === "on_request") {
+          // Tarmoqda narx yo'q — bu ariza, ro'yxatdan o'tish emas.
+          goToForm(`Tarif: ${plan.name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman`);
+          return;
+        }
+        if (planInput) planInput.value = code;
+        goToForm(`Tarif: ${plan.name} | Oyiga ${money(plan.monthly_uzs)}`);
       });
+    });
+
+    // Hero'dagi narx ilgagi — eng arzon tarifdan.
+    const cheapest = plans.find((item) => item.price_kind === "fixed");
+    const heroPrice = document.getElementById("heroPrice");
+    if (heroPrice && cheapest) {
+      heroPrice.textContent = `${money(cheapest.monthly_uzs)}/oydan`;
+      heroPrice.hidden = false;
     }
   }
 
@@ -227,14 +272,6 @@
     .then((response) => response.json())
     .then((data) => {
       pricing = data;
-
-      // Hero'dagi narx ilgagi: mijoz "qancha turadi?" degan savol bilan
-      // keladi va javob uchun pastga tushishga majbur bo'lmasligi kerak.
-      const heroPrice = document.getElementById("heroPrice");
-      if (heroPrice) {
-        heroPrice.textContent = `${money(pricing.base.monthly_usd_cents)}/oydan`;
-        heroPrice.hidden = false;
-      }
 
       // Funksiyalar hali qabul sinovidan o'tmagan bo'lsa buni
       // yashirmaymiz — bitta halol izoh.
@@ -246,13 +283,13 @@
         note.hidden = false;
       }
 
-      renderLite();
+      renderPlans();
     })
     .catch(() => {
-      const card = document.getElementById("liteCard");
-      if (card) {
-        card.innerHTML =
-          '<p class="preset-hint">Narxni yuklab bo‘lmadi. Sahifani yangilang yoki ' +
+      const grid = document.getElementById("planGrid");
+      if (grid) {
+        grid.innerHTML =
+          '<p class="preset-hint">Narxni yuklab bo\u2018lmadi. Sahifani yangilang yoki ' +
           '<a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> ga yozing.</p>';
       }
     });

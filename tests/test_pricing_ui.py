@@ -1,10 +1,19 @@
 """Saytdagi tarif bo'limi.
 
-Qaror (2026-08-17): 3 ta paket o'rniga BITTA tarif — "Chaqimchi Lite",
-$20/oy, hammasi ichida.  Narx sahifaga yozilmaydi: `/api/v1/public/pricing`
-dan keladi (so'm kursi bilan), ya'ni narx o'zgarsa sayt o'zi yangilanadi.
+Qaror (2026-08-21): bitta tarif o'rniga UCHTA — Boshlang'ich, Biznes,
+Tarmoq.  Bitta tarif ($20, hammasi ichida) 2026-08-17 da joriy qilingan
+edi va u ikki tomondan zarar keltirardi: kichik do'kon uchun arzon kirish
+nuqtasi yo'q edi, katta mijozdan ko'proq pul olishning yo'li ham yo'q edi.
 
-Bu testlar eski holat (ko'p paket, qo'lda yozilgan narx, to'q nav tugma)
+Uchta TENG ustun qarorni qiyinlashtiradi — shuning uchun o'rtadagisi
+ajratilgan va ko'z birinchi o'shanga tushadi.
+
+Narx sahifaga YOZILMAYDI: `/api/v1/public/pricing` dan tayyor so'mda
+keladi.  Ilgari so'mga o'girish formulasi `site.js` da qaytadan yozilgan
+edi — ikki joydagi formula bir-biridan uzoqlashib, sayt bir narxni,
+hisob-faktura boshqasini ko'rsatishi mumkin edi.
+
+Bu testlar eski holat (qo'lda yozilgan narx, to'q nav tugma, ko'p forma)
 qaytib kelmasligini qo'riqlaydi.
 """
 
@@ -18,37 +27,53 @@ SITE_HTML = ROOT / "cloud" / "static" / "site.html"
 SITE_CSS = ROOT / "cloud" / "static" / "site.css"
 
 
-def test_single_lite_tariff_card() -> None:
+def test_three_tariff_cards_come_from_the_api() -> None:
     html = SITE_HTML.read_text(encoding="utf-8")
     js = SITE_JS.read_text(encoding="utf-8")
 
-    assert 'id="liteCard"' in html, "bitta tarif kartasi bo'lsin"
-    assert "Chaqimchi Lite" in html
-    # Eski ko'p-paket mashinasi qaytmasin.
-    assert "presetGrid" not in html
-    assert "const PRESETS" not in js
-    assert "data-billing" not in html, "oylik/yillik almashtirgich olib tashlangan"
+    assert 'id="planGrid"' in html, "kartalar uchun joy bo'lsin"
+    assert "renderPlans" in js
+    # Eski bitta-karta mashinasi qaytmasin.
+    assert 'id="liteCard"' not in html
+    assert "renderLite" not in js
+    assert "data-billing" not in html, "oylik/yillik almashtirgich yo'q"
     assert "Yillik to‘lovda 2 oy bepul" in html, "yillik chegirma bitta satr bo'lib qoladi"
 
 
-def test_price_is_not_hardcoded_in_the_card() -> None:
-    """Narx API'dan keladi — sahifada faqat joy turadi.
+def test_the_middle_plan_is_the_highlighted_one() -> None:
+    """Ajratish serverdan keladi, sahifaga yozilmaydi.
 
-    Qotirilgan narx bir marta katalogdan orqada qolib, mijoz eski narxni
-    ko'rgan edi.  noscript'dagi $20 bundan mustasno (JS'siz fallback).
+    Aks holda tariflar tartibi o'zgarganda "Eng ommabop" yorlig'i
+    noto'g'ri kartada qolib ketardi.
     """
+    js = SITE_JS.read_text(encoding="utf-8")
     html = SITE_HTML.read_text(encoding="utf-8")
-    js = SITE_JS.read_text(encoding="utf-8")
-    assert '<b id="litePrice">…</b>' in html, "narx joyi bo'sh (…) turishi kerak"
-    assert "monthly_usd_cents" in js, "narx pricing API'dan olinsin"
-    assert "usd_rate_uzs" in js, "so'm kursi serverdan olinsin"
+    assert "plan.highlight" in js
+    assert "plan.badge" in js
+    assert "Eng ommabop" not in html, "yorliq HTMLga qotirilmasin"
 
 
-def test_lite_price_shows_both_currencies() -> None:
-    """Qaror: so'm + dollar birga ("~260 000 so'm ($20)")."""
+def test_the_site_does_not_recompute_the_price_itself() -> None:
+    """Sayt va hisob-faktura bitta so'mni ham farq qilmasligi kerak.
+
+    Bungacha `site.js` `(cents * rate + 99) / 100` formulasini QAYTADAN
+    yozgan edi.  Serverda yaxlitlash qadami qo'shilganda ikkalasi
+    darrov uzoqlashib ketardi.
+    """
     js = SITE_JS.read_text(encoding="utf-8")
-    assert "so‘m" in js
-    assert 'id="litePriceUsd"' in SITE_HTML.read_text(encoding="utf-8")
+    assert "monthly_uzs" in js, "so'm summasi serverdan olinsin"
+    assert "usd_rate_uzs" not in js, "so'mga o'girish saytda takrorlanmasin"
+
+
+def test_the_network_plan_shows_no_number_and_no_false_promise() -> None:
+    """Tarmoqda narx yo'q va bitta login VA'DA QILINMAYDI.
+
+    Ko'p do'konni bitta logindan ko'rish kodi hali yo'q
+    (`portal_accounts.site_id` bitta) — sayt uni sotmasin.
+    """
+    js = SITE_JS.read_text(encoding="utf-8")
+    assert 'price_kind === "on_request"' in js, "narxsiz tarif alohida yo'l bilan chizilsin"
+    assert "plan.note" in js, "halollik izohi kartada chiqsin"
 
 
 def test_dark_nav_button_is_gone() -> None:
@@ -80,11 +105,20 @@ def test_the_page_has_exactly_one_lead_form_flow() -> None:
     assert html.count("<form") == 2, "leadForm va notifyForm'dan boshqa forma bo'lmasin"
 
 
-def test_cta_leads_to_the_single_form() -> None:
+def test_every_plan_cta_leads_to_the_same_form() -> None:
+    """Uchala tugma ham bitta formaga olib boradi.
+
+    Sahifada bir nechta raqobatlashuvchi harakat bo'lmasin — bu 2026-08-17
+    da hal qilingan muammo edi va uch karta bilan qaytishi oson.
+    """
     js = SITE_JS.read_text(encoding="utf-8")
-    assert 'getElementById("liteCta")' in js
-    assert "goToForm" in js
-    assert "Chaqimchi Lite" in js, "tanlov admin xabarida ko'rinsin"
+    html = SITE_HTML.read_text(encoding="utf-8")
+    assert "data-plan-cta" in js
+    assert js.count("goToForm(") >= 2
+    # Tanlangan tarif yashirin maydonga yoziladi — Boshlang'ichni bosgan
+    # mijoz Biznes obyektini olib qolmasin.
+    assert 'id="plan"' in html
+    assert 'getElementById("plan")' in js
 
 
 def test_buy_button_does_not_promise_a_checkout() -> None:
@@ -97,7 +131,9 @@ def test_pricing_section_has_a_noscript_fallback() -> None:
     html = SITE_HTML.read_text(encoding="utf-8")
     assert "<noscript>" in html
     assert "JavaScript" in html
-    assert "Chaqimchi Lite" in html[html.index("<noscript>") : html.index("</noscript>")]
+    fallback = html[html.index("<noscript>") : html.index("</noscript>")]
+    for plan in ("Boshlang‘ich", "Biznes", "Tarmoq"):
+        assert plan in fallback, plan
 
 
 def test_attendance_is_only_advertised_with_licensed_models() -> None:
@@ -117,8 +153,13 @@ def test_attendance_is_only_advertised_with_licensed_models() -> None:
     )
 
 
-def test_the_page_itself_hardcodes_no_feature_list() -> None:
-    """Funksiyalar ro'yxati serverdan keladi, HTMLda yozilmaydi."""
-    html = SITE_HTML.read_text(encoding="utf-8").lower()
-    assert "issiqlik xaritasi" not in html
-    assert "xodim davomati" not in html
+def test_the_plan_cards_hardcode_no_feature_list() -> None:
+    """Tarif kartalari serverdan keladi, HTMLda yozilmaydi.
+
+    FAQ va noscript bundan mustasno: ular JS ishlamaganda ham
+    o'qilishi kerak bo'lgan matn.
+    """
+    html = SITE_HTML.read_text(encoding="utf-8")
+    grid = html[html.index('id="planGrid"') : html.index("<noscript>")]
+    assert "<li>" not in grid, "punktlar API'dan chizilsin"
+    assert "so‘m" not in grid, "narx HTMLga yozilmasin"

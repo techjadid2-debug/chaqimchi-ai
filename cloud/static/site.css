@@ -95,7 +95,48 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 .hero-trust #heroPrice { border-color: var(--ink); background: var(--ink); color: var(--lime); font-weight: 800; }
 .model-note { max-width: 590px; margin: 24px 0 0; padding-left: 16px; border-left: 3px solid var(--lime); color: var(--muted); font-size: 13px; }
 
-.hero-photo { position: relative; min-height: 500px; overflow: hidden; border-radius: 30px; background: var(--green); box-shadow: var(--shadow); transform: rotate(1.2deg); }.hero-photo img { width: 100%; height: 500px; object-fit: cover; object-position: 65% center; display: block; }.hero-photo-badge { position: absolute; right: 22px; bottom: 22px; display: inline-flex; align-items: center; gap: 9px; padding: 11px 14px; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(19,35,29,.86); color: white; font-size: 12px; font-weight: 750; backdrop-filter: blur(8px); }.hero-photo-badge span { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); }
+/* Izometrik sahna.  Rasm o'rniga SVG: 64 KB fotosurat o'rniga ~8 KB
+   belgilash, va u sahifaning o'z ranglaridan foydalanadi. */
+.scene { position: relative; margin: 0; padding: 0; border-radius: 30px; background: var(--paper-2); box-shadow: var(--shadow); overflow: hidden; }
+.scene svg { display: block; width: 100%; height: auto; }
+.scene-badge { position: absolute; right: 22px; bottom: 22px; display: inline-flex; align-items: center; gap: 9px; padding: 11px 14px; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(19,35,29,.86); color: white; font-size: 12px; font-weight: 750; backdrop-filter: blur(8px); }
+.scene-badge span { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); }
+
+/* Bitta 7 soniyalik hikoya: nur suriladi -> odam aniqlanadi -> Telegram
+   xabari chiqadi.  Faqat `transform` va `opacity` — ikkalasi ham
+   kompozitorda ishlaydi, ya'ni sahifa qayta chizilmaydi va arzon
+   telefonda ham silliq ketadi. */
+#scene-beam { transform-origin: 126px 132px; animation: scene-sweep 7s ease-in-out infinite; }
+#scene-pulse { opacity: 0; transform-origin: 266px 234px; animation: scene-detect 7s ease-in-out infinite; }
+#scene-phone { opacity: 0; animation: scene-notify 7s ease-in-out infinite; }
+#scene-people .person { animation: scene-walk 7s ease-in-out infinite; }
+#scene-people .person:nth-child(2) { animation-delay: -2.4s; }
+#scene-people .person:nth-child(3) { animation-delay: -4.6s; }
+
+@keyframes scene-sweep {
+  0%, 100% { transform: rotate(-5deg); opacity: .2; }
+  45%      { transform: rotate(4deg);  opacity: .34; }
+}
+@keyframes scene-detect {
+  0%, 32%  { opacity: 0; transform: scale(.94); }
+  42%, 88% { opacity: 1; transform: scale(1); }
+  100%     { opacity: 0; transform: scale(1); }
+}
+@keyframes scene-notify {
+  0%, 58%   { opacity: 0; transform: translateY(10px); }
+  70%, 94%  { opacity: 1; transform: translateY(0); }
+  100%      { opacity: 0; transform: translateY(10px); }
+}
+@keyframes scene-walk {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(14px, 7px); }
+}
+
+/* Mahsulot ekranlari — chizilgan illyustratsiya emas, panelning o'zi. */
+.proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+.proof-grid figure { margin: 0; }
+.proof-grid img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); }
+.proof-grid figcaption { margin-top: 10px; color: var(--muted); font-size: 14px; font-weight: 650; }
 
 .control-card { position: relative; padding: 24px; border: 1px solid rgba(255,255,255,.09); border-radius: 30px; background: var(--ink); color: white; box-shadow: var(--shadow); transform: rotate(1.4deg); }
 .control-card::before { content: ""; position: absolute; inset: -70px -85px auto auto; z-index: -1; width: 230px; height: 230px; border-radius: 50%; background: var(--lime); filter: blur(2px); }
@@ -147,7 +188,12 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 .preset-items { display: grid; gap: 6px; margin: 0 0 14px; padding: 0; list-style: none; font-size: 14px; font-weight: 650; }
 .preset-items li::before { content: "✓"; margin-right: 8px; color: var(--orange); font-weight: 900; }
 .preset-cameras { margin: 0 0 14px; color: var(--muted); font-size: 12px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
-.preset-price { margin: auto 0 18px; display: flex; align-items: baseline; gap: 6px; }
+/* Narx sarlavha ostida — HAMMA kartada bir xil balandlikda.  Ilgari
+   `margin-top: auto` turardi va punktlar soni farq qilganda narx
+   kartadan kartaga sakrab ketardi: ko'z ularni solishtira olmasdi.
+   Pastga tortiladigan narsa — tugma. */
+.preset-price { margin: 0 0 18px; display: flex; align-items: baseline; gap: 6px; }
+.preset .button { margin-top: auto; }
 .preset-price b { font-size: 32px; letter-spacing: -.04em; }
 .preset-price span { color: var(--muted); font-size: 14px; }
 .preset .button { width: 100%; }
@@ -230,7 +276,11 @@ footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid
 .download-card h3 { margin: 0 0 10px; font-size: 24px; }
 .download-card p { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
 .code-box { padding: 14px 18px; margin-bottom: 24px; border-radius: 12px; background: var(--ink); color: var(--lime); font-family: monospace; font-size: 13px; word-break: break-all; }
-.download-action { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+/* Hero'da yuklab olish IKKINCHI darajali harakat.  `align-items:
+   flex-start` bo'lmasa ustun to'liq kenglikni egallaydi va
+   ikkinchi darajali tugma asosiysidan kattaroq ko'rinadi — ko'z
+   kattaroq tugmani asosiy deb o'qiydi. */
+.download-action { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .download-action small { color: var(--muted); font-size: 12px; }
 
 /* O'rnatish yo'riqnomasi (/install).
@@ -272,7 +322,7 @@ footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid
   .nav-links { display: none; }.hero { grid-template-columns: 1fr; gap: 42px; }.control-card, .hero-photo { transform: none; }.hero-photo { min-height: 460px; }.hero-photo img { height: 460px; }.facts { grid-template-columns: 1fr 1fr; }.facts div:nth-child(2) { border-right: 0; }.facts div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }.feature-grid { grid-template-columns: 1fr 1fr; }.feature-wide { grid-column: span 2; }.price-card, .pilot, .sales-visual, .store-proof, .config-layout, .paths-grid, .download-grid { grid-template-columns: 1fr; }.feature-sales-grid { grid-template-columns: 1fr 1fr; }.price { text-align: left; }.price-card > .button { justify-self: start; }.pilot { gap: 44px; }.order-summary { position: static; }.install-flow { grid-template-columns: 1fr 18px 1fr; }.install-flow article { min-height: 190px; }.install-flow > i:nth-of-type(2) { display: none; }.section-pad { padding-top: 80px; padding-bottom: 80px; }
 }
 @media (max-width: 620px) {
-  body { padding-bottom: 74px; }.nav { min-height: 66px; }.nav-actions .text-link { display: none; }.nav-actions { gap: 8px; }.brand { gap: 8px; font-size: 15px; }.brand-mark { width: 34px; height: 34px; border-radius: 8px; }.section-pad { padding-left: 18px; padding-right: 18px; }.hero { min-height: auto; padding-top: 54px; }.hero h1 { font-size: clamp(48px, 14vw, 65px); }.hero-photo { min-height: 330px; border-radius: 22px; }.hero-photo img { height: 330px; object-position: 62% center; }.hero-photo-badge { right: 14px; bottom: 14px; font-size: 11px; }.hero-text { font-size: 17px; }.hero-actions .button { width: 100%; }.text-cta { justify-content: center; width: 100%; }.hero-trust { gap: 6px; }.hero-trust span { font-size: 11px; }.facts { margin: 0 18px; }.facts div { padding: 24px 16px; }.facts strong { font-size: 24px; }.feature-grid, .faq-grid, .feature-sales-grid, .install-flow { grid-template-columns: 1fr; }.feature-wide { grid-column: auto; }.feature { min-height: 260px; }.price-card { padding: 28px; }.price-card ul { grid-template-columns: 1fr; }.lead-form, .config-form { padding: 22px; }.field-half { grid-column: span 2; }.steps li { grid-template-columns: 48px 1fr; }.connect-form { grid-template-columns: 1fr; } footer { grid-template-columns: 1fr; } footer > div { flex-wrap: wrap; }.purchase-fields { grid-template-columns: 1fr; }.purchase-fields .consent { grid-column: auto; }.preset-grid { grid-template-columns: 1fr; }.feature-choice { grid-template-columns: 1fr auto; }.feature-head { grid-column: 1 / -1; }.feature-sum { min-width: 0; }.summary-install { display: none; }
+  body { padding-bottom: 74px; }.nav { min-height: 66px; }.nav-actions .text-link { display: none; }.nav-actions { gap: 8px; }.brand { gap: 8px; font-size: 15px; }.brand-mark { width: 34px; height: 34px; border-radius: 8px; }.section-pad { padding-left: 18px; padding-right: 18px; }.hero { min-height: auto; padding-top: 54px; }.hero h1 { font-size: clamp(48px, 14vw, 65px); }.scene { border-radius: 22px; }.scene-badge { right: 14px; bottom: 14px; font-size: 11px; }.proof-grid { grid-template-columns: 1fr; }.hero-text { font-size: 17px; }.hero-actions .button { width: 100%; }.text-cta { justify-content: center; width: 100%; }.hero-trust { gap: 6px; }.hero-trust span { font-size: 11px; }.facts { margin: 0 18px; }.facts div { padding: 24px 16px; }.facts strong { font-size: 24px; }.feature-grid, .faq-grid, .feature-sales-grid, .install-flow { grid-template-columns: 1fr; }.feature-wide { grid-column: auto; }.feature { min-height: 260px; }.price-card { padding: 28px; }.price-card ul { grid-template-columns: 1fr; }.lead-form, .config-form { padding: 22px; }.field-half { grid-column: span 2; }.steps li { grid-template-columns: 48px 1fr; }.connect-form { grid-template-columns: 1fr; } footer { grid-template-columns: 1fr; } footer > div { flex-wrap: wrap; }.purchase-fields { grid-template-columns: 1fr; }.purchase-fields .consent { grid-column: auto; }.preset-grid { grid-template-columns: 1fr; }.preset-featured { order: -1; }.feature-choice { grid-template-columns: 1fr auto; }.feature-head { grid-column: 1 / -1; }.feature-sum { min-width: 0; }.summary-install { display: none; }
   /* Narx paneli: mijoz funksiya tanlayotganda summani ko'rib turishi kerak.
      Telegram tugmasi shu paytda yashiriladi (JS `is-hidden` qo'yadi). */
   .sticky-price { position: fixed; right: 12px; bottom: 12px; left: 12px; z-index: 31; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px 12px 18px; border-radius: 18px; background: var(--ink); color: white; box-shadow: 0 14px 32px rgba(19,35,29,.3); }
@@ -282,4 +332,14 @@ footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid
   .mobile-lead-cta.is-hidden { display: none; }
 .install-flow > i { display: none; }.guide-step { padding: 20px 18px 18px 20px; }.guide-step::before { position: static; margin-bottom: 12px; }.mobile-lead-cta { position: fixed; right: 16px; bottom: 12px; left: 16px; z-index: 30; display: flex; min-height: 52px; align-items: center; justify-content: center; border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: white; box-shadow: 0 12px 28px rgba(19,35,29,.24); font-size: 14px; font-weight: 750; text-decoration: none; }
 }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+/* Harakatni o'chirgan foydalanuvchi uchun.
+   `animation` ham qo'shildi: ilgari faqat `transition` to'xtardi va
+   hero sahnasi baribir harakatlanib turardi.  Sahna esa oxirgi kadrda
+   emas, TUSHUNARLI holatda qolishi kerak — nur ko'rinadi, aniqlash
+   ramkasi turibdi, Telegram kartasi joyida.  Aks holda "harakatsiz"
+   foydalanuvchi yarim chizilgan rasm ko'rardi. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation: none !important; }
+  #scene-beam, #scene-pulse, #scene-phone { opacity: 1; transform: none; }
+}

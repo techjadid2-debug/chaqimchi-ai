@@ -330,6 +330,30 @@
           </div>
         </div>
 
+        <!-- Oylik xulosa.  Kunlik jadval "kim keldi" savoliga javob
+             beradi, bu esa "kim kechikyapti va bu qancha vaqt" degan
+             savolga — do'kon egasi oy oxirida aynan shuni so'raydi.
+             Kunma-kun 30 qatorni qo'lda qo'shib chiqmasin. -->
+        <div class="card">
+          <div class="card-head">
+            <h2>Oylik smena hisoboti</h2>
+            <div class="actions" style="margin:0">
+              <input type="month" id="shiftMonth" style="width:auto">
+              <button class="button ghost small" id="shiftCsvBtn" type="button">CSV</button>
+            </div>
+          </div>
+          <p class="hint" id="shiftHint" style="margin-top:0"></p>
+          <div class="scroll-x">
+            <table class="events">
+              <thead><tr>
+                <th>Xodim</th><th>Ish kuni</th><th>Kelmadi</th>
+                <th>Kechikdi</th><th>Jami kechikish</th>
+              </tr></thead>
+              <tbody id="shiftRows"></tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Kamera tanlanmasa qurilma yuz kadri umuman yubormaydi —
              shuning uchun bu karta ro'yxatdan keyin darrov turadi. -->
         <div class="card">
@@ -1516,6 +1540,44 @@
     }
   }
 
+  /* Oylik smena hisoboti -------------------------------------------------- */
+
+  function shiftMonthValue() {
+    const chosen = $("shiftMonth").value;
+    return chosen || shopDate().slice(0, 7);
+  }
+
+  function lateLabel(minutes) {
+    const total = Number(minutes) || 0;
+    if (!total) return "—";
+    const hours = Math.floor(total / 60);
+    return hours ? `${hours}s ${String(total % 60).padStart(2, "0")}d` : `${total} daq`;
+  }
+
+  async function loadShiftTable() {
+    const month = shiftMonthValue();
+    try {
+      const report = await api(`/api/v1/owner/shifts?month=${encodeURIComponent(month)}`);
+      const total = report.jami || {};
+      $("shiftHint").textContent = total.kechikish_daq || total.kelmagan_kunlar
+        ? `Jami kechikish ${lateLabel(total.kechikish_daq)} · kelmagan kunlar ${total.kelmagan_kunlar || 0}`
+        : "Bu oyda kechikish ham, kelmagan kun ham yo‘q.";
+      const rows = (report.rows || []).map((row) => `
+        <tr>
+          <td>${esc(row.employee_name)}</td>
+          <td>${Number(row.ish_kunlari) || 0}</td>
+          <td>${Number(row.kelmagan_kunlar) || 0}</td>
+          <td>${Number(row.kechikkan_kunlar) || 0}</td>
+          <td>${esc(lateLabel(row.jami_kechikish_daq))}</td>
+        </tr>`).join("");
+      $("shiftRows").innerHTML = rows ||
+        '<tr><td colspan="5" class="hint">Bu oyda qayd yo‘q.</td></tr>';
+    } catch (error) {
+      $("shiftRows").innerHTML =
+        `<tr><td colspan="5" class="hint">${esc(error.message)}</td></tr>`;
+    }
+  }
+
   /* Davomat kamerasi ----------------------------------------------------- */
 
   const ATTENDANCE_ROLES = [
@@ -1859,6 +1921,7 @@
         drawStaff(S.staff.data);
         drawAttendanceCameras();
         loadAttendanceTable();
+        loadShiftTable();
         loadFaceGallery();
       } else cardError("staffList", S.staff, "staff");
     }
@@ -1959,6 +2022,25 @@
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
       note("attendanceHint", "warn", err.message);
+    }
+  });
+  $("shiftMonth").addEventListener("change", loadShiftTable);
+  $("shiftCsvBtn").addEventListener("click", async () => {
+    const month = shiftMonthValue();
+    try {
+      const response = await fetch(
+        `/api/v1/owner/shifts.csv?month=${encodeURIComponent(month)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) throw new Error("CSV olinmadi");
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `smena-hisoboti-${month}.csv`;
+      link.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      note("shiftHint", "warn", err.message);
     }
   });
   $("saveConfigBtn").addEventListener("click", saveConfig);

@@ -4287,6 +4287,91 @@ def _attendance_dates(start: Optional[str], end: Optional[str]) -> tuple[date_ty
     return parsed_start, parsed_end
 
 
+def _month_range(month: Optional[str]) -> tuple[date_type, date_type]:
+    """`YYYY-MM` → oyning birinchi va oxirgi kuni.
+
+    Oxirgi kun kalendar bo'yicha: 30/31 ni qo'lda yozish shubhasiz
+    fevralda buzilardi.
+    """
+    today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    if not month:
+        first = today.replace(day=1)
+    else:
+        try:
+            year, mon = month.split("-")
+            first = date_type(int(year), int(mon), 1)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, "Oy YYYY-MM ko'rinishida bo'lishi kerak") from exc
+    next_month = first.replace(day=28) + timedelta(days=4)
+    last = next_month - timedelta(days=next_month.day)
+    # Kelajakdagi kunlar hisobotni buzadi: jadval bor, kelish yo'q —
+    # hammasi "kelmagan" bo'lib chiqardi.
+    return first, min(last, today)
+
+
+@app.get("/api/v1/owner/shifts")
+async def owner_shifts(
+    month: Optional[str] = None,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Oylik smena hisoboti: kim qancha kechikdi, necha kun kelmadi."""
+    require_attendance()
+    first, last = _month_range(month)
+    return get_event_store().shift_summary(owner.site_id, start=first, end=last)
+
+
+@app.get("/api/v1/owner/shifts.csv")
+async def owner_shifts_csv(
+    month: Optional[str] = None,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Response:
+    require_attendance()
+    first, last = _month_range(month)
+    report = get_event_store().shift_summary(owner.site_id, start=first, end=last)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "xodim",
+            "tashqi_id",
+            "ish_kunlari",
+            "kelgan_kunlar",
+            "kelmagan_kunlar",
+            "kechikkan_kunlar",
+            "jami_kechikish_daq",
+            "ortacha_kechikish_daq",
+            "erta_ketgan_kunlar",
+            "jami_erta_ketish_daq",
+            "chiqish_aniqlanmadi",
+        ]
+    )
+    for row in report["rows"]:
+        writer.writerow(
+            [
+                row["employee_name"],
+                row.get("external_id") or "",
+                row["ish_kunlari"],
+                row["kelgan_kunlar"],
+                row["kelmagan_kunlar"],
+                row["kechikkan_kunlar"],
+                row["jami_kechikish_daq"],
+                row["ortacha_kechikish_daq"],
+                row["erta_ketgan_kunlar"],
+                row["jami_erta_ketish_daq"],
+                row["chiqish_aniqlanmadi"],
+            ]
+        )
+    return Response(
+        # BOM: Windows'dagi Excel usiz UTF-8 ni tanimaydi va o'zbekcha
+        # harflar krakozyabra bo'lib ochiladi.  Kunlik CSV'da ham shunday.
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="smena-hisoboti-{first:%Y-%m}.csv"'
+        },
+    )
+
+
 @app.get("/api/v1/owner/attendance")
 async def owner_attendance(
     start: Optional[str] = None,

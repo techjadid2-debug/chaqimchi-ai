@@ -1896,6 +1896,87 @@ class EventStore:
             "rows": rows,
         }
 
+    def shift_summary(
+        self,
+        site_id: str,
+        *,
+        start: date,
+        end: date,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Oylik smena hisoboti — xodim kesimida.
+
+        Kunlik jadval allaqachon bor (`attendance_report`), lekin do'kon
+        egasining savoli boshqacha: "kim qancha kechikdi va bu menga
+        necha pulga tushdi".  Kunma-kun 30 qatorni ko'zdan kechirib
+        chiqib, uni qo'lda qo'shib hisoblash — hech kim qilmaydigan ish.
+
+        Hisob `attendance_report` ustiga quriladi, chunki kechikish
+        daqiqalari faqat o'sha yerda jadval bilan solishtirib
+        aniqlanadi.  Kunlik natijalar `attendance_daily` ga keshlanadi,
+        ya'ni ikkinchi chaqiruv qimmat emas.
+        """
+        report = self.attendance_report(site_id, start=start, end=end, now=now)
+        people: Dict[str, Dict[str, Any]] = {}
+        for row in report["rows"]:
+            item = people.setdefault(
+                str(row["employee_id"]),
+                {
+                    "employee_id": row["employee_id"],
+                    "employee_name": row["employee_name"],
+                    "external_id": row.get("external_id"),
+                    "ish_kunlari": 0,
+                    "kelgan_kunlar": 0,
+                    "kelmagan_kunlar": 0,
+                    "kechikkan_kunlar": 0,
+                    "jami_kechikish_daq": 0,
+                    "erta_ketgan_kunlar": 0,
+                    "jami_erta_ketish_daq": 0,
+                    "chiqish_aniqlanmadi": 0,
+                },
+            )
+            # `unscheduled` — jadvalda yo'q kun (dam olish).  U "ish
+            # kuni" ham, "kelmagan kun" ham emas: aks holda haftada ikki
+            # kun dam oladigan xodim eng yomon ko'rsatkichga chiqib
+            # qolardi.
+            if row["status"] in {"present", "late", "absent", "early_leave"}:
+                item["ish_kunlari"] += 1
+            if row.get("first_seen"):
+                item["kelgan_kunlar"] += 1
+            if row["status"] == "absent":
+                item["kelmagan_kunlar"] += 1
+            if row["late_minutes"]:
+                item["kechikkan_kunlar"] += 1
+                item["jami_kechikish_daq"] += int(row["late_minutes"])
+            if row["early_leave_minutes"]:
+                item["erta_ketgan_kunlar"] += 1
+                item["jami_erta_ketish_daq"] += int(row["early_leave_minutes"])
+            if row["checkout_missing"]:
+                item["chiqish_aniqlanmadi"] += 1
+
+        rows = []
+        for item in people.values():
+            kechikkan = item["kechikkan_kunlar"]
+            item["ortacha_kechikish_daq"] = (
+                round(item["jami_kechikish_daq"] / kechikkan, 1) if kechikkan else 0.0
+            )
+            rows.append(item)
+        # Eng ko'p kechikkan tepada — hisobot aynan shu savolga javob
+        # beradi va do'kon egasi pastga qarab qidirmasin.
+        rows.sort(key=lambda item: (-item["jami_kechikish_daq"], item["employee_name"]))
+
+        return {
+            "from": start.isoformat(),
+            "to": end.isoformat(),
+            "employees": len(rows),
+            "jami": {
+                "kechikish_daq": sum(item["jami_kechikish_daq"] for item in rows),
+                "kelmagan_kunlar": sum(item["kelmagan_kunlar"] for item in rows),
+                "erta_ketish_daq": sum(item["jami_erta_ketish_daq"] for item in rows),
+            },
+            "rows": rows,
+        }
+
     def _employee_events_of_day(
         self, site_id: str, day: date, zone: ZoneInfo
     ) -> Dict[str, List[Tuple[datetime, str]]]:

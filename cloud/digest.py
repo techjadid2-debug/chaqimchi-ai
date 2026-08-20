@@ -1,9 +1,11 @@
 """Owner va managerlarga Asia/Tashkent bo'yicha Telegram hisobotlar.
 
-Ikki xil hisobot:
+Uch xil hisobot:
 - **Kunlik** — har kuni kechqurun (standart 21:00): bugungi raqamlar.
 - **Haftalik** — dushanba ertalab (09:00): o'tgan hafta xulosasi,
   kunlar grafigi, taqqos va kamera uptime.
+- **Oylik smena** — oyning 1-kuni (10:00): o'tgan oyda kim qancha
+  kechikdi va necha kun kelmadi.  Faqat davomat yoqilgan do'konda.
 
 Uslub `cloud/botfmt.py`da — bot xabarlari bir xil ko'rinishda bo'lsin.
 """
@@ -24,6 +26,12 @@ logger = logging.getLogger(__name__)
 #: Haftalik hisobot yuboriladigan kun (0 = dushanba) va soat.
 WEEKLY_WEEKDAY = 0
 WEEKLY_HOUR = 9
+
+#: Oylik smena hisoboti: oyning 1-kuni, haftalikdan KEYIN.
+#: 1-yanvar dushanbaga to'g'ri kelsa ikkala xabar bir kunda ketadi —
+#: bu normal, ular boshqa savolga javob beradi.
+MONTHLY_DAY = 1
+MONTHLY_HOUR = 10
 
 
 def _duration(seconds: float) -> str:
@@ -134,6 +142,45 @@ def _minutes(clock_value: str) -> int:
         return 0
 
 
+def build_shifts(site_name: str, month_label: str, summary: Dict[str, Any]) -> str:
+    """Oylik smena xulosasi.
+
+    Kunlik davomat jadvalini hech kim oxirigacha o'qimaydi.  Oy yakunida
+    bitta savol qoladi: kim kechikyapti va bu qancha vaqtga tushdi.
+
+    Ismlar ATAYLAB ko'rsatiladi — bu xabar do'kon egasiga boradi va
+    aynan shu ma'lumot uchun kerak.  Lekin faqat uchtasi: to'liq
+    ro'yxat xabarni o'qib bo'lmaydigan qiladi, u panelda turadi.
+    """
+    total = summary.get("jami") or {}
+    late_minutes = int(total.get("kechikish_daq") or 0)
+    lines = [
+        f"🗓 {botfmt.header(site_name)} — {botfmt.escape(month_label)} smena hisoboti",
+        "",
+    ]
+    if not late_minutes and not total.get("kelmagan_kunlar"):
+        lines.append("✅ Kechikish ham, kelmagan kun ham yo'q.")
+        return "\n".join(lines)
+
+    hours, minutes = divmod(late_minutes, 60)
+    total_label = f"{hours} soat {minutes} daq" if hours else f"{minutes} daq"
+    lines.append(f"⏰ Jami kechikish: <b>{botfmt.escape(total_label)}</b>")
+    if total.get("kelmagan_kunlar"):
+        lines.append(f"🚫 Kelmagan kunlar: <b>{total['kelmagan_kunlar']}</b>")
+
+    top = [row for row in (summary.get("rows") or []) if row.get("jami_kechikish_daq")][:3]
+    if top:
+        lines.append("")
+        for row in top:
+            lines.append(
+                f"• {botfmt.escape(row['employee_name'])} — "
+                f"{row['kechikkan_kunlar']} kun, {row['jami_kechikish_daq']} daq"
+            )
+    lines.append("")
+    lines.append("To'liq jadval va CSV — mijoz panelidagi «Xodimlar» bo'limida.")
+    return "\n".join(lines)
+
+
 def build_weekly(
     site_name: str,
     *,
@@ -224,6 +271,7 @@ class DailyDigestService:
             now = now.replace(tzinfo=ZoneInfo("Asia/Tashkent"))
         sent = 0
         sent += await self._weekly_once(now)
+        sent += await self._monthly_shifts_once(now)
         if now.hour < self.hour:
             return sent
         digest_date = now.date().isoformat()
@@ -305,6 +353,43 @@ class DailyDigestService:
                 queue_longest=queue_longest,
                 uptime_percent=uptime,
             )
+            site_sent = await self._deliver(site_id, members, text)
+            if site_sent:
+                self.events.mark_digest_sent(site_id, marker)
+                sent += site_sent
+        return sent
+
+    async def _monthly_shifts_once(self, now: datetime) -> int:
+        """Oyning 1-kuni — o'tgan oyning smena hisoboti.
+
+        Belgilash mavjud `daily_digests` jadvalida `2026-07-smena`
+        ko'rinishida: yangi jadval kerak emas va qayta yuborilmaydi.
+
+        Davomat o'chirilgan yoki xodimi yo'q do'konga xabar KETMAYDI —
+        bo'sh hisobot shovqin.
+        """
+        if now.day != MONTHLY_DAY or now.hour < MONTHLY_HOUR:
+            return 0
+        last_day = now.date().replace(day=1) - timedelta(days=1)
+        first_day = last_day.replace(day=1)
+        marker = f"{first_day:%Y-%m}-smena"
+        sent = 0
+        for site in self.sites():
+            site_id = str(site["id"])
+            members = self.events.list_members(site_id)
+            if not members:
+                continue
+            if self.events.digest_was_sent(site_id, marker):
+                continue
+            try:
+                summary = self.events.shift_summary(site_id, start=first_day, end=last_day)
+            except Exception:
+                logger.warning("Smena hisoboti hisoblanmadi: site=%s", site_id, exc_info=True)
+                continue
+            if not summary.get("employees"):
+                self.events.mark_digest_sent(site_id, marker)
+                continue
+            text = build_shifts(str(site["name"]), f"{first_day:%Y-%m}", summary)
             site_sent = await self._deliver(site_id, members, text)
             if site_sent:
                 self.events.mark_digest_sent(site_id, marker)

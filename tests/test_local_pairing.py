@@ -343,3 +343,97 @@ def test_default_cloud_url_prefills_the_wizard(
     """Mijoz server manzilini yodda tutmaydi va yozmasligi kerak."""
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
     assert client.get("/api/setup/cloud-status").json()["default_cloud_url"] == CLOUD
+
+
+# ── Avtomatik ulanish xatosi mijozga aytiladi ───────────────────────────
+#
+# Bungacha xato faqat log faylida qolardi.  Mijoz o'rnatib bo'lgach
+# "ulandi" deb o'ylab qolardi, cloud panelida esa hech narsa paydo
+# bo'lmasdi.  Eng ko'p uchraydigan sabab — kod 48 soatda eskirishi:
+# fayl bugun yuklab olinib, ertaga o'rnatiladi.
+
+
+def test_expired_code_is_reported_to_the_customer(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setattr(
+        "chaqimchi_ai.local.cloud_link.httpx.post",
+        lambda *a, **k: _FakeResponse(400, {"detail": "Pairing kod topilmadi"}),
+    )
+    _handoff(tmp_path, "A1B2C3")
+
+    assert cloud_link.auto_pair() is None
+
+    failure = client.get("/api/setup/cloud-status").json()["auto_pair_error"]
+    assert failure, "sehrgar sababini ko'rsatishi kerak"
+    assert "muddati o'tgan" in failure["reason"]
+    assert failure["retryable"] is False, "yangi kod kerak — kutish yordam bermaydi"
+
+
+def test_a_network_outage_is_marked_as_temporary(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Internet yo'qligi va eskirgan kod — bir xil emas: birinchisida
+    mijoz hech narsa qilmasligi kerak."""
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+
+    def _boom(*args, **kwargs):
+        raise httpx.ConnectError("tarmoq yo'q")
+
+    monkeypatch.setattr("chaqimchi_ai.local.cloud_link.httpx.post", _boom)
+    _handoff(tmp_path, "A1B2C3")
+
+    assert cloud_link.auto_pair() is None
+    failure = client.get("/api/setup/cloud-status").json()["auto_pair_error"]
+    assert failure["retryable"] is True
+
+
+def test_the_error_disappears_after_a_successful_pairing(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    cloud_link.record_auto_pair_error("eski xato", retryable=False)
+    monkeypatch.setattr(
+        "chaqimchi_ai.local.cloud_link.httpx.post",
+        lambda *a, **k: _FakeResponse(
+            200, {"site_id": "s1", "device_id": "d1", "device_token": "t1"}
+        ),
+    )
+
+    cloud_link.claim("A1B2C3", CLOUD)
+
+    assert cloud_link.auto_pair_error() is None
+    assert client.get("/api/setup/cloud-status").json()["auto_pair_error"] is None
+
+
+def test_a_package_without_a_cloud_address_says_so(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CI bir marta cloud manzilisiz reliz chiqargan.  Bunday paket
+    tushgan mijoz hech bo'lmasa sababini bilsin."""
+    from chaqimchi_ai.local import cloud_link
+
+    monkeypatch.delenv("CHAQIMCHI_DEFAULT_CLOUD_URL", raising=False)
+    _handoff(tmp_path, "A1B2C3")
+
+    assert cloud_link.auto_pair() is None
+    failure = client.get("/api/setup/cloud-status").json()["auto_pair_error"]
+    assert failure and "cloud manzili yo'q" in failure["reason"]
+
+
+def test_the_wizard_shows_the_reason_above_the_form() -> None:
+    """Xato formadan yuqorida bo'lsin: mijoz avval nima bo'lganini
+    o'qisin, keyin kodni qo'lda kiritsin."""
+    static = Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "static"
+    html = (static / "setup.html").read_text(encoding="utf-8")
+    js = (static / "setup.js").read_text(encoding="utf-8")
+    assert 'id="pairAutoError"' in html
+    assert html.index('id="pairAutoError"') < html.index('id="cloudForm"')
+    assert "auto_pair_error" in js

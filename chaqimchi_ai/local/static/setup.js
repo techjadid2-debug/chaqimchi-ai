@@ -838,6 +838,30 @@
       const link = $("cloudOwnerLink");
       link.href = state.owner_url || "#";
       link.textContent = state.owner_url || "";
+      clearNote("pairAutoError");
+      return;
+    }
+    // Avtomatik ulanish urinib ko'rilgan va bajarilmagan bo'lsa — sababini
+    // AYTAMIZ.  Bungacha xato faqat log faylida qolardi: mijoz o'rnatib
+    // bo'lgach "ulandi" deb o'ylab qolardi, cloud panelida esa hech narsa
+    // paydo bo'lmasdi.  Eng ko'p uchraydigan sabab — kod 48 soatda
+    // eskirishi (fayl bugun yuklab olinib, ertaga o'rnatiladi).
+    const failure = state.auto_pair_error;
+    if (failure && failure.reason) {
+      note(
+        "pairAutoError",
+        failure.retryable ? "warn" : "err",
+        failure.retryable
+          ? "Avtomatik ulanish hozircha bajarilmadi."
+          : "Avtomatik ulanish bajarilmadi.",
+        " " +
+          failure.reason +
+          (failure.retryable
+            ? " Internet tiklangach dastur o'zi qayta urinib ko'radi."
+            : " Yangi kodni quyidagi maydonga qo'lda kiriting yoki bizga yozing: +998 93 222 50 70.")
+      );
+    } else {
+      clearNote("pairAutoError");
     }
   }
 

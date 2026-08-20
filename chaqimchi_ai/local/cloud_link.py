@@ -17,11 +17,13 @@ va uning maydonlari bir xil — cloud ikkalasini ham farq qilmaydi.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import platform
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
@@ -41,7 +43,17 @@ TIMEOUT_SEC = 20
 
 
 class PairingError(Exception):
-    """Mijozga ko'rsatiladigan, tuzatib bo'ladigan xato."""
+    """Mijozga ko'rsatiladigan, tuzatib bo'ladigan xato.
+
+    `retryable` — vaqtinchalik muammomi (internet yo'q, server javob
+    bermadi) yoki qat'iymi (kod eskirgan, allaqachon ishlatilgan).
+    Sehrgar ikkalasini boshqacha ko'rsatadi: birinchisida "biroz kuting",
+    ikkinchisida "yangi kod kerak".
+    """
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 @dataclass(frozen=True)
@@ -124,7 +136,8 @@ def claim(code: str, cloud_url: str) -> PairedSite:
     except httpx.HTTPError as exc:
         logger.warning("Cloud bilan ulanish xatosi: %s", exc)
         raise PairingError(
-            "Cloud serverga ulanib bo'lmadi. Internetni tekshiring va qayta urinib ko'ring."
+            "Cloud serverga ulanib bo'lmadi. Internetni tekshiring va qayta urinib ko'ring.",
+            retryable=True,
         ) from exc
 
     if response.status_code == 400:
@@ -134,7 +147,11 @@ def claim(code: str, cloud_url: str) -> PairedSite:
         )
     if response.status_code >= 400:
         logger.warning("Claim rad etildi: %s %s", response.status_code, response.text[:200])
-        raise PairingError(f"Cloud so'rovni rad etdi (kod {response.status_code}).")
+        # 5xx — serverdagi vaqtinchalik muammo, kod aybdor emas.
+        raise PairingError(
+            f"Cloud so'rovni rad etdi (kod {response.status_code}).",
+            retryable=response.status_code >= 500,
+        )
 
     try:
         device = response.json()
@@ -154,6 +171,7 @@ def claim(code: str, cloud_url: str) -> PairedSite:
             "device_token": device_token,
         },
     )
+    clear_auto_pair_error()
     logger.info("Cloudga ulandi: site=%s device=%s", site_id, device_id)
     return PairedSite(site_id=site_id, device_id=device_id, cloud_url=safe_url)
 
@@ -162,6 +180,58 @@ def claim(code: str, cloud_url: str) -> PairedSite:
 #: Dastur birinchi ishga tushishda uni o'qiydi va **o'chiradi**: kod bir
 #: martalik, diskda qolib ketishining ma'nosi yo'q.
 PAIRING_HANDOFF = "pairing.txt"
+
+#: Avtomatik ulanish xatosi shu faylda qoladi va sehrgarda ko'rinadi.
+#:
+#: Bungacha xato faqat log'ga yozilardi: mijoz o'rnatib bo'lgach "ulandi"
+#: deb o'ylab qolardi, cloud panelida esa hech narsa paydo bo'lmasdi.
+#: Eng ko'p uchraydigan sabab — kod 48 soatda eskirishi (mijoz faylni
+#: bugun yuklab, ertaga o'rnatadi).
+PAIRING_ERROR_FILE = "pairing-error.json"
+
+
+def _error_path():
+    from chaqimchi_ai.local import paths
+
+    return paths.data_dir() / PAIRING_ERROR_FILE
+
+
+def record_auto_pair_error(reason: str, *, retryable: bool) -> None:
+    try:
+        _error_path().write_text(
+            json.dumps(
+                {
+                    "reason": reason,
+                    "retryable": retryable,
+                    "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except OSError:  # pragma: no cover - diskka yozib bo'lmasa ham ishlash davom etsin
+        logger.warning("Ulanish xatosi yozilmadi", exc_info=True)
+
+
+def clear_auto_pair_error() -> None:
+    try:
+        _error_path().unlink(missing_ok=True)
+    except OSError:  # pragma: no cover
+        pass
+
+
+def auto_pair_error() -> Optional[Dict[str, Any]]:
+    """Oxirgi avtomatik ulanish xatosi (bo'lsa)."""
+    path = _error_path()
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not data.get("reason"):
+        return None
+    return data
 
 
 def default_cloud_url() -> str:
@@ -192,6 +262,7 @@ def auto_pair() -> Optional[PairedSite]:
         return None
     if status()["connected"]:
         handoff.unlink(missing_ok=True)
+        clear_auto_pair_error()
         return None
 
     try:
@@ -202,6 +273,11 @@ def auto_pair() -> Optional[PairedSite]:
     cloud_url = default_cloud_url()
     if not cloud_url:
         logger.info("Avtomatik ulanish o'tkazildi: cloud manzili sozlanmagan")
+        record_auto_pair_error(
+            "Bu paketda cloud manzili yo'q — dastur qaysi serverga ulanishini bilmaydi. "
+            "Yangi o'rnatuvchini saytdan yuklab oling.",
+            retryable=False,
+        )
         return None
 
     try:
@@ -209,7 +285,10 @@ def auto_pair() -> Optional[PairedSite]:
     except PairingError as exc:
         logger.info("Avtomatik ulanish bajarilmadi (%s) — sehrgar kodni so'raydi", exc)
         # Faylni **qoldiramiz**: internet hali yo'q bo'lishi mumkin,
-        # keyingi ishga tushishda qayta urinib ko'ramiz.
+        # keyingi ishga tushishda qayta urinib ko'ramiz.  Sababni esa
+        # sehrgar ko'rsatadi — bungacha u faqat log'da qolardi va mijoz
+        # "ulandi" deb o'ylab yurardi.
+        record_auto_pair_error(str(exc), retryable=getattr(exc, "retryable", False))
         return None
 
     handoff.unlink(missing_ok=True)
@@ -248,6 +327,8 @@ def status() -> Dict[str, Any]:
         "site_id": raw.get("site_id") if connected else None,
         "owner_url": f"{raw.get('url')}/owner" if connected else None,
         "app_version": __version__,
+        # Ulanmagan bo'lsa — nega ulanmagani.  Sehrgar shuni ko'rsatadi.
+        "auto_pair_error": None if connected else auto_pair_error(),
     }
 
 

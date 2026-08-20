@@ -1,6 +1,6 @@
 [project]
 name = "chaqimchi-ai"
-version = "0.6.6"
+version = "0.6.7"
 description = "8-camera edge analytics, face recognition and production cloud"
 readme = "README.md"
 # 3.12 — rasmiy qo'llab-quvvatlanadigan versiya (Docker va CI shu).

@@ -75,10 +75,30 @@ bo‘lib chiqadi.
 | Biometrika | embedding Fernet bilan shifrlanadi; xodim ro‘yxatdan
 chiqarilsa rasm ham, embedding ham o‘chadi; yuz kadri 14 kun yashaydi |
 
-**Sotuvdan oldin hal qilinadigan band:** hozirgi model (`buffalo_l`) —
-tadqiqot litsenziyasida. Funksiya tekin ekan bu qabul qilingan xavf;
-pullik qilishdan oldin tijoratga ruxsat etilgan modelga o‘tish shart
-(kod bitta joyda — `cloud/faces.py`).
+**Litsenziya bandi YOPILDI (2026-08-21).** Modellar OpenVINO Open Model
+Zoo'ga ko'chirildi va uchalasi ham **Apache-2.0** — tijoratga ochiq:
+
+| Vazifa | Model | Kirish → chiqish |
+|---|---|---|
+| Yuzni topish | `face-detection-retail-0005` | 300×300 BGR → SSD |
+| Tayanch nuqta | `landmarks-regression-retail-0009` | 48×48 BGR → 5 nuqta |
+| Embedding | `face-reidentification-retail-0095` | 128×128 BGR → **256** |
+
+URL va sha256 — `models/faces_manifest.json`; o'rnatish —
+`scripts/fetch_face_models.py`.  Litsenziya endi env sozlamasi emas,
+koddagi fakt (`cloud/faces.py: MODELS_LICENSED_FOR_COMMERCIAL_USE`) —
+ilgari `CHAQIMCHI_FACE_MODEL_LICENSED` bayrog'ini noto'g'ri qo'yish
+tadqiqot modelini "tijoriy" qilib ko'rsatib qo'yardi.
+
+**Bir martalik migratsiya:** yangi model 256 o'lchamli vektor beradi,
+eskisi 512 — mavjud xodim rasmlari qayta hisoblanishi shart
+(`scripts/reembed_faces.py`).  Hisoblanmagan yozuv moslashga umuman
+qo'shilmaydi; log ogohlantiradi.
+
+**Chegara:** standart 0.6 (`CHAQIMCHI_FACE_MATCH_THRESHOLD`).  Sinovda
+boshqa odam 0.01, bir xil odam buzilgan rasmda 0.67–0.98.  Haqiqiy
+do'kon kadrlarida qayta o'lchash —
+`scripts/calibrate_face_threshold.py`.
 
 ## Qabul mezoni
 

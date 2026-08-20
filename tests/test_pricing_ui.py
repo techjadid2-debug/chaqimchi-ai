@@ -100,8 +100,25 @@ def test_pricing_section_has_a_noscript_fallback() -> None:
     assert "Chaqimchi Lite" in html[html.index("<noscript>") : html.index("</noscript>")]
 
 
-def test_attendance_is_not_advertised() -> None:
-    """Davomat (Face ID) arxivlangan — sotuv sahifasi uni taklif qilmasin."""
+def test_attendance_is_only_advertised_with_licensed_models() -> None:
+    """Davomatni sotish faqat tijoratga ochiq model bilan.
+
+    Bu tekshiruv `buffalo_l` (tadqiqot litsenziyasi) sababli qurilgan
+    edi va "hech qachon eslatilmasin" degan ma'noda edi.  Modellar
+    Apache-2.0 ga o'tkazilgach taqiq o'rinsiz — lekin BOG'LIQLIK
+    qolishi kerak: litsenziya orqaga qaytsa, sotuv matni ham qaytsin.
+    """
+    from chaqimchi_ai.licensing.plans import PLANS
+    from cloud import faces
+
+    mentions = any("davomat" in item.lower() for item in PLANS["biznes"].includes)
+    assert mentions is faces.MODELS_LICENSED_FOR_COMMERCIAL_USE, (
+        "Tarif kartasidagi davomat va model litsenziyasi bir-biriga bog'liq bo'lishi kerak"
+    )
+
+
+def test_the_page_itself_hardcodes_no_feature_list() -> None:
+    """Funksiyalar ro'yxati serverdan keladi, HTMLda yozilmaydi."""
     html = SITE_HTML.read_text(encoding="utf-8").lower()
-    assert "davomat" not in html
-    assert "face id" not in html
+    assert "issiqlik xaritasi" not in html
+    assert "xodim davomati" not in html

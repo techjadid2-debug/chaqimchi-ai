@@ -186,6 +186,10 @@ BIZNES_INCLUDES = (
     "Xavfsizlik: tungi harakat, taqiqlangan zona, kamera buzilishi",
     "Do'kon issiqlik xaritasi — mijozlar qayerda ko'p yuradi",
     "Mijoz portreti: yosh va jins (anonim, rasm saqlanmaydi)",
+    # 2026-08-21 dan sotuvga ochiq: modellar Apache-2.0 ga o'tkazildi.
+    # Bungacha bu qator ataylab yo'q edi — yuz tanish modeli tadqiqot
+    # litsenziyasida bo'lgani uchun uni tarif ichida sotib bo'lmasdi.
+    "Xodim davomati: 10 xodimgacha, yuz orqali (yozma rozilik bilan)",
     "Imzolangan avtomatik yangilanishlar",
 )
 

@@ -560,18 +560,25 @@ def _owner_session(member: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _attendance_enabled() -> bool:
-    """Davomat tijoriy model yoki ataylab yoqilgan yopiq pilotda ishlaydi."""
-    commercial = os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    """Davomat tijoriy modelda yoki yopiq pilotda ishlaydi.
+
+    2026-08-21 dan boshlab modellar Apache-2.0 (OpenVINO OMZ), ya'ni
+    birinchi shart doim bajariladi.  Bungacha bu yerda
+    `CHAQIMCHI_FACE_MODEL_LICENSED` env bayrog'i turardi — uni
+    production'da qo'yib qo'yish tadqiqot litsenziyasidagi modelni
+    "tijoriy" qilib ko'rsatib qo'yardi, ya'ni huquqiy tekshiruv
+    sozlamaga bog'liq edi.  Endi u KODDAN keladi.
+    """
     pilot = os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower() in {
         "1",
         "true",
         "yes",
     }
-    return commercial or pilot or os.environ.get("CHAQIMCHI_ENV", "development") != "production"
+    return (
+        faces.MODELS_LICENSED_FOR_COMMERCIAL_USE
+        or pilot
+        or os.environ.get("CHAQIMCHI_ENV", "development") != "production"
+    )
 
 
 def require_attendance() -> None:
@@ -3283,13 +3290,28 @@ async def _process_face_capture(site_id: str, device_id: str, event_id: str) -> 
         store.set_face_result(site_id, event_id, matched=False, note="yuz topilmadi")
         return
     candidates = []
+    stale = 0
+    current_dim = faces.current_embedding_dim()
     for row in store.face_embeddings(site_id):
+        # Eski modeldan qolgan yozuv (512 o'lchamli ArcFace) — moslashga
+        # kiritilmaydi.  Rasmlar saqlanib turibdi, ular
+        # `scripts/reembed_faces.py` bilan qayta hisoblanadi.
+        if int(row.get("embedding_dim") or 0) != current_dim:
+            stale += 1
+            continue
         try:
             candidates.append(
                 (str(row["employee_id"]), faces.decrypt_embedding(row["embedding_b64"]))
             )
         except Exception:  # pragma: no cover - buzuq yozuv moslashni to'xtatmasin
             logger.warning("Embedding o'qilmadi: site=%s", site_id, exc_info=True)
+    if stale:
+        logger.warning(
+            "site=%s: %d ta xodim rasmi eski modeldan — qayta hisoblang "
+            "(scripts/reembed_faces.py)",
+            site_id,
+            stale,
+        )
     result = faces.FaceService.match(embedding.vector, candidates)
     if result is None:
         store.set_face_result(site_id, event_id, matched=False)
@@ -3697,7 +3719,7 @@ async def edge_site_config(
         "enabled": _attendance_enabled(),
         "mode": (
             "commercial"
-            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower() in {"1", "true", "yes"}
+            if faces.MODELS_LICENSED_FOR_COMMERCIAL_USE
             else "closed_pilot"
             if _attendance_enabled()
             else "disabled"
@@ -4132,11 +4154,7 @@ async def owner_employees(
 ) -> Dict[str, Any]:
     require_attendance()
     return {
-        "mode": (
-            "commercial"
-            if os.environ.get("CHAQIMCHI_FACE_MODEL_LICENSED", "").lower() in {"1", "true", "yes"}
-            else "closed_pilot"
-        ),
+        "mode": "commercial" if faces.MODELS_LICENSED_FOR_COMMERCIAL_USE else "closed_pilot",
         "employees": get_event_store().list_employees(
             owner.site_id, include_inactive=include_inactive
         ),
@@ -4431,6 +4449,9 @@ async def admin_add_employee_face(
             employee_id,
             photo_key=photo_key,
             embedding_b64=faces.encrypt_embedding(embedding.vector),
+            # O'lcham yozib qo'yiladi: model almashganda eski yozuvlar
+            # shu bo'yicha ajratiladi va moslashga qo'shilmaydi.
+            embedding_dim=int(embedding.vector.shape[0]),
             det_score=round(float(embedding.det_score), 3),
             photo_bytes=len(payload),
         )
@@ -4600,6 +4621,9 @@ async def owner_add_employee_face(
             employee_id,
             photo_key=photo_key,
             embedding_b64=faces.encrypt_embedding(embedding.vector),
+            # O'lcham yozib qo'yiladi: model almashganda eski yozuvlar
+            # shu bo'yicha ajratiladi va moslashga qo'shilmaydi.
+            embedding_dim=int(embedding.vector.shape[0]),
             det_score=round(float(embedding.det_score), 3),
             photo_bytes=len(payload),
         )

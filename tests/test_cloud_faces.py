@@ -32,13 +32,19 @@ KNOWN_FACES = {
 
 
 def vector(angle: float) -> np.ndarray:
-    out = np.zeros(512, dtype=np.float32)
+    # O'lcham haqiqiy modelniki bilan bir xil: moslash endi
+    # `embedding_dim` ni tekshiradi va mos kelmagan yozuvni chetlab
+    # o'tadi.  Dublyor 512 qoldirilsa test yashil bo'lardi-yu,
+    # production'dagi filtrni umuman sinamas edi.
+    out = np.zeros(faces.EMBEDDING_DIM, dtype=np.float32)
     out[0] = np.cos(angle)
     out[1] = np.sin(angle)
     return out
 
 
 class FakeFaceService:
+    embedding_dim = faces.EMBEDDING_DIM
+
     def embed_jpeg(self, data: bytes):
         angle = KNOWN_FACES.get(bytes(data))
         if angle is None:
@@ -313,17 +319,41 @@ def test_employee_seen_media_upload_is_still_rejected(pilot_client) -> None:
     assert response.status_code == 403
 
 
-def test_pilot_gate_blocks_everything_when_disabled(pilot_client, monkeypatch) -> None:
-    """Darvoza yopiq — enrollment ham, kadr qabul ham ishlamaydi."""
+def test_gate_closes_when_the_models_are_not_commercially_licensed(
+    pilot_client, monkeypatch
+) -> None:
+    """Litsenziyasiz model bilan davomat umuman ishlamasin.
+
+    Bu darvoza `buffalo_l` (tadqiqot litsenziyasi) sababli qurilgan edi.
+    Modellar Apache-2.0 ga o'tkazilgach u ochildi — lekin MEXANIZM
+    qolishi kerak: kelajakda litsenziyasi noaniq model qaytib kelsa,
+    xizmat o'zi yopilsin va bu sozlamaga bog'liq bo'lmasin.
+    """
     site, headers = _site_with_device(pilot_client)
     monkeypatch.setenv("CHAQIMCHI_ENV", "production")
     monkeypatch.delenv("CHAQIMCHI_ATTENDANCE_PILOT", raising=False)
+    monkeypatch.setattr(faces, "MODELS_LICENSED_FOR_COMMERCIAL_USE", False)
 
     assert (
         pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN).status_code
         == 403
     )
     assert _send_face_capture(pilot_client, headers, "evt-face-4", b"kadr-ali").status_code == 403
+
+
+def test_apache_models_open_attendance_in_production(pilot_client, monkeypatch) -> None:
+    """Litsenziya hal bo'lgach davomat production'da ham ishlaydi.
+
+    Bungacha `CHAQIMCHI_FACE_MODEL_LICENSED` env bayrog'i kerak edi —
+    ya'ni huquqiy tekshiruv sozlamaga bog'liq edi va uni noto'g'ri
+    qo'yish tadqiqot modelini "tijoriy" qilib ko'rsatib qo'yardi.
+    """
+    site, _headers = _site_with_device(pilot_client)
+    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
+    monkeypatch.delenv("CHAQIMCHI_ATTENDANCE_PILOT", raising=False)
+
+    response = pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN)
+    assert response.status_code == 200
 
 
 # ── Mijoz paneli (faqat o'qish) ──────────────────────────────────────────
@@ -601,3 +631,82 @@ def test_upgrading_the_plan_opens_attendance(pilot_client) -> None:
         json={"name": "Ali", "consent": True},
     )
     assert created.status_code == 200, created.text
+
+
+# ── Model migratsiyasi ──────────────────────────────────────────────────
+
+
+def test_old_arcface_embeddings_are_skipped_not_misread(pilot_client) -> None:
+    """512 o'lchamli eski yozuv 256 o'lchamli vektor bilan taqqoslanmasin.
+
+    Ikki xavf bor edi va ikkalasi ham jimgina: `np.dot` o'lchamlari
+    mos kelmasa XATO ko'taradi (butun moslash to'xtaydi), kesib
+    taqqoslash esa MA'NOSIZ raqam beradi (begona odam xodim deb
+    tanilishi mumkin).
+    """
+    import numpy as np
+
+    site, _headers = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    _upload_photo(pilot_client, site["site_id"], employee["id"], b"rasm-ali-1")
+
+    import cloud.main as main
+
+    store = main.get_event_store()
+    rows = store.all_employee_faces(site_id=site["site_id"])
+    assert len(rows) == 1
+    assert rows[0]["embedding_dim"] == faces.EMBEDDING_DIM
+
+    # Eski modeldan qolgan yozuvni qo'lda yasaymiz.
+    store.update_employee_face_embedding(
+        rows[0]["id"],
+        embedding_b64=faces.encrypt_embedding(np.zeros(512, dtype=np.float32)),
+        embedding_dim=512,
+    )
+
+    # Moslash yiqilmaydi va yolg'on javob bermaydi.
+    probe = vector(0.0)
+    candidates = [
+        (str(row["employee_id"]), faces.decrypt_embedding(row["embedding_b64"]))
+        for row in store.face_embeddings(site["site_id"])
+    ]
+    assert faces.FaceService.match(probe, candidates) is None
+
+
+def test_reembedding_restores_matching(pilot_client) -> None:
+    """Rasm saqlanib turgani uchun xodimni qaytadan ro'yxatga olish shart emas."""
+    import numpy as np
+
+    site, _headers = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    _upload_photo(pilot_client, site["site_id"], employee["id"], b"rasm-ali-1")
+
+    import cloud.main as main
+
+    store = main.get_event_store()
+    face_id = store.all_employee_faces(site_id=site["site_id"])[0]["id"]
+    store.update_employee_face_embedding(
+        face_id,
+        embedding_b64=faces.encrypt_embedding(np.zeros(512, dtype=np.float32)),
+        embedding_dim=512,
+    )
+
+    # `reembed_faces.py` shu ikki qadamni bajaradi: rasmni o'qiydi,
+    # yangi model bilan hisoblaydi, yozuvni YANGILAYDI (o'chirib qayta
+    # qo'shmaydi — `photo_key` va `created_at` joyida qoladi).
+    photo = store.all_employee_faces(site_id=site["site_id"])[0]
+    fresh = faces.get_face_service().embed_jpeg(b"rasm-ali-1")
+    store.update_employee_face_embedding(
+        photo["id"],
+        embedding_b64=faces.encrypt_embedding(fresh.vector),
+        embedding_dim=int(fresh.vector.shape[0]),
+    )
+
+    candidates = [
+        (str(row["employee_id"]), faces.decrypt_embedding(row["embedding_b64"]))
+        for row in store.face_embeddings(site["site_id"])
+        if int(row["embedding_dim"]) == faces.current_embedding_dim()
+    ]
+    matched = faces.FaceService.match(vector(0.05), candidates)
+    assert matched is not None
+    assert matched[0] == employee["id"]

@@ -1,0 +1,35 @@
+{
+  "bundle": "yuz-tanish-apache2",
+  "source": "OpenVINO Open Model Zoo",
+  "license": "Apache-2.0",
+  "license_url": "https://github.com/openvinotoolkit/open_model_zoo/blob/master/LICENSE",
+  "verified_at": "2026-08-21",
+  "note": "buffalo_l (SCRFD + ArcFace) o'rnini bosdi — u faqat TADQIQOT litsenziyasida edi va davomatni sotishga to'sqinlik qilardi. Checksumlar rasmiy HTTPS fayllardan hisoblangan; fetch_face_models.py mos kelmagan faylni qabul qilmaydi.",
+  "embedding_dim": 256,
+  "files": {
+    "face-detection-retail-0005.xml": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0005/FP16/face-detection-retail-0005.xml",
+      "sha256": "c5cc97916a594ede031bd2bca91b4ffc12abd4597b307efedf51fe4edd8f314a"
+    },
+    "face-detection-retail-0005.bin": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0005/FP16/face-detection-retail-0005.bin",
+      "sha256": "21cc37045583739a5ed1b1bd1bac44eafa8261708e07a8bdb9a2d044a132cc26"
+    },
+    "landmarks-regression-retail-0009.xml": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/landmarks-regression-retail-0009/FP16/landmarks-regression-retail-0009.xml",
+      "sha256": "1d7e43d3060e8f0328932ae9eeced07ff216eac80f10fd07b58c52fbaf69af58"
+    },
+    "landmarks-regression-retail-0009.bin": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/landmarks-regression-retail-0009/FP16/landmarks-regression-retail-0009.bin",
+      "sha256": "a7285eec8cb20a50c0ed567c426db6c7b8753c51b47f798f8ef5d8e0fa12d3c5"
+    },
+    "face-reidentification-retail-0095.xml": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-reidentification-retail-0095/FP16/face-reidentification-retail-0095.xml",
+      "sha256": "ce53d2c9c08c0bd1c1660fb8a5b6d0e3e4ec19eb92f1036d2d83a85e83082dce"
+    },
+    "face-reidentification-retail-0095.bin": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-reidentification-retail-0095/FP16/face-reidentification-retail-0095.bin",
+      "sha256": "241229ca3d206321868d46ce74a3c0b06c49cea58db7dc70b2e842ff287545d1"
+    }
+  }
+}

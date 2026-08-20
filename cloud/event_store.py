@@ -1647,6 +1647,7 @@ class EventStore:
         *,
         photo_key: str,
         embedding_b64: str,
+        embedding_dim: int,
         det_score: Optional[float] = None,
         photo_bytes: int = 0,
     ) -> Dict[str, Any]:
@@ -1671,7 +1672,7 @@ class EventStore:
                     employee_id,
                     photo_key,
                     embedding_b64,
-                    512,
+                    int(embedding_dim),
                     det_score,
                     int(photo_bytes),
                     now,
@@ -1709,6 +1710,50 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(self._sql(query), tuple(params)).fetchall()
         return [self._dict(row) for row in rows]
+
+    def all_employee_faces(self, *, site_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Barcha obyektlardagi rasm yozuvlari — model migratsiyasi uchun.
+
+        `list_employee_faces` ataylab bitta obyekt bilan cheklangan va
+        embedding qaytarmaydi (panel uchun).  Bu yerda esa aksincha:
+        `scripts/reembed_faces.py` butun bazani aylanib chiqishi kerak.
+        """
+        query = (
+            "SELECT id,site_id,employee_id,photo_key,embedding_dim,created_at "
+            "FROM employee_faces"
+        )
+        params: List[Any] = []
+        if site_id is not None:
+            query += " WHERE site_id=?"
+            params.append(site_id)
+        query += " ORDER BY site_id,created_at"
+        with self._connect() as conn:
+            rows = conn.execute(self._sql(query), tuple(params)).fetchall()
+        return [self._dict(row) for row in rows]
+
+    def update_employee_face_embedding(
+        self,
+        face_id: str,
+        *,
+        embedding_b64: str,
+        embedding_dim: int,
+        det_score: Optional[float] = None,
+    ) -> bool:
+        """Rasmni qayta hisoblangan vektor bilan yangilaydi.
+
+        Rasm o'chirilib qayta qo'shilmaydi: `photo_key` va `created_at`
+        o'z joyida qoladi, ya'ni retensiya hisobi va galereya tartibi
+        buzilmaydi.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql(
+                    "UPDATE employee_faces SET embedding_b64=?,embedding_dim=?,det_score=? "
+                    "WHERE id=?"
+                ),
+                (embedding_b64, int(embedding_dim), det_score, face_id),
+            )
+        return bool(cursor.rowcount)
 
     def employee_face(self, site_id: str, face_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
@@ -1749,11 +1794,15 @@ class EventStore:
         return str(face["photo_key"])
 
     def face_embeddings(self, site_id: str) -> List[Dict[str, Any]]:
-        """Moslash uchun faol xodimlarning shifrlangan embeddinglari."""
+        """Moslash uchun faol xodimlarning shifrlangan embeddinglari.
+
+        `embedding_dim` ham qaytariladi: model almashganda eski yozuvlar
+        boshqa o'lchamda qoladi va ularni moslashga qo'shib bo'lmaydi.
+        """
         with self._connect() as conn:
             rows = conn.execute(
                 self._sql(
-                    "SELECT f.employee_id,f.embedding_b64,e.name "
+                    "SELECT f.employee_id,f.embedding_b64,f.embedding_dim,e.name "
                     "FROM employee_faces f JOIN employees e ON e.id=f.employee_id "
                     "WHERE f.site_id=? AND e.active=1"
                 ),

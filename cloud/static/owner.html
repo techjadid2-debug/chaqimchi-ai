@@ -121,10 +121,10 @@
 
       <!-- Do'kon xaritasi: odamlar ko'p yuradigan joylar kamera rasmi
            ustida och-to'q qizil bilan.  Rasm emas, sonlar keladi. -->
-      <div class="card wide">
+      <div class="card wide" id="heatCard">
         <div class="card-head">
           <h2>Do‘kon xaritasi</h2>
-          <div class="chip-row">
+          <div class="chip-row" id="heatControls">
             <button class="chip active" type="button" data-heatmode="camera">Kamera</button>
             <button class="chip" type="button" data-heatmode="plan">Plan (tepadan)</button>
             <select id="heatCamera" style="width:auto"></select>
@@ -132,13 +132,21 @@
             <select id="heatHour" style="width:auto"><option value="">Kun bo‘yi</option></select>
           </div>
         </div>
-        <p class="hint" style="margin-top:0" id="heatHint">To‘q qizil — mijozlar eng ko‘p yurgan joylar. Kamera ko‘rinishi ustida.</p>
-        <div class="heat-wrap"><canvas id="heatCanvas" width="640" height="360"></canvas></div>
-        <div class="actions" style="margin-top:8px">
+        <p class="hint" style="margin-top:0" id="heatHint">To‘q qizil — mijozlar eng ko‘p yurgan joylar. Bo‘sh joylar — javon yoki jihoz uchun. Bir hafta ma’lumot yig‘ilgach xarita barqarorlashadi.</p>
+        <div class="heat-wrap" id="heatWrap"><canvas id="heatCanvas" width="640" height="360"></canvas></div>
+        <div class="actions" style="margin-top:8px" id="heatActions">
           <button class="button ghost small" id="heatEditBtn" type="button">Pol burchaklarini to‘g‘irlash</button>
           <button class="button primary small hidden" id="heatSaveBtn" type="button">Burchaklarni saqlash</button>
         </div>
         <p class="hint" id="heatSummary">—</p>
+        <!-- Tarifda yo'q bo'lsa: karta YO'QOLMAYDI, qulflangan holatda
+             turadi.  Yo'qolgan bo'lim mijozga "buzilibdi" degan taassurot
+             beradi, qulf esa "ko'tarish mumkin" deb aytadi. -->
+        <div class="note" id="heatLocked" hidden>
+          <b>Do‘kon xaritasi Biznes tarifida ochiladi.</b>
+          Mijozlar do‘konning qaysi joyida ko‘p turishini ko‘rasiz — javonni
+          shunga qarab joylashtirasiz.
+        </div>
       </div>
 
       <div class="card wide">
@@ -491,6 +499,31 @@
   //: bosilgach 403 ko'rsatadigan bo'sh bo'lim eng yomon variant.
   let staffEnabled = true;
 
+  //: Tarifda ochiq panel bo'limlari (`/api/v1/owner/health` beradi).
+  //:
+  //: Tab bilan farqi bor va u ataylab: yuz tanish YO'Q bo'lsa tugma
+  //: umuman chizilmaydi (u yopiq pilot, mijoz uni sotib ololmaydi), tarifda
+  //: yo'q bo'lim esa QULF bilan turadi — uni ko'tarish mumkin va mijoz
+  //: nimani ololishini ko'rishi kerak.
+  let planFeatures = null;
+
+  function hasFeature(name) {
+    // `null` — health hali kelmagan.  Bunday paytda qulf ko'rsatilmaydi:
+    // sekin internetda karta bir zumga "tarifda yo'q" bo'lib chaqnab
+    // ketardi.
+    return planFeatures === null || planFeatures.includes(name);
+  }
+
+  function applyPlanLocks() {
+    const mapOpen = hasFeature("xarita");
+    ["heatControls", "heatWrap", "heatActions", "heatSummary", "heatHint"].forEach((id) => {
+      const node = $(id);
+      if (node) node.hidden = !mapOpen;
+    });
+    const locked = $("heatLocked");
+    if (locked) locked.hidden = mapOpen;
+  }
+
   function visibleTabs() {
     return TABS.filter((tab) => tab.id !== "xodimlar" || staffEnabled);
   }
@@ -587,6 +620,10 @@
   function drawStatus(health) {
     const banner = $("statusBanner");
     $("siteName").textContent = health.site_name || "";
+    if (health.plan && Array.isArray(health.plan.panel_features)) {
+      planFeatures = health.plan.panel_features;
+      applyPlanLocks();
+    }
     const expected = Number(health.cameras_expected || 0);
     const active = Number(health.cameras_active || 0);
     const minutes = health.minutes_since_seen;
@@ -732,6 +769,7 @@
       $("heatEditBtn").disabled = true;
       return;
     }
+    if (!hasFeature("xarita")) return;
     $("heatEditBtn").disabled = false;
     const cameraId = $("heatCamera").value;
     if (!cameraId) return;
@@ -901,6 +939,7 @@
   }
 
   async function loadPlanView() {
+    if (!hasFeature("xarita")) return;
     const canvas = $("heatCanvas");
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1134,6 +1173,16 @@
 
   function drawDemography(demo) {
     const block = $("demoStats");
+    if (!hasFeature("demografiya")) {
+      // Server bu bo'limni hisobotdan olib tashlaydi.  Panel esa nima
+      // borligini aytadi — mijoz nimani ololishini bilsin.
+      block.innerHTML =
+        '<div class="note"><b>Mijoz portreti Biznes tarifida ochiladi.</b> ' +
+        "Do‘koningizga kim ko‘proq kelishini ko‘rasiz: yosh guruhi va jins " +
+        "(anonim baho, rasm saqlanmaydi).</div>";
+      block.classList.remove("hidden");
+      return;
+    }
     if (!demo || !demo.hisoblangan) {
       block.classList.add("hidden");
       block.innerHTML = "";

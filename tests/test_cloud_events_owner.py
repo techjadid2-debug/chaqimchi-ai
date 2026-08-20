@@ -1402,3 +1402,62 @@ def test_an_unknown_plan_is_refused(production_client) -> None:
         json={"plan": "oltin"},
     )
     assert response.status_code == 422
+
+
+def test_heatmap_and_demography_follow_the_plan(production_client) -> None:
+    """Sotilgan farq haqiqatan ham bo'lsin.
+
+    Ikkalasi ham kodda allaqachon ishlardi va hech qaysi tarifga
+    bog'lanmagan edi — ya'ni 149 000 to'lagan mijoz 299 000 lik bilan bir
+    xil tahlil olardi.
+    """
+    client, _messages = production_client
+    site, headers = _site_on(client, "boshlangich")
+    admin = {"X-Cloud-Admin-Key": "test-admin"}
+
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/members",
+        headers=admin,
+        json={"telegram_id": "707", "role": "owner"},
+    )
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "707"})
+    token = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "707", "site_id": site["site_id"], "code": "123456"},
+    ).json()["access_token"]
+    owner = {"Authorization": f"Bearer {token}"}
+
+    health = client.get("/api/v1/owner/health", headers=owner).json()
+    assert health["plan"]["code"] == "boshlangich"
+    assert "xarita" not in health["plan"]["panel_features"]
+
+    blocked = client.get("/api/v1/owner/heatmap?camera_id=camera-01", headers=owner)
+    assert blocked.status_code == 403
+    assert "Biznes" in blocked.json()["detail"]
+
+    assert "demografiya" not in client.get("/api/v1/owner/report", headers=owner).json()
+
+    # Qurilma to'rni yuborishda XATO olmaydi — aks holda outbox uni
+    # "keyin qayta yuboraman" deb saqlab, do'kon kompyuterining diskini
+    # to'ldirardi.
+    upload = client.post(
+        "/api/v1/edge/heatmap",
+        headers=headers,
+        json={
+            "items": [
+                {
+                    "camera_id": "camera-01",
+                    "hour": "2026-08-21T10",
+                    "grid": [[0] * 48 for _ in range(27)],
+                    "frames": 10,
+                }
+            ]
+        },
+    )
+    assert upload.status_code == 200
+    assert upload.json()["accepted"] == 0
+
+    # Tarif ko'tarilsa ikkalasi ham ochiladi.
+    client.post(f"/api/v1/admin/sites/{site['site_id']}/plan", headers=admin, json={"plan": "biznes"})
+    assert client.get("/api/v1/owner/heatmap?camera_id=camera-01", headers=owner).status_code == 200
+    assert "demografiya" in client.get("/api/v1/owner/report", headers=owner).json()

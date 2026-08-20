@@ -261,6 +261,14 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         telegram_allowed=False,
         monthly_price_uzs=790_000,
         install_price_uzs=6_500_000,
+        # Eski tarif.  Panelda hammasi ochiq: sotuvdan chiqarish mavjud
+        # mijozdan ko'rinadigan bo'lim olib qo'ymasin (xarita ma'lumoti
+        # jimgina yo'qolib qolardi).
+        #
+        # `edge_features` esa ataylab BO'SH: bu tariflar shartnoma
+        # bo'yicha, `site_feature_assignments` orqali boshqariladi.
+        panel_features=BIZNES_PANEL_FEATURES,
+        legacy=True,
     ),
     "business": PlanLimits(
         max_cameras=3,
@@ -269,6 +277,14 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         telegram_allowed=True,
         monthly_price_uzs=1_490_000,
         install_price_uzs=9_500_000,
+        # Eski tarif.  Panelda hammasi ochiq: sotuvdan chiqarish mavjud
+        # mijozdan ko'rinadigan bo'lim olib qo'ymasin (xarita ma'lumoti
+        # jimgina yo'qolib qolardi).
+        #
+        # `edge_features` esa ataylab BO'SH: bu tariflar shartnoma
+        # bo'yicha, `site_feature_assignments` orqali boshqariladi.
+        panel_features=BIZNES_PANEL_FEATURES,
+        legacy=True,
     ),
     "enterprise": PlanLimits(
         max_cameras=8,
@@ -277,6 +293,14 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         telegram_allowed=True,
         monthly_price_uzs=2_990_000,
         install_price_uzs=15_000_000,
+        # Eski tarif.  Panelda hammasi ochiq: sotuvdan chiqarish mavjud
+        # mijozdan ko'rinadigan bo'lim olib qo'ymasin (xarita ma'lumoti
+        # jimgina yo'qolib qolardi).
+        #
+        # `edge_features` esa ataylab BO'SH: bu tariflar shartnoma
+        # bo'yicha, `site_feature_assignments` orqali boshqariladi.
+        panel_features=BIZNES_PANEL_FEATURES,
+        legacy=True,
     ),
     # ── Davomat tariflari (xodim bo'yicha) ────────────────────────────────
     #
@@ -290,6 +314,14 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         monthly_price_uzs=500_000,  # eng kam
         install_price_uzs=6_500_000,
         price_per_person_uzs=15_000,
+        # Eski tarif.  Panelda hammasi ochiq: sotuvdan chiqarish mavjud
+        # mijozdan ko'rinadigan bo'lim olib qo'ymasin (xarita ma'lumoti
+        # jimgina yo'qolib qolardi).
+        #
+        # `edge_features` esa ataylab BO'SH: bu tariflar shartnoma
+        # bo'yicha, `site_feature_assignments` orqali boshqariladi.
+        panel_features=BIZNES_PANEL_FEATURES,
+        legacy=True,
     ),
     "staff_business": PlanLimits(
         max_cameras=5,
@@ -299,6 +331,14 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         monthly_price_uzs=1_200_000,
         install_price_uzs=9_500_000,
         price_per_person_uzs=12_000,
+        # Eski tarif.  Panelda hammasi ochiq: sotuvdan chiqarish mavjud
+        # mijozdan ko'rinadigan bo'lim olib qo'ymasin (xarita ma'lumoti
+        # jimgina yo'qolib qolardi).
+        #
+        # `edge_features` esa ataylab BO'SH: bu tariflar shartnoma
+        # bo'yicha, `site_feature_assignments` orqali boshqariladi.
+        panel_features=BIZNES_PANEL_FEATURES,
+        legacy=True,
     ),
     "staff_enterprise": PlanLimits(
         max_cameras=MAX_CAMERAS,
@@ -308,6 +348,14 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         monthly_price_uzs=2_500_000,
         install_price_uzs=15_000_000,
         price_per_person_uzs=9_000,
+        # Eski tarif.  Panelda hammasi ochiq: sotuvdan chiqarish mavjud
+        # mijozdan ko'rinadigan bo'lim olib qo'ymasin (xarita ma'lumoti
+        # jimgina yo'qolib qolardi).
+        #
+        # `edge_features` esa ataylab BO'SH: bu tariflar shartnoma
+        # bo'yicha, `site_feature_assignments` orqali boshqariladi.
+        panel_features=BIZNES_PANEL_FEATURES,
+        legacy=True,
     ),
 }
 

@@ -3447,6 +3447,15 @@ async def upload_heatmap(
         window_sec=86_400,
         message="Kunlik issiqlik to'ri chegarasi oshdi",
     )
+    # Tarifda xarita yo'q bo'lsa: 200 qaytariladi, lekin yozilmaydi.
+    #
+    # 403 EMAS.  Qurilmadagi outbox xatoni "keyin qayta yuboraman" deb
+    # tushunadi va to'r fayllari diskda yig'ilib boraveradi — do'kon
+    # kompyuterining diski to'ladi.  Rad javob mijozning kompyuterini
+    # buzmasligi kerak.
+    if not _panel_feature_open(device["site_id"], "xarita"):
+        return {"ok": True, "accepted": 0}
+
     store = get_event_store()
     accepted = 0
     for item in body.items:
@@ -3475,6 +3484,8 @@ async def owner_heatmap(
     `days=7` — plan rejimi uchun haftalik yig'indi (odam yurmagan joylar
     jihoz sifatida qorayadi).
     """
+    if not _panel_feature_open(owner.site_id, "xarita"):
+        raise HTTPException(403, "Do'kon xaritasi Biznes tarifidan boshlab ishlaydi.")
     zone = ZoneInfo("Asia/Tashkent")
     try:
         day = date_type.fromisoformat(date) if date else datetime.now(zone).date()
@@ -3990,7 +4001,15 @@ async def owner_report(
             day = date_type.fromisoformat(date)
         except ValueError as exc:
             raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lishi kerak") from exc
-    return get_event_store().retail_report(owner.site_id, day=day)
+    report = get_event_store().retail_report(owner.site_id, day=day)
+    # Demografiya hisobotdan CHIQARILADI, qabuldan emas.
+    #
+    # Ma'lumot yozilib turaveradi — mijoz tarifni ko'targanda tarix
+    # o'zidan paydo bo'ladi.  Qabulda to'xtatilsa, o'sha oyning
+    # o'rtasidan boshlanadigan doimiy teshik qolardi.
+    if not _panel_feature_open(owner.site_id, "demografiya"):
+        report.pop("demografiya", None)
+    return report
 
 
 @app.get("/api/v1/owner/trend")
@@ -4122,6 +4141,18 @@ async def owner_employees(
             owner.site_id, include_inactive=include_inactive
         ),
     }
+
+
+def _panel_feature_open(site_id: str, feature: str) -> bool:
+    """Shu obyektning tarifida panel bo'limi ochiqmi.
+
+    Bir joyda: xarita, demografiya va navbat kartalari uch xil endpointda
+    tekshiriladi va uchtasi bir-biridan uzoqlashib ketmasin.
+    """
+    site = get_store().get_site(site_id)
+    if not site:
+        return False
+    return feature in get_plan(str(site.get("plan") or "")).panel_features
 
 
 def _check_employee_limit(site_id: str) -> None:

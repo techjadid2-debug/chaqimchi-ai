@@ -10,7 +10,7 @@ yozilgan config qolmaydi — do'kon kompyuterida bu nazariy xavf emas.
 
 Kamera ro'yxati `retail.cameras_source: config` rejimida turadi: zanjir uni
 lokal fayldan oladi va **cloud ulanmasa ham** ishlaydi.  Cloud keyin
-ulanганda `auto` ga o'tkaziladi va inventar cloud'dan keladi.
+ulanganda `auto` ga o'tkaziladi va inventar cloud'dan keladi.
 """
 
 from __future__ import annotations

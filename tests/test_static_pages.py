@@ -173,7 +173,7 @@ def test_every_referenced_icon_exists_in_the_sprite() -> None:
     for page in pages():
         used = set(re.findall(r"icons\.svg#([\w\-]+)", page.read_text(encoding="utf-8")))
         missing = used - available
-        assert not missing, f"{page.name}: spriteда yo'q ikonka — {sorted(missing)}"
+        assert not missing, f"{page.name}: sprite'da yo'q ikonka — {sorted(missing)}"
 
 
 def test_keyboard_focus_is_visible_everywhere() -> None:

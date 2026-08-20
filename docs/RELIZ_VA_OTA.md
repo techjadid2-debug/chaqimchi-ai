@@ -57,10 +57,30 @@ kalit** bilan tekshirilishi. Mahsulot nomi (`chaqimchi-windows` /
 Versiya ko'tarilib commit qilingandan keyin hammasi bitta buyruq:
 
 ```bash
-make windows-release CLOUD_URL=https://chaqimchi.169.58.27.216.nip.io
-# so'ng chiqarilgan .exe va .json ni serverga:
-scp releases/chaqimchi-windows-X.Y.Z.{exe,json} deploy@<server>:/home/deploy/chaqimchi-ai/releases/
+# 1. Quring va imzolang (noutbukda, maxfiy kalit shu yerda)
+make windows-release CLOUD_URL=https://api.chaqimchi.uz
+
+# 2. Serverga chiqaring — shundan keyingina do'konlar ko'radi
+CHAQIMCHI_RELEASE_HOST=deploy@169.58.198.111 \
+  scripts/publish_windows_release.sh
 ```
+
+`publish_windows_release.sh` `scp` ning o'rnini bosadi va uchta ishni
+qo'shimcha qiladi: imzoni **qurilmadagi ochiq kalit bilan** qayta
+tekshiradi, fayllarni serverga qo'yadi va **tashqaridan** (aynan qurilma
+yuradigan `dl.` manzilidan) ularni o'qib ko'radi — hajm mos kelmasa xato
+beradi. Ilgari bu qadam qo'lda `scp` edi va uni unutish "reliz chiqdi,
+lekin hech kimga yetmadi" degan jim holatga olib kelardi.
+
+CI qurgan faylni chiqarish (GitHub Releases'dan yuklab olingan):
+
+```bash
+CHAQIMCHI_RELEASE_HOST=deploy@169.58.198.111 \
+  scripts/publish_windows_release.sh --exe ~/Downloads/Chaqimchi_AI_Setup.exe
+```
+
+Skript uni `chaqimchi-windows-<versiya>.exe` nomiga ko'chiradi: cloud
+faqat shu nomni taniydi (`latest_windows_release`).
 
 `CLOUD_URL` majburiy: u o'rnatuvchiga bake qilinadi va yangi mijoz
 pairing kod bilan yuklaganda dastur cloudga o'zi ulanadi. Usiz sehrgar
@@ -175,15 +195,32 @@ heartbeat uni allaqachon yuboradi.
 ## Bosqichli tarqatish (Windows relizlari uchun MAJBURIY tartib)
 
 Windows qurilmalar yangilanishni har 15 daqiqada tekshiradi — buzuq reliz
-15 daqiqada **hamma** qurilmaga yetadi. Shuning uchun tartib qat'iy:
+15 daqiqada **hamma** qurilmaga yetadi. Shuning uchun tartib qat'iy va u
+endi bitta buyruqda (`scripts/rollout.py`), admin panelda har do'konni
+alohida bosish emas:
 
-1. **Relizdan oldin** admin panelda barcha mijoz saytlarini `hold` ga
-   o'tkazing (Yangilanish tugmasi). O'z sinov qurilmangiz `auto` da qoladi.
-2. Reliz fayllarini serverga qo'ying — 15 daqiqada faqat sizning
-   qurilmangiz yangilanadi.
-3. **24 soat kuting**: panel ochiladimi, hodisalar kelyaptimi, heartbeat'da
-   yangi versiya ko'rinyaptimi.
-4. Muammo bo'lmasa mijoz saytlarini yana `auto` ga qaytaring.
+```bash
+export CHAQIMCHI_CLOUD_ADMIN_KEY=...        # parol menejeridan
+
+# 1. Relizdan OLDIN: faqat sinov do'koni yangilansin
+python3 scripts/rollout.py --sinov <sinov_site_id>
+
+# 2. Relizni chiqaring (yuqoridagi publish skripti)
+
+# 3. 24 soat kuzating — qurilma versiyasi ustuniga qarang
+python3 scripts/rollout.py --holat
+
+# 4. Muammo bo'lmasa hammaga oching
+python3 scripts/rollout.py --hammaga
+```
+
+Favqulodda holat — buzuq reliz allaqachon tarqala boshlagan bo'lsa,
+har do'konni alohida to'xtatishga ulgurib bo'lmaydi:
+
+```bash
+python3 scripts/rollout.py --toxtat     # hamma qurilma darhol to'xtaydi
+python3 scripts/rollout.py --davom      # tuzatilgach qayta yoqiladi
+```
 
 Himoya qatlamlari (`chaqimchi_ai/local/updater.py`):
 
@@ -196,6 +233,23 @@ Himoya qatlamlari (`chaqimchi_ai/local/updater.py`):
   qaytaradi va buzuq versiyani `blocked` qiladi — qayta o'rnatilmaydi.
 - Rollback nishoni birinchi OTA'dan keyin paydo bo'ladi: qo'lda
   o'rnatilgan birinchi versiyada hali saqlangan oldingi `.exe` yo'q.
+
+---
+
+## Yangi versiya do'kongacha: to'liq zanjir
+
+```
+versiya ko'tariladi  →  make windows-release   (quriladi + imzolanadi)
+                     →  publish_windows_release.sh  (serverga + tekshiruv)
+                     →  rollout.py --sinov      (avval bitta do'kon)
+                     →  qurilma 15 daqiqada o'zi oladi
+                     →  30 daqiqada panel ko'tarilmasa — o'zi orqaga qaytadi
+                     →  rollout.py --hammaga    (24 soatdan keyin)
+```
+
+Qurilma tomonida hech qanday qo'l ishi yo'q: yangilanish vazifasi
+(`Chaqimchi AI Update`, SYSTEM, har 15 daqiqa) o'rnatuvchi bilan birga
+kelgan va u imzoni har safar tekshiradi.
 
 ---
 

@@ -306,7 +306,7 @@ def get_media_service(
         xaddr = _text(media, "XAddr") if media is not None else ""
         if xaddr:
             # Kamera ichki manzilini qaytarishi mumkin (NAT yoki ikki
-            # tarmoqli NVR).  Biz **ulanа olgan** hostni saqlab qolamiz,
+            # tarmoqli NVR).  Biz **ulana olgan** hostni saqlab qolamiz,
             # aks holda keyingi so'rov yetib bormaydi.
             return _rehost(xaddr, service_url)
     return service_url

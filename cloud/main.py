@@ -1436,7 +1436,7 @@ async def list_plans() -> Dict[str, Any]:
     }
 
 
-#: Yillik to'lovda nechа oy hisoblanadi (2 oy bepul). Sayt ham, hisob-faktura
+#: Yillik to'lovda necha oy hisoblanadi (2 oy bepul). Sayt ham, hisob-faktura
 #: ham shu bitta qoidani ishlatadi.
 YEARLY_MONTHS_CHARGED = billable_months(12)
 

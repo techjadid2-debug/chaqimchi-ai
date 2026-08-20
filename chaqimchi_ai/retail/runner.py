@@ -18,7 +18,7 @@ Uchta narsa ataylab shunday:
    NVR band).  Har kamera o'z backoff'i bilan qayta ulanadi va boshqa
    kameralarga xalaqit bermaydi.
 3. **ffmpeg alohida oqimda.**  Klip kesish va segment tozalash sekin ish;
-   inferens halqasida turса byudjet o'sha vaqtni yo'qotardi.
+   inferens halqasida tursa byudjet o'sha vaqtni yo'qotardi.
 
 Bu modul ham apparatsiz sinaladi: `capture_factory`, `spawn`, soat va uyqu
 tashqaridan beriladi.

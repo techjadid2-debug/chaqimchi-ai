@@ -38,7 +38,7 @@ from chaqimchi_ai.local import config_store, paths
 logger = logging.getLogger(__name__)
 
 #: Cloud sozlamasini shuncha soniyada bir marta so'raymiz.  60 emas, 20:
-#: mijoz panelda "Jonli ko'rish" bossа qurilma buni keyingi heartbeat'da
+#: mijoz panelda "Jonli ko'rish" bossa qurilma buni keyingi heartbeat'da
 #: biladi — kutish 60 soniyadan 20 gacha tushdi.  Har so'rov bir necha yuz
 #: bayt — kuniga ~4300 ta yengil so'rov, VPS uchun sezilmas yuk.
 POLL_INTERVAL_SEC = 20

@@ -91,7 +91,7 @@ def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-#: Obuna tugagach nechа kun ichida tizim ishlashda davom etadi (grace).
+#: Obuna tugagach necha kun ichida tizim ishlashda davom etadi (grace).
 GRACE_DAYS = 14
 
 # ── Aloqa holati ─────────────────────────────────────────────────────────

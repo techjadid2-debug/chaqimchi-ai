@@ -1,7 +1,7 @@
 # Chaqimchi AI
 PY ?= python3
 
-.PHONY: install-dev test lint fmt run-sotqin run-cloud run-local run-retail provision docker-build cloud-config cloud-deploy benchmark windows-installer
+.PHONY: install-dev test lint fmt run-sotqin run-cloud run-local run-retail provision docker-build cloud-config cloud-deploy benchmark windows-installer windows-release windows-publish
 
 install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
@@ -72,5 +72,13 @@ windows-release:
 	cp releases/Chaqimchi_AI_Setup.exe "releases/chaqimchi-windows-$$VERSION.exe"; \
 	$(PY) scripts/sign_release.py "releases/chaqimchi-windows-$$VERSION.exe"; \
 	echo ""; \
-	echo "Serverga yuklash:"; \
-	echo "  scp releases/chaqimchi-windows-$$VERSION.exe releases/chaqimchi-windows-$$VERSION.json <server>:<dir>/releases/"
+	echo "Serverga chiqarish:"; \
+	echo "  CHAQIMCHI_RELEASE_HOST=deploy@<server> make windows-publish"
+
+# Relizni serverga chiqaradi — shundan keyin do'konlar uni 15 daqiqada
+# oladi.  Imzoni qayta tekshiradi va tashqaridan (qurilma yuradigan
+# manzildan) fayllar haqiqatan berilayotganini ko'radi.
+windows-publish:
+	@test -n "$(CHAQIMCHI_RELEASE_HOST)" || \
+		(echo 'Usage: CHAQIMCHI_RELEASE_HOST=deploy@IP make windows-publish' && exit 1)
+	scripts/publish_windows_release.sh

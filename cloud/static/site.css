@@ -67,7 +67,7 @@ button, input, textarea { font: inherit; }
  * qora va lime.  Mijoz qaysi biri asosiy ekanini bilmasdi va shu sabab
  * hech qaysisini bosmasdi.
  *
- *   .button-light  — ASOSIY (lime).  Bloкda bitta.
+ *   .button-light  — ASOSIY (lime).  Blokda bitta.
  *   .button        — ikkilamchi (to'q).  Muqobil harakat.
  *   .button-ghost  — uchinchi daraja (shaffof chiziq).
  *   .text-cta      — matnli havola, ixtiyoriy harakat.
@@ -154,7 +154,7 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 .preset-hint { margin: 0 0 32px; color: var(--muted); font-size: 14px; text-align: center; }
 
 /* Konfigurator: valyuta tugmasi, baza ro'yxati va funksiya bo'yicha kamera soni. */
-.config-switches { display: flex; flex-wrap: wrap; gap: 10px; }.base-includes { margin: 24px 0 4px; padding: 18px 20px; border-radius: 18px; background: var(--paper-2); }.base-includes h3 { margin: 0 0 10px; font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }.base-includes ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }.base-includes li::before { content: "✓"; margin-right: 8px; color: var(--ink); font-weight: 800; }/* ── Funksiya qatori va kamera steppери ──────────────────────────────
+.config-switches { display: flex; flex-wrap: wrap; gap: 10px; }.base-includes { margin: 24px 0 4px; padding: 18px 20px; border-radius: 18px; background: var(--paper-2); }.base-includes h3 { margin: 0 0 10px; font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }.base-includes ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }.base-includes li::before { content: "✓"; margin-right: 8px; color: var(--ink); font-weight: 800; }/* ── Funksiya qatori va kamera stepperi ──────────────────────────────
  * Ilgari bu `<label>` ichidagi checkbox + `<select>` edi.  Ikki muammo:
  * select `<label>` ichida turgani uchun uni bosganda checkbox ham
  * almashishi mumkin edi, va o'chirilgan holatda `opacity: .45` bilan

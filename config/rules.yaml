@@ -91,6 +91,36 @@ rules:
     cooldown_sec: 300
     actions: [cloud_sync]
 
+  # ── Kassa nazorati ────────────────────────────────────────────────────
+  #
+  # Bu ikkisi 16-avgustdagi "MINIMAL rejim" qaroriga QARSHI ko'rinadi va
+  # buni yozib qo'yish shart, aks holda keyingi tozalashda olib
+  # tashlanadi.  Farq bor: `queue_threshold_exceeded` xom hodisa, u
+  # gavjum daqiqada takror-takror chiqadi va botni shovqinga aylantiradi.
+  # Quyidagi ikkitasi esa **latch** bilan ishlaydi — holat o'zgarmaguncha
+  # qayta chiqmaydi — ish vaqti bilan cheklangan va cooldown'i uzun.
+  #
+  # Ikkalasi ham "kassa" haqida, "kassir" haqida emas: detektor odamni
+  # topadi, lavozimni emas.
+
+  - name: Kassada hech kim yo'q
+    event_type: checkout_unattended
+    # Analyzer buni faqat kadrda odam bor, kassada esa yo'q paytda
+    # chiqaradi — bo'sh do'kondagi bo'sh kassa signal emas.
+    schedule: ish-vaqti
+    severity: warning
+    cooldown_sec: 900
+    actions: [cloud_sync, telegram_alert]
+
+  - name: Ikkinchi kassani ochish kerak
+    event_type: checkout_second_till
+    # Faqat ikki va undan ko'p kassa zonasi bo'lgan do'konda: bittasida
+    # navbat chegaradan oshgan, boshqasida umuman odam yo'q.
+    schedule: ish-vaqti
+    severity: warning
+    cooldown_sec: 600
+    actions: [cloud_sync, telegram_alert]
+
   # Kirish/chiqish sanog'i hisobot uchun kerak, lekin xabar qilinmaydi —
   # aks holda telefon kun bo'yi jiringlaydi.
   - name: Kirish-chiqish

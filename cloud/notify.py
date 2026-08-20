@@ -53,6 +53,10 @@ EVENT_LABELS: Dict[str, str] = {
     "line_crossed": "Kirish/chiqish",
     "dwell_exceeded": "Zonada uzoq turdi",
     "queue_threshold_exceeded": "Navbat uzun",
+    # Detektor odamni topadi, kassirni emas — matn ham shunga mos:
+    # "kassada hech kim yo'q" o'lchanadigan fakt, "kassir ketdi" taxmin.
+    "checkout_unattended": "Kassada hech kim yo'q",
+    "checkout_second_till": "Ikkinchi kassani oching",
     "after_hours_presence": "Ish vaqtidan tashqari harakat",
     "camera_tampered": "Kamera yopildi yoki burildi",
     # Sog'liq hodisalari do'kon egasi uchun aniq tilda: u nima buzilganini

@@ -221,12 +221,94 @@ class SceneAnalyzer:
             {zone.name: float(zone.dwell_sec) for zone in self.zones if zone.dwell_sec is not None}
         )
         self._queue_alerted = False
+        #: Kassa zonasi qachondan beri bo'sh (zona → monotonik vaqt).
+        self._checkout_empty_since: Dict[str, float] = {}
+        self._checkout_alerted: Dict[str, bool] = {}
+        self._second_till_alerted = False
         self._last_analysis = 0.0
         self._track_first_seen: Dict[int, float] = {}
         self._track_last_seen: Dict[int, float] = {}
         self._track_zones: Dict[int, set[str]] = {}
         self._emitted: Dict[Tuple[str, str], float] = {}
         self._occupancy_alerted = False
+
+    def _checkout_events(
+        self,
+        zone_counts: Dict[str, int],
+        queue_zones: List[str],
+        people_in_view: int,
+        now: float,
+    ) -> List[EdgeEvent]:
+        """Kassa nazorati: bo'sh kassa va ikkinchi kassa kerakligi.
+
+        **Nima aytiladi va nima aytilmaydi.** Detektor ODAMNI topadi,
+        kassirni emas.  "Kassada hech kim yo'q" — o'lchanadigan fakt.
+        "Kassir ketib qoldi" — taxmin, va uni sotuv va'dasiga aylantirish
+        aynan `FORBIDDEN_CLAIMS` ushlaydigan xato bo'lardi.  Shu sabab
+        hamma matnda **kassa**, hech qachon **kassir**.
+
+        Bo'sh kassaning o'zi signal EMAS: mijoz yo'q paytda kassa bo'sh
+        bo'lishi normal va bu haqda xabar berish — shovqin.  Signal
+        ikkalasi birga bo'lganda chiqadi: kadrda odamlar bor, kassada
+        esa yo'q.
+        """
+        events: List[EdgeEvent] = []
+        idle_limit = float(self.settings.checkout_idle_sec)
+
+        for zone_name in queue_zones:
+            waiting = zone_counts.get(zone_name, 0)
+            if waiting:
+                # Kassada odam bor — hisob noldan boshlanadi.
+                self._checkout_empty_since.pop(zone_name, None)
+                self._checkout_alerted[zone_name] = False
+                continue
+            if people_in_view < 1:
+                # Do'konda umuman odam yo'q: bo'sh kassa kutilgan holat.
+                # Hisob ham boshlanmaydi, aks holda kechqurun yopilgandan
+                # keyin ertalab birinchi mijoz kelishi bilan signal
+                # chiqib ketardi.
+                self._checkout_empty_since.pop(zone_name, None)
+                continue
+            since = self._checkout_empty_since.setdefault(zone_name, now)
+            if now - since < idle_limit or self._checkout_alerted.get(zone_name):
+                continue
+            self._checkout_alerted[zone_name] = True
+            events.append(
+                EdgeEvent(
+                    event_type="checkout_unattended",
+                    severity="warning",
+                    camera_id=self.camera_id,
+                    zone=zone_name,
+                    metadata={
+                        "idle_sec": round(now - since, 1),
+                        "people_in_view": people_in_view,
+                    },
+                )
+            )
+
+        # Ikkinchi kassa: bittasida navbat chegaradan oshgan, boshqasida
+        # esa umuman odam yo'q.  Bitta kassali do'konda bu hodisa
+        # chiqmaydi — ochadigan ikkinchi kassa yo'q.
+        if len(queue_zones) >= 2:
+            counts = {zone: zone_counts.get(zone, 0) for zone in queue_zones}
+            busiest = max(counts, key=lambda zone: counts[zone])
+            idle = [zone for zone, count in counts.items() if count == 0]
+            if counts[busiest] >= self.settings.queue_limit and idle:
+                if not self._second_till_alerted:
+                    self._second_till_alerted = True
+                    events.append(
+                        EdgeEvent(
+                            event_type="checkout_second_till",
+                            severity="warning",
+                            camera_id=self.camera_id,
+                            zone=busiest,
+                            queue_length=counts[busiest],
+                            metadata={"bosh_kassalar": idle},
+                        )
+                    )
+            else:
+                self._second_till_alerted = False
+        return events
 
     def _estimate_demography(
         self, frame: np.ndarray, detection: Dict[str, Any], track_id: int
@@ -426,6 +508,8 @@ class SceneAnalyzer:
                 )
             elif longest_queue < self.settings.queue_limit:
                 self._queue_alerted = False
+
+            events.extend(self._checkout_events(zone_counts, queue_zones, len(detections), now))
 
         occupancy = len(detections)
         if occupancy >= self.settings.occupancy_limit and not self._occupancy_alerted:

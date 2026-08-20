@@ -396,6 +396,10 @@ class SiteConfigBody(BaseModel):
     occupancy_limit: int = Field(default=20, ge=1, le=10000)
     loitering_sec: int = Field(default=60, ge=5, le=86400)
     queue_limit: int = Field(default=5, ge=1, le=1000)
+    #: Kassa shuncha daqiqa bo'sh qolsa xabar beriladi (qurilmada
+    #: soniyaga aylantiriladi).  Mijoz panelda daqiqada ko'radi —
+    #: "300 soniya" degan sozlama do'kon egasiga hech narsa aytmaydi.
+    checkout_idle_minutes: int = Field(default=5, ge=1, le=60)
     open_from: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     open_to: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     attendance_camera_ids: List[str] = Field(default_factory=list, max_length=2)

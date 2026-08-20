@@ -476,3 +476,29 @@ def test_live_frame_loop_writes_requested_camera_frames(tmp_path: Path, monkeypa
 
     assert target.is_file() and target.stat().st_size > 0
     assert not (tmp_path / "live" / "camera-09.jpg").exists(), "kadri yo'q kamera yozilmasin"
+
+
+def test_checkout_alerts_ride_the_queue_feature(tmp_path: Path) -> None:
+    """Kassa nazorati alohida narxlanadigan funksiya EMAS.
+
+    U navbat o'lchovining o'zidan chiqadi.  Alohida kod qo'shilsa
+    `/api/v1/public/pricing` uni kamera bo'yicha narxlanadigan
+    qo'shimcha sifatida ko'rsatib qo'yardi va "hammasi ichida" degan
+    yagona narx va'dasi buzilardi.
+    """
+    queue_dir = tmp_path / "navbatli"
+    counting_dir = tmp_path / "sanoqli"
+    queue_dir.mkdir()
+    counting_dir.mkdir()
+    settings = settings_for(sotqin_config_path="sotqin-cache.json")
+
+    def filter_for(code: str, folder: Path):
+        (folder / "sotqin-cache.json").write_text(
+            '{"revision":7,"cloud_features":[{"code":"%s"}]}' % code, encoding="utf-8"
+        )
+        return retail_event_filter(settings, folder)
+
+    for kind in ("checkout_unattended", "checkout_second_till"):
+        event = EdgeEvent(event_type=kind, camera_id="camera-02", severity="warning")
+        assert filter_for("queue_length", queue_dir)(event) is True, kind
+        assert filter_for("person_count", counting_dir)(event) is False, kind

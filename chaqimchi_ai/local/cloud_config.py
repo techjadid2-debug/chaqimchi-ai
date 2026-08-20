@@ -170,6 +170,11 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
         for key in ("occupancy_limit", "queue_limit", "loitering_sec")
         if site.get(key)
     }
+    # Mijoz daqiqada kiritadi, zanjir soniyada o'ylaydi.  O'girish shu
+    # yerda — bitta joyda: ikkala tomonda ham daqiqa/soniya aralashsa
+    # sozlama 60 barobar xato ishlardi.
+    if site.get("checkout_idle_minutes"):
+        limits["checkout_idle_sec"] = int(site["checkout_idle_minutes"]) * 60
     if limits:
         config_store.update("scene", limits)
         changed["limits"] = True

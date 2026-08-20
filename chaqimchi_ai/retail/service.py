@@ -272,7 +272,16 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
         for camera_id in (cache.get("config") or {}).get("attendance_camera_ids") or []
     }
     traffic = {"line_crossed", "occupancy_exceeded", "dwell_exceeded"}
-    queue = {"queue_threshold_exceeded"}
+    # Kassa nazorati alohida funksiya EMAS: u navbat o'lchovining o'zidan
+    # chiqadi va shu paketda sotiladi.  Alohida kod qo'shilsa
+    # `/api/v1/public/pricing` uni kamera bo'yicha narxlanadigan
+    # qo'shimcha sifatida ko'rsatib qo'yardi va yagona narx va'dasi
+    # buzilardi.
+    queue = {
+        "queue_threshold_exceeded",
+        "checkout_unattended",
+        "checkout_second_till",
+    }
     security = {
         "zone_entered",
         "loitering",

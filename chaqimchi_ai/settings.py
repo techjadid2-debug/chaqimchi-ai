@@ -125,6 +125,9 @@ class SceneSettings(BaseModel):
     event_debounce_sec: int = Field(default=30, ge=1, le=3600)
     #: Navbatdagi odam soni shundan oshsa `queue_threshold_exceeded`.
     queue_limit: int = Field(default=5, ge=1, le=1000)
+    #: Kassa zonasi shuncha soniya bo'sh qolsa `checkout_unattended`.
+    #: 5 daqiqa — kassir bir daqiqaga chetga chiqqani signal bo'lmasin.
+    checkout_idle_sec: int = Field(default=300, ge=60, le=3600)
     zones: List[SceneZoneSettings] = Field(default_factory=list)
     lines: List[SceneLineSettings] = Field(default_factory=list)
     #: Mijoz demografiyasi (jins/yosh) — faqat kirish chizig'i bor kamerada,

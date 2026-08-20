@@ -1387,6 +1387,7 @@ class EventStore:
                     # yaratar edi.  5 daqiqa — haqiqatan g'ayrioddiy holat.
                     "loitering_sec": 300,
                     "queue_limit": 5,
+                    "checkout_idle_minutes": 5,
                     "open_from": None,
                     "open_to": None,
                     "attendance_camera_ids": [],

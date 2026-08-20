@@ -29,6 +29,12 @@ EventType = Literal[
     "dwell_exceeded",
     #: Navbatdagi odam soni chegaradan oshdi (`queue_length`).
     "queue_threshold_exceeded",
+    #: Kadrda mijozlar bor, kassa zonasida esa uzoq vaqt hech kim yo'q.
+    #: Ataylab "kassada hech kim yo'q", "kassir ketdi" EMAS: detektor
+    #: odamni topadi, lavozimni emas.
+    "checkout_unattended",
+    #: Bir kassada navbat chegaradan oshgan, boshqasi esa bo'sh.
+    "checkout_second_till",
     #: Ish vaqtidan tashqari harakat.
     "after_hours_presence",
     #: Kamera yopildi, burildi yoki ko'rinishi buzildi.

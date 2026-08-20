@@ -76,9 +76,7 @@ def store(tmp_path) -> CloudStore:
 
 def _age_device(store: CloudStore, site_id: str, minutes: int) -> None:
     conn = store._connect()
-    conn.execute(
-        "UPDATE devices SET last_seen = ? WHERE site_id = ?", (_seen(minutes), site_id)
-    )
+    conn.execute("UPDATE devices SET last_seen = ? WHERE site_id = ?", (_seen(minutes), site_id))
     conn.commit()
     conn.close()
 

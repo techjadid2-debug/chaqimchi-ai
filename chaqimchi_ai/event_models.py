@@ -14,6 +14,10 @@ EventType = Literal[
     # ── V1 ────────────────────────────────────────────────────────────────
     "person_detected",
     "employee_seen",
+    #: Davomat kamerasidan yuz kadri (yopiq pilot).  Qurilma yuzni
+    #: TANIMAYDI — faqat crop yuboradi; moslash cloudda bo'ladi va natija
+    #: server tomonda `employee_seen` sifatida yoziladi.
+    "face_captured",
     "zone_entered",
     "loitering",
     "occupancy_exceeded",
@@ -25,10 +29,33 @@ EventType = Literal[
     "dwell_exceeded",
     #: Navbatdagi odam soni chegaradan oshdi (`queue_length`).
     "queue_threshold_exceeded",
+    #: Kadrda mijozlar bor, kassa zonasida esa uzoq vaqt hech kim yo'q.
+    #: Ataylab "kassada hech kim yo'q", "kassir ketdi" EMAS: detektor
+    #: odamni topadi, lavozimni emas.
+    "checkout_unattended",
+    #: Bir kassada navbat chegaradan oshgan, boshqasi esa bo'sh.
+    "checkout_second_till",
+    #: Javondagi mahsulot keskin kamaydi (`retail/shelf.py`).  "Bo'sh"
+    #: deyilmaydi: o'lchanadigan narsa — chekka zichligining etalonga
+    #: nisbati, ya'ni "javon ancha bo'shab qolgan".
+    "shelf_empty",
     #: Ish vaqtidan tashqari harakat.
     "after_hours_presence",
     #: Kamera yopildi, burildi yoki ko'rinishi buzildi.
     "camera_tampered",
+    # ── Kamera sog'ligi ───────────────────────────────────────────────────
+    #
+    # Bulargacha kamera holati faqat `runner.stats()` ichida yashardi va
+    # hech qachon hodisaga aylanmasdi: kamera o'chsa do'kon egasi buni
+    # hisobotdagi bo'shliqdan, ya'ni bir necha kundan keyin bilardi.
+    #: Kamera ketma-ket bir necha marta ulanmadi (kabel, quvvat, NVR).
+    "camera_offline",
+    #: Uzilishdan keyin qayta ulandi.  `metadata.downtime_sec` bilan keladi.
+    "camera_recovered",
+    #: Oqim ochiq, lekin kadr o'zgarmayapti — dekoder yoki NVR qotib qolgan.
+    #: Bu eng xavflisi: harakat yo'q degani filtr uni to'sadi va buzilish
+    #: tekshiruvi ham "normal" deydi, ya'ni tizim sog'lom ko'rinadi.
+    "stream_frozen",
     #: Ko'rish agenti kadrni ko'rib bergan xulosa.  Boshqa hodisadan **keyin**
     #: tug'iladi (`metadata.source_event_type`) va uni odam tilida
     #: tushuntiradi: "kassa oldida ikki kishi janjallashmoqda".

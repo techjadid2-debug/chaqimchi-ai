@@ -84,6 +84,111 @@ Backup fayli va uning paroli bir joyda saqlanmasin. Kamida oyiga bir marta
 alohida staging hostda restore drill o‘tkazing. Restore drill bajarilmaguncha
 “backup bor” production tayyor degani emas.
 
+### 2.1 Kunlik avtomatik backup (majburiy)
+
+Deploy paytidagi backup yetarli emas: deploy bo‘lmagan har kun — backup
+bo‘lmagan kun.
+
+**Ikki xil zaxira bor va bu ataylab:**
+
+| Nima | Qachon | Hajmi | Nechta saqlanadi |
+|---|---|---|---|
+| Baza (PostgreSQL + `cloud.db` + kalitlar) | har kuni 03:30 | ~50–200 MB | 14 kun + tashqi nusxa |
+| Media (MinIO — rasm/kliplar) | yakshanba 04:30 | o‘nlab GB | 8 kun (2 nusxa) |
+
+Sabab: ilgari har kecha butun MinIO diskka nusxalanardi va arxiv 14 kun
+saqlanardi — media hajmi diskda ~15 barobar takrorlanib, 96 GB server
+ikki-uch do‘kondan keyin to‘lardi. Hisob-faktura va akkauntlar yo‘qolsa
+biznes to‘xtaydi; bir haftalik klip yo‘qolsa — yo‘q.
+
+VPS’da bir marta o‘rnatiladi:
+
+```bash
+sudo mkdir -p /etc/chaqimchi
+sudo cp deploy/backup.env.example /etc/chaqimchi/backup.env
+sudo nano /etc/chaqimchi/backup.env         # parol va yo'llarni kiriting
+sudo chmod 600 /etc/chaqimchi/backup.env
+sudo cp deploy/chaqimchi-backup.service deploy/chaqimchi-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chaqimchi-backup.timer
+sudo systemctl start chaqimchi-backup.service   # birinchi sinov darhol
+systemctl list-timers chaqimchi-backup.timer    # keyingi ishga tushish vaqti
+```
+
+Har kuni 03:30 da baza backupi olinadi, 14 kundan eskilari o‘chiriladi.
+Holatni tekshirish: `journalctl -u chaqimchi-backup.service -n 20`.
+
+Media uchun ikkinchi unit (bir marta):
+
+```bash
+sudo cp deploy/chaqimchi-backup-media.service deploy/chaqimchi-backup-media.timer \
+  /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chaqimchi-backup-media.timer
+sudo systemctl start chaqimchi-backup-media.service   # birinchi sinov
+```
+
+Qo‘lda media zaxirasi: `./scripts/backup_production.sh --media`.
+
+**Tashqi nusxa.** `RESTIC_REPOSITORY` sozlanmasa arxiv faqat shu serverda
+yotadi va server bilan birga yo‘qoladi. Kunlik arxiv endi kichik, ya’ni
+bepul 10–15 GB lik ombor bir necha oyga yetadi. Preflight buni tekshiradi:
+
+```bash
+python3 scripts/production_preflight.py --env-file .env.production \
+  --backup-env /etc/chaqimchi/backup.env
+```
+
+### 2.2 Restore mashqi (oyiga 1 marta)
+
+Mashq **production'ga tegmaydi**: arxiv ochiladi va mazmuni tekshiriladi.
+
+```bash
+cd /home/deploy/chaqimchi-ai
+export CHAQIMCHI_BACKUP_PASSWORD='...'          # parol menejeridan
+export CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml
+./scripts/restore_production.sh --check \
+  /home/deploy/chaqimchi-backups/chaqimchi-<sana>.tar.gz.enc
+```
+
+Skript to'rt narsani tekshiradi va bittasi ham yetishmasa xato beradi:
+
+| Tekshiruv | Nega |
+|---|---|
+| PostgreSQL dump ochiladimi, nechta jadval bor | bo'sh dump ham "sog'lom" ko'rinadi |
+| `cloud.db` yaxlitmi, ichida sayt/hisob/login bormi | hisob-faktura va obunalar shu yerda |
+| MinIO obyektlari soni | rasm va kliplar |
+| **Shifrlash kalitlari** (`CHAQIMCHI_CAMERA_SECRET_KEY`, `CHAQIMCHI_SNAPSHOT_KEY`) | ularsiz kamera parollari va barcha media o'qib bo'lmaydi |
+
+Skript arxiv turini mazmunidan aniqlaydi: baza arxivida MinIO tekshiruvi
+o‘tkazilmaydi (u yerda media ataylab yo‘q), media arxivida esa faqat
+obyektlar soni tekshiriladi. Media arxivini `--restore` qilish bazaga
+tegmaydi va aksincha.
+
+Natijani sana bilan quyidagi jadvalga yozing.
+
+### 2.3 Haqiqiy tiklash (server yo'qolganda)
+
+```bash
+./scripts/restore_production.sh --restore <arxiv.tar.gz.enc>
+```
+
+Skript `TIKLASH` deb yozishni so'raydi, so'ng joriy `.env.production` ni
+zaxiralab, sozlamalarni, PostgreSQL'ni, `cloud.db` ni va MinIO'ni
+arxivdagisiga almashtiradi. Undan keyin qo'lda ikki ish qoladi:
+
+1. Rasm va kliplar — eng yangi `chaqimchi-media-*.tar.gz.enc` arxivini
+   ham `--restore` qiling (ular kunlik arxivda yo'q)
+2. Yuz modellari — `python scripts/fetch_face_models.py` (ular arxivga
+   ataylab kirmaydi: o'zgarmaydi va ~180 MB joy egallaydi)
+3. Telegram webhook — `python scripts/set_telegram_webhook.py`
+
+Restore mashqlari jurnali:
+
+| Sana | Kim | Natija |
+|---|---|---|
+| 2026-08-19 | Abdulvosit | ✓ 12 jadval, `cloud.db` butun, kalitlar joyida. Mashq ikkita xatoni topdi: `docker cp` konteynerning tmpfs `/tmp` idan o‘qiy olmasdi, va hostda `pg_restore` yo‘qligi “dump bo‘sh” deb ko‘rinardi — ikkalasi tuzatildi. |
+
 ## 3. Deploydan keyingi tekshiruv
 
 ```bash

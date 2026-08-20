@@ -7,7 +7,18 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# Reliz artefaktlari git'da saqlanmaydi — ular CI'da quriladi va GitHub
+# Releases'ga yuklanadi.  O'rnatuvchi .exe ichida Python va AI modellari bor,
+# ya'ni ~150 MB: bunday binarni har build'da commit qilish repo tarixini
+# qaytarib bo'lmas darajada shishiradi.
 releases/*.tar.gz
+releases/*.zip
+releases/*.exe
+# Windows manifesti har qurishda yangi SHA bilan qayta yoziladi va u
+# ta'riflaydigan `.exe` git'da yo'q — ya'ni yolg'iz manifestning ma'nosi
+# ham yo'q.  (Linux `chaqimchi-sotqin-*.json` esa kuzatiladi: u reliz
+# tarixining bir qismi.)
+releases/chaqimchi-windows-*.json
 
 # Ma'lumotlar va modellar
 data/
@@ -24,6 +35,10 @@ data/
 .deploy_keys/
 secrets/
 *.pem
+# OTA ochiq kaliti — ataylab commit qilinadi: u reliz paketi ichida
+# qurilmaga boradi va o'rnatishda qotiriladi.  Maxfiy kalit esa repo
+# daraxtidan tashqarida (~/.chaqimchi/), ya'ni bu yerga tushishi mumkin emas.
+!deploy/update-public.pem
 *.key
 *.p12
 *.pfx

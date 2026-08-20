@@ -67,6 +67,17 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     public_url = require("CHAQIMCHI_PUBLIC_URL")
     if public_url and not _https(public_url):
         errors.append("CHAQIMCHI_PUBLIC_URL haqiqiy HTTPS manzil bo'lishi kerak")
+    # Subdomen manzillari ixtiyoriy, lekin berilsa HTTPS bo'lishi shart.
+    for key in (
+        "CHAQIMCHI_APP_URL",
+        "CHAQIMCHI_API_URL",
+        "CHAQIMCHI_DL_URL",
+        "CHAQIMCHI_PARTNER_URL",
+        "CHAQIMCHI_ADMIN_URL",
+    ):
+        value = values.get(key, "").strip()
+        if value and not _https(value):
+            errors.append(f"{key} haqiqiy HTTPS manzil bo'lishi kerak")
 
     for key in (
         "POSTGRES_DB",
@@ -110,6 +121,33 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     elif any(not re.fullmatch(r"-?\d+", item.strip()) for item in recipients.split(",")):
         errors.append("Telegram chat ID'lari vergul bilan ajratilgan sonlar bo'lishi kerak")
 
+    # Sinov eshiklari production'da bo'lishi mumkin emas.  Bular env
+    # orqali yoqilgani uchun eng real xavf — "demo paytida qo'yib,
+    # o'chirishni unutish".  Cloud lifespan ham xuddi shu tekshiruvni
+    # qiladi, lekin preflight muammoni deploy'dan OLDIN ushlaydi.
+    if values.get("CHAQIMCHI_OTP_TEST_CODE", "").strip():
+        errors.append(
+            "CHAQIMCHI_OTP_TEST_CODE production'da taqiqlanadi — hamma "
+            "mijozning OTP kodi bitta doimiy qiymat bo'lib qoladi"
+        )
+    if values.get("CHAQIMCHI_OTP_BYPASS_IDS", "").strip():
+        errors.append(
+            "CHAQIMCHI_OTP_BYPASS_IDS olib tashlangan — o'rniga admin "
+            "panel yoki Telegram bot beradigan kirish havolasini ishlating"
+        )
+
+    # Yuz tanish piloti: embedding shifrlash kalitisiz yoqib bo'lmaydi —
+    # aks holda biometrik vektorlar bazada ochiq yotadi.
+    if values.get("CHAQIMCHI_ATTENDANCE_PILOT", "").strip().lower() in {"1", "true", "yes"}:
+        pilot_key = values.get("CHAQIMCHI_EMBEDDING_KEY", "").strip()
+        if not pilot_key:
+            errors.append("CHAQIMCHI_ATTENDANCE_PILOT yoqiq, lekin CHAQIMCHI_EMBEDDING_KEY yo'q")
+        else:
+            try:
+                Fernet(pilot_key.encode("utf-8"))
+            except (TypeError, ValueError):
+                errors.append("CHAQIMCHI_EMBEDDING_KEY haqiqiy Fernet kaliti emas")
+
     release_url = require("CHAQIMCHI_SOTQIN_RELEASE_URL")
     release_sha = require("CHAQIMCHI_SOTQIN_RELEASE_SHA256")
     if release_url and not _https(release_url):
@@ -121,20 +159,64 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
         warnings.append("N100 qabul fayli yo'q: public AI funksiyalari sotuvga ochilmaydi")
     if not values.get("CHAQIMCHI_AVAILABLE_FEATURES", "").strip():
         warnings.append("Public AI funksiyalari environmentda yoqilmagan")
-    if not any(values.get(key, "").strip() for key in ("CHAQIMCHI_PAYME_KEY", "CHAQIMCHI_CLICK_SECRET")):
+    if not any(
+        values.get(key, "").strip() for key in ("CHAQIMCHI_PAYME_KEY", "CHAQIMCHI_CLICK_SECRET")
+    ):
         warnings.append("Payme/Click ulanmagan: faqat qo'lda to'lov ishlaydi")
     return errors, warnings
+
+
+#: Zaxira sozlamalari alohida faylda turadi (`chaqimchi-backup.service`
+#: shuni o'qiydi), shuning uchun `.env.production` bilan bir qatorda
+#: tekshiriladi.
+DEFAULT_BACKUP_ENV = Path("/etc/chaqimchi/backup.env")
+
+
+def check_backup(path: Path) -> List[str]:
+    """Zaxira nusxa server bilan birga yo'qolmaydimi.
+
+    Server bir marta to'lov uzilishi sabab o'chgan.  Agar zaxira faqat
+    o'sha serverda yotsa — hisob-faktura, obuna va portal loginlari u
+    bilan birga ketadi.  Bu tekshiruv shuni ogohlantiradi.
+    """
+    if not path.is_file():
+        return [
+            f"{path} topilmadi — kunlik zaxira o'rnatilmagan bo'lishi mumkin "
+            "(docs/PRODUCTION_RUNBOOK.md, 2.1-bo'lim)"
+        ]
+    values = read_env(path)
+    warnings: List[str] = []
+    restic = bool(values.get("RESTIC_REPOSITORY", "").strip())
+    telegram = bool(
+        values.get("CHAQIMCHI_BACKUP_TELEGRAM_TOKEN", "").strip()
+        and values.get("CHAQIMCHI_BACKUP_TELEGRAM_CHAT_ID", "").strip()
+    )
+    if not restic and not telegram:
+        warnings.append(
+            "Tashqi nusxa sozlanmagan: zaxira faqat shu serverda yotibdi. "
+            "Server yo'qolsa hisob-faktura va akkauntlar bilan birga zaxira ham yo'qoladi"
+        )
+    if restic and not values.get("RESTIC_PASSWORD", "").strip():
+        warnings.append("RESTIC_REPOSITORY bor, lekin RESTIC_PASSWORD yo'q — nusxa chiqmaydi")
+    return warnings
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Cloud production preflight")
     parser.add_argument("--env-file", type=Path, default=Path(".env.production"))
+    parser.add_argument(
+        "--backup-env",
+        type=Path,
+        default=DEFAULT_BACKUP_ENV,
+        help="zaxira sozlamalari fayli (chaqimchi-backup.service o'qiydigan)",
+    )
     args = parser.parse_args()
     if not args.env_file.is_file():
         print(f"XATO: {args.env_file} topilmadi")
         return 1
     mode = stat.S_IMODE(args.env_file.stat().st_mode)
     errors, warnings = validate(read_env(args.env_file))
+    warnings.extend(check_backup(args.backup_env))
     if mode & 0o077:
         errors.append(f"{args.env_file} ruxsati {mode:o}; 600 bo'lishi shart")
     for warning in warnings:

@@ -47,12 +47,26 @@ def _site(
 
 
 def test_alert_config_can_reuse_owner_bot_token(monkeypatch) -> None:
+    monkeypatch.delenv("CHAQIMCHI_SALES_TELEGRAM_TOKEN", raising=False)
     monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", raising=False)
     monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "owner-token")
     monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "123")
     config = AlertConfig.from_env()
     assert config.enabled
     assert config.token == "owner-token"
+
+
+def test_sales_bot_token_wins_over_the_customer_bot(monkeypatch) -> None:
+    """Arizalar va servis xabarlari SOTUV botidan ketadi.
+
+    Ikkalasi bitta botdan kelsa, ega uchun "yangi ariza" va "do'kon
+    hisoboti" bir chatda aralashib, ikkalasi ham e'tibordan qolardi.
+    """
+    monkeypatch.setenv("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "sotuv-token")
+    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "mijoz-token")
+    monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "123")
+
+    assert AlertConfig.from_env().token == "sotuv-token"
 
 
 # ── plan_alerts: kimga xabar ketadi ──────────────────────────────────────
@@ -242,9 +256,7 @@ def test_recovery_clears_state(store: CloudStore) -> None:
 
     # Qurilma yana xabar berdi.
     conn = store._connect()
-    conn.execute(
-        "UPDATE devices SET last_seen = ? WHERE site_id = ?", (_stamp(0), site_id)
-    )
+    conn.execute("UPDATE devices SET last_seen = ? WHERE site_id = ?", (_stamp(0), site_id))
     conn.commit()
     conn.close()
 
@@ -398,6 +410,47 @@ def test_api_test_message_rejected_when_not_configured(cloud_client) -> None:
     r = cloud_client.post("/api/v1/admin/alerts/test", headers=ADMIN)
     assert r.status_code == 400
     assert "TELEGRAM_TOKEN" in r.json()["detail"]
+
+
+# ── Server diski ─────────────────────────────────────────────────────────
+#
+# Qurilma monitoringi mijoz tomonini qo'riqlaydi; bu VPS'ning o'zini.
+# Disk to'lsa PostgreSQL o'qish rejimiga tushadi va media yuklash 500
+# qaytara boshlaydi — buni mijozdan oldin bilish kerak.
+
+
+def test_full_disk_raises_an_alert_once() -> None:
+    from cloud.alerts import SERVER_SITE_ID, plan_disk_alert
+
+    alerts, _ = plan_disk_alert(91.0, {})
+    assert len(alerts) == 1
+    assert alerts[0].site_id == SERVER_SITE_ID
+    assert alerts[0].kind == "disk"
+    assert alerts[0].remember == "full"
+
+    # Holat yozilgach o'sha xabar takrorlanmaydi.
+    repeat, _ = plan_disk_alert(92.0, {SERVER_SITE_ID: "full"})
+    assert repeat == []
+
+
+def test_disk_recovery_uses_hysteresis() -> None:
+    """84.9/85.1 atrofidagi tebranish xabar bo'roniga aylanmasin."""
+    from cloud.alerts import SERVER_SITE_ID, plan_disk_alert
+
+    # 85 dan tushdi, lekin hali 80 dan baland — jim.
+    between, _ = plan_disk_alert(83.0, {SERVER_SITE_ID: "full"})
+    assert between == []
+
+    # 80 dan pastga tushgach "tiklandi" ketadi.
+    recovered, _ = plan_disk_alert(70.0, {SERVER_SITE_ID: "full"})
+    assert len(recovered) == 1 and recovered[0].remember is None
+
+
+def test_unknown_disk_usage_is_silent() -> None:
+    from cloud.alerts import plan_disk_alert
+
+    alerts, forget = plan_disk_alert(None, {})
+    assert alerts == [] and forget == []
 
 
 def test_api_manual_check_runs(cloud_client) -> None:

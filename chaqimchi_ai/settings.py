@@ -10,23 +10,6 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class FaceSettings(BaseModel):
-    model_name: str = "buffalo_l"
-    model_root: Optional[str] = None
-    model_version: Optional[str] = None
-    det_size: Tuple[int, int] = (640, 640)
-    preprocess_max_side: int = Field(default=1024, ge=64, le=4096)
-    compare_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
-    commercial_model_licensed: bool = False
-
-    @field_validator("det_size")
-    @classmethod
-    def _det(cls, v: Any) -> Tuple[int, int]:
-        if isinstance(v, (list, tuple)) and len(v) == 2:
-            return int(v[0]), int(v[1])
-        raise ValueError("det_size [w,h] bo‘lishi kerak")
-
-
 class PathsSettings(BaseModel):
     reference_image: str = "data/abdulvosit/reference_outdoor.png"
     db_path: str = "data/database"
@@ -34,7 +17,6 @@ class PathsSettings(BaseModel):
     snapshots_dir: str = "data/snapshots"
     calibration_dir: str = "data/calibration"
     audit_db: str = "data/audit.db"
-    vision_db: str = "data/vision_usage.db"
 
 
 class TrackingSettings(BaseModel):
@@ -62,11 +44,22 @@ class CloudSyncSettings(BaseModel):
     site_id: Optional[str] = None
     device_id: Optional[str] = None
     device_token: Optional[str] = None
+    #: Navbatda ish bo'lganda eng tez oraliq.
     interval_sec: int = Field(default=5, ge=1, le=3600)
+    #: Navbat bo'sh bo'lganda oraliq shu qiymatgacha ikkilanib boradi.
+    #: Har 5 soniyada so'rov yuborish soatiga 720 chaqiruv demak — bu
+    #: cloud chegarasini (429) tinch do'konda ham urib yuborardi.
+    max_interval_sec: int = Field(default=60, ge=1, le=3600)
     heartbeat_interval_sec: int = Field(default=60, ge=10, le=3600)
     batch_size: int = Field(default=50, ge=1, le=500)
     queue_days: int = Field(default=7, ge=1, le=30)
     queue_max_bytes: int = Field(default=20 * 1024**3, ge=1024**2)
+
+    @model_validator(mode="after")
+    def _intervals(self) -> "CloudSyncSettings":
+        if self.max_interval_sec < self.interval_sec:
+            raise ValueError("max_interval_sec interval_sec dan kichik bo'lmasin")
+        return self
 
 
 class SceneZoneSettings(BaseModel):
@@ -80,6 +73,9 @@ class SceneZoneSettings(BaseModel):
     #: Shu zonada shuncha soniyadan uzoq turgan mijoz uchun `dwell_exceeded`.
     #: `None` — zona uchun dwell o'lchanmaydi (yo'lak, kirish maydoni).
     dwell_sec: Optional[int] = Field(default=None, ge=5, le=86400)
+    #: Mahsulot javoni.  Zonadagi chekka zichligi o'rganilgan etalondan
+    #: keskin pasaysa `shelf_empty` chiqadi (`retail/shelf.py`).
+    shelf: bool = False
 
     @field_validator("polygon")
     @classmethod
@@ -117,8 +113,9 @@ class SceneLineSettings(BaseModel):
 
 class SceneSettings(BaseModel):
     enabled: bool = False
-    #: `openvino` — Sotqin (Intel N100) uchun asosiy yo'l.
-    backend: Literal["onnx", "rknn", "openvino"] = "onnx"
+    #: `openvino` — Sotqin (Intel N100) uchun asosiy yo'l.  `onnx` faqat
+    #: ishlab chiqish mashinasi uchun qoladi.
+    backend: Literal["onnx", "openvino"] = "onnx"
     model_path: Optional[str] = None
     confidence: float = Field(default=0.45, ge=0.05, le=0.99)
     nms_threshold: float = Field(default=0.45, ge=0.05, le=0.99)
@@ -131,8 +128,22 @@ class SceneSettings(BaseModel):
     event_debounce_sec: int = Field(default=30, ge=1, le=3600)
     #: Navbatdagi odam soni shundan oshsa `queue_threshold_exceeded`.
     queue_limit: int = Field(default=5, ge=1, le=1000)
+    #: Kassa zonasi shuncha soniya bo'sh qolsa `checkout_unattended`.
+    #: 5 daqiqa — kassir bir daqiqaga chetga chiqqani signal bo'lmasin.
+    checkout_idle_sec: int = Field(default=300, ge=60, le=3600)
+    #: Javondagi chekka zichligi etalonning shu ulushidan pastga tushsa
+    #: "bo'shab qolgan" deb hisoblanadi.  0.45 — yarmidan ko'pi ketgan.
+    shelf_empty_ratio: float = Field(default=0.45, ge=0.05, le=0.95)
+    #: Javon shuncha soniya past turishi kerak.  15 daqiqa — mijoz
+    #: mahsulotni olib, keyin qaytarib qo'ygani signal bo'lmasin.
+    shelf_empty_sec: int = Field(default=900, ge=60, le=7200)
     zones: List[SceneZoneSettings] = Field(default_factory=list)
     lines: List[SceneLineSettings] = Field(default_factory=list)
+    #: Mijoz demografiyasi (jins/yosh) — faqat kirish chizig'i bor kamerada,
+    #: chiziq kesilgan paytda ishlaydi.  Rasm saqlanmaydi va yuborilmaydi.
+    demographics_enabled: bool = True
+    face_model_path: Optional[str] = "models/retail/face-detection-retail-0004.xml"
+    age_gender_model_path: Optional[str] = "models/retail/age-gender-recognition-retail-0013.xml"
 
 
 class RetailCameraSettings(BaseModel):
@@ -160,6 +171,15 @@ class RetailCameraSettings(BaseModel):
 
 class RetailSettings(BaseModel):
     enabled: bool = False
+    #: Tarifda ruxsat etilgan kamera soni.  Cloud `/api/v1/edge/config`
+    #: javobida yuboradi (`product.max_cameras`), `cloud_config.apply()`
+    #: shu yerga yozadi.  `None` — cloud hali gapirmagan yoki qurilma
+    #: oflayn: bunda apparat chegarasi (`SHOP_MAX_CAMERAS`) ishlaydi.
+    #:
+    #: Bu **qulaylik chegarasi**, litsenziya chegarasi emas: fayl
+    #: mijozning o'z kompyuterida turadi.  Haqiqiy nazorat cloudda
+    #: (`CloudStore.upsert_camera`).
+    max_cameras: Optional[int] = Field(default=None, ge=1, le=16)
     #: Qurilma sekundiga nechta inferens ko'taradi.  Bu **boshlang'ich taxmin**:
     #: byudjet o'lchangan latency bo'yicha o'zini tuzatadi.
     target_fps: float = Field(default=30.0, ge=1, le=240)
@@ -194,6 +214,10 @@ class RetailSettings(BaseModel):
     #: Sotqin cloud config keshi.  Bo'sh bo'lsa `CHAQIMCHI_SOTQIN_CONFIG_CACHE`
     #: muhit o'zgaruvchisi, keyin standart yo'l ishlatiladi.
     sotqin_config_path: Optional[str] = None
+    #: Zanjir holati yoziladigan fayl (kameralarning **haqiqiy** ulanish
+    #: holati).  Sotqin agenti uni heartbeat uchun o'qiydi.  Bo'sh bo'lsa
+    #: `CHAQIMCHI_RETAIL_STATUS`, keyin standart yo'l.
+    status_path: Optional[str] = None
     #: Cloud'da kamera qo'shilsa/o'chirilsa xizmat o'zini to'xtatadi va
     #: systemd uni qayta ishga tushiradi — yangi ro'yxat shunda kuchga kiradi.
     restart_on_config_change: bool = True
@@ -266,24 +290,6 @@ class EventsSettings(BaseModel):
     retention_interval_sec: int = Field(default=21_600, ge=60, le=604_800)
 
 
-class VisionSettings(BaseModel):
-    """Ko‘rish agenti — kadrni AI ko‘rib tushuntiradi (pul sarflaydi)."""
-
-    enabled: bool = False
-    model: str = "claude-opus-5"
-    #: Kadr shu o‘lchamgacha kichraytiriladi — narxni tushirishning asosiy usuli.
-    max_side: int = Field(default=768, ge=256, le=2576)
-    jpeg_quality: int = Field(default=80, ge=40, le=95)
-    #: Bitta kamera uchun ikki tahlil orasidagi eng kam vaqt.
-    min_interval_sec: int = Field(default=300, ge=10, le=86_400)
-    max_calls_per_day: int = Field(default=100, ge=0, le=100_000)
-    max_calls_per_month: int = Field(default=2000, ge=0, le=1_000_000)
-    effort: Literal["low", "medium", "high"] = "low"
-    max_tokens: int = Field(default=2048, ge=256, le=32_000)
-    timeout_sec: float = Field(default=30.0, ge=5.0, le=300.0)
-    telegram_alerts: bool = True
-
-
 class ServerSettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = Field(default=8742, ge=1, le=65535)
@@ -297,11 +303,13 @@ class WebcamSettings(BaseModel):
     client_interval_ms: int = Field(default=140, ge=30, le=2000)
     jpeg_quality: float = Field(default=0.82, ge=0.1, le=1.0)
 
+
 class TelegramSettings(BaseModel):
     token: Optional[str] = None
     chat_id: Optional[str] = None
     enabled: bool = False
     alert_interval_sec: int = 60
+
 
 class CameraItem(BaseModel):
     id: str
@@ -322,6 +330,7 @@ class CameraItem(BaseModel):
             return s
         raise ValueError("source RTSP URL (str) yoki kamera indeksi (int) bo‘lishi kerak")
 
+
 class LicenseSettings(BaseModel):
     enabled: bool = False
     cloud_url: str = "http://127.0.0.1:8750"
@@ -335,7 +344,10 @@ class LicenseSettings(BaseModel):
 class AppSettings(BaseModel):
     environment: Literal["development", "test", "production"] = "development"
     license: LicenseSettings = Field(default_factory=LicenseSettings)
-    face: FaceSettings = Field(default_factory=FaceSettings)
+    # Eslatma: konfiguratsiyadagi `face:` bo'limi endi o'qilmaydi —
+    # davomat to'plami arxivlangan (`archive/attendance-local` tegi).
+    # Pydantic notanish kalitlarni indamay o'tkazadi, shuning uchun eski
+    # config.yaml fayllar buzilmaydi.
     paths: PathsSettings = Field(default_factory=PathsSettings)
     events: EventsSettings = Field(default_factory=EventsSettings)
     tracking: TrackingSettings = Field(default_factory=TrackingSettings)
@@ -348,7 +360,6 @@ class AppSettings(BaseModel):
     storage: StorageSettings = Field(default_factory=StorageSettings)
     roi: RoiSettings = Field(default_factory=RoiSettings)
     antispoof: AntispoofSettings = Field(default_factory=AntispoofSettings)
-    vision: VisionSettings = Field(default_factory=VisionSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     webcam: WebcamSettings = Field(default_factory=WebcamSettings)
     telegram: TelegramSettings = Field(default_factory=TelegramSettings)
@@ -362,6 +373,7 @@ class AppSettings(BaseModel):
                 raw = yaml.safe_load(f) or {}
         else:
             raw = {}
+
         def expand(value: Any) -> Any:
             if isinstance(value, str):
                 return os.path.expandvars(value)
@@ -396,34 +408,8 @@ class AppSettings(BaseModel):
             errors.append("CHAQIMCHI_JWT_SECRET kamida 32 belgidan iborat bo'lishi shart")
         if not self.rate_limit.enabled:
             errors.append("rate_limit productionda yoqilishi shart")
-        if not self.storage.encrypt_embeddings:
-            errors.append("embedding shifrlash productionda yoqilishi shart")
-        if self.storage.encrypt_embeddings and not os.environ.get(
-            "CHAQIMCHI_EMBEDDING_KEY", ""
-        ).strip():
-            errors.append("CHAQIMCHI_EMBEDDING_KEY berilishi shart")
-        licensed = self.face.commercial_model_licensed or os.environ.get(
-            "CHAQIMCHI_FACE_MODEL_LICENSED", ""
-        ).lower() in {"1", "true", "yes"}
-        attendance_pilot = os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-        if not licensed and not attendance_pilot:
-            errors.append("commercial Face ID model litsenziyasi tasdiqlanishi shart")
-        if licensed:
-            from chaqimchi_ai.model_bundle import verify_model_manifest
-
-            manifest = os.environ.get("CHAQIMCHI_FACE_MODEL_MANIFEST", "").strip()
-            if not manifest:
-                errors.append("CHAQIMCHI_FACE_MODEL_MANIFEST berilishi shart")
-            else:
-                errors.extend(verify_model_manifest(Path(manifest)))
-            if self.face.model_name in {"buffalo_l", "buffalo_s", "antelopev2"}:
-                errors.append("commercial rejim demo InsightFace model nomidan foydalana olmaydi")
-        if attendance_pilot and self.events.save_snapshots:
-            errors.append("davomat pilotida biometrik snapshot saqlash o'chirilishi shart")
+        # Face ID / davomat tekshiruvlari olib tashlandi: to'plam arxivda
+        # (`archive/attendance-local`), production'da bunday xizmat yo'q.
         if self.cloud_sync.enabled:
             if not self.cloud_sync.url.lower().startswith("https://"):
                 errors.append("cloud_sync.url productionda HTTPS bo'lishi shart")

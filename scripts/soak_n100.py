@@ -22,18 +22,21 @@ SERVICES = (
 def service_restarts() -> int:
     total = 0
     for service in SERVICES:
-        result = subprocess.run(
-            ["systemctl", "show", service, "--property=NRestarts", "--value"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            try:
-                total += int(result.stdout.strip() or 0)
-            except ValueError:
-                pass
+        try:
+            result = subprocess.run(
+                ["systemctl", "show", service, "--property=NRestarts", "--value"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                try:
+                    total += int(result.stdout.strip() or 0)
+                except ValueError:
+                    pass
+        except (FileNotFoundError, PermissionError, OSError):
+            pass
     return total
 
 
@@ -52,22 +55,16 @@ def summarize_samples(
     expected = len(samples)
     active = [int(item.get("cameras_active") or 0) for item in samples]
     temperatures = [
-        float(item["temperature_c"])
-        for item in samples
-        if item.get("temperature_c") is not None
+        float(item["temperature_c"]) for item in samples if item.get("temperature_c") is not None
     ]
     online_samples = sum(1 for count in active if count >= 4)
     return {
         "duration_hours": round(max(0.0, duration_hours), 3),
         "cameras_min_active": min(active, default=0),
         "unexpected_restarts": max(0, int(restart_delta)),
-        "camera_uptime_percent": round(
-            online_samples * 100 / expected if expected else 0.0, 3
-        ),
+        "camera_uptime_percent": round(online_samples * 100 / expected if expected else 0.0, 3),
         "max_temperature_c": round(max(temperatures), 2) if temperatures else None,
-        "undelivered_critical_events": int(
-            samples[-1].get("outbox_critical_pending") or 0
-        )
+        "undelivered_critical_events": int(samples[-1].get("outbox_critical_pending") or 0)
         if samples
         else 0,
         "samples": expected,

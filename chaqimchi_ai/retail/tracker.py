@@ -30,9 +30,30 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple
 
-from chaqimchi_ai.face_tracker import bbox_iou
-
 Bbox = List[float]
+
+
+def bbox_iou(a: List[float], b: List[float]) -> float:
+    """bbox [x1,y1,x2,y2] — intersection over union.
+
+    Ilgari `chaqimchi_ai/face_tracker.py` da edi; u modul davomat
+    to'plami bilan arxivlangach funksiya shu yerga ko'chdi.
+    """
+    ax1, ay1, ax2, ay2 = a[0], a[1], a[2], a[3]
+    bx1, by1, bx2, by2 = b[0], b[1], b[2], b[3]
+    inter_x1 = max(ax1, bx1)
+    inter_y1 = max(ay1, by1)
+    inter_x2 = min(ax2, bx2)
+    inter_y2 = min(ay2, by2)
+    if inter_x2 <= inter_x1 or inter_y2 <= inter_y1:
+        return 0.0
+    inter = (inter_x2 - inter_x1) * (inter_y2 - inter_y1)
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    if union <= 0:
+        return 0.0
+    return inter / union
 
 
 def _center(bbox: Bbox) -> Tuple[float, float]:
@@ -51,10 +72,25 @@ class _Track:
     missed: int = 0
     hits: int = 1
     history: List[Bbox] = field(default_factory=list)
+    initial_center: Tuple[float, float] = (0.0, 0.0)
+    total_displacement: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.initial_center == (0.0, 0.0) and self.bbox:
+            self.initial_center = _center(self.bbox)
 
     def predict(self) -> Bbox:
         """Keyingi kadrda ramka qayerda bo'lishi kerak."""
         return _shift(self.bbox, *self.velocity)
+
+    def is_static(self, min_hits: int = 40, max_net_movement: float = 8.0) -> bool:
+        """Track ko'p kadrlardan beri harakatlanmay turgan bo'lsa (maneken, plakat)."""
+        if self.hits < min_hits:
+            return False
+        curr_cx, curr_cy = _center(self.bbox)
+        init_cx, init_cy = self.initial_center
+        net_dist = ((curr_cx - init_cx) ** 2 + (curr_cy - init_cy) ** 2) ** 0.5
+        return net_dist <= max_net_movement
 
 
 class MotionTracker:
@@ -92,9 +128,7 @@ class MotionTracker:
         self._next_id = 1
 
     def update(self, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        predictions = {
-            track_id: track.predict() for track_id, track in self._tracks.items()
-        }
+        predictions = {track_id: track.predict() for track_id, track in self._tracks.items()}
         used_detections: set = set()
         used_tracks: set = set()
 
@@ -206,6 +240,13 @@ class MotionTracker:
                 # Uzoq ko'rinmasa bashoratni to'xtatamiz: aks holda ramka
                 # kadrdan uchib chiqib, begona odamga yopishishi mumkin.
                 track.velocity = (0.0, 0.0)
+
+    def is_static(self, track_id: int, min_hits: int = 40, max_net_movement: float = 8.0) -> bool:
+        """Berilgan track_id statik obyekt (maneken/plakat) ekanligini aytadi."""
+        track = self._tracks.get(track_id)
+        if track is None:
+            return False
+        return track.is_static(min_hits=min_hits, max_net_movement=max_net_movement)
 
     @property
     def active(self) -> int:

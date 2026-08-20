@@ -28,6 +28,9 @@ _SWEEP_EVERY_SEC = 300
 class _Window:
     started_at: float
     count: int
+    #: Shu oynaning o'z muddati.  Tozalash aynan shunga qarab ishlaydi:
+    #: aks holda sutkalik chegara ham 5 daqiqada o'chib ketardi.
+    window_sec: int
 
 
 class RateLimiter:
@@ -37,14 +40,20 @@ class RateLimiter:
         self._last_sweep = time.monotonic()
 
     def _sweep(self, now: float) -> None:
-        """Ishlatilmay qolgan kalitlarni tashlaydi — xotira cheksiz o'smasin."""
+        """Ishlatilmay qolgan kalitlarni tashlaydi — xotira cheksiz o'smasin.
+
+        Faqat **muddati tugagan** oynalar o'chiriladi.  Ilgari o'lchov
+        oynaning o'z muddati emas, tozalash oralig'i (5 daqiqa) edi: shu
+        sabab sutkalik chegara (masalan 500 ta rasm) amalda 5 daqiqada
+        qayta ochilardi va buzuq qurilma kuniga terabaytlab yuklay olardi.
+        """
         if now - self._last_sweep < _SWEEP_EVERY_SEC:
             return
         self._last_sweep = now
         stale = [
             key
             for key, window in self._windows.items()
-            if now - window.started_at > _SWEEP_EVERY_SEC
+            if now - window.started_at >= window.window_sec
         ]
         for key in stale:
             del self._windows[key]
@@ -56,10 +65,17 @@ class RateLimiter:
             self._sweep(now)
             entry = self._windows.get((bucket, key))
             if entry is None or now - entry.started_at >= window_sec:
-                self._windows[(bucket, key)] = _Window(started_at=now, count=1)
+                self._windows[(bucket, key)] = _Window(
+                    started_at=now, count=1, window_sec=int(window_sec)
+                )
                 return True
             entry.count += 1
             return entry.count <= limit
+
+    def size(self) -> int:
+        """Kuzatilayotgan kalitlar soni — xotira o'smayotganini tekshirish uchun."""
+        with self._lock:
+            return len(self._windows)
 
     def reset(self) -> None:
         """Testlar orasida holatni tozalaydi."""

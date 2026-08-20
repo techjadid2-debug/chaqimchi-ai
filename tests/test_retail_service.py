@@ -42,9 +42,7 @@ def test_event_clips_are_pruned_by_age_and_quota(tmp_path: Path) -> None:
     os.utime(first, (800, 800))
     os.utime(second, (900, 900))
 
-    removed, freed = prune_event_clips(
-        tmp_path, retention_sec=500, max_bytes=5, now=1000
-    )
+    removed, freed = prune_event_clips(tmp_path, retention_sec=500, max_bytes=5, now=1000)
 
     assert (removed, freed) == (2, 8)
     assert not old.exists()
@@ -66,12 +64,28 @@ def test_paired_device_emits_only_purchased_feature_events(tmp_path: Path) -> No
     assert allowed(EdgeEvent(event_type="queue_threshold_exceeded", camera_id="cam")) is False
     assert allowed(EdgeEvent(event_type="camera_tampered", camera_id="cam")) is False
     assert allowed(EdgeEvent(event_type="person_detected", camera_id="cam")) is False
+    # Davomat yoqilmagan — yuz kadri chiqmaydi (eski cloud batchni rad etardi).
+    assert allowed(EdgeEvent(event_type="face_captured", camera_id="cam")) is False
 
 
-def settings_for(*, vision: Any = None, **retail: Any) -> AppSettings:
+def test_face_captures_flow_only_from_attendance_cameras(tmp_path: Path) -> None:
+    """Yuz kadri: cloud davomatni yoqqan VA kamera ro'yxatda bo'lsa."""
+    cache = tmp_path / "sotqin-cache.json"
+    cache.write_text(
+        '{"revision":7,"cloud_features":[],"attendance":{"enabled":true},'
+        '"config":{"attendance_camera_ids":["kirish-01"]}}',
+        encoding="utf-8",
+    )
+    settings = settings_for(sotqin_config_path="sotqin-cache.json")
+    allowed = retail_event_filter(settings, tmp_path)
+
+    assert allowed(EdgeEvent(event_type="face_captured", camera_id="kirish-01")) is True
+    assert allowed(EdgeEvent(event_type="face_captured", camera_id="zal-01")) is False
+
+
+def settings_for(**retail: Any) -> AppSettings:
     payload: Dict[str, Any] = {
         "scene": {"enabled": True, "model_path": "models/person.onnx"},
-        "vision": vision or {"enabled": False},
         "retail": {
             "enabled": True,
             "cameras": [
@@ -89,10 +103,10 @@ def settings_for(*, vision: Any = None, **retail: Any) -> AppSettings:
     return AppSettings.model_validate(payload)
 
 
-def runner_for(tmp_path: Path, *, vision: Any = None, **retail: Any):
+def runner_for(tmp_path: Path, **retail: Any):
     outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10 * 1024**2, retention_days=7)
     runner = build_runner(
-        settings_for(vision=vision, **retail),
+        settings_for(**retail),
         tmp_path,
         detector=FakeDetector(),
         outbox=outbox,
@@ -199,9 +213,7 @@ def test_owner_business_hours_replace_the_queue_rule_schedule(tmp_path: Path) ->
         "    schedule: ish-vaqti\n",
         encoding="utf-8",
     )
-    runner, _outbox = runner_for(
-        tmp_path, open_from="08:00", open_to="20:00", rules_path=str(path)
-    )
+    runner, _outbox = runner_for(tmp_path, open_from="08:00", open_to="20:00", rules_path=str(path))
 
     hours = runner.pipeline.rules.schedules["ish-vaqti"]
     assert hours.contains(dt_time(hour=8)) is True
@@ -327,49 +339,10 @@ def test_the_important_event_is_uploaded_first(tmp_path: Path) -> None:
     sink = OutboxSink(outbox)
 
     sink("cloud_sync", EdgeEvent(event_type="person_detected", camera_id="cam"))
-    tampered = EdgeEvent(
-        event_type="camera_tampered", camera_id="cam", severity="critical"
-    )
+    tampered = EdgeEvent(event_type="camera_tampered", camera_id="cam", severity="critical")
     sink("cloud_sync", tampered)
 
     assert outbox.pending()[0]["event_id"] == tampered.event_id
-
-
-# ── Ko'rish agentiga ulanish (8.3) ───────────────────────────────────────
-
-
-def test_vision_is_off_by_default(tmp_path: Path) -> None:
-    """Pul sarflaydigan modul o'z-o'zidan yoqilib qolmasin."""
-    runner, _outbox = runner_for(tmp_path)
-
-    assert runner.reviewer is None
-    assert runner.pipeline.on_review is None
-    assert "vision" not in runner.stats()
-
-
-def test_enabled_vision_is_wired_into_the_pipeline(tmp_path: Path) -> None:
-    """`vision.enabled: true` — zanjir kadrni ko'rikchiga uzata oladi."""
-    runner, _outbox = runner_for(
-        tmp_path, vision={"enabled": True, "min_interval_sec": 60, "max_calls_per_day": 5}
-    )
-
-    assert runner.reviewer is not None
-    assert runner.pipeline.on_review == runner.reviewer.submit
-    # Sozlama yo'lda yo'qolmagan — narx aynan shu raqamlarga bog'liq.
-    assert runner.reviewer.agent.config.min_interval_sec == 60
-    assert runner.reviewer.agent.config.max_calls_per_day == 5
-    assert runner.stats()["vision"]["completed"] == 0
-
-
-def test_usage_is_shared_with_the_face_service(tmp_path: Path) -> None:
-    """Kunlik limit umumiy: ikkala xizmat bitta hisobga yozadi.
-
-    Alohida bo'lsa "kuniga 100 ta" aslida 200 ta bo'lib chiqardi.
-    """
-    runner, _outbox = runner_for(tmp_path, vision={"enabled": True})
-
-    assert runner.reviewer is not None
-    assert runner.reviewer.agent.usage.db_path == tmp_path / "data" / "vision_usage.db"
 
 
 def test_ai_review_rule_loads(tmp_path: Path) -> None:
@@ -386,3 +359,146 @@ def test_ai_review_rule_loads(tmp_path: Path) -> None:
     engine = load_rules(path)
 
     assert engine.rules[0].actions == ("cloud_sync", "ai_review")
+
+
+def test_build_runner_wires_the_pressure_signal(tmp_path: Path) -> None:
+    """Aynan shu regressiya bir marta sodir bo'lgan.
+
+    `budget.set_pressure()` yozilgan, `RetailRunner` uni har housekeeping
+    tikida chaqiradigan qilib qurilgan, lekin `build_runner()` argumentni
+    uzatmasdi — natijada `budget.py` dagi `pressure >= 0.85` tarmog'i
+    yozilganidan beri bir marta ham ishlamagan.
+    """
+    from chaqimchi_ai.retail.pressure import SystemPressure
+
+    runner, _outbox = runner_for(tmp_path)
+
+    assert isinstance(runner._pressure, SystemPressure)
+    # Va u rostdan byudjetga yetadi.
+    runner._pressure = lambda: 0.93
+    runner.housekeeping_once()
+    assert runner.pipeline.broker.budget.stats()["pressure"] == 0.93
+
+
+# ── Zanjir holati (soak testi shundan o'qiydi) ───────────────────────────
+
+
+def test_status_file_reports_the_real_camera_state(tmp_path: Path) -> None:
+    """`ffprobe` "RTSP javob beryaptimi" deydi, bu esa "zanjir kadr
+    olyaptimi" deydi.  Farqi: kamera ffprobe uchun ochiq bo'lib, zanjir
+    bir soat backoff'da turishi mumkin."""
+    import json
+
+    from chaqimchi_ai.retail.service import write_status
+
+    path = tmp_path / "retail-status.json"
+    write_status(
+        path,
+        {
+            "analyzed": 120,
+            "events": 4,
+            "streams": {
+                "camera-01": {"connected": True, "offline": False, "frames": 900, "reconnects": 1},
+                "camera-02": {"connected": False, "offline": True, "frames": 12, "reconnects": 7},
+                "camera-03": {"connected": True, "offline": False, "frames": 880, "reconnects": 1},
+            },
+            "pressure": {"cpu": 0.4, "memory": 0.5, "temperature": 0.1},
+        },
+        now=1_800_000_000.0,
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["cameras_configured"] == 3
+    assert payload["cameras_active"] == 2
+    assert payload["cameras"]["camera-02"]["offline"] is True
+    assert payload["updated_at"] == 1_800_000_000.0
+    assert payload["pressure"]["cpu"] == 0.4
+
+
+def test_status_file_is_written_atomically(tmp_path: Path) -> None:
+    """Agent uni istalgan vaqtda o'qiydi — yarim yozilgan JSON ko'rmasin."""
+    from chaqimchi_ai.retail.service import write_status
+
+    path = tmp_path / "retail-status.json"
+    write_status(path, {"streams": {}}, now=1.0)
+    write_status(path, {"streams": {}}, now=2.0)
+
+    assert list(tmp_path.iterdir()) == [path]  # vaqtinchalik fayl qolmadi
+
+
+def test_an_unwritable_status_path_does_not_crash_the_service(tmp_path: Path) -> None:
+    """Holat fayli yozilmasa ham zanjir ishlashda davom etsin."""
+    from chaqimchi_ai.retail.service import write_status
+
+    blocked = tmp_path / "fayl"
+    blocked.write_text("men papka emasman", encoding="utf-8")
+
+    write_status(blocked / "status.json", {"streams": {}}, now=1.0)
+
+
+def test_live_frame_loop_writes_requested_camera_frames(tmp_path: Path, monkeypatch) -> None:
+    """Jonli so'rov bor kameraning kadri JPEG bo'lib diskka tushadi.
+
+    Yangi RTSP ulanish yo'q — kadr pipeline xotirasidan olinadi.
+    """
+    import json
+    import threading
+    import time
+    from datetime import datetime, timedelta, timezone
+
+    import numpy as np
+
+    from chaqimchi_ai.retail import service
+
+    class FakePipeline:
+        def latest_frame(self, camera_id):
+            if camera_id == "camera-01":
+                return np.zeros((90, 1280, 3), dtype=np.uint8)
+            return None
+
+    until = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+    (tmp_path / "live-request.json").write_text(
+        json.dumps({"camera-01": {"until": until}, "camera-09": {"until": until}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(service, "LIVE_FRAME_INTERVAL_SEC", 0.01)
+    stopped = threading.Event()
+    thread = threading.Thread(
+        target=service._live_frame_loop, args=(FakePipeline(), tmp_path, stopped), daemon=True
+    )
+    thread.start()
+    target = tmp_path / "live" / "camera-01.jpg"
+    deadline = time.time() + 5
+    while time.time() < deadline and not target.is_file():
+        time.sleep(0.05)
+    stopped.set()
+    thread.join(timeout=2)
+
+    assert target.is_file() and target.stat().st_size > 0
+    assert not (tmp_path / "live" / "camera-09.jpg").exists(), "kadri yo'q kamera yozilmasin"
+
+
+def test_checkout_alerts_ride_the_queue_feature(tmp_path: Path) -> None:
+    """Kassa nazorati alohida narxlanadigan funksiya EMAS.
+
+    U navbat o'lchovining o'zidan chiqadi.  Alohida kod qo'shilsa
+    `/api/v1/public/pricing` uni kamera bo'yicha narxlanadigan
+    qo'shimcha sifatida ko'rsatib qo'yardi va "hammasi ichida" degan
+    yagona narx va'dasi buzilardi.
+    """
+    queue_dir = tmp_path / "navbatli"
+    counting_dir = tmp_path / "sanoqli"
+    queue_dir.mkdir()
+    counting_dir.mkdir()
+    settings = settings_for(sotqin_config_path="sotqin-cache.json")
+
+    def filter_for(code: str, folder: Path):
+        (folder / "sotqin-cache.json").write_text(
+            '{"revision":7,"cloud_features":[{"code":"%s"}]}' % code, encoding="utf-8"
+        )
+        return retail_event_filter(settings, folder)
+
+    for kind in ("checkout_unattended", "checkout_second_till"):
+        event = EdgeEvent(event_type=kind, camera_id="camera-02", severity="warning")
+        assert filter_for("queue_length", queue_dir)(event) is True, kind
+        assert filter_for("person_count", counting_dir)(event) is False, kind

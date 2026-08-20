@@ -18,7 +18,7 @@ Uchta narsa ataylab shunday:
    NVR band).  Har kamera o'z backoff'i bilan qayta ulanadi va boshqa
    kameralarga xalaqit bermaydi.
 3. **ffmpeg alohida oqimda.**  Klip kesish va segment tozalash sekin ish;
-   inferens halqasida turса byudjet o'sha vaqtni yo'qotardi.
+   inferens halqasida tursa byudjet o'sha vaqtni yo'qotardi.
 
 Bu modul ham apparatsiz sinaladi: `capture_factory`, `spawn`, soat va uyqu
 tashqaridan beriladi.
@@ -34,6 +34,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
+from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.pipeline import RetailPipeline
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
@@ -50,6 +51,13 @@ MAX_BACKOFF_SEC = 30.0
 #: Kamera yopiq turganda oqim shuncha uxlaydi — bo'sh aylanish CPU yemasin.
 CLOSED_SLEEP_SEC = 0.2
 
+#: Shuncha ketma-ket muvaffaqiyatsiz urinishdan keyin kamera "o'chgan"
+#: deb e'lon qilinadi.  Backoff 2, 4, 8 soniya bo'lgani uchun bu ~14
+#: soniya: bitta tarmoq uzilishi yoki NVR qayta yuklanishi shovqin
+#: bermaydi, lekin haqiqiy uzilish ikki daqiqada emas, yarim daqiqada
+#: bilinadi.
+OFFLINE_AFTER_FAILURES = 3
+
 
 def open_stream(url: str) -> Any:
     """Standart RTSP ochish yo'li.
@@ -60,7 +68,11 @@ def open_stream(url: str) -> Any:
     """
     import cv2
 
-    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+    # `setdefault` emas, **aniq belgilash**: bu qiymat jarayonga tashqaridan
+    # meros bo'lib o'tishi mumkin (supervisor bolaga butun muhitni uzatadi)
+    # va o'sha begona qiymat barcha kamerani ochilmaydigan qilib qo'ygan
+    # edi.  Zanjir qanday ulanishini faqat shu qator hal qiladi.
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;10000000"
     capture = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
     try:
         capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -104,6 +116,9 @@ class _Stream:
     frames: int = 0
     reconnects: int = 0
     recorder_starts: int = 0
+    #: Kamera qachondan beri javob bermayapti.  `None` — hodisa hali
+    #: e'lon qilinmagan (yo ishlayapti, yo urinishlar soni yetmagan).
+    offline_since: Optional[float] = None
 
     @property
     def interval(self) -> float:
@@ -123,15 +138,10 @@ class RetailRunner:
         idle_sleep_sec: float = 0.01,
         pressure: Optional[Callable[[], float]] = None,
         on_stats: Optional[Callable[[Dict[str, Any]], None]] = None,
-        reviewer: Optional[Any] = None,
     ) -> None:
         if housekeeping_sec <= 0:
             raise ValueError("housekeeping_sec musbat bo'lishi kerak")
         self.pipeline = pipeline
-        #: Ko'rish agenti ko'rikchisi (`VisionReviewer`).  O'z oqimi bor,
-        #: shuning uchun runner uni ham ishga tushiradi va to'xtatadi —
-        #: aks holda jarayon tugaganda navbatdagi kadr yo'qolardi.
-        self.reviewer = reviewer
         self.capture_factory = capture_factory
         self.spawn = spawn
         self.housekeeping_sec = float(housekeeping_sec)
@@ -194,7 +204,11 @@ class RetailRunner:
                 return False
             stream.capture = capture
             stream.reconnects += 1
-            stream.failures = 0
+            # `failures` bu yerda **nolga tushmaydi**.  Ochilish oqim sog'lom
+            # degani emas: NVR TCP ulanishni qabul qilib, keyin hech qanday
+            # kadr bermasligi mumkin.  Shunday kamera har siklda qayta
+            # ochilib, hisobni nolga tushirib yuborardi va hech qachon
+            # "o'chgan" deb e'lon qilinmasdi.
 
         capture = stream.capture
         # `grab()` dekodlamaydi — oqimni yangi holatda ushlab turishning eng
@@ -202,6 +216,9 @@ class RetailRunner:
         if not capture.grab():
             self._backoff(stream, now, "oqim uzildi")
             return False
+        # Kadr keldi — mana shu oqim tirikligining yagona haqiqiy isboti.
+        stream.failures = 0
+        self._recovered(stream, now)
         if now - stream.last_sample < stream.interval:
             return False
 
@@ -249,7 +266,7 @@ class RetailRunner:
         self._release(stream.capture)
         stream.capture = None
         stream.failures += 1
-        wait = min(MAX_BACKOFF_SEC, float(2**min(stream.failures, 5)))
+        wait = min(MAX_BACKOFF_SEC, float(2 ** min(stream.failures, 5)))
         stream.retry_at = now + wait
         logger.warning(
             "[%s] %s — %.0f soniyadan keyin qayta urinamiz",
@@ -257,6 +274,49 @@ class RetailRunner:
             reason,
             wait,
         )
+        # Uzilish hodisaga aylanadi.  Bungacha kamera holati faqat
+        # `stats()` ichida yashardi va do'kon egasi kamera o'chganini
+        # hisobotdagi bo'shliqdan — bir necha kundan keyin — bilardi.
+        if stream.offline_since is None and stream.failures >= OFFLINE_AFTER_FAILURES:
+            stream.offline_since = now
+            self._emit(
+                EdgeEvent(
+                    event_type="camera_offline",
+                    severity="warning",
+                    camera_id=stream.source.camera_id,
+                    metadata={"reason": reason, "attempts": stream.failures},
+                ),
+                now=now,
+            )
+
+    def _recovered(self, stream: _Stream, now: float) -> None:
+        if stream.offline_since is None:
+            return
+        downtime = round(max(0.0, now - stream.offline_since), 1)
+        stream.offline_since = None
+        logger.info("[%s] kamera tiklandi (%.0f soniya)", stream.source.camera_id, downtime)
+        self._emit(
+            EdgeEvent(
+                event_type="camera_recovered",
+                severity="info",
+                camera_id=stream.source.camera_id,
+                metadata={"downtime_sec": downtime},
+            ),
+            now=now,
+        )
+
+    def _emit(self, event: EdgeEvent, *, now: float) -> None:
+        """Sog'liq hodisasini zanjirga uzatadi.
+
+        Outboxga to'g'ridan-to'g'ri yozish mumkin edi, lekin u holda qoida
+        dvigateli chetlab o'tilardi — cooldown ham, `telegram_alert` ham
+        ishlamasdi.  Xato bo'lsa kadr halqasi to'xtamaydi: kamera o'qishdan
+        muhimroq narsa yo'q.
+        """
+        try:
+            self.pipeline.emit_system_event(event, now=now)
+        except Exception:
+            logger.exception("[%s] sog'liq hodisasi yuborilmadi", event.camera_id)
 
     @staticmethod
     def _release(capture: Any) -> None:
@@ -332,11 +392,12 @@ class RetailRunner:
             raise RuntimeError("Kamera qo'shilmagan")
         self._stop.clear()
         self._running = True
-        if self.reviewer is not None:
-            self.reviewer.start()
         self._threads = [
             threading.Thread(
-                target=self._capture_loop, args=(camera_id,), name=f"retail-{camera_id}", daemon=True
+                target=self._capture_loop,
+                args=(camera_id,),
+                name=f"retail-{camera_id}",
+                daemon=True,
             )
             for camera_id in self._streams
         ]
@@ -357,11 +418,6 @@ class RetailRunner:
             thread.join(timeout=timeout)
         self._threads = []
         self._running = False
-        if self.reviewer is not None:
-            try:
-                self.reviewer.stop(timeout=timeout)
-            except Exception:
-                logger.exception("AI ko'rikchisi to'xtamadi")
         for stream in self._streams.values():
             self._release(stream.capture)
             stream.capture = None
@@ -389,11 +445,18 @@ class RetailRunner:
                 "connected": stream.capture is not None,
                 "reconnects": stream.reconnects,
                 "failures": stream.failures,
+                "offline": stream.offline_since is not None,
                 "recorder": stream.recorder is not None,
                 "recorder_starts": stream.recorder_starts,
             }
             for camera_id, stream in sorted(self._streams.items())
         }
-        if self.reviewer is not None:
-            data["vision"] = self.reviewer.stats()
+        # Bosim tafsiloti: "bosim 0.9" nima qilishni aytmaydi, "xotira 0.9"
+        # esa aytadi.  Faqat o'lchagich buni bera olsa.
+        breakdown = getattr(self._pressure, "stats", None)
+        if callable(breakdown):
+            try:
+                data["pressure"] = breakdown()
+            except Exception:
+                logger.debug("Bosim tafsiloti o'qilmadi", exc_info=True)
         return data

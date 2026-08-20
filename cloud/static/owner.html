@@ -3,115 +3,2121 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
   <title>Chaqimchi AI — Do‘kon paneli</title>
-  <link rel="stylesheet" href="/assets/admin.css">
-  <style>
-    body{max-width:1180px;margin:auto;padding:24px} .hidden{display:none!important}
-    .login{max-width:440px;margin:10vh auto}.row{display:flex;gap:10px;flex-wrap:wrap}
-    input,select,button{padding:11px;border-radius:8px;border:1px solid #344155;background:#111827;color:#f8fafc}
-    button{cursor:pointer;background:#2563eb}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
-    .card{background:#111827;border:1px solid #263449;border-radius:12px;padding:16px}.events{width:100%;border-collapse:collapse}
-    th,td{text-align:left;padding:10px;border-bottom:1px solid #263449}small{color:#94a3b8}.error{color:#f87171}
-    .up{color:#4ade80}.down{color:#f87171}
-    .bars{display:flex;align-items:flex-end;gap:3px;height:130px;margin-top:8px}
-    .bars>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
-    .bars i{display:block;background:#2563eb;border-radius:3px 3px 0 0;min-height:2px}
-    .bars b{font-weight:400;font-size:10px;color:#64748b;text-align:center;padding-top:4px}
-    .bars .peak i{background:#f59e0b}
-  </style>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/owner.css">
 </head>
 <body>
-  <section id="login" class="login card">
-    <h1>Chaqimchi AI</h1><p>Do‘koningiz holatini login va parol bilan kuzating.</p>
-    <div style="display:grid;gap:10px"><input id="portalUsername" autocomplete="username" placeholder="Login"><input id="portalPassword" type="password" autocomplete="current-password" placeholder="Parol"><button onclick="passwordLogin()">Mijoz paneliga kirish</button></div>
-    <div style="display:flex;align-items:center;gap:10px;margin:18px 0"><i style="height:1px;background:#344155;flex:1"></i><small>yoki Telegram OTP</small><i style="height:1px;background:#344155;flex:1"></i></div>
-    <div class="row"><input id="telegram" placeholder="Telegram ID"><button onclick="requestOtp()">Kod olish</button></div>
-    <div id="verify" class="hidden"><div class="row"><input id="code" inputmode="numeric" maxlength="6" placeholder="6 xonali kod"><button onclick="verifyOtp()">Kirish</button></div></div>
-    <p id="loginMsg"></p>
+  <!-- ── KIRISH ── -->
+  <section id="login" class="login-wrap">
+    <a class="brand" href="/">
+      <img src="/assets/chaqimchi-logo-v2.webp" alt="">
+      <span>Chaqimchi <b>AI</b></span>
+    </a>
+
+    <!-- Ilgari bu ekranda UCHTA kirish yo'li bor edi: Telegram tugmasi,
+         login/parol va Telegram kod.  Mijoz qaysi birini bosishni
+         bilmasdi.  Endi bitta asosiy yo'l — login va parol; Telegram
+         esa kirgandan KEYIN, panel ichidan bir bosishda ulanadi. -->
+    <div class="card">
+      <h2>Do‘kon paneliga kirish</h2>
+      <form id="loginForm" style="display:grid;gap:12px;margin-top:14px" novalidate>
+        <label class="field" for="portalUsername">Login
+          <input id="portalUsername" type="text" autocomplete="username">
+        </label>
+        <label class="field" for="portalPassword">Parol
+          <input id="portalPassword" type="password" autocomplete="current-password">
+        </label>
+        <button class="button primary" id="passwordBtn" type="submit">Kirish</button>
+      </form>
+      <p id="loginMsg" class="hint" role="status" aria-live="polite"></p>
+
+      <details class="alt-login">
+        <summary>Login va parolim yo‘q</summary>
+        <p class="hint">Telegram botimizga <code>/start</code> yozing — bot sizga
+          kirish havolasini beradi. Havola bosilishi bilan panel ochiladi.</p>
+        <a class="button ghost" id="botLink" href="__TELEGRAM_BOT_URL__" target="_blank" rel="noopener noreferrer">Telegram botni ochish</a>
+        <p class="hint">Yordam kerak bo‘lsa: <a href="tel:+998932225070">+998 93 222 50 70</a></p>
+      </details>
+    </div>
   </section>
+
+  <!-- ── PANEL ── -->
   <main id="app" class="hidden">
-    <div class="row" style="justify-content:space-between"><h1>Do‘kon nazorati</h1><button onclick="logout()">Chiqish</button></div>
-    <div class="cards">
-      <div class="card"><small>Bugun kirdi</small><h2 id="entered">0</h2><small id="enteredChange">—</small></div>
-      <div class="card"><small>Chiqdi</small><h2 id="exited">0</h2><small id="inside">—</small></div>
-      <div class="card"><small>Gavjum soat</small><h2 id="busiest">—</h2><small id="busiestCount">—</small></div>
-      <div class="card"><small>Eng uzun navbat</small><h2 id="queueLongest">—</h2><small id="queueDetail">—</small></div>
-      <div class="card"><small>Sotqin holati</small><h2 id="edgeHealth">—</h2><small id="totalEvents">—</small></div>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <div class="row" style="justify-content:space-between"><h2>Soat bo‘yicha kirish</h2><small id="reportDate">—</small></div>
-      <div id="hourly" class="bars"></div>
-      <small>Xodim jadvalini shu grafikka qarab tuzing: gavjum soatda kassada odam ko‘p bo‘lsin.</small>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <div class="row" style="justify-content:space-between">
-        <h2>Kunlar bo‘yicha</h2>
-        <select id="trendDays" onchange="loadTrend()"><option value="7">7 kun</option><option value="14">14 kun</option><option value="30">30 kun</option></select>
+    <header class="topbar">
+      <a class="brand" href="/owner">
+        <img src="/assets/chaqimchi-logo-v2.webp" alt="">
+        <span>Chaqimchi <b>AI</b></span>
+      </a>
+      <div class="topbar-actions">
+        <span id="siteName"></span>
+        <button class="button ghost small" id="logoutBtn" type="button">Chiqish</button>
       </div>
-      <div id="daily" class="bars"></div>
-      <small id="trendSummary">—</small>
+    </header>
+
+    <!-- Bo'limlar.  Har biri o'z ma'lumotini o'zi yuklaydi: ilgari kirish
+         paytida 7 ta so'rov birdan ketardi va bittasi yiqilsa to'rtta
+         karta bo'shab qolardi. -->
+    <nav class="tabbar" id="tabbar" aria-label="Bo'limlar"></nav>
+
+    <div class="shell">
+      <!-- Holat: oddiy tilda, bitta qarashda.  Ichki kod nomlari va
+           "3/4 · 47°C" kabi texnik satr o'rniga "Hammasi ishlayapti"
+           yoki aniq muammo.  HAR bo'limda ko'rinadi: qurilma o'chiq
+           bo'lsa istalgan bo'limdagi raqam yolg'on bo'ladi. -->
+      <div id="statusBanner" class="status-banner warn"><div>Yuklanmoqda…</div></div>
+
+      <!-- ── BUGUN ────────────────────────────────────────────────── -->
+      <div class="pane" id="paneBugun">
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Kunlik hisobot</h2>
+          <div class="chip-row">
+            <button class="chip active" type="button" data-day="today">Bugun</button>
+            <button class="chip" type="button" data-day="yesterday">Kecha</button>
+            <input type="date" id="reportDate" style="width:auto">
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><small>Kirdi</small><strong id="entered">0</strong><span id="enteredChange">—</span></div>
+          <div class="stat"><small>Chiqdi</small><strong id="exited">0</strong><span id="inside">—</span></div>
+          <div class="stat"><small>Gavjum soat</small><strong id="busiest">—</strong><span id="busiestCount">—</span></div>
+        </div>
+        <!-- Xodim o'tishlari sanoqdan chiqariladi.  Buni AYTISH kerak:
+             aks holda "nega bugun kamroq?" degan savol javobsiz qoladi. -->
+        <p class="hint" id="staffNote" style="margin-top:8px"></p>
+        <!-- Mijoz demografiyasi: xodimlar hisobga kirmaydi (ular davomatda).
+             Ma'lumot yo'q kunda butun blok yashirin. -->
+        <div class="stats hidden" id="demoStats" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card wide">
+        <div class="card-head">
+          <h2>Soat bo‘yicha</h2>
+          <div class="chip-row">
+            <button class="chip active" type="button" data-hourmode="in">Kirganlar</button>
+            <button class="chip" type="button" data-hourmode="inside">Ichkaridagilar</button>
+          </div>
+        </div>
+        <div id="hourly" class="bars"></div>
+        <div id="hourReadout" class="bar-readout"></div>
+        <p class="hint" id="hourHint" style="margin-top:0"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Navbat</h2></div>
+        <div class="stats">
+          <div class="stat"><small>Eng uzun navbat</small><strong id="queueLongest">—</strong><span id="queueDetail">—</span></div>
+          <div class="stat"><small>O‘rtacha uzunlik</small><strong id="queueAverage">—</strong><span id="queueAlerts">—</span></div>
+        </div>
+      </div>
+
+      </div><!-- /paneBugun -->
+
+      <!-- ── TAHLIL: naqshlar → xodim jadvali ─────────────────────── -->
+      <div class="pane" id="paneTahlil" hidden>
+
+      <!-- Do'kon xaritasi: odamlar ko'p yuradigan joylar kamera rasmi
+           ustida och-to'q qizil bilan.  Rasm emas, sonlar keladi. -->
+      <div class="card wide" id="heatCard">
+        <div class="card-head">
+          <h2>Do‘kon xaritasi</h2>
+          <div class="chip-row" id="heatControls">
+            <button class="chip active" type="button" data-heatmode="camera">Kamera</button>
+            <button class="chip" type="button" data-heatmode="plan">Plan (tepadan)</button>
+            <select id="heatCamera" style="width:auto"></select>
+            <input type="date" id="heatDate" style="width:auto">
+            <select id="heatHour" style="width:auto"><option value="">Kun bo‘yi</option></select>
+          </div>
+        </div>
+        <p class="hint" style="margin-top:0" id="heatHint">To‘q qizil — mijozlar eng ko‘p yurgan joylar. Bo‘sh joylar — javon yoki jihoz uchun. Bir hafta ma’lumot yig‘ilgach xarita barqarorlashadi.</p>
+        <div class="heat-wrap" id="heatWrap"><canvas id="heatCanvas" width="640" height="360"></canvas></div>
+        <div class="actions" style="margin-top:8px" id="heatActions">
+          <button class="button ghost small" id="heatEditBtn" type="button">Pol burchaklarini to‘g‘irlash</button>
+          <button class="button primary small hidden" id="heatSaveBtn" type="button">Burchaklarni saqlash</button>
+        </div>
+        <p class="hint" id="heatSummary">—</p>
+        <!-- Tarifda yo'q bo'lsa: karta YO'QOLMAYDI, qulflangan holatda
+             turadi.  Yo'qolgan bo'lim mijozga "buzilibdi" degan taassurot
+             beradi, qulf esa "ko'tarish mumkin" deb aytadi. -->
+        <div class="note" id="heatLocked" hidden>
+          <b>Do‘kon xaritasi Biznes tarifida ochiladi.</b>
+          Mijozlar do‘konning qaysi joyida ko‘p turishini ko‘rasiz — javonni
+          shunga qarab joylashtirasiz.
+        </div>
+      </div>
+
+      <div class="card wide">
+        <div class="card-head">
+          <h2>Kunlar bo‘yicha</h2>
+          <div class="chip-row" id="trendChips">
+            <button class="chip active" type="button" data-days="7">7 kun</button>
+            <button class="chip" type="button" data-days="14">14</button>
+            <button class="chip" type="button" data-days="30">30</button>
+            <button class="chip" type="button" data-days="90">90</button>
+          </div>
+        </div>
+        <div id="daily" class="bars"></div>
+        <p class="hint" id="trendSummary">—</p>
+      </div>
+
+      <!-- "Qayerda uzoq turishadi" — do'konga eng xos ma'lumot: qaysi
+           tokcha oldida odam to'xtaydi.  Server buni to'liq qaytaradi,
+           panel esa umuman ko'rsatmasdi. -->
+      <div class="card">
+        <div class="card-head"><h2>Qayerda uzoq turishadi</h2></div>
+        <div id="dwellList"></div>
+      </div>
+
+      </div><!-- /paneTahlil -->
+
+      <!-- ── XAVFSIZLIK ───────────────────────────────────────────── -->
+      <div class="pane" id="paneXavfsizlik" hidden>
+
+      <div class="card wide">
+        <div class="card-head">
+          <h2>Do‘konni ko‘rish</h2>
+          <span class="hint" id="cameraHint" style="margin:0"></span>
+        </div>
+        <div id="cameraGrid" class="camera-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Xavfsizlik</h2>
+          <span class="hint" id="securitySummary" style="margin:0"></span>
+        </div>
+        <div class="stats" id="securityStats"></div>
+        <div id="securityEvents"></div>
+      </div>
+
+      <div class="card wide">
+        <div class="card-head">
+          <h2>Hodisalar</h2>
+          <button class="button ghost small" id="refreshBtn" type="button">Yangilash</button>
+        </div>
+        <div class="filters">
+          <select id="typeFilter"><option value="">Barcha turlar</option></select>
+          <select id="cameraFilter"><option value="">Barcha kameralar</option></select>
+        </div>
+        <!-- Telefonda kartochka, keng ekranda jadval.  Ilgari 100 ta
+             qator jadval sahifaning 60% ini egallardi. -->
+        <div id="eventList" class="event-list"></div>
+        <div class="actions" style="margin-top:10px">
+          <button class="button ghost small hidden" id="eventMoreBtn" type="button">Yana 25 ta</button>
+        </div>
+      </div>
+
+      </div><!-- /paneXavfsizlik -->
+
+      <!-- ── DO'KON ───────────────────────────────────────────────── -->
+      <div class="pane" id="paneDokon" hidden>
+
+      <div class="card wide">
+        <h2>Do‘kon sozlamalari</h2>
+        <div class="grid-3">
+          <label class="field">Odam limiti<input id="occupancy" type="number" min="1"></label>
+          <label class="field">Navbat limiti<input id="queueLimit" type="number" min="1"></label>
+          <label class="field">Uzoq turish (soniya)<input id="loitering" type="number" min="5"></label>
+          <!-- Daqiqada: "300 soniya" degan sozlama do'kon egasiga hech
+               narsa aytmaydi.  Soniyaga o'girish serverdan qurilmaga
+               ketayotganda bo'ladi. -->
+          <label class="field">Kassa bo‘sh qolsa (daqiqa)
+            <input id="checkoutIdle" type="number" min="1" max="60"></label>
+        </div>
+        <div class="grid-2">
+          <label class="field">Ochilish vaqti<input id="openFrom" type="time"></label>
+          <label class="field">Yopilish vaqti<input id="openTo" type="time"></label>
+        </div>
+        <div id="cameraRoles"></div>
+        <div class="actions" style="margin-top:12px">
+          <button class="button primary" id="saveConfigBtn" type="button">Saqlash</button>
+        </div>
+        <p class="hint">Kirish chizig‘i va zonalarni o‘rnatuvchi sozlaydi — kerak bo‘lsa bizga yozing.</p>
+        <div id="configStatus"></div>
+      </div>
+
+      <div class="card">
+        <h2>Bildirishnomalar</h2>
+        <label class="switch">
+          <input type="checkbox" id="digestToggle">
+          <span class="track"></span>
+          <span>Har kuni kechqurun kunlik hisobot kelsin</span>
+        </label>
+        <p id="digestHint" class="hint" style="margin-top:4px"></p>
+        <div id="memberList"></div>
+
+        <!-- Ilgari bu yerda "Yangi a'zo (Telegram ID)" degan maydon bor edi.
+             Do'kon egasi o'z Telegram ID sini ham, xodiminikini ham
+             bilmaydi — ya'ni tugma bor edi, foyda yo'q.  Endi panel
+             havola beradi, odam uni bosadi, bot o'zi qo'shadi. -->
+        <div class="actions" style="margin:0">
+          <button class="button" id="connectTelegramBtn" type="button">Telegramimni ulash</button>
+          <button class="button ghost" id="inviteStaffBtn" type="button">Xodim taklif qilish</button>
+        </div>
+        <div id="inviteBox" class="hidden" style="margin-top:12px">
+          <p class="hint" style="margin-top:0">Bu havolani xodimingizga yuboring. U havolani bossa,
+            kunlik hisobot va ogohlantirishlar unga ham boradi. Havola <b>30 daqiqa</b> yashaydi
+            va faqat bir marta ishlaydi.</p>
+          <label class="field" for="inviteLink">Taklif havolasi
+            <input id="inviteLink" type="text" readonly onclick="this.select()">
+          </label>
+          <div class="actions" style="margin:0">
+            <button class="button small" id="inviteCopyBtn" type="button">Nusxa olish</button>
+            <a class="button ghost small" id="inviteShareBtn" href="#" target="_blank" rel="noopener noreferrer">Telegramda yuborish</a>
+          </div>
+        </div>
+        <div id="memberStatus"></div>
+      </div>
+
+      <div class="card quiet">
+        <h2>To‘lov</h2>
+        <p id="tariffLine" class="lead" style="margin-bottom:10px">—</p>
+        <div id="invoiceList"></div>
+        <div class="actions" style="margin-top:10px">
+          <button class="button" id="invoiceBtn" type="button">To‘lov hisobini ochish</button>
+        </div>
+        <p class="hint">Funksiyalarni o‘zgartirish (qo‘shish/olib tashlash) uchun bizga yozing — keyingi oydan qayta hisoblanadi.</p>
+        <div id="billingStatus"></div>
+      </div>
+
+      </div><!-- /paneDokon -->
+
+      <!-- ── XODIMLAR ────────────────────────────────────────────────────
+           Yuz tanish yoqilmagan saytda butun bo'lim ko'rinmaydi: JS
+           `/owner/faces` 403 bersa tab ham chizilmaydi. -->
+      <div class="pane" id="paneXodimlar" hidden>
+
+        <div class="card wide">
+          <div class="card-head">
+            <h2>Xodimlar</h2>
+            <span class="hint" id="staffCount"></span>
+          </div>
+          <p class="hint" style="margin-top:0">
+            Xodimni qo‘shib, rasmini oling — kamera uni tanib, kelgan-ketgan
+            vaqtini o‘zi yozib boradi. Har xodimga <b>1–3 rasm</b>: yuz aniq
+            va yorug‘ ko‘rinsin.
+          </p>
+          <div id="staffList"></div>
+          <div id="staffStatus"></div>
+
+          <form id="staffForm" class="actions" style="margin-top:12px">
+            <label class="field" style="flex:1 1 200px;margin:0">
+              <span class="hidden">Xodim ismi</span>
+              <input type="text" id="staffName" placeholder="Xodim ismi" maxlength="120" required>
+            </label>
+            <button class="button" type="submit" id="staffAddBtn">Qo‘shish</button>
+          </form>
+          <p class="hint" style="margin-bottom:0">
+            Xodim rasmini olishdan oldin undan roziligini so‘rang —
+            <a href="/rozilik-shabloni" target="_blank" rel="noopener noreferrer">shablon</a>.
+          </p>
+        </div>
+
+        <!-- Davomat jadvali: kim soat nechada kelgan va ketgan. -->
+        <div class="card wide" id="attendanceCard">
+          <div class="card-head">
+            <h2>Davomat</h2>
+            <div class="actions" style="margin:0">
+              <button class="button ghost small" id="attendanceTodayBtn" type="button">Bugun</button>
+              <button class="button ghost small" id="attendanceMonthBtn" type="button">Shu oy</button>
+              <button class="button ghost small" id="attendanceCsvBtn" type="button">CSV</button>
+            </div>
+          </div>
+          <p class="hint" id="attendanceHint" style="margin-top:0"></p>
+          <div class="scroll-x">
+            <table class="events">
+              <thead><tr><th>Xodim</th><th>Keldi</th><th>Ketdi</th><th>Necha soat</th></tr></thead>
+              <tbody id="attendanceRows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Oylik xulosa.  Kunlik jadval "kim keldi" savoliga javob
+             beradi, bu esa "kim kechikyapti va bu qancha vaqt" degan
+             savolga — do'kon egasi oy oxirida aynan shuni so'raydi.
+             Kunma-kun 30 qatorni qo'lda qo'shib chiqmasin. -->
+        <div class="card">
+          <div class="card-head">
+            <h2>Oylik smena hisoboti</h2>
+            <div class="actions" style="margin:0">
+              <input type="month" id="shiftMonth" style="width:auto">
+              <button class="button ghost small" id="shiftCsvBtn" type="button">CSV</button>
+            </div>
+          </div>
+          <p class="hint" id="shiftHint" style="margin-top:0"></p>
+          <div class="scroll-x">
+            <table class="events">
+              <thead><tr>
+                <th>Xodim</th><th>Ish kuni</th><th>Kelmadi</th>
+                <th>Kechikdi</th><th>Jami kechikish</th>
+              </tr></thead>
+              <tbody id="shiftRows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Kamera tanlanmasa qurilma yuz kadri umuman yubormaydi —
+             shuning uchun bu karta ro'yxatdan keyin darrov turadi. -->
+        <div class="card">
+          <div class="card-head"><h2>Qaysi kamera taniydi?</h2></div>
+          <p class="hint" style="margin-top:0">Xodimlar o‘tadigan kamerani belgilang —
+            odatda kirish eshigi. Ko‘pi bilan <b>2 kamera</b>. Belgilanmasa davomat ishlamaydi.</p>
+          <div id="attendanceCameras"></div>
+          <div class="actions">
+            <button class="button" id="attendanceCamSave" type="button">Saqlash</button>
+          </div>
+          <div id="attendanceCamStatus"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>So‘nggi kadrlar</h2></div>
+          <p class="hint" style="margin-top:0">Tanilmagan kadr ko‘p bo‘lsa — xodimga
+            yana bitta aniqroq rasm qo‘shing.</p>
+          <div id="faceGallery" class="face-grid"></div>
+        </div>
+
+      </div><!-- /paneXodimlar -->
+
+      <!-- Panelda to'rt joyda "bizga yozing" deyiladi, aloqa havolasi esa
+           faqat KIRISH ekranida edi — u kirgandan keyin yashiriladi.
+           Ya'ni mijozga yozadigan joy umuman ko'rsatilmasdi. -->
+      <div class="card quiet">
+        <h2>Yordam kerakmi?</h2>
+        <p class="hint" style="margin-top:0">Kamera, chiziq yoki hisobot bo‘yicha savol bo‘lsa yozing —
+          odatda bir necha daqiqada javob beramiz.</p>
+        <div class="actions">
+          <a class="button" href="__TELEGRAM_BOT_URL__">Telegramda yozish</a>
+          <a class="button ghost" href="tel:+998932225070">+998 93 222 50 70</a>
+        </div>
+      </div>
     </div>
-    <div class="card" style="margin-top:16px">
-      <h2>Zonada turish vaqti</h2>
-      <div style="overflow:auto"><table class="events"><thead><tr><th>Zona</th><th>Necha marta</th><th>O‘rtacha</th><th>Eng uzun</th></tr></thead><tbody id="dwell"></tbody></table></div>
-      <small id="securityLine">—</small>
-    </div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Tarif va Cloud AI funksiyalari</h2><button onclick="loadSubscription()">Yangilash</button></div><p id="subscriptionSummary"><small>Yuklanmoqda…</small></p><div id="featureList"></div><div class="row" style="margin-top:12px"><button onclick="requestFeatures()">Tanlovni admin tasdig'iga yuborish</button><button onclick="createInvoice()">To'lov hisobini ochish</button></div><small id="invoiceSummary"></small></div>
-    <div class="card" style="margin-top:16px"><h2>Do‘kon qoidalari</h2><div class="row"><label>Odam limiti <input id="occupancy" type="number" min="1"></label><label>Navbat limiti <input id="queueLimit" type="number" min="1"></label><label>Uzoq turish (soniya) <input id="loitering" type="number" min="5"></label><label>Ochilish <input id="openFrom" type="time"></label><label>Yopilish <input id="openTo" type="time"></label></div><div id="cameraRoles" style="margin:14px 0"></div><details><summary>Texnik line/zone sozlamalari</summary><label>Lines JSON<textarea id="linesJson" rows="4" style="width:100%"></textarea></label><label>Zones JSON<textarea id="zonesJson" rows="6" style="width:100%"></textarea></label></details><button onclick="saveConfig()" style="margin-top:12px">Sozlamani saqlash</button><p id="configStatus"><small>Odam tahlili Sotqinda ishlaydi; uzluksiz video cloudga yuborilmaydi.</small></p></div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Xodimlar davomati <small>yopiq pilot</small></h2><button onclick="loadAttendance()">Yangilash</button></div><p><small>Cloud faqat xodim profili, jadvali va vaqt hodisasini saqlaydi. Yuz namunasi va embedding do‘kondagi Sotqindan chiqmaydi.</small></p><div class="row"><input id="employeeName" placeholder="Xodim ismi"><input id="employeeExternal" placeholder="Tabel ID (ixtiyoriy)"><label><input id="employeeConsent" type="checkbox"> Yozma rozilik olindi</label><button onclick="createEmployee()">Xodim qo‘shish</button></div><div style="overflow:auto;margin-top:12px"><table class="events"><thead><tr><th>Xodim</th><th>Jadval</th><th>Enrollment</th><th></th></tr></thead><tbody id="employees"></tbody></table></div></div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Davomat hisoboti</h2><div class="row"><input id="attendanceFrom" type="date"><input id="attendanceTo" type="date"><button onclick="loadAttendanceReport()">Ko‘rsatish</button><button onclick="downloadAttendanceCsv()">CSV</button></div></div><div id="attendanceSummary"><small>Ma’lumot yuklanmoqda…</small></div><div style="overflow:auto"><table class="events"><thead><tr><th>Sana</th><th>Xodim</th><th>Keldi</th><th>Ketdi</th><th>Holat</th></tr></thead><tbody id="attendanceRows"></tbody></table></div></div>
-    <div class="card" style="margin-top:16px"><div class="row" style="justify-content:space-between"><h2>Oxirgi hodisalar</h2><button onclick="loadData()">Yangilash</button></div><div style="overflow:auto"><table class="events"><thead><tr><th>Vaqt</th><th>Kamera</th><th>Hodisa</th><th>Zona/xodim</th><th>Media</th></tr></thead><tbody id="events"></tbody></table></div></div>
   </main>
+
+  <!-- Rasm/klip modal: yangi oynaga blob ochish popup-blockerda yutilardi
+       va xatoda hech narsa ko'rinmasdi. -->
+  <div id="modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <b id="modalTitle"></b>
+        <div style="display:flex;gap:8px">
+          <button class="button ghost small hidden" id="modalLiveBtn" type="button">▶ Jonli ko‘rish</button>
+          <a class="button ghost small" id="modalDownload" href="#" download>Yuklab olish</a>
+          <button class="button small" id="modalClose" type="button">Yopish</button>
+        </div>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
 <script>
-let token=localStorage.getItem('chaqimchi_owner_token')||'';
-const $=id=>document.getElementById(id);
-async function passwordLogin(){const r=await fetch('/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('portalUsername').value.trim(),password:$('portalPassword').value})});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}if(d.account.role!=='customer'){$('loginMsg').textContent='Bu login mijoz akkaunti emas.';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
-async function requestOtp(){const id=$('telegram').value.trim();const r=await fetch('/api/v1/owner/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegram_id:id})});const d=await r.json();$('loginMsg').textContent=d.message||d.detail||'';$('verify').classList.remove('hidden')}
-async function verifyOtp(){const params=new URLSearchParams(location.search);const body={telegram_id:$('telegram').value.trim(),code:$('code').value.trim()};if(params.get('site'))body.site_id=params.get('site');const r=await fetch('/api/v1/owner/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){$('loginMsg').textContent=d.detail||'Kirish xatosi';return}token=d.access_token;localStorage.setItem('chaqimchi_owner_token',token);showApp()}
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(path,options={}){const headers={Authorization:`Bearer ${token}`,...(options.headers||{})};const r=await fetch(path,{...options,headers});const d=await r.json();if(r.status===401){logout();throw new Error('Session tugadi')}if(!r.ok)throw new Error(d.detail||'So‘rov bajarilmadi');return d}
-let currentConfig=null;
-let cameraInventory=[];
-const minutes=s=>s>=60?`${Math.floor(s/60)} daq ${Math.round(s%60)} s`:`${Math.round(s)} s`;
-function drawReport(r){const t=r.traffic;$('reportDate').textContent=r.date;$('entered').textContent=t.entered;$('exited').textContent=t.exited;
-  $('enteredChange').innerHTML=t.change_percent===null?'<small>kecha ma’lumot yo‘q</small>':`<span class="${t.change_percent>=0?'up':'down'}">${t.change_percent>=0?'▲':'▼'} ${Math.abs(t.change_percent)}%</span> kechagiga nisbatan`;
-  $('inside').textContent=`Hozir ichkarida ~${t.inside_estimate} kishi`;
-  $('busiest').textContent=t.busiest_hour?`${String(t.busiest_hour.hour).padStart(2,'0')}:00`:'—';
-  $('busiestCount').textContent=t.busiest_hour?`${t.busiest_hour.entered} kishi kirdi`:'Hali kirish yo‘q';
-  $('queueLongest').textContent=r.queue.longest?`${r.queue.longest} kishi`:'—';
-  $('queueDetail').textContent=r.queue.longest?`${r.queue.longest_at} da · jami ${r.queue.alerts} marta uzun navbat`:'Navbat chegaradan oshmadi';
-  const peak=Math.max(1,...t.hourly.map(h=>h.entered));
-  $('hourly').innerHTML=t.hourly.map(h=>`<div class="${t.busiest_hour&&h.hour===t.busiest_hour.hour&&h.entered?'peak':''}" title="${String(h.hour).padStart(2,'0')}:00 — ${h.entered} kirdi, ${h.exited} chiqdi"><i style="height:${Math.round(h.entered/peak*100)}%"></i><b>${h.hour%3===0?h.hour:''}</b></div>`).join('');
-  $('dwell').innerHTML=r.dwell.length?r.dwell.map(d=>`<tr><td>${esc(d.zone)}</td><td>${d.count}</td><td>${minutes(d.average_sec)}</td><td>${minutes(d.longest_sec)}</td></tr>`).join(''):'<tr><td colspan="4"><small>Bugun zonada uzoq turish qayd etilmadi.</small></td></tr>';
-  const s=r.security;const alarms=[];if(s.camera_tampered)alarms.push(`${s.camera_tampered} marta kamera buzilgan`);if(s.after_hours_presence)alarms.push(`${s.after_hours_presence} marta ish vaqtidan tashqari harakat`);if(s.restricted_zone)alarms.push(`${s.restricted_zone} marta taqiqlangan zonaga kirish`);if(s.loitering)alarms.push(`${s.loitering} marta uzoq turish`);
-  $('securityLine').innerHTML=alarms.length?`<span class="error">⚠ ${alarms.join(' · ')}</span>`:'Xavfsizlik hodisasi yo‘q.'}
-function drawTrend(t){const peak=Math.max(1,...t.daily.map(d=>d.entered));
-  $('daily').innerHTML=t.daily.map(d=>`<div class="${t.busiest_day&&d.date===t.busiest_day.date?'peak':''}" title="${d.date} (${d.weekday}) — ${d.entered} kishi"><i style="height:${Math.round(d.entered/peak*100)}%"></i><b>${t.days<=14?d.weekday.slice(0,2):(d.date.slice(8)==='01'||Number(d.date.slice(8))%5===0?d.date.slice(8):'')}</b></div>`).join('');
-  const parts=[`Jami ${t.total} kishi, kuniga o‘rtacha ${t.average}`];
-  if(t.busiest_day)parts.push(`eng kuchli kun — ${t.busiest_day.weekday} (${t.busiest_day.entered})`);
-  if(t.change_percent!==null)parts.push(`oldingi ${t.days} kunga nisbatan ${t.change_percent>=0?'▲':'▼'} ${Math.abs(t.change_percent)}%`);
-  $('trendSummary').textContent=parts.join(' · ')}
-async function loadTrend(){try{drawTrend(await api(`/api/v1/owner/trend?days=${$('trendDays').value}`))}catch(e){$('trendSummary').textContent=e.message}}
-async function loadData(){const [stats,report,data,health,config,cameras]=await Promise.all([api('/api/v1/owner/stats'),api('/api/v1/owner/report'),api('/api/v1/owner/events?limit=100'),api('/api/v1/owner/health'),api('/api/v1/owner/config'),api('/api/v1/owner/cameras')]);currentConfig=config.config;cameraInventory=cameras.cameras;drawReport(report);$('totalEvents').textContent=`Bugun ${stats.total} hodisa`;const device=health.devices[0];const expected=health.cameras_expected||'—';$('edgeHealth').textContent=device?`${device.health.cameras_active}/${expected} · ${device.health.temperature_c??'—'}°C`:'Offline';$('occupancy').value=currentConfig.occupancy_limit;$('queueLimit').value=currentConfig.queue_limit||5;$('loitering').value=currentConfig.loitering_sec;$('openFrom').value=currentConfig.open_from||'';$('openTo').value=currentConfig.open_to||'';$('linesJson').value=JSON.stringify(currentConfig.lines||[],null,2);$('zonesJson').value=JSON.stringify(currentConfig.zones||[],null,2);renderCameraRoles();$('events').innerHTML=data.events.map(e=>{const media=[];if(e.snapshot_key)media.push(`<a href="#" onclick="snapshot('${e.event_id}');return false">Rasm</a>`);if(e.clip_key)media.push(`<a href="#" onclick="clip('${e.event_id}');return false">Klip</a>`);return `<tr><td>${new Date(e.occurred_at).toLocaleString()}</td><td>${esc(e.camera_id)}</td><td>${esc(e.label||e.event_type)}</td><td>${esc(e.zone||e.line_name||e.person_name||'—')}</td><td>${media.join(' · ')||'—'}</td></tr>`}).join('');await Promise.all([loadTrend(),loadSubscription(),loadAttendance()])}
-function renderCameraRoles(){const roles=currentConfig.camera_roles||{},attendance=new Set(currentConfig.attendance_camera_ids||[]),attendanceRoles=currentConfig.attendance_camera_roles||{};$('cameraRoles').innerHTML=cameraInventory.length?cameraInventory.map(c=>`<div class="row" style="align-items:center;margin:6px 0"><b style="min-width:140px">${esc(c.label||c.camera_id)}</b><select data-camera-role="${esc(c.camera_id)}"><option value="entrance" ${roles[c.camera_id]==='entrance'?'selected':''}>Kirish</option><option value="checkout" ${roles[c.camera_id]==='checkout'?'selected':''}>Kassa</option><option value="sales_floor" ${roles[c.camera_id]==='sales_floor'?'selected':''}>Savdo zali</option><option value="storage" ${roles[c.camera_id]==='storage'?'selected':''}>Ombor</option></select><label><input type="checkbox" data-attendance-camera="${esc(c.camera_id)}" ${attendance.has(c.camera_id)?'checked':''}> Davomat</label><select data-attendance-role="${esc(c.camera_id)}"><option value="arrival" ${attendanceRoles[c.camera_id]==='arrival'?'selected':''}>Kelish</option><option value="departure" ${attendanceRoles[c.camera_id]==='departure'?'selected':''}>Ketish</option><option value="both" ${!attendanceRoles[c.camera_id]||attendanceRoles[c.camera_id]==='both'?'selected':''}>Ikkalasi</option></select></div>`).join(''):'<small>Avval admin panelda kamera qo‘shing.</small>'}
-async function saveConfig(){if(!currentConfig)return;let lines,zones;try{lines=JSON.parse($('linesJson').value||'[]');zones=JSON.parse($('zonesJson').value||'[]')}catch(_){return alert('Lines/Zones JSON noto‘g‘ri')}const camera_roles={};document.querySelectorAll('[data-camera-role]').forEach(x=>camera_roles[x.dataset.cameraRole]=x.value);const attendance_camera_ids=[...document.querySelectorAll('[data-attendance-camera]:checked')].map(x=>x.dataset.attendanceCamera);if(attendance_camera_ids.length>2)return alert('Davomat uchun ko‘pi bilan 2 kamera');const attendance_camera_roles={};attendance_camera_ids.forEach(id=>{const x=document.querySelector(`[data-attendance-role="${id}"]`);attendance_camera_roles[id]=x?x.value:'both'});const body={...currentConfig,camera_roles,attendance_camera_ids,attendance_camera_roles,occupancy_limit:Number($('occupancy').value),queue_limit:Number($('queueLimit').value),loitering_sec:Number($('loitering').value),open_from:$('openFrom').value||null,open_to:$('openTo').value||null,lines,zones};try{currentConfig=(await api('/api/v1/owner/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).config;$('configStatus').textContent='Sozlama saqlandi va Sotqinga yuboriladi.';await loadData()}catch(e){$('configStatus').textContent=e.message}}
-async function snapshot(id){const r=await fetch(`/api/v1/owner/events/${id}/snapshot`,{headers:{Authorization:`Bearer ${token}`}});if(r.ok)window.open(URL.createObjectURL(await r.blob()),'_blank')}
-async function clip(id){const r=await fetch(`/api/v1/owner/events/${id}/clip`,{headers:{Authorization:`Bearer ${token}`}});if(r.ok)window.open(URL.createObjectURL(await r.blob()),'_blank')}
-async function loadSubscription(){try{const [view,invoices]=await Promise.all([api('/api/v1/owner/features'),api('/api/v1/owner/invoices')]);const summary=view.summary;const selected=summary.drafts.length?summary.drafts:summary.assignments.filter(x=>x.status==='active');const selectedCodes=new Map(selected.map(x=>[x.feature_code,x.camera_count]));const q=summary.active_quote;$('subscriptionSummary').innerHTML=`<small>Faol hisob: <b>$${(q.monthly_usd_cents/100).toFixed(0)}/oy</b> · ${(q.monthly_uzs||0).toLocaleString('ru-RU')} so'm. Draft tanlov admin tasdig'idan keyin Sotqinga yuboriladi.</small>`;$('featureList').innerHTML=view.catalog.features.filter(f=>f.active).map(f=>`<label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" data-feature="${esc(f.code)}" ${selectedCodes.has(f.code)?'checked':''}><span style="min-width:170px">${esc(f.name)}</span><small>$${(f.monthly_usd_cents/100).toFixed(0)}/kamera/oy</small><input data-feature-count="${esc(f.code)}" type="number" min="1" max="4" value="${selectedCodes.get(f.code)||1}" style="width:65px"></label>`).join('');const pending=invoices.find(i=>i.state==='pending');$('invoiceSummary').innerHTML=pending?`To'lanmagan hisob: <a href="${esc(pending.pay_url)}">${(pending.amount_uzs||0).toLocaleString('ru-RU')} so‘m to‘lash</a>`:'To‘lanmagan hisob yo‘q.'}catch(e){$('subscriptionSummary').textContent=e.message}}
-async function requestFeatures(){const selections=[...document.querySelectorAll('[data-feature]')].filter(x=>x.checked).map(x=>({feature_code:x.dataset.feature,camera_count:Number(document.querySelector(`[data-feature-count="${x.dataset.feature}"]`).value)}));if(!selections.length)return alert('Kamida bitta funksiya tanlang');try{const q=await api('/api/v1/owner/features/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selections})});if(!confirm(`Yangi hisob: $${(q.monthly_usd_cents/100).toFixed(0)}/oy. Admin tasdig'iga yuborilsinmi?`))return;await api('/api/v1/owner/features/request',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({selections})});await loadSubscription();alert('So‘rov admin tasdig‘iga yuborildi')}catch(e){alert(e.message)}}
-async function createInvoice(){try{const inv=await api('/api/v1/owner/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({months:1})});location.href=inv.pay_url}catch(e){alert(e.message)}}
-const weekNames=['Du','Se','Cho','Pa','Ju','Sha','Ya'];
-function scheduleText(items){const active=(items||[]).filter(x=>x.enabled);if(!active.length)return 'Jadval yo‘q';const times=[...new Set(active.map(x=>`${x.start_time}–${x.end_time}`))].join(', ');return `${active.map(x=>weekNames[x.weekday]).join(', ')} · ${times}`}
-async function loadAttendance(){try{const data=await api('/api/v1/owner/employees');$('employees').innerHTML=data.employees.length?data.employees.map(e=>`<tr><td><b>${esc(e.name)}</b><br><small>${esc(e.external_id||e.id)}</small></td><td>${esc(scheduleText(e.schedules))}</td><td>${esc(e.enrollment_status)}</td><td><button onclick="editSchedule('${e.id}')">Jadval</button> <button onclick="deactivateEmployee('${e.id}')">O‘chirish</button></td></tr>`).join(''):'<tr><td colspan="4"><small>Xodim qo‘shilmagan.</small></td></tr>';const today=new Date().toISOString().slice(0,10);if(!$('attendanceFrom').value){$('attendanceFrom').value=today;$('attendanceTo').value=today}await loadAttendanceReport()}catch(e){$('employees').innerHTML=`<tr><td colspan="4"><small>${esc(e.message)}</small></td></tr>`}}
-async function createEmployee(){const name=$('employeeName').value.trim();if(!name)return alert('Xodim ismini kiriting');if(!$('employeeConsent').checked)return alert('Yozma rozilik olinmasdan xodim qo‘shilmaydi');try{await api('/api/v1/owner/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,external_id:$('employeeExternal').value.trim()||null,consent:true,consent_note:'Owner panel orqali qayd etildi'})});$('employeeName').value='';$('employeeExternal').value='';$('employeeConsent').checked=false;await loadAttendance()}catch(e){alert(e.message)}}
-async function editSchedule(id){const days=prompt('Ish kunlari: 0=Dushanba ... 6=Yakshanba','0,1,2,3,4');if(days===null)return;const start=prompt('Kirish vaqti','09:00');if(start===null)return;const end=prompt('Chiqish vaqti','18:00');if(end===null)return;const grace=Number(prompt('Kechikish toleransi (daqiqa)','5'));const weekdays=days.split(',').map(x=>Number(x.trim())).filter(x=>Number.isInteger(x)&&x>=0&&x<=6);try{await api(`/api/v1/owner/employees/${id}/schedule`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({schedules:weekdays.map(weekday=>({weekday,start_time:start,end_time:end,grace_minutes:grace,enabled:true}))})});await loadAttendance()}catch(e){alert(e.message)}}
-async function deactivateEmployee(id){if(!confirm('Xodim davomatdan chiqarilsinmi? Lokal yuz namunasi Sotqin panelidan ham o‘chiriladi.'))return;try{await api(`/api/v1/owner/employees/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:false})});await loadAttendance()}catch(e){alert(e.message)}}
-function attendanceStatus(r){const bits=[r.status];if(r.early_leave_minutes)bits.push(`${r.early_leave_minutes} daq erta`);if(r.checkout_missing)bits.push('chiqish aniqlanmadi');return bits.join(' · ')}
-async function loadAttendanceReport(){try{const from=$('attendanceFrom').value,to=$('attendanceTo').value||from;if(!from)return;const data=await api(`/api/v1/owner/attendance?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`);const s=data.summary;$('attendanceSummary').innerHTML=`<p><b>${s.present}</b> keldi · <b>${s.absent}</b> kelmadi · <b>${s.late}</b> kechikdi · <b>${s.checkout_missing}</b> chiqishi aniqlanmadi</p>`;$('attendanceRows').innerHTML=data.rows.length?data.rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.employee_name)}</td><td>${r.first_seen?new Date(r.first_seen).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'—'}</td><td>${r.last_seen&&r.last_seen!==r.first_seen?new Date(r.last_seen).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'—'}</td><td>${esc(attendanceStatus(r))}</td></tr>`).join(''):'<tr><td colspan="5"><small>Davomat ma’lumoti yo‘q.</small></td></tr>'}catch(e){$('attendanceSummary').textContent=e.message}}
-async function downloadAttendanceCsv(){const from=$('attendanceFrom').value,to=$('attendanceTo').value||from;if(!from)return;const r=await fetch(`/api/v1/owner/attendance.csv?start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`,{headers:{Authorization:`Bearer ${token}`}});if(!r.ok)return alert((await r.json()).detail||'CSV olinmadi');const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`davomat-${from}-${to}.csv`;a.click();URL.revokeObjectURL(url)}
-function showApp(){$('login').classList.add('hidden');$('app').classList.remove('hidden');loadData().catch(()=>{})}
-function logout(){token='';localStorage.removeItem('chaqimchi_owner_token');location.reload()}
-if(token)showApp();
+(() => {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) =>
+    String(value ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let token = localStorage.getItem("chaqimchi_owner_token") || "";
+  let reportDay = "";           // "" = bugun
+  let trendDays = 7;
+  let cameraList = [];
+  let currentConfig = null;
+  let previewUrls = [];         // revoke uchun
+
+  function note(containerId, kind, text) {
+    $(containerId).innerHTML = `<div class="note ${kind}">${esc(text)}</div>`;
+  }
+
+  async function api(path, options = {}) {
+    const headers = { Authorization: `Bearer ${token}`, ...(options.headers || {}) };
+    // JSON — standart, lekin chaqiruvchi o'zi bergan turni BUZMAYMIZ.
+    // Ilgari bu qator shartsiz edi va rasm yuklashda `image/jpeg` ni
+    // `application/json` ga almashtirib qo'yardi — server 415 qaytarardi.
+    if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    let response;
+    try {
+      response = await fetch(path, { ...options, headers });
+    } catch (err) {
+      // `fetch` tarmoq uzilganda `TypeError: Failed to fetch` beradi.
+      // Bu matn mijozga hech narsa aytmaydi.
+      throw new Error("Internet bilan aloqa yo‘q");
+    }
+    if (response.status === 401) { logout(); throw new Error("Sessiya tugadi"); }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      // FastAPI tekshiruv xatosida `detail` — RO'YXAT.  Uni to'g'ridan-
+      // to'g'ri ko'rsatsak mijoz "[object Object]" ni o'qiydi.
+      const detail = typeof data.detail === "string" ? data.detail : "";
+      throw new Error(detail || "So‘rov bajarilmadi");
+    }
+    return data;
+  }
+
+  /* ── Bo'limlar ──────────────────────────────────────────────────────── */
+
+  // Ma'lumot omborchasi.  Har yozuv: `{ok:true,data}` | `{ok:false,error}`
+  // | `null` (hali olinmagan).  Ilgari hamma so'rov bitta `try` ichida
+  // ketardi va bittasi yiqilsa to'rtta karta bo'shab qolardi — uzilish
+  // "bugun mijoz yo'q" bilan bir xil ko'rinardi.
+  const S = {
+    health: null, cameras: null, report: null, trend: null,
+    events: null, config: null, members: null, billing: null, features: null,
+    staff: null,
+  };
+
+  const LOADERS = {
+    health: () => api("/api/v1/owner/health"),
+    cameras: () => api("/api/v1/owner/cameras"),
+    report: () => api(`/api/v1/owner/report${reportDay ? `?date=${reportDay}` : ""}`),
+    trend: () => api(`/api/v1/owner/trend?days=${trendDays}`),
+    events: () => api(`/api/v1/owner/events?${eventQuery()}`),
+    config: () => api("/api/v1/owner/config"),
+    members: () => api("/api/v1/owner/members"),
+    billing: () => api("/api/v1/owner/invoices?limit=6"),
+    features: () => api("/api/v1/owner/features"),
+    staff: () => api("/api/v1/owner/faces"),
+  };
+
+  async function needSettled(keys) {
+    const missing = keys.filter((key) => S[key] === null);
+    if (!missing.length) return;
+    const results = await Promise.allSettled(missing.map((key) => LOADERS[key]()));
+    missing.forEach((key, index) => {
+      const item = results[index];
+      S[key] = item.status === "fulfilled"
+        ? { ok: true, data: item.value }
+        : { ok: false, error: item.reason?.message || "Ma’lumot kelmadi" };
+    });
+  }
+
+  function invalidate(...keys) { keys.forEach((key) => (S[key] = null)); }
+
+  async function reload(...keys) {
+    invalidate(...keys);
+    await renderCurrent();
+  }
+
+  /** Bitta karta o'z xatosini o'zi ko'rsatadi va qayta urinish beradi. */
+  function cardError(containerId, entry, retryKeys) {
+    const box = $(containerId);
+    if (!box) return true;
+    box.innerHTML =
+      `<div class="note err"><b>Ma’lumot kelmadi</b>${esc(entry.error)}</div>` +
+      `<button class="button ghost small" type="button" data-retry="${esc(retryKeys)}">Qayta urinish</button>`;
+    return true;
+  }
+
+  const TABS = [
+    { id: "bugun", label: "Bugun", icon: "odamlar", pane: "paneBugun",
+      deps: ["health", "cameras", "report"] },
+    { id: "tahlil", label: "Tahlil", icon: "soat", pane: "paneTahlil",
+      deps: ["health", "cameras", "trend", "config", "report"] },
+    { id: "xavfsizlik", label: "Xavfsizlik", icon: "qalqon", pane: "paneXavfsizlik",
+      deps: ["health", "cameras", "report", "events"] },
+    { id: "dokon", label: "Do‘kon", icon: "dokon", pane: "paneDokon",
+      deps: ["health", "cameras", "config", "members", "billing", "features"] },
+    { id: "xodimlar", label: "Xodimlar", icon: "odamlar", pane: "paneXodimlar",
+      deps: ["health", "cameras", "config", "staff"] },
+  ];
+
+  //: Yuz tanish yoqilmagan saytda "Xodimlar" tugmasi umuman chizilmaydi —
+  //: bosilgach 403 ko'rsatadigan bo'sh bo'lim eng yomon variant.
+  let staffEnabled = true;
+
+  //: Tarifda ochiq panel bo'limlari (`/api/v1/owner/health` beradi).
+  //:
+  //: Tab bilan farqi bor va u ataylab: yuz tanish YO'Q bo'lsa tugma
+  //: umuman chizilmaydi (u yopiq pilot, mijoz uni sotib ololmaydi), tarifda
+  //: yo'q bo'lim esa QULF bilan turadi — uni ko'tarish mumkin va mijoz
+  //: nimani ololishini ko'rishi kerak.
+  let planFeatures = null;
+
+  function hasFeature(name) {
+    // `null` — health hali kelmagan.  Bunday paytda qulf ko'rsatilmaydi:
+    // sekin internetda karta bir zumga "tarifda yo'q" bo'lib chaqnab
+    // ketardi.
+    return planFeatures === null || planFeatures.includes(name);
+  }
+
+  function applyPlanLocks() {
+    const mapOpen = hasFeature("xarita");
+    ["heatControls", "heatWrap", "heatActions", "heatSummary", "heatHint"].forEach((id) => {
+      const node = $(id);
+      if (node) node.hidden = !mapOpen;
+    });
+    const locked = $("heatLocked");
+    if (locked) locked.hidden = mapOpen;
+  }
+
+  function visibleTabs() {
+    return TABS.filter((tab) => tab.id !== "xodimlar" || staffEnabled);
+  }
+
+  function currentTab() {
+    const raw = (location.hash || "").replace(/^#\/?/, "");
+    const [id] = raw.split("/");
+    return TABS.find((tab) => tab.id === id) || TABS[0];
+  }
+
+  function drawTabs() {
+    const active = currentTab();
+    $("tabbar").innerHTML = visibleTabs().map((tab) => `
+      <a class="tab" href="#/${tab.id}"${tab.id === active.id ? ' aria-current="page"' : ""}>
+        <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#${tab.icon}"></use></svg>
+        <span>${esc(tab.label)}</span>
+      </a>`).join("");
+  }
+
+  /* ── Kirish ─────────────────────────────────────────────────────────── */
+
+  // Havoladan kirish: `/owner?key=<token>`.  `key` — uzun tasodifiy token
+  // (admin panel yoki Telegram bot beradi).  Ilgari bu yerda `?tg=<id>`
+  // ishlardi — Telegram ID sir emasligi uchun olib tashlandi.
+  async function loginFromLink() {
+    const params = new URLSearchParams(location.search);
+    const key = (params.get("key") || "").trim();
+    if (!key) return false;
+    try {
+      const r = await fetch("/api/v1/owner/auth/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      const d = await r.json();
+      if (r.ok && d.access_token) {
+        token = d.access_token;
+        localStorage.setItem("chaqimchi_owner_token", token);
+        // Manzil qatoridagi tokenni tozalaymiz — u credential, tarix va
+        // skrinshotlarda qolmasin.  Telegramdagi havola ishlayveradi.
+        params.delete("key");
+        const rest = params.toString();
+        // `location.hash` ham saqlanadi: Telegramdan kelgan chuqur
+        // havola (`#/xavfsizlik`) aks holda yo'qolib ketardi.
+        history.replaceState(null, "", location.pathname + (rest ? `?${rest}` : "") + location.hash);
+        showApp();
+        return true;
+      }
+      $("loginMsg").textContent = d.detail || d.message || "Havola eskirgan — botdan yangisini oling.";
+    } catch (err) {
+      $("loginMsg").textContent = "Server bilan aloqa yo‘q.";
+    }
+    return false;
+  }
+
+  async function passwordLogin() {
+    const username = $("portalUsername").value.trim();
+    const password = $("portalPassword").value;
+    if (!username || !password) {
+      $("loginMsg").textContent = "Login va parolni kiriting.";
+      return;
+    }
+    const button = $("passwordBtn");
+    button.disabled = true;
+    $("loginMsg").textContent = "Kirmoqda…";
+    try {
+      const r = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Login yoki parol noto‘g‘ri.");
+      if (!d.account || d.account.role !== "customer") throw new Error("Bu login mijoz akkaunti emas.");
+      token = d.access_token;
+      localStorage.setItem("chaqimchi_owner_token", token);
+      $("loginMsg").textContent = "";
+      showApp();
+    } catch (err) {
+      $("loginMsg").textContent = err.message || "Server bilan aloqa yo‘q.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function logout() {
+    token = "";
+    localStorage.removeItem("chaqimchi_owner_token");
+    location.reload();
+  }
+
+  /* ── Holat banneri ──────────────────────────────────────────────────── */
+
+  function drawStatus(health) {
+    const banner = $("statusBanner");
+    $("siteName").textContent = health.site_name || "";
+    if (health.plan && Array.isArray(health.plan.panel_features)) {
+      planFeatures = health.plan.panel_features;
+      applyPlanLocks();
+    }
+    const expected = Number(health.cameras_expected || 0);
+    const active = Number(health.cameras_active || 0);
+    const minutes = health.minutes_since_seen;
+
+    let kind = "ok";
+    let title = "Hammasi ishlayapti";
+    let sub = expected ? `${active}/${expected} kamera ulangan` : "Qurilma ulangan";
+
+    if (health.connection === "not_paired") {
+      kind = "err"; title = "Qurilma hali ulanmagan";
+      sub = "O‘rnatish tugallanmagan — o‘rnatuvchi bilan bog‘laning.";
+    } else if (health.connection === "offline") {
+      kind = "err"; title = "Qurilma aloqada emas";
+      sub = minutes != null ? `Oxirgi aloqa: ${sinceLabel(minutes)}. Tok va internetni tekshiring.` : "Tok va internetni tekshiring.";
+    } else if (health.connection === "stale") {
+      kind = "warn"; title = "Aloqa uzilib turibdi";
+      sub = minutes != null ? `Oxirgi aloqa: ${sinceLabel(minutes)}.` : "";
+    } else if (expected && active < expected) {
+      kind = "warn"; title = `${expected - active} ta kamera ishlamayapti`;
+      sub = `${expected} tadan ${active} tasi ulangan. Kamera tokini va kabelini tekshiring.`;
+    }
+
+    banner.className = `status-banner ${kind}`;
+    banner.innerHTML = `<div><span>${esc(title)}</span><span class="sub">${esc(sub)}</span></div>`;
+  }
+
+  function sinceLabel(minutes) {
+    const value = Number(minutes);
+    if (!Number.isFinite(value)) return "noma’lum";
+    if (value < 60) return `${Math.round(value)} daqiqa oldin`;
+    if (value < 1440) return `${Math.floor(value / 60)} soat oldin`;
+    return `${Math.floor(value / 1440)} kun oldin`;
+  }
+
+  /* ── Kameralar ──────────────────────────────────────────────────────── */
+
+  function fillCameraFilter() {
+    const filter = $("cameraFilter");
+    if (!filter) return;
+    const selected = filter.value;
+    filter.innerHTML = '<option value="">Barcha kameralar</option>' +
+      cameraList.map((camera) =>
+        `<option value="${esc(camera.camera_id)}">${esc(camera.label || camera.camera_id)}</option>`).join("");
+    filter.value = selected;
+  }
+
+  async function drawCameras() {
+    const grid = $("cameraGrid");
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls = [];
+    if (!cameraList.length) {
+      grid.innerHTML = '<p class="hint">Kamera hali qo‘shilmagan.</p>';
+      $("cameraHint").textContent = "";
+      return;
+    }
+    $("cameraHint").textContent = "Rasmni bossangiz kattaroq ochiladi";
+    grid.innerHTML = cameraList.map((camera) => `
+      <button class="camera-card" type="button" data-camera="${esc(camera.camera_id)}">
+        <div class="shot empty" data-shot="${esc(camera.camera_id)}">rasm yuklanmoqda…</div>
+        <div class="meta"><span class="dot" data-dot="${esc(camera.camera_id)}"></span><b>${esc(camera.label || camera.camera_id)}</b></div>
+      </button>`).join("");
+
+    grid.querySelectorAll(".camera-card").forEach((cardButton) => {
+      cardButton.addEventListener("click", () => openCameraModal(cardButton.dataset.camera));
+    });
+
+    for (const camera of cameraList) {
+      loadPreview(camera.camera_id);
+    }
+  }
+
+  async function loadPreview(cameraId) {
+    const holder = document.querySelector(`[data-shot="${CSS.escape(cameraId)}"]`);
+    const dot = document.querySelector(`[data-dot="${CSS.escape(cameraId)}"]`);
+    try {
+      const r = await fetch(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error("yo‘q");
+      const url = URL.createObjectURL(await r.blob());
+      previewUrls.push(url);
+      const img = document.createElement("img");
+      img.className = "shot";
+      img.alt = "";
+      img.src = url;
+      holder.replaceWith(img);
+      img.dataset.shot = cameraId;
+      if (dot) dot.className = "dot on";
+    } catch (err) {
+      if (holder) holder.textContent = "rasm hali kelmagan";
+    }
+  }
+
+  async function openCameraModal(cameraId) {
+    const camera = cameraList.find((item) => item.camera_id === cameraId);
+    openModal(esc((camera && camera.label) || cameraId));
+    liveCameraId = cameraId;
+    const liveBtn = $("modalLiveBtn");
+    liveBtn.classList.remove("hidden");
+    liveBtn.textContent = "▶ Jonli ko‘rish";
+    await renderMediaInModal(
+      `/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`,
+      "image",
+      `${cameraId}.jpg`,
+      "Bu kameradan rasm hali kelmagan. Qurilma ulanganda o‘zi paydo bo‘ladi.",
+    );
+  }
+
+  /* ── Do'kon xaritasi (issiqlik) ──────────────────────────────────────
+     Kataklar sonlari serverdan keladi; kamera rasmi fonga chiziladi va
+     ustiga och-to'q qizil qatlam tushadi. */
+
+  let heatLoaded = false;
+
+  function fillHeatControls() {
+    const select = $("heatCamera");
+    const current = select.value;
+    select.innerHTML = cameraList
+      .map((camera) => `<option value="${esc(camera.camera_id)}">${esc(camera.label || camera.camera_id)}</option>`)
+      .join("");
+    if (current) select.value = current;
+    if ($("heatHour").options.length <= 1) {
+      for (let hour = 8; hour <= 22; hour += 1) {
+        const option = document.createElement("option");
+        option.value = String(hour);
+        option.textContent = `${String(hour).padStart(2, "0")}:00`;
+        $("heatHour").appendChild(option);
+      }
+    }
+    if (!heatLoaded && cameraList.length) {
+      heatLoaded = true;
+      loadHeatmap();
+    }
+  }
+
+  async function loadHeatmap() {
+    // Kamera yo'q bo'lsa xarita bo'sh oq quti bo'lib qolardi, "burchaklarni
+    // to'g'irlash" tugmasi esa hech nima qilmasdi.
+    if (!cameraList.length) {
+      $("heatSummary").innerHTML =
+        '<span class="empty-note"><b>Xarita hali tayyor emas</b>' +
+        'Kamera qo‘shilgach, mijozlar ko‘p yurgan joylar shu yerda ko‘rinadi.</span>';
+      $("heatEditBtn").disabled = true;
+      return;
+    }
+    if (!hasFeature("xarita")) return;
+    $("heatEditBtn").disabled = false;
+    const cameraId = $("heatCamera").value;
+    if (!cameraId) return;
+    const params = new URLSearchParams({ camera_id: cameraId });
+    if ($("heatDate").value) params.set("date", $("heatDate").value);
+    if ($("heatHour").value !== "") params.set("hour", $("heatHour").value);
+    let data;
+    try {
+      data = await api(`/api/v1/owner/heatmap?${params.toString()}`);
+    } catch (err) {
+      $("heatSummary").textContent = err.message;
+      return;
+    }
+    const canvas = $("heatCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Fon: kameraning oxirgi kadri (bo'lmasa oddiy kulrang maydon).
+    try {
+      const r = await fetch(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const blobUrl = URL.createObjectURL(await r.blob());
+        const image = new Image();
+        image.src = blobUrl;
+        await image.decode();
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(blobUrl);
+      } else {
+        ctx.fillStyle = "#e5e7eb";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    } catch (_) {
+      ctx.fillStyle = "#e5e7eb";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    const peak = Math.max(1, ...data.grid.map((row) => Math.max(...row)));
+    const cellW = canvas.width / data.cols;
+    const cellH = canvas.height / data.rows;
+    for (let r = 0; r < data.rows; r += 1) {
+      for (let c = 0; c < data.cols; c += 1) {
+        const value = data.grid[r][c];
+        if (!value) continue;
+        // Och → to'q: qiymat oshgani sari qatlam quyuqlashadi.
+        const alpha = 0.12 + 0.6 * (value / peak);
+        ctx.fillStyle = `rgba(220, 38, 38, ${alpha.toFixed(3)})`;
+        ctx.fillRect(c * cellW, r * cellH, Math.ceil(cellW), Math.ceil(cellH));
+      }
+    }
+    $("heatSummary").textContent = data.points
+      ? `${data.points} ta qadam nuqtasi yig‘ildi · eng gavjum katakda ${peak} ta`
+      : "Bu kun uchun hali ma’lumot yo‘q — qurilma har 10 daqiqada yuboradi.";
+    if (heatEditing) drawQuadOverlay();
+  }
+
+  /* ── Do'kon plani (tepadan) va pol burchaklari ───────────────────────
+     Har kamera uchun pol to'rtburchagi: kamera rasmi ustidagi 4 burchak
+     to'rni "tepadan ko'rinish"ga akslantiradi.  Standart trapetsiya
+     taxminiy — ega burchaklarni sudrab aniqlashtiradi (saqlash configda).
+     7 kunlik yig'indida odam YURMAGAN joylar qoraytiriladi — jihozlar
+     plani trafikdan o'z-o'zidan chiziladi (taxminiy!). */
+
+  let heatMode = "camera";
+  let heatEditing = false;
+  let dragCorner = -1;
+
+  const DEFAULT_QUAD = [[0.15, 0.45], [0.85, 0.45], [1, 1], [0, 1]];
+
+  function floorQuad(cameraId) {
+    const cameras = ((currentConfig || {}).floor_map || {}).cameras || {};
+    const quad = (cameras[cameraId] || {}).quad;
+    return Array.isArray(quad) && quad.length === 4
+      ? quad.map((p) => [Number(p[0]), Number(p[1])])
+      : DEFAULT_QUAD.map((p) => [...p]);
+  }
+
+  function setFloorQuad(cameraId, quad) {
+    if (!currentConfig) return;
+    const map = currentConfig.floor_map || {};
+    const cameras = map.cameras || {};
+    cameras[cameraId] = { ...(cameras[cameraId] || {}), quad };
+    currentConfig.floor_map = { ...map, cameras };
+  }
+
+  function drawQuadOverlay() {
+    const canvas = $("heatCanvas");
+    const ctx = canvas.getContext("2d");
+    const quad = floorQuad($("heatCamera").value);
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    quad.forEach((p, i) => {
+      const x = p[0] * canvas.width, y = p[1] * canvas.height;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+    quad.forEach((p) => {
+      ctx.fillStyle = "#2563eb";
+      ctx.beginPath();
+      ctx.arc(p[0] * canvas.width, p[1] * canvas.height, 7, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function canvasPoint(event) {
+    const canvas = $("heatCanvas");
+    const rect = canvas.getBoundingClientRect();
+    return [
+      Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+      Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+    ];
+  }
+
+  $("heatCanvas").addEventListener("pointerdown", (event) => {
+    if (!heatEditing || heatMode !== "camera") return;
+    const [x, y] = canvasPoint(event);
+    const quad = floorQuad($("heatCamera").value);
+    dragCorner = quad.findIndex((p) => Math.hypot(p[0] - x, p[1] - y) < 0.05);
+    if (dragCorner >= 0) $("heatCanvas").setPointerCapture(event.pointerId);
+  });
+  // Sudrash paytida `loadHeatmap()` chaqirilardi — u issiqlik xaritasini
+  // ham, kamera rasmini ham QAYTA SO'RARDI.  Bir soniyalik sudrash
+  // o'nlab autentifikatsiyalangan so'rov tug'dirardi va telefonda
+  // burchakni tortib bo'lmasdi.  Endi sudrash paytida faqat chiziq
+  // qayta chiziladi, so'rov esa barmoq uzilganda bir marta ketadi.
+  let dragFrame = 0;
+  $("heatCanvas").addEventListener("pointermove", (event) => {
+    if (dragCorner < 0) return;
+    event.preventDefault();
+    const cameraId = $("heatCamera").value;
+    const quad = floorQuad(cameraId);
+    quad[dragCorner] = canvasPoint(event);
+    setFloorQuad(cameraId, quad);
+    if (dragFrame) return;
+    dragFrame = requestAnimationFrame(() => {
+      dragFrame = 0;
+      drawQuadOverlay();
+    });
+  });
+  $("heatCanvas").addEventListener("pointerup", () => {
+    if (dragCorner < 0) return;
+    dragCorner = -1;
+    loadHeatmap();   // yakuniy holat bo'yicha bir marta
+  });
+
+  async function saveFloorMap() {
+    if (!currentConfig) return;
+    try {
+      await api("/api/v1/owner/config", {
+        method: "PUT",
+        body: JSON.stringify({ ...currentConfig }),
+      });
+      note("heatSummary", "ok", "Pol burchaklari saqlandi.");
+    } catch (err) {
+      note("heatSummary", "err", err.message);
+    }
+  }
+
+  // Bilinear: tepadan (u,v) → kamera rasmi nuqtasi.
+  function quadPoint(quad, u, v) {
+    const [tl, tr, br, bl] = quad;
+    return [
+      (1 - u) * (1 - v) * tl[0] + u * (1 - v) * tr[0] + u * v * br[0] + (1 - u) * v * bl[0],
+      (1 - u) * (1 - v) * tl[1] + u * (1 - v) * tr[1] + u * v * br[1] + (1 - u) * v * bl[1],
+    ];
+  }
+
+  async function loadPlanView() {
+    if (!hasFeature("xarita")) return;
+    const canvas = $("heatCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#f3f4f6";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!cameraList.length) return;
+    const cols = cameraList.length > 1 ? 2 : 1;
+    const rows = Math.ceil(cameraList.length / cols);
+    const tileW = canvas.width / cols, tileH = canvas.height / rows;
+    const CELLS = 24;
+    let totalPoints = 0;
+    for (let index = 0; index < cameraList.length; index += 1) {
+      const camera = cameraList[index];
+      let data;
+      try {
+        data = await api(
+          `/api/v1/owner/heatmap?camera_id=${encodeURIComponent(camera.camera_id)}&days=7`,
+        );
+      } catch (_) { continue; }
+      totalPoints += data.points;
+      const quad = floorQuad(camera.camera_id);
+      const ox = (index % cols) * tileW, oy = Math.floor(index / cols) * tileH;
+      const peak = Math.max(1, ...data.grid.map((row) => Math.max(...row)));
+      const enoughData = data.frames > 500; // ~bir necha soat tahlil
+      for (let r = 0; r < CELLS; r += 1) {
+        for (let c = 0; c < CELLS; c += 1) {
+          const [px, py] = quadPoint(quad, (c + 0.5) / CELLS, (r + 0.5) / CELLS);
+          const value = data.grid[Math.min(data.rows - 1, Math.floor(py * data.rows))][
+            Math.min(data.cols - 1, Math.floor(px * data.cols))];
+          const cw = tileW / CELLS, ch = tileH / CELLS;
+          if (value) {
+            const alpha = 0.15 + 0.6 * (value / peak);
+            ctx.fillStyle = `rgba(220, 38, 38, ${alpha.toFixed(3)})`;
+          } else if (enoughData) {
+            // Hafta davomida hech kim bosmagan joy — jihoz/o'tib bo'lmas.
+            ctx.fillStyle = "rgba(55, 65, 81, 0.55)";
+          } else {
+            continue;
+          }
+          ctx.fillRect(ox + c * cw, oy + r * ch, Math.ceil(cw), Math.ceil(ch));
+        }
+      }
+      ctx.strokeStyle = "#9ca3af";
+      ctx.strokeRect(ox + 1, oy + 1, tileW - 2, tileH - 2);
+      ctx.fillStyle = "#111827";
+      ctx.font = "13px system-ui";
+      ctx.fillText(camera.label || camera.camera_id, ox + 8, oy + 18);
+    }
+    $("heatSummary").textContent = totalPoints
+      ? "Oxirgi 7 kun · qora joylar — odam yurmagan (jihozlar, taxminiy)"
+      : "Plan uchun hali ma’lumot yetarli emas — bir necha kun yig‘ilsin.";
+  }
+
+  function setHeatMode(mode) {
+    heatMode = mode;
+    document.querySelectorAll("[data-heatmode]").forEach((chip) =>
+      chip.classList.toggle("active", chip.dataset.heatmode === mode));
+    const cameraMode = mode === "camera";
+    $("heatCamera").style.display = cameraMode ? "" : "none";
+    $("heatDate").style.display = cameraMode ? "" : "none";
+    $("heatHour").style.display = cameraMode ? "" : "none";
+    $("heatEditBtn").style.display = cameraMode ? "" : "none";
+    $("heatHint").textContent = cameraMode
+      ? "To‘q qizil — mijozlar eng ko‘p yurgan joylar. Kamera ko‘rinishi ustida."
+      : "Tepadan ko‘rinish (taxminiy): har kamera o‘z pol to‘rtburchagi orqali akslantiriladi.";
+    if (cameraMode) loadHeatmap(); else loadPlanView();
+  }
+
+  /* ── Jonli ko'rish ───────────────────────────────────────────────────
+     Video oqim emas: qurilma har 2-3 soniyada bitta kadr yuboradi, biz
+     preview'ni o'sha tezlikda qayta o'qiymiz.  Zaif do'kon kompyuteri
+     uchun eng arzon "jonli". */
+
+  let liveCameraId = "";
+  let liveTimer = null;
+  let liveKeepAlive = null;
+
+  async function startLive() {
+    if (!liveCameraId || liveTimer) return;
+    const btn = $("modalLiveBtn");
+    btn.textContent = "⏸ Jonli (ulanmoqda…)";
+    try {
+      await api(`/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/live`, { method: "POST" });
+    } catch (err) {
+      btn.textContent = "▶ Jonli ko‘rish";
+      return note("cameraHint", "warn", err.message);
+    }
+    // Muddatni panel ochiq ekan uzaytirib turamiz (server 90 s beradi).
+    liveKeepAlive = setInterval(() => {
+      api(`/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/live`, { method: "POST" }).catch(() => {});
+    }, 60000);
+    let firstFrameAt = 0;
+    liveTimer = setInterval(async () => {
+      try {
+        const r = await fetch(
+          `/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/preview`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!r.ok) return;
+        const fresh = URL.createObjectURL(await r.blob());
+        const img = $("modalBody").querySelector("img.media");
+        if (img) {
+          const old = img.src;
+          img.src = fresh;
+          if (old && old.startsWith("blob:") && old !== modalUrl) URL.revokeObjectURL(old);
+        } else {
+          $("modalBody").innerHTML = `<img class="media" src="${fresh}" alt="">`;
+        }
+        if (!firstFrameAt) {
+          firstFrameAt = Date.now();
+          $("modalLiveBtn").textContent = "⏸ Jonli — to‘xtatish";
+        }
+      } catch (_) {}
+    }, 2500);
+  }
+
+  function stopLive() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    if (liveKeepAlive) { clearInterval(liveKeepAlive); liveKeepAlive = null; }
+    const btn = $("modalLiveBtn");
+    if (btn) btn.textContent = "▶ Jonli ko‘rish";
+  }
+
+  /* ── Kunlik hisobot ─────────────────────────────────────────────────── */
+
+  //: "Kirganlar" yoki "Ichkaridagilar".  Ikkinchisi savolga boshqacha
+  //: javob beradi: soat 15:00 da do'konda NECHTA odam bor edi.  U
+  //: `hourly[].exited` dan hisoblanadi — server buni allaqachon
+  //: yuboradi, panel esa faqat kirganlarni chizardi.
+  let hourMode = "in";
+
+  // Do'kon kuni — Toshkent bo'yicha, UTC emas.  Ilgari "Kecha" tugmasi
+  // `Date.now() - 86400000` ni UTC sanaga aylantirardi: Toshkentda
+  // yarim tundan 05:00 gacha bu IKKI kun oldingi hisobotni so'rardi va
+  // panel bo'sh ko'rinardi.  Server esa kunni Asia/Tashkent bo'yicha
+  // ajratadi — ikkalasi bir xil kunni tushunishi shart.
+  const SHOP_TZ = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tashkent" });
+  const shopDate = (offsetDays = 0) => SHOP_TZ.format(new Date(Date.now() + offsetDays * 86400000));
+
+  function drawReport(report) {
+    const traffic = report.traffic;
+    $("entered").textContent = traffic.entered;
+    $("exited").textContent = traffic.exited;
+    $("enteredChange").innerHTML = traffic.change_percent === null
+      ? "kechagi ma’lumot yo‘q"
+      : `<span class="${traffic.change_percent >= 0 ? "up" : "down"}">${traffic.change_percent >= 0 ? "▲" : "▼"} ${Math.abs(traffic.change_percent)}%</span> kechagiga nisbatan`;
+    $("inside").textContent = `Hozir ichkarida ~${traffic.inside_estimate} kishi`;
+    $("busiest").textContent = traffic.busiest_hour ? `${String(traffic.busiest_hour.hour).padStart(2, "0")}:00` : "—";
+    $("busiestCount").textContent = traffic.busiest_hour ? `${traffic.busiest_hour.entered} kishi kirdi` : "hali kirish yo‘q";
+
+    // "Nega bugun kamroq?" degan savolni oldindan yopadi.
+    const staff = Number(traffic.xodim_chiqarilgan || 0);
+    $("staffNote").textContent = staff
+      ? `Yuqoridagi songa xodimlar kirmaydi — bugun ularning ${staff} ta o‘tishi hisobga olinmadi.`
+      : "";
+
+    $("queueLongest").textContent = report.queue.longest ? `${report.queue.longest} kishi` : "—";
+    $("queueDetail").textContent = report.queue.longest
+      ? `${report.queue.longest_at} da`
+      : "navbat chegaradan oshmadi";
+    $("queueAverage").textContent = report.queue.average ? `${report.queue.average} kishi` : "—";
+    $("queueAlerts").textContent = report.queue.alerts
+      ? `${report.queue.alerts} marta chegaradan oshdi`
+      : "bugun tinch";
+
+    drawHourly(traffic);
+    drawDemography(report.demografiya);
+    drawSecurity(report.security);
+  }
+
+  function drawHourly(traffic) {
+    // Ichkaridagilar: kirganlar minus chiqqanlar, to'planib boradi.
+    // Manfiy bo'lib ketmasin — kamera ba'zi o'tishni ko'rmay qolishi
+    // mumkin, `inside_estimate` ham shu sababdan "taxminiy".
+    let running = 0;
+    const values = traffic.hourly.map((h) => {
+      running = Math.max(0, running + Number(h.entered || 0) - Number(h.exited || 0));
+      return hourMode === "inside" ? running : Number(h.entered || 0);
+    });
+    const peak = Math.max(1, ...values);
+    $("hourly").innerHTML = traffic.hourly.map((h, index) => {
+      const value = values[index];
+      const isPeak = hourMode === "in" && traffic.busiest_hour
+        && h.hour === traffic.busiest_hour.hour && h.entered;
+      const label = `${String(h.hour).padStart(2, "0")}:00 — ${
+        hourMode === "inside" ? `taxminan ${value} kishi ichkarida` : `${h.entered} kirdi, ${h.exited} chiqdi`}`;
+      return `
+      <button type="button" class="${isPeak ? "peak" : ""}" aria-label="${esc(label)}"
+              data-hour="${h.hour}" data-readout="${esc(label)}">
+        <i style="height:${Math.round((value / peak) * 100)}%"></i>
+        <b>${h.hour % 3 === 0 ? h.hour : ""}</b>
+      </button>`;
+    }).join("");
+    $("hourHint").textContent = hourMode === "inside"
+      ? "Kirganlar minus chiqqanlar — do‘konda o‘sha soatda taxminan nechta odam bo‘lgani."
+      : "Ustunni bossangiz — o‘sha soat raqamlari chiqadi.";
+    $("hourReadout").textContent = "";
+    // Teginish/bosish bilan qiymat: `title` tooltip telefonlarda ishlamaydi.
+    $("hourly").querySelectorAll("[data-hour]").forEach((bar) => {
+      bar.addEventListener("click", () => {
+        $("hourly").querySelectorAll(".selected").forEach((el) => el.classList.remove("selected"));
+        bar.classList.add("selected");
+        $("hourReadout").textContent = bar.dataset.readout;
+      });
+    });
+  }
+
+  function dwellLabel(seconds) {
+    const value = Math.round(Number(seconds) || 0);
+    if (value < 60) return `${value} soniya`;
+    const minutes = Math.floor(value / 60);
+    const rest = value % 60;
+    return rest ? `${minutes} daq ${rest} s` : `${minutes} daqiqa`;
+  }
+
+  function drawDwell(dwell) {
+    const box = $("dwellList");
+    const rows = Array.isArray(dwell) ? dwell : [];
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty-note"><b>Hali ma’lumot yo‘q</b>' +
+        'Zonalar chizilgach, qaysi tokcha oldida odam to‘xtashi shu yerda ko‘rinadi.</div>';
+      return;
+    }
+    box.innerHTML = rows.map((row) => `
+      <div class="member-row">
+        <div class="who"><b>${esc(row.zone === "—" ? "Zona ko‘rsatilmagan" : row.zone)}</b>
+          <small>o‘rtacha ${esc(dwellLabel(row.average_sec))} · eng uzuni ${esc(dwellLabel(row.longest_sec))}</small></div>
+        <span class="hint" style="margin:0">${Number(row.count)} marta</span>
+      </div>`).join("");
+  }
+
+  function drawDemography(demo) {
+    const block = $("demoStats");
+    if (!hasFeature("demografiya")) {
+      // Server bu bo'limni hisobotdan olib tashlaydi.  Panel esa nima
+      // borligini aytadi — mijoz nimani ololishini bilsin.
+      block.innerHTML =
+        '<div class="note"><b>Mijoz portreti Biznes tarifida ochiladi.</b> ' +
+        "Do‘koningizga kim ko‘proq kelishini ko‘rasiz: yosh guruhi va jins " +
+        "(anonim baho, rasm saqlanmaydi).</div>";
+      block.classList.remove("hidden");
+      return;
+    }
+    if (!demo || !demo.hisoblangan) {
+      block.classList.add("hidden");
+      block.innerHTML = "";
+      return;
+    }
+    const ages = demo.yosh || {};
+    const topAge = Object.keys(ages).reduce(
+      (best, key) => (ages[key] > (ages[best] || 0) ? key : best),
+      "",
+    );
+    const jins = demo.jins || {};
+    block.innerHTML = `
+      <div class="stat"><small>Ayollar</small><strong>${jins.ayol || 0}%</strong><span>${demo.hisoblangan} kishidan</span></div>
+      <div class="stat"><small>Erkaklar</small><strong>${jins.erkak || 0}%</strong><span>xodimlar hisobga kirmaydi</span></div>
+      <div class="stat"><small>Asosiy yosh guruhi</small><strong>${esc(topAge || "—")}</strong><span>${topAge ? `${ages[topAge]} kishi` : ""}</span></div>`;
+    block.classList.remove("hidden");
+  }
+
+  const SECURITY_LABELS = {
+    camera_tampered: "Kamera yopilgan/burilgan",
+    after_hours_presence: "Ish vaqtidan tashqari harakat",
+    restricted_zone: "Taqiqlangan zonaga kirish",
+    loitering: "Uzoq turish",
+  };
+
+  function drawSecurity(security) {
+    const entries = Object.entries(SECURITY_LABELS);
+    $("securityStats").innerHTML = entries.map(([key, label]) => `
+      <div class="stat"><small>${esc(label)}</small><strong>${Number(security[key] || 0)}</strong></div>`).join("");
+    const total = entries.reduce((sum, [key]) => sum + Number(security[key] || 0), 0);
+    $("securitySummary").textContent = total ? `${total} ta hodisa` : "hodisa yo‘q";
+  }
+
+  const SECURITY_TYPES = new Set(["camera_tampered", "after_hours_presence", "zone_entered", "loitering", "stream_frozen"]);
+
+  function drawSecurityEvents(events) {
+    const list = events.filter((event) => SECURITY_TYPES.has(event.event_type)).slice(0, 6);
+    $("securityEvents").innerHTML = list.length
+      ? list.map((event) => `
+        <div class="member-row">
+          <div class="who"><b>${esc(event.label || event.event_type)}</b>
+            <small>${new Date(event.occurred_at).toLocaleString()} · ${esc(event.camera_id)}</small></div>
+          ${mediaButtons(event)}
+        </div>`).join("")
+      : '<p class="hint">So‘nggi xavfsizlik hodisalari yo‘q — yaxshi belgi.</p>';
+    bindMediaButtons($("securityEvents"));
+  }
+
+  /* ── Hodisalar ──────────────────────────────────────────────────────── */
+
+  const TYPE_OPTIONS = [
+    ["line_crossed", "Kirish/chiqish"],
+    ["queue_threshold_exceeded", "Navbat uzun"],
+    ["loitering", "Uzoq turish"],
+    ["zone_entered", "Zonaga kirish"],
+    ["camera_tampered", "Kamera buzilishi"],
+    ["after_hours_presence", "Tungi harakat"],
+    ["camera_offline", "Kamera o‘chdi"],
+    ["camera_recovered", "Kamera tiklandi"],
+  ];
+
+  function mediaButtons(event) {
+    const parts = [];
+    if (event.snapshot_key) parts.push(`<button class="button ghost small" type="button" data-media="snapshot" data-event="${esc(event.event_id)}" data-title="${esc(event.label || event.event_type)}">Rasm</button>`);
+    if (event.clip_key) parts.push(`<button class="button ghost small" type="button" data-media="clip" data-event="${esc(event.event_id)}" data-title="${esc(event.label || event.event_type)}">Klip</button>`);
+    return parts.join(" ") || '<span class="hint" style="margin:0">—</span>';
+  }
+
+  function bindMediaButtons(root) {
+    root.querySelectorAll("[data-media]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = btn.dataset.media;
+        openModal(btn.dataset.title);
+        renderMediaInModal(
+          `/api/v1/owner/events/${encodeURIComponent(btn.dataset.event)}/${kind}`,
+          kind === "clip" ? "video" : "image",
+          `${btn.dataset.event}.${kind === "clip" ? "mp4" : "jpg"}`,
+          "Media topilmadi — muddati o‘tib o‘chirilgan bo‘lishi mumkin.",
+        );
+      });
+    });
+  }
+
+  // Ilgari har yangilanishda 100 ta hodisa olinardi va jadval sahifaning
+  // 60% ini egallardi.  Do'kon egasiga 100 ta "kimdir kirdi" yozuvi kerak
+  // emas — unga oxirgi bir nechtasi va qidiruv kerak.
+  let eventLimit = 25;
+
+  function eventQuery() {
+    const params = new URLSearchParams({ limit: String(eventLimit) });
+    const type = $("typeFilter");
+    const camera = $("cameraFilter");
+    if (type && type.value) params.set("event_type", type.value);
+    if (camera && camera.value) params.set("camera_id", camera.value);
+    return params.toString();
+  }
+
+  function eventCard(event) {
+    const when = new Date(event.occurred_at);
+    const time = Number.isNaN(when.getTime()) ? "—" : when.toLocaleString();
+    const where = event.zone || event.line_name || "";
+    const kind = event.severity === "critical" ? " err" : event.severity === "warning" ? " warn" : "";
+    return `
+      <div class="event-card${kind}">
+        <span class="what">
+          <b>${esc(event.label || event.event_type)}</b>
+          <small>${esc(time)} · ${esc(event.camera_id)}${where ? ` · ${esc(where)}` : ""}</small>
+        </span>
+        <span class="actions">${mediaButtons(event)}</span>
+      </div>`;
+  }
+
+  function drawEvents() {
+    const box = $("eventList");
+    if (!S.events.ok) return cardError("eventList", S.events, "events");
+    const events = S.events.data.events || [];
+    box.innerHTML = events.length
+      ? events.map(eventCard).join("")
+      : '<div class="empty-note"><b>Hodisa yo‘q</b>Tanlangan shart bo‘yicha hech narsa topilmadi.</div>';
+    bindMediaButtons(box);
+    // "Yana" tugmasi faqat to'liq sahifa kelganda ma'noli.
+    $("eventMoreBtn").classList.toggle("hidden", events.length < eventLimit);
+    drawSecurityEvents(events);
+  }
+
+  /* ── Trend ──────────────────────────────────────────────────────────── */
+
+  function loadTrend() {
+    if (!S.trend.ok) return cardError("trendSummary", S.trend, "trend");
+    {
+      const trend = S.trend.data;
+      const peak = Math.max(1, ...trend.daily.map((d) => d.entered));
+      $("daily").innerHTML = trend.daily.map((d) => `
+        <div class="${trend.busiest_day && d.date === trend.busiest_day.date ? "peak" : ""}"
+             data-hour="${d.date}" data-in="${d.entered}" data-out="">
+          <i style="height:${Math.round((d.entered / peak) * 100)}%"></i>
+          <b>${trend.days <= 14 ? d.weekday.slice(0, 2) : (Number(d.date.slice(8)) % 5 === 0 ? d.date.slice(8) : "")}</b>
+        </div>`).join("");
+      $("daily").querySelectorAll("[data-hour]").forEach((bar) => {
+        bar.addEventListener("click", () => {
+          $("trendSummary").textContent = `${bar.dataset.hour}: ${bar.dataset.in} kishi kirdi`;
+        });
+      });
+      // Xodim jadvali uchun eng foydali juftlik: qaysi kun gavjum va
+      // qaysi kun bo'sh.  Ikkalasi ham serverdan keladi, panel esa
+      // faqat birinchisini ko'rsatardi.
+      const parts = [`Jami ${trend.total} kishi, kuniga o‘rtacha ${trend.average}`];
+      if (trend.busiest_day) parts.push(`eng gavjum — ${trend.busiest_day.weekday} (${trend.busiest_day.entered})`);
+      if (trend.quietest_day) parts.push(`eng bo‘sh — ${trend.quietest_day.weekday} (${trend.quietest_day.entered})`);
+      if (trend.change_percent !== null) {
+        parts.push(`oldingi ${trend.days} kunga nisbatan ${
+          trend.change_percent >= 0 ? "▲" : "▼"} ${Math.abs(trend.change_percent)}% (${trend.previous_total} edi)`);
+      }
+      $("trendSummary").textContent = parts.join(" · ");
+    }
+  }
+
+  /* ── Xodimlar va davomat ────────────────────────────────────────────── */
+
+  let faceUrls = [];
+  let attendanceRange = "today";
+
+  //: Rasm yuborishdan oldin brauzerda JPEG ga aylantiriladi.  Sabab:
+  //: iPhone galereyasi HEIC beradi (server uni qabul qilmaydi), zamonaviy
+  //: telefon esa 4-8 MB rasm chiqaradi (chegara 2 MB).  Yuz uchun 1024px
+  //: yetarli — model baribir 112x112 ga keltiradi.
+  const PHOTO_MAX_SIDE = 1024;
+
+  async function toJpeg(file) {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    return new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Rasm o‘qilmadi"))),
+        "image/jpeg",
+        0.9,
+      ),
+    );
+  }
+
+  async function authedImage(url, img) {
+    try {
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) return;
+      const blobUrl = URL.createObjectURL(await response.blob());
+      faceUrls.push(blobUrl);
+      img.src = blobUrl;
+    } catch (_) {}
+  }
+
+  function drawStaff(data) {
+    faceUrls.forEach((url) => URL.revokeObjectURL(url));
+    faceUrls = [];
+
+    const employees = data.employees || [];
+    // `|| 10` EMAS: Boshlang'ich tarifida chegara 0 va u yolg'on qiymat,
+    // ya'ni panel "0 / 10" ko'rsatib, qo'shish tugmasini ochiq qoldirardi —
+    // mijoz bosardi va server 422 qaytarardi.
+    const raw = Number(data.max_employees);
+    const limit = Number.isFinite(raw) ? raw : 10;
+    $("staffCount").textContent = `${employees.length} / ${limit}`;
+    $("staffAddBtn").disabled = employees.length >= limit;
+
+    $("staffList").innerHTML = employees.map((emp) => {
+      const photo = emp.photos && emp.photos[0];
+      const ready = emp.enrollment_status === "enrolled";
+      return `
+        <div class="staff-row">
+          ${photo
+            ? `<img class="staff-face" data-src="/api/v1/owner/faces/photos/${esc(photo.id)}/image" alt="">`
+            : `<div class="staff-face">🙂</div>`}
+          <div class="staff-main">
+            <b>${esc(emp.name)}</b>
+            <small>${ready
+              ? `${emp.photos.length} ta rasm · kamera taniydi`
+              : "rasm kutilmoqda — kamera hali tanimaydi"}</small>
+          </div>
+          <div class="staff-actions">
+            <input type="file" class="staff-file" accept="image/*" id="staffFile-${esc(emp.id)}">
+            <button class="button small" type="button" data-act="photo" data-id="${esc(emp.id)}">Rasm qo‘shish</button>
+            ${photo
+              ? `<button class="button ghost small" type="button" data-act="photo-del" data-id="${esc(photo.id)}">Rasmni o‘chirish</button>`
+              : ""}
+            <button class="button ghost small" type="button" data-act="remove" data-id="${esc(emp.id)}" data-name="${esc(emp.name)}">Chiqarish</button>
+          </div>
+        </div>`;
+    }).join("") || '<p class="hint">Hali xodim qo‘shilmagan.</p>';
+
+    if (employees.length >= limit) {
+      note("staffStatus", "warn",
+        `Tarifingizda ${limit} ta xodim. Yangisini qo‘shish uchun kimnidir ro‘yxatdan chiqaring.`);
+    } else {
+      $("staffStatus").innerHTML = "";
+    }
+    if (data.ready === false) {
+      note("staffStatus", "warn", "Yuz tanish xizmati hozir tayyor emas — bizga yozing.");
+    }
+
+    document.querySelectorAll("#staffList img[data-src]")
+      .forEach((img) => authedImage(img.dataset.src, img));
+  }
+
+  async function staffAction(act, id, name) {
+    try {
+      if (act === "photo") {
+        const input = $(`staffFile-${id}`);
+        input.onchange = async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          note("staffStatus", "warn", "Rasm yuborilmoqda…");
+          try {
+            const blob = await toJpeg(file);
+            await api(`/api/v1/owner/faces/employees/${id}/photos`, {
+              method: "POST",
+              headers: { "Content-Type": "image/jpeg" },
+              body: blob,
+            });
+            note("staffStatus", "ok", "Rasm qo‘shildi — kamera endi taniydi.");
+            reload("staff");
+          } catch (error) {
+            note("staffStatus", "err", error.message);
+          }
+          input.value = "";
+        };
+        input.click();
+        return;
+      }
+      if (act === "photo-del") {
+        await api(`/api/v1/owner/faces/photos/${id}`, { method: "DELETE" });
+        reload("staff");
+        return;
+      }
+      if (act === "remove") {
+        if (!confirm(`${name} ro‘yxatdan chiqarilsinmi? Rasmlari ham o‘chadi.`)) return;
+        await api(`/api/v1/owner/employees/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ active: false }),
+        });
+        note("staffStatus", "ok", "Xodim ro‘yxatdan chiqarildi.");
+        reload("staff");
+      }
+    } catch (error) {
+      note("staffStatus", "err", error.message);
+    }
+  }
+
+  /* Davomat jadvali ------------------------------------------------------ */
+
+  // Sana DOIM do'kon kuni bo'yicha (`shopDate`, Asia/Tashkent).  UTC
+  // ishlatilsa Toshkentda yarim tundan 05:00 gacha kechagi kun so'ralardi
+  // va jadval bo'sh ko'rinardi — bu xato panelda bir marta bo'lgan.
+  function attendanceQuery() {
+    const today = shopDate();
+    return attendanceRange === "month"
+      ? `?start=${today.slice(0, 8)}01&end=${today}`
+      : `?start=${today}&end=${today}`;
+  }
+
+  function workedHours(row) {
+    if (!row.first_seen || !row.last_seen) return "—";
+    const minutes = Math.round(
+      (new Date(row.last_seen) - new Date(row.first_seen)) / 60000);
+    if (minutes <= 0) return "—";
+    return `${Math.floor(minutes / 60)}s ${String(minutes % 60).padStart(2, "0")}d`;
+  }
+
+  async function loadAttendanceTable() {
+    $("attendanceHint").textContent = attendanceRange === "month"
+      ? "Shu oy boshidan bugungacha."
+      : "Bugungi kun.";
+    try {
+      const report = await api(`/api/v1/owner/attendance${attendanceQuery()}`);
+      const rows = (report.rows || []).map((row) => `
+        <tr>
+          <td>${esc(row.employee_name)}${attendanceRange === "month"
+            ? `<small class="hint"> ${esc((row.work_date || "").slice(5))}</small>` : ""}</td>
+          <td>${esc((row.first_seen || "").slice(11, 16) || "—")}</td>
+          <td>${esc((row.last_seen || "").slice(11, 16) || "—")}</td>
+          <td>${esc(workedHours(row))}</td>
+        </tr>`).join("");
+      $("attendanceRows").innerHTML = rows ||
+        '<tr><td colspan="4" class="hint">Hali qayd yo‘q. Kamera tanlanganini tekshiring.</td></tr>';
+    } catch (error) {
+      $("attendanceRows").innerHTML =
+        `<tr><td colspan="4" class="hint">${esc(error.message)}</td></tr>`;
+    }
+  }
+
+  /* Oylik smena hisoboti -------------------------------------------------- */
+
+  function shiftMonthValue() {
+    const chosen = $("shiftMonth").value;
+    return chosen || shopDate().slice(0, 7);
+  }
+
+  function lateLabel(minutes) {
+    const total = Number(minutes) || 0;
+    if (!total) return "—";
+    const hours = Math.floor(total / 60);
+    return hours ? `${hours}s ${String(total % 60).padStart(2, "0")}d` : `${total} daq`;
+  }
+
+  async function loadShiftTable() {
+    const month = shiftMonthValue();
+    try {
+      const report = await api(`/api/v1/owner/shifts?month=${encodeURIComponent(month)}`);
+      const total = report.jami || {};
+      $("shiftHint").textContent = total.kechikish_daq || total.kelmagan_kunlar
+        ? `Jami kechikish ${lateLabel(total.kechikish_daq)} · kelmagan kunlar ${total.kelmagan_kunlar || 0}`
+        : "Bu oyda kechikish ham, kelmagan kun ham yo‘q.";
+      const rows = (report.rows || []).map((row) => `
+        <tr>
+          <td>${esc(row.employee_name)}</td>
+          <td>${Number(row.ish_kunlari) || 0}</td>
+          <td>${Number(row.kelmagan_kunlar) || 0}</td>
+          <td>${Number(row.kechikkan_kunlar) || 0}</td>
+          <td>${esc(lateLabel(row.jami_kechikish_daq))}</td>
+        </tr>`).join("");
+      $("shiftRows").innerHTML = rows ||
+        '<tr><td colspan="5" class="hint">Bu oyda qayd yo‘q.</td></tr>';
+    } catch (error) {
+      $("shiftRows").innerHTML =
+        `<tr><td colspan="5" class="hint">${esc(error.message)}</td></tr>`;
+    }
+  }
+
+  /* Davomat kamerasi ----------------------------------------------------- */
+
+  const ATTENDANCE_ROLES = [
+    ["both", "Kirish va chiqish"],
+    ["arrival", "Faqat kirish"],
+    ["departure", "Faqat chiqish"],
+  ];
+
+  function drawAttendanceCameras() {
+    const chosen = (currentConfig && currentConfig.attendance_camera_ids) || [];
+    const roles = (currentConfig && currentConfig.attendance_camera_roles) || {};
+    $("attendanceCameras").innerHTML = cameraList.map((camera) => {
+      const id = camera.camera_id;
+      const on = chosen.includes(id);
+      return `
+        <div class="staff-row">
+          <label class="staff-main" style="display:flex;gap:10px;align-items:center">
+            <input type="checkbox" data-cam="${esc(id)}"${on ? " checked" : ""}>
+            <span><b>${esc(camera.label || id)}</b></span>
+          </label>
+          <select data-cam-role="${esc(id)}">
+            ${ATTENDANCE_ROLES.map(([value, label]) =>
+              `<option value="${value}"${roles[id] === value ? " selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </div>`;
+    }).join("") || '<p class="hint">Avval kamera ulang.</p>';
+  }
+
+  async function saveAttendanceCameras() {
+    const ids = [...document.querySelectorAll("#attendanceCameras input[data-cam]")]
+      .filter((box) => box.checked).map((box) => box.dataset.cam);
+    if (ids.length > 2) {
+      note("attendanceCamStatus", "err", "Ko‘pi bilan 2 kamera tanlash mumkin.");
+      return;
+    }
+    const roles = {};
+    ids.forEach((id) => {
+      const select = document.querySelector(`#attendanceCameras select[data-cam-role="${id}"]`);
+      if (select) roles[id] = select.value;
+    });
+    try {
+      // Butun config qaytariladi: faqat o'zgargan maydonni yuborsak
+      // qolganlari (chiziq, zona, ish vaqti) o'chib ketardi.
+      await api("/api/v1/owner/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          ...currentConfig,
+          attendance_camera_ids: ids,
+          attendance_camera_roles: roles,
+        }),
+      });
+      note("attendanceCamStatus", "ok",
+        ids.length ? "Saqlandi — qurilma bir necha daqiqada oladi." : "Davomat o‘chirildi.");
+      reload("config");
+    } catch (error) {
+      note("attendanceCamStatus", "err", error.message);
+    }
+  }
+
+  async function loadFaceGallery() {
+    try {
+      const gallery = await api("/api/v1/owner/faces/events?limit=12");
+      $("faceGallery").innerHTML = gallery.events.map((ev) => `
+        <figure class="face-item${ev.person_id ? "" : " face-unknown"}">
+          <img data-src="/api/v1/owner/faces/events/${esc(ev.event_id)}/image" alt="">
+          <figcaption><b>${ev.person_id ? esc(ev.person_name || "?") : "Notanish"}</b><small>${esc((ev.occurred_at || "").slice(11, 16))}</small></figcaption>
+        </figure>`).join("") || '<p class="hint">Kameradan hali kadr kelmagan.</p>';
+      document.querySelectorAll("#faceGallery img[data-src]")
+        .forEach((img) => authedImage(img.dataset.src, img));
+    } catch (_) {}
+  }
+
+  /* ── Sozlamalar ─────────────────────────────────────────────────────── */
+
+  const ROLE_OPTIONS = [
+    ["entrance", "Kirish"],
+    ["checkout", "Kassa"],
+    ["sales_floor", "Savdo zali"],
+    ["storage", "Ombor"],
+  ];
+
+  function drawConfig(config) {
+    currentConfig = config;
+    $("occupancy").value = config.occupancy_limit ?? "";
+    $("queueLimit").value = config.queue_limit ?? "";
+    $("loitering").value = config.loitering_sec ?? "";
+    $("checkoutIdle").value = config.checkout_idle_minutes ?? "";
+    $("openFrom").value = config.open_from || "";
+    $("openTo").value = config.open_to || "";
+    const roles = config.camera_roles || {};
+    $("cameraRoles").innerHTML = cameraList.length
+      ? cameraList.map((camera) => `
+        <div class="member-row">
+          <div class="who"><b>${esc(camera.label || camera.camera_id)}</b></div>
+          <select data-role="${esc(camera.camera_id)}" style="width:auto">
+            ${ROLE_OPTIONS.map(([value, label]) =>
+              `<option value="${value}" ${roles[camera.camera_id] === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </div>`).join("")
+      : "";
+  }
+
+  async function saveConfig() {
+    if (!currentConfig) return;
+    const from = $("openFrom").value;
+    const to = $("openTo").value;
+    if (Boolean(from) !== Boolean(to)) {
+      note("configStatus", "err", "Ochilish va yopilishni birga kiriting yoki ikkalasini bo‘sh qoldiring.");
+      return;
+    }
+    const camera_roles = {};
+    document.querySelectorAll("[data-role]").forEach((select) => { camera_roles[select.dataset.role] = select.value; });
+    const body = {
+      ...currentConfig,
+      camera_roles,
+      occupancy_limit: Number($("occupancy").value || currentConfig.occupancy_limit),
+      queue_limit: Number($("queueLimit").value || currentConfig.queue_limit),
+      loitering_sec: Number($("loitering").value || currentConfig.loitering_sec),
+      checkout_idle_minutes: Number(
+        $("checkoutIdle").value || currentConfig.checkout_idle_minutes || 5),
+      open_from: from || null,
+      open_to: to || null,
+    };
+    try {
+      const saved = await api("/api/v1/owner/config", { method: "PUT", body: JSON.stringify(body) });
+      currentConfig = saved.config;
+      S.config = { ok: true, data: saved };
+      note("configStatus", "ok", "Saqlandi — bir daqiqada qurilmaga tushadi.");
+    } catch (err) { note("configStatus", "err", err.message); }
+  }
+
+  /* ── A'zolar va digest ──────────────────────────────────────────────── */
+
+  function drawMembers(data) {
+    {
+      const me = data.me;
+      const mine = data.members.find((member) => String(member.id) === String(me));
+      // Login/parol bilan kirganda tokenda a'zo yo'q — server digest
+      // so'rovini rad etadi.  Tumblerni ishlaydigandek ko'rsatmaymiz.
+      const toggle = $("digestToggle");
+      toggle.disabled = !mine;
+      toggle.checked = !!mine && !Number(mine.digest_muted);
+      $("digestHint").textContent = mine ? "" : "Buni yoqish uchun avval Telegramingizni ulang.";
+      $("memberList").innerHTML = (data.members || []).map((member) => `
+        <div class="member-row">
+          <div class="who"><b>${esc(member.display_name || "Telegram a’zosi")}</b>
+            <small>${member.role === "owner" ? "egasi" : "xodim"}${Number(member.notify_failures) >= 3 ? " · <span style=\"color:var(--danger)\">botni bloklagan — xabar bormayapti</span>" : " · xabarlar boradi"}</small>
+          </div>
+          ${String(member.id) === String(me) ? '<span class="hint" style="margin:0">siz</span>'
+            : `<button class="button danger small" type="button" data-remove="${esc(member.id)}">O‘chirish</button>`}
+        </div>`).join("") || '<p class="empty-note">Hali hech kim ulanmagan — hisobot Telegramga bormayapti.</p>';
+      $("memberList").querySelectorAll("[data-remove]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          try {
+            await api(`/api/v1/owner/members/${encodeURIComponent(btn.dataset.remove)}`, { method: "DELETE" });
+            await reload("members");
+          } catch (err) { note("memberStatus", "err", err.message); }
+        });
+      });
+    }
+  }
+
+  async function inviteLink(role) {
+    return api("/api/v1/owner/telegram-invite", {
+      method: "POST", body: JSON.stringify({ role }),
+    });
+  }
+
+  // O'zini ulash: havola olinadi va SHU oynada Telegramga o'tiladi.
+  // Yangi oyna ochilmaydi — telefonda u bo'sh varaq bo'lib qolardi,
+  // "Orqaga" esa panelga qaytaradi.
+  async function connectMyTelegram() {
+    const button = $("connectTelegramBtn");
+    button.disabled = true;
+    note("memberStatus", "ok", "Havola tayyorlanmoqda…");
+    try {
+      const data = await inviteLink("owner");
+      note("memberStatus", "ok", "Telegram ochilmoqda — u yerda “Start” tugmasini bosing.");
+      location.href = data.url;
+    } catch (err) {
+      note("memberStatus", "err", err.message);
+      button.disabled = false;
+    }
+  }
+
+  async function inviteStaff() {
+    const button = $("inviteStaffBtn");
+    button.disabled = true;
+    try {
+      const data = await inviteLink("manager");
+      $("inviteLink").value = data.url;
+      $("inviteShareBtn").href = `https://t.me/share/url?url=${encodeURIComponent(data.url)}`;
+      $("inviteBox").classList.remove("hidden");
+      note("memberStatus", "ok", "");
+    } catch (err) { note("memberStatus", "err", err.message); }
+    button.disabled = false;
+  }
+
+  async function copyInvite() {
+    const field = $("inviteLink");
+    try {
+      await navigator.clipboard.writeText(field.value);
+      note("memberStatus", "ok", "Havola nusxalandi.");
+    } catch (err) {
+      // Eski brauzer yoki ruxsat berilmagan — hech bo'lmasa belgilaymiz,
+      // mijoz qo'lda nusxa oladi.
+      field.select();
+      note("memberStatus", "ok", "Havolani belgilab oldik — nusxa oling.");
+    }
+  }
+
+  async function toggleDigest() {
+    try {
+      await api("/api/v1/owner/digest", { method: "PUT", body: JSON.stringify({ muted: !$("digestToggle").checked }) });
+    } catch (err) {
+      note("memberStatus", "err", err.message);
+      $("digestToggle").checked = !$("digestToggle").checked;
+    }
+  }
+
+  /* ── To'lov ─────────────────────────────────────────────────────────── */
+
+  function drawBilling(invoices, monthlyUzs) {
+    {
+      const uzs = Number(monthlyUzs || 0);
+      $("tariffLine").textContent = uzs
+        ? `Joriy tarif: Chaqimchi Lite — oyiga ${uzs.toLocaleString("ru-RU")} so‘m`
+        : "Joriy tarif: Chaqimchi Lite";
+      $("invoiceList").innerHTML = invoices.length
+        ? invoices.slice(0, 5).map((invoice) => `
+          <div class="member-row">
+            <div class="who"><b>${Number(invoice.amount_uzs || 0).toLocaleString("ru-RU")} so‘m</b>
+              <small>${esc(invoice.created_at || "")} · ${invoice.state === "paid" ? "to‘langan" : invoice.state === "pending" ? "to‘lanmagan" : esc(invoice.state)}</small></div>
+            ${invoice.state === "pending" ? `<a class="button primary small" href="${esc(invoice.pay_url)}">To‘lash</a>` : ""}
+          </div>`).join("")
+        : '<div class="empty-note"><b>Hisob-faktura yo‘q</b>Pastdagi tugma orqali ochishingiz mumkin.</div>';
+    }
+  }
+
+  async function createInvoice() {
+    try {
+      const invoice = await api("/api/v1/owner/invoices", { method: "POST", body: JSON.stringify({ months: 1 }) });
+      location.href = invoice.pay_url;
+    } catch (err) { note("billingStatus", "err", err.message); }
+  }
+
+  /* ── Modal ──────────────────────────────────────────────────────────── */
+
+  let modalUrl = "";
+
+  function openModal(title) {
+    $("modalTitle").textContent = title;
+    $("modalBody").innerHTML = '<p class="hint">Yuklanmoqda…</p>';
+    $("modalDownload").classList.add("hidden");
+    $("modal").classList.remove("hidden");
+  }
+
+  function closeModal() {
+    stopLive();
+    liveCameraId = "";
+    $("modalLiveBtn").classList.add("hidden");
+    $("modal").classList.add("hidden");
+    if (modalUrl) { URL.revokeObjectURL(modalUrl); modalUrl = ""; }
+  }
+
+  async function renderMediaInModal(path, kind, filename, missingText) {
+    try {
+      const r = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(missingText);
+      if (modalUrl) URL.revokeObjectURL(modalUrl);
+      modalUrl = URL.createObjectURL(await r.blob());
+      $("modalBody").innerHTML = kind === "video"
+        ? `<video class="media" src="${modalUrl}" controls autoplay playsinline></video>`
+        : `<img class="media" src="${modalUrl}" alt="">`;
+      const download = $("modalDownload");
+      download.href = modalUrl;
+      download.download = filename;
+      download.classList.remove("hidden");
+    } catch (err) {
+      $("modalBody").innerHTML = `<div class="note warn">${esc(err.message)}</div>`;
+    }
+  }
+
+  /* ── Yig'ish ────────────────────────────────────────────────────────── */
+
+  /** Faol bo'limni chizadi.  Har karta o'z ma'lumotini o'zi tekshiradi. */
+  let renderToken = 0;
+
+  async function renderCurrent() {
+    const tab = currentTab();
+    const mine = ++renderToken;
+    drawTabs();
+    TABS.forEach((item) => {
+      $(item.pane).hidden = item.id !== tab.id;
+    });
+    await needSettled(tab.deps);
+    if (mine !== renderToken) return;   // foydalanuvchi boshqa bo'limga o'tdi
+
+    // Funksiya yoqilmagan saytda 403 keladi — tugmani olib tashlaymiz,
+    // aks holda mijoz bosib, bo'sh va tushunarsiz bo'lim ko'rardi.
+    if (S.staff && !S.staff.ok && /403|yoq|topilmadi/i.test(S.staff.error || "")) {
+      staffEnabled = false;
+      drawTabs();
+    }
+
+    // Aloqa holati har bo'limda: qurilma o'chiq bo'lsa istalgan
+    // bo'limdagi raqam yolg'on bo'ladi.
+    if (S.health.ok) drawStatus(S.health.data);
+    else {
+      const banner = $("statusBanner");
+      banner.className = "status-banner warn";
+      banner.innerHTML = `<div><span>Holat aniqlanmadi</span><span class="sub">${esc(S.health.error)}</span></div>`;
+    }
+    if (S.cameras.ok) {
+      cameraList = S.cameras.data.cameras || [];
+      fillCameraFilter();
+    }
+
+    if (tab.id === "bugun") {
+      if (S.report.ok) drawReport(S.report.data);
+      else cardError("hourReadout", S.report, "report");
+    } else if (tab.id === "tahlil") {
+      loadTrend();
+      if (S.report.ok) drawDwell(S.report.data.dwell);
+      else cardError("dwellList", S.report, "report");
+      if (S.config.ok) { currentConfig = S.config.data.config; fillHeatControls(); loadHeatmap(); }
+      else cardError("heatSummary", S.config, "config");
+    } else if (tab.id === "xavfsizlik") {
+      await drawCameras();
+      if (S.report.ok) drawSecurity(S.report.data.security);
+      drawEvents();
+    } else if (tab.id === "dokon") {
+      if (S.config.ok) drawConfig(S.config.data.config);
+      else note("configStatus", "err", S.config.error);
+      if (S.members.ok) drawMembers(S.members.data);
+      else note("memberStatus", "err", S.members.error);
+      if (S.billing.ok) {
+        const quote = S.features.ok ? S.features.data.summary.active_quote : null;
+        drawBilling(S.billing.data, quote ? quote.monthly_uzs : 0);
+      } else note("billingStatus", "err", S.billing.error);
+    } else if (tab.id === "xodimlar") {
+      if (S.config.ok) currentConfig = S.config.data.config;
+      if (S.staff.ok) {
+        drawStaff(S.staff.data);
+        drawAttendanceCameras();
+        loadAttendanceTable();
+        loadShiftTable();
+        loadFaceGallery();
+      } else cardError("staffList", S.staff, "staff");
+    }
+  }
+
+  // Nomi va `setInterval(refresh, 60000)` ataylab saqlanadi.  Farqi:
+  // endi u faqat "Bugun" bo'limida va sahifa ko'rinib turganda ishlaydi.
+  // Ilgari har 60 soniyada 7 ta so'rov ketardi — shu jumladan davomat
+  // uchun 403, ya'ni pilotsiz do'konda abadiy rad javob.
+  async function refresh() {
+    if (document.visibilityState !== "visible") return;
+    const tab = currentTab();
+    if (tab.id !== "bugun") return;
+    invalidate("health", "cameras", "report");
+    await renderCurrent();
+  }
+
+  async function showApp() {
+    $("login").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    if (!location.hash) history.replaceState(null, "", `${location.pathname}#/bugun`);
+    await renderCurrent();
+    // Avto-yangilanish: mijoz sahifani ochib qo'ysa ham raqamlar eskirmaydi.
+    setInterval(refresh, 60000);
+  }
+
+  /* ── Ulanishlar ─────────────────────────────────────────────────────── */
+
+  // `submit` — shunda telefon klaviaturasidagi "Kirish" tugmasi ham ishlaydi.
+  $("loginForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    passwordLogin();
+  });
+  $("logoutBtn").addEventListener("click", logout);
+  $("refreshBtn").addEventListener("click", () => reload("events", "report"));
+  $("eventMoreBtn").addEventListener("click", () => { eventLimit += 25; reload("events"); });
+  document.querySelectorAll("[data-hourmode]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("[data-hourmode]").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      hourMode = chip.dataset.hourmode;
+      if (S.report && S.report.ok) drawHourly(S.report.data.traffic);
+    });
+  });
+
+  // Bo'lim almashishi va "Qayta urinish" tugmalari.
+  window.addEventListener("hashchange", () => { window.scrollTo(0, 0); renderCurrent(); });
+  document.addEventListener("click", (event) => {
+    const retry = event.target.closest("[data-retry]");
+    if (retry) reload(...retry.dataset.retry.split(","));
+  });
+  // Xodimlar ro'yxatidagi tugmalar dinamik chiziladi — delegatsiya.
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("#staffList [data-act]");
+    if (!button) return;
+    staffAction(button.dataset.act, button.dataset.id, button.dataset.name || "");
+  });
+  $("staffForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = $("staffName").value.trim();
+    if (!name) return;
+    $("staffAddBtn").disabled = true;
+    try {
+      await api("/api/v1/owner/employees", {
+        method: "POST",
+        // Rozilikni do'kon egasi o'zi oladi — panel buni so'ramaydi.
+        body: JSON.stringify({ name, consent: true }),
+      });
+      $("staffName").value = "";
+      note("staffStatus", "ok", "Xodim qo‘shildi — endi rasmini oling.");
+      reload("staff");
+    } catch (error) {
+      note("staffStatus", "err", error.message);
+    } finally {
+      $("staffAddBtn").disabled = false;
+    }
+  });
+  $("attendanceCamSave").addEventListener("click", saveAttendanceCameras);
+  $("attendanceTodayBtn").addEventListener("click", () => {
+    attendanceRange = "today";
+    loadAttendanceTable();
+  });
+  $("attendanceMonthBtn").addEventListener("click", () => {
+    attendanceRange = "month";
+    loadAttendanceTable();
+  });
+  $("attendanceCsvBtn").addEventListener("click", async () => {
+    try {
+      const response = await fetch(`/api/v1/owner/attendance.csv${attendanceQuery()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("CSV olinmadi");
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = "davomat.csv";
+      link.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      note("attendanceHint", "warn", err.message);
+    }
+  });
+  $("shiftMonth").addEventListener("change", loadShiftTable);
+  $("shiftCsvBtn").addEventListener("click", async () => {
+    const month = shiftMonthValue();
+    try {
+      const response = await fetch(
+        `/api/v1/owner/shifts.csv?month=${encodeURIComponent(month)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) throw new Error("CSV olinmadi");
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `smena-hisoboti-${month}.csv`;
+      link.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      note("shiftHint", "warn", err.message);
+    }
+  });
+  $("saveConfigBtn").addEventListener("click", saveConfig);
+  $("connectTelegramBtn").addEventListener("click", connectMyTelegram);
+  $("inviteStaffBtn").addEventListener("click", inviteStaff);
+  $("inviteCopyBtn").addEventListener("click", copyInvite);
+  $("digestToggle").addEventListener("change", toggleDigest);
+  $("invoiceBtn").addEventListener("click", createInvoice);
+  $("typeFilter").addEventListener("change", () => reload("events"));
+  $("cameraFilter").addEventListener("change", () => reload("events"));
+  $("modalClose").addEventListener("click", closeModal);
+  $("modalLiveBtn").addEventListener("click", () => (liveTimer ? stopLive() : startLive()));
+  $("heatCamera").addEventListener("change", loadHeatmap);
+  $("heatDate").addEventListener("change", loadHeatmap);
+  $("heatHour").addEventListener("change", loadHeatmap);
+  document.querySelectorAll("[data-heatmode]").forEach((chip) =>
+    chip.addEventListener("click", () => setHeatMode(chip.dataset.heatmode)));
+  $("heatEditBtn").addEventListener("click", () => {
+    heatEditing = !heatEditing;
+    $("heatEditBtn").textContent = heatEditing
+      ? "Tahrirni yopish"
+      : "Pol burchaklarini to‘g‘irlash";
+    $("heatSaveBtn").classList.toggle("hidden", !heatEditing);
+    loadHeatmap();
+  });
+  $("heatSaveBtn").addEventListener("click", saveFloorMap);
+  $("modal").addEventListener("click", (event) => { if (event.target === $("modal")) closeModal(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
+
+  const typeFilter = $("typeFilter");
+  TYPE_OPTIONS.forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    typeFilter.appendChild(option);
+  });
+
+  document.querySelectorAll("[data-day]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("[data-day]").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      if (chip.dataset.day === "today") { reportDay = ""; $("reportDate").value = ""; }
+      else {
+        reportDay = shopDate(-1);
+        $("reportDate").value = reportDay;
+      }
+      reload("report");
+    });
+  });
+  $("reportDate").addEventListener("change", () => {
+    document.querySelectorAll("[data-day]").forEach((c) => c.classList.remove("active"));
+    reportDay = $("reportDate").value || "";
+    reload("report");
+  });
+
+  $("trendChips").querySelectorAll("[data-days]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      $("trendChips").querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      trendDays = Number(chip.dataset.days);
+      reload("trend");
+    });
+  });
+
+  // Bot manzili sozlanmagan bo'lsa tugma ma'nosiz — yashiramiz.
+  if (!$("botLink").getAttribute("href")) $("botLink").classList.add("hidden");
+
+  if (token) { showApp(); } else { loginFromLink(); }
+})();
 </script>
 </body>
 </html>

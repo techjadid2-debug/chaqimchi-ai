@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="uz">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xavfsizlik va maxfiylik — Chaqimchi AI hujjatlari</title>
+<meta name="description" content="Chaqimchi AI: ma'lumotlar qayerda saqlanadi, qancha muddat, kim ko'radi.">
+<link rel="stylesheet" href="/docs-static/assets/docs.css"></head>
+<body>
+<nav class="doc-nav"><a class="brand" href="/">Chaqimchi AI · Hujjatlar</a><a href="https://chaqimchi.uz">Asosiy sayt</a></nav>
+<main>
+  <p class="crumbs"><a href="/">Hujjatlar</a> → Xavfsizlik</p>
+  <h1>Ma'lumot qayerda va qancha saqlanadi</h1>
+  <p class="lead">Asosiy printsip: video do'konda qoladi, cloudga faqat hodisa va kerakli kadr boradi.</p>
+
+  <h2>Do'konda (lokal)</h2>
+  <table>
+    <tr><th>Nima</th><th>Qayerda</th><th>Muddat</th></tr>
+    <tr><td>Uzluksiz video</td><td>NVR diskida (bizga tegmaydi)</td><td>NVR sozlamasiga qarab</td></tr>
+    <tr><td>Hodisa videobuferi</td><td>Do'kon kompyuterida</td><td>3 kun, hajm chegarasi bilan</td></tr>
+    <tr><td>Kamera parollari</td><td>Do'kon kompyuterida / cloudda shifrlangan</td><td>Xizmat davomida</td></tr>
+  </table>
+
+  <h2>Cloudda</h2>
+  <table>
+    <tr><th>Nima</th><th>Izoh</th><th>Muddat</th></tr>
+    <tr><td>Hodisalar (kirdi-chiqdi, navbat…)</td><td>Raqam va vaqt — video emas</td><td>Tarifga qarab, standart 30 kun</td></tr>
+    <tr><td>Hodisa kadrlari va qisqa kliplar</td><td>Faqat qoida ruxsat berganlari</td><td>30 kun / hajm kvotasi</td></tr>
+    <tr><td>Issiqlik xaritasi</td><td>Faqat sonlar to'ri, rasm emas</td><td>90 kun</td></tr>
+    <tr><td>Davomat yuz kadrlari</td><td>Faqat yozma rozilikli pilotda</td><td>14 kun, avto o'chadi</td></tr>
+    <tr><td>Yuz namunalari (embedding)</td><td>Shifrlangan, kalit bazadan alohida</td><td>Xodim chiqquncha yoki so'rovgacha</td></tr>
+  </table>
+
+  <h2>Kim ko'radi</h2>
+  <p>Do'kon ma'lumotini faqat o'sha do'kon paneli a'zolari (egasi qo'shganlar) ko'radi. Rasmlar hech qachon ochiq havola bilan berilmaydi — faqat tizimga kirgan foydalanuvchiga. Har so'rov shifrlangan aloqa (HTTPS) orqali.</p>
+
+  <h2>Demografiya haqida</h2>
+  <p>Jins/yosh statistikasi anonim: qurilma yuzni <b>tanimaydi</b>, hech qanday rasm yubormaydi — faqat «ayol, ~30 yosh» ko'rinishidagi raqam hodisaga qo'shiladi.</p>
+
+  <h2>Xodimlar sanoqqa kirmaydi</h2>
+  <p>Xodim kuniga o'n martalab eshikdan o'tadi. Davomat (yuz tanish) yoqilgan do'konda tizim uni taniydi va uning o'tishlari <b>mijoz sanog'idan, soatlik grafikdan va jins/yosh statistikasidan</b> chiqarib tashlanadi. Hisobotda nechta o'tish chiqarilgani ham ko'rsatiladi.</p>
+  <p>Davomat yoqilmagan bo'lsa tizim xodimni mijozdan ajrata olmaydi — u holda kirish soni xodimlar hisobiga biroz yuqori chiqadi.</p>
+
+  <h2>To'liq siyosat</h2>
+  <p><a href="https://chaqimchi.uz/maxfiylik">Maxfiylik sahifasi</a> · Davomat uchun <a href="https://chaqimchi.uz/rozilik-shabloni">rozilik shabloni</a>.</p>
+</main>
+</body>
+</html>

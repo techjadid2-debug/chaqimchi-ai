@@ -88,10 +88,12 @@ def test_walking_alongside_the_line_is_not_a_crossing() -> None:
 
 
 def test_one_movement_can_cross_two_lines() -> None:
-    counter = LineCounter([
-        door(name="tashqi", start=(0.3, 0.0), end=(0.3, 1.0)),
-        door(name="ichki", start=(0.6, 0.0), end=(0.6, 1.0)),
-    ])
+    counter = LineCounter(
+        [
+            door(name="tashqi", start=(0.3, 0.0), end=(0.3, 1.0)),
+            door(name="ichki", start=(0.6, 0.0), end=(0.6, 1.0)),
+        ]
+    )
     counter.update(7, (0.1, 0.5))
     crossings = counter.update(7, (0.9, 0.5))
     assert sorted(item.line for item in crossings) == ["ichki", "tashqi"]

@@ -1,4 +1,87 @@
-# Chaqimchi Sotqin o‘rnatuvchi qo‘llanmasi
+# Chaqimchi o‘rnatuvchi qo‘llanmasi
+
+Ikkita yo‘l bor va ular bir-biridan mustaqil:
+
+| Yo‘l | Kim uchun | Qurilma | Cloud kerakmi |
+|---|---|---|---|
+| **Windows lokal** (0-bo‘lim) | do‘kon egasi o‘zi o‘rnatadi | mavjud Windows 10/11 | yo‘q |
+| **Sotqin R1** (1–3-bo‘limlar) | o‘rnatuvchi mutaxassis | Intel N100 mini-PC | ha |
+
+---
+
+## 0. Windows lokal o‘rnatish (mijoz o‘zi)
+
+Mijoz `Chaqimchi_AI_Setup.exe` ni saytdan yuklab oladi. Ichida Python, AI
+modeli va barcha kutubxonalar bor — **internet ham, `pip` ham kerak emas**.
+
+1. Faylni ishga tushiradi → Windows ruxsat so‘raydi (UAC) → “Ha”.
+2. Keyingi → Keyingi → O‘rnatish → Tayyor.
+3. Brauzerda sozlash ustasi ochiladi: `http://localhost:8760`.
+4. Kamera qo‘shadi → kadr ko‘rinadi → kirish chizig‘ini chizadi → ishga tushiradi.
+
+Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
+**“Qo‘shimcha ma’lumot” → “Baribir ishga tushirish”**.
+
+> **Mijozga beriladigan yo‘riqnoma — saytda:** `/install`
+> (`cloud/static/install.html`). Har bir to‘siq alohida qadam sifatida
+> yozilgan (brauzer ogohlantirishi, SmartScreen, UAC, kamera ulash) va
+> “Nima ishlamayapti?” bo‘limi bor. Bu hujjatda takrorlanmaydi — matn
+> bitta joyda turishi kerak, aks holda ular bir-biridan uzoqlashadi.
+
+| Nima | Qayerda |
+|---|---|
+| Dastur | `C:\Program Files\Chaqimchi AI` (faqat o‘qish) |
+| Sozlama, log, hodisalar | `C:\ProgramData\Chaqimchi` |
+| Panel | `http://localhost:8760` (faqat shu kompyuterda) |
+| Avtostart | Rejalashtirilgan vazifa `Chaqimchi AI` (SYSTEM, `ONSTART`) |
+
+### Avtomatik ishga tushish qanday ishlaydi
+
+Nazorat **kompyuter yonganda** ishga tushadi — tizimga kirish shart emas.
+Buni rejalashtirilgan vazifa qiladi: `Chaqimchi AI`, SYSTEM nomidan,
+30 soniyalik kechikish bilan, `Chaqimchi_AI_xizmat.bat` ni ishga tushiradi
+(u brauzerni ochmaydi va oxirida `pause` qilmaydi).
+
+Bungacha bu `HKLM\...\Run` kaliti edi va ikkita muammosi bor edi:
+Run kaliti kompyuter yonganda emas, **kimdir tizimga kirganda** ishlaydi
+(do‘kon kompyuteri qulf ekranida tursa nazorat umuman boshlanmasdi), va
+dastur kassirning ekranida qora oyna bo‘lib turardi.
+
+Vazifaning vaqt cheklovi ataylab olib tashlangan
+(`ExecutionTimeLimit=PT0S`): `schtasks` standart bo‘yicha vazifani
+**72 soatdan keyin to‘xtatadi** — ya’ni aynan 72 soatlik barqarorlik
+sinovining oxirida nazorat jimgina o‘chib qolardi.
+
+Tekshirish (do‘kon kompyuterida):
+
+```powershell
+schtasks /Query /TN "Chaqimchi AI" /V /FO LIST
+```
+
+Bu rejimda kamera ro‘yxati lokal `config.yaml` da turadi
+(`retail.cameras_source: config`) va cloud ulanmasa ham tahlil ishlaydi.
+Cloudga ulash keyinroq, pairing kod bilan bajariladi (3-bo‘lim).
+
+### O‘rnatuvchini qurish
+
+```bash
+python scripts/build_windows_payload.py     # Python + wheel + model → build/payload
+makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.exe
+```
+
+CI ham shuni qiladi (`.github/workflows/windows-installer.yml`) va faylni
+GitHub Releases’ga yuklaydi. Cloud uni git ichida tashimaydi — deployda
+shu ikki o‘zgaruvchi beriladi:
+
+```bash
+export CHAQIMCHI_WINDOWS_INSTALLER_URL="https://github.com/.../Chaqimchi_AI_Setup.exe"
+export CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB=68
+```
+
+Berilmasa sayt yuklab olish tugmasi o‘rniga “tayyor bo‘lganda xabar bering”
+formasini ko‘rsatadi — buzuq tugma chiqmaydi.
+
+---
 
 ## 1. Cloud (markaz)
 
@@ -95,7 +178,7 @@ python scripts/backup_db.py info nusxa.zip   # ichida nima bor
 Yoki serverdan (API kalit bilan):
 
 ```bash
-curl -H "X-API-Key: $CHAQIMCHI_API_KEY" http://MINI_PC:8742/api/backup -O -J
+curl -H "X-API-Key: $CHAQIMCHI_API_KEY" http://MINI_PC:8743/api/backup -O -J
 ```
 
 ### Qurilma almashganda

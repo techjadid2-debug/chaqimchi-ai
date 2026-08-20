@@ -7,7 +7,7 @@
   "output": "1x1xNx7 SSD [image_id, label, conf, x_min, y_min, x_max, y_max]",
   "gflops": 2.3,
   "verified_at": "2026-08-13",
-  "note": "Checksumlar OpenVINO Open Model Zoo rasmiy HTTPS fayllaridan hisoblangan. Installer mos kelmagan faylni qabul qilmaydi.",
+  "note": "Checksumlar OpenVINO Open Model Zoo rasmiy HTTPS fayllaridan hisoblangan. Installer mos kelmagan faylni qabul qilmaydi. Demografiya modellari (yuz + yosh-jins) ham shu katalogda: hammasi Apache-2.0, tijoratga ochiq.",
   "files": {
     "person-detection-retail-0013.xml": {
       "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-detection-retail-0013/FP16/person-detection-retail-0013.xml",
@@ -16,6 +16,22 @@
     "person-detection-retail-0013.bin": {
       "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-detection-retail-0013/FP16/person-detection-retail-0013.bin",
       "sha256": "cf4a1f2f252d229966001e15454c5ba02a7ace047b181b235e3a2c4aebcf3ba7"
+    },
+    "face-detection-retail-0004.xml": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0004/FP16/face-detection-retail-0004.xml",
+      "sha256": "8675f0b00d91a4b5048d0e9caf492d7b48e80c9150db23429bb92c0428b97447"
+    },
+    "face-detection-retail-0004.bin": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0004/FP16/face-detection-retail-0004.bin",
+      "sha256": "d0a8ca818c657b454ce6118715c49027b1b70d9d85a83a9a4a6606d773b02dfe"
+    },
+    "age-gender-recognition-retail-0013.xml": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/age-gender-recognition-retail-0013/FP16/age-gender-recognition-retail-0013.xml",
+      "sha256": "a625adb569fb40f6b4e392059409088ec4443b465c8ed571e9e8fb71b5192d64"
+    },
+    "age-gender-recognition-retail-0013.bin": {
+      "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/age-gender-recognition-retail-0013/FP16/age-gender-recognition-retail-0013.bin",
+      "sha256": "7c6e3da30e369fd870f6d208fc6b08f7cc15a137c1c9c1030b911a5fad31da13"
     }
   }
 }

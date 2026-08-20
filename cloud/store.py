@@ -42,6 +42,10 @@ DEFAULT_FEATURES = (
         "realtime",
         600,
     ),
+    # Davomat — Lite'ga KIRMAYDIGAN pullik qo'shimcha (category=attendance
+    # bo'yicha tarif fallback'idan chiqarib tashlanadi).  Sotuvga litsenziyali
+    # yuz modeli kelgach ochiladi; hozir faqat yopiq pilot.
+    ("davomat", "Yuz orqali xodim davomati", "attendance", "batch", 800),
 )
 
 
@@ -72,6 +76,13 @@ DEFAULT_TEMPLATES = {
 }
 
 
+#: Lead xabari shuncha urinishdan keyin tashlab qo'yiladi (holat
+#: `abandoned`).  Eksponensial backoff bilan bu ~6 soatlik urinish —
+#: undan keyin chat mavjud emasligi aniq va abadiy retry faqat log
+#: shovqini bo'lardi.
+LEAD_DELIVERY_MAX_ATTEMPTS = 8
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -80,7 +91,7 @@ def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-#: Obuna tugagach nechа kun ichida tizim ishlashda davom etadi (grace).
+#: Obuna tugagach necha kun ichida tizim ishlashda davom etadi (grace).
 GRACE_DAYS = 14
 
 # ── Aloqa holati ─────────────────────────────────────────────────────────
@@ -169,8 +180,13 @@ class CloudStore:
             pass
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            pass
         return conn
 
     def _init_db(self) -> None:
@@ -225,6 +241,13 @@ class CloudStore:
                 height INTEGER,
                 fps REAL,
                 last_probed_at TEXT,
+                -- O'rnatuvchi "rasmni ko'rsat" desa shu bayroq qo'yiladi va
+                -- qurilma keyingi heartbeat'da bitta kadr yuboradi.  Config
+                -- revizyasi orqali so'rash mumkin emas edi: uning o'zgarishi
+                -- retail xizmatini qayta ishga tushiradi.
+                preview_requested INTEGER NOT NULL DEFAULT 0,
+                preview_key TEXT,
+                preview_at TEXT,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (site_id, camera_id),
                 FOREIGN KEY (site_id) REFERENCES sites(id)
@@ -239,6 +262,14 @@ class CloudStore:
                 notified_at TEXT NOT NULL,
                 PRIMARY KEY (site_id, kind),
                 FOREIGN KEY (site_id) REFERENCES sites(id)
+            );
+            -- Platforma darajasidagi kalitlar.  Hozircha bittasi bor:
+            -- `updates_paused` — barcha do'konlarga yangilanish tarqatishni
+            -- bir tugma bilan to'xtatish.
+            CREATE TABLE IF NOT EXISTS platform_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS leads (
                 id TEXT PRIMARY KEY,
@@ -271,8 +302,12 @@ class CloudStore:
             CREATE TABLE IF NOT EXISTS lead_notification_deliveries (
                 lead_id TEXT NOT NULL,
                 chat_id TEXT NOT NULL,
+                -- `abandoned` — yetarlicha urinishdan keyin yopilgan.
+                -- U `CHECK` ro'yxatida bo'lishi SHART: bo'lmasa yakuniy
+                -- `UPDATE` yiqiladi, qator navbat boshida qolib ketadi va
+                -- keyingi har bir aylanish o'sha yerda to'xtaydi.
                 state TEXT NOT NULL DEFAULT 'pending'
-                    CHECK(state IN ('pending', 'sent', 'failed')),
+                    CHECK(state IN ('pending', 'sent', 'failed', 'abandoned')),
                 attempts INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT,
                 next_attempt_at TEXT,
@@ -437,6 +472,8 @@ class CloudStore:
         for row in rows:
             item = dict(row)
             item["enabled"] = bool(item["enabled"])
+            item["preview_requested"] = bool(item.get("preview_requested"))
+            item["has_preview"] = bool(item.get("preview_key"))
             item.pop("rtsp_ciphertext", None)
             if cipher is not None:
                 try:
@@ -456,6 +493,21 @@ class CloudStore:
             raise ValueError(
                 f"Pilot kamera ID camera-01..camera-{GUARANTEED_CAMERAS:02d} bo'lishi kerak"
             )
+        # Tarifdagi kamera SONI.  ID oralig'i emas: 2 kameralik mijoz
+        # `camera-01` va `camera-03` ni ulashi mumkin — bu to'g'ri.
+        # Chegara nechta kamera borligida.
+        #
+        # Bu yagona haqiqiy nazorat nuqtasi: qurilmadagi tekshiruv
+        # mijozning o'z kompyuterida turadi va tahrirlanishi mumkin,
+        # cloud esa bizda.
+        existing = self.list_cameras(site_id)
+        if camera_id not in {item["camera_id"] for item in existing}:
+            limit = get_plan(str(self.get_site(site_id)["plan"])).max_cameras
+            if len(existing) >= limit:
+                raise ValueError(
+                    f"Tarifingizda ko'pi bilan {limit} ta kamera. "
+                    "Yana kamera ulash uchun tarifni ko'taring."
+                )
         source = rtsp_url.strip()
         if not source.startswith(("rtsp://", "rtsps://")):
             raise ValueError("Kamera manzili rtsp:// yoki rtsps:// bilan boshlanishi kerak")
@@ -484,6 +536,95 @@ class CloudStore:
         conn.commit()
         conn.close()
         return bool(cursor.rowcount)
+
+    def request_camera_preview(self, site_id: str, camera_id: str) -> Dict[str, Any]:
+        """O'rnatuvchi rasm so'radi — qurilma keyingi heartbeat'da yuboradi."""
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET preview_requested=1,updated_at=? "
+            "WHERE site_id=? AND camera_id=?",
+            (_iso(_utc_now()), site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+        return next(item for item in self.list_cameras(site_id) if item["camera_id"] == camera_id)
+
+    def pending_preview_cameras(self, site_id: str) -> List[str]:
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT camera_id FROM site_cameras "
+            "WHERE site_id=? AND preview_requested=1 AND enabled=1 ORDER BY camera_id",
+            (site_id,),
+        ).fetchall()
+        conn.close()
+        return [str(row[0]) for row in rows]
+
+    def request_live(self, site_id: str, camera_id: str, *, ttl_sec: int = 90) -> str:
+        """Jonli ko'rishni yoqadi/uzaytiradi; muddat (ISO) qaytaradi.
+
+        Bir martalik preview'dan farqi — muddat: panel ochiq turganda
+        mijoz tomoni har 60 soniyada qayta chaqiradi va oqim uzilmaydi;
+        panel yopilsa muddat o'tib qurilma o'zi to'xtaydi.
+        """
+        until = _iso(_utc_now() + timedelta(seconds=max(10, ttl_sec)))
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET live_until=?,updated_at=? "
+            "WHERE site_id=? AND camera_id=? AND enabled=1",
+            (until, _iso(_utc_now()), site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+        return until
+
+    def live_cameras(self, site_id: str) -> List[Dict[str, Any]]:
+        """Hozir jonli rejimda kutilayotgan kameralar (muddat bilan)."""
+        now = _iso(_utc_now())
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT camera_id,live_until FROM site_cameras "
+            "WHERE site_id=? AND enabled=1 AND live_until IS NOT NULL AND live_until>? "
+            "ORDER BY camera_id",
+            (site_id, now),
+        ).fetchall()
+        conn.close()
+        return [{"camera_id": str(row[0]), "until": str(row[1])} for row in rows]
+
+    def live_active(self, site_id: str, camera_id: str) -> bool:
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT live_until FROM site_cameras WHERE site_id=? AND camera_id=?",
+            (site_id, camera_id),
+        ).fetchone()
+        conn.close()
+        return bool(row and row[0] and str(row[0]) > _iso(_utc_now()))
+
+    def set_camera_preview(self, site_id: str, camera_id: str, key: str) -> None:
+        """Rasm keldi: so'rov bayrog'i o'chadi, kalit saqlanadi."""
+        now = _iso(_utc_now())
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET preview_requested=0,preview_key=?,preview_at=?,"
+            "updated_at=? WHERE site_id=? AND camera_id=?",
+            (key, now, now, site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+
+    def camera_preview_key(self, site_id: str, camera_id: str) -> Optional[str]:
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT preview_key FROM site_cameras WHERE site_id=? AND camera_id=?",
+            (site_id, camera_id),
+        ).fetchone()
+        conn.close()
+        return str(row[0]) if row and row[0] else None
 
     def record_camera_probe(
         self,
@@ -825,6 +966,10 @@ class CloudStore:
             "config_status": "TEXT NOT NULL DEFAULT 'pending'",
             "config_error": "TEXT",
             "config_reported_at": "TEXT",
+            # Qurilmada ishlab turgan dastur versiyasi.  Heartbeat'da
+            # allaqachon kelardi, lekin hech qayerda saqlanmasdi — ya'ni
+            # yangilanish qaysi do'konga yetganini bilishning iloji yo'q edi.
+            "app_version": "TEXT",
         }
         for name, definition in device_additions.items():
             if name not in device_columns:
@@ -833,9 +978,73 @@ class CloudStore:
         if "cameras_expected" not in columns("sites"):
             conn.execute("ALTER TABLE sites ADD COLUMN cameras_expected INTEGER")
 
+        site_columns = columns("sites")
+        site_additions = {
+            # Yangilanish siyosati.  `auto` — eng yangi imzolangan reliz
+            # o'zi o'rnatiladi.  `hold` — obyekt joriy versiyada qoladi
+            # (masalan mijozda muhim tadbir bor, yoki yangi versiya shu
+            # do'konda muammo bergan).  `pin` — aynan `update_version`.
+            "update_channel": "TEXT NOT NULL DEFAULT 'auto'",
+            "update_version": "TEXT",
+        }
+        for name, definition in site_additions.items():
+            if name not in site_columns:
+                conn.execute(f"ALTER TABLE sites ADD COLUMN {name} {definition}")
+
+        camera_columns = columns("site_cameras")
+        camera_additions = {
+            "preview_requested": "INTEGER NOT NULL DEFAULT 0",
+            "preview_key": "TEXT",
+            "preview_at": "TEXT",
+            # Jonli ko'rish: shu vaqtgacha qurilma har 2-3 soniyada kadr
+            # yuboradi (panel ochiq ekan muddat uzaytirib turiladi).
+            "live_until": "TEXT",
+        }
+        for name, definition in camera_additions.items():
+            if name not in camera_columns:
+                conn.execute(f"ALTER TABLE site_cameras ADD COLUMN {name} {definition}")
+
         # Davomat tariflarida oylik to'lov shu songa bog'liq.
         if "billable_persons" not in columns("sites"):
             conn.execute("ALTER TABLE sites ADD COLUMN billable_persons INTEGER NOT NULL DEFAULT 0")
+
+        # Ishlab turgan bazada `lead_notification_deliveries` eski `CHECK`
+        # bilan yaratilgan bo'lishi mumkin — u `abandoned` ni rad etadi.
+        # SQLite'da `CHECK` ni `ALTER` bilan o'zgartirib bo'lmaydi, shuning
+        # uchun jadval qayta quriladi.
+        delivery_sql = str(
+            conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='lead_notification_deliveries'"
+            ).fetchone()[0]
+            or ""
+        )
+        if "abandoned" not in delivery_sql:
+            conn.executescript(
+                """
+                ALTER TABLE lead_notification_deliveries RENAME TO lead_delivery_old;
+                CREATE TABLE lead_notification_deliveries (
+                    lead_id TEXT NOT NULL,
+                    chat_id TEXT NOT NULL,
+                    state TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(state IN ('pending', 'sent', 'failed', 'abandoned')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT,
+                    next_attempt_at TEXT,
+                    sent_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (lead_id, chat_id),
+                    FOREIGN KEY (lead_id) REFERENCES leads(id)
+                );
+                INSERT INTO lead_notification_deliveries
+                    SELECT lead_id,chat_id,state,attempts,last_error,next_attempt_at,
+                           sent_at,created_at,updated_at FROM lead_delivery_old;
+                DROP TABLE lead_delivery_old;
+                CREATE INDEX IF NOT EXISTS idx_lead_delivery_retry
+                    ON lead_notification_deliveries(state, next_attempt_at, updated_at);
+                """
+            )
 
         # `alert_state` bir turdan (connection) ikki turga (kind) o'tdi.
         if "kind" not in columns("alert_state"):
@@ -923,6 +1132,77 @@ class CloudStore:
         if account is None:  # pragma: no cover - database invariant
             raise RuntimeError("Akkaunt yozilmadi")
         return account
+
+    # ── Mijozning kirish ma'lumotlari ───────────────────────────────────
+    #
+    # Do'kon egasi paneliga login va parol bilan kiradi.  Bu ma'lumot
+    # unga TELEFON ORQALI aytiladi — SMS shlyuzi yo'q.  Shuning uchun:
+    #
+    #   login  — o'z telefon raqami: yodlash shart emas, u allaqachon biladi
+    #   parol  — ikkita oddiy so'z + to'rt raqam: telefonda aytib berish
+    #            mumkin.  `Xk9$mQ2!` ni telefonda aytib bo'lmaydi.
+    #
+    # Parol xotirada emas, faqat yaratilgan payt bir marta qaytariladi.
+    _PASSWORD_WORDS = (
+        "olma", "anor", "uzum", "bodom", "shakar", "asal", "chinor", "lola",
+        "qaymoq", "gilos", "yong'oq", "nok", "shaftoli", "behi", "tut", "anjir",
+    )
+
+    def generate_customer_password(self) -> str:
+        first, second = secrets.choice(self._PASSWORD_WORDS), secrets.choice(self._PASSWORD_WORDS)
+        while second == first:
+            second = secrets.choice(self._PASSWORD_WORDS)
+        # `'` faqat "yong'oq" da uchraydi va telefonda aytishda chalkashadi.
+        pair = f"{first}{second}".replace("'", "")
+        return f"{pair}{secrets.randbelow(9000) + 1000}"
+
+    def suggest_customer_username(self, phone: str) -> str:
+        digits = "".join(char for char in str(phone or "") if char.isdigit())
+        base = digits[-12:] if len(digits) >= 6 else ""
+        if not base:
+            base = f"dokon{secrets.randbelow(900000) + 100000}"
+        candidate = base
+        for attempt in range(2, 60):
+            if not self.account_by_username(candidate):
+                return candidate
+            candidate = f"{base}-{attempt}"
+        raise ValueError("Login tanlanmadi — telefon raqamini tekshiring")
+
+    def create_customer_login(
+        self,
+        site_id: str,
+        *,
+        full_name: str,
+        phone: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Do'kon uchun kirish ma'lumotlarini yaratadi va parolni QAYTARADI.
+
+        Parol shu yerdan boshqa hech qayerda ochiq saqlanmaydi: chaqiruvchi
+        uni mijozga yetkazishi shart, aks holda parolni tiklash kerak
+        bo'ladi.
+        """
+        password = self.generate_customer_password()
+        account = self.create_account(
+            username=self.suggest_customer_username(phone or ""),
+            password=password,
+            role="customer",
+            status="active",
+            full_name=full_name,
+            phone=phone,
+            site_id=site_id,
+            created_by=created_by,
+        )
+        return {"account": account, "username": account["username"], "password": password}
+
+    def customer_account_for_site(self, site_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM portal_accounts WHERE role='customer' AND site_id=? "
+                "ORDER BY created_at LIMIT 1",
+                (site_id,),
+            ).fetchone()
+        return self._public_account(row) if row else None
 
     def ensure_bootstrap_admin(self, username: str, password: str) -> Dict[str, Any]:
         """Birinchi adminni faqat adminlar hali yo'q bo'lsa yaratadi."""
@@ -1289,6 +1569,21 @@ class CloudStore:
                 "WHERE lead_id=? AND chat_id=?",
                 (attempts, _iso(now), _iso(now), lead_id, str(chat_id)),
             )
+        elif attempts >= LEAD_DELIVERY_MAX_ATTEMPTS:
+            # Abadiy retry — log shovqini: mavjud bo'lmagan chatga soatiga
+            # bir marta urinib, jurnal "chat not found" bilan to'lardi.
+            # Yetarlicha urinishdan keyin yetkazish yopiladi.
+            conn.execute(
+                "UPDATE lead_notification_deliveries SET state='abandoned',attempts=?,"
+                "last_error=?,next_attempt_at=NULL,updated_at=? WHERE lead_id=? AND chat_id=?",
+                (
+                    attempts,
+                    (error or "Telegram yuborilmadi")[:500],
+                    _iso(now),
+                    lead_id,
+                    str(chat_id),
+                ),
+            )
         else:
             delay_seconds = min(3600, 60 * (2 ** min(attempts - 1, 6)))
             conn.execute(
@@ -1510,6 +1805,33 @@ class CloudStore:
         conn.close()
         return self.site_detail(site_id)
 
+    def set_plan(self, site_id: str, plan: str) -> Dict[str, Any]:
+        """Obyektning tarifini almashtiradi.
+
+        Bungacha tarifni o'zgartirishning umuman yo'li yo'q edi — qo'lda
+        `UPDATE sites SET plan=...` yozilardi.  Uch tarif bilan bu kundalik
+        amal bo'lib qoladi: mijoz Boshlang'ichdan Biznesga ko'tariladi yoki
+        eski `lite` mijozi yangi narxga o'z roziligi bilan ko'chadi.
+
+        Config revizyasi ataylab surib qo'yiladi: tarif qurilmadagi
+        funksiya to'plamini va kamera chegarasini belgilaydi, qurilma esa
+        o'zgarishni faqat revizya raqami bo'yicha sezadi (20 soniyalik
+        poll).  Usiz mijoz pul to'lab, funksiyani keyingi qayta ishga
+        tushishgacha kutib turardi.
+        """
+        key = str(plan).lower().strip()
+        # `get_plan` noma'lum tarifda ValueError ko'taradi — bazaga faqat
+        # hisob-kitob qila oladigan qiymat tushsin.
+        get_plan(key)
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+
+        conn = self._connect()
+        conn.execute("UPDATE sites SET plan = ? WHERE id = ?", (key, site_id))
+        conn.commit()
+        conn.close()
+        return self.site_detail(site_id)
+
     def _insert_pairing_code(
         self, conn: sqlite3.Connection, site_id: str, *, valid_hours: int = 48
     ) -> tuple[str, str]:
@@ -1521,6 +1843,19 @@ class CloudStore:
             (code, site_id, expires),
         )
         return code, expires
+
+    def count_sites(self) -> int:
+        """Nechta do'kon ochilgan.
+
+        `list_sites()` har sayt uchun qo'shimcha so'rov qiladi — bu yerda
+        esa faqat son kerak (self-service chegarasini tekshirish uchun),
+        shuning uchun bitta arzon so'rov.
+        """
+        conn = self._connect()
+        try:
+            return int(conn.execute("SELECT COUNT(*) FROM sites").fetchone()[0])
+        finally:
+            conn.close()
 
     def list_sites(self) -> List[Dict[str, Any]]:
         """Barcha saytlar — har biriga hisoblangan holat, tarif narxi va qurilma soni bilan."""
@@ -1570,6 +1905,18 @@ class CloudStore:
             out.append(site)
         return out
 
+    def subscription_status(self, site_id: str) -> Dict[str, Any]:
+        """Obuna holati — hisob-kitobsiz, faqat holat.
+
+        `site_detail()` butun obyektni (qurilmalar, kodlar, funksiya
+        shartnomasi) yig'adi va u har 20 soniyada chaqiriladigan yo'l
+        uchun qimmat.
+        """
+        site = self.get_site(site_id)
+        if not site:
+            raise ValueError("Sayt topilmadi")
+        return _compute_status(site)
+
     def site_detail(self, site_id: str) -> Dict[str, Any]:
         """Bitta sayt: holat, tarif cheklovlari, qurilmalar va faol pairing kodlar."""
         site = self.get_site(site_id)
@@ -1594,6 +1941,7 @@ class CloudStore:
                 "last_seen": r["last_seen"],
                 "created_at": r["created_at"],
                 "active_cameras": r["active_cameras"],
+                "app_version": r["app_version"],
                 **_connection_state(r["last_seen"], 1, now),
             }
             for r in conn.execute(
@@ -1643,6 +1991,83 @@ class CloudStore:
         )
         site["active_pairing_codes"] = codes
         return site
+
+    def record_device_version(self, device_id: str, app_version: Optional[str]) -> None:
+        """Qurilma o'z versiyasini heartbeat'da aytadi.
+
+        Yozib qo'yilmasa masofadan yangilash "ko'r" bo'lardi: reliz
+        chiqariladi-yu, u qaysi do'konga yetganini bilib bo'lmasdi.
+        """
+        version = (app_version or "").strip()[:64]
+        if not version or version == "unknown":
+            return
+        conn = self._connect()
+        conn.execute("UPDATE devices SET app_version = ? WHERE id = ?", (version, device_id))
+        conn.commit()
+        conn.close()
+
+    def set_update_policy(
+        self, site_id: str, *, channel: str, version: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Obyektning yangilanish siyosatini belgilaydi.
+
+        Nega kerak: bitta buzuq reliz barcha do'konni birdan yiqitmasligi
+        kerak.  Yangi versiya avval bitta obyektda sinaladi (`pin`),
+        muammo chiqsa qolganlari `hold` ga o'tkaziladi.
+        """
+        if channel not in {"auto", "hold", "pin"}:
+            raise ValueError("update_channel: auto, hold yoki pin bo'lishi kerak")
+        if channel == "pin" and not version:
+            raise ValueError("pin uchun versiya ko'rsatilishi shart")
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+
+        conn = self._connect()
+        conn.execute(
+            "UPDATE sites SET update_channel = ?, update_version = ? WHERE id = ?",
+            (channel, version if channel == "pin" else None, site_id),
+        )
+        conn.commit()
+        conn.close()
+        return self.site_detail(site_id)
+
+    def updates_paused(self) -> bool:
+        """Barcha do'konlarga yangilanish tarqatish to'xtatilganmi.
+
+        Nega kerak: relizni nashr qilishning o'zi tarqatish edi.
+        Kanareyka ham, bosqichma-bosqich tarqatish ham yo'q — fayl
+        papkaga tushgan zahoti har bir do'kon uni 15 daqiqa ichida
+        oladi.  Buzuq reliz chiqib ketsa yagona himoya har do'konni
+        qo'lda `hold` ga o'tkazish edi, ya'ni mijoz soni qancha bo'lsa
+        shuncha so'rov — aynan panika paytida.
+
+        Bu bayroq bitta tugma bilan hammasini to'xtatadi va deploy ham,
+        qayta ishga tushirish ham talab qilmaydi.
+        """
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT value FROM platform_settings WHERE key='updates_paused'"
+        ).fetchone()
+        conn.close()
+        return bool(row and str(row["value"]) == "1")
+
+    def set_updates_paused(self, paused: bool) -> bool:
+        conn = self._connect()
+        conn.execute(
+            "INSERT INTO platform_settings(key,value,updated_at) VALUES('updates_paused',?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
+            ("1" if paused else "0", _iso(_utc_now())),
+        )
+        conn.commit()
+        conn.close()
+        return bool(paused)
+
+    def update_policy(self, site_id: str) -> Dict[str, Any]:
+        site = self.get_site(site_id) or {}
+        return {
+            "channel": site.get("update_channel") or "auto",
+            "version": site.get("update_version"),
+        }
 
     def set_cameras_expected(self, site_id: str, expected: int) -> Dict[str, Any]:
         """O‘rnatilgan kamera sonini qo‘lda belgilash.
@@ -1739,6 +2164,42 @@ class CloudStore:
         )
         conn.commit()
         conn.close()
+
+    def alert_throttle_allow(self, site_id: str, key: str, *, window_sec: int = 600) -> bool:
+        """Chidamli xabar tormozi: oynada bir marta True, qolganida False.
+
+        `cloud/notify.py` dagi xotiradagi tormoz har deploy'da nolga
+        qaytib, hamma sayt uchun bir vaqtda xabar bo'roni berardi.  Bu
+        yozuv `alert_state` jadvalida turadi va restartdan omon qoladi.
+        """
+        kind = f"notify:{key}"[:200]
+        now = _utc_now()
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT notified_at FROM alert_state WHERE site_id = ? AND kind = ?",
+                (site_id, kind),
+            ).fetchone()
+            if row is not None:
+                try:
+                    # `_iso` naiv "YYYY-MM-DD HH:MM:SS" yozadi — UTC deb o'qiladi.
+                    last = datetime.fromisoformat(str(row["notified_at"])).replace(
+                        tzinfo=timezone.utc
+                    )
+                except ValueError:
+                    last = None
+                if last is not None and (now - last).total_seconds() < window_sec:
+                    return False
+            conn.execute(
+                "INSERT INTO alert_state (site_id, kind, connection, notified_at)"
+                " VALUES (?, ?, 'sent', ?)"
+                " ON CONFLICT(site_id, kind) DO UPDATE SET notified_at = ?",
+                (site_id, kind, _iso(now), _iso(now)),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
 
     def clear_alert_state(self, site_id: str, *, kind: Optional[str] = None) -> None:
         """`kind` berilmasa — saytning barcha ogohlantirish holatlari o‘chadi."""

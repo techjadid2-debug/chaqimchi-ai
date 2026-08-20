@@ -1,0 +1,96 @@
+name: Windows o'rnatuvchisi
+
+# Nega CI'da quriladi: tayyor `.exe` ~70 MB.  Uni git'ga commit qilish repo
+# tarixini qaytarib bo'lmas darajada shishiradi (shuning uchun `.gitignore`
+# da `releases/*.exe` bor).  Fayl GitHub Releases'da turadi, cloud esa
+# `CHAQIMCHI_WINDOWS_INSTALLER_URL` orqali unga yo'naltiradi.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "GitHub Release'ga yuklansinmi?"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # Ubuntu yetarli: payload Windows uchun `pip download --platform win_amd64`
+    # bilan yig'iladi, NSIS esa Linux'da ham kompilyatsiya qiladi.  Windows
+    # runner sekinroq va qimmatroq bo'lardi.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: NSIS o'rnatish
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis nsis-doc
+
+      - name: Payload yig'ish
+        env:
+          # Paket ichida cloud manzili turishi SHART: mijoz uni bilmaydi.
+          # Bir marta bu o'zgaruvchisiz reliz chiqqan va o'sha `.exe` auto-pair
+          # qila olmagan.  Endi manzil bo'lmasa qurish to'xtaydi.
+          # Repo o'zgaruvchisi (Settings → Variables) bilan boshqa cloudga
+          # yo'naltirish mumkin.
+          CHAQIMCHI_DEFAULT_CLOUD_URL: ${{ vars.CHAQIMCHI_DEFAULT_CLOUD_URL || 'https://api.chaqimchi.uz' }}
+        run: python scripts/build_windows_payload.py
+
+      - name: Cloud manzili paket ichida ekanini tekshirish
+        run: |
+          set -euo pipefail
+          grep -q "^set CHAQIMCHI_DEFAULT_CLOUD_URL=https://" \
+            build/payload/Chaqimchi_AI.bat
+          echo "Cloud manzili joyida:"
+          grep "^set CHAQIMCHI_DEFAULT_CLOUD_URL=" build/payload/Chaqimchi_AI.bat
+
+      - name: O'rnatuvchini kompilyatsiya qilish
+        run: makensis -V2 scripts/windows_installer.nsi
+
+      - name: Natijani tekshirish
+        run: |
+          set -euo pipefail
+          test -f releases/Chaqimchi_AI_Setup.exe
+          # PE fayl "MZ" bilan boshlanadi — bo'sh yoki buzuq artefakt
+          # relizga chiqmasligi kerak.
+          head -c 2 releases/Chaqimchi_AI_Setup.exe | grep -q "MZ"
+          SIZE_MB=$(( $(stat -c%s releases/Chaqimchi_AI_Setup.exe) / 1024 / 1024 ))
+          echo "Hajmi: ${SIZE_MB} MB"
+          # 40 MB dan kichik bo'lsa payload tushib qolgan (Python yoki
+          # AI modeli qo'shilmagan) — bunday fayl mijozda ishlamaydi.
+          test "${SIZE_MB}" -gt 40
+          echo "SIZE_MB=${SIZE_MB}" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Chaqimchi_AI_Setup
+          path: releases/Chaqimchi_AI_Setup.exe
+          retention-days: 14
+
+      - name: GitHub Release'ga yuklash
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: releases/Chaqimchi_AI_Setup.exe
+          body: |
+            Windows uchun o'rnatuvchi (${{ env.SIZE_MB }} MB).
+
+            O'rnatish: faylni ishga tushiring → Keyingi → Keyingi → Tayyor.
+            Python va AI modeli ichida, internet talab qilinmaydi.
+
+            Fayl imzolanmagan, shuning uchun Windows birinchi marta
+            ogohlantiradi: «Qo'shimcha ma'lumot» → «Baribir ishga tushirish».
+
+            Deploydan keyin cloudda sozlang:
+              CHAQIMCHI_WINDOWS_INSTALLER_URL=<shu fayl havolasi>
+              CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB=${{ env.SIZE_MB }}

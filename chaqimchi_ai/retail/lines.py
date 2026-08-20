@@ -24,9 +24,9 @@ def _cross(origin: Point, first: Point, second: Point) -> float:
     Belgisi `second` nuqta `origin→first` chizig'ining qaysi tomonida
     turganini aytadi.
     """
-    return (first[0] - origin[0]) * (second[1] - origin[1]) - (
-        first[1] - origin[1]
-    ) * (second[0] - origin[0])
+    return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (
+        second[0] - origin[0]
+    )
 
 
 def segments_intersect(a1: Point, a2: Point, b1: Point, b2: Point) -> bool:
@@ -169,11 +169,7 @@ class DwellTracker:
                 alerts.append(DwellAlert(zone=zone, track_id=track_id, dwell_sec=elapsed))
 
         # Zonadan chiqqan bo'lsa hisob tozalanadi — qaytib kirsa yangidan.
-        for key in [
-            key
-            for key in self._entered
-            if key[0] == track_id and key[1] not in current
-        ]:
+        for key in [key for key in self._entered if key[0] == track_id and key[1] not in current]:
             del self._entered[key]
             self._alerted.discard(key)
         return alerts

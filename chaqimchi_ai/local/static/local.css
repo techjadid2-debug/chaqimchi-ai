@@ -1,0 +1,182 @@
+/* Lokal dastur uslubi — rasmiy sayt bilan bir xil tilda.
+ *
+ * Nega muhim: mijoz saytda yorug', zamonaviy sahifani ko'radi, keyin dasturni
+ * o'rnatadi va qora, dasturchi uslubidagi panelga tushardi.  Bu "boshqa
+ * mahsulot" hissini beradi va ishonchni tushiradi.  Shuning uchun rang
+ * o'zgaruvchilari `cloud/static/site.css` bilan bir xil.
+ */
+
+:root {
+  --ink: #13231d;
+  --muted: #5e6e66;
+  --paper: #f3f0e8;
+  --paper-2: #e7e4da;
+  --lime: #d9f55f;
+  --green: #173d2d;
+  --orange: #f26a3d;
+  --danger: #c0392b;
+  --line: rgba(19, 35, 29, 0.16);
+  --radius: 20px;
+  --shadow: 0 18px 50px rgba(19, 35, 29, 0.12);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.55;
+}
+a { color: inherit; }
+button, input, select, textarea { font: inherit; }
+
+.shell { max-width: 940px; margin: 0 auto; padding: 24px 20px 80px; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 20px; margin-bottom: 8px;
+  background: rgba(243, 240, 232, .92); border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+}
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.02em; text-decoration: none; }
+.brand b { color: var(--orange); }
+.topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+h1 { margin: 0 0 8px; font-size: clamp(28px, 4.5vw, 40px); letter-spacing: -.03em; line-height: 1.1; }
+h2 { margin: 0 0 10px; font-size: clamp(22px, 3.2vw, 28px); letter-spacing: -.02em; }
+h3 { margin: 0 0 8px; font-size: 17px; }
+p.lead { margin: 0 0 22px; color: var(--muted); font-size: 16px; }
+
+/* ── Qadamlar ko'rsatkichi ─────────────────────────────────────────────
+ * Faqat ko'rsatkich: bosib sakrash yo'q.  Oldingi maketda 1-2-3-4 raqamlari
+ * bor edi-yu, oqim 2 dan 4 ga sakrardi — mijoz qaysi qadamda ekanini
+ * bilmasdi. */
+.steps { display: flex; gap: 8px; margin-bottom: 26px; flex-wrap: wrap; }
+.step-chip {
+  flex: 1 1 150px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--paper-2); color: var(--muted); font-size: 13px; font-weight: 650;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.step-chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.step-chip.done { background: var(--lime); border-color: var(--lime); color: var(--ink); }
+
+.card {
+  padding: 26px; margin-bottom: 18px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: #fffdf8;
+}
+.card.quiet { background: var(--paper-2); }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.actions.spread { justify-content: space-between; }
+
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 46px; padding: 0 20px;
+  border: 1px solid var(--ink); border-radius: 999px;
+  background: var(--ink); color: #fff; font-weight: 700; text-decoration: none; cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+}
+.button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(19,35,29,.16); }
+.button:disabled { opacity: .5; cursor: not-allowed; }
+.button.primary { background: var(--lime); border-color: var(--lime); color: var(--ink); }
+.button.ghost { background: transparent; color: var(--ink); }
+.button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.button.small { min-height: 36px; padding: 0 14px; font-size: 13px; }
+
+label.field { display: grid; gap: 6px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+label.field small { font-weight: 500; color: var(--muted); }
+input[type=text], input[type=password], input[type=number], input[type=time], select {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: #fff; color: var(--ink);
+}
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 3px solid var(--orange); outline-offset: 2px;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 14px; }
+
+/* ── Xabarlar ──────────────────────────────────────────────────────────
+ * `alert()` o'rniga.  Brauzer oynasi mijozni to'xtatadi va ko'chirib
+ * bo'lmaydi; bu esa sahifada qoladi va matnini o'qish mumkin. */
+.note { padding: 14px 16px; margin: 14px 0; border-radius: 12px; font-size: 14px; }
+.note.ok { background: #e8f7e4; border: 1px solid #9bd48a; }
+.note.warn { background: #fff4d9; border: 1px solid #e9c46a; }
+.note.err { background: #fdecea; border: 1px solid #e79a92; }
+.note b { display: block; margin-bottom: 3px; }
+
+.hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+.cloud-benefits { display: grid; gap: 10px; margin: 0 0 22px; padding: 0; list-style: none; font-size: 14px; }
+.cloud-benefits li::before { content: "✓ "; margin-right: 8px; color: var(--orange); font-weight: 900; }
+#pairCode::placeholder { letter-spacing: normal; font-size: 15px; font-weight: 500; }
+
+/* ── Kamera ro'yxati ─────────────────────────────────────────────────── */
+.camera-row {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px 16px; margin-bottom: 10px;
+  border: 1px solid var(--line); border-radius: 14px; background: #fff;
+}
+.camera-row .meta { flex: 1 1 220px; min-width: 0; }
+.camera-row .meta b { display: block; }
+.camera-row .meta code { color: var(--muted); font-size: 12px; word-break: break-all; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #b9c4be; flex: none; }
+.dot.on { background: #2ac976; }
+.dot.off { background: var(--danger); }
+
+.found-list { display: grid; gap: 8px; margin: 14px 0; }
+.found {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+}
+
+/* ── Kadr va muharrir ────────────────────────────────────────────────── */
+.frame { margin: 16px 0; border-radius: 14px; overflow: hidden; background: #0d1117; }
+.frame img { display: block; width: 100%; height: auto; }
+#geoCanvas { display: block; width: 100%; max-width: 100%; border-radius: 14px; background: #0d1117; cursor: crosshair; touch-action: none; }
+.shape-list { display: grid; gap: 8px; margin: 14px 0; }
+.shape {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: 13px;
+}
+.shape label { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
+.shape input[type=number] { width: 88px; }
+
+/* ── Panel ────────────────────────────────────────────────────────────── */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.stat { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: #fffdf8; }
+.stat small { display: block; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.stat strong { display: block; margin-top: 6px; font-size: 34px; letter-spacing: -.04em; }
+.stat span { color: var(--muted); font-size: 13px; }
+
+.bars { display: flex; align-items: flex-end; gap: 3px; height: 130px; margin-top: 10px; }
+.bars > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.bars i { display: block; background: var(--green); border-radius: 3px 3px 0 0; min-height: 2px; }
+.bars .peak i { background: var(--orange); }
+.bars b { font-weight: 400; font-size: 10px; color: var(--muted); text-align: center; padding-top: 4px; }
+
+table.events { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.events th, table.events td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+table.events th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.scroll-x { overflow-x: auto; }
+
+pre.log {
+  max-height: 320px; overflow: auto; padding: 14px; border-radius: 12px;
+  background: #0d1117; color: #d6e2dc; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+}
+
+.hidden { display: none !important; }
+
+@media (max-width: 620px) {
+  .shell { padding: 16px 14px 70px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .steps { gap: 6px; }
+  .step-chip { flex-basis: 100%; }
+  .actions .button { width: 100%; }
+  .actions.spread { flex-direction: column-reverse; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

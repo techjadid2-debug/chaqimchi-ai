@@ -1,0 +1,31 @@
+# Chaqimchi Cloud media zaxirasi — rasm va kliplar (MinIO).
+#
+# Nega kunlikdan ajratilgan: media o'nlab GB.  Har kecha nusxalanib, arxiv
+# 14 kun saqlanganda 96 GB server ikki-uch do'kondan keyin to'lardi.
+# Yo'qotish narxi ham boshqa: bir haftalik klip yo'qolsa biznes ishlaydi,
+# hisob-faktura va akkauntlar yo'qolsa — yo'q.
+#
+# O'rnatish (VPS'da, root):
+#   cp deploy/chaqimchi-backup-media.{service,timer} /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now chaqimchi-backup-media.timer
+#   systemctl start chaqimchi-backup-media.service   # birinchi sinov darhol
+#
+# Tiklash: ./scripts/restore_production.sh --restore chaqimchi-media-<sana>.tar.gz.enc
+
+[Unit]
+Description=Chaqimchi Cloud haftalik media zaxirasi (MinIO)
+Wants=docker.service
+After=docker.service network-online.target
+OnFailure=chaqimchi-backup-failed.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/chaqimchi-ai
+EnvironmentFile=/etc/chaqimchi/backup.env
+ExecStart=/home/deploy/chaqimchi-ai/scripts/backup_production.sh --media
+# Ikki nusxa yetadi (8 kun ≈ oxirgi ikkita haftalik arxiv).  Media eng ko'p
+# joy egallaydigan narsa — bu yerda ko'p saqlash diskni yeydi.
+ExecStartPost=/usr/bin/find ${CHAQIMCHI_BACKUP_DIR} -name chaqimchi-media-*.tar.gz.enc -mtime +8 -delete
+Nice=15
+IOSchedulingClass=idle

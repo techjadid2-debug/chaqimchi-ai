@@ -43,6 +43,54 @@ def test_window_expiry_restores_quota(monkeypatch) -> None:
     assert limiter.hit("events", "dev-1", limit=1, window_sec=60)
 
 
+def test_a_long_window_survives_the_memory_sweep(monkeypatch) -> None:
+    """Kunlik chegara kun bo'yi ushlab tursin.
+
+    Xotira tozalash har 5 daqiqada eskirgan kalitlarni o'chirardi, lekin
+    "eskirgan"ni oynaning **o'z** muddati bilan emas, tozalash oralig'i
+    bilan o'lchardi.  Ya'ni kunlik 500 ta rasm chegarasi amalda 5 daqiqada
+    500 ta bo'lardi — kuniga ~1 TB, disk to'lsa baza ishlamay qoladi.
+
+    `RateLimiter()` ataylab yangidan yaratiladi: `_last_sweep` konstruktorda
+    HAQIQIY soatdan olinadi, monkeypatch esa undan keyin qo'yiladi — eski
+    test aynan shu sabab tozalashni umuman ishga tushira olmasdi.
+    """
+    clock = {"now": 1_000.0}
+    monkeypatch.setattr("cloud.ratelimit.time.monotonic", lambda: clock["now"])
+    limiter = RateLimiter()
+
+    day = 86_400
+    assert limiter.hit("snapshots", "dev-1", limit=2, window_sec=day)
+    assert limiter.hit("snapshots", "dev-1", limit=2, window_sec=day)
+    assert not limiter.hit("snapshots", "dev-1", limit=2, window_sec=day)
+
+    # Tozalash oralig'idan o'tdi, lekin sutkalik oyna hali tugamadi.
+    clock["now"] += ratelimit._SWEEP_EVERY_SEC * 3
+    assert not limiter.hit("snapshots", "dev-1", limit=2, window_sec=day), (
+        "kunlik chegara 5 daqiqadan keyin qayta ochilmasin"
+    )
+
+    # Sutka o'tgach kvota tiklanadi.
+    clock["now"] += day
+    assert limiter.hit("snapshots", "dev-1", limit=2, window_sec=day)
+
+
+def test_the_sweep_still_frees_memory_for_finished_windows(monkeypatch) -> None:
+    """Tozalashning maqsadi saqlanib qolsin: tugagan oynalar o'chirilsin,
+    aks holda har IP uchun yozuv abadiy yig'ilardi."""
+    clock = {"now": 1_000.0}
+    monkeypatch.setattr("cloud.ratelimit.time.monotonic", lambda: clock["now"])
+    limiter = RateLimiter()
+
+    limiter.hit("leads", "1.2.3.4", limit=3, window_sec=60)
+    assert limiter.size() == 1
+
+    clock["now"] += ratelimit._SWEEP_EVERY_SEC + 1
+    limiter.hit("leads", "9.9.9.9", limit=3, window_sec=60)
+
+    assert limiter.size() == 1, "tugagan oyna xotirada qolmasin"
+
+
 def test_check_raises_429_with_retry_after() -> None:
     ratelimit.check("otp", "555", limit=1, window_sec=600, message="Kod juda ko'p so'raldi")
     with pytest.raises(HTTPException) as exc:

@@ -1,8 +1,14 @@
-"""Sotqin uchun RTSP inventar va stream qabul testi.
+"""Sotqin uchun RTSP inventar, stream qabul testi va bitta kadr rasmi.
 
 Bu modul lokal AI qilmaydi. U cloud yuborgan RTSP substreamlarning texnik
 yaroqliligini `ffprobe` bilan tekshiradi va keyingi frame/clip worker uchun
 xavfsiz, secretsiz health natijasini beradi.
+
+Bundan tashqari o'rnatuvchi uchun **bitta kadr rasmi** oladi. Sababi: hozir
+o'rnatuvchi kamerani ko'rmaydi — `ffprobe` unga faqat "h264 640x360 15fps"
+deb aytadi. Kamera to'g'ri joyga qaratilganini, linza tozaligini yoki
+umuman qaysi kamera ekanini bilishning yagona yo'li — rasmni ko'rish.
+O'sha rasm ayni paytda chiziq va zona chizish uchun ham asos bo'ladi.
 """
 
 from __future__ import annotations
@@ -13,6 +19,16 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 
 from chaqimchi_ai.sotqin_profile import MAX_CAMERAS
+
+#: Preview rasm eni (balandlik nisbat bo'yicha). 640 px — brauzerda chiziq
+#: chizish uchun yetarli va bitta kadr ~50-80 KB bo'ladi.
+PREVIEW_WIDTH = 640
+
+#: JPEG sifati (ffmpeg `-q:v`, 2 eng yaxshi ... 31 eng yomon).
+PREVIEW_QUALITY = 6
+
+#: Cloud tomon ham shu chegarani qo'yadi; undan kattasi yuborilmaydi.
+PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -86,19 +102,29 @@ class SotqinMediaRuntime:
         self,
         *,
         ffprobe_binary: str = "ffprobe",
+        ffmpeg_binary: str = "ffmpeg",
         timeout_sec: int = 12,
         runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     ) -> None:
         self.ffprobe_binary = ffprobe_binary
+        self.ffmpeg_binary = ffmpeg_binary
         self.timeout_sec = timeout_sec
         self.runner = runner
         self.cameras: List[Dict[str, Any]] = []
         self.probes: Dict[str, StreamProbe] = {}
 
+    def camera(self, camera_id: str) -> Optional[Dict[str, Any]]:
+        for item in self.cameras:
+            if item["camera_id"] == camera_id:
+                return item
+        return None
+
     def apply_config(self, payload: Mapping[str, Any]) -> None:
         self.cameras = validate_cameras(payload.get("cameras", []))
         active = {camera["camera_id"] for camera in self.cameras if camera["enabled"]}
-        self.probes = {camera_id: probe for camera_id, probe in self.probes.items() if camera_id in active}
+        self.probes = {
+            camera_id: probe for camera_id, probe in self.probes.items() if camera_id in active
+        }
 
     def probe_camera(self, camera: Mapping[str, Any]) -> StreamProbe:
         camera_id = str(camera["camera_id"])
@@ -144,6 +170,55 @@ class SotqinMediaRuntime:
             return StreamProbe(camera_id, "offline", error="ffprobe yoki RTSP timeout")
         except (json.JSONDecodeError, TypeError, ValueError):
             return StreamProbe(camera_id, "offline", error="RTSP probe javobi noto'g'ri")
+
+    def grab_preview(self, camera: Mapping[str, Any]) -> Optional[bytes]:
+        """Kameradan bitta kadr — JPEG bayt.  Olinmasa `None`.
+
+        Xato holatida `None` qaytariladi va sabab log'ga ham chiqmaydi:
+        chiqishda RTSP manzili bo'lishi mumkin, u esa parol bilan keladi.
+        Nima bo'lganini o'rnatuvchi `probe_camera()` natijasidan biladi.
+        """
+        source = str(camera["source"])
+        command = [
+            self.ffmpeg_binary,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-rtsp_transport",
+            "tcp",
+            "-i",
+            source,
+            "-frames:v",
+            "1",
+            "-vf",
+            f"scale={PREVIEW_WIDTH}:-2",
+            "-q:v",
+            str(PREVIEW_QUALITY),
+            "-f",
+            "image2",
+            "-",
+        ]
+        try:
+            completed = self.runner(
+                command,
+                capture_output=True,
+                timeout=self.timeout_sec,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            return None
+        if completed.returncode != 0:
+            return None
+        data = completed.stdout
+        if not isinstance(data, (bytes, bytearray)):
+            return None
+        data = bytes(data)
+        # JPEG SOI markeri — ffmpeg xato matnini stdout'ga yozib qo'ymaganiga
+        # ishonch hosil qilamiz.
+        if not data.startswith(b"\xff\xd8") or len(data) > PREVIEW_MAX_BYTES:
+            return None
+        return data
 
     def probe_all(self) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []

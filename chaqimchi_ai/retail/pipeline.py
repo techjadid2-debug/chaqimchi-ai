@@ -42,7 +42,7 @@ from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
 from chaqimchi_ai.retail.rules import Decision, RuleEngine, Schedule
-from chaqimchi_ai.retail.tamper import TamperDetector
+from chaqimchi_ai.retail.tamper import FREEZE, TAMPER, TamperDetector
 from chaqimchi_ai.scene_analytics import SceneAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,7 @@ class _Camera:
     analyzed: int = 0
     errors: int = 0
     tamper_alerts: int = 0
+    freezes: int = 0
     #: Oxirgi "ish vaqtidan tashqari" hodisasi — takror oqimini to'sish uchun.
     after_hours_at: float = float("-inf")
     #: Oxirgi ko'rilgan kadr — `ai_review` harakati shuni AI ga yuboradi.
@@ -129,6 +130,11 @@ class _Totals:
     errors: int = 0
     events: int = 0
     suppressed: int = 0
+    #: Cloud shartnomasida yoqilmagan paket sabab tashlab yuborilganlar.
+    #: `suppressed` dan alohida: u — qoidalarning ongli qarori, bu esa
+    #: "tarif faollashtirilmagan" belgisi va panelda ogohlantirish bo'lib
+    #: chiqishi kerak (ilgari jimgina yutilardi).
+    plan_filtered: int = 0
     action_errors: int = 0
     actions: Dict[str, int] = field(default_factory=dict)
     clips_written: int = 0
@@ -136,9 +142,8 @@ class _Totals:
     clips_dropped: int = 0
     clips_unavailable: int = 0
     tamper_alerts: int = 0
+    freezes: int = 0
     after_hours: int = 0
-    reviews_sent: int = 0
-    reviews_skipped: int = 0
     snapshots_written: int = 0
     snapshots_missing: int = 0
 
@@ -172,7 +177,6 @@ class RetailPipeline:
         *,
         on_action: Callable[[str, EdgeEvent], None],
         on_clip: Optional[Callable[[EdgeEvent, Path], None]] = None,
-        on_review: Optional[Callable[[EdgeEvent, Any], bool]] = None,
         clip_dir: Optional[Path] = None,
         snapshot_dir: Optional[Path] = None,
         snapshot_writer: Callable[[Path, Any], bool] = write_jpeg,
@@ -191,11 +195,6 @@ class RetailPipeline:
         self.rules = rules
         self.on_action = on_action
         self.on_clip = on_clip
-        #: `ai_review` harakatini bajaruvchi.  Berilmasa qoida shu harakatni
-        #: so'rasa hodisa baribir cloudga ketadi — faqat AI izohsiz.
-        #: `True` qaytarsa tahlil navbatga tushdi, `False` — o'tkazib
-        #: yuborildi (oraliq yoki limit).
-        self.on_review = on_review
         self.clip_dir = Path(clip_dir) if clip_dir is not None else None
         self.snapshot_dir = Path(snapshot_dir) if snapshot_dir is not None else None
         self.snapshot_writer = snapshot_writer
@@ -345,7 +344,7 @@ class RetailPipeline:
         local_time = self._local_time()
         with self._lock:
             self._totals.events += original_count
-            self._totals.suppressed += original_count - len(events)
+            self._totals.plan_filtered += original_count - len(events)
             # Qoida dvigatelida cooldown holati bor — u ham qulf ostida.
             decisions = self.rules.decisions(events, now=now, local_time=local_time)
             self._totals.suppressed += len(events) - len(decisions)
@@ -354,16 +353,32 @@ class RetailPipeline:
         return decisions
 
     def _report_tamper(self, camera_id: str, alert: Any, *, now: float) -> None:
+        """Buzilish yoki qotib qolgan oqim.
+
+        Ikkalasi ham bir xil o'lchovdan chiqadi, lekin hodisa turi boshqa:
+        qotgan oqimni "kamera yopilgan" deb aytish o'rnatuvchini noto'g'ri
+        joyga — linzani artishga — yuboradi, aslida esa NVR qayta
+        yuklanishi kerak.
+        """
+        frozen = getattr(alert, "kind", TAMPER) == FREEZE
         logger.warning(
-            "[%s] kamera buzilgan: %s (%.0f soniya)", camera_id, alert.reason, alert.duration_sec
+            "[%s] %s: %s (%.0f soniya)",
+            camera_id,
+            "oqim qotib qoldi" if frozen else "kamera buzilgan",
+            alert.reason,
+            alert.duration_sec,
         )
         with self._lock:
-            self._cameras[camera_id].tamper_alerts += 1
-            self._totals.tamper_alerts += 1
+            if frozen:
+                self._cameras[camera_id].freezes += 1
+                self._totals.freezes += 1
+            else:
+                self._cameras[camera_id].tamper_alerts += 1
+                self._totals.tamper_alerts += 1
         self._report(
             [
                 EdgeEvent(
-                    event_type="camera_tampered",
+                    event_type="stream_frozen" if frozen else "camera_tampered",
                     severity="critical",
                     camera_id=camera_id,
                     score=alert.score,
@@ -373,6 +388,16 @@ class RetailPipeline:
             camera_id=camera_id,
             now=now,
         )
+
+    def emit_system_event(self, event: EdgeEvent, *, now: float) -> None:
+        """Zanjirdan tashqarida tug'ilgan hodisa (kamera uzilishi, tiklanishi).
+
+        `runner` uni to'g'ridan-to'g'ri outboxga yozishi ham mumkin edi, lekin
+        u holda qoida dvigateli chetlab o'tilardi: cooldown, jadval va
+        `telegram_alert` ishlamasdi.  Shu yo'ldan o'tgani uchun kamera
+        sog'ligi hodisalari ham `config/rules.yaml` bilan boshqariladi.
+        """
+        self._report([event], camera_id=event.camera_id, now=now)
 
     def _after_hours_event(
         self, events: List[EdgeEvent], camera_id: str, *, now: float
@@ -407,7 +432,17 @@ class RetailPipeline:
         )
 
     def _dispatch(self, decision: Decision, *, camera_id: str) -> None:
+        self._attach_face_crop(decision.event, camera_id=camera_id)
         self._attach_security_snapshot(decision.event, camera_id=camera_id)
+        # Qoida Telegram so'raganmi — hodisaning o'zida yozib qo'yiladi.
+        # Bungacha `telegram_alert` harakati dekorativ edi: cloud faqat
+        # severity'ga qarab yuborar, ya'ni qoidalardagi tanlov va
+        # sovutishlar hech narsani boshqarmasdi.  Endi cloud/notify.py shu
+        # bayroqqa bo'ysunadi (eski versiya hodisalarida bayroq bo'lmaydi —
+        # u holda severity fallback ishlaydi).
+        if decision.event.metadata is None:
+            decision.event.metadata = {}
+        decision.event.metadata["alert"] = "telegram_alert" in decision.actions
         for action in decision.actions:
             with self._lock:
                 self._totals.actions[action] = self._totals.actions.get(action, 0) + 1
@@ -415,7 +450,9 @@ class RetailPipeline:
                 self._queue_clip(decision.event, camera_id=camera_id)
                 continue
             if action == "ai_review":
-                self._request_review(decision.event, camera_id=camera_id)
+                # Cloud tomonidagi AI ko'rigi uchun ajratilgan nom.  Edge'da
+                # bajarilmaydi, lekin qoidalar faylida uchrasa xato bermasin —
+                # mijozning eski konfigi validatsiyadan o'tsin.
                 continue
             try:
                 self.on_action(action, decision.event)
@@ -425,6 +462,69 @@ class RetailPipeline:
                 with self._lock:
                     self._totals.action_errors += 1
                 logger.exception("[%s] '%s' harakati bajarilmadi", camera_id, action)
+
+    def drain_heatmaps(self) -> Dict[str, Any]:
+        """Har kameraning yig'ilgan issiqlik to'rini olib bo'shatadi."""
+        result: Dict[str, Any] = {}
+        for camera_id, camera in self._cameras.items():
+            grid = getattr(camera.analyzer, "heatmap", None)
+            if grid is None:
+                continue
+            cells, frames, points = grid.drain()
+            if points:
+                result[camera_id] = {"grid": cells, "frames": frames}
+        return result
+
+    def latest_frame(self, camera_id: str) -> Optional[Any]:
+        """Kameraning oxirgi tahlil qilingan kadri (jonli ko'rish uchun).
+
+        Yangi RTSP ulanish YO'Q — kadr allaqachon xotirada turadi, uni
+        faqat JPEG qilib berish qoladi.
+        """
+        camera = self._cameras.get(camera_id)
+        return camera.last_frame if camera is not None else None
+
+    def _attach_face_crop(self, event: EdgeEvent, *, camera_id: str) -> None:
+        """`face_captured` uchun odam ramkasining yuqori qismini kesib oladi.
+
+        To'liq kadr yuborilmaydi — maxfiylik (kadrda boshqa odamlar bor)
+        va hajm: crop odatda 20-60 KB, to'liq kadr esa yarim megabayt.
+        Yuzni topish/tanish bu yerda YO'Q — hammasi cloudda.
+        """
+        if event.event_type != "face_captured" or self.snapshot_dir is None:
+            return
+        bbox = (event.metadata or {}).get("bbox")
+        camera = self._cameras.get(camera_id)
+        frame = camera.last_frame if camera is not None else None
+        if frame is None or not bbox or len(bbox) != 4:
+            with self._lock:
+                self._totals.snapshots_missing += 1
+            return
+        height, width = frame.shape[:2]
+        x1, y1, x2, y2 = (int(value) for value in bbox)
+        # Yuqori ~35% + yon tomonlarga 10% chekka: bosh ramka chetiga tegib
+        # turganda ham yuz kesilib qolmasin.
+        margin = int((x2 - x1) * 0.10)
+        top = max(0, y1)
+        bottom = min(height, y1 + max(1, int((y2 - y1) * 0.35)))
+        left = max(0, x1 - margin)
+        right = min(width, x2 + margin)
+        if bottom - top < 16 or right - left < 16:
+            with self._lock:
+                self._totals.snapshots_missing += 1
+            return
+        path = self.snapshot_dir / f"{camera_id}-{event.event_id}-face.jpg"
+        try:
+            written = self.snapshot_writer(path, frame[top:bottom, left:right])
+        except Exception:
+            written = False
+            logger.exception("[%s] yuz kadri yozilmadi", camera_id)
+        with self._lock:
+            if written:
+                event.snapshot_path = str(path)
+                self._totals.snapshots_written += 1
+            else:
+                self._totals.snapshots_missing += 1
 
     def _attach_security_snapshot(self, event: EdgeEvent, *, camera_id: str) -> None:
         # Oddiy zona kirishi retail analitikasi, xavfsizlik hodisasi emas.
@@ -455,37 +555,6 @@ class RetailPipeline:
                 self._totals.snapshots_written += 1
             else:
                 self._totals.snapshots_missing += 1
-
-    # ── AI ko'rigi ───────────────────────────────────────────────────────
-
-    def _request_review(self, event: EdgeEvent, *, camera_id: str) -> None:
-        """Hodisani tug'dirgan kadrni ko'rish agentiga uzatadi.
-
-        Bu yerda **hech qanday tarmoq chaqiruvi yo'q**: `on_review` kadrni
-        navbatga qo'yadi va o'z oqimida ishlaydi.  Aks holda inferens halqasi
-        AI javobini kutib turardi (soniyalar) va o'sha vaqtda hech bir kamera
-        tahlilga tushmasdi.
-
-        Kadr topilmasa hodisa baribir yuborilgan — faqat AI izohisiz qoladi.
-        """
-        camera = self._cameras.get(camera_id)
-        frame = camera.last_frame if camera is not None else None
-        if self.on_review is None or frame is None:
-            with self._lock:
-                self._totals.reviews_skipped += 1
-            return
-        try:
-            queued = self.on_review(event, frame)
-        except Exception:
-            with self._lock:
-                self._totals.action_errors += 1
-            logger.exception("[%s] AI ko'rigi so'ralmadi", camera_id)
-            return
-        with self._lock:
-            if queued:
-                self._totals.reviews_sent += 1
-            else:
-                self._totals.reviews_skipped += 1
 
     # ── Klip ─────────────────────────────────────────────────────────────
 
@@ -586,12 +655,10 @@ class RetailPipeline:
             "errors": self._totals.errors,
             "events": self._totals.events,
             "suppressed": self._totals.suppressed,
+            "plan_filtered": self._totals.plan_filtered,
             "tamper_alerts": self._totals.tamper_alerts,
+            "freezes": self._totals.freezes,
             "after_hours": self._totals.after_hours,
-            "reviews": {
-                "sent": self._totals.reviews_sent,
-                "skipped": self._totals.reviews_skipped,
-            },
             "actions": dict(sorted(self._totals.actions.items())),
             "action_errors": self._totals.action_errors,
             "snapshots": {
@@ -612,6 +679,7 @@ class RetailPipeline:
                     "analyzed": camera.analyzed,
                     "errors": camera.errors,
                     "tamper_alerts": camera.tamper_alerts,
+                    "freezes": camera.freezes,
                     "tampered": camera.tamper is not None and camera.tamper.alerted,
                 }
                 for camera_id, camera in sorted(self._cameras.items())

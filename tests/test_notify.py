@@ -16,13 +16,59 @@ from cloud.notify import (
 )
 
 
-def event(event_type: str, camera: str, severity: str = "warning") -> EdgeEvent:
+# MINIMAL rejim: botga faqat critical boradi, shuning uchun mexanika
+# testlari critical hodisalar bilan yoziladi.
+def event(event_type: str, camera: str, severity: str = "critical") -> EdgeEvent:
     return EdgeEvent(event_type=event_type, camera_id=camera, severity=severity)
 
 
 def test_info_events_never_alert() -> None:
     events = [event("person_detected", "camera-01", severity="info") for _ in range(50)]
     assert build_alert("site-1", events, throttle_service=AlertThrottle()) is None
+
+
+# ── Minimal rejim siyosati ───────────────────────────────────────────────
+
+
+def test_warning_events_stay_in_the_panel() -> None:
+    """Foydalanuvchi qarori (2026-08-16): navbat/loitering botga bormaydi."""
+    events = [event("loitering", "camera-01", severity="warning") for _ in range(20)]
+    assert build_alert("site-1", events, throttle_service=AlertThrottle()) is None
+
+
+def test_device_rule_flag_is_authoritative() -> None:
+    """Qoida `telegram_alert` demagan bo'lsa — critical ham yuborilmaydi.
+
+    Bungacha bayroq dekorativ edi: cloud faqat severity'ga qarar, qurilma
+    qoidalaridagi tanlov hech narsani boshqarmas edi.
+    """
+    silent = EdgeEvent(
+        event_type="camera_tampered",
+        camera_id="camera-01",
+        severity="critical",
+        metadata={"alert": False},
+    )
+    assert build_alert("site-1", [silent], throttle_service=AlertThrottle()) is None
+
+    flagged = EdgeEvent(
+        event_type="camera_tampered",
+        camera_id="camera-01",
+        severity="critical",
+        metadata={"alert": True},
+    )
+    assert build_alert("site-1", [flagged], throttle_service=AlertThrottle())
+
+
+def test_recovery_reaches_the_owner_despite_low_severity() -> None:
+    """ "Buzildi"ning "tiklandi" jufti — usiz tizim doim buzuq ko'rinadi."""
+    recovered = EdgeEvent(
+        event_type="camera_recovered",
+        camera_id="camera-01",
+        severity="info",
+        metadata={"alert": True, "downtime_sec": 42},
+    )
+    message = build_alert("site-1", [recovered], throttle_service=AlertThrottle())
+    assert message is not None and "Kamera tiklandi" in message
 
 
 def test_batch_becomes_one_grouped_message() -> None:
@@ -33,14 +79,15 @@ def test_batch_becomes_one_grouped_message() -> None:
 
     assert message is not None
     assert "503 ta ogohlantirish" in message
-    # Eng ko'p takrorlangani birinchi turadi va o'zbekcha nomlanadi.
+    # Eng ko'p takrorlangani birinchi turadi va o'zbekcha nomlanadi
+    # (oxirida Toshkent vaqti qo'shiladi — u testda qat'iy emas).
     lines = message.splitlines()
-    assert lines[1] == "• Taqiqlangan zonaga kirish — camera-01 ×500"
-    assert lines[2] == "• Uzoq turish — camera-02 ×3"
+    assert lines[1].startswith("• Taqiqlangan zonaga kirish — camera-01 ×500")
+    assert lines[2].startswith("• Uzoq turish — camera-02 ×3")
 
 
 def test_critical_event_changes_the_marker() -> None:
-    assert summarize([event("loitering", "camera-01")]).startswith("⚠️")
+    assert summarize([event("loitering", "camera-01", severity="warning")]).startswith("⚠️")
     assert summarize([event("loitering", "camera-01", severity="critical")]).startswith("🔴")
 
 
@@ -48,7 +95,9 @@ def test_repeat_within_window_is_suppressed() -> None:
     throttle = AlertThrottle(window_sec=600)
     assert build_alert("site-1", [event("loitering", "camera-01")], throttle_service=throttle)
     # Xuddi shu kamera, xuddi shu tur — mijoz telefonini o'chirib qo'ymasin.
-    assert build_alert("site-1", [event("loitering", "camera-01")], throttle_service=throttle) is None
+    assert (
+        build_alert("site-1", [event("loitering", "camera-01")], throttle_service=throttle) is None
+    )
     # Boshqa kamera yoki boshqa obyekt mustaqil.
     assert build_alert("site-1", [event("loitering", "camera-02")], throttle_service=throttle)
     assert build_alert("site-2", [event("loitering", "camera-01")], throttle_service=throttle)
@@ -95,11 +144,10 @@ def test_ai_conclusion_is_written_into_the_message() -> None:
     """
     message = summarize([ai_review("kassa-01", "Ikki kishi janjallashmoqda")])
 
-    assert message.splitlines() == [
-        "⚠️ 1 ta ogohlantirish",
-        "• AI ko'rdi — kassa-01",
-        "   ↳ Ikki kishi janjallashmoqda",
-    ]
+    lines = message.splitlines()
+    assert lines[0] == "⚠️ 1 ta ogohlantirish"
+    assert lines[1].startswith("• AI ko'rdi — kassa-01")
+    assert lines[2] == "   ↳ Ikki kishi janjallashmoqda"
 
 
 def test_description_is_used_when_there_is_no_reason() -> None:

@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 import cv2
 import numpy as np
 
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.retail.lines import CountingLine, DwellTracker, LineCounter
+from chaqimchi_ai.retail.shelf import ShelfWatcher, crop_polygon
 from chaqimchi_ai.retail.tracker import MotionTracker
 from chaqimchi_ai.settings import SceneSettings, SceneZoneSettings
 
@@ -109,52 +110,6 @@ class OpenCVDnnPersonDetector:
         )
 
 
-class RKNNPersonDetector:
-    """RK3588 RKNNLite adapteri; single-output YOLOv8/YOLOX exportini qabul qiladi."""
-
-    def __init__(
-        self,
-        model_path: Path,
-        *,
-        input_size: int = 640,
-        confidence: float = 0.45,
-        nms_threshold: float = 0.45,
-    ) -> None:
-        try:
-            from rknnlite.api import RKNNLite
-        except ImportError as exc:  # pragma: no cover - faqat RK3588 qurilmada
-            raise RuntimeError("RKNNLite2 vendor wheel o'rnatilishi kerak") from exc
-        if not model_path.is_file():
-            raise FileNotFoundError(f"RKNN modeli topilmadi: {model_path}")
-        self._runtime = RKNNLite()
-        if self._runtime.load_rknn(str(model_path)) != 0:
-            raise RuntimeError("RKNN model yuklanmadi")
-        if self._runtime.init_runtime() != 0:
-            raise RuntimeError("RKNN runtime ishga tushmadi")
-        self.input_size = int(input_size)
-        self.confidence = float(confidence)
-        self.nms_threshold = float(nms_threshold)
-
-    def detect(self, frame: np.ndarray) -> List[Dict[str, Any]]:
-        height, width = frame.shape[:2]
-        resized = cv2.resize(frame, (self.input_size, self.input_size))
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        outputs = self._runtime.inference(inputs=[rgb])
-        if not outputs or len(outputs) != 1:
-            raise RuntimeError("RKNN model single-output YOLO eksport bo'lishi kerak")
-        return _decode_person_output(
-            outputs[0],
-            width=width,
-            height=height,
-            input_size=self.input_size,
-            confidence=self.confidence,
-            nms_threshold=self.nms_threshold,
-        )
-
-    def close(self) -> None:
-        self._runtime.release()
-
-
 #: Fon modeli o'rganilguncha o'tadigan kadrlar.  Shu oraliqda hamma narsa
 #: "harakat" deb qaraladi — aks holda tizim endi yoqilganda birinchi hodisani
 #: o'tkazib yuborardi.
@@ -194,16 +149,54 @@ def _inside(point: Tuple[float, float], polygon: Sequence[Tuple[float, float]]) 
     return cv2.pointPolygonTest(contour, point, False) >= 0
 
 
+#: Davomat kadri uchun odam ramkasining minimal balandligi (kadr ulushida).
+#: Kichik ramka = uzoqdagi odam = crop ichida yuz o'qib bo'lmaydigan darajada
+#: mayda bo'ladi va cloud bekorga ishlaydi.
+FACE_MIN_BBOX_RATIO = 0.28
+#: Bitta trackdan ko'pi bilan shuncha yuz kadri — odam eshik oldida turib
+#: qolsa ham oqim to'lib ketmaydi.
+FACE_EMITS_PER_TRACK = 2
+#: Ikkinchi kadr kamida shuncha soniyadan keyin (birinchisi sifatsiz chiqsa
+#: zaxira bo'ladi).
+FACE_DEBOUNCE_SEC = 60.0
+
+#: Bosim shundan oshsa demografiya o'tkazib yuboriladi — xavfsizlik va
+#: sanash muhimroq (himoya klapani).
+DEMOGRAPHY_PRESSURE_LIMIT = 0.85
+#: Bitta trek uchun urinishlar (kirish chizig'i kesilgan kadrlarda).
+DEMOGRAPHY_ATTEMPTS_PER_TRACK = 2
+
+
 class SceneAnalyzer:
     def __init__(
         self,
         camera_id: str,
         detector: PersonDetector,
         settings: SceneSettings,
+        *,
+        attendance: bool = False,
+        demography: Optional[Any] = None,
+        pressure: Optional[Callable[[], float]] = None,
     ) -> None:
         self.camera_id = camera_id
         self.detector = detector
         self.settings = settings
+        #: Davomat kamerasi: odam ko'ringanida yuz crop hodisasi chiqadi.
+        #: Qurilma yuzni TANIMAYDI — moslash cloudda (cloud/faces.py).
+        self.attendance = bool(attendance)
+        self._track_face_emits: Dict[int, int] = {}
+        self._track_face_last: Dict[int, float] = {}
+        #: Demografiya (jins/yosh): faqat kirish chizig'i bor kamerada
+        #: beriladi; natija anonim raqamlar, rasm saqlanmaydi.
+        self.demography = demography
+        self.pressure = pressure
+        self._track_demography: Dict[int, Dict[str, Any]] = {}
+        self._demo_attempts: Dict[int, int] = {}
+        #: Issiqlik to'ri: har kadrda oyoq nuqtalari yig'iladi (deyarli
+        #: bepul), 10 daqiqada bir cloudga ketadi.
+        from chaqimchi_ai.retail.heatmap import HeatmapGrid
+
+        self.heatmap = HeatmapGrid()
         self.motion = MotionGate(settings.motion_min_area_ratio)
         # Yuz uchun mo'ljallangan IoU tracker do'kon eshigida ishlamaydi: normal
         # yurgan odam bir kadrda ramkasining yarmidan ko'p siljiydi va track
@@ -226,19 +219,164 @@ class SceneAnalyzer:
             ]
         )
         self.dwell = DwellTracker(
-            {
-                zone.name: float(zone.dwell_sec)
-                for zone in self.zones
-                if zone.dwell_sec is not None
-            }
+            {zone.name: float(zone.dwell_sec) for zone in self.zones if zone.dwell_sec is not None}
         )
         self._queue_alerted = False
+        #: Kassa zonasi qachondan beri bo'sh (zona → monotonik vaqt).
+        self._checkout_empty_since: Dict[str, float] = {}
+        self._checkout_alerted: Dict[str, bool] = {}
+        self._second_till_alerted = False
+        self.shelves = ShelfWatcher(
+            empty_ratio=settings.shelf_empty_ratio,
+            empty_sec=float(settings.shelf_empty_sec),
+        )
         self._last_analysis = 0.0
         self._track_first_seen: Dict[int, float] = {}
         self._track_last_seen: Dict[int, float] = {}
         self._track_zones: Dict[int, set[str]] = {}
         self._emitted: Dict[Tuple[str, str], float] = {}
         self._occupancy_alerted = False
+
+    def _checkout_events(
+        self,
+        zone_counts: Dict[str, int],
+        queue_zones: List[str],
+        people_in_view: int,
+        now: float,
+    ) -> List[EdgeEvent]:
+        """Kassa nazorati: bo'sh kassa va ikkinchi kassa kerakligi.
+
+        **Nima aytiladi va nima aytilmaydi.** Detektor ODAMNI topadi,
+        kassirni emas.  "Kassada hech kim yo'q" — o'lchanadigan fakt.
+        "Kassir ketib qoldi" — taxmin, va uni sotuv va'dasiga aylantirish
+        aynan `FORBIDDEN_CLAIMS` ushlaydigan xato bo'lardi.  Shu sabab
+        hamma matnda **kassa**, hech qachon **kassir**.
+
+        Bo'sh kassaning o'zi signal EMAS: mijoz yo'q paytda kassa bo'sh
+        bo'lishi normal va bu haqda xabar berish — shovqin.  Signal
+        ikkalasi birga bo'lganda chiqadi: kadrda odamlar bor, kassada
+        esa yo'q.
+        """
+        events: List[EdgeEvent] = []
+        idle_limit = float(self.settings.checkout_idle_sec)
+
+        for zone_name in queue_zones:
+            waiting = zone_counts.get(zone_name, 0)
+            if waiting:
+                # Kassada odam bor — hisob noldan boshlanadi.
+                self._checkout_empty_since.pop(zone_name, None)
+                self._checkout_alerted[zone_name] = False
+                continue
+            if people_in_view < 1:
+                # Do'konda umuman odam yo'q: bo'sh kassa kutilgan holat.
+                # Hisob ham boshlanmaydi, aks holda kechqurun yopilgandan
+                # keyin ertalab birinchi mijoz kelishi bilan signal
+                # chiqib ketardi.
+                self._checkout_empty_since.pop(zone_name, None)
+                continue
+            since = self._checkout_empty_since.setdefault(zone_name, now)
+            if now - since < idle_limit or self._checkout_alerted.get(zone_name):
+                continue
+            self._checkout_alerted[zone_name] = True
+            events.append(
+                EdgeEvent(
+                    event_type="checkout_unattended",
+                    severity="warning",
+                    camera_id=self.camera_id,
+                    zone=zone_name,
+                    metadata={
+                        "idle_sec": round(now - since, 1),
+                        "people_in_view": people_in_view,
+                    },
+                )
+            )
+
+        # Ikkinchi kassa: bittasida navbat chegaradan oshgan, boshqasida
+        # esa umuman odam yo'q.  Bitta kassali do'konda bu hodisa
+        # chiqmaydi — ochadigan ikkinchi kassa yo'q.
+        if len(queue_zones) >= 2:
+            counts = {zone: zone_counts.get(zone, 0) for zone in queue_zones}
+            busiest = max(counts, key=lambda zone: counts[zone])
+            idle = [zone for zone, count in counts.items() if count == 0]
+            if counts[busiest] >= self.settings.queue_limit and idle:
+                if not self._second_till_alerted:
+                    self._second_till_alerted = True
+                    events.append(
+                        EdgeEvent(
+                            event_type="checkout_second_till",
+                            severity="warning",
+                            camera_id=self.camera_id,
+                            zone=busiest,
+                            queue_length=counts[busiest],
+                            metadata={"bosh_kassalar": idle},
+                        )
+                    )
+            else:
+                self._second_till_alerted = False
+        return events
+
+    def _shelf_events(
+        self, frame: np.ndarray, zone_counts: Dict[str, int], now: float
+    ) -> List[EdgeEvent]:
+        """Javon bo'shab qolganini aytadi.
+
+        Model ishlatilmaydi — sabab va cheklovlar `retail/shelf.py` da.
+        Bu yerda faqat ulanish: qaysi zona javon, kim uni yopib turibdi.
+        """
+        events: List[EdgeEvent] = []
+        for zone in self.zones:
+            if not zone.shelf:
+                continue
+            found = self.shelves.observe(
+                zone.name,
+                crop_polygon(frame, zone.polygon),
+                # Zonada odam bor — o'lchov ishonchsiz.  Mijoz javonni
+                # yopib turgani ham, uning kiyimi ham chekka zichligini
+                # o'zgartiradi va ikkala tomonga ham yolg'on beradi.
+                blocked=zone_counts.get(zone.name, 0) > 0,
+                now=now,
+            )
+            if found is None:
+                continue
+            events.append(
+                EdgeEvent(
+                    event_type="shelf_empty",
+                    severity="warning",
+                    camera_id=self.camera_id,
+                    zone=zone.name,
+                    metadata=found,
+                )
+            )
+        return events
+
+    def _estimate_demography(
+        self, frame: np.ndarray, detection: Dict[str, Any], track_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """Kirish kesishmasida mijozning jins/yoshini baholaydi.
+
+        Trek boshiga ko'pi bilan 2 urinish; bosim yuqorida — o'tkazib
+        yuboriladi (xavfsizlik va sanash ustuvor).  Xato tahlilni hech
+        qachon to'xtatmaydi.
+        """
+        if self.demography is None:
+            return None
+        cached = self._track_demography.get(track_id)
+        if cached is not None:
+            return cached
+        if self.pressure is not None and self.pressure() >= DEMOGRAPHY_PRESSURE_LIMIT:
+            return None
+        attempts = self._demo_attempts.get(track_id, 0)
+        if attempts >= DEMOGRAPHY_ATTEMPTS_PER_TRACK:
+            return None
+        self._demo_attempts[track_id] = attempts + 1
+        try:
+            result = self.demography.estimate(frame, detection["bbox"])
+        except Exception:
+            logger.exception("[%s] demografiya baholanmadi", self.camera_id)
+            return None
+        if result:
+            self._track_demography[track_id] = result
+        return result
 
     def _emit_allowed(self, kind: str, key: str, now: float) -> bool:
         token = (kind, key)
@@ -271,6 +409,7 @@ class SceneAnalyzer:
         """
         now = time.monotonic() if now is None else float(now)
         self._last_analysis = now
+        self.heatmap.frame_done()
 
         detections = self.tracker.update(self.detector.detect(frame))
         events: List[EdgeEvent] = []
@@ -298,10 +437,29 @@ class SceneAnalyzer:
                 )
 
             x1, y1, x2, y2 = detection["bbox"]
+
+            # Davomat: yetarlicha yaqin kelgan odamdan yuz kadri.
+            if self.attendance and (y2 - y1) / height >= FACE_MIN_BBOX_RATIO:
+                emits = self._track_face_emits.get(track_id, 0)
+                last = self._track_face_last.get(track_id)
+                if emits < FACE_EMITS_PER_TRACK and (
+                    last is None or now - last >= FACE_DEBOUNCE_SEC
+                ):
+                    self._track_face_emits[track_id] = emits + 1
+                    self._track_face_last[track_id] = now
+                    events.append(
+                        EdgeEvent(
+                            event_type="face_captured",
+                            camera_id=self.camera_id,
+                            track_id=track_id,
+                            score=float(detection.get("score", 0.0)),
+                            metadata={"bbox": detection["bbox"]},
+                        )
+                    )
+
             center = ((x1 + x2) / 2 / width, y2 / height)
-            current_zones = {
-                zone.name for zone in self.zones if _inside(center, zone.polygon)
-            }
+            self.heatmap.add(center[0], center[1])
+            current_zones = {zone.name for zone in self.zones if _inside(center, zone.polygon)}
             for zone_name in current_zones:
                 zone_counts[zone_name] = zone_counts.get(zone_name, 0) + 1
             previous_zones = self._track_zones.setdefault(track_id, set())
@@ -322,6 +480,11 @@ class SceneAnalyzer:
 
             # Kirish/chiqish — konversiya hisobining maxraji.
             for crossing in self.lines.update(track_id, center):
+                metadata: Dict[str, Any] = {"bbox": detection["bbox"]}
+                if crossing.direction == "in":
+                    demography = self._estimate_demography(frame, detection, track_id)
+                    if demography:
+                        metadata["demografiya"] = demography
                 events.append(
                     EdgeEvent(
                         event_type="line_crossed",
@@ -329,7 +492,7 @@ class SceneAnalyzer:
                         track_id=track_id,
                         direction=crossing.direction,
                         line=crossing.line,
-                        metadata={"bbox": detection["bbox"]},
+                        metadata=metadata,
                     )
                 )
 
@@ -385,6 +548,10 @@ class SceneAnalyzer:
             elif longest_queue < self.settings.queue_limit:
                 self._queue_alerted = False
 
+            events.extend(self._checkout_events(zone_counts, queue_zones, len(detections), now))
+
+        events.extend(self._shelf_events(frame, zone_counts, now))
+
         occupancy = len(detections)
         if occupancy >= self.settings.occupancy_limit and not self._occupancy_alerted:
             self._occupancy_alerted = True
@@ -435,10 +602,7 @@ def build_person_detector(settings: SceneSettings, base_dir: Path) -> PersonDete
             model_path, confidence=settings.confidence
         )
     else:
-        detector_class = (
-            RKNNPersonDetector if settings.backend == "rknn" else OpenCVDnnPersonDetector
-        )
-        detector = detector_class(
+        detector = OpenCVDnnPersonDetector(
             model_path,
             input_size=settings.input_size,
             confidence=settings.confidence,

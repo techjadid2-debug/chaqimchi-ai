@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -16,6 +17,8 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from chaqimchi_ai.event_models import EdgeEvent
+
+logger = logging.getLogger(__name__)
 
 #: Kunlik hisobot uchun o'qiladigan turlar.  `person_detected` ataylab yo'q:
 #: u eng katta hajmli tur va hisobotda ishlatilmaydi — uni ham o'qish
@@ -50,6 +53,23 @@ MIN_BOTH_CAMERA_DEPARTURE_MINUTES = 30
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _age_bucket(age: Any) -> str:
+    """Yosh guruhi — do'kon egasi aniq son emas, guruh bilan ishlaydi."""
+    try:
+        value = int(age)
+    except (TypeError, ValueError):
+        return "31-45"
+    if value < 18:
+        return "<18"
+    if value <= 30:
+        return "18-30"
+    if value <= 45:
+        return "31-45"
+    if value <= 60:
+        return "46-60"
+    return "60+"
 
 
 def _change_percent(today: int, yesterday: int) -> Optional[float]:
@@ -120,6 +140,8 @@ class EventStore:
                 snapshot_key TEXT,
                 has_clip INTEGER NOT NULL DEFAULT 0,
                 clip_key TEXT,
+                snapshot_bytes INTEGER NOT NULL DEFAULT 0,
+                clip_bytes INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )
             """,
@@ -131,6 +153,8 @@ class EventStore:
                 role TEXT NOT NULL,
                 display_name TEXT,
                 active INTEGER NOT NULL DEFAULT 1,
+                digest_muted INTEGER NOT NULL DEFAULT 0,
+                notify_failures INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 UNIQUE(site_id, telegram_id)
             )
@@ -143,6 +167,31 @@ class EventStore:
                 expires_at TEXT NOT NULL,
                 attempts INTEGER NOT NULL DEFAULT 0,
                 used INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS owner_login_links (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                telegram_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS telegram_invites (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                display_name TEXT,
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                used_by TEXT,
                 created_at TEXT NOT NULL
             )
             """,
@@ -217,12 +266,42 @@ class EventStore:
                 FOREIGN KEY(employee_id) REFERENCES employees(id)
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS employee_faces (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                employee_id TEXT NOT NULL,
+                photo_key TEXT NOT NULL,
+                embedding_b64 TEXT NOT NULL,
+                embedding_dim INTEGER NOT NULL DEFAULT 512,
+                det_score REAL,
+                photo_bytes INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(employee_id) REFERENCES employees(id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_employee_faces_site "
+            "ON employee_faces(site_id,employee_id)",
+            """
+            CREATE TABLE IF NOT EXISTS heatmap_hourly (
+                site_id TEXT NOT NULL,
+                camera_id TEXT NOT NULL,
+                bucket_hour TEXT NOT NULL,
+                grid_json TEXT NOT NULL,
+                frames INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, camera_id, bucket_hour)
+            )
+            """,
             "CREATE INDEX IF NOT EXISTS idx_prod_events_site_time "
             "ON production_events(site_id,occurred_at)",
             "CREATE INDEX IF NOT EXISTS idx_owner_members_telegram "
             "ON owner_members(telegram_id,active)",
-            "CREATE INDEX IF NOT EXISTS idx_employees_site_active "
-            "ON employees(site_id,active)",
+            "CREATE INDEX IF NOT EXISTS idx_owner_login_links_hash "
+            "ON owner_login_links(token_hash,revoked)",
+            "CREATE INDEX IF NOT EXISTS idx_telegram_invites_hash "
+            "ON telegram_invites(token_hash,used_at)",
+            "CREATE INDEX IF NOT EXISTS idx_employees_site_active ON employees(site_id,active)",
             "CREATE INDEX IF NOT EXISTS idx_attendance_site_date "
             "ON attendance_daily(site_id,work_date)",
         ]
@@ -257,6 +336,9 @@ class EventStore:
             ("queue_length", "INTEGER"),
             ("has_clip", "INTEGER NOT NULL DEFAULT 0"),
             ("clip_key", "TEXT"),
+            # Hajm kvotasi uchun: qaysi hodisa qancha media saqlayotgani.
+            ("snapshot_bytes", "INTEGER NOT NULL DEFAULT 0"),
+            ("clip_bytes", "INTEGER NOT NULL DEFAULT 0"),
         )
         for name, column_type in retail_columns:
             if name not in existing:
@@ -264,10 +346,68 @@ class EventStore:
         employee_columns = self._existing_columns(conn, "employees")
         if "deactivated_at" not in employee_columns:
             conn.execute("ALTER TABLE employees ADD COLUMN deactivated_at TEXT")
+        member_columns = self._existing_columns(conn, "owner_members")
+        for name in ("digest_muted", "notify_failures"):
+            if name not in member_columns:
+                conn.execute(
+                    f"ALTER TABLE owner_members ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                )
 
     @staticmethod
     def _dict(row: Any) -> Dict[str, Any]:
         return dict(row)
+
+    #: Qurilma soati serverdan shuncha oldinda bo'lishi mumkin.  Bir necha
+    #: daqiqalik farq normal va uni "tuzatish" hodisani noto'g'ri soatga
+    #: surib qo'yardi.
+    CLOCK_FUTURE_TOLERANCE = timedelta(minutes=5)
+
+    #: Shundan orqada qolgan soat — deyarli aniq BIOS batareyasi o'lgan
+    #: (o'sha davr kompyuterlari 2010-2016 ga tushadi).  Bunday hodisa
+    #: **surilmaydi**, faqat jurnalga yoziladi: quyidagi izohga qarang.
+    CLOCK_PAST_WARN = timedelta(days=730)
+
+    def _normalise_occurred_at(self, raw: Any, *, now: Optional[datetime] = None) -> str:
+        """Qurilma vaqtini ishonchli holga keltiradi.
+
+        `occurred_at` do'kon kompyuterining devor soatidan olinadi.  U
+        2014-yilgi kompyuter, CMOS batareyasi o'lishi odatiy hol va NTP
+        hech qayerda majburiy emas.  Bu qiymat esa **retention**, kunlik
+        hisobot va grafikni boshqaradi:
+
+        * kelajakdagi sana hech qachon o'chmaydi va ro'yxat boshida
+          abadiy turib oladi — u **serverning vaqtiga tortiladi**;
+        * ochib bo'lmaydigan satr hisobotni butunlay yiqitadi — unda
+          hech qanday ma'lumot yo'q, shuning uchun server vaqti qo'yiladi.
+
+        Orqada qolgan soat esa ATAYLAB surilmaydi.  Bir yillik arxiv
+        sotilgan mijozda eski hodisa qonuniy holat (`enterprise` tarifi
+        365 kun), va butun kunlik yuklamani "hozir" ga surish do'kon
+        egasiga **soxta mijozlar** ko'rsatardi: soatlik grafik yuklash
+        daqiqasiga yig'ilib qolardi.  Buzuq soat jurnalga yoziladi.
+
+        Internet bir hafta yo'q bo'lgandan keyingi kechikkan yuklash ham
+        shu sabab haqiqiy vaqtini saqlaydi.
+        """
+        moment = (now or _now()).astimezone(timezone.utc)
+        try:
+            parsed = datetime.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            logger.warning("Qurilma vaqti o'qilmadi (%r) — server vaqti qo'yildi", raw)
+            return moment.isoformat()
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.astimezone(timezone.utc)
+        if parsed > moment + self.CLOCK_FUTURE_TOLERANCE:
+            logger.warning("Qurilma soati oldinda (%s) — server vaqti qo'yildi", parsed)
+            return moment.isoformat()
+        if parsed < moment - self.CLOCK_PAST_WARN:
+            logger.warning(
+                "Qurilma soati juda orqada (%s) — hodisa o'z vaqtida saqlandi, "
+                "lekin do'kon kompyuterining soatini to'g'rilash kerak",
+                parsed,
+            )
+        return parsed.isoformat()
 
     def ingest(self, site_id: str, device_id: str, events: List[EdgeEvent]) -> List[str]:
         accepted: List[str] = []
@@ -306,7 +446,7 @@ class EventStore:
                         event.event_type,
                         event.severity,
                         event.camera_id,
-                        event.occurred_at,
+                        self._normalise_occurred_at(event.occurred_at),
                         event.ended_at,
                         event.track_id,
                         event.person_id,
@@ -349,34 +489,213 @@ class EventStore:
     def event(self, site_id: str, event_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(
-                self._sql(
-                    "SELECT * FROM production_events WHERE site_id=? AND event_id=?"
-                ),
+                self._sql("SELECT * FROM production_events WHERE site_id=? AND event_id=?"),
                 (site_id, event_id),
             ).fetchone()
         return self._decode_event(row) if row else None
 
-    def set_snapshot(self, site_id: str, event_id: str, key: str) -> bool:
+    def set_snapshot(self, site_id: str, event_id: str, key: str, *, size_bytes: int = 0) -> bool:
         with self._connect() as conn:
             cursor = conn.execute(
                 self._sql(
-                    "UPDATE production_events SET snapshot_key=?,has_snapshot=1 "
-                    "WHERE site_id=? AND event_id=?"
+                    "UPDATE production_events SET snapshot_key=?,has_snapshot=1,"
+                    "snapshot_bytes=? WHERE site_id=? AND event_id=?"
                 ),
-                (key, site_id, event_id),
+                (key, int(size_bytes), site_id, event_id),
             )
             return bool(cursor.rowcount)
 
-    def set_clip(self, site_id: str, event_id: str, key: str) -> bool:
+    def set_clip(self, site_id: str, event_id: str, key: str, *, size_bytes: int = 0) -> bool:
         with self._connect() as conn:
             cursor = conn.execute(
                 self._sql(
-                    "UPDATE production_events SET clip_key=?,has_clip=1 "
-                    "WHERE site_id=? AND event_id=?"
+                    "UPDATE production_events SET clip_key=?,has_clip=1,"
+                    "clip_bytes=? WHERE site_id=? AND event_id=?"
                 ),
-                (key, site_id, event_id),
+                (key, int(size_bytes), site_id, event_id),
             )
             return bool(cursor.rowcount)
+
+    def set_face_result(
+        self,
+        site_id: str,
+        event_id: str,
+        *,
+        matched: bool,
+        employee_id: Optional[str] = None,
+        score: Optional[float] = None,
+        note: Optional[str] = None,
+    ) -> bool:
+        """`face_captured` kadriga moslash natijasini yozadi.
+
+        Ism `employees`dan olinadi — qurilma yuborgan matnga ishonilmaydi
+        (ingest'dagi qoida bilan bir xil).
+        """
+        person_name = None
+        if matched and employee_id:
+            employee = self.employee(site_id, employee_id)
+            person_name = employee["name"] if employee else None
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT metadata_json FROM production_events "
+                    "WHERE site_id=? AND event_id=? AND event_type='face_captured'"
+                ),
+                (site_id, event_id),
+            ).fetchone()
+            if not row:
+                return False
+            try:
+                metadata = json.loads(self._dict(row)["metadata_json"] or "{}")
+            except ValueError:
+                metadata = {}
+            metadata["face"] = {
+                "matched": bool(matched),
+                **({"note": note} if note else {}),
+            }
+            cursor = conn.execute(
+                self._sql(
+                    "UPDATE production_events SET person_id=?,person_name=?,score=?,"
+                    "metadata_json=? WHERE site_id=? AND event_id=?"
+                ),
+                (
+                    employee_id if matched else None,
+                    person_name,
+                    score,
+                    json.dumps(metadata, ensure_ascii=False),
+                    site_id,
+                    event_id,
+                ),
+            )
+            return bool(cursor.rowcount)
+
+    def list_face_events(self, site_id: str, *, limit: int = 50) -> List[Dict[str, Any]]:
+        """Galereya uchun so'nggi yuz kadrlari (yangi birinchi)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT event_id,camera_id,occurred_at,person_id,person_name,"
+                    "score,snapshot_key,metadata_json FROM production_events "
+                    "WHERE site_id=? AND event_type='face_captured' "
+                    "ORDER BY occurred_at DESC LIMIT ?"
+                ),
+                (site_id, max(1, min(int(limit), 200))),
+            ).fetchall()
+        events = []
+        for raw in rows:
+            row = self._dict(raw)
+            try:
+                metadata = json.loads(row.pop("metadata_json") or "{}")
+            except ValueError:
+                metadata = {}
+            row["face"] = metadata.get("face") or {}
+            events.append(row)
+        return events
+
+    def purge_face_media(self, site_id: str, *, retention_days: int) -> List[str]:
+        """Muddati o'tgan yuz kadrlarini butunlay o'chiradi.
+
+        Oddiy hodisalardan farqi: yozuvning O'ZI ham o'chadi — biometrik iz
+        (kim qachon ko'ringani rasm bilan) kerak bo'lgandan uzoq yashamasligi
+        kerak.  Davomat statistikasi `employee_seen`da — u qoladi.
+        """
+        cutoff = (_now() - timedelta(days=max(1, retention_days))).isoformat()
+        keys: List[str] = []
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT event_id,snapshot_key FROM production_events "
+                    "WHERE site_id=? AND event_type='face_captured' AND occurred_at<?"
+                ),
+                (site_id, cutoff),
+            ).fetchall()
+            for raw in rows:
+                row = self._dict(raw)
+                if row["snapshot_key"]:
+                    keys.append(str(row["snapshot_key"]))
+                conn.execute(
+                    self._sql("DELETE FROM production_events WHERE site_id=? AND event_id=?"),
+                    (site_id, row["event_id"]),
+                )
+        return keys
+
+    def purge_inactive_employee_faces(self, site_id: str) -> List[str]:
+        """Ro'yxatdan chiqarilgan xodimlarning yuz namunalarini o'chiradi.
+
+        Maxfiylik va'dasi: xodim ketdi — biometrikasi ham ketadi.  Har 6
+        soatlik maintenance shu yerni chaqiradi, ya'ni kechikish ko'pi
+        bilan yarim kun.
+        """
+        keys: List[str] = []
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT f.id,f.photo_key FROM employee_faces f "
+                    "JOIN employees e ON e.id=f.employee_id "
+                    "WHERE f.site_id=? AND e.active=0"
+                ),
+                (site_id,),
+            ).fetchall()
+            for raw in rows:
+                row = self._dict(raw)
+                keys.append(str(row["photo_key"]))
+                conn.execute(
+                    self._sql("DELETE FROM employee_faces WHERE id=?"),
+                    (row["id"],),
+                )
+        return keys
+
+    def media_usage_bytes(self, site_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT COALESCE(SUM(COALESCE(snapshot_bytes,0)+COALESCE(clip_bytes,0)),0) "
+                    "AS total FROM production_events WHERE site_id=?"
+                ),
+                (site_id,),
+            ).fetchone()
+        return int(self._dict(row)["total"] or 0)
+
+    def purge_site_media_over_quota(self, site_id: str, max_bytes: int) -> List[str]:
+        """Obyekt media hajmi kvotadan oshsa **eng eski** medialarni bo'shatadi.
+
+        Muddat bo'yicha tozalash (`purge_site`) yetarli emas: kuniga 500
+        snapshot + 100 klip ruxsat etilgan, ya'ni bitta shovqinli sayt 30
+        kunlik tarifda ham VPS diskini to'ldira oladi.  Hodisa yozuvining
+        o'zi qoladi (statistika buzilmaydi) — faqat media o'chadi, xuddi
+        edge'dagi `outbox.prune` kabi.
+        """
+        usage = self.media_usage_bytes(site_id)
+        if usage <= max_bytes:
+            return []
+        keys: List[str] = []
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT event_id,snapshot_key,clip_key,"
+                    "COALESCE(snapshot_bytes,0)+COALESCE(clip_bytes,0) AS media_bytes "
+                    "FROM production_events WHERE site_id=? AND "
+                    "(snapshot_key IS NOT NULL OR clip_key IS NOT NULL) "
+                    "ORDER BY occurred_at"
+                ),
+                (site_id,),
+            ).fetchall()
+            freed = 0
+            for raw in rows:
+                if usage - freed <= max_bytes:
+                    break
+                row = self._dict(raw)
+                keys.extend(key for key in (row["snapshot_key"], row["clip_key"]) if key)
+                freed += int(row["media_bytes"] or 0)
+                conn.execute(
+                    self._sql(
+                        "UPDATE production_events SET snapshot_key=NULL,has_snapshot=0,"
+                        "snapshot_bytes=0,clip_key=NULL,has_clip=0,clip_bytes=0 "
+                        "WHERE site_id=? AND event_id=?"
+                    ),
+                    (site_id, row["event_id"]),
+                )
+        return keys
 
     def list_events(
         self,
@@ -431,6 +750,94 @@ class EventStore:
         by_type = {row["event_type"]: int(row["count"]) for row in rows}
         return {"date": day.isoformat(), "total": sum(by_type.values()), "by_type": by_type}
 
+    #: "Ochilish vaqti" uchun hisobga olinadigan harakat turlari — kamera
+    #: sog'ligi hodisalari emas (ular odam kelganini bildirmaydi).
+    MOVEMENT_TYPES = (
+        "line_crossed",
+        "person_detected",
+        "zone_entered",
+        "loitering",
+        "queue_threshold_exceeded",
+    )
+
+    def first_movement_time(self, site_id: str, *, day: Optional[date] = None) -> Optional[str]:
+        """Kunning birinchi harakat hodisasi (Toshkent kuni bo'yicha).
+
+        Kunlik hisobotdagi "Ochilish: 09:05" satri uchun — do'kon
+        jadvaldagidan kech ochilsa ega buni hisobotdan ko'radi.
+        """
+        timezone_tashkent = ZoneInfo("Asia/Tashkent")
+        day = day or datetime.now(timezone_tashkent).date()
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=timezone_tashkent)
+        start = start_local.astimezone(timezone.utc).isoformat()
+        end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        placeholders = ",".join("?" for _ in self.MOVEMENT_TYPES)
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT MIN(occurred_at) AS first FROM production_events "
+                    f"WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    f"AND event_type IN ({placeholders})"
+                ),
+                (site_id, start, end, *self.MOVEMENT_TYPES),
+            ).fetchone()
+        value = self._dict(row).get("first") if row else None
+        return str(value) if value else None
+
+    def camera_uptime_percent(self, site_id: str, *, start: date, end: date) -> Optional[float]:
+        """Davr bo'yicha kamera ishlash foizi (offline/recovered juftlaridan).
+
+        Haftalik hisobot uchun: "kameralar 98% vaqt ishladi".  Hodisa
+        umuman bo'lmasa (uzilish qayd etilmagan) — 100%.  Ma'lumot yo'q
+        davr uchun None emas, 100 qaytadi: uzilish hodisasi bor-yo'qligi
+        yagona ishonchli signalimiz.
+        """
+        timezone_tashkent = ZoneInfo("Asia/Tashkent")
+        start_local = datetime.combine(start, datetime.min.time(), tzinfo=timezone_tashkent)
+        end_local = datetime.combine(
+            end, datetime.min.time(), tzinfo=timezone_tashkent
+        ) + timedelta(days=1)
+        period_start = start_local.astimezone(timezone.utc)
+        period_end = end_local.astimezone(timezone.utc)
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT camera_id,event_type,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type IN ('camera_offline','camera_recovered') "
+                    "ORDER BY camera_id,occurred_at"
+                ),
+                (site_id, period_start.isoformat(), period_end.isoformat()),
+            ).fetchall()
+        events = [self._dict(row) for row in rows]
+        if not events:
+            return 100.0
+        total_seconds = (period_end - period_start).total_seconds()
+        downtime = 0.0
+        cameras = {item["camera_id"] for item in events}
+        for camera_id in cameras:
+            offline_since: Optional[datetime] = None
+            for item in (e for e in events if e["camera_id"] == camera_id):
+                try:
+                    moment = datetime.fromisoformat(str(item["occurred_at"]))
+                except ValueError:
+                    continue
+                if moment.tzinfo is None:
+                    moment = moment.replace(tzinfo=timezone.utc)
+                if item["event_type"] == "camera_offline" and offline_since is None:
+                    offline_since = moment
+                elif item["event_type"] == "camera_recovered" and offline_since is not None:
+                    downtime += (moment - offline_since).total_seconds()
+                    offline_since = None
+            if offline_since is not None:
+                # Davr oxirigacha tiklanmagan.
+                downtime += (period_end - offline_since).total_seconds()
+        if not cameras or total_seconds <= 0:
+            return 100.0
+        # O'rtacha: umumiy downtime kamera-davrlar yig'indisiga nisbatan.
+        ratio = downtime / (total_seconds * len(cameras))
+        return round(max(0.0, min(1.0, 1 - ratio)) * 100, 1)
+
     def retail_report(self, site_id: str, *, day: Optional[date] = None) -> Dict[str, Any]:
         """Do'kon egasi uchun kunlik hisobot.
 
@@ -460,15 +867,38 @@ class EventStore:
             "restricted_zone": 0,
             "loitering": 0,
         }
+        # Do'kon egasi sotib olgan raqam — «bugun nechta MIJOZ kirdi».  Xodim
+        # kuniga o'n martalab eshikdan o'tadi, shuning uchun uning o'tishlari
+        # kirdi-chiqdi sonidan ham, soatlik grafikdan ham, demografiyadan ham
+        # butunlay chiqariladi.  Xodimni `employee_seen` (kamera, trek)
+        # juftligi belgilaydi — uni cloud tomondagi yuz moslash yozadi.
+        employee_marks = self._employee_marks_of_day(site_id, day, timezone_tashkent)
+        gender_counts = {"ayol": 0, "erkak": 0}
+        age_buckets = {"<18": 0, "18-30": 0, "31-45": 0, "46-60": 0, "60+": 0}
+        demo_total = 0
+        staff_crossings = 0
 
         for row in rows:
             kind = row["event_type"]
             local = self._to_local(row["occurred_at"], timezone_tashkent)
+            if local is None:
+                continue  # yaroqsiz vaqt — bitta qator hisobotni yiqitmasin
             if kind == "line_crossed":
-                if row.get("direction") == "in":
+                direction = row.get("direction")
+                if direction not in ("in", "out"):
+                    continue
+                if self._matches_employee(row, employee_marks):
+                    staff_crossings += 1
+                    continue
+                if direction == "in":
                     entered += 1
                     hourly[local.hour]["entered"] += 1
-                elif row.get("direction") == "out":
+                    demo = (row.get("metadata") or {}).get("demografiya") or {}
+                    if demo.get("jins") in gender_counts:
+                        demo_total += 1
+                        gender_counts[str(demo["jins"])] += 1
+                        age_buckets[_age_bucket(demo.get("yosh"))] += 1
+                else:
                     exited += 1
                     hourly[local.hour]["exited"] += 1
             elif kind == "dwell_exceeded" and row.get("dwell_sec") is not None:
@@ -496,6 +926,10 @@ class EventStore:
                 "change_percent": _change_percent(entered, yesterday),
                 "busiest_hour": busiest if busiest["entered"] else None,
                 "hourly": [hourly[hour] for hour in range(24)],
+                #: Yuz tanish xodim deb topgan va sanoqdan chiqarilgan
+                #: o'tishlar.  Ko'rsatiladi, chunki "kecha 210 edi, bugun 190"
+                #: degan farq xodim jadvalidan ham kelib chiqishi mumkin.
+                "xodim_chiqarilgan": staff_crossings,
             },
             "queue": {
                 "alerts": len(queue_lengths),
@@ -520,7 +954,206 @@ class EventStore:
                 key=lambda item: (-item["count"], item["zone"]),
             ),
             "security": security,
+            "demografiya": {
+                "hisoblangan": demo_total,
+                "jins": (
+                    {
+                        "ayol": round(gender_counts["ayol"] * 100 / demo_total),
+                        "erkak": round(gender_counts["erkak"] * 100 / demo_total),
+                    }
+                    if demo_total
+                    else {}
+                ),
+                "yosh": age_buckets,
+            },
         }
+
+    # ── Issiqlik xaritasi ────────────────────────────────────────────────
+
+    #: To'r o'lchami — qurilmadagi chaqimchi_ai/retail/heatmap.py bilan mos.
+    HEATMAP_COLS = 48
+    HEATMAP_ROWS = 27
+
+    def add_heatmap(
+        self, site_id: str, camera_id: str, bucket_hour: str, grid: List[List[int]], frames: int
+    ) -> None:
+        """Soatlik to'rni JAMLAB yozadi (qurilma bir soat uchun bir necha
+        marta yuborishi mumkin — internet uzilib qayta ulanganda)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT grid_json,frames FROM heatmap_hourly "
+                    "WHERE site_id=? AND camera_id=? AND bucket_hour=?"
+                ),
+                (site_id, camera_id, bucket_hour),
+            ).fetchone()
+            total_frames = int(frames)
+            if row:
+                existing = self._dict(row)
+                try:
+                    old = json.loads(existing["grid_json"])
+                    for row_index in range(min(len(old), self.HEATMAP_ROWS)):
+                        for col_index in range(min(len(old[row_index]), self.HEATMAP_COLS)):
+                            grid[row_index][col_index] += int(old[row_index][col_index])
+                except (ValueError, TypeError):
+                    pass
+                total_frames += int(existing["frames"] or 0)
+                conn.execute(
+                    self._sql(
+                        "UPDATE heatmap_hourly SET grid_json=?,frames=?,updated_at=? "
+                        "WHERE site_id=? AND camera_id=? AND bucket_hour=?"
+                    ),
+                    (
+                        json.dumps(grid, separators=(",", ":")),
+                        total_frames,
+                        _now().isoformat(),
+                        site_id,
+                        camera_id,
+                        bucket_hour,
+                    ),
+                )
+            else:
+                conn.execute(
+                    self._sql(
+                        "INSERT INTO heatmap_hourly "
+                        "(site_id,camera_id,bucket_hour,grid_json,frames,updated_at) "
+                        "VALUES (?,?,?,?,?,?)"
+                    ),
+                    (
+                        site_id,
+                        camera_id,
+                        bucket_hour,
+                        json.dumps(grid, separators=(",", ":")),
+                        total_frames,
+                        _now().isoformat(),
+                    ),
+                )
+
+    def heatmap(
+        self,
+        site_id: str,
+        camera_id: str,
+        *,
+        day: date,
+        hour: Optional[int] = None,
+        days: int = 1,
+    ) -> Dict[str, Any]:
+        """Toshkent kuni (ixtiyoriy soati) bo'yicha jamlangan to'r.
+
+        Bucket'lar UTC'da saqlanadi — lokal soat oralig'i UTC bucket
+        satrlariga o'girilib yig'iladi.  `days > 1` — `day` bilan tugaydigan
+        bir necha kun jamlanadi (do'kon plani "o'zi chizilishi" uchun:
+        haftalik yig'indida odam yurmagan joylar jihoz bo'lib ko'rinadi).
+        """
+        zone = ZoneInfo("Asia/Tashkent")
+        hours = [hour] if hour is not None else list(range(24))
+        buckets = []
+        for offset in range(max(1, min(int(days), 30))):
+            target_day = day - timedelta(days=offset)
+            for local_hour in hours:
+                local = datetime.combine(target_day, datetime.min.time(), tzinfo=zone) + timedelta(
+                    hours=local_hour
+                )
+                buckets.append(local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
+        placeholders = ",".join("?" for _ in buckets)
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT grid_json,frames FROM heatmap_hourly "
+                    f"WHERE site_id=? AND camera_id=? AND bucket_hour IN ({placeholders})"
+                ),
+                (site_id, camera_id, *buckets),
+            ).fetchall()
+        total = [[0] * self.HEATMAP_COLS for _ in range(self.HEATMAP_ROWS)]
+        frames = 0
+        for raw in rows:
+            row = self._dict(raw)
+            try:
+                cells = json.loads(row["grid_json"])
+            except (ValueError, TypeError):
+                continue
+            frames += int(row["frames"] or 0)
+            for row_index in range(min(len(cells), self.HEATMAP_ROWS)):
+                for col_index in range(min(len(cells[row_index]), self.HEATMAP_COLS)):
+                    total[row_index][col_index] += int(cells[row_index][col_index])
+        return {
+            "camera_id": camera_id,
+            "date": day.isoformat(),
+            "hour": hour,
+            "cols": self.HEATMAP_COLS,
+            "rows": self.HEATMAP_ROWS,
+            "grid": total,
+            "frames": frames,
+            "points": sum(sum(row) for row in total),
+        }
+
+    def purge_heatmaps(self, site_id: str, *, retention_days: int = 90) -> int:
+        cutoff = (_now() - timedelta(days=max(1, retention_days))).strftime("%Y-%m-%dT%H")
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("DELETE FROM heatmap_hourly WHERE site_id=? AND bucket_hour<?"),
+                (site_id, cutoff),
+            )
+            return int(cursor.rowcount or 0)
+
+    #: Xodim treki bilan kirish kesishmasi orasidagi ruxsat etilgan farq.
+    #: Trek raqamlari restartdan keyin qayta ishlatiladi — vaqt oynasi
+    #: eski trekni yangi mijoz bilan adashtirishning oldini oladi.
+    EMPLOYEE_MATCH_WINDOW_SEC = 600
+
+    def _employee_marks_between(
+        self, site_id: str, start: str, end: str
+    ) -> List[Dict[str, Any]]:
+        """Oraliqdagi `employee_seen` belgilari (kamera, trek, vaqt).
+
+        `employee_seen` `line_crossed`ga qaraganda o'nlab marta kam — kun
+        yoki hafta bo'yicha to'liq o'qish arzon.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT camera_id,track_id,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type='employee_seen' AND track_id IS NOT NULL"
+                ),
+                (site_id, start, end),
+            ).fetchall()
+        return [self._dict(row) for row in rows]
+
+    def _employee_marks_of_day(
+        self, site_id: str, day: date, zone: ZoneInfo
+    ) -> List[Dict[str, Any]]:
+        """Kun ichidagi `employee_seen` belgilari (kamera, trek, vaqt)."""
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+        return self._employee_marks_between(
+            site_id,
+            start_local.astimezone(timezone.utc).isoformat(),
+            (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat(),
+        )
+
+    def _matches_employee(self, row: Dict[str, Any], marks: List[Dict[str, Any]]) -> bool:
+        if not marks or row.get("track_id") is None:
+            return False
+        try:
+            moment = datetime.fromisoformat(str(row["occurred_at"]))
+        except (TypeError, ValueError):
+            return False
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        for mark in marks:
+            if str(mark["camera_id"]) != str(row.get("camera_id")):
+                continue
+            if int(mark["track_id"]) != int(row["track_id"]):
+                continue
+            try:
+                seen_at = datetime.fromisoformat(str(mark["occurred_at"]))
+            except (TypeError, ValueError):
+                continue
+            if seen_at.tzinfo is None:
+                seen_at = seen_at.replace(tzinfo=timezone.utc)
+            if abs((seen_at - moment).total_seconds()) <= self.EMPLOYEE_MATCH_WINDOW_SEC:
+                return True
+        return False
 
     def traffic_trend(
         self, site_id: str, *, days: int = 7, until: Optional[date] = None
@@ -576,10 +1209,12 @@ class EventStore:
     ) -> Dict[date, int]:
         """Oraliqdagi kunlar bo'yicha kirish soni.
 
-        Faqat `occurred_at` o'qiladi: 30 kunlik oraliqda bu o'n minglab
-        qatorni to'liq yuklashdan ancha yengil.  Kunga bo'lish Python'da,
-        chunki vaqt mintaqasi bo'yicha guruhlash SQLite va PostgreSQL'da
-        har xil yoziladi.
+        Faqat kerakli ustunlar o'qiladi: 30 kunlik oraliqda bu qatorni
+        to'liq yuklashdan ancha yengil.  Kunga bo'lish Python'da, chunki
+        vaqt mintaqasi bo'yicha guruhlash SQLite va PostgreSQL'da har xil
+        yoziladi.  Xodim o'tishlari kunlik hisobotdagi bilan **bir xil**
+        qoida bo'yicha chiqariladi — aks holda grafik va hisobot bir-biriga
+        zid raqam ko'rsatardi.
         """
         start_utc = datetime.combine(start, datetime.min.time(), tzinfo=zone).astimezone(
             timezone.utc
@@ -590,16 +1225,24 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(
                 self._sql(
-                    "SELECT occurred_at FROM production_events WHERE site_id=? "
-                    "AND occurred_at>=? AND occurred_at<? AND event_type='line_crossed' "
-                    "AND direction='in'"
+                    "SELECT camera_id,track_id,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type='line_crossed' AND direction='in'"
                 ),
                 (site_id, start_utc.isoformat(), end_utc.isoformat()),
             ).fetchall()
+        marks = self._employee_marks_between(
+            site_id, start_utc.isoformat(), end_utc.isoformat()
+        )
         counts: Dict[date, int] = {}
         for row in rows:
-            day = self._to_local(dict(row)["occurred_at"], zone).date()
-            counts[day] = counts.get(day, 0) + 1
+            item = self._dict(row)
+            if self._matches_employee(item, marks):
+                continue
+            local = self._to_local(item["occurred_at"], zone)
+            if local is None:
+                continue
+            counts[local.date()] = counts.get(local.date(), 0) + 1
         return counts
 
     def _events_of_day(self, site_id: str, day: date, zone: ZoneInfo) -> List[Dict[str, Any]]:
@@ -616,23 +1259,42 @@ class EventStore:
         return [self._decode_event(row) for row in rows]
 
     def _entered_count(self, site_id: str, day: date, zone: ZoneInfo) -> int:
+        """Bir kunlik mijoz kirishi — «kechaga nisbatan» taqqoslash uchun.
+
+        `COUNT(*)` emas: xodim o'tishlari kunlik hisobotdagi bilan bir xil
+        qoida bo'yicha chiqarilishi kerak, aks holda "bugun 50% kam" degan
+        yolg'on farq chiqadi.
+        """
         start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
         start = start_local.astimezone(timezone.utc).isoformat()
         end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
         with self._connect() as conn:
-            row = conn.execute(
+            rows = conn.execute(
                 self._sql(
-                    "SELECT COUNT(*) AS count FROM production_events WHERE site_id=? "
-                    "AND occurred_at>=? AND occurred_at<? AND event_type='line_crossed' "
-                    "AND direction='in'"
+                    "SELECT camera_id,track_id,occurred_at FROM production_events "
+                    "WHERE site_id=? AND occurred_at>=? AND occurred_at<? "
+                    "AND event_type='line_crossed' AND direction='in'"
                 ),
                 (site_id, start, end),
-            ).fetchone()
-        return int(dict(row)["count"]) if row else 0
+            ).fetchall()
+        marks = self._employee_marks_between(site_id, start, end)
+        return sum(
+            1 for row in rows if not self._matches_employee(self._dict(row), marks)
+        )
 
     @staticmethod
-    def _to_local(occurred_at: str, zone: ZoneInfo) -> datetime:
-        moment = datetime.fromisoformat(str(occurred_at))
+    def _to_local(occurred_at: str, zone: ZoneInfo) -> Optional[datetime]:
+        """Mahalliy vaqtga o'giradi; ochib bo'lmasa `None`.
+
+        Ilgari bu yerda himoya yo'q edi va bitta yaroqsiz qator butun
+        do'konning kunlik hisobotini va grafigini 500 qilardi.  Yangi
+        yozuvlar `_normalise_occurred_at` bilan kirishda to'g'rilanadi,
+        bu esa bazada allaqachon turgan qatorlar uchun.
+        """
+        try:
+            moment = datetime.fromisoformat(str(occurred_at))
+        except (TypeError, ValueError):
+            return None
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=timezone.utc)
         return moment.astimezone(zone)
@@ -657,9 +1319,7 @@ class EventStore:
     def health(self, site_id: str) -> List[Dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                self._sql(
-                    "SELECT * FROM device_health WHERE site_id=? ORDER BY received_at DESC"
-                ),
+                self._sql("SELECT * FROM device_health WHERE site_id=? ORDER BY received_at DESC"),
                 (site_id,),
             ).fetchall()
         result = []
@@ -667,6 +1327,46 @@ class EventStore:
             item = self._dict(row)
             item["health"] = json.loads(item.pop("payload_json"))
             result.append(item)
+        return result
+
+    def latest_health_by_site(self) -> Dict[str, Dict[str, Any]]:
+        """Har sayt uchun oxirgi heartbeat — bitta so'rovda.
+
+        Ogohlantirish tsikli har 15 daqiqada barcha saytlarni ko'radi;
+        har biri uchun alohida so'rov yuborish qimmat bo'lardi.  Bir
+        saytda bir necha qurilma bo'lsa eng yomon ko'rsatkich olinadi:
+        bitta qurilma sog'lom bo'lgani boshqasining yiqilganini
+        yashirmasligi kerak.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql("SELECT site_id,payload_json,received_at FROM device_health")
+            ).fetchall()
+        result: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            item = self._dict(row)
+            try:
+                payload = json.loads(item["payload_json"])
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            current = result.get(item["site_id"])
+            if current is None:
+                result[item["site_id"]] = payload
+                continue
+            for key in ("analysis_errors", "queue_errors"):
+                current[key] = max(int(current.get(key) or 0), int(payload.get(key) or 0))
+            current["analyzed"] = max(
+                int(current.get("analyzed") or 0), int(payload.get("analyzed") or 0)
+            )
+            free_values = [
+                int(value or 0)
+                for value in (current.get("disk_free_bytes"), payload.get("disk_free_bytes"))
+                if value
+            ]
+            if free_values:
+                current["disk_free_bytes"] = min(free_values)
         return result
 
     def get_site_config(self, site_id: str) -> Dict[str, Any]:
@@ -682,8 +1382,12 @@ class EventStore:
                     "camera_labels": {},
                     "camera_roles": {},
                     "occupancy_limit": 20,
-                    "loitering_sec": 60,
+                    # 60 s juda tajovuzkor edi: band do'konda deyarli har
+                    # xaridor "uzoq turish" bo'lib chiqar va shovqin
+                    # yaratar edi.  5 daqiqa — haqiqatan g'ayrioddiy holat.
+                    "loitering_sec": 300,
                     "queue_limit": 5,
+                    "checkout_idle_minutes": 5,
                     "open_from": None,
                     "open_to": None,
                     "attendance_camera_ids": [],
@@ -793,7 +1497,9 @@ class EventStore:
             ).fetchone()
         return self._decode_employee(row) if row else None
 
-    def list_employees(self, site_id: str, *, include_inactive: bool = False) -> List[Dict[str, Any]]:
+    def list_employees(
+        self, site_id: str, *, include_inactive: bool = False
+    ) -> List[Dict[str, Any]]:
         where = "site_id=?" if include_inactive else "site_id=? AND active=1"
         with self._connect() as conn:
             rows = conn.execute(
@@ -825,7 +1531,9 @@ class EventStore:
         clean_name = current["name"] if name is None else name.strip()
         if not clean_name:
             raise ValueError("Xodim ismi bo'sh bo'lishi mumkin emas")
-        clean_external = current.get("external_id") if external_id is None else external_id.strip() or None
+        clean_external = (
+            current.get("external_id") if external_id is None else external_id.strip() or None
+        )
         clean_status = enrollment_status or str(current.get("enrollment_status") or "pending")
         if clean_status not in {"pending", "enrolled", "failed", "removed"}:
             raise ValueError("Enrollment holati noto'g'ri")
@@ -923,6 +1631,186 @@ class EventStore:
             for employee in self.list_employees(site_id)
         ]
 
+    # ── Yuz namunalari (cloud enrollment) ────────────────────────────────
+    #
+    # Embedding hech qachon ochiq saqlanmaydi: `embedding_b64` — Fernet
+    # bilan shifrlangan vektor.  Kalit (`CHAQIMCHI_EMBEDDING_KEY`) faqat
+    # environmentda, bazada emas — baza nusxasi o'g'irlansa ham biometrik
+    # ma'lumot ochilmaydi.
+
+    #: Bitta xodimga rasm limiti: 1-3 rasm yetadi, ko'pi shovqin.
+    MAX_FACES_PER_EMPLOYEE = 3
+
+    def add_employee_face(
+        self,
+        site_id: str,
+        employee_id: str,
+        *,
+        photo_key: str,
+        embedding_b64: str,
+        embedding_dim: int,
+        det_score: Optional[float] = None,
+        photo_bytes: int = 0,
+    ) -> Dict[str, Any]:
+        employee = self.employee(site_id, employee_id)
+        if employee is None:
+            raise ValueError("Xodim topilmadi")
+        existing = self.list_employee_faces(site_id, employee_id=employee_id)
+        if len(existing) >= self.MAX_FACES_PER_EMPLOYEE:
+            raise ValueError(f"Bitta xodimga ko'pi bilan {self.MAX_FACES_PER_EMPLOYEE} ta rasm")
+        face_id = uuid.uuid4().hex[:12]
+        now = _now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO employee_faces "
+                    "(id,site_id,employee_id,photo_key,embedding_b64,embedding_dim,"
+                    "det_score,photo_bytes,created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+                ),
+                (
+                    face_id,
+                    site_id,
+                    employee_id,
+                    photo_key,
+                    embedding_b64,
+                    int(embedding_dim),
+                    det_score,
+                    int(photo_bytes),
+                    now,
+                ),
+            )
+            # Birinchi yaroqli rasm — xodim ro'yxatga olindi.
+            conn.execute(
+                self._sql(
+                    "UPDATE employees SET enrollment_status='enrolled',updated_at=? "
+                    "WHERE site_id=? AND id=?"
+                ),
+                (now, site_id, employee_id),
+            )
+        return {
+            "id": face_id,
+            "employee_id": employee_id,
+            "photo_key": photo_key,
+            "det_score": det_score,
+            "created_at": now,
+        }
+
+    def list_employee_faces(
+        self, site_id: str, *, employee_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Rasm ro'yxati — embedding QAYTARILMAYDI (faqat moslash o'qiydi)."""
+        query = (
+            "SELECT id,employee_id,photo_key,det_score,photo_bytes,created_at "
+            "FROM employee_faces WHERE site_id=?"
+        )
+        params: List[Any] = [site_id]
+        if employee_id is not None:
+            query += " AND employee_id=?"
+            params.append(employee_id)
+        query += " ORDER BY created_at"
+        with self._connect() as conn:
+            rows = conn.execute(self._sql(query), tuple(params)).fetchall()
+        return [self._dict(row) for row in rows]
+
+    def all_employee_faces(self, *, site_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Barcha obyektlardagi rasm yozuvlari — model migratsiyasi uchun.
+
+        `list_employee_faces` ataylab bitta obyekt bilan cheklangan va
+        embedding qaytarmaydi (panel uchun).  Bu yerda esa aksincha:
+        `scripts/reembed_faces.py` butun bazani aylanib chiqishi kerak.
+        """
+        query = (
+            "SELECT id,site_id,employee_id,photo_key,embedding_dim,created_at "
+            "FROM employee_faces"
+        )
+        params: List[Any] = []
+        if site_id is not None:
+            query += " WHERE site_id=?"
+            params.append(site_id)
+        query += " ORDER BY site_id,created_at"
+        with self._connect() as conn:
+            rows = conn.execute(self._sql(query), tuple(params)).fetchall()
+        return [self._dict(row) for row in rows]
+
+    def update_employee_face_embedding(
+        self,
+        face_id: str,
+        *,
+        embedding_b64: str,
+        embedding_dim: int,
+        det_score: Optional[float] = None,
+    ) -> bool:
+        """Rasmni qayta hisoblangan vektor bilan yangilaydi.
+
+        Rasm o'chirilib qayta qo'shilmaydi: `photo_key` va `created_at`
+        o'z joyida qoladi, ya'ni retensiya hisobi va galereya tartibi
+        buzilmaydi.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql(
+                    "UPDATE employee_faces SET embedding_b64=?,embedding_dim=?,det_score=? "
+                    "WHERE id=?"
+                ),
+                (embedding_b64, int(embedding_dim), det_score, face_id),
+            )
+        return bool(cursor.rowcount)
+
+    def employee_face(self, site_id: str, face_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT id,employee_id,photo_key,det_score,photo_bytes,created_at "
+                    "FROM employee_faces WHERE site_id=? AND id=?"
+                ),
+                (site_id, face_id),
+            ).fetchone()
+        return self._dict(row) if row else None
+
+    def delete_employee_face(self, site_id: str, face_id: str) -> Optional[str]:
+        """Rasmni o'chiradi, blob kalitini qaytaradi (chaqiruvchi blobni o'chiradi)."""
+        face = self.employee_face(site_id, face_id)
+        if face is None:
+            return None
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("DELETE FROM employee_faces WHERE site_id=? AND id=?"),
+                (site_id, face_id),
+            )
+            remaining = conn.execute(
+                self._sql(
+                    "SELECT COUNT(*) AS total FROM employee_faces WHERE site_id=? AND employee_id=?"
+                ),
+                (site_id, face["employee_id"]),
+            ).fetchone()
+            if not int(self._dict(remaining)["total"] or 0):
+                # Oxirgi rasm o'chdi — xodim yana ro'yxatga olinmagan holatda.
+                conn.execute(
+                    self._sql(
+                        "UPDATE employees SET enrollment_status='pending',updated_at=? "
+                        "WHERE site_id=? AND id=?"
+                    ),
+                    (_now().isoformat(), site_id, face["employee_id"]),
+                )
+        return str(face["photo_key"])
+
+    def face_embeddings(self, site_id: str) -> List[Dict[str, Any]]:
+        """Moslash uchun faol xodimlarning shifrlangan embeddinglari.
+
+        `embedding_dim` ham qaytariladi: model almashganda eski yozuvlar
+        boshqa o'lchamda qoladi va ularni moslashga qo'shib bo'lmaydi.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT f.employee_id,f.embedding_b64,f.embedding_dim,e.name "
+                    "FROM employee_faces f JOIN employees e ON e.id=f.employee_id "
+                    "WHERE f.site_id=? AND e.active=1"
+                ),
+                (site_id,),
+            ).fetchall()
+        return [self._dict(row) for row in rows]
+
     def attendance_report(
         self,
         site_id: str,
@@ -953,12 +1841,16 @@ class EventStore:
         while cursor <= end:
             day_events = self._employee_events_of_day(site_id, cursor, zone)
             for employee in employees:
-                created_day = self._to_local(str(employee["created_at"]), zone).date()
-                deactivated_day = (
-                    self._to_local(str(employee["deactivated_at"]), zone).date()
+                # Bu vaqtlarni server o'zi yozadi, ya'ni ular doim to'g'ri;
+                # `or cursor` faqat sxema buzilgan holat uchun himoya.
+                created_local = self._to_local(str(employee["created_at"]), zone)
+                created_day = created_local.date() if created_local else cursor
+                deactivated_local = (
+                    self._to_local(str(employee["deactivated_at"]), zone)
                     if employee.get("deactivated_at")
                     else None
                 )
+                deactivated_day = deactivated_local.date() if deactivated_local else None
                 if cursor < created_day or (
                     deactivated_day is not None and cursor > deactivated_day
                 ):
@@ -1005,6 +1897,87 @@ class EventStore:
             "rows": rows,
         }
 
+    def shift_summary(
+        self,
+        site_id: str,
+        *,
+        start: date,
+        end: date,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Oylik smena hisoboti — xodim kesimida.
+
+        Kunlik jadval allaqachon bor (`attendance_report`), lekin do'kon
+        egasining savoli boshqacha: "kim qancha kechikdi va bu menga
+        necha pulga tushdi".  Kunma-kun 30 qatorni ko'zdan kechirib
+        chiqib, uni qo'lda qo'shib hisoblash — hech kim qilmaydigan ish.
+
+        Hisob `attendance_report` ustiga quriladi, chunki kechikish
+        daqiqalari faqat o'sha yerda jadval bilan solishtirib
+        aniqlanadi.  Kunlik natijalar `attendance_daily` ga keshlanadi,
+        ya'ni ikkinchi chaqiruv qimmat emas.
+        """
+        report = self.attendance_report(site_id, start=start, end=end, now=now)
+        people: Dict[str, Dict[str, Any]] = {}
+        for row in report["rows"]:
+            item = people.setdefault(
+                str(row["employee_id"]),
+                {
+                    "employee_id": row["employee_id"],
+                    "employee_name": row["employee_name"],
+                    "external_id": row.get("external_id"),
+                    "ish_kunlari": 0,
+                    "kelgan_kunlar": 0,
+                    "kelmagan_kunlar": 0,
+                    "kechikkan_kunlar": 0,
+                    "jami_kechikish_daq": 0,
+                    "erta_ketgan_kunlar": 0,
+                    "jami_erta_ketish_daq": 0,
+                    "chiqish_aniqlanmadi": 0,
+                },
+            )
+            # `unscheduled` — jadvalda yo'q kun (dam olish).  U "ish
+            # kuni" ham, "kelmagan kun" ham emas: aks holda haftada ikki
+            # kun dam oladigan xodim eng yomon ko'rsatkichga chiqib
+            # qolardi.
+            if row["status"] in {"present", "late", "absent", "early_leave"}:
+                item["ish_kunlari"] += 1
+            if row.get("first_seen"):
+                item["kelgan_kunlar"] += 1
+            if row["status"] == "absent":
+                item["kelmagan_kunlar"] += 1
+            if row["late_minutes"]:
+                item["kechikkan_kunlar"] += 1
+                item["jami_kechikish_daq"] += int(row["late_minutes"])
+            if row["early_leave_minutes"]:
+                item["erta_ketgan_kunlar"] += 1
+                item["jami_erta_ketish_daq"] += int(row["early_leave_minutes"])
+            if row["checkout_missing"]:
+                item["chiqish_aniqlanmadi"] += 1
+
+        rows = []
+        for item in people.values():
+            kechikkan = item["kechikkan_kunlar"]
+            item["ortacha_kechikish_daq"] = (
+                round(item["jami_kechikish_daq"] / kechikkan, 1) if kechikkan else 0.0
+            )
+            rows.append(item)
+        # Eng ko'p kechikkan tepada — hisobot aynan shu savolga javob
+        # beradi va do'kon egasi pastga qarab qidirmasin.
+        rows.sort(key=lambda item: (-item["jami_kechikish_daq"], item["employee_name"]))
+
+        return {
+            "from": start.isoformat(),
+            "to": end.isoformat(),
+            "employees": len(rows),
+            "jami": {
+                "kechikish_daq": sum(item["jami_kechikish_daq"] for item in rows),
+                "kelmagan_kunlar": sum(item["kelmagan_kunlar"] for item in rows),
+                "erta_ketish_daq": sum(item["jami_erta_ketish_daq"] for item in rows),
+            },
+            "rows": rows,
+        }
+
     def _employee_events_of_day(
         self, site_id: str, day: date, zone: ZoneInfo
     ) -> Dict[str, List[Tuple[datetime, str]]]:
@@ -1023,12 +1996,10 @@ class EventStore:
         grouped: Dict[str, List[Tuple[datetime, str]]] = {}
         for item in raw:
             row = self._dict(item)
-            if row.get("person_id"):
+            local = self._to_local(str(row["occurred_at"]), zone)
+            if row.get("person_id") and local is not None:
                 grouped.setdefault(str(row["person_id"]), []).append(
-                    (
-                        self._to_local(str(row["occurred_at"]), zone),
-                        str(row["camera_id"]),
-                    )
+                    (local, str(row["camera_id"]))
                 )
         return grouped
 
@@ -1088,16 +2059,14 @@ class EventStore:
         else:
             start_hour, start_minute = map(int, str(schedule["start_time"]).split(":"))
             end_hour, end_minute = map(int, str(schedule["end_time"]).split(":"))
-            scheduled_start = datetime.combine(
-                day, datetime.min.time(), tzinfo=zone
-            ).replace(hour=start_hour, minute=start_minute)
-            scheduled_end = datetime.combine(
-                day, datetime.min.time(), tzinfo=zone
-            ).replace(hour=end_hour, minute=end_minute)
+            scheduled_start = datetime.combine(day, datetime.min.time(), tzinfo=zone).replace(
+                hour=start_hour, minute=start_minute
+            )
+            scheduled_end = datetime.combine(day, datetime.min.time(), tzinfo=zone).replace(
+                hour=end_hour, minute=end_minute
+            )
             if not moments:
-                absent_after = scheduled_start + timedelta(
-                    minutes=int(schedule["grace_minutes"])
-                )
+                absent_after = scheduled_start + timedelta(minutes=int(schedule["grace_minutes"]))
                 status = "absent" if now >= absent_after else "pending"
             else:
                 allowed = scheduled_start + timedelta(minutes=int(schedule["grace_minutes"]))
@@ -1108,13 +2077,10 @@ class EventStore:
                 )
                 shift_finished = now >= scheduled_end or day < now.date()
                 checkout_missing = bool(
-                    shift_finished
-                    and (last is None if explicit_roles else first == last)
+                    shift_finished and (last is None if explicit_roles else first == last)
                 )
                 if shift_finished and not checkout_missing and last is not None:
-                    early_minutes = max(
-                        0, int((scheduled_end - last).total_seconds() // 60)
-                    )
+                    early_minutes = max(0, int((scheduled_end - last).total_seconds() // 60))
                 status = "late" if late_minutes else "present"
 
         return {
@@ -1216,12 +2182,49 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(
                 self._sql(
-                    "SELECT id,site_id,telegram_id,role,display_name,active,created_at "
+                    "SELECT id,site_id,telegram_id,role,display_name,active,"
+                    "digest_muted,notify_failures,created_at "
                     "FROM owner_members WHERE site_id=? AND active=1 ORDER BY created_at"
                 ),
                 (site_id,),
             ).fetchall()
         return [self._dict(row) for row in rows]
+
+    def set_digest_muted(self, site_id: str, member_id: str, muted: bool) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("UPDATE owner_members SET digest_muted=? WHERE site_id=? AND id=?"),
+                (1 if muted else 0, site_id, member_id),
+            )
+            return bool(cursor.rowcount)
+
+    def record_notify_failure(self, site_id: str, member_id: str) -> int:
+        """Yuborish muvaffaqiyatsizligini sanaydi; yangi qiymatni qaytaradi.
+
+        "Chat not found" — a'zo botga hech qachon /start bosmagani belgisi;
+        bir necha urinishdan keyin unga yuborish to'xtatiladi, aks holda
+        har batch'da log xatoga to'lardi.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "UPDATE owner_members SET notify_failures=notify_failures+1 "
+                    "WHERE site_id=? AND id=?"
+                ),
+                (site_id, member_id),
+            )
+            row = conn.execute(
+                self._sql("SELECT notify_failures FROM owner_members WHERE site_id=? AND id=?"),
+                (site_id, member_id),
+            ).fetchone()
+        return int(self._dict(row)["notify_failures"]) if row else 0
+
+    def reset_notify_failures(self, site_id: str, member_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("UPDATE owner_members SET notify_failures=0 WHERE site_id=? AND id=?"),
+                (site_id, member_id),
+            )
 
     def disable_member(self, site_id: str, member_id: str) -> bool:
         with self._connect() as conn:
@@ -1239,9 +2242,7 @@ class EventStore:
         now = _now()
         with self._connect() as conn:
             conn.execute(
-                self._sql(
-                    "UPDATE owner_otps SET used=1 WHERE telegram_id=? AND used=0"
-                ),
+                self._sql("UPDATE owner_otps SET used=1 WHERE telegram_id=? AND used=0"),
                 (str(telegram_id),),
             )
             conn.execute(
@@ -1282,10 +2283,165 @@ class EventStore:
             ).hexdigest()
             if not hmac.compare_digest(digest, row["code_hash"]):
                 return False
-            conn.execute(
-                self._sql("UPDATE owner_otps SET used=1 WHERE id=?"), (row["id"],)
-            )
+            conn.execute(self._sql("UPDATE owner_otps SET used=1 WHERE id=?"), (row["id"],))
             return True
+
+    # ── Kirish havolalari ────────────────────────────────────────────────
+    #
+    # `?key=<token>` havolasi — OTP o'rnini bosadigan qulaylik.  Token
+    # `secrets.token_urlsafe(32)` (taxmin qilib bo'lmaydi), bazada faqat
+    # HMAC hash turadi (baza sizib chiqsa ham havola tiklanmaydi), va har
+    # a'zoda bitta faol havola bo'ladi: yangisini yaratish eskisini bekor
+    # qiladi — "havola tarqalib ketdi" muammosi bitta tugma bilan yopiladi.
+
+    def _login_link_digest(self, token: str, secret: str) -> str:
+        # "login-link:" prefiksi — OTP hash'lari bilan domen ajratish.
+        return hmac.new(secret.encode(), f"login-link:{token}".encode(), hashlib.sha256).hexdigest()
+
+    # ── Telegramni bir bosishda ulash ───────────────────────────────────
+    #
+    # Mijozdan Telegram ID raqamini so'rash ishlamaydi: u raqamni bilmaydi
+    # va topish yo'lini ham bilmaydi.  Buning o'rniga panel havola beradi
+    # (`t.me/bot?start=<token>`), odam uni bosadi va bot uni a'zo qiladi.
+    # Xuddi shu mexanizm xodim taklif qilish uchun ham ishlatiladi.
+    #
+    # Havola — CREDENTIAL: uni bosgan odam do'kon paneliga kiradi.
+    # Shuning uchun muddati qisqa va bir martalik.  (Taqqoslash uchun:
+    # `owner_login_links` 30 kun yashaydi, chunki u aniq bir a'zo uchun
+    # yaratiladi; bu esa "kim bossa o'sha" turidan.)
+    INVITE_TTL_MINUTES = 30
+
+    def _invite_digest(self, token: str, secret: str) -> str:
+        return hmac.new(secret.encode(), f"tg-invite:{token}".encode(), hashlib.sha256).hexdigest()
+
+    def create_telegram_invite(
+        self,
+        site_id: str,
+        *,
+        secret: str,
+        role: str = "manager",
+        display_name: Optional[str] = None,
+        ttl_minutes: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        token = secrets.token_urlsafe(24)
+        now = _now()
+        minutes = int(ttl_minutes or self.INVITE_TTL_MINUTES)
+        expires = now + timedelta(minutes=minutes)
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO telegram_invites "
+                    "(id,site_id,token_hash,role,display_name,expires_at,created_at) "
+                    "VALUES (?,?,?,?,?,?,?)"
+                ),
+                (
+                    str(uuid.uuid4()),
+                    site_id,
+                    self._invite_digest(token, secret),
+                    role,
+                    display_name,
+                    expires.isoformat(),
+                    now.isoformat(),
+                ),
+            )
+        return {"token": token, "expires_at": expires.isoformat(), "expires_minutes": minutes}
+
+    def redeem_telegram_invite(
+        self, token: str, telegram_id: str, *, secret: str
+    ) -> Optional[Dict[str, Any]]:
+        """Havolani a'zolikka aylantiradi.  Muddati o'tgan yoki ishlatilgan
+        bo'lsa `None` — chaqiruvchi buni "havola eskirgan" deb aytadi."""
+        digest = self._invite_digest(token, secret)
+        now = _now()
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT * FROM telegram_invites WHERE token_hash=? AND used_at IS NULL"
+                ),
+                (digest,),
+            ).fetchone()
+            if not row:
+                return None
+            invite = self._dict(row)
+            try:
+                if datetime.fromisoformat(str(invite["expires_at"])) < now:
+                    return None
+            except (TypeError, ValueError):
+                return None
+            conn.execute(
+                self._sql("UPDATE telegram_invites SET used_at=?,used_by=? WHERE id=?"),
+                (now.isoformat(), str(telegram_id), invite["id"]),
+            )
+        self.add_member(
+            invite["site_id"],
+            str(telegram_id),
+            role=str(invite["role"] or "manager"),
+            display_name=invite.get("display_name") or None,
+        )
+        return {"site_id": invite["site_id"], "role": invite["role"]}
+
+    def create_login_link(
+        self, site_id: str, telegram_id: str, *, secret: str, ttl_days: int = 30
+    ) -> str:
+        token = secrets.token_urlsafe(32)
+        now = _now()
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "UPDATE owner_login_links SET revoked=1 "
+                    "WHERE site_id=? AND telegram_id=? AND revoked=0"
+                ),
+                (site_id, str(telegram_id)),
+            )
+            conn.execute(
+                self._sql(
+                    "INSERT INTO owner_login_links "
+                    "(id,site_id,telegram_id,token_hash,expires_at,revoked,created_at) "
+                    "VALUES (?,?,?,?,?,0,?)"
+                ),
+                (
+                    str(uuid.uuid4()),
+                    site_id,
+                    str(telegram_id),
+                    self._login_link_digest(token, secret),
+                    (now + timedelta(days=ttl_days)).isoformat(),
+                    now.isoformat(),
+                ),
+            )
+        return token
+
+    def member_for_login_token(self, token: str, *, secret: str) -> Optional[Dict[str, Any]]:
+        """Havola tokeni → faol a'zo, yoki None.
+
+        A'zolik har safar qayta tekshiriladi: a'zo o'chirilsa uning eski
+        havolasi ham darhol ishlamay qoladi.
+        """
+        digest = self._login_link_digest(token, secret)
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT * FROM owner_login_links WHERE token_hash=? AND revoked=0"),
+                (digest,),
+            ).fetchone()
+            if not row:
+                return None
+            data = self._dict(row)
+            if data["expires_at"] < _now().isoformat():
+                return None
+            conn.execute(
+                self._sql("UPDATE owner_login_links SET last_used_at=? WHERE id=?"),
+                (_now().isoformat(), data["id"]),
+            )
+        return self.member_for_site(data["site_id"], data["telegram_id"])
+
+    def revoke_login_links(self, site_id: str, telegram_id: Optional[str] = None) -> int:
+        query = "UPDATE owner_login_links SET revoked=1 WHERE site_id=? AND revoked=0"
+        params: List[Any] = [site_id]
+        if telegram_id is not None:
+            query += " AND telegram_id=?"
+            params.append(str(telegram_id))
+        with self._connect() as conn:
+            cursor = conn.execute(self._sql(query), tuple(params))
+            return int(cursor.rowcount or 0)
 
     def mark_digest_sent(self, site_id: str, digest_date: str) -> bool:
         with self._connect() as conn:
@@ -1301,9 +2457,7 @@ class EventStore:
     def digest_was_sent(self, site_id: str, digest_date: str) -> bool:
         with self._connect() as conn:
             row = conn.execute(
-                self._sql(
-                    "SELECT 1 FROM daily_digests WHERE site_id=? AND digest_date=?"
-                ),
+                self._sql("SELECT 1 FROM daily_digests WHERE site_id=? AND digest_date=?"),
                 (site_id, digest_date),
             ).fetchone()
         return row is not None
@@ -1319,15 +2473,8 @@ class EventStore:
                 ),
                 (cutoff,),
             ).fetchall()
-            conn.execute(
-                self._sql("DELETE FROM production_events WHERE occurred_at<?"), (cutoff,)
-            )
-        return [
-            str(key)
-            for row in rows
-            for key in (row["snapshot_key"], row["clip_key"])
-            if key
-        ]
+            conn.execute(self._sql("DELETE FROM production_events WHERE occurred_at<?"), (cutoff,))
+        return [str(key) for row in rows for key in (row["snapshot_key"], row["clip_key"]) if key]
 
     def purge_site(self, site_id: str, retention_days: int) -> List[str]:
         """Bitta obyektni **o'z tarifi** muddati bo'yicha tozalaydi.
@@ -1349,12 +2496,7 @@ class EventStore:
                 self._sql("DELETE FROM production_events WHERE site_id=? AND occurred_at<?"),
                 (site_id, cutoff),
             )
-        return [
-            str(key)
-            for row in rows
-            for key in (row["snapshot_key"], row["clip_key"])
-            if key
-        ]
+        return [str(key) for row in rows for key in (row["snapshot_key"], row["clip_key"]) if key]
 
 
 def event_store_from_env(base_dir: Path) -> EventStore:

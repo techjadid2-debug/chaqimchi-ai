@@ -91,6 +91,7 @@ def test_slow_polling_costs_throughput_by_design() -> None:
     bir zumda bosib qo'yish mumkin emas.  Chaqiruv oralig'i `burst/target_fps`
     dan kichik bo'lishi kerak — 30 FPS va burst=2 uchun 66 ms.
     """
+
     def granted_per_second(step: float) -> float:
         limiter = budget(target_fps=30.0, min_fps=30.0, max_fps=30.0, burst=2.0)
         now, granted = 0.0, 0
@@ -185,7 +186,9 @@ def run_simulation(
     now = 0.0
     while now < seconds:
         for camera in cameras:
-            broker.submit(camera, f"{camera}@{now:.2f}", motion_score=motion.get(camera, 1.0), now=now)
+            broker.submit(
+                camera, f"{camera}@{now:.2f}", motion_score=motion.get(camera, 1.0), now=now
+            )
         while True:
             claim = broker.acquire(now=now)
             if claim is None:

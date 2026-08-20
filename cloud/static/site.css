@@ -1,6 +1,9 @@
 :root {
   --ink: #13231d;
-  --muted: #5e6e66;
+  /* Krem fonda (#f3f0e8) kontrast ≈ 5.6:1 — WCAG AA dan o'tadi.
+     Oldingi #5e6e66 ≈ 4.4:1 edi: 12–13px matnda 40+ yoshdagi do'kon egasi
+     uchun o'qish qiyin, ba'zi ekranlarda esa umuman xira ko'rinardi. */
+  --muted: #4d5c55;
   --paper: #f3f0e8;
   --paper-2: #e7e4da;
   --lime: #d9f55f;
@@ -13,9 +16,27 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+/* `hidden` atributi HAR DOIM g'olib bo'lsin.  Haqiqiy bag: notify
+ * formasida inline `display:grid` UA'ning `[hidden] {display:none}`
+ * qoidasini yengib, "raqam qoldiring" formasi reliz chiqqanda ham
+ * ko'rinib turardi (2026-08-17 skrinshotda ushlangan). */
+[hidden] { display: none !important; }
+/* Yuklab olish hali nashr qilinmaganda chiqadigan telefon formasi. */
+.quick-download-form { display: grid; gap: 10px; max-width: 420px; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; }
 a { color: inherit; }
 button, input, textarea { font: inherit; }
+
+/* Klaviatura fokusi — butun sayt uchun bitta qoida.
+ *
+ * Bungacha fokus ramkasi faqat `.field input` da bor edi, qolgan hamma
+ * tugma va havolada brauzerning standart ramkasi `outline: none` bilan
+ * o'chirilgan yoki umuman ko'rinmas edi.  Klaviatura bilan yuruvchi
+ * foydalanuvchi (va ekran o'quvchisi bilan ishlaydigan mijoz) qayerda
+ * turganini bilmasdi — WCAG 2.4.7 buzilishi.
+ *
+ * `:focus-visible` ataylab: sichqoncha bilan bosganda ramka chiqmaydi, * faqat Tab bilan kelinganda. */
+:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; border-radius: 4px; }
 .section-pad { padding: 112px max(24px, calc((100vw - 1180px) / 2)); }
 
 .nav-shell { position: sticky; top: 0; z-index: 20; background: rgba(243, 240, 232, 0.88); border-bottom: 1px solid var(--line); backdrop-filter: blur(18px); }
@@ -29,11 +50,31 @@ button, input, textarea { font: inherit; }
 .nav-links a:hover, .text-link:hover { color: var(--ink); }
 .nav-actions { display: flex; align-items: center; gap: 18px; }
 
-.button { display: inline-flex; align-items: center; justify-content: center; min-height: 50px; padding: 0 24px; border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: white; font-weight: 700; text-decoration: none; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
-.button:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(19,35,29,.18); }
+/* Ikonkalar — `/assets/icons.svg` spritedan.
+ *
+ * `aria-hidden="true"` bilan qo'yiladi: ma'no doim yonidagi matnda turadi, * ikonka faqat ko'zni yo'naltiradi.  Ekran o'quvchi uni o'qishi shart emas. */
+.icon { width: 22px; height: 22px; flex: none; vertical-align: -4px; }
+
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 50px; padding: 0 24px; border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: white; font-weight: 700; text-decoration: none; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
+/* Tugma iyerarxiyasi — uch daraja, har blokda **bittadan** asosiy tugma.
+ *
+ * Bungacha `.button`, `.button-light` va `.button-ghost` sahifa bo'ylab
+ * aralash ishlatilardi: hero'da lime va shaffof yonma-yon, boshqa joyda
+ * qora va lime.  Mijoz qaysi biri asosiy ekanini bilmasdi va shu sabab
+ * hech qaysisini bosmasdi.
+ *
+ *   .button-light  — ASOSIY (lime).  Blokda bitta.
+ *   .button        — ikkilamchi (to'q).  Muqobil harakat.
+ *   .button-ghost  — uchinchi daraja (shaffof chiziq).
+ *   .text-cta      — matnli havola, ixtiyoriy harakat.
+ */
 .button-small { min-height: 40px; padding: 0 18px; font-size: 13px; }
 .button-ghost { background: transparent; color: var(--ink); }
 .button-light { background: var(--lime); color: var(--ink); border-color: var(--lime); }
+/* Ko'tarilish effekti faqat asosiy tugmada: hamma tugma sakrasa
+   iyerarxiya yo'qoladi va sahifa notinch ko'rinadi. */
+.button-light:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(19,35,29,.18); }
+.button:hover:not(.button-light) { box-shadow: 0 6px 16px rgba(19,35,29,.12); }
 .text-cta { display: inline-flex; align-items: center; min-height: 50px; color: var(--ink); font-size: 14px; font-weight: 750; text-decoration: none; }
 
 .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; min-height: 660px; padding-top: 76px; padding-bottom: 76px; overflow: hidden; }
@@ -45,70 +86,150 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 .hero-text { max-width: 650px; margin: 0 0 30px; color: var(--muted); font-size: 19px; line-height: 1.7; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .hero-trust { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }.hero-trust span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; font-weight: 650; }
+/* Narx ilgagi qolgan belgilardan ajralib turishi kerak — mijoz aynan shuni
+   qidiradi. */
+.hero-trust #heroPrice { border-color: var(--ink); background: var(--ink); color: var(--lime); font-weight: 800; }
 .model-note { max-width: 590px; margin: 24px 0 0; padding-left: 16px; border-left: 3px solid var(--lime); color: var(--muted); font-size: 13px; }
 
-.hero-photo { position: relative; min-height: 500px; overflow: hidden; border-radius: 30px; background: var(--green); box-shadow: var(--shadow); transform: rotate(1.2deg); }.hero-photo img { width: 100%; height: 500px; object-fit: cover; object-position: 65% center; display: block; }.hero-photo-badge { position: absolute; right: 22px; bottom: 22px; display: inline-flex; align-items: center; gap: 9px; padding: 11px 14px; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(19,35,29,.86); color: white; font-size: 12px; font-weight: 750; backdrop-filter: blur(8px); }.hero-photo-badge span { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); }
+/* Izometrik sahna.  Rasm o'rniga SVG: 64 KB fotosurat o'rniga ~8 KB
+   belgilash, va u sahifaning o'z ranglaridan foydalanadi. */
+.scene { position: relative; margin: 0; padding: 0; border-radius: 30px; background: var(--paper-2); box-shadow: var(--shadow); overflow: hidden; }
+.scene svg { display: block; width: 100%; height: auto; }
+.scene-badge { position: absolute; right: 22px; bottom: 22px; display: inline-flex; align-items: center; gap: 9px; padding: 11px 14px; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(19,35,29,.86); color: white; font-size: 12px; font-weight: 750; backdrop-filter: blur(8px); }
+.scene-badge span { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); }
 
-.control-card { position: relative; padding: 24px; border: 1px solid rgba(255,255,255,.09); border-radius: 30px; background: var(--ink); color: white; box-shadow: var(--shadow); transform: rotate(1.4deg); }
-.control-card::before { content: ""; position: absolute; inset: -70px -85px auto auto; z-index: -1; width: 230px; height: 230px; border-radius: 50%; background: var(--lime); filter: blur(2px); }
-.control-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; color: #cfd9d3; font-size: 13px; }
-.live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 5px rgba(217,245,95,.12); }
-.secure { padding: 5px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; font-size: 10px; letter-spacing: .08em; }
-.device-row { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 13px; padding: 18px; border-radius: 18px; background: rgba(255,255,255,.06); }
-.device-row strong, .device-row small { display: block; }
-.device-row small { margin-top: 3px; color: #91a29a; }
-.device-icon { display: grid; grid-template-columns: repeat(3, 1fr); align-items: end; gap: 3px; width: 48px; height: 48px; padding: 11px; border-radius: 13px; background: var(--lime); }
-.device-icon span { display: block; background: var(--ink); border-radius: 3px; }
-.device-icon span:nth-child(1) { height: 12px; }.device-icon span:nth-child(2) { height: 24px; }.device-icon span:nth-child(3) { height: 18px; }
-.status-pill { padding: 6px 10px; border-radius: 999px; background: rgba(217,245,95,.12); color: var(--lime); font-size: 11px; font-weight: 750; }
-.signal-line { display: grid; grid-template-columns: 1fr 12px 1fr; align-items: center; gap: 8px; padding: 18px 0; }
-.signal-line span { height: 1px; background: rgba(255,255,255,.12); }.signal-line i { width: 12px; height: 12px; border: 3px solid var(--lime); border-radius: 50%; }
-.control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.control-grid article { min-height: 112px; padding: 16px; border-radius: 17px; background: #20362d; }
-.control-grid small, .control-grid span { display: block; color: #93a79e; font-size: 11px; }.control-grid strong { display: block; margin: 9px 0 4px; font-size: 22px; }
-.activity { display: grid; grid-template-columns: 1fr auto; gap: 9px 18px; margin-top: 18px; padding: 17px; border: 1px solid rgba(255,255,255,.08); border-radius: 17px; color: #b9c8c1; font-size: 11px; }.activity time { color: #71847b; }
+/* Bitta 7 soniyalik hikoya: nur suriladi -> odam aniqlanadi -> Telegram
+   xabari chiqadi.  Faqat `transform` va `opacity` — ikkalasi ham
+   kompozitorda ishlaydi, ya'ni sahifa qayta chizilmaydi va arzon
+   telefonda ham silliq ketadi. */
+#scene-beam { transform-origin: 126px 132px; animation: scene-sweep 7s ease-in-out infinite; }
+#scene-pulse { opacity: 0; transform-origin: 266px 234px; animation: scene-detect 7s ease-in-out infinite; }
+#scene-phone { opacity: 0; animation: scene-notify 7s ease-in-out infinite; }
+#scene-people .person { animation: scene-walk 7s ease-in-out infinite; }
+#scene-people .person:nth-child(2) { animation-delay: -2.4s; }
+#scene-people .person:nth-child(3) { animation-delay: -4.6s; }
 
-.facts { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.facts div { padding: 34px 26px; border-right: 1px solid var(--line); }.facts div:last-child { border: 0; }.facts strong { display: block; font-size: 30px; letter-spacing: -.04em; }.facts span { color: var(--muted); font-size: 13px; }
+@keyframes scene-sweep {
+  0%, 100% { transform: rotate(-5deg); opacity: .2; }
+  45%      { transform: rotate(4deg);  opacity: .34; }
+}
+@keyframes scene-detect {
+  0%, 32%  { opacity: 0; transform: scale(.94); }
+  42%, 88% { opacity: 1; transform: scale(1); }
+  100%     { opacity: 0; transform: scale(1); }
+}
+@keyframes scene-notify {
+  0%, 58%   { opacity: 0; transform: translateY(10px); }
+  70%, 94%  { opacity: 1; transform: translateY(0); }
+  100%      { opacity: 0; transform: translateY(10px); }
+}
+@keyframes scene-walk {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(14px, 7px); }
+}
 
-.sales-visual { display: grid; grid-template-columns: 1.04fr .96fr; gap: 72px; align-items: center; }.sales-photo { min-height: 440px; overflow: hidden; border-radius: 30px; box-shadow: var(--shadow); background: var(--green); }.sales-photo img { width: 100%; height: 100%; min-height: 440px; object-fit: cover; display: block; }.sales-copy h2, .store-proof h2 { margin-bottom: 18px; font-size: clamp(40px, 4.5vw, 64px); }.sales-copy > p:not(.eyebrow), .store-proof p:not(.eyebrow) { color: var(--muted); font-size: 17px; }.sales-copy ul { margin: 28px 0 32px; padding: 0; list-style: none; }.sales-copy li { margin: 12px 0; }.sales-copy li::before { content: "✓"; margin-right: 10px; color: var(--orange); font-weight: 900; }
+/* Mahsulot ekranlari — chizilgan illyustratsiya emas, panelning o'zi. */
+.proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+.proof-grid figure { margin: 0; }
+.proof-grid img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); }
+.proof-grid figcaption { margin-top: 10px; color: var(--muted); font-size: 14px; font-weight: 650; }
 
-.features-section { background: #faf8f2; }.feature-sales-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }.feature-sales-grid article { min-height: 260px; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: var(--paper); }.feature-sales-grid h3 { margin: 42px 0 14px; font-size: 28px; }.feature-sales-grid p { color: var(--muted); }.feature-tag { display: inline-block; padding: 6px 9px; border-radius: 999px; background: var(--paper-2); color: var(--ink); font-size: 10px; font-weight: 850; letter-spacing: .08em; }.feature-pilot { background: var(--green) !important; color: white; }.feature-pilot p { color: #c3d0ca; }.feature-pilot .feature-tag { background: var(--lime); }
+.section-intro { max-width: 690px; margin-bottom: 48px; }.section-intro h2, .pilot h2 { margin-bottom: 18px; font-size: clamp(40px, 5vw, 68px); }.section-intro > p:last-child, .pilot-copy > p { color: var(--muted); font-size: 17px; }
+.feature { min-height: 310px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.3); }.feature h3 { margin: 54px 0 16px; font-size: 30px; }.feature p { max-width: 520px; color: var(--muted); }.steps { list-style: none; margin: 0 0 48px; padding: 0; border-top: 1px solid rgba(255,255,255,.16); }.steps li { display: grid; grid-template-columns: 70px 1fr; gap: 22px; padding: 30px 0; border-bottom: 1px solid rgba(255,255,255,.16); }.steps li > span { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--lime); border-radius: 50%; color: var(--lime); font-weight: 800; }.steps h3 { margin: 0 0 7px; font-size: 24px; }.steps p { max-width: 700px; margin: 0; color: #acbeb5; }.price { text-align: right; }.price strong { display: block; font-size: 76px; letter-spacing: -.07em; }.price sup { font-size: 30px; }.price span, .price small { display: block; color: var(--muted); }
 
-.section-intro { max-width: 690px; margin-bottom: 48px; }.section-intro h2, .price-card h2, .pilot h2 { margin-bottom: 18px; font-size: clamp(40px, 5vw, 68px); }.section-intro > p:last-child, .price-card > div > p:last-child, .pilot-copy > p { color: var(--muted); font-size: 17px; }
-.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.feature { min-height: 310px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.3); }
-.feature-wide { grid-column: span 2; }.feature-num { color: var(--orange); font-size: 12px; font-weight: 800; }.feature h3 { margin: 54px 0 16px; font-size: 30px; }.feature p { max-width: 520px; color: var(--muted); }.dark-feature { background: var(--green); color: white; }.dark-feature p { color: #b9c9c1; }
-.mini-flow { display: flex; align-items: center; gap: 10px; margin-top: 48px; }.mini-flow b { padding: 9px 12px; border-radius: 10px; background: var(--paper-2); font-size: 12px; }.mini-flow i { width: 36px; height: 1px; background: var(--orange); }
+.configurator { background: #faf8f2; }
 
-.connection { background: var(--green); color: white; }.light-intro p { color: #acbeb5; }.steps { list-style: none; margin: 0 0 48px; padding: 0; border-top: 1px solid rgba(255,255,255,.16); }.steps li { display: grid; grid-template-columns: 70px 1fr; gap: 22px; padding: 30px 0; border-bottom: 1px solid rgba(255,255,255,.16); }.steps li > span { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--lime); border-radius: 50%; color: var(--lime); font-weight: 800; }.steps h3 { margin: 0 0 7px; font-size: 24px; }.steps p { max-width: 700px; margin: 0; color: #acbeb5; }
+/* ── Tayyor paketlar ─────────────────────────────────────────────────
+ * Mijoz narxni o'zi yig'ish o'rniga bittasini bosadi.  Restoran menyusidagi
+ * "set" bilan bir xil mantiq: qaror tezlashadi. */
+.preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 14px; }
+.preset { position: relative; display: flex; flex-direction: column; padding: 26px 24px; border: 1px solid var(--line); border-radius: 22px; background: var(--paper); }
+.preset-featured { border-color: var(--ink); box-shadow: var(--shadow); }
+.preset-badge { position: absolute; top: -11px; left: 24px; padding: 4px 12px; border-radius: 999px; background: var(--ink); color: white; font-size: 10px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.preset h3 { margin: 0 0 8px; font-size: 24px; }
+.preset-note { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.preset-items { display: grid; gap: 6px; margin: 0 0 14px; padding: 0; list-style: none; font-size: 14px; font-weight: 650; }
+.preset-items li::before { content: "✓"; margin-right: 8px; color: var(--orange); font-weight: 900; }
+/* Narx sarlavha ostida — HAMMA kartada bir xil balandlikda.  Ilgari
+   `margin-top: auto` turardi va punktlar soni farq qilganda narx
+   kartadan kartaga sakrab ketardi: ko'z ularni solishtira olmasdi.
+   Pastga tortiladigan narsa — tugma. */
+.preset-price { margin: 0 0 18px; display: flex; align-items: baseline; gap: 6px; }
+.preset .button { margin-top: auto; }
+.preset-price b { font-size: 32px; letter-spacing: -.04em; }
+.preset-price span { color: var(--muted); font-size: 14px; }
+.preset .button { width: 100%; }
+.preset-hint { margin: 0 0 32px; color: var(--muted); font-size: 14px; text-align: center; }
 
-.price-card { display: grid; grid-template-columns: 1.25fr .75fr; gap: 44px; padding: 50px; border: 1px solid var(--line); border-radius: 32px; background: #faf8f2; box-shadow: var(--shadow); }.price { text-align: right; }.price strong { display: block; font-size: 76px; letter-spacing: -.07em; }.price sup { font-size: 30px; }.price span, .price small { display: block; color: var(--muted); }.price-card ul { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 26px; margin: 0; padding: 0; list-style: none; }.price-card li::before { content: "✓"; margin-right: 10px; color: var(--orange); font-weight: 900; }.price-card > .button { justify-self: end; align-self: end; }
-
-.configurator { background: #faf8f2; }.config-layout { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(300px,.8fr); gap: 24px; align-items: start; }.config-form { padding: 30px; border: 1px solid var(--line); border-radius: 26px; background: var(--paper); }.billing-switch { display: inline-flex; gap: 4px; padding: 5px; border-radius: 999px; background: var(--paper-2); }.billing-option { min-height: 42px; padding: 0 18px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 750; }.billing-option.active { background: var(--ink); color: white; }.billing-option small { margin-left: 4px; color: inherit; opacity: .72; }.camera-select { display: grid; gap: 8px; margin: 24px 0; font-size: 13px; font-weight: 750; }.camera-select select { max-width: 220px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; color: var(--ink); }.config-form fieldset { margin: 0; padding: 0; border: 0; }.config-form legend { margin-bottom: 12px; font-size: 14px; font-weight: 800; }.feature-choice { display: grid; grid-template-columns: 20px 1fr auto; gap: 12px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); cursor: pointer; }.feature-choice input { width: 17px; height: 17px; accent-color: var(--ink); }.feature-choice span { font-weight: 700; }.feature-choice b { color: var(--muted); font-size: 12px; }.feature-choice i { display: inline-block; margin-left: 5px; padding: 2px 5px; border-radius: 999px; background: var(--lime); color: var(--ink); font-size: 9px; font-style: normal; letter-spacing: .06em; }.purchase-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }.purchase-fields label { display: grid; gap: 7px; font-size: 12px; font-weight: 750; }.purchase-fields input:not([type="checkbox"]) { width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; }.purchase-fields .consent { grid-column: span 2; display: flex; align-items: flex-start; font-weight: 500; }.config-buy { width: 100%; margin-top: 18px; border: 0; }.order-summary { position: sticky; top: 100px; padding: 30px; border-radius: 26px; background: var(--green); color: white; }.order-summary > p { margin: 0 0 8px; color: #b9c9c1; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.order-summary h3 { margin-bottom: 24px; font-size: 30px; }.summary-features { min-height: 54px; margin-bottom: 20px; color: #c3d0ca; font-size: 13px; }.summary-line { display: flex; justify-content: space-between; gap: 14px; padding: 13px 0; border-top: 1px solid rgba(255,255,255,.16); color: #c3d0ca; font-size: 13px; }.summary-line b { color: white; white-space: nowrap; }.summary-total { margin-top: 10px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.28); }.summary-total span, .summary-total small { display: block; color: #c3d0ca; font-size: 12px; }.summary-total strong { display: block; margin: 4px 0; color: var(--lime); font-size: 52px; letter-spacing: -.06em; }.summary-install { display: block; margin-top: 24px; color: var(--lime); font-size: 13px; font-weight: 750; text-decoration: none; }
-
-/* Konfigurator: valyuta tugmasi, baza ro'yxati va funksiya bo'yicha kamera soni. */
-.config-switches { display: flex; flex-wrap: wrap; gap: 10px; }.base-includes { margin: 24px 0 4px; padding: 18px 20px; border-radius: 18px; background: var(--paper-2); }.base-includes h3 { margin: 0 0 10px; font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }.base-includes ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }.base-includes li::before { content: "✓"; margin-right: 8px; color: var(--ink); font-weight: 800; }.feature-list { display: grid; }.feature-choice { grid-template-columns: 20px 1fr auto auto; }.feature-cameras { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf8; color: var(--ink); font-size: 12px; font-weight: 700; }.feature-cameras:disabled { opacity: .45; }.feature-choice i.soon { background: var(--paper-2); color: var(--muted); }
-.installation { background: var(--paper-2); }.install-flow { display: grid; grid-template-columns: repeat(4,1fr); align-items: center; gap: 12px; }.install-flow article { min-height: 220px; padding: 24px; border-radius: 20px; background: var(--paper); }.install-flow article > span { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--lime); font-size: 12px; font-weight: 850; }.install-flow h3 { margin: 32px 0 10px; font-size: 22px; }.install-flow p { margin: 0; color: var(--muted); font-size: 13px; }.install-flow > i { width: 100%; height: 2px; background: var(--orange); }.install-actions { display: flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
-
-.store-proof { display: grid; grid-template-columns: 1.08fr .92fr; gap: 72px; align-items: center; background: var(--green); color: white; }.store-proof img { width: 100%; min-height: 370px; object-fit: cover; border-radius: 26px; display: block; }.store-proof p:not(.eyebrow) { color: #b9c9c1; }.store-proof .eyebrow { color: #b9c9c1; }
+/* Konfigurator: valyuta tugmasi { display: flex; flex-wrap: wrap; gap: 10px; }/* ── Funksiya qatori va kamera stepperi ──────────────────────────────
+ * Ilgari bu `<label>` ichidagi checkbox + `<select>` edi.  Ikki muammo:
+ * select `<label>` ichida turgani uchun uni bosganda checkbox ham
+ * almashishi mumkin edi { display: grid; }.install-flow { display: grid; grid-template-columns: repeat(4,1fr); align-items: center; gap: 12px; }.install-flow article { min-height: 220px; padding: 24px; border-radius: 20px; background: var(--paper); }.install-flow article > span { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--lime); font-size: 12px; font-weight: 850; }.install-flow h3 { margin: 32px 0 10px; font-size: 22px; }.install-flow p { margin: 0; color: var(--muted); font-size: 13px; }.install-flow > i { width: 100%; height: 2px; background: var(--orange); }
 
 .pilot { display: grid; grid-template-columns: .85fr 1.15fr; gap: 80px; align-items: start; background: var(--paper-2); }.contact-points { display: grid; gap: 15px; margin-top: 36px; }.contact-points span { padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); }.contact-points b { color: var(--ink); }
 .lead-form { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 32px; border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); }.field { grid-column: span 2; }.field-half { grid-column: span 1; }.field label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 750; }.field input, .field textarea { width: 100%; padding: 14px 15px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; color: var(--ink); outline: none; }.field input:focus, .field textarea:focus { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(242,106,61,.12); }.honey { position: absolute; left: -9999px; }.consent { grid-column: span 2; display: flex; gap: 10px; align-items: flex-start; color: var(--muted); font-size: 12px; }.consent input { margin-top: 3px; }.form-button { grid-column: span 2; border: 0; }.form-status { grid-column: span 2; min-height: 20px; margin: 0; color: var(--muted); font-size: 13px; }.form-status.ok { color: #17643e; }.form-status.error { color: #a83721; }
+/* Ro'yxatdan o'tgandan keyingi natija: yuklab olish tugmasi va
+   kirish ma'lumotlari.  Forma o'rniga chiqadi, sahifa almashmaydi —
+   mijoz kodni yoki havolani yo'qotmasligi kerak. */
+.trial-result { display: grid; gap: 14px; padding: 32px; border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); }.trial-title { margin: 0; font-size: 20px; font-weight: 850; }.trial-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }.trial-hint b { color: var(--ink); }
 
 .faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.faq details { padding: 22px 24px; border: 1px solid var(--line); border-radius: 17px; background: rgba(255,255,255,.28); }.faq summary { cursor: pointer; font-weight: 750; }.faq details p { color: var(--muted); font-size: 14px; }
 footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 34px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; } footer p { margin: 0; } footer > div { display: flex; gap: 20px; } footer > div a { text-decoration: none; }
-.mobile-lead-cta { display: none; }
+/* `paths-grid` va `download-grid` 900px dan pastda bitta ustunga tushadi —
+   media query pastda { position: relative; display: flex; flex-direction: column; padding: 40px 36px; border: 1px solid var(--line); border-radius: 28px; background: var(--paper); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+/* Hero'da yuklab olish IKKINCHI darajali harakat.  `align-items:
+   flex-start` bo'lmasa ustun to'liq kenglikni egallaydi va
+   ikkinchi darajali tugma asosiysidan kattaroq ko'rinadi — ko'z
+   kattaroq tugmani asosiy deb o'qiydi. */
+.download-action { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.download-action small { color: var(--muted); font-size: 12px; }
+
+/* O'rnatish yo'riqnomasi (/install).
+ *
+ * Har qadam alohida karta: mijoz Windows oynasi bilan sahifani yonma-yon
+ * solishtiradi, shuning uchun "hozir qaysi qadamdaman" savolining javobi
+ * bir qarashda ko'rinishi kerak.  Uzluksiz matn blokida bu yo'qoladi.
+ *
+ * Uch xil satr uch xil vazifada:
+ *   oddiy <p>  — nima ko'rasiz
+ *   .do        — nima qilasiz (yagona harakat, ko'zga tashlanadi)
+ *   .why       — nega shunday (ishonch uchun; o'qimasa ham bo'ladi)
+ */
+.guide-steps { counter-reset: guide; display: grid; gap: 14px; margin: 32px 0; padding: 0; list-style: none; }
+.guide-step { position: relative; padding: 24px 26px 22px 68px; border: 1px solid var(--line); border-radius: 18px; background: #fffdf8; }
+.guide-step::before { counter-increment: guide; content: counter(guide); position: absolute; top: 24px; left: 22px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--lime); color: var(--ink); font-size: 14px; font-weight: 850; }
+.guide-step h3 { margin: 0 0 10px; font-size: 20px; }
+.guide-step p { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
+.guide-step p:last-child { margin-bottom: 0; }
+.guide-step b { color: var(--ink); }
+.guide-step i { font-style: normal; color: var(--muted); opacity: .8; }
+.guide-step code { padding: 2px 6px; border-radius: 6px; background: var(--paper-2); color: var(--ink); font-size: 14px; }
+.guide-step .do { padding: 12px 14px; border-left: 3px solid var(--orange); border-radius: 0 10px 10px 0; background: var(--paper-2); color: var(--ink); }
+.guide-step .why { font-size: 13px; }
+.guide-fix { padding: 16px 18px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 14px; background: #fffdf8; }
+.guide-fix summary { cursor: pointer; font-weight: 750; }
+.guide-fix p, .guide-fix li { color: var(--muted); font-size: 14px; }
+.guide-fix ol { padding-left: 20px; }
+.guide-fix code { padding: 2px 6px; border-radius: 6px; background: var(--paper-2); font-size: 13px; }
+.hint { color: var(--muted); font-size: 13px; }
 
 .utility-page { min-height: 100vh; }.utility-main { max-width: 900px; margin: auto; padding: 90px 24px; }.utility-main h1 { font-size: clamp(48px, 7vw, 80px); }.utility-card { margin-top: 32px; padding: 32px; border: 1px solid var(--line); border-radius: var(--radius); background: #faf8f2; }.connect-form { display: grid; grid-template-columns: 1fr auto; gap: 12px; }.connect-form input { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; text-transform: uppercase; }.command { display: block; margin-top: 18px; padding: 18px; overflow: auto; border-radius: 14px; background: var(--ink); color: var(--lime); white-space: pre-wrap; word-break: break-all; }.status-panel { display: flex; gap: 14px; align-items: center; }.status-light { width: 16px; height: 16px; border-radius: 50%; background: #9aa8a0; }.status-light.online { background: #2ac976; box-shadow: 0 0 0 8px rgba(42,201,118,.12); }
 
-@media (max-width: 1100px) and (min-width: 901px) {
-  .hero { gap: 40px; }.hero h1 { font-size: clamp(50px, 5.2vw, 62px); }.hero-photo, .hero-photo img { min-height: 440px; height: 440px; }.sales-visual, .store-proof { gap: 48px; }
+
+@media (max-width: 1100px) and (min-width: 901px) {.hero { gap: 40px; }.hero h1 { font-size: clamp(50px, 5.2vw, 62px); }
 }
-@media (max-width: 900px) {
-  .nav-links { display: none; }.hero { grid-template-columns: 1fr; gap: 42px; }.control-card, .hero-photo { transform: none; }.hero-photo { min-height: 460px; }.hero-photo img { height: 460px; }.facts { grid-template-columns: 1fr 1fr; }.facts div:nth-child(2) { border-right: 0; }.facts div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }.feature-grid { grid-template-columns: 1fr 1fr; }.feature-wide { grid-column: span 2; }.price-card, .pilot, .sales-visual, .store-proof, .config-layout { grid-template-columns: 1fr; }.feature-sales-grid { grid-template-columns: 1fr 1fr; }.price { text-align: left; }.price-card > .button { justify-self: start; }.pilot { gap: 44px; }.order-summary { position: static; }.install-flow { grid-template-columns: 1fr 18px 1fr; }.install-flow article { min-height: 190px; }.install-flow > i:nth-of-type(2) { display: none; }.section-pad { padding-top: 80px; padding-bottom: 80px; }
+@media (max-width: 900px) {.nav-links { display: none; }.hero { grid-template-columns: 1fr; gap: 42px; }.pilot { grid-template-columns: 1fr; }.price { text-align: left; }.pilot { gap: 44px; }.install-flow { grid-template-columns: 1fr 18px 1fr; }.install-flow article { min-height: 190px; }.install-flow > i:nth-of-type(2) { display: none; }.section-pad { padding-top: 80px; padding-bottom: 80px; }
 }
-@media (max-width: 620px) {
-  body { padding-bottom: 74px; }.nav { min-height: 66px; }.nav-actions .text-link { display: none; }.nav-actions { gap: 8px; }.brand { gap: 8px; font-size: 15px; }.brand-mark { width: 34px; height: 34px; border-radius: 8px; }.section-pad { padding-left: 18px; padding-right: 18px; }.hero { min-height: auto; padding-top: 54px; }.hero h1 { font-size: clamp(48px, 14vw, 65px); }.hero-photo { min-height: 330px; border-radius: 22px; }.hero-photo img { height: 330px; object-position: 62% center; }.hero-photo-badge { right: 14px; bottom: 14px; font-size: 11px; }.hero-text { font-size: 17px; }.hero-actions .button { width: 100%; }.text-cta { justify-content: center; width: 100%; }.hero-trust { gap: 6px; }.hero-trust span { font-size: 11px; }.facts { margin: 0 18px; }.facts div { padding: 24px 16px; }.facts strong { font-size: 24px; }.feature-grid, .faq-grid, .feature-sales-grid, .install-flow { grid-template-columns: 1fr; }.feature-wide { grid-column: auto; }.feature { min-height: 260px; }.price-card { padding: 28px; }.price-card ul { grid-template-columns: 1fr; }.lead-form, .config-form { padding: 22px; }.field-half { grid-column: span 2; }.steps li { grid-template-columns: 48px 1fr; }.connect-form { grid-template-columns: 1fr; } footer { grid-template-columns: 1fr; } footer > div { flex-wrap: wrap; }.purchase-fields { grid-template-columns: 1fr; }.purchase-fields .consent { grid-column: auto; }.feature-choice { grid-template-columns: 20px 1fr auto; }.feature-choice b { grid-column: 2 / span 2; }.install-flow > i { display: none; }.mobile-lead-cta { position: fixed; right: 16px; bottom: 12px; left: 16px; z-index: 30; display: flex; min-height: 52px; align-items: center; justify-content: center; border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: white; box-shadow: 0 12px 28px rgba(19,35,29,.24); font-size: 14px; font-weight: 750; text-decoration: none; }
+@media (max-width: 620px) {body { padding-bottom: 74px; }.nav { min-height: 66px; }.nav-actions .text-link { display: none; }.nav-actions { gap: 8px; }.brand { gap: 8px; font-size: 15px; }.brand-mark { width: 34px; height: 34px; border-radius: 8px; }.section-pad { padding-left: 18px; padding-right: 18px; }.hero { min-height: auto; padding-top: 54px; }.hero h1 { font-size: clamp(48px, 14vw, 65px); }.scene { border-radius: 22px; }.scene-badge { right: 14px; bottom: 14px; font-size: 11px; }.proof-grid { grid-template-columns: 1fr; }.hero-text { font-size: 17px; }.hero-actions .button { width: 100%; }.text-cta { justify-content: center; width: 100%; }.hero-trust { gap: 6px; }.hero-trust span { font-size: 11px; }.faq-grid, .install-flow { grid-template-columns: 1fr; }.feature { min-height: 260px; }.lead-form { padding: 22px; }.field-half { grid-column: span 2; }.steps li { grid-template-columns: 48px 1fr; }.connect-form { grid-template-columns: 1fr; }footer { grid-template-columns: 1fr; }footer > div { flex-wrap: wrap; }.preset-grid { grid-template-columns: 1fr; }.preset-featured { order: -1; }.install-flow > i { display: none; }.guide-step { padding: 20px 18px 18px 20px; }.guide-step::before { position: static; margin-bottom: 12px; }
 }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+/* Harakatni o'chirgan foydalanuvchi uchun.
+   `animation` ham qo'shildi: ilgari faqat `transition` to'xtardi va
+   hero sahnasi baribir harakatlanib turardi.  Sahna esa oxirgi kadrda
+   emas, TUSHUNARLI holatda qolishi kerak — nur ko'rinadi, aniqlash
+   ramkasi turibdi, Telegram kartasi joyida.  Aks holda "harakatsiz"
+   foydalanuvchi yarim chizilgan rasm ko'rardi. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation: none !important; }
+  #scene-beam, #scene-pulse, #scene-phone { opacity: 1; transform: none; }
+}

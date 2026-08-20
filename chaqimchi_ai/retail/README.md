@@ -223,38 +223,52 @@ Disk kvotasi (40 GB) yozayotgan kameralar orasida **teng bo'linadi**. Har
 kamera to'liq kvotani o'ziniki deb bilsa 8 kamera 320 GB talab qilardi —
 128 GB disk esa ancha oldin to'lardi.
 
-### AI ko'rigi (`vision_review.py`)
+### Kamera sog'ligi (`camera_offline`, `camera_recovered`, `stream_frozen`)
 
-Analitika "kassada 6 kishi" deydi — raqam. Do'kon egasiga esa jumla kerak:
-"kamera oldiga karton quti qo'yilgan". Shu jumlani ko'rish agenti yozadi,
-lekin uni har kadrga qo'yib bo'lmaydi — har chaqiruv pul (~87 so'm).
+Kamera holati ilgari faqat `runner.stats()` ichida yashardi. Kabel uzilsa
+yoki NVR o'chsa do'kon egasi buni hisobotdagi bo'shliqdan — bir necha
+kundan keyin — bilardi.
 
-Shuning uchun ko'rik zanjirning **oxirida**, qoida so'raganda ishlaydi:
+Uchta narsa ataylab shunday:
 
-```yaml
-actions: [cloud_sync, telegram_alert, save_clip, ai_review]
-```
+1. **Uch marta urinishdan keyin** (`OFFLINE_AFTER_FAILURES`). Backoff
+   2, 4, 8 soniya bo'lgani uchun bu ~14 soniya: bitta tarmoq uzilishi
+   shovqin bermaydi, haqiqiy uzilish esa yarim daqiqada bilinadi.
+2. **`failures` faqat kadr kelganda nolga tushadi**, ulanish ochilganda
+   emas. NVR TCP ulanishni qabul qilib, keyin hech qanday kadr bermasligi
+   mumkin — bunday kamera har siklda qayta ochilib, hisobni nolga
+   tushirib yuborardi va hech qachon "o'chgan" deb e'lon qilinmasdi.
+3. **Qoida dvigatelidan o'tadi** (`emit_system_event`). To'g'ridan-to'g'ri
+   outboxga yozish mumkin edi, lekin u holda cooldown ham, `telegram_alert`
+   ham ishlamasdi va sog'liqni `config/rules.yaml` bilan boshqarib
+   bo'lmasdi.
 
-```
-qoida → ai_review → navbat ─┐
-                            └→ vision-review oqimi → AI → outbox → cloud
-```
+**Qotib qolgan oqim** eng jimgina buziladigan holat: RTSP ochiq,
+`grab()` va `retrieve()` muvaffaqiyatli qaytadi, lekin kadr o'zgarmaydi.
+Harakat yo'q degani filtr uni to'sadi, buzilish imzosi ham o'zgarmaydi —
+tizim butunlay sog'lom ko'rinadi. Aniqlash arzon: 160×90 kulrang kadrning
+hash'i 20 soniya davomida bir xil bo'lsa oqim qotgan. Haqiqiy kamera
+sensor shovqini tufayli hech qachon bayt-bayt bir xil kadr bermaydi,
+shuning uchun bu tekshiruv chegara sozlashni talab qilmaydi.
 
-Uch narsa ataylab shunday:
+Sog'liq hodisalari **litsenziyadan mustaqil** (`HEALTH_EVENTS`): mijoz
+qaysi paketni olganidan qat'i nazar, kamerasi ishlamayotganini bilishi
+kerak — aks holda u ishlamayotgan tizim uchun pul to'lab yuraveradi.
 
-1. **Alohida oqim.** AI javobi 3–10 soniya. Uni `step()` ichida kutish o'sha
-   vaqtda hamma kamerani to'xtatib qo'yardi.
-2. **Kadr `submit()` da kodlanadi.** Bir necha millisekund, lekin navbatda
-   turgan havola oqim tomonidan almashtirilib qolmaydi.
-3. **Oraliq navbatga qo'yishda boshlanadi**, javob kelganda emas — aks holda
-   sekin javob paytida o'tgan har bir hodisa yangi chaqiruv bo'lardi.
 
-Navbat to'lsa kadr tashlanadi (`dropped`): kadrni yo'qotgan qurilmani
-yo'qotgandan yaxshi. `vision.enabled: false` bo'lsa `on_review` umuman
-berilmaydi va qoidadagi `ai_review` jimgina hisobga olinadi — hodisa
-baribir cloudga ketadi, faqat izohsiz.
+### `ai_review` — cloud uchun ajratilgan nom
 
-Batafsil: [docs/KORISH_AGENTI.md](../../docs/KORISH_AGENTI.md)
+Ilgari bu yerda qurilmadan turib Claude'ga kadr yuboradigan ko'rik oqimi
+bor edi (`vision_review.py` + `vision_agent.py`).  U olib tashlandi: og'ir
+AI faqat cloudda ishlashi kerak, va modul har profilda `enabled: false`
+holatida turardi — ya'ni hech qachon ishlamagan ~2 000 qator kod.
+
+`ai_review` harakati `rules.py` da **qabul qilinadigan no-op** bo'lib
+qoladi: mijozning eski qoidalar fayli validatsiyadan o'taversin va hodisa
+baribir cloudga ketsin, faqat AI izohisiz.  Cloud tarafida ko'rik qayta
+tiklanganda shu nom ishlatiladi.
+
+Eski kod: `git show archive/vision-agent`.
 
 ## Sig'imni o'lchash (`scripts/benchmark_n100.py`)
 
@@ -300,6 +314,6 @@ Ochiq bandlar:
 - Bitta kamera ham yuz tanish, ham analitika uchun kerak bo'lsa oqim ikki
   marta ochiladi (ikki jarayon, ikki dekod). Ataylab: xato ajratilishi shu
   narxga arziydi.
-- AI ko'rigi **bitta kadr** ko'radi, klipni emas. Video yuborish bir necha
-  barobar qimmat, shuning uchun xulosa "nima bo'lgani" emas, "ayni damda nima
-  ko'rinayotgani" haqida.
+- **Sig'im hali haqiqiy qurilmada o'lchanmagan.** Bosim signali va
+  cgroup xotira shifti bor, lekin 4 kamerada CPU rostdan 80% dan past
+  qoladimi — `scripts/benchmark_n100.py` javob beradi.

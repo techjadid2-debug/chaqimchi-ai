@@ -54,11 +54,11 @@ from chaqimchi_ai.retail.inventory import (
     read_sotqin_cache,
 )
 from chaqimchi_ai.retail.pipeline import RetailPipeline
+from chaqimchi_ai.retail.pressure import SystemPressure
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
 from chaqimchi_ai.retail.rules import RuleEngine, Schedule
 from chaqimchi_ai.retail.runner import CameraSource, RetailRunner
 from chaqimchi_ai.retail.tamper import TamperDetector
-from chaqimchi_ai.retail.vision_review import VisionReviewer
 from chaqimchi_ai.scene_analytics import PersonDetector, SceneAnalyzer, build_person_detector
 from chaqimchi_ai.settings import AppSettings, SceneSettings, default_config_path
 
@@ -69,6 +69,11 @@ PRIORITIES: Dict[str, Priority] = {
     "retail": Priority.RETAIL,
     "background": Priority.BACKGROUND,
 }
+
+#: Qurilma sog'ligi haqidagi hodisalar hech qanday paketga bog'lanmaydi.
+#: Mijoz qaysi funksiyani sotib olganidan qat'i nazar, kamerasi
+#: ishlamayotganini bilishi shart.
+HEALTH_EVENTS = frozenset({"camera_offline", "camera_recovered", "stream_frozen"})
 
 
 def load_rules(path: Optional[Path]) -> RuleEngine:
@@ -183,49 +188,6 @@ def prune_event_clips(
     )
 
 
-def build_reviewer(
-    settings: AppSettings, base_dir: Path, sink: Callable[[str, EdgeEvent], None]
-) -> Optional[VisionReviewer]:
-    """Ko'rish agenti yoqilgan bo'lsa ko'rikchini yig'adi, aks holda `None`.
-
-    `vision.enabled: false` (standart) bo'lsa `anthropic` kutubxonasi ham
-    import qilinmaydi va bir tiyin sarflanmaydi.  Kalit topilmasa xizmat
-    yiqilmaydi — analitika AI'siz ishlashda davom etadi, faqat ogohlantirish
-    izohsiz qoladi.
-    """
-    cfg = settings.vision
-    if not cfg.enabled:
-        return None
-    from chaqimchi_ai.vision_agent import UsageStore, VisionAgent, VisionConfig
-
-    agent = VisionAgent(
-        VisionConfig(
-            enabled=cfg.enabled,
-            model=cfg.model,
-            max_side=cfg.max_side,
-            jpeg_quality=cfg.jpeg_quality,
-            min_interval_sec=cfg.min_interval_sec,
-            max_calls_per_day=cfg.max_calls_per_day,
-            max_calls_per_month=cfg.max_calls_per_month,
-            effort=cfg.effort,
-            max_tokens=cfg.max_tokens,
-            timeout_sec=cfg.timeout_sec,
-            telegram_alerts=cfg.telegram_alerts,
-        ),
-        # Sarf hisobi yuz tanish xizmati bilan **bitta** fayl: ikkalasi ham
-        # shu bazaga yozadi, ya'ni kunlik limit umumiy bo'ladi.
-        UsageStore(_resolve(base_dir, settings.paths.vision_db)),
-    )
-    logger.info(
-        "Ko'rish agenti yoqilgan: %s, kamera boshiga %d soniyada bir marta, "
-        "kuniga %d tagacha",
-        cfg.model,
-        cfg.min_interval_sec,
-        cfg.max_calls_per_day,
-    )
-    return VisionReviewer(agent, sink)
-
-
 def _resolve(base_dir: Path, value: str) -> Path:
     path = Path(value)
     return path if path.is_absolute() else base_dir / path
@@ -268,8 +230,18 @@ def apply_remote_site_settings(settings: AppSettings, base_dir: Path) -> None:
     cache = read_sotqin_cache(sotqin_cache_path(settings, base_dir))
     remote = cache.get("config") or {}
     scene_payload = settings.scene.model_dump()
-    for key in ("occupancy_limit", "loitering_sec", "queue_limit", "zones", "lines"):
-        if key in remote:
+    for key in ("occupancy_limit", "loitering_sec", "queue_limit"):
+        if key in remote and remote[key] is not None:
+            scene_payload[key] = remote[key]
+    # Geometriya faqat cloud'da HAQIQATAN chizilgan bo'lsa olinadi.
+    # Ilgari shart `key in remote` edi — cloud `get_site_config()` esa har
+    # doim bo'sh `"lines": []` qaytaradi, ya'ni ulanish bilanoq sehrgarda
+    # chizilgan chiziq runtime'da o'chib, kirish-chiqish sanash jimgina
+    # to'xtardi (config.yaml va panel esa chiziq bor deb ko'rsatib
+    # turardi).  `cloud_config.apply()` xuddi shu sababdan `if lines or
+    # zones:` bilan ishlaydi — bu yerda ham o'sha qoida.
+    for key in ("zones", "lines"):
+        if remote.get(key):
             scene_payload[key] = remote[key]
     settings.scene = SceneSettings.model_validate(scene_payload)
     if remote.get("open_from") and remote.get("open_to"):
@@ -291,8 +263,30 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
         for item in cache.get("cloud_features") or []
         if isinstance(item, dict) and item.get("code")
     }
+    # Davomat: cloud yoqqan bo'lsa VA kamera davomat ro'yxatida bo'lsa.
+    # Eski cloud `face_captured`ni tanimaydi va butun batchni rad etadi —
+    # shu filtr yoqilmagan saytda hodisa chiqishining oldini oladi.
+    attendance_on = bool((cache.get("attendance") or {}).get("enabled"))
+    attendance_cameras = {
+        str(camera_id)
+        for camera_id in (cache.get("config") or {}).get("attendance_camera_ids") or []
+    }
     traffic = {"line_crossed", "occupancy_exceeded", "dwell_exceeded"}
-    queue = {"queue_threshold_exceeded"}
+    # Kassa nazorati alohida funksiya EMAS: u navbat o'lchovining o'zidan
+    # chiqadi va shu paketda sotiladi.  Alohida kod qo'shilsa
+    # `/api/v1/public/pricing` uni kamera bo'yicha narxlanadigan
+    # qo'shimcha sifatida ko'rsatib qo'yardi va yagona narx va'dasi
+    # buzilardi.
+    queue = {
+        "queue_threshold_exceeded",
+        "checkout_unattended",
+        "checkout_second_till",
+        # Javon nazorati ham shu paketda va bu VAQTINCHA qaror: usul
+        # (modelsiz, chekka zichligi) hali haqiqiy do'konda sinalmagan.
+        # Yangi narxlanadigan kod ochish uni sotuvga chiqarish bo'lardi
+        # — ishonchliligi tasdiqlangunicha erta.
+        "shelf_empty",
+    }
     security = {
         "zone_entered",
         "loitering",
@@ -303,6 +297,13 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
     def allowed(event: EdgeEvent) -> bool:
         if event.event_type == "person_detected":
             return False
+        if event.event_type == "face_captured":
+            return attendance_on and str(event.camera_id) in attendance_cameras
+        # Kamera sog'ligi litsenziyalanadigan funksiya emas.  Mijoz qaysi
+        # paketni olganidan qat'i nazar, kamerasi o'chganini bilishi kerak —
+        # aks holda u ishlamayotgan tizim uchun pul to'lab yuraveradi.
+        if event.event_type in HEALTH_EVENTS:
+            return True
         if event.event_type in traffic:
             return "person_count" in enabled
         if event.event_type in queue:
@@ -333,9 +334,7 @@ def build_runner(
         raise RuntimeError("retail.enabled: false — xizmat ishga tushmaydi")
     cameras, revision = plan_cameras(settings, base_dir)
     if not cameras:
-        raise RuntimeError(
-            "Kamera topilmadi: cloud inventari ham, retail.cameras ham bo'sh"
-        )
+        raise RuntimeError("Kamera topilmadi: cloud inventari ham, retail.cameras ham bo'sh")
     logger.info("%s (config revision: %s)", describe(cameras), revision)
 
     if detector is None:
@@ -351,11 +350,8 @@ def build_runner(
         )
 
     sink = OutboxSink(outbox)
-    reviewer = build_reviewer(settings, base_dir, sink)
     broker = FrameBroker(
-        InferenceBudget(
-            target_fps=cfg.target_fps, min_fps=cfg.min_fps, max_fps=cfg.max_fps
-        )
+        InferenceBudget(target_fps=cfg.target_fps, min_fps=cfg.min_fps, max_fps=cfg.max_fps)
     )
     rules_path = _resolve(base_dir, cfg.rules_path) if cfg.rules_path else None
     business_hours = (
@@ -373,7 +369,6 @@ def build_runner(
         rules,
         on_action=sink,
         on_clip=sink.clip_ready,
-        on_review=None if reviewer is None else reviewer.submit,
         clip_dir=clip_dir,
         snapshot_dir=snapshot_dir,
         pre_sec=cfg.pre_sec,
@@ -410,7 +405,10 @@ def build_runner(
         pipeline,
         housekeeping_sec=cfg.housekeeping_sec,
         on_stats=report_stats,
-        reviewer=reviewer,
+        # Bu argumentsiz `budget.py` dagi `pressure >= 0.85` tarmog'i o'lik
+        # kod bo'lib turadi: byudjet faqat latency bo'yicha sozlanadi va
+        # qurilma qizib ketganini kech biladi.
+        pressure=SystemPressure(),
     )
 
     buffer_dir = _resolve(base_dir, cfg.buffer_dir)
@@ -420,8 +418,35 @@ def build_runner(
     # 320 GB talab qilardi — 128 GB disk esa oldin to'lardi.
     per_camera = cfg.buffer_max_bytes // max(1, len(recording))
 
+    # Davomat kameralari (cloud belgilagan, ko'pi bilan 2 ta): faqat shularda
+    # yuz kadri chiqadi — qolganlari uchun qo'shimcha ish yo'q.
+    cache = read_sotqin_cache(sotqin_cache_path(settings, base_dir))
+    attendance_enabled = bool((cache.get("attendance") or {}).get("enabled"))
+    attendance_cameras = {
+        str(camera_id)
+        for camera_id in (cache.get("config") or {}).get("attendance_camera_ids") or []
+    }
+
+    # Demografiya (jins/yosh): bitta umumiy estimator, faqat kirish
+    # chizig'i bor kameralarga beriladi.  Bosim oshsa analyzer o'zi
+    # o'chiradi (byudjetdagi pressure orqali).
+    from chaqimchi_ai.retail.demography import build_demography_estimator
+
+    demography = build_demography_estimator(settings, base_dir)
+    entrance_cameras = {line.camera_id for line in settings.scene.lines}
+
+    def read_pressure() -> float:
+        return broker.budget.pressure
+
     for camera in cameras:
-        analyzer = SceneAnalyzer(camera.camera_id, detector, settings.scene)
+        analyzer = SceneAnalyzer(
+            camera.camera_id,
+            detector,
+            settings.scene,
+            attendance=attendance_enabled and camera.camera_id in attendance_cameras,
+            demography=demography if camera.camera_id in entrance_cameras else None,
+            pressure=read_pressure,
+        )
         clips = (
             RingBuffer(
                 camera.camera_id,
@@ -461,28 +486,102 @@ def _log_stats(stats: Dict[str, Any]) -> None:
     """
     broker = stats["broker"]
     logger.info(
-        "tahlil=%d hodisa=%d klip=%d | kafolat buzilishi=%d p95=%.0f ms target=%.1f FPS",
+        "tahlil=%d hodisa=%d klip=%d | kafolat buzilishi=%d p95=%.0f ms target=%.1f FPS bosim=%.2f",
         stats["analyzed"],
         stats["events"],
         stats["clips"]["written"],
         broker["floor_violations"],
         broker["budget"]["p95_latency_ms"],
         broker["budget"]["target_fps"],
+        broker["budget"]["pressure"],
     )
-    vision = stats.get("vision")
-    if vision:
-        # Xarajat alohida qatorda: bu yagona **pul yeydigan** raqam va uni
-        # log ichida qidirib yurmaslik kerak.
-        logger.info(
-            "AI ko'rigi: %d ta xulosa, $%.4f | o'tkazib yuborilgan: oraliq=%d "
-            "limit=%d navbat=%d xato=%d",
-            vision["completed"],
-            vision["cost_usd"],
-            vision["throttled"],
-            vision["over_budget"],
-            vision["dropped"],
-            vision["failed"],
+    # Bosim yuqori bo'lsa qaysi manba sababchi ekani aytiladi: "bosim 0.9"
+    # nima qilishni aytmaydi, "xotira 0.9" esa aytadi.
+    breakdown = stats.get("pressure")
+    if breakdown and broker["budget"]["pressure"] >= 0.7:
+        logger.warning(
+            "Qurilma bosim ostida: CPU=%.2f xotira=%.2f harorat=%.2f",
+            breakdown.get("cpu", 0.0),
+            breakdown.get("memory", 0.0),
+            breakdown.get("temperature", 0.0),
         )
+
+
+def retail_status_path(settings: AppSettings, base_dir: Path) -> Path:
+    """Zanjir holati yoziladigan fayl.
+
+    Sotqin agenti bilan aloqa uchun eng sodda kanal: ikkalasi ham alohida
+    jarayon, lekin bitta diskda.  Soket yoki IPC qo'shish faqat ishlamay
+    qolishi mumkin bo'lgan yana bitta narsa bo'lardi.
+    """
+    if settings.retail.status_path:
+        return _resolve(base_dir, settings.retail.status_path)
+    return Path(
+        os.environ.get(
+            "CHAQIMCHI_RETAIL_STATUS",
+            "/opt/chaqimchi/shared/data/retail-status.json",
+        )
+    )
+
+
+def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = None) -> None:
+    """Kameralarning haqiqiy ulanish holatini diskka yozadi.
+
+    Nima uchun kerak: agent `cameras_active` ni `ffprobe` natijasidan
+    olardi, ya'ni "RTSP manzil javob beryaptimi" degan savolga javob
+    berardi.  Lekin kamera ffprobe uchun ochiq bo'lib, retail zanjiri
+    bir soat backoff'da turishi mumkin — 72 soatlik soak testi esa aynan
+    shu farqni sezmasdan "4 kamera ishlayapti" deb sertifikatlab qo'yardi.
+    """
+    streams = stats.get("streams") or {}
+    payload = {
+        "updated_at": time.time() if now is None else float(now),
+        "cameras_configured": len(streams),
+        "cameras_active": sum(
+            1 for item in streams.values() if item.get("connected") and not item.get("offline")
+        ),
+        "cameras": {
+            camera_id: {
+                "connected": bool(item.get("connected")),
+                "offline": bool(item.get("offline")),
+                "frames": int(item.get("frames") or 0),
+                "reconnects": int(item.get("reconnects") or 0),
+            }
+            for camera_id, item in streams.items()
+        },
+        "analyzed": stats.get("analyzed", 0),
+        "events": stats.get("events", 0),
+        # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel buni
+        # ko'rsatishi shart: "hodisa bor, lekin cloudga bormayapti".
+        "plan_filtered": stats.get("plan_filtered", 0),
+        # Xato hisoblagichlari holat faylida BO'LISHI SHART.  Ular
+        # `stats()` da allaqachon bor edi, lekin bu yerga yozilmasdi va
+        # heartbeat'ga ham chiqmasdi.  Natijada `analyze()` har kadrda
+        # yiqilsa ham panel "4 kamera ishlayapti" deb turardi va hech kim
+        # hodisa yozilmayotganini bilmasdi.
+        "errors": stats.get("errors", 0),
+        # Hodisani navbatga yozib bo'lmadi (odatda disk to'lgan) — bu
+        # hodisa butunlay yo'qoldi degani, uni keyin tiklab bo'lmaydi.
+        "action_errors": stats.get("action_errors", 0),
+        "pressure": stats.get("pressure") or {},
+    }
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        # `mkdir` ham `try` ichida: yo'l band bo'lsa (fayl turgan bo'lsa)
+        # u ham xato beradi, va holat fayli yozilmagani uchun butun
+        # zanjirni to'xtatish noto'g'ri bo'lardi.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
+        os.replace(temporary, path)
+    except OSError:
+        logger.warning("Holat fayli yozilmadi: %s", path)
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            # Yo'lning o'zi yaroqsiz bo'lsa tozalash ham imkonsiz.
+            pass
 
 
 def _watcher(
@@ -497,6 +596,7 @@ def _watcher(
     natijasi aniq — yarim qo'llangan config'dan yaxshi.
     """
     cache = sotqin_cache_path(settings, base_dir)
+    status = retail_status_path(settings, base_dir)
     try:
         revision = read_sotqin_cache(cache)["revision"]
     except ValueError:
@@ -504,6 +604,7 @@ def _watcher(
 
     def observe(stats: Dict[str, Any]) -> None:
         _log_stats(stats)
+        write_status(status, stats)
         if not settings.retail.restart_on_config_change:
             return
         try:
@@ -522,11 +623,98 @@ def _watcher(
     return observe
 
 
+#: Jonli kadr yozish qadami (soniya) va o'lchami.
+LIVE_FRAME_INTERVAL_SEC = 2.0
+LIVE_FRAME_WIDTH = 640
+LIVE_FRAME_JPEG_QUALITY = 70
+
+#: Issiqlik to'ri qancha tez-tez diskka tushadi.
+HEATMAP_FLUSH_INTERVAL_SEC = 600.0
+
+
+def _heatmap_flush_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threading.Event) -> None:
+    """Har 10 daqiqada yig'ilgan to'rlarni faylga yozadi.
+
+    Yuborishni lokal ilova qiladi (cloud hisob ma'lumotlari unda) — biz
+    faqat `data/heatmap/` ga yozamiz; 200 kelganda ilova o'chiradi.
+    """
+    from datetime import datetime, timezone
+
+    from chaqimchi_ai.retail.heatmap import write_heatmap_file
+
+    directory = base_dir / "heatmap"
+    while not stopped.wait(HEATMAP_FLUSH_INTERVAL_SEC):
+        try:
+            drained = pipeline.drain_heatmaps()
+            if not drained:
+                continue
+            bucket = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+            for camera_id, item in drained.items():
+                write_heatmap_file(directory, camera_id, bucket, item["grid"], int(item["frames"]))
+        except Exception:
+            logger.exception("Issiqlik to'ri yozilmadi")
+
+
+def _live_frame_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threading.Event) -> None:
+    """Jonli ko'rish kadrlarini diskka yozib turadi.
+
+    Lokal ilova heartbeat javobidan `live-request.json` yozadi; biz shu
+    yerda so'ralgan kameralarning **oxirgi tahlil kadri**ni (yangi RTSP
+    ulanishsiz) 640px JPEG qilib `live/` ga qo'yamiz; ilova esa uni
+    cloudga yuboradi.  So'rov yo'q payt sikl deyarli bepul (bitta stat).
+    """
+    import json as json_module
+    from datetime import datetime, timezone
+
+    import cv2
+
+    request_path = base_dir / "live-request.json"
+    out_dir = base_dir / "live"
+
+    while not stopped.wait(LIVE_FRAME_INTERVAL_SEC):
+        if not request_path.is_file():
+            continue
+        try:
+            raw = json_module.loads(request_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(raw, dict):
+            continue
+        now = datetime.now(timezone.utc)
+        for camera_id, item in raw.items():
+            try:
+                until = datetime.fromisoformat(str((item or {}).get("until")))
+            except (TypeError, ValueError):
+                continue
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            if until <= now:
+                continue
+            frame = pipeline.latest_frame(str(camera_id))
+            if frame is None:
+                continue
+            height, width = frame.shape[:2]
+            if width > LIVE_FRAME_WIDTH:
+                scale = LIVE_FRAME_WIDTH / width
+                frame = cv2.resize(frame, (LIVE_FRAME_WIDTH, max(1, round(height * scale))))
+            ok, encoded = cv2.imencode(
+                ".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), LIVE_FRAME_JPEG_QUALITY]
+            )
+            if not ok:
+                continue
+            out_dir.mkdir(parents=True, exist_ok=True)
+            target = out_dir / f"{camera_id}.jpg"
+            temporary = target.with_name(f".{target.name}.tmp")
+            try:
+                temporary.write_bytes(encoded.tobytes())
+                os.replace(temporary, target)
+            except OSError:
+                temporary.unlink(missing_ok=True)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Retail AI xizmati")
-    parser.add_argument(
-        "--config", default=None, help="config yo'li (standart: $CHAQIMCHI_CONFIG)"
-    )
+    parser.add_argument("--config", default=None, help="config yo'li (standart: $CHAQIMCHI_CONFIG)")
     parser.add_argument("--base-dir", default=".", help="loyiha ildizi")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args(argv)
@@ -557,6 +745,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         on_stats=_watcher(settings, base_dir, stopped),
     )
     runner.start()
+    threading.Thread(
+        target=_live_frame_loop,
+        args=(runner.pipeline, base_dir, stopped),
+        name="live-frames",
+        daemon=True,
+    ).start()
+    threading.Thread(
+        target=_heatmap_flush_loop,
+        args=(runner.pipeline, base_dir, stopped),
+        name="heatmap-flush",
+        daemon=True,
+    ).start()
     sync_thread: Optional[threading.Thread] = None
     if sync_cfg.enabled:
         sync = CloudEventSync(sync_cfg, outbox)

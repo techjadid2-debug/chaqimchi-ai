@@ -7,10 +7,15 @@ kechqurun bilasiz. Shuning uchun cloud o‘zi Telegramga yozadi.
 **Faqat holat o‘zgarganda** xabar ketadi (`alert_state` jadvali) — aks holda
 har 15 daqiqada o‘sha xabar takrorlanib, siz uni o‘qishni tashlab qo‘yasiz.
 
+Bu modul (va saytdan kelgan arizalar) **sotuv boti** orqali yozadi —
+mijozlarga hisobot yuboradigan botdan alohida.  Sabab oddiy: ikkalasi bitta
+botdan kelsa, ega uchun "yangi ariza" va "do'kon hisoboti" bir chatda
+aralashib ketadi va ikkalasi ham e'tibordan qoladi.
+
 Yoqish:
 
 ```bash
-export CHAQIMCHI_CLOUD_TELEGRAM_TOKEN="123456:ABC..."
+export CHAQIMCHI_SALES_TELEGRAM_TOKEN="123456:ABC..."   # sotuv boti
 export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
 make run-cloud
 ```
@@ -23,8 +28,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -33,6 +40,16 @@ logger = logging.getLogger(__name__)
 
 #: Aloqa nazorati qanchalik tez-tez tekshiriladi (standart 15 daqiqa).
 DEFAULT_INTERVAL_SEC = 900
+
+#: Server diski shu foizdan oshsa admin ogohlantiriladi.  Pastga qaytish
+#: chegarasi ataylab boshqa (histerezis) — 84.9/85.1 atrofida tebranish
+#: har 15 daqiqada xabar/tiklandi juftini yubormasin.
+DISK_ALERT_PERCENT = 85
+DISK_OK_PERCENT = 80
+
+#: `alert_state` jadvalida server ogohlantirishlari shu soxta sayt ID
+#: ostida yuritiladi — jadval sxemasini o'zgartirmasdan.
+SERVER_SITE_ID = "__server__"
 
 #: Yangi ochilgan mijoz shu muddat ichida juftlanmasa — ogohlantiriladi.
 #: Pairing kod 48 soat amal qiladi; shundan oldin xabar berish erta bo‘lardi
@@ -69,8 +86,13 @@ class AlertConfig:
             logger.warning("CHAQIMCHI_CLOUD_ALERT_INTERVAL_SEC son emas — standart qiymat")
             interval = DEFAULT_INTERVAL_SEC
         return AlertConfig(
+            # Ichki xabarlar (arizalar va qurilma aloqasi) **sotuv boti**dan
+            # ketadi: aks holda ular mijoz botidagi hisobotlar bilan bitta
+            # chatda aralashib, ikkalasi ham o'qilmay qolardi.  Sotuv boti
+            # sozlanmagan bo'lsa eski xatti-harakat saqlanadi.
             token=(
-                os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+                os.environ.get("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "").strip()
+                or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
                 or os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
                 or None
             ),
@@ -154,10 +176,7 @@ def _problem_text(site: Dict[str, Any]) -> str:
 
 
 def _recovery_text(site: Dict[str, Any]) -> str:
-    return (
-        f"✅ <b>{site.get('name', '?')}</b> — qayta ishga tushdi\n"
-        f"Aloqa tiklandi."
-    )
+    return f"✅ <b>{site.get('name', '?')}</b> — qayta ishga tushdi\nAloqa tiklandi."
 
 
 def _camera_text(site: Dict[str, Any]) -> str:
@@ -200,9 +219,10 @@ def plan_camera_alerts(
         site_id = site["id"]
         prev = previous.get(site_id)
 
-        watched = site.get("license_status") in ("active", "grace") and site.get(
-            "connection"
-        ) in ("online", "stale")
+        watched = site.get("license_status") in ("active", "grace") and site.get("connection") in (
+            "online",
+            "stale",
+        )
         if not watched:
             if prev is not None:
                 forget.append(site_id)
@@ -213,9 +233,14 @@ def plan_camera_alerts(
         if not expected:
             continue
 
-        state = "ok" if active >= expected else f"missing:{expected - active}"
+        # Holat ataylab sonsiz ("missing:2" emas, shunchaki "missing"):
+        # 2 kamera -> 1 kamera -> 2 kamera tebranishi har 15 daqiqada
+        # yangi xabar tug'dirardi.  Nechta yo'qolgani xabar matnida
+        # baribir yoziladi; qayta xabar esa faqat to'liq tiklangandan
+        # keyingi yangi yo'qolishda ketadi.
+        state = "ok" if active >= expected else "missing"
 
-        if state.startswith("missing"):
+        if state == "missing":
             if prev != state:
                 alerts.append(
                     Alert(site_id, state, _camera_text(site), remember=state, kind="cameras")
@@ -223,6 +248,162 @@ def plan_camera_alerts(
         elif prev is not None:
             alerts.append(
                 Alert(site_id, state, _camera_recovery_text(site), remember=None, kind="cameras")
+            )
+
+    return alerts, forget
+
+
+def disk_watch_path() -> Path:
+    """Qaysi disk kuzatiladi.
+
+    Docker'da `/app/data` — volume'lar turgan host fayl tizimini ko'rsatadi
+    (statvfs bind mount orqali hostnikini qaytaradi).  Konteynersiz ishga
+    tushirishda ham shu papka ishlaydi, bo'lmasa ildiz.
+    """
+    override = os.environ.get("CHAQIMCHI_DISK_WATCH_PATH", "").strip()
+    if override:
+        return Path(override)
+    default = Path("/app/data")
+    return default if default.exists() else Path("/")
+
+
+def disk_usage_percent(path: Path) -> Optional[float]:
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return None
+    if not usage.total:
+        return None
+    return usage.used / usage.total * 100
+
+
+def _disk_text(percent: float) -> str:
+    return (
+        f"💾 <b>Cloud server</b> — disk {percent:.0f}% to'lgan\n"
+        f"Media kvotasi ishlayapti, lekin joy baribir kamaymoqda.\n"
+        f"Eski backuplarni ko'chiring yoki diskni kengaytiring."
+    )
+
+
+def _disk_recovery_text(percent: float) -> str:
+    return f"✅ <b>Cloud server</b> — disk bo'shadi ({percent:.0f}%)."
+
+
+def plan_disk_alert(
+    percent: Optional[float], previous: Dict[str, str]
+) -> Tuple[List[Alert], List[str]]:
+    """Server diski uchun ogohlantirish (sof funksiya, histerezis bilan).
+
+    Qurilma monitoringi mijoz tomonini qo'riqlaydi; bu esa VPS'ning o'zini.
+    Disk to'lsa PostgreSQL o'qish rejimiga tushadi va snapshot yuklash 500
+    qaytara boshlaydi — bu holatni mijozdan oldin bilishimiz kerak.
+    """
+    if percent is None:
+        return [], []
+    prev = previous.get(SERVER_SITE_ID)
+    if percent >= DISK_ALERT_PERCENT:
+        state = "full"
+        if prev != state:
+            return [
+                Alert(SERVER_SITE_ID, state, _disk_text(percent), remember=state, kind="disk")
+            ], []
+        return [], []
+    if prev is not None and percent <= DISK_OK_PERCENT:
+        return [
+            Alert(SERVER_SITE_ID, "ok", _disk_recovery_text(percent), remember=None, kind="disk")
+        ], []
+    return [], []
+
+
+# ── Do'kon kompyuterining sog'ligi ──────────────────────────────────────
+#
+# Eng xavfli buzilish — tizim yashil ko'rinib, hodisa yozmay qo'yishi.
+# Aloqa uzilishini darhol ko'ramiz; buni esa faqat oy oxirida "hisobot
+# nega bo'sh?" degan savoldan bilib qolardik.
+
+#: Shundan kam bo'sh joy qolganda navbat va kliplar sig'may boshlaydi.
+DEVICE_DISK_LOW_BYTES = 3 * 1024**3
+
+#: Xato ulushi shundan oshsa tahlil zanjiri buzilgan hisoblanadi.
+ANALYSIS_ERROR_RATIO = 0.5
+
+#: Bundan kam kadr — bu hali statistika emas (dastur endi ko'tarildi).
+ANALYSIS_MIN_SAMPLE = 200
+
+
+def _device_problem(health: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """Eng og'ir muammoni qaytaradi: `(holat, tavsif)`.
+
+    Bitta xabar — bitta muammo.  Uchalasi bir vaqtda bo'lsa (disk to'ldi →
+    navbat yiqildi → tahlil ham xato bera boshladi) uchta alohida xabar
+    chatni ko'mib tashlaydi va eng muhimi ko'rinmay ketadi.
+    """
+    if int(health.get("queue_errors") or 0) > 0:
+        # Eng og'iri: hodisa diskka ham yozilmadi, ya'ni butunlay yo'qoldi.
+        # Uni keyin tiklab bo'lmaydi.
+        return "queue", "hodisalar saqlanmayapti va yo'qolyapti"
+
+    analyzed = int(health.get("analyzed") or 0)
+    errors = int(health.get("analysis_errors") or 0)
+    if analyzed >= ANALYSIS_MIN_SAMPLE and errors >= analyzed * ANALYSIS_ERROR_RATIO:
+        return "analysis", "tahlil ishlamayapti — kadrlar qayta ishlanmayapti"
+
+    free = int(health.get("disk_free_bytes") or 0)
+    if 0 < free < DEVICE_DISK_LOW_BYTES:
+        return "disk", f"kompyuterda joy tugayapti ({free / 1024**3:.1f} GB qoldi)"
+    return None
+
+
+def _device_text(site: Dict[str, Any], description: str) -> str:
+    return (
+        f"🔴 <b>{site.get('name', '?')}</b> — {description}\n"
+        f"Tizim tashqaridan sog'lom ko'rinadi, lekin hisobot to'planmayapti.\n"
+        f"Do'kon kompyuterini tekshirish kerak."
+    )
+
+
+def _device_recovery_text(site: Dict[str, Any]) -> str:
+    return f"✅ <b>{site.get('name', '?')}</b> — do'kon kompyuteri tuzaldi, hisobot yana to'planyapti."
+
+
+def plan_device_health_alerts(
+    sites: List[Dict[str, Any]],
+    health_by_site: Dict[str, Dict[str, Any]],
+    previous: Dict[str, str],
+) -> Tuple[List[Alert], List[str]]:
+    """Qurilma heartbeat'idagi sog'liq belgilarini tekshiradi.
+
+    `health_by_site` — sayt bo'yicha oxirgi heartbeat.  Aloqasi yo'q
+    saytlar tekshirilmaydi: ularning heartbeat'i eskirgan va aloqa
+    ogohlantirishi allaqachon ketgan.
+    """
+    alerts: List[Alert] = []
+    forget: List[str] = []
+
+    for site in sites:
+        site_id = site["id"]
+        prev = previous.get(site_id)
+        watched = site.get("license_status") in ("active", "grace") and site.get("connection") in (
+            "online",
+            "stale",
+        )
+        health = health_by_site.get(site_id)
+        if not watched or health is None:
+            if prev is not None:
+                forget.append(site_id)
+            continue
+
+        problem = _device_problem(health)
+        if problem is None:
+            if prev is not None:
+                alerts.append(
+                    Alert(site_id, "ok", _device_recovery_text(site), remember=None, kind="device")
+                )
+            continue
+        state, description = problem
+        if prev != state:
+            alerts.append(
+                Alert(site_id, state, _device_text(site, description), remember=state, kind="device")
             )
 
     return alerts, forget
@@ -271,9 +452,7 @@ def plan_alerts(
 
         if state in PROBLEM_STATES:
             if prev != state:
-                alerts.append(
-                    Alert(site_id, state, _problem_text(site), remember=state)
-                )
+                alerts.append(Alert(site_id, state, _problem_text(site), remember=state))
         elif prev in PROBLEM_STATES:
             # Muammo hal bo'ldi. `stale` ham tiklanish deb qaraladi: tizim
             # yana xabar bera boshlagan.
@@ -291,12 +470,14 @@ class TelegramSender:
         self.config = config
         self._client: Optional[httpx.AsyncClient] = None
 
-    async def send(self, text: str) -> bool:
+    async def send(self, text: str, reply_markup: Optional[Dict[str, Any]] = None) -> bool:
         if not self.config.chat_id:
             return False
-        return await self.send_to(self.config.chat_id, text)
+        return await self.send_to(self.config.chat_id, text, reply_markup=reply_markup)
 
-    async def send_to(self, chat_id: str, text: str) -> bool:
+    async def send_to(
+        self, chat_id: str, text: str, reply_markup: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """Bitta ishonchli chatga xabar yuboradi.
 
         Leadlar uchun bir nechta ichki sales guruhini qo'llash kerak bo'lishi
@@ -307,16 +488,16 @@ class TelegramSender:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=15.0)
         url = f"https://api.telegram.org/bot{self.config.token}/sendMessage"
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         try:
-            resp = await self._client.post(
-                url,
-                json={
-                    "chat_id": chat_id,
-                    "text": text,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": True,
-                },
-            )
+            resp = await self._client.post(url, json=payload)
             if resp.status_code != 200:
                 logger.warning("Telegram javobi %s: %s", resp.status_code, resp.text[:200])
                 return False
@@ -333,6 +514,17 @@ class TelegramSender:
                 self._client = None
 
 
+def _latest_health() -> Dict[str, Dict[str, Any]]:
+    """Qurilma heartbeat'lari hodisa bazasida (cloud DB'da emas).
+
+    Import shu yerda: `alerts` moduli hodisa bazasidan mustaqil bo'lib
+    qolsin, testlarda esa uni almashtirish oson bo'lsin.
+    """
+    from cloud.main import get_event_store
+
+    return get_event_store().latest_health_by_site()
+
+
 async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
     """Bir marta tekshirish: holatlarni solishtirib, o‘zgarganlarini yuboradi."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -341,17 +533,31 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
     sites = store.list_sites()
     run.checked = len(sites)
 
-    conn_alerts, conn_forget = plan_alerts(
-        sites, store.alert_states("connection"), now=now
-    )
+    conn_alerts, conn_forget = plan_alerts(sites, store.alert_states("connection"), now=now)
     cam_alerts, cam_forget = plan_camera_alerts(sites, store.alert_states("cameras"))
+    disk_alerts, _ = plan_disk_alert(
+        disk_usage_percent(disk_watch_path()), store.alert_states("disk")
+    )
+    # Qurilma sog'ligi hodisa bazasida — u yerdan bitta so'rov bilan
+    # olinadi.  Bazaga yetib bo'lmasa qolgan ogohlantirishlar baribir
+    # ketishi kerak.
+    device_alerts: List[Alert] = []
+    device_forget: List[str] = []
+    try:
+        device_alerts, device_forget = plan_device_health_alerts(
+            sites, _latest_health(), store.alert_states("device")
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Qurilma sog'ligi tekshirilmadi")
 
     for site_id in conn_forget:
         store.clear_alert_state(site_id, kind="connection")
     for site_id in cam_forget:
         store.clear_alert_state(site_id, kind="cameras")
+    for site_id in device_forget:
+        store.clear_alert_state(site_id, kind="device")
 
-    for alert in conn_alerts + cam_alerts:
+    for alert in conn_alerts + cam_alerts + device_alerts + disk_alerts:
         if await sender.send(alert.text):
             run.sent += 1
             run.messages.append(alert.text)
@@ -366,9 +572,7 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
             run.failed += 1
 
     if run.sent or run.failed:
-        logger.info(
-            "Aloqa ogohlantirishi: %d yuborildi, %d xato", run.sent, run.failed
-        )
+        logger.info("Aloqa ogohlantirishi: %d yuborildi, %d xato", run.sent, run.failed)
     return run
 
 
@@ -405,9 +609,7 @@ class AlertService:
             return
         if self._task is None:
             self._task = asyncio.create_task(self._loop())
-            logger.info(
-                "Aloqa nazorati yoqildi — har %d soniyada", self.config.interval_sec
-            )
+            logger.info("Aloqa nazorati yoqildi — har %d soniyada", self.config.interval_sec)
 
     async def stop(self) -> None:
         if self._task is not None:
@@ -441,10 +643,14 @@ __all__ = [
     "AlertConfig",
     "AlertRun",
     "AlertService",
+    "DISK_ALERT_PERCENT",
     "PAIRING_GRACE_HOURS",
     "TelegramSender",
+    "disk_usage_percent",
+    "disk_watch_path",
     "plan_alerts",
     "plan_camera_alerts",
+    "plan_disk_alert",
     "run_check",
     "test_message",
 ]

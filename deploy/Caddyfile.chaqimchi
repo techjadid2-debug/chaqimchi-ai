@@ -1,0 +1,154 @@
+# chaqimchi.uz platformasi — subdomen bo'yicha yo'l-ruxsatnomalar.
+#
+# Hamma subdomen BITTA cloud ilovasiga proxy bo'ladi; ajratish shu yerda:
+# har host faqat o'z bo'limining yo'llarini o'tkazadi.  Panellar API'ni
+# nisbiy yo'ldan chaqiradi — so'rov o'sha hostda qoladi, CORS kerak emas.
+#
+# Sertifikatlar: Caddy har host uchun Let's Encrypt'dan o'zi oladi —
+# DNS'da A yozuvlar serverga ko'rsatib turgani yetarli.
+
+# Umumiy xavfsizlik headerlari (import bilan har blokga qo'shiladi).
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+(noindex) {
+	header X-Robots-Tag "noindex, nofollow"
+}
+
+# ── Landing (marketing) ──────────────────────────────────────────────────
+chaqimchi.uz {
+	import security
+	encode zstd gzip
+	# Landing + ochiq sahifalar + public API (lead, narx, pay callback).
+	# Panellar bu yerdan subdomenlarga 301 bo'ladi (ilova ichida).
+	reverse_proxy cloud:8750
+	request_body {
+		max_size 5MB
+	}
+}
+
+www.chaqimchi.uz {
+	import security
+	redir https://chaqimchi.uz{uri} permanent
+}
+
+# ── API: qurilmalar, to'lov, Telegram (ENG BARQAROR shartnoma) ──────────
+api.chaqimchi.uz {
+	import security
+	import noindex
+	encode zstd gzip
+	@allowed path /api/* /health /releases/* /downloads/* /robots.txt
+	handle @allowed {
+		reverse_proxy cloud:8750
+	}
+	handle {
+		respond "Topilmadi" 404
+	}
+	# Klip limiti (cloud/main.py CLIP_MAX_BYTES = 50MB) dan katta bo'lishi
+	# shart — tests/test_proxy_limits.py mosligini tekshiradi.
+	request_body {
+		max_size 60MB
+	}
+}
+
+# ── Mijoz paneli ─────────────────────────────────────────────────────────
+app.chaqimchi.uz {
+	import security
+	import noindex
+	encode zstd gzip
+	@allowed path / /owner /owner/* /assets/* /vendor/* /robots.txt /api/v1/owner/* /api/v1/owner* /api/v1/auth/* /api/v1/public/urls /api/v1/public/windows-release /pay/* /api/v1/invoices/* /api/v1/payments/*
+	handle @allowed {
+		reverse_proxy cloud:8750
+	}
+	handle {
+		respond "Topilmadi" 404
+	}
+	request_body {
+		max_size 5MB
+	}
+}
+
+# ── Montajchi (hamkor) portali ───────────────────────────────────────────
+partner.chaqimchi.uz {
+	import security
+	import noindex
+	encode zstd gzip
+	@allowed path / /installer /installer/* /installer-guide /assets/* /vendor/* /robots.txt /api/v1/auth/* /api/v1/installer/* /api/v1/public/urls
+	handle @allowed {
+		reverse_proxy cloud:8750
+	}
+	handle {
+		respond "Topilmadi" 404
+	}
+	request_body {
+		max_size 5MB
+	}
+}
+
+# ── Admin (faqat egasi) ──────────────────────────────────────────────────
+admin.chaqimchi.uz {
+	import security
+	import noindex
+	encode zstd gzip
+	# Kelajakda VPN/IP cheklovi uchun tayyor joy (hozircha parol bilan):
+	#   @tashqi not remote_ip 100.64.0.0/10 SIZNING_IP
+	#   handle @tashqi { respond "Ruxsat yo'q" 403 }
+	@allowed path / /admin /admin/* /assets/* /vendor/* /robots.txt /api/v1/admin/* /api/v1/auth/* /api/v1/public/urls /installer-guide
+	handle @allowed {
+		reverse_proxy cloud:8750
+	}
+	handle {
+		respond "Topilmadi" 404
+	}
+	request_body {
+		max_size 5MB
+	}
+}
+
+# ── Yuklab olish (keyin CDN'ga DNS bilan ko'chadi) ───────────────────────
+dl.chaqimchi.uz {
+	import security
+	import noindex
+	encode zstd gzip
+	@allowed path / /downloads/* /releases/* /install /assets/* /robots.txt /api/v1/public/*
+	handle @allowed {
+		reverse_proxy cloud:8750
+	}
+	handle {
+		respond "Topilmadi" 404
+	}
+	request_body {
+		max_size 1MB
+	}
+}
+
+# ── Hujjatlar (SEO ochiq, statik) ────────────────────────────────────────
+docs.chaqimchi.uz {
+	import security
+	encode zstd gzip
+	@allowed path / /ornatish-windows /nvr-hikvision /nvr-dahua /nvr-uniview /muammolar /xavfsizlik /docs-static/* /assets/* /robots.txt
+	handle @allowed {
+		reverse_proxy cloud:8750
+	}
+	handle {
+		respond "Topilmadi" 404
+	}
+	request_body {
+		max_size 1MB
+	}
+}
+
+# Eslatma: status.chaqimchi.uz bu serverga KELMAYDI — u tashqi xizmatda
+# (UptimeRobot status page, DNS'da CNAME) — server o'lsa status tirik qoladi.

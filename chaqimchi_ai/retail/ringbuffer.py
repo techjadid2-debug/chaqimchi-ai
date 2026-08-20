@@ -14,12 +14,35 @@ soniya uchun: `data/buffer` da 3 kun / 40 GB (`sotqin_profile`).
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
+
+
+def default_ffmpeg_binary() -> str:
+    """ffmpeg qayerda — Windows payload'idagi birga kelgan nusxa birinchi.
+
+    Do'kon kompyuterida PATH'da ffmpeg bo'lmaydi; o'rnatuvchi uni
+    `bin/ffmpeg.exe` sifatida dastur papkasiga qo'yadi
+    (`scripts/build_windows_payload.py step_ffmpeg`).  Linux Sotqin'da
+    esa hostdagi ffmpeg ishlatiladi (PATH).
+    """
+    override = os.environ.get("CHAQIMCHI_FFMPEG", "").strip()
+    if override:
+        return override
+    bundled = (
+        Path(__file__).resolve().parents[2]
+        / "bin"
+        / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+    )
+    if bundled.is_file():
+        return str(bundled)
+    return "ffmpeg"
+
 
 #: Segment nomi: `camera-01-20260813-142530.mp4`.  Vaqt nomdan o'qiladi —
 #: alohida indeks fayli yuritish kerak emas va u buzilib qolmaydi.
@@ -59,7 +82,7 @@ class RingBuffer:
         retention_sec: int = 180,
         max_bytes: int = 2 * 1024**3,
         container: str = "mp4",
-        ffmpeg_binary: str = "ffmpeg",
+        ffmpeg_binary: Optional[str] = None,
         runner: Runner = subprocess.run,
     ) -> None:
         if segment_sec < 1:
@@ -72,7 +95,7 @@ class RingBuffer:
         self.retention_sec = int(retention_sec)
         self.max_bytes = int(max_bytes)
         self.container = container
-        self.ffmpeg_binary = ffmpeg_binary
+        self.ffmpeg_binary = ffmpeg_binary or default_ffmpeg_binary()
         self.runner = runner
 
     # ── Yozish ───────────────────────────────────────────────────────────
@@ -88,15 +111,24 @@ class RingBuffer:
         return [
             self.ffmpeg_binary,
             "-nostdin",
-            "-loglevel", "error",
-            "-rtsp_transport", "tcp",
-            "-i", rtsp_url,
-            "-c", "copy",
-            "-f", "segment",
-            "-segment_time", str(self.segment_sec),
-            "-segment_format", self.container,
-            "-strftime", "1",
-            "-reset_timestamps", "1",
+            "-loglevel",
+            "error",
+            "-rtsp_transport",
+            "tcp",
+            "-i",
+            rtsp_url,
+            "-c",
+            "copy",
+            "-f",
+            "segment",
+            "-segment_time",
+            str(self.segment_sec),
+            "-segment_format",
+            self.container,
+            "-strftime",
+            "1",
+            "-reset_timestamps",
+            "1",
             pattern,
         ]
 
@@ -175,11 +207,16 @@ class RingBuffer:
         return [
             self.ffmpeg_binary,
             "-nostdin",
-            "-loglevel", "error",
-            "-i", f"concat:{listing}" if len(segments) > 1 else str(segments[0].path),
-            "-ss", f"{max(0.0, offset_sec):.3f}",
-            "-t", f"{duration_sec:.3f}",
-            "-c", "copy",
+            "-loglevel",
+            "error",
+            "-i",
+            f"concat:{listing}" if len(segments) > 1 else str(segments[0].path),
+            "-ss",
+            f"{max(0.0, offset_sec):.3f}",
+            "-t",
+            f"{duration_sec:.3f}",
+            "-c",
+            "copy",
             "-y",
             str(output),
         ]

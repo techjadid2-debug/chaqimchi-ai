@@ -22,7 +22,7 @@ CANCELLED = "cancelled"
 def billable_months(months: int) -> int:
     """To'lanadigan oylar: har to'liq yil uchun 2 oy tekin (yillik = oylik × 10).
 
-    `docs/BIZNES_MODEL.md` dagi narx qoidasi shu yerda — bitta joyda.
+    `docs/archive/BIZNES_MODEL.md` dagi narx qoidasi shu yerda — bitta joyda.
     """
     years, rest = divmod(max(1, int(months)), 12)
     return years * 10 + rest
@@ -37,8 +37,13 @@ class PaymentStore:
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            pass
         return conn
 
     def _init_db(self) -> None:

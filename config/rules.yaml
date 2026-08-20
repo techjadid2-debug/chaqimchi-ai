@@ -1,20 +1,48 @@
 # Do'kon qoidalari — namuna.
 #
 # Yoqish: `retail.rules_path: config/rules.yaml` (config.yaml da).
-# Qoida o'zgarsa faqat analitika xizmati qayta yuklanadi, yuz tanish tegilmaydi.
+# Qoida o'zgarsa faqat analitika xizmati qayta yuklanadi.
 #
 # Harakatlar:
 #   cloud_sync     — hodisa cloudga ketadi (standart)
 #   telegram_alert — cloud mijozga Telegram xabarini yuboradi
 #   save_clip      — hodisa atrofidagi video kesib olinadi
 #   ignore         — hodisa bostiriladi
-# Canonical do'kon MVP taxminiy AI talqinidan foydalanmaydi. `ai_review`
-# mexanizmi repoda tarixiy/future modul sifatida qolgan, bu qoidalarga kirmaydi.
 
 schedules:
   ish-vaqti: {start: "09:00", end: "21:00"}
 
 rules:
+  # ── Kamera sog'ligi ───────────────────────────────────────────────────
+  #
+  # Bular jadvalga bog'lanmagan: kamera kechasi o'chsa ham ertalab emas,
+  # o'sha zahoti aytilishi kerak.  Klip ham olinmaydi — uzilgan kameradan
+  # kesib olinadigan video yo'q.
+
+  - name: Kamera javob bermayapti
+    event_type: camera_offline
+    # Kamera o'chgan do'kon — ko'r do'kon; bu kritik va botga boradi.
+    severity: critical
+    # 15 daqiqa: NVR o'chib-yonib turgan bo'lsa telefon jiringlab ketmasin.
+    cooldown_sec: 900
+    actions: [cloud_sync, telegram_alert]
+
+  - name: Kamera tiklandi
+    event_type: camera_recovered
+    severity: info
+    cooldown_sec: 900
+    actions: [cloud_sync, telegram_alert]
+
+  # Eng jimgina buziladigan holat: oqim ochiq, lekin tasvir o'zgarmaydi.
+  # Buzilish tekshiruvi ham, harakat filtri ham buni sezmaydi.
+  - name: Tasvir qotib qoldi
+    event_type: stream_frozen
+    severity: critical
+    cooldown_sec: 900
+    actions: [cloud_sync, telegram_alert]
+
+  # ── Xavfsizlik ────────────────────────────────────────────────────────
+
   # Kamera yopilgan yoki burilgan — aniq, o'lchanadigan security hodisasi.
   - name: Kamera buzilishi
     event_type: camera_tampered
@@ -43,11 +71,15 @@ rules:
     conditions: {restricted: false}
     suppress: true
 
+  # MINIMAL rejim (2026-08-16): loitering va navbat botga BORMAYDI —
+  # ular kundalik holat, mijoz ularni panelda ko'radi.  Botga faqat
+  # kritik xavfsizlik hodisalari boradi, aks holda bot shovqinga aylanib,
+  # haqiqiy xavf ham o'qilmay qoladi.
   - name: Uzoq vaqt turish
     event_type: loitering
     severity: warning
     cooldown_sec: 300
-    actions: [cloud_sync, telegram_alert, save_clip]
+    actions: [cloud_sync, save_clip]
 
   # Navbat — kundalik ish, AI kerak emas: raqamning o'zi yetarli.
   - name: Kassada uzun navbat
@@ -57,7 +89,51 @@ rules:
     schedule: ish-vaqti
     severity: warning
     cooldown_sec: 300
+    actions: [cloud_sync]
+
+  # ── Kassa nazorati ────────────────────────────────────────────────────
+  #
+  # Bu ikkisi 16-avgustdagi "MINIMAL rejim" qaroriga QARSHI ko'rinadi va
+  # buni yozib qo'yish shart, aks holda keyingi tozalashda olib
+  # tashlanadi.  Farq bor: `queue_threshold_exceeded` xom hodisa, u
+  # gavjum daqiqada takror-takror chiqadi va botni shovqinga aylantiradi.
+  # Quyidagi ikkitasi esa **latch** bilan ishlaydi — holat o'zgarmaguncha
+  # qayta chiqmaydi — ish vaqti bilan cheklangan va cooldown'i uzun.
+  #
+  # Ikkalasi ham "kassa" haqida, "kassir" haqida emas: detektor odamni
+  # topadi, lavozimni emas.
+
+  - name: Kassada hech kim yo'q
+    event_type: checkout_unattended
+    # Analyzer buni faqat kadrda odam bor, kassada esa yo'q paytda
+    # chiqaradi — bo'sh do'kondagi bo'sh kassa signal emas.
+    schedule: ish-vaqti
+    severity: warning
+    cooldown_sec: 900
     actions: [cloud_sync, telegram_alert]
+
+  - name: Ikkinchi kassani ochish kerak
+    event_type: checkout_second_till
+    # Faqat ikki va undan ko'p kassa zonasi bo'lgan do'konda: bittasida
+    # navbat chegaradan oshgan, boshqasida umuman odam yo'q.
+    schedule: ish-vaqti
+    severity: warning
+    cooldown_sec: 600
+    actions: [cloud_sync, telegram_alert]
+
+  # ── Javon nazorati (sinov bosqichi) ──────────────────────────────────
+  #
+  # Usul modelsiz: javon zonasidagi chekka zichligi o'rganilgan etalondan
+  # keskin pasaysa signal (`chaqimchi_ai/retail/shelf.py`).  Hali haqiqiy
+  # do'konda sinalmagan, shuning uchun ATAYLAB faqat `cloud_sync`:
+  # yolg'on signal bo'lsa u panelda ko'rinadi, lekin telefonni
+  # jiringlatmaydi.  Sinovdan o'tgach `telegram_alert` qo'shiladi.
+  - name: Javon bo'shab qolgan
+    event_type: shelf_empty
+    schedule: ish-vaqti
+    severity: warning
+    cooldown_sec: 3600
+    actions: [cloud_sync]
 
   # Kirish/chiqish sanog'i hisobot uchun kerak, lekin xabar qilinmaydi —
   # aks holda telefon kun bo'yi jiringlaydi.

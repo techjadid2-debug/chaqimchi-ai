@@ -8,8 +8,6 @@ tests/
 docs/
 Makefile
 pytest.ini
-scripts/*
-!scripts/create_portal_account.py
 test_data_lena.jpg
 .git/
 .gitignore

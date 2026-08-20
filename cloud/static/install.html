@@ -1,1 +1,318 @@
-<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Mustaqil o‘rnatish — Chaqimchi AI</title><link rel="stylesheet" href="/assets/site.css?v=20260813-install"></head><body class="utility-page"><header class="nav-shell"><nav class="nav"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-black-crop-v1.png" alt=""></span><span>Chaqimchi <b>AI</b></span></a><div class="nav-actions"><a class="button button-small" href="/#configurator">Tarifni tanlash</a></div></nav></header><main class="utility-main"><p class="eyebrow"><span></span> Mustaqil o‘rnatish</p><h1>O‘zingiz o‘rnating. Kerak bo‘lsa, yordam so‘rang.</h1><p class="hero-text">Tarif tanlab, to‘lov qilingandan keyin kompaniya mini-kompyuter uchun rasmiy dasturiy paketni yuboradi. Quyidagi ketma-ketlik bilan tizimni ishga tushiring.</p><section class="utility-card"><div class="install-flow"><article><span>1</span><h3>Tarif va to‘lov</h3><p>Saytda oylik/yillik tarif va funksiyalarni belgilang. To‘lov havolasini oling.</p></article><i></i><article><span>2</span><h3>Paketni oling</h3><p>To‘lov tasdiqlangach, o‘rnatish paketi va pairing kodi yuboriladi.</p></article><i></i><article><span>3</span><h3>Tarmoqni ulang</h3><p>Mini-kompyuterni elektr, internet hamda NVR tarmog‘iga ulang.</p></article><i></i><article><span>4</span><h3>Buyruqni bajaring</h3><p>Quyidagi buyruq bilan paketni o‘rnating va cloudga ulang.</p></article></div></section><section class="utility-card"><h2>Ulanish chizmasi</h2><div class="mini-flow"><b>IP kameralar</b><i></i><b>NVR</b><i></i><b>Mini-kompyuter</b><i></i><b>Chaqimchi Cloud</b></div><p class="model-note">Mini-kompyuter va NVR bir tarmoqda bo‘lishi, internet barqaror ishlashi kerak.</p></section><section class="utility-card"><h2>O‘rnatish buyrug‘i</h2><p>Pairing kod berilgandan keyin uni kiriting:</p><div class="connect-form"><input id="pairCode" maxlength="6" pattern="[A-Fa-f0-9]{6}" placeholder="ABC123" aria-label="6 xonali pairing kod"><button id="makeCommand" class="button" type="button">Buyruq yaratish</button></div><code id="command" class="command">Pairing kodni kiriting.</code><button id="copyCommand" class="button button-ghost" type="button" hidden style="margin-top:12px">Nusxalash</button><p id="copyStatus" class="form-status" role="status"></p></section><p><a class="button" href="/#pilot">Maslahat bilan o‘rnatish</a></p></main><script>const code=document.getElementById('pairCode'),output=document.getElementById('command'),copy=document.getElementById('copyCommand'),status=document.getElementById('copyStatus');function make(){const value=code.value.trim().toUpperCase();if(!/^[A-F0-9]{6}$/.test(value)){status.textContent='6 xonali pairing kodni kiriting.';status.className='form-status error';return}output.textContent=`curl -fsSL ${location.origin}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${location.origin} --code ${value}`;copy.hidden=false;status.textContent='Buyruq tayyor.';status.className='form-status ok'}document.getElementById('makeCommand').addEventListener('click',make);copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(output.textContent);status.textContent='Buyruq nusxalandi.';status.className='form-status ok'}catch(_){status.textContent='Qo‘lda nusxalang.';status.className='form-status error'}});</script></body></html>
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Chaqimchi AI ni Windows kompyuteringizga o‘rnatish: qadam-baqadam yo‘riqnoma, Windows ogohlantirishi va kamerani ulash.">
+  <title>O‘rnatish yo‘riqnomasi — Chaqimchi AI</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/site.css?v=20260816-v7">
+</head>
+<body class="utility-page">
+  <header class="nav-shell">
+    <nav class="nav">
+      <a class="brand" href="/">
+        <span class="brand-mark"><img src="/assets/chaqimchi-logo-v2.webp" alt="Chaqimchi AI"></span>
+        <span>Chaqimchi <b>AI</b></span>
+      </a>
+      <div class="nav-actions">
+        <a class="text-link" href="/installer-guide">O‘rnatuvchi mutaxassislar uchun</a>
+        <a class="button button-small" href="/#narx">Tarifni tanlash</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="utility-main">
+    <p class="eyebrow"><span></span> O‘rnatish yo‘riqnomasi</p>
+    <h1>Windows kompyuteringizga o‘rnatamiz</h1>
+    <p class="hero-text">
+      Boshidan oxirigacha <b>10 daqiqa</b>. Dasturchi bo‘lish shart emas —
+      quyidagi 8 qadamni ketma-ket bajarasiz, xolos.
+    </p>
+
+    <!-- ── Yuklab olish ────────────────────────────────────────────── -->
+    <section class="utility-card" id="downloadCard">
+      <h2>Dasturni yuklab olish</h2>
+      <p>Python, sun’iy intellekt modeli va barcha kutubxonalar o‘rnatuvchi ichida. Internet faqat yuklab olish uchun kerak.</p>
+
+      <div id="guideDownloadReady" hidden>
+        <a class="button button-light" id="guideDownloadBtn" href="/api/v1/public/download-installer">
+          Windows uchun yuklab olish
+        </a>
+        <p class="hint" id="guideDownloadVersion" style="margin: 8px 0 0;" hidden></p>
+      </div>
+
+      <div id="guideDownloadPending">
+        <p class="form-status">
+          Dastur hozir yakuniy sinovdan o‘tmoqda.
+          <a href="/#aloqa">Raqamingizni qoldiring</a> — tayyor bo‘lgan kuni yuboramiz.
+        </p>
+      </div>
+
+      <p class="hint" style="margin-top:14px">
+        Fayl nomi <code>Chaqimchi_AI_Setup-</code> bilan boshlanadi va versiya
+        raqami bilan tugaydi — masalan <code>Chaqimchi_AI_Setup-0.6.8.exe</code>.
+        Raqam har yangi versiyada o‘zgaradi, ya’ni yangisini olganingizni
+        shundan bilasiz.
+      </p>
+    </section>
+
+    <!-- ── Qadamlar ────────────────────────────────────────────────── -->
+    <ol class="guide-steps">
+
+      <li class="guide-step">
+        <h3>Faylni saqlang</h3>
+        <p>
+          Chrome ba’zan <b>“Bu faylni kam odam yuklaydi”</b>
+          <i>(This file isn’t commonly downloaded)</i> deb ogohlantiradi.
+        </p>
+        <p class="do">
+          Yuklamalar ro‘yxatida fayl yonidagi <b>⋮</b> tugmasini bosing →
+          <b>Saqlash</b> <i>(Keep)</i>.
+        </p>
+      </li>
+
+      <li class="guide-step">
+        <h3>“Windows kompyuteringizni himoya qildi” oynasi</h3>
+        <p>
+          Faylni ishga tushirganingizda ko‘k oyna chiqadi:
+          <b>“Windows protected your PC”</b>.
+        </p>
+        <p class="do">
+          <b>Qo‘shimcha ma’lumot</b> <i>(More info)</i> ni bosing → pastda
+          <b>Baribir ishga tushirish</b> <i>(Run anyway)</i> paydo bo‘ladi, shuni bosing.
+        </p>
+        <p class="why">
+          <b>Nega chiqadi?</b> Dasturimiz yangi va hali Microsoft raqamli
+          sertifikati olinmagan. Bu virus haqidagi ogohlantirish emas —
+          Windows shunchaki dasturni tanimaydi. Faylni faqat shu rasmiy
+          saytdan yuklab oling.
+        </p>
+      </li>
+
+      <li class="guide-step">
+        <h3>Ruxsat bering</h3>
+        <p>
+          Windows so‘raydi: <b>“Bu ilova qurilmangizga o‘zgartirish
+          kiritishiga ruxsat berasizmi?”</b>
+          <i>(Do you want to allow this app to make changes?)</i>
+        </p>
+        <p class="do"><b>Ha</b> <i>(Yes)</i> ni bosing.</p>
+        <p class="why">
+          Bu ruxsat dasturni <code>Program Files</code> ga o‘rnatish va
+          kompyuter yonganda avtomatik ishga tushirish uchun kerak.
+        </p>
+      </li>
+
+      <li class="guide-step">
+        <h3>Keyingi → Keyingi → O‘rnatish</h3>
+        <p>O‘rnatuvchi oynasi o‘zbek tilida ochiladi.</p>
+        <p class="do">
+          Ikkala katakni <b>belgilangan holda qoldiring</b>:<br>
+          ☑ Ish stoliga yorliq &nbsp;·&nbsp; ☑ Kompyuter yonganda avtomatik ishga tushsin
+        </p>
+        <p class="why">
+          Avtomatik ishga tushish muhim: do‘kon kompyuteri kechqurun
+          o‘chirilib ertalab yoqiladi. Belgilangan bo‘lsa, nazorat
+          kompyuter yonishi bilan o‘zi boshlanadi — tizimga kirish ham,
+          hech qanday oynani ochiq tutish ham kerak emas.
+        </p>
+      </li>
+
+      <li class="guide-step">
+        <h3>Sozlash oynasi ochiladi</h3>
+        <p>
+          O‘rnatish tugagach brauzer o‘zi ochiladi va sozlash ustasi
+          ko‘rinadi.
+        </p>
+        <p class="do">
+          Ochilmasa brauzerni qo‘lda oching va manzilga yozing:
+          <code>http://localhost:8760</code>
+        </p>
+      </li>
+
+      <li class="guide-step">
+        <h3>Kamerani ulang</h3>
+        <p>
+          Dastur avval tarmoqni o‘zi qidiradi. Topilmasa qo‘lda kiritasiz:
+          NVR yoki kamera IP manzili, foydalanuvchi nomi va parol.
+        </p>
+        <p class="do">
+          <b>“Tasvirni tekshirish”</b> tugmasini bosing — kameradan haqiqiy
+          rasm kelishi kerak. Rasm kelmasa saqlamang, avval quyidagi
+          “Nima ishlamayapti?” bo‘limini o‘qing.
+        </p>
+        <p class="why">
+          NVR’da Chaqimchi uchun <b>alohida foydalanuvchi</b> yarating va unga
+          faqat ko‘rish huquqini bering. Parol shu kompyuterdan chiqmaydi.
+        </p>
+      </li>
+
+      <li class="guide-step">
+        <h3>Kirish chizig‘ini chizing</h3>
+        <p>
+          Kamera tasviri ustida eshik oldidan o‘tuvchi chiziq tortasiz —
+          ikki nuqtani bosasiz.
+        </p>
+        <p class="do">
+          Yashil o‘q do‘kon <b>ichkarisini</b> ko‘rsatishi kerak. Teskari
+          bo‘lsa “Yo‘nalishni almashtirish” tugmasini bosing.
+        </p>
+        <p class="why">
+          <b>Chiziqsiz hech narsa sanalmaydi.</b> Tizim aynan shu chiziqni
+          kesib o‘tgan odamlarni hisoblaydi.
+        </p>
+      </li>
+
+      <li class="guide-step">
+        <h3>Ishga tushiring</h3>
+        <p>
+          Ish vaqtini va istasangiz Telegram botni kiritasiz, so‘ng
+          <b>“Saqlash va ishga tushirish”</b>.
+        </p>
+        <p class="do">
+          Panelda birinchi raqamlar <b>10–20 daqiqada</b> paydo bo‘ladi —
+          birinchi mijoz eshikdan kirganda.
+        </p>
+      </li>
+
+    </ol>
+
+    <!-- ── Muammolar ───────────────────────────────────────────────── -->
+    <section class="utility-card">
+      <h2>Nima ishlamayapti?</h2>
+
+      <details class="guide-fix">
+        <summary>Brauzer o‘zi ochilmadi</summary>
+        <p>
+          Brauzerni qo‘lda oching va manzil qatoriga
+          <code>http://localhost:8760</code> deb yozing. Sahifa ochilmasa,
+          ish stolidagi <b>Chaqimchi AI</b> yorlig‘ini bosing va qora oyna
+          ochilib turganiga ishonch hosil qiling — u yopilsa dastur to‘xtaydi.
+        </p>
+      </details>
+
+      <details class="guide-fix">
+        <summary>Kamera topilmadi yoki tasvir kelmadi</summary>
+        <p>Tartib bilan tekshiring:</p>
+        <ol>
+          <li>Kompyuter va NVR <b>bitta tarmoqda</b>mi (bir xil router yoki switch)?</li>
+          <li>NVR sozlamalarida <b>RTSP</b> yoqilganmi? (Odatda: Network → Advanced → RTSP, port 554)</li>
+          <li>Foydalanuvchi nomi va parol to‘g‘rimi? Parolda <code>@</code> yoki <code>/</code> bo‘lsa ham ishlaydi — dastur uni o‘zi to‘g‘rilaydi.</li>
+          <li>Kamera <b>H.265</b> berayaptimi? Chaqimchi H.264 substream bilan ishlaydi. NVR menyusida: Video → Stream Type → Sub Stream → H.264.</li>
+        </ol>
+        <p>Baribir chiqmasa — <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> ga yozing, birga ulaymiz.</p>
+      </details>
+
+      <details class="guide-fix">
+        <summary>“Windows bu faylni bloklab qo‘ydi”</summary>
+        <p>
+          Bu 2-qadamdagi oyna. <b>Qo‘shimcha ma’lumot</b> <i>(More info)</i> →
+          <b>Baribir ishga tushirish</b> <i>(Run anyway)</i>.
+          Agar oyna umuman chiqmay fayl o‘chib ketgan bo‘lsa, antivirus
+          o‘chirgan bo‘lishi mumkin — yuklamalar papkasini tekshiring.
+        </p>
+      </details>
+
+      <details class="guide-fix">
+        <summary>ZIP fayl tushdi, ichida faqat papkalar bor</summary>
+        <p>
+          Siz <b>manba kodini</b> yuklab olgansiz (GitHub’dagi “Download ZIP”).
+          U o‘rnatilmaydi — dasturchilar uchun. Tayyor dasturni shu sahifadagi
+          <b>“Windows uchun yuklab olish”</b> tugmasidan oling: fayl nomi
+          <code>Chaqimchi_AI_Setup-</code> bilan boshlanadi va <code>.exe</code>
+          bilan tugaydi.
+        </p>
+      </details>
+
+      <details class="guide-fix">
+        <summary>Dasturni qanday o‘chiraman?</summary>
+        <p>
+          Boshqaruv paneli → Dasturlar → <b>Chaqimchi AI</b> → O‘chirish.
+          Sozlamalaringizni saqlashni so‘raydi: <b>Yo‘q</b> desangiz kamera
+          sozlamalari qoladi va qayta o‘rnatganda hammasi joyida bo‘ladi.
+        </p>
+      </details>
+    </section>
+
+    <!-- ── Linux ───────────────────────────────────────────────────── -->
+    <section class="utility-card">
+      <h2>Linux / Ubuntu Server</h2>
+      <p>
+        Bu yo‘l texnik mutaxassislar uchun: mini-PC yoki serverga
+        <code>systemd</code> xizmati sifatida o‘rnatiladi va cloudga pairing
+        kod bilan ulanadi.
+      </p>
+      <label style="font-weight: 700; display: block; margin: 18px 0 8px;">Pairing kodni kiriting:</label>
+      <div class="connect-form">
+        <input id="pairCodeLin" maxlength="6" pattern="[A-Fa-f0-9]{6}" placeholder="ABC123" aria-label="6 xonali pairing kod">
+        <button class="button button-ghost" type="button" onclick="makeLin()">Buyruq yaratish</button>
+      </div>
+      <code id="commandLin" class="command">Pairing kodni kiriting.</code>
+      <button id="copyCommandLin" class="button button-ghost" type="button" hidden style="margin-top:12px" onclick="copyText('commandLin', 'copyStatusLin')">Nusxalash</button>
+      <p id="copyStatusLin" class="form-status" role="status"></p>
+    </section>
+
+    <p style="margin-top: 32px;">
+      <a class="button button-ghost" href="/#aloqa">O‘zim uddalay olmadim — usta chaqiring</a>
+    </p>
+  </main>
+
+  <script>
+      const PLATFORM = { api: location.origin, dl: location.origin };
+      fetch('/api/v1/public/urls').then((r) => r.ok ? r.json() : null).then((d) => { if (d) Object.assign(PLATFORM, d); }).catch(() => {});
+    // Yuklab olish tugmasi serverdan so'raladi: dastur nashr qilinmagan
+    // bo'lsa mijoz 503 qaytaradigan buzuq tugmani bosmasligi kerak.
+    fetch("/api/v1/public/windows-release")
+      .then((response) => response.json())
+      .then((release) => {
+        if (!release.available) return;
+        const button = document.getElementById("guideDownloadBtn");
+        if (button && release.size_mb) {
+          button.textContent = `Windows uchun yuklab olish (${release.size_mb} MB)`;
+        }
+        // Versiya ko'rinsin: hajm har relizda bir xil (68 MB) va usiz
+        // yangi fayl chiqqanini sahifadan bilib bo'lmasdi.
+        const label = document.getElementById("guideDownloadVersion");
+        if (label && release.version) {
+          label.textContent = `Versiya ${release.version}`;
+          label.hidden = false;
+        }
+        document.getElementById("guideDownloadReady").hidden = false;
+        document.getElementById("guideDownloadPending").hidden = true;
+      })
+      .catch(() => {
+        /* Tayyor emas — "raqamingizni qoldiring" bloki ko'rinib turaveradi. */
+      });
+
+    function makeLin() {
+      const value = document.getElementById('pairCodeLin').value.trim().toUpperCase();
+      const out = document.getElementById('commandLin');
+      const copy = document.getElementById('copyCommandLin');
+      const status = document.getElementById('copyStatusLin');
+      if (!/^[A-F0-9]{6}$/.test(value)) {
+        status.textContent = '6 xonali pairing kodni kiriting (masalan: ABC123).';
+        status.className = 'form-status error';
+        return;
+      }
+      out.textContent = `curl -fsSL ${PLATFORM.dl}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${PLATFORM.api} --code ${value}`;
+      copy.hidden = false;
+      status.textContent = 'Buyruq tayyor.';
+      status.className = 'form-status ok';
+    }
+
+    async function copyText(elemId, statusId) {
+      const text = document.getElementById(elemId).textContent;
+      const status = document.getElementById(statusId);
+      try {
+        await navigator.clipboard.writeText(text);
+        status.textContent = 'Buyruq nusxalandi.';
+        status.className = 'form-status ok';
+      } catch (_) {
+        status.textContent = 'Matndan qo‘lda nusxalang.';
+        status.className = 'form-status error';
+      }
+    }
+  </script>
+</body>
+</html>

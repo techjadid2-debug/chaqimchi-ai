@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Chaqimchi AI — sozlash</title>
+  <link rel="stylesheet" href="/assets/local.css">
+  <script src="/assets/zone-editor.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Chaqimchi <b>AI</b></a>
+    <div class="topbar-actions">
+      <span id="appVersion" class="hint" style="margin:0"></span>
+      <a class="button ghost small" href="/panel">Panelga o‘tish</a>
+    </div>
+  </header>
+
+  <main class="shell">
+    <div class="steps" aria-label="Sozlash bosqichlari">
+      <div class="step-chip active" data-step="1">1. Kamerani ulash</div>
+      <div class="step-chip" data-step="2">2. Tasvirni tekshirish</div>
+      <div class="step-chip" data-step="3">3. Chiziq chizish</div>
+      <div class="step-chip" data-step="4">4. Sozlamalar</div>
+      <div class="step-chip" data-step="5">5. Cloudga ulash</div>
+    </div>
+
+    <!-- ── 1-QADAM ── -->
+    <section class="step" data-step="1">
+      <h1>Kamerangizni ulaymiz</h1>
+      <p class="lead">Do‘koningizdagi NVR yoki IP kamera shu kompyuter bilan bitta tarmoqda bo‘lishi kerak. Avval tarmoqni tekshiramiz.</p>
+
+      <!-- Kompyuter quvvati kamera qo‘shishdan OLDIN aytiladi: zaif
+           mashinaga to‘rtta kamera qo‘shilsa hisobot jimgina to‘liqsiz
+           bo‘lardi va buni hech kim sezmasdi. -->
+      <div class="card quiet" id="hardwareCard" hidden>
+        <h2>Bu kompyuter nimani ko‘taradi</h2>
+        <div id="hardwareResult"></div>
+      </div>
+
+      <div class="card">
+        <h2>Tarmoqdagi kameralarni qidirish</h2>
+        <p class="hint">Qidiruv 10–30 soniya davom etadi.</p>
+        <div class="actions">
+          <button class="button primary" id="scanBtn" type="button">Kameralarni qidirish</button>
+        </div>
+        <div id="scanResult"></div>
+      </div>
+
+      <div class="card">
+        <h2>Kamera manzilini kiritish</h2>
+        <p class="hint">Kamera topilmasa yoki qaysi biri kerakligini bilsangiz, shu yerdan qo‘shing.</p>
+
+        <label class="field">Kamera brendi <small>bilmasangiz «Bilmayman» ni tanlang</small>
+          <select id="brand">
+            <option value="auto">Bilmayman — o‘zi topsin</option>
+            <option value="hikvision">Hikvision / HiLook</option>
+            <option value="dahua">Dahua / IMOU</option>
+            <option value="uniview">Uniview (UNV)</option>
+            <option value="onvif">ONVIF — kameradan so‘ralsin</option>
+            <option value="manual">Boshqa — RTSP manzilini o‘zim yozaman</option>
+          </select>
+        </label>
+
+        <div id="templateFields">
+          <div class="grid-2">
+            <label class="field">NVR yoki kamera IP manzili
+              <input type="text" id="host" placeholder="192.168.1.64" autocomplete="off">
+            </label>
+            <label class="field">Kanal raqami <small>NVR’dagi kamera tartibi</small>
+              <input type="number" id="channel" value="1" min="1" max="64">
+            </label>
+          </div>
+          <div class="grid-2">
+            <label class="field">Foydalanuvchi nomi
+              <input type="text" id="username" placeholder="admin" autocomplete="off">
+            </label>
+            <label class="field">Parol
+              <input type="password" id="password" autocomplete="new-password">
+            </label>
+          </div>
+          <p class="hint">Maslahat: NVR’da faqat ko‘rish huquqiga ega alohida foydalanuvchi yarating. Parol shu kompyuterdan chiqmaydi.</p>
+        </div>
+
+        <label class="field hidden" id="manualField">RTSP manzili
+          <input type="text" id="manualUrl" placeholder="rtsp://foydalanuvchi:parol@192.168.1.64:554/..." autocomplete="off">
+        </label>
+
+        <div class="grid-2">
+          <label class="field">Bu kamera qayerda turibdi?
+            <!-- Rol tanlash nomni ham to'ldiradi, ham tahlil muhimligini
+                 belgilaydi (kirish/kassa kamerasi birinchi navbatda
+                 tahlil qilinadi, ombor esa fonda). -->
+            <select id="cameraRole">
+              <option value="">Tanlang…</option>
+              <option value="entrance">Kirish eshigi</option>
+              <option value="checkout">Kassa</option>
+              <option value="sales">Savdo zali</option>
+              <option value="storage">Ombor</option>
+            </select>
+          </label>
+          <label class="field">Nomi <small>panelda shu ko‘rinadi</small>
+            <input type="text" id="label" placeholder="Masalan: Kirish eshigi" autocomplete="off">
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="button primary" id="testBtn" type="button">Tasvirni tekshirish</button>
+          <button class="button ghost" id="scanChannelsBtn" type="button">Shu NVR’dagi barcha kameralarni topish</button>
+          <button class="button ghost" id="onvifBtn" type="button">ONVIF orqali so‘rash</button>
+        </div>
+        <p class="hint">«ONVIF orqali so‘rash» — manzilni taxmin qilmaydi, kameraning o‘zidan so‘raydi. Boshqa usullar ishlamasa shuni sinang.</p>
+        <div id="testResult"></div>
+        <div id="channelResult"></div>
+        <div id="onvifResult"></div>
+      </div>
+
+      <div class="card quiet" id="savedCard">
+        <h2>Qo‘shilgan kameralar</h2>
+        <div id="cameraList"></div>
+      </div>
+
+      <div class="actions spread">
+        <span></span>
+        <button class="button" id="toStep3" type="button" disabled>Keyingi: chiziq chizish →</button>
+      </div>
+    </section>
+
+    <!-- ── 2-QADAM (tasvir tasdiqlash) ── -->
+    <section class="step hidden" data-step="2">
+      <h1>Tasvir keldi</h1>
+      <p class="lead">Quyidagi rasm haqiqatan shu kameradan olindi. Kerakli joy ko‘rinayaptimi?</p>
+      <div class="frame"><img id="confirmImage" alt="Kameradan olingan kadr"></div>
+      <div class="actions spread">
+        <button class="button ghost" id="rejectFrame" type="button">Yo‘q, boshqa kamera</button>
+        <button class="button primary" id="acceptFrame" type="button">Ha, shu kamerani saqlash</button>
+      </div>
+    </section>
+
+    <!-- ── 3-QADAM ── -->
+    <section class="step hidden" data-step="3">
+      <h1>Kirish chizig‘ini to‘g‘rilang</h1>
+      <p class="lead">
+        Taxminiy chiziq allaqachon chizilgan — uni <b>eshik oldiga surib</b> to‘g‘rilang.
+        Tizim shu chiziqni kesib o‘tgan odamlarni sanaydi, shuning uchun u
+        haqiqatan odamlar o‘tadigan joyda bo‘lishi kerak.
+      </p>
+
+      <div class="card">
+        <div class="grid-2">
+          <label class="field">Kamera
+            <select id="geoCamera"></select>
+          </label>
+          <label class="field">Nima chizamiz?
+            <select id="geoMode">
+              <option value="line">Chiziq — kirish/chiqishni sanaydi</option>
+              <option value="zone">Zona — navbat, taqiqlangan joy, uzoq turish</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- Bir-bosim shablonlar: mijoz qo'lda chizishni bilmasa ham
+             tayyor shakl tushadi, keyin uni surib to'g'rilaydi.
+             `zone-editor.js addPreset()` allaqachon bor edi — tugmasi
+             yo'q edi. -->
+        <div class="actions" style="margin-top:0">
+          <button class="button ghost small" id="presetLineBtn" type="button">+ Kirish chizig‘i</button>
+          <button class="button ghost small" id="presetQueueBtn" type="button">+ Kassa navbati zonasi</button>
+          <button class="button ghost small" id="presetRestrictedBtn" type="button">+ Taqiqlangan zona</button>
+          <button class="button ghost small" id="presetShelfBtn" type="button">+ Javon zonasi</button>
+        </div>
+
+        <p class="hint">
+          <b>Chiziq:</b> ikki nuqtani bosing. <b>Zona:</b> burchaklarni bosing, oxirida ikki marta bosing.
+          O‘ng tugma — o‘chiradi. Nuqtani sudrab ko‘chirish mumkin. Yashil o‘q do‘kon <b>ichkarisini</b> ko‘rsatadi.
+        </p>
+
+        <canvas id="geoCanvas" width="960" height="540"></canvas>
+        <div class="actions">
+          <button class="button ghost small" id="refreshFrame" type="button">Kadrni yangilash</button>
+        </div>
+        <div id="shapeList" class="shape-list"></div>
+        <div id="geoResult"></div>
+      </div>
+
+      <div class="actions spread">
+        <button class="button ghost" id="backToStep1" type="button">← Kameralarga qaytish</button>
+        <button class="button primary" id="toStep4" type="button">Saqlash va davom etish →</button>
+      </div>
+    </section>
+
+    <!-- ── 4-QADAM ── -->
+    <section class="step hidden" data-step="4">
+      <h1>Oxirgi sozlamalar</h1>
+      <p class="lead">Bularni keyin ham o‘zgartira olasiz.</p>
+
+      <div class="card">
+        <h2>Do‘kon ish vaqti</h2>
+        <p class="hint">Ikkalasi kiritilsa, ish vaqtidan tashqari harakat aniqlanganda ogohlantirish keladi. Bo‘sh qoldirsangiz bu tekshiruv o‘chiq turadi.</p>
+        <div class="grid-2">
+          <label class="field">Ochilish<input type="time" id="openFrom"></label>
+          <label class="field">Yopilish<input type="time" id="openTo"></label>
+        </div>
+        <!-- Bo'sh qoldirilsa jim o'tib ketmasin: tungi nazorat funksiyasi
+             indamay o'chiq qolgani eng ko'p "nega ishlamadi" savolini
+             tug'diradigan holat edi. -->
+        <div id="hoursHint"></div>
+        <div class="grid-3">
+          <label class="field">Do‘konda odam limiti<input type="number" id="occupancy" min="1" max="10000" value="20"></label>
+          <label class="field">Navbat limiti <small>kassada</small><input type="number" id="queueLimit" min="1" max="1000" value="5"></label>
+          <label class="field">Uzoq turish <small>soniya</small><input type="number" id="loitering" min="5" max="86400" value="300"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Telegram xabarlari <small style="font-weight:500;color:var(--muted)">(hozircha tayyor emas)</small></h2>
+        <div class="note warn">
+          <b>Bu funksiya hali ishlamaydi.</b>
+          Telegram xabarlarini cloud yuboradi, dastur esa hozir cloudga ulanmagan.
+          Token kiritsangiz ham xabar kelmaydi — u faqat saqlanadi va cloud
+          ulanganda ishga tushadi. Bugungi kunda barcha hodisalarni
+          <b>shu kompyuterdagi panelda</b> ko‘rasiz.
+        </div>
+        <details>
+          <summary style="cursor:pointer">Baribir hozir kiritib qo‘yaman</summary>
+          <p class="hint">
+            Telegramda <b>@BotFather</b> ga <code>/newbot</code> yozing — u token beradi.
+            Chat ID ni olish uchun <b>@userinfobot</b> ga <code>/start</code> yuboring.
+          </p>
+          <label class="field">Bot token<input type="text" id="tgToken" placeholder="123456:ABC-DEF..." autocomplete="off"></label>
+          <label class="field">Chat ID<input type="text" id="tgChat" placeholder="123456789" autocomplete="off"></label>
+        </details>
+      </div>
+
+      <div id="finishResult"></div>
+
+      <div class="actions spread">
+        <button class="button ghost" id="backToStep3" type="button">← Chiziqqa qaytish</button>
+        <button class="button primary" id="finishBtn" type="button">Saqlash va ishga tushirish</button>
+      </div>
+    </section>
+
+    <!-- ── 5-QADAM: cloud (ixtiyoriy) ── -->
+    <section class="step hidden" data-step="5">
+      <h1>Cloudga ulash</h1>
+      <p class="lead">
+        Bu qadam <b>ixtiyoriy</b>. Ulanmasangiz ham tizim to‘liq ishlaydi —
+        hisobot shu kompyuterda ko‘rinadi. Ulasangiz uch narsa qo‘shiladi.
+      </p>
+
+      <div class="card">
+        <ul class="cloud-benefits">
+          <li><b>Mijoz o‘z telefonidan ko‘radi</b> — istalgan joydan, brauzer orqali</li>
+          <li><b>Telegramga ogohlantirish</b> — kamera yopilsa, navbat uzaysa</li>
+          <li><b>Masofadan yangilash</b> — yangi versiyalar o‘zi o‘rnatiladi</li>
+        </ul>
+
+        <div id="cloudConnected" class="hidden">
+          <div class="note ok">
+            <b>Ulangan</b>
+            <span id="cloudSite"></span>
+          </div>
+          <p class="hint">Mijoz paneli: <a id="cloudOwnerLink" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+          <p class="hint">
+            Kamera va chiziqlarni cloud panelida oldindan sozlagan bo‘lsangiz,
+            quyidagi tugma ularni shu kompyuterga darhol olib tushadi.
+          </p>
+          <div class="actions">
+            <button class="button primary" id="pullConfigBtn" type="button">Cloud sozlamasini olib tushish</button>
+            <button class="button ghost small" id="unpairBtn" type="button">Ulanishni uzish</button>
+          </div>
+        </div>
+
+        <!-- Avtomatik ulanish xatosi shu yerda ko'rinadi (masalan kod
+             eskirgan bo'lsa).  Formadan yuqorida: mijoz avval nima
+             bo'lganini o'qisin, keyin qo'lda kiritsin. -->
+        <div id="pairAutoError"></div>
+
+        <div id="cloudForm">
+          <label class="field">Cloud manzili
+            <input type="text" id="cloudUrl" placeholder="https://chaqimchi.uz" autocomplete="off">
+          </label>
+          <label class="field">Ulanish kodi <small>6 ta belgi — bizdan olinadi: +998 93 222 50 70</small>
+            <input type="text" id="pairCode" placeholder="A1B2C3" maxlength="6" autocomplete="off"
+                   style="text-transform:uppercase; letter-spacing:.2em; font-size:20px; font-weight:800">
+          </label>
+          <div class="actions">
+            <button class="button primary" id="pairBtn" type="button">Ulash</button>
+          </div>
+        </div>
+        <div id="pairResult"></div>
+      </div>
+
+      <!-- Yakuniy tekshiruv: sehrgar tugadi degani hamma funksiya ishlayapti
+           degani emas.  Nima yoqilgan, nima yetishmayotgani shu yerda aniq
+           ko'rinadi — mijoz "keyin nega ishlamadi" deb yurmasin. -->
+      <div class="card">
+        <h2>Funksiyalar holati</h2>
+        <div id="wizardFeatureList"><span class="hint">Yuklanmoqda…</span></div>
+      </div>
+
+      <div class="actions spread">
+        <button class="button ghost" id="backToStep4" type="button">← Sozlamalarga qaytish</button>
+        <button class="button" id="skipCloud" type="button">Panelga o‘tish</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/assets/setup.js" defer></script>
+</body>
+</html>

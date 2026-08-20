@@ -18,8 +18,8 @@ def main() -> int:
     parser.add_argument("name", help="Mijoz / joy nomi")
     parser.add_argument(
         "--plan",
-        choices=["lite", "starter", "business", "enterprise"],
-        default="lite",
+        choices=["boshlangich", "biznes", "lite", "starter", "business", "enterprise"],
+        default="biznes",
     )
     parser.add_argument("--months", type=int, default=1)
     parser.add_argument("--cloud-url", default=DEFAULT_URL)
@@ -62,8 +62,8 @@ def main() -> int:
         print("\nEdge config.yaml:")
         print("license:")
         print("  enabled: true")
-        print(f"  cloud_url: \"{url}\"")
-        print(f"  pairing_code: \"{data['pairing_code']}\"")
+        print(f'  cloud_url: "{url}"')
+        print(f'  pairing_code: "{data["pairing_code"]}"')
 
     return 0
 

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="uz">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dahua NVR ulash — Chaqimchi AI hujjatlari</title>
+<meta name="description" content="Dahua/IMOU NVR: RTSP manzil formati, ONVIF yoqish, substream sozlash.">
+<link rel="stylesheet" href="/docs-static/assets/docs.css"></head>
+<body>
+<nav class="doc-nav"><a class="brand" href="/">Chaqimchi AI · Hujjatlar</a><a href="https://chaqimchi.uz">Asosiy sayt</a><a href="/muammolar">Muammolar</a></nav>
+<main>
+  <p class="crumbs"><a href="/">Hujjatlar</a> → Dahua</p>
+  <h1>Dahua / IMOU NVR</h1>
+  <p class="lead">Odatda dastur hammasini o'zi topadi. Bu sahifa qo'lda kiritish kerak bo'lgan holatlar uchun.</p>
+
+  <h2>RTSP manzil formati</h2>
+  <pre><code>rtsp://LOGIN:PAROL@NVR_IP:554/cam/realmonitor?channel=1&amp;subtype=1</code></pre>
+  <table>
+    <tr><th>Parametr</th><th>Ma'nosi</th></tr>
+    <tr><td><code>channel=1</code></td><td>Kanal raqami (1, 2, 3…)</td></tr>
+    <tr><td><code>subtype=0</code></td><td>Asosiy oqim (og'ir — kerak emas)</td></tr>
+    <tr><td><code>subtype=1</code></td><td>Substream (yengil — <b>shuni ishlating</b>)</td></tr>
+  </table>
+
+  <h2>ONVIF yoqish</h2>
+  <p>NVR menyusi: <b>Network → Access Platform → ONVIF</b> → yoqing. Dahua'da ONVIF porti ko'pincha <b>80</b> yoki <b>8000</b> — dastur ikkalasini ham o'zi sinaydi.</p>
+
+  <h2>Substream sozlash</h2>
+  <p><b>Camera → Encode → Sub Stream</b>: kodek <b>H.264</b>, o'lcham 704×576 (D1) yoki kichikroq, 10–15 fps. «Smart Codec / H.264+» ni o'chirib qo'ygan ma'qul — ayrim pleyerlar bilan mos kelmaydi.</p>
+
+  <h2>Muhim</h2>
+  <div class="note">Dahua NVR bir vaqtda cheklangan RTSP ulanish beradi. Bitta kanalni bir nechta dasturda ochib qo'ymang — «tasvir kelmadi» chiqadi.</div>
+</main>
+</body>
+</html>

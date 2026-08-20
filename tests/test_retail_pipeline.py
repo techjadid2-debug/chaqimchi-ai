@@ -115,7 +115,6 @@ def build(
     rules: Optional[RuleEngine] = None,
     clips: Any = "default",
     wall: Optional[List[float]] = None,
-    review: Any = None,
     snapshots: bool = False,
 ) -> Tuple[RetailPipeline, FakeAnalyzer, Recorder, Any]:
     broker = FrameBroker(InferenceBudget(target_fps=30.0, min_fps=1.0, max_fps=60.0))
@@ -128,10 +127,13 @@ def build(
         rules or RuleEngine(),
         on_action=recorder,
         on_clip=recorder.clip,
-        on_review=review,
         clip_dir=tmp_path / "clips",
         snapshot_dir=tmp_path / "snapshots" if snapshots else None,
-        snapshot_writer=lambda path, _frame: (path.parent.mkdir(parents=True, exist_ok=True), path.write_bytes(b"jpeg"), True)[2],
+        snapshot_writer=lambda path, _frame: (
+            path.parent.mkdir(parents=True, exist_ok=True),
+            path.write_bytes(b"jpeg"),
+            True,
+        )[2],
         pre_sec=10.0,
         post_sec=20.0,
         clock=Clock(),
@@ -144,6 +146,10 @@ def build(
 
 def line_crossed() -> EdgeEvent:
     return EdgeEvent(event_type="line_crossed", camera_id="kassa-01", direction="in")
+
+
+def loitering() -> EdgeEvent:
+    return EdgeEvent(event_type="loitering", camera_id="kassa-01", severity="warning")
 
 
 def run(pipeline: RetailPipeline, *, now: float = 1.0, frame=FRAME) -> Any:
@@ -217,9 +223,7 @@ def test_event_reaches_the_action(tmp_path: Path) -> None:
 
 def test_a_rule_can_suppress_an_event(tmp_path: Path) -> None:
     rules = RuleEngine([Rule(name="xodimlar", event_type="line_crossed", suppress=True)])
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[line_crossed()], rules=rules
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[line_crossed()], rules=rules)
 
     run(pipeline)
 
@@ -237,13 +241,37 @@ def test_rule_actions_replace_the_default(tmp_path: Path) -> None:
             )
         ]
     )
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[line_crossed()], rules=rules
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[line_crossed()], rules=rules)
 
     run(pipeline)
 
     assert recorder.names == ["telegram_alert", "cloud_sync"]
+
+
+def test_telegram_choice_travels_inside_the_event(tmp_path: Path) -> None:
+    """Qoidaning Telegram tanlovi hodisaning o'zida cloudga boradi.
+
+    `metadata.alert` bayrog'i — `cloud/notify.py wants_telegram()` uchun
+    yakuniy so'z.  Usiz `telegram_alert` harakati dekorativ edi: cloud
+    faqat severity'ga qarab yuborar edi.
+    """
+    rules = RuleEngine(
+        [
+            Rule(
+                name="alertli", event_type="line_crossed", actions=("telegram_alert", "cloud_sync")
+            ),
+            Rule(name="jim", event_type="loitering", actions=("cloud_sync",)),
+        ]
+    )
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[line_crossed(), loitering()], rules=rules
+    )
+
+    run(pipeline)
+
+    by_type = {event.event_type: event for _name, event in recorder.actions}
+    assert by_type["line_crossed"].metadata.get("alert") is True
+    assert by_type["loitering"].metadata.get("alert") is False
 
 
 # ── Xatolar zanjirni to'xtatmasligi ──────────────────────────────────────
@@ -357,9 +385,7 @@ def test_security_event_has_private_snapshot_before_cloud_action(tmp_path: Path)
         severity="warning",
         camera_id="kassa-01",
     )
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[event], snapshots=True
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[event], snapshots=True)
 
     run(pipeline)
 
@@ -378,9 +404,7 @@ def test_normal_zone_event_does_not_capture_a_security_snapshot(tmp_path: Path) 
         zone="savdo-zali",
         metadata={"restricted": False},
     )
-    pipeline, _analyzer, recorder, _buffer = build(
-        tmp_path, events=[event], snapshots=True
-    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[event], snapshots=True)
 
     run(pipeline)
 
@@ -541,7 +565,9 @@ def test_a_person_at_night_becomes_an_alert(tmp_path: Path) -> None:
 
     kinds = [event.event_type for _action, event in recorder.actions]
     assert "after_hours_presence" in kinds
-    alert = next(event for _a, event in recorder.actions if event.event_type == "after_hours_presence")
+    alert = next(
+        event for _a, event in recorder.actions if event.event_type == "after_hours_presence"
+    )
     assert alert.severity == "warning"
     assert alert.track_id == 7
     assert alert.metadata["local_time"] == "23:00"
@@ -628,112 +654,79 @@ def test_a_real_walk_through_the_door_produces_an_action(tmp_path: Path) -> None
     assert crossings[0].direction in {"in", "out"}
 
 
-# ── AI ko'rigi (8.3) ─────────────────────────────────────────────────────
+# ── `ai_review` — cloud uchun ajratilgan nom ─────────────────────────────
 
 
-class ReviewSpy:
-    """`VisionReviewer.submit` o'rniga: qaysi hodisa va kadr kelganini yozadi."""
-
-    def __init__(self, *, queued: bool = True) -> None:
-        self.calls: List[Tuple[EdgeEvent, Any]] = []
-        self.queued = queued
-        self.raises = False
-
-    def __call__(self, event: EdgeEvent, frame: Any) -> bool:
-        if self.raises:
-            raise RuntimeError("AI ko'rikchisi yiqildi")
-        self.calls.append((event, frame))
-        return self.queued
-
-
-def tamper_rules() -> RuleEngine:
-    return RuleEngine(
+def test_ai_review_action_is_accepted_but_does_nothing(tmp_path: Path) -> None:
+    """Eski mijoz konfigi yiqilmasin: `ai_review` qabul qilinadi, lekin
+    edge'da bajarilmaydi va outboxga hodisa yozmaydi.  AI ko'rigi cloudga
+    ko'chirildi (talablar hujjati §6)."""
+    rules = RuleEngine(
         [
             Rule(
-                name="buzilishni AI ko'rsin",
+                name="Kamera buzilishi",
                 event_type="camera_tampered",
                 actions=("cloud_sync", "ai_review"),
             )
         ]
     )
-
-
-def with_tamper(pipeline: RetailPipeline, analyzer: FakeAnalyzer) -> None:
+    pipeline, analyzer, recorder, _buffer = build(tmp_path, rules=rules)
     pipeline.add_camera("yopiq-01", analyzer, tamper=FakeTamper(), now=0.0)  # type: ignore[arg-type]
 
-
-def test_rule_can_send_the_frame_to_the_ai(tmp_path: Path) -> None:
-    """Qoida so'ragan hodisada kadr ko'rikchiga uzatiladi."""
-    spy = ReviewSpy()
-    pipeline, analyzer, recorder, _buffer = build(
-        tmp_path, rules=tamper_rules(), review=spy
-    )
-    with_tamper(pipeline, analyzer)
-    analyzer.motion.ratio = 0.0  # yopilgan kamerada harakat yo'q
-
     pipeline.offer("yopiq-01", FRAME, now=1.0)
 
-    assert len(spy.calls) == 1
-    event, frame = spy.calls[0]
-    assert event.event_type == "camera_tampered"
-    # AI aynan buzilish ko'ringan kadrni ko'rishi kerak, keyingisini emas.
-    assert frame is FRAME
-    # Hodisaning o'zi baribir cloudga ketgan — AI qo'shimcha, shart emas.
-    assert "cloud_sync" in recorder.names
-    assert pipeline.stats()["reviews"]["sent"] == 1
+    # `cloud_sync` bajarildi, `ai_review` esa hisoblandi-yu, hech nima qilmadi.
+    assert recorder.names == ["cloud_sync"]
+    assert pipeline.stats()["actions"]["ai_review"] == 1
 
 
-def test_analyzed_frame_is_the_one_the_ai_sees(tmp_path: Path) -> None:
-    """Tahlilga tushgan kadr saqlanadi — oqimdagi tasodifiy keyingisi emas."""
-    spy = ReviewSpy()
-    rules = RuleEngine(
-        [Rule(name="AI", event_type="line_crossed", actions=("ai_review",))]
+# ── Davomat: yuz kadri crop ──────────────────────────────────────────────
+
+
+def face_captured() -> EdgeEvent:
+    return EdgeEvent(
+        event_type="face_captured",
+        camera_id="kassa-01",
+        metadata={"bbox": [40, 20, 80, 120]},
     )
-    pipeline, _analyzer, _recorder, _buffer = build(
-        tmp_path, events=[line_crossed()], rules=rules, review=spy
+
+
+def test_face_capture_ships_an_upper_body_crop_not_the_full_frame(tmp_path: Path) -> None:
+    """Kadrda boshqa odamlar ham bor — cloudga faqat ramka yuqori qismi ketadi."""
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[face_captured()], snapshots=True
     )
-    analyzed = np.ones((8, 8, 3), dtype=np.uint8)
+    captured = {}
 
-    pipeline.offer("kassa-01", analyzed, now=1.0)
-    pipeline.step(now=1.0)
+    def writer(path: Path, frame) -> bool:
+        captured["shape"] = frame.shape
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"jpeg")
+        return True
 
-    assert spy.calls[0][1] is analyzed
+    pipeline.snapshot_writer = writer
+    big_frame = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    run(pipeline, frame=big_frame)
+
+    event = recorder.actions[0][1]
+    assert event.snapshot_path and event.snapshot_path.endswith("-face.jpg")
+    height, width, _ = captured["shape"]
+    assert height == 35, "bbox balandligining ~35% qismi (100 * 0.35)"
+    assert width == 48, "bbox eni + 10% chekka (40 + 2*4)"
 
 
-def test_review_without_a_reviewer_is_only_counted(tmp_path: Path) -> None:
-    """`vision.enabled: false` bo'lsa qoida yiqilmaydi — hodisa AI'siz ketadi."""
-    pipeline, analyzer, recorder, _buffer = build(tmp_path, rules=tamper_rules())
-    with_tamper(pipeline, analyzer)
-
-    pipeline.offer("yopiq-01", FRAME, now=1.0)
-
-    assert "cloud_sync" in recorder.names
-    assert pipeline.stats()["reviews"] == {"sent": 0, "skipped": 1}
-
-
-def test_refused_review_is_not_counted_as_sent(tmp_path: Path) -> None:
-    """Oraliq yoki limit tufayli o'tkazib yuborilgani alohida ko'rinadi."""
-    spy = ReviewSpy(queued=False)
-    pipeline, analyzer, _recorder, _buffer = build(
-        tmp_path, rules=tamper_rules(), review=spy
+def test_face_capture_without_a_frame_is_sent_without_media(tmp_path: Path) -> None:
+    """Kadr topilmasa hodisa matn bo'lib ketaveradi — oqim to'xtamaydi."""
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[face_captured()], snapshots=True
     )
-    with_tamper(pipeline, analyzer)
+    # offer/step'siz to'g'ridan-to'g'ri dispatch — last_frame hali yo'q.
+    from chaqimchi_ai.retail.rules import Decision
 
-    pipeline.offer("yopiq-01", FRAME, now=1.0)
-
-    assert pipeline.stats()["reviews"] == {"sent": 0, "skipped": 1}
-
-
-def test_broken_reviewer_does_not_stop_the_pipeline(tmp_path: Path) -> None:
-    """AI tomoni yiqilsa ham navbat, dwell va sanoq ishlashda davom etadi."""
-    spy = ReviewSpy()
-    spy.raises = True
-    pipeline, analyzer, recorder, _buffer = build(
-        tmp_path, rules=tamper_rules(), review=spy
+    pipeline._dispatch(
+        Decision(event=face_captured(), actions=("cloud_sync",), rule_name=None),
+        camera_id="kassa-01",
     )
-    with_tamper(pipeline, analyzer)
 
-    pipeline.offer("yopiq-01", FRAME, now=1.0)
-
-    assert "cloud_sync" in recorder.names
-    assert pipeline.stats()["action_errors"] == 1
+    assert recorder.actions[0][1].snapshot_path is None

@@ -41,11 +41,7 @@ def analyzer_for(**scene) -> tuple[SceneAnalyzer, ScriptedDetector]:
 
 # ── Kirish/chiqish ───────────────────────────────────────────────────────
 
-DOOR = {
-    "lines": [
-        {"name": "eshik", "camera_id": "cam-1", "start": [0.5, 0.0], "end": [0.5, 1.0]}
-    ]
-}
+DOOR = {"lines": [{"name": "eshik", "camera_id": "cam-1", "start": [0.5, 0.0], "end": [0.5, 1.0]}]}
 
 
 def walk(analyzer, detector, *, start: float, stop: float, step: float, now: float = 1.0):
@@ -76,10 +72,16 @@ def test_walking_through_the_door_emits_line_crossed_with_direction() -> None:
 def test_walking_back_produces_the_opposite_direction() -> None:
     analyzer, detector = analyzer_for(**DOOR)
 
-    first = [e for e in walk(analyzer, detector, start=0.30, stop=0.70, step=0.04)
-             if e.event_type == "line_crossed"][0]
-    second = [e for e in walk(analyzer, detector, start=0.70, stop=0.30, step=0.04, now=20.0)
-              if e.event_type == "line_crossed"][0]
+    first = [
+        e
+        for e in walk(analyzer, detector, start=0.30, stop=0.70, step=0.04)
+        if e.event_type == "line_crossed"
+    ][0]
+    second = [
+        e
+        for e in walk(analyzer, detector, start=0.70, stop=0.30, step=0.04, now=20.0)
+        if e.event_type == "line_crossed"
+    ][0]
 
     assert {first.direction, second.direction} == {"in", "out"}
 
@@ -107,9 +109,7 @@ def test_moving_without_crossing_emits_nothing() -> None:
 
 def test_lines_of_other_cameras_are_ignored() -> None:
     analyzer, detector = analyzer_for(
-        lines=[
-            {"name": "boshqa", "camera_id": "cam-2", "start": [0.5, 0.0], "end": [0.5, 1.0]}
-        ]
+        lines=[{"name": "boshqa", "camera_id": "cam-2", "start": [0.5, 0.0], "end": [0.5, 1.0]}]
     )
     events = walk(analyzer, detector, start=0.30, stop=0.70, step=0.04)
     assert [e for e in events if e.event_type == "line_crossed"] == []
@@ -157,7 +157,9 @@ def test_zone_without_dwell_setting_never_alerts() -> None:
     )
     detector.people = [(0.5, 0.5)]
     analyzer.process(FRAME, now=0.0)
-    assert [e for e in analyzer.process(FRAME, now=9999.0) if e.event_type == "dwell_exceeded"] == []
+    assert [
+        e for e in analyzer.process(FRAME, now=9999.0) if e.event_type == "dwell_exceeded"
+    ] == []
 
 
 # ── Navbat ───────────────────────────────────────────────────────────────
@@ -181,17 +183,23 @@ def test_queue_alert_fires_at_the_limit_and_latches() -> None:
     analyzer, detector = analyzer_for(**QUEUE_ZONE)
 
     detector.people = [(0.2, 0.5), (0.4, 0.5)]
-    assert [e for e in analyzer.process(FRAME, now=1.0) if e.event_type == "queue_threshold_exceeded"] == []
+    assert [
+        e for e in analyzer.process(FRAME, now=1.0) if e.event_type == "queue_threshold_exceeded"
+    ] == []
 
     detector.people = [(0.2, 0.5), (0.4, 0.5), (0.6, 0.5)]
-    alerts = [e for e in analyzer.process(FRAME, now=2.0) if e.event_type == "queue_threshold_exceeded"]
+    alerts = [
+        e for e in analyzer.process(FRAME, now=2.0) if e.event_type == "queue_threshold_exceeded"
+    ]
     assert len(alerts) == 1
     assert alerts[0].queue_length == 3
     assert alerts[0].zone == "kassa"
     assert alerts[0].severity == "warning"
 
     # Navbat turaversa qayta ogohlantirmaydi — mijoz xabardan charchamasin.
-    assert [e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"] == []
+    assert [
+        e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"
+    ] == []
 
 
 def test_queue_alert_rearms_after_the_queue_clears() -> None:
@@ -203,7 +211,9 @@ def test_queue_alert_rearms_after_the_queue_clears() -> None:
     analyzer.process(FRAME, now=2.0)
 
     detector.people = [(0.2, 0.5), (0.4, 0.5), (0.6, 0.5), (0.8, 0.5)]
-    alerts = [e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"]
+    alerts = [
+        e for e in analyzer.process(FRAME, now=3.0) if e.event_type == "queue_threshold_exceeded"
+    ]
     assert len(alerts) == 1
 
 
@@ -241,3 +251,299 @@ def test_track_state_is_released_so_memory_does_not_grow_all_day() -> None:
     detector.people = []
     analyzer.process(FRAME, now=1000.0)
     assert analyzer.lines.tracked == 0
+
+
+# ── Demografiya (jins/yosh) — kirish kesishmasida ────────────────────────
+
+
+class FakeDemography:
+    def __init__(self, result=None):
+        self.result = result or {"jins": "ayol", "yosh": 27}
+        self.calls = 0
+
+    def estimate(self, frame, bbox):
+        self.calls += 1
+        return self.result
+
+
+def _entrance_analyzer(demography, pressure=None):
+    settings = SceneSettings.model_validate({"enabled": True, "burst_fps": 30, **DOOR})
+    detector = ScriptedDetector()
+    analyzer = SceneAnalyzer("cam-1", detector, settings, demography=demography, pressure=pressure)
+    analyzer.motion.has_motion = lambda _frame: True
+    return analyzer, detector
+
+
+def _in_crossing(analyzer, detector, *, now: float = 1.0):
+    events = walk(analyzer, detector, start=0.30, stop=0.70, step=0.04, now=now)
+    crossed = [e for e in events if e.event_type == "line_crossed"]
+    return crossed[0] if crossed else None
+
+
+def test_demography_rides_the_in_crossing_metadata() -> None:
+    """Natija alohida hodisa emas — o'sha line_crossed metadatasida.
+
+    Yangi hodisa turi eski cloudda butun batchni 422 qilardi.
+    """
+    fake = FakeDemography({"jins": "erkak", "yosh": 41})
+    analyzer, detector = _entrance_analyzer(fake)
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None
+    if crossing.direction == "in":
+        assert crossing.metadata["demografiya"] == {"jins": "erkak", "yosh": 41}
+        assert fake.calls == 1
+    else:
+        assert "demografiya" not in crossing.metadata, "chiqishda baholanmaydi"
+
+
+def test_camera_without_estimator_stays_untouched() -> None:
+    analyzer, detector = _entrance_analyzer(None)
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None and "demografiya" not in crossing.metadata
+
+
+def test_high_pressure_skips_demography() -> None:
+    """Bosim 0.85+ — xavfsizlik va sanash ustuvor, demografiya kutadi."""
+    fake = FakeDemography()
+    analyzer, detector = _entrance_analyzer(fake, pressure=lambda: 0.9)
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None
+    assert "demografiya" not in crossing.metadata
+    assert fake.calls == 0, "og'ir paytda model umuman chaqirilmasin"
+
+
+def test_failed_estimates_are_capped_per_track() -> None:
+    """Yuz topilmayotgan trek uchun cheksiz urinish bo'lmasin."""
+
+    class NoFace(FakeDemography):
+        def estimate(self, frame, bbox):
+            self.calls += 1
+            return None
+
+    fake = NoFace()
+    analyzer, detector = _entrance_analyzer(fake)
+
+    # Bir trek ikki marta kirdi-chiqdi qildi (4 kesishma) — urinish 2 ta.
+    _in_crossing(analyzer, detector, now=1.0)
+    walk(analyzer, detector, start=0.70, stop=0.30, step=0.04, now=30.0)
+    _in_crossing(analyzer, detector, now=60.0)
+
+    assert fake.calls <= 2
+
+
+def test_estimator_crash_never_breaks_analysis() -> None:
+    class Boom(FakeDemography):
+        def estimate(self, frame, bbox):
+            raise RuntimeError("model yiqildi")
+
+    analyzer, detector = _entrance_analyzer(Boom())
+
+    crossing = _in_crossing(analyzer, detector)
+
+    assert crossing is not None, "tahlil davom etadi"
+    assert "demografiya" not in crossing.metadata
+
+
+# ── Kassa nazorati ───────────────────────────────────────────────────────
+#
+# Eng muhim qoida: bo'sh kassaning O'ZI signal emas.  Mijoz yo'q paytda
+# kassa bo'sh bo'lishi normal va bu haqda xabar berish — shovqin.
+# Signal ikkalasi birga bo'lganda: kadrda odamlar bor, kassada esa yo'q.
+
+#: Kassa zonasi kadrning chap yarmida — o'ng yarim "savdo zali" bo'lib
+#: qoladi va u yerdagi odam kassaga kirmaydi.
+CHECKOUT = {
+    "queue_limit": 3,
+    "occupancy_limit": 9999,
+    "loitering_sec": 86400,
+    "checkout_idle_sec": 60,
+    "zones": [
+        {
+            "name": "kassa",
+            "camera_id": "cam-1",
+            "queue": True,
+            "polygon": [[0.0, 0.0], [0.5, 0.0], [0.5, 1.0], [0.0, 1.0]],
+        }
+    ],
+}
+
+
+def _checkout_events(analyzer, now: float, kind: str):
+    return [e for e in analyzer.process(FRAME, now=now) if e.event_type == kind]
+
+
+def test_an_empty_shop_never_reports_an_empty_checkout() -> None:
+    """Do'konda odam yo'q — bo'sh kassa kutilgan holat.
+
+    Bu tekshiruv bo'lmasa kechqurun yopilgandan keyin hisob ketaverib,
+    ertalab birinchi mijoz kelishi bilan darrov signal chiqib ketardi.
+    """
+    analyzer, detector = analyzer_for(**CHECKOUT)
+    detector.people = []
+    # 1.0 dan boshlanadi: `process` birinchi kadrni tezlik chegarasi
+    # sabab o'tkazib yuboradi (`_last_analysis` noldan boshlanadi).
+    for tick in range(1, 300, 20):
+        assert _checkout_events(analyzer, float(tick), "checkout_unattended") == []
+
+
+def test_customers_in_view_but_nobody_at_the_checkout() -> None:
+    analyzer, detector = analyzer_for(**CHECKOUT)
+    # Savdo zalida (o'ng yarim) ikki mijoz, kassada hech kim yo'q.
+    detector.people = [(0.7, 0.5), (0.8, 0.5)]
+
+    assert _checkout_events(analyzer, 1.0, "checkout_unattended") == []
+    assert _checkout_events(analyzer, 59.0, "checkout_unattended") == []
+
+    alerts = _checkout_events(analyzer, 62.0, "checkout_unattended")
+    assert len(alerts) == 1
+    assert alerts[0].zone == "kassa"
+    assert alerts[0].severity == "warning"
+    assert alerts[0].metadata["people_in_view"] == 2
+
+    # Latch: holat o'zgarmaguncha qayta chiqmaydi.
+    assert _checkout_events(analyzer, 200.0, "checkout_unattended") == []
+
+
+def test_the_alert_rearms_once_the_checkout_is_used_again() -> None:
+    analyzer, detector = analyzer_for(**CHECKOUT)
+    detector.people = [(0.7, 0.5)]
+    analyzer.process(FRAME, now=1.0)
+    assert _checkout_events(analyzer, 62.0, "checkout_unattended")
+
+    # Kassaga odam keldi — hisob noldan boshlanadi.
+    detector.people = [(0.2, 0.5), (0.7, 0.5)]
+    analyzer.process(FRAME, now=70.0)
+
+    detector.people = [(0.7, 0.5)]
+    analyzer.process(FRAME, now=80.0)
+    assert _checkout_events(analyzer, 100.0, "checkout_unattended") == []
+    assert len(_checkout_events(analyzer, 145.0, "checkout_unattended")) == 1
+
+
+TWO_TILLS = {
+    "queue_limit": 3,
+    "occupancy_limit": 9999,
+    "loitering_sec": 86400,
+    "checkout_idle_sec": 3600,  # bo'sh kassa signali bu testga xalaqit bermasin
+    "zones": [
+        {
+            "name": "kassa-1",
+            "camera_id": "cam-1",
+            "queue": True,
+            "polygon": [[0.0, 0.0], [0.5, 0.0], [0.5, 1.0], [0.0, 1.0]],
+        },
+        {
+            "name": "kassa-2",
+            "camera_id": "cam-1",
+            "queue": True,
+            "polygon": [[0.5, 0.0], [1.0, 0.0], [1.0, 1.0], [0.5, 1.0]],
+        },
+    ],
+}
+
+
+def test_a_long_queue_next_to_an_empty_till_asks_to_open_it() -> None:
+    analyzer, detector = analyzer_for(**TWO_TILLS)
+    detector.people = [(0.1, 0.5), (0.2, 0.5), (0.3, 0.5)]
+
+    alerts = _checkout_events(analyzer, 1.0, "checkout_second_till")
+    assert len(alerts) == 1
+    assert alerts[0].zone == "kassa-1"
+    assert alerts[0].queue_length == 3
+    assert alerts[0].metadata["bosh_kassalar"] == ["kassa-2"]
+
+    # Latch — navbat turaversa takrorlanmaydi.
+    assert _checkout_events(analyzer, 2.0, "checkout_second_till") == []
+
+
+def test_no_second_till_advice_when_both_are_busy() -> None:
+    """Ikkinchi kassa allaqachon ishlayapti — maslahat o'rinsiz."""
+    analyzer, detector = analyzer_for(**TWO_TILLS)
+    detector.people = [(0.1, 0.5), (0.2, 0.5), (0.3, 0.5), (0.7, 0.5)]
+
+    assert _checkout_events(analyzer, 1.0, "checkout_second_till") == []
+
+
+def test_a_single_till_shop_never_gets_the_advice() -> None:
+    """Ochadigan ikkinchi kassa yo'q — bu xabar mijozni g'ashiga tegadi."""
+    analyzer, detector = analyzer_for(**CHECKOUT)
+    detector.people = [(0.1, 0.5), (0.2, 0.5), (0.3, 0.5)]
+
+    assert _checkout_events(analyzer, 1.0, "checkout_second_till") == []
+
+
+# ── Javon nazorati ───────────────────────────────────────────────────────
+
+
+def test_shelf_zone_reports_only_after_learning_and_only_when_free() -> None:
+    """Analizator bilan ulanish: qaysi zona javon, kim uni yopib turibdi.
+
+    Usulning o'zi `tests/test_retail_shelf.py` da tekshiriladi — bu yerda
+    faqat zanjirga ulangani muhim.
+    """
+    from chaqimchi_ai.retail.shelf import MIN_SAMPLES
+
+    analyzer, detector = analyzer_for(
+        occupancy_limit=9999,
+        loitering_sec=86400,
+        shelf_empty_ratio=0.5,
+        shelf_empty_sec=120,
+        zones=[
+            {
+                "name": "javon",
+                "camera_id": "cam-1",
+                "shelf": True,
+                "polygon": [[0.0, 0.0], [0.6, 0.0], [0.6, 1.0], [0.0, 1.0]],
+            }
+        ],
+    )
+    detector.people = []
+
+    # "To'la javon": kadrda ko'p chekka.
+    full = np.zeros((100, 100, 3), dtype=np.uint8)
+    for column in range(5, 55, 8):
+        full[20:80, column:column + 4] = 220
+
+    now = 1.0
+    for _ in range(MIN_SAMPLES + 2):
+        analyzer.process(full, now=now)
+        now += 60.0
+
+    empty = np.full((100, 100, 3), 120, dtype=np.uint8)
+    assert [e for e in analyzer.process(empty, now=now) if e.event_type == "shelf_empty"] == []
+
+    alerts = [
+        e for e in analyzer.process(empty, now=now + 200) if e.event_type == "shelf_empty"
+    ]
+    assert len(alerts) == 1
+    assert alerts[0].zone == "javon"
+    assert alerts[0].severity == "warning"
+    assert alerts[0].metadata["ratio"] < 0.5
+
+
+def test_a_zone_without_the_shelf_flag_is_never_measured() -> None:
+    analyzer, detector = analyzer_for(
+        occupancy_limit=9999,
+        loitering_sec=86400,
+        zones=[
+            {
+                "name": "zal",
+                "camera_id": "cam-1",
+                "polygon": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            }
+        ],
+    )
+    detector.people = []
+    now = 1.0
+    for _ in range(60):
+        assert [
+            e for e in analyzer.process(FRAME, now=now) if e.event_type == "shelf_empty"
+        ] == []
+        now += 60.0
+    assert analyzer.shelves.states == {}

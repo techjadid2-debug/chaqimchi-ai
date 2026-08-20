@@ -76,7 +76,9 @@ def main() -> int:
             failures.append(f"{name}: manifestda sha256 yo'q")
             continue
         if digest != expected:
-            failures.append(f"{name}: sha256 mos kelmadi\n  kutilgan: {expected}\n  olingan: {digest}")
+            failures.append(
+                f"{name}: sha256 mos kelmadi\n  kutilgan: {expected}\n  olingan: {digest}"
+            )
             continue
         verified[name] = payload
         print(f"   ✓ {len(payload) / 1024:.0f} KB tekshirildi")
@@ -103,7 +105,9 @@ def main() -> int:
         finally:
             for tmp in temporary.values():
                 tmp.unlink(missing_ok=True)
-        print(f"\nTayyor. config: scene.backend=openvino, scene.model_path=models/retail/{next(iter(files))}")
+        print(
+            f"\nTayyor. config: scene.backend=openvino, scene.model_path=models/retail/{next(iter(files))}"
+        )
     return 0
 
 

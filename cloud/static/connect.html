@@ -2,31 +2,32 @@
 <html lang="uz">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="robots" content="noindex"><title>Sotqinni ulash — Chaqimchi AI</title>
+  <meta name="robots" content="noindex"><title>Qurilmani ulash — Chaqimchi AI</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/site.css?v=20260812-conversion">
 </head>
 <body class="utility-page">
-  <header class="nav-shell"><nav class="nav"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-black-crop-v1.png" alt=""></span><span>Chaqimchi <b>AI</b></span></a><div class="nav-actions"><a class="button button-small" href="/#pilot">Raqam qoldirish</a></div></nav></header>
+  <header class="nav-shell"><nav class="nav"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-v2.webp" alt=""></span><span>Chaqimchi <b>AI</b></span></a><div class="nav-actions"><a class="button button-small" href="/#aloqa">Raqam qoldirish</a></div></nav></header>
   <main class="utility-main">
-    <p class="eyebrow"><span></span> Sotqin ulash</p>
-    <h1>Sotqin bor ekan, qolganini biz qilamiz</h1>
-    <p class="hero-text">Agar Sotqin qurilmasi yoningizda bo‘lsa, telefon raqamingizni qoldiring. Mutaxassis pairing kod beradi va masofadan ulashga yordam beradi.</p>
-    <p><a class="button" href="/#pilot">Telefon raqam qoldirish</a></p>
+    <p class="eyebrow"><span></span> Qurilmani ulash</p>
+    <h1>Qurilma bor ekan, qolganini biz qilamiz</h1>
+    <p class="hero-text">Agar qurilma yoningizda bo‘lsa, telefon raqamingizni qoldiring. Mutaxassis ulanish kodini beradi va masofadan ulashga yordam beradi.</p>
+    <p><a class="button" href="/#aloqa">Telefon raqam qoldirish</a></p>
     <section class="utility-card">
       <h2>Mutaxassis uchun tezkor ulash</h2>
-      <p>Bu bo‘lim faqat Chaqimchi xodimi yoki texnik mutaxassis pairing kod berganidan keyin ishlatiladi.</p>
+      <p>Bu bo‘lim faqat Chaqimchi xodimi yoki texnik mutaxassis ulanish kodini berganidan keyin ishlatiladi.</p>
       <div class="connect-form">
-        <input id="pairCode" maxlength="6" pattern="[A-Fa-f0-9]{6}" placeholder="ABC123" aria-label="6 xonali pairing kod">
+        <input id="pairCode" maxlength="6" pattern="[A-Fa-f0-9]{6}" placeholder="ABC123" aria-label="6 xonali ulanish kodi">
         <button id="makeCommand" class="button" type="button">Buyruq yaratish</button>
       </div>
-      <code id="command" class="command">Pairing kodni kiriting.</code>
+      <code id="command" class="command">Ulanish kodini kiriting.</code>
       <button id="copyCommand" class="button button-ghost" type="button" hidden style="margin-top:12px">Nusxalash</button>
       <p id="copyStatus" class="form-status" role="status"></p>
     </section>
     <section class="utility-card">
       <h2>Ulanishdan keyin</h2>
       <ol>
-        <li>Sotqinni internetga ulang.</li>
+        <li>Qurilmani internetga ulang.</li>
         <li>Mutaxassis qurilmani cloud’ga biriktiradi.</li>
         <li>Kamera, NVR, tarif va funksiyalar masofadan sozlanadi.</li>
       </ol>
@@ -34,14 +35,16 @@
     </section>
   </main>
   <script>
+    const PLATFORM={api:location.origin,dl:location.origin};
+    fetch('/api/v1/public/urls').then((r)=>r.ok?r.json():null).then((d)=>{if(d)Object.assign(PLATFORM,d)}).catch(()=>{});
     const code = document.getElementById('pairCode');
     const output = document.getElementById('command');
     const copy = document.getElementById('copyCommand');
     const status = document.getElementById('copyStatus');
     function make(){
       const value=code.value.trim().toUpperCase();
-      if(!/^[A-F0-9]{6}$/.test(value)){status.textContent='6 xonali pairing kodni kiriting.';status.className='form-status error';return}
-      output.textContent=`curl -fsSL ${location.origin}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${location.origin} --code ${value}`;
+      if(!/^[A-F0-9]{6}$/.test(value)){status.textContent='6 xonali ulanish kodini kiriting.';status.className='form-status error';return}
+      output.textContent=`curl -fsSL ${PLATFORM.dl}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${PLATFORM.api} --code ${value}`;
       copy.hidden=false;status.textContent='Buyruq tayyor.';status.className='form-status ok';
     }
     document.getElementById('makeCommand').addEventListener('click',make);

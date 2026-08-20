@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import platform
 import shutil
@@ -36,6 +37,8 @@ from chaqimchi_ai.sotqin_profile import (
     PRODUCT_NAME,
     product_payload,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _read_first(paths: tuple[Path, ...]) -> Optional[str]:
@@ -70,9 +73,7 @@ class SotqinAgent:
         self.site_id = os.environ.get("CHAQIMCHI_SITE_ID", "").strip()
         self.device_id = os.environ.get("CHAQIMCHI_DEVICE_ID", "").strip()
         self.device_token = os.environ.get("CHAQIMCHI_DEVICE_TOKEN", "").strip()
-        self.hardware_model = os.environ.get(
-            "CHAQIMCHI_SOTQIN_MODEL", HARDWARE_MODEL
-        ).strip()
+        self.hardware_model = os.environ.get("CHAQIMCHI_SOTQIN_MODEL", HARDWARE_MODEL).strip()
         self.hardware_revision = os.environ.get(
             "CHAQIMCHI_SOTQIN_REVISION", HARDWARE_REVISION
         ).strip()
@@ -105,6 +106,21 @@ class SotqinAgent:
                 )
             ),
         )
+        #: Retail zanjiri yozadigan holat fayli.  `ffprobe` "RTSP manzil
+        #: javob beryaptimi" degan savolga javob beradi; bu esa "zanjir
+        #: rostdan kadr olyaptimi" degan savolga.  Ikkalasi bir xil emas:
+        #: kamera ffprobe uchun ochiq bo'lib, zanjir bir soat backoff'da
+        #: turishi mumkin.
+        self.retail_status_path = Path(
+            os.environ.get(
+                "CHAQIMCHI_RETAIL_STATUS",
+                str(data_root / "retail-status.json"),
+            )
+        )
+        #: Holat fayli shuncha vaqtdan eski bo'lsa ishonilmaydi — retail
+        #: xizmati o'lgan bo'lishi mumkin.  Housekeeping 30 soniyada bir
+        #: marta yozadi, ya'ni uch tsikl o'tkazib yuborilgani muammo.
+        self.retail_status_max_age_sec = 120.0
         self.client: Optional[httpx.AsyncClient] = None
         self.task: Optional[asyncio.Task] = None
         self.last_ok: Optional[str] = None
@@ -137,12 +153,14 @@ class SotqinAgent:
         disk = shutil.disk_usage(data_root)
         queue = self._outbox_health()
         return {
-            "cameras_active": self.media.health()["online"],
+            "cameras_active": self._cameras_active(),
             "temperature_c": temperature,
             "disk_free_bytes": disk.free,
             "outbox_pending": queue["pending"],
             "outbox_bytes": queue["bytes"],
             "outbox_critical_pending": queue["critical_pending"],
+            #: Nolga teng bo'lmasa cloud biror hodisani doimiy rad etyapti.
+            "outbox_poisoned": queue["poisoned"],
             "app_version": __version__,
             "model_version": None,
             "product_name": PRODUCT_NAME,
@@ -152,16 +170,50 @@ class SotqinAgent:
             "config_revision": self.remote_config_revision,
         }
 
+    def retail_status(self) -> Optional[Dict[str, Any]]:
+        """Retail zanjirining oxirgi holati.  Yo'q yoki eskirgan bo'lsa `None`."""
+        try:
+            payload = json.loads(self.retail_status_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        updated_at = payload.get("updated_at")
+        if not isinstance(updated_at, (int, float)):
+            return None
+        if time.time() - float(updated_at) > self.retail_status_max_age_sec:
+            # Retail xizmati o'lgan bo'lishi mumkin — eski raqamni
+            # "hozirgi holat" deb yuborish yolg'on bo'lardi.
+            return None
+        return payload
+
+    def _cameras_active(self) -> int:
+        """Nechta kamera **rostdan** kadr berayotgani.
+
+        Asosiy manba — retail zanjiri.  `ffprobe` faqat "RTSP manzil javob
+        beryaptimi" degan savolga javob beradi va zanjir backoff'da
+        turganini sezmaydi; 72 soatlik soak testi aynan shu farqni
+        ko'rmasdan "4 kamera ishlayapti" deb sertifikatlab qo'yardi.
+
+        Zanjir hali yozmagan bo'lsa (yangi o'rnatish, davomat-only rejim)
+        ffprobe natijasiga qaytamiz — hech narsadan yaxshi.
+        """
+        status = self.retail_status()
+        if status is not None:
+            try:
+                return int(status.get("cameras_active", 0))
+            except (TypeError, ValueError):
+                return 0
+        return int(self.media.health()["online"])
+
     def _outbox_health(self) -> Dict[str, int]:
-        totals = {"pending": 0, "bytes": 0, "critical_pending": 0}
+        totals = {"pending": 0, "bytes": 0, "critical_pending": 0, "poisoned": 0}
         for path in self.outbox_paths:
             if not path.is_file():
                 continue
             try:
                 with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2) as conn:
-                    columns = {
-                        str(row[1]) for row in conn.execute("PRAGMA table_info(outbox)")
-                    }
+                    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(outbox)")}
                     size_parts = ["length(payload)"]
                     if "snapshot_size" in columns:
                         size_parts.append("snapshot_size")
@@ -177,11 +229,21 @@ class SotqinAgent:
                         f"COALESCE(SUM({'+'.join(size_parts)}),0),"
                         f"{critical} FROM outbox"
                     ).fetchone()
+                    # Tashlangan hodisalar soni — bu nolga teng bo'lmasa
+                    # cloud biror narsani doimiy rad etyapti va buni admin
+                    # bilishi kerak.  Jadval eski bazada bo'lmasligi mumkin.
+                    try:
+                        poisoned = int(
+                            conn.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0]
+                        )
+                    except sqlite3.Error:
+                        poisoned = 0
             except (OSError, sqlite3.Error):
                 continue
             totals["pending"] += int(row[0])
             totals["bytes"] += int(row[1])
             totals["critical_pending"] += int(row[2])
+            totals["poisoned"] += poisoned
         return totals
 
     def validate_config(self, payload: Dict[str, Any]) -> None:
@@ -270,6 +332,39 @@ class SotqinAgent:
         await self.report_camera_probes()
         self.last_probe_at = now
 
+    async def upload_previews(self, camera_ids: Any) -> int:
+        """O'rnatuvchi so'ragan kameralardan bittadan kadr yuboradi.
+
+        Bitta kamera yiqilsa qolganlari yuborilaveradi — o'rnatuvchi to'rt
+        kameradan uchtasini ko'rib, to'rtinchisi ishlamayotganini bilsin.
+        """
+        if self.client is None or not isinstance(camera_ids, list):
+            return 0
+        sent = 0
+        for raw in camera_ids[:MAX_CAMERAS]:
+            camera = self.media.camera(str(raw))
+            if camera is None or not camera.get("enabled"):
+                continue
+            try:
+                image = await asyncio.to_thread(self.media.grab_preview, camera)
+            except Exception:
+                logger.exception("[%s] kadr olinmadi", camera["camera_id"])
+                continue
+            if not image:
+                logger.warning("[%s] kadr olinmadi (RTSP javob bermadi)", camera["camera_id"])
+                continue
+            try:
+                response = await self.client.put(
+                    f"{self.cloud_url}/api/v1/sotqin/cameras/{camera['camera_id']}/preview",
+                    headers={**self.headers, "Content-Type": "image/jpeg"},
+                    content=image,
+                )
+                response.raise_for_status()
+                sent += 1
+            except Exception:
+                logger.exception("[%s] kadr yuborilmadi", camera["camera_id"])
+        return sent
+
     async def heartbeat_once(self) -> None:
         if not self.configured:
             raise RuntimeError("Sotqin pairing qilinmagan")
@@ -288,6 +383,7 @@ class SotqinAgent:
             heartbeat = response.json()
         except ValueError:
             heartbeat = {}
+        await self.upload_previews(heartbeat.get("preview_requested"))
         if (
             heartbeat.get("config_changed") is False
             and self.config_status == "applied"
@@ -393,3 +489,52 @@ async def health() -> JSONResponse:
 @app.get("/ready")
 async def ready() -> JSONResponse:
     return await health()
+
+
+@app.get("/preflight")
+async def preflight() -> JSONResponse:
+    """O'rnatuvchi uchun tekshiruv ro'yxati.
+
+    `/health` "men tirikman" deydi; bu esa "obyektni topshirsa bo'ladimi"
+    degan savolga javob beradi va har muammo uchun nima qilish kerakligini
+    aytadi.
+
+    Asosiy yo'l — skript (`sotqin_preflight.py`), chunki u xizmat
+    ishlamayotganda ham ishlaydi.  Bu marshrut faqat qulaylik uchun, shuning
+    uchun import muvaffaqiyatsiz bo'lsa ham xizmat yiqilmaydi.
+    """
+    try:
+        from scripts.sotqin_preflight import Preflight
+    except ImportError:
+        return JSONResponse(
+            status_code=501,
+            content={
+                "ready": False,
+                "detail": "Tekshiruvni buyruq satridan ishga tushiring",
+                "command": (
+                    "/opt/chaqimchi/venv/bin/python "
+                    "/opt/chaqimchi/current/scripts/sotqin_preflight.py"
+                ),
+            },
+        )
+    payload = await asyncio.to_thread(Preflight().payload)
+    return JSONResponse(status_code=200 if payload["ready"] else 503, content=payload)
+
+
+@app.get("/api/v1/discover-cameras")
+async def discover_cameras() -> JSONResponse:
+    """Lokal tarmoqdagi barcha IP kameralarni avtomatik qidirish va substream takliflarini olish."""
+    from chaqimchi_ai.discovery import discover_cameras_all
+
+    try:
+        devices = await discover_cameras_all(timeout_sec=3.0)
+        return JSONResponse(
+            status_code=200,
+            content={"ok": True, "count": len(devices), "devices": devices},
+        )
+    except Exception as exc:
+        logger.warning("Kamerani skanerlashda xatolik: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(exc), "devices": []},
+        )

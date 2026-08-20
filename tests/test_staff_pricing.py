@@ -275,8 +275,7 @@ def test_api_change_person_count(cloud_client) -> None:
 
 def test_api_persons_requires_admin(cloud_client) -> None:
     assert (
-        cloud_client.post("/api/v1/admin/sites/x/persons", json={"persons": 10}).status_code
-        == 401
+        cloud_client.post("/api/v1/admin/sites/x/persons", json={"persons": 10}).status_code == 401
     )
 
 

@@ -6,13 +6,25 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements-cloud.txt
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
+# libglib: opencv-python-headless'ning slim image'dagi yagona tizim bog'liqligi.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libglib2.0-0 \
+  && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 chaqimchi && useradd --uid 10001 --gid 10001 --no-create-home chaqimchi
 COPY --from=builder /install /usr/local
 COPY chaqimchi_ai ./chaqimchi_ai
 COPY cloud ./cloud
 COPY deploy ./deploy
-COPY scripts/create_portal_account.py ./scripts/create_portal_account.py
+COPY scripts ./scripts
+# Model manifestlari (URL + sha256, og'irliklarsiz — jami ~12 KB).
+# `fetch_face_models.py` konteyner ICHIDA ishlaydi va manifestsiz
+# "topilmadi" deb to'xtaydi: model o'rnatib bo'lmaydi, davomat esa
+# jimgina ishlamay qoladi.  Og'irliklar image'ga kirmaydi — ular
+# `cloud_state` volumega yuklab olinadi.
+COPY models ./models
 RUN mkdir -p /app/data/cloud && chown -R chaqimchi:chaqimchi /app/data
+
+
 USER 10001:10001
 EXPOSE 8750
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

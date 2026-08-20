@@ -24,7 +24,7 @@ def production_client(tmp_path: Path, monkeypatch):
 
     messages = []
 
-    async def fake_send(chat_id: str, text: str) -> None:
+    async def fake_send(chat_id: str, text: str, *, reply_markup=None) -> None:
         messages.append((chat_id, text))
 
     monkeypatch.setattr(main, "_send_owner_telegram", fake_send)
@@ -47,6 +47,107 @@ def _provision(client: TestClient):
         "X-Device-Token": device["device_token"],
     }
     return site, device, headers
+
+
+def test_config_profile_matches_the_device_product(production_client) -> None:
+    """Windows do'kon kompyuteri N100 pasportini olmasin.
+
+    Ilgari hamma qurilmaga bitta profil ketardi: Windows PC o'zini
+    "Intel N100" deb hisoblab, 40 GB bufer va 20 GB bo'sh joy siyosatini
+    qabul qilardi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+
+    # Sotqin (product_name'siz eski claim ham shu yo'lga tushadi).
+    sotqin_config = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert sotqin_config["product"]["hardware_model"] == "Intel N100"
+    assert sotqin_config["buffer_policy"]["max_bytes"] == 40 * 1024**3
+
+    # Windows qurilma — o'z profili.
+    code = client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/pairing",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+    ).json()["pairing_code"]
+    windows = client.post(
+        "/api/v1/devices/claim",
+        json={"pairing_code": code, "product_name": "Chaqimchi Windows"},
+    ).json()
+    win_headers = {
+        "X-Site-Id": windows["site_id"],
+        "X-Device-Id": windows["device_id"],
+        "X-Device-Token": windows["device_token"],
+    }
+    win_config = client.get("/api/v1/sotqin/config", headers=win_headers).json()
+    assert win_config["product"]["name"] == "Chaqimchi Windows"
+    assert "hardware_model" not in win_config["product"]
+    assert win_config["product"]["max_cameras"] == 4
+    assert "max_bytes" not in win_config["buffer_policy"], "N100 bufer siyosati ketmasin"
+
+
+def test_media_quota_evicts_oldest_media_but_keeps_events(production_client, monkeypatch) -> None:
+    """Bitta shovqinli sayt VPS diskini to'ldira olmasin.
+
+    Kvotadan oshganda eng eski media o'chadi, hodisa yozuvi (statistika)
+    esa qoladi — edge'dagi `outbox.prune` mantig'i bilan bir xil.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+
+    for index in range(3):
+        event_id = f"evt-quota-{index}"
+        client.post(
+            "/api/v1/edge/events/batch",
+            headers=headers,
+            json={
+                "events": [
+                    {
+                        "event_id": event_id,
+                        "event_type": "line_crossed",
+                        "camera_id": "cam-1",
+                        "occurred_at": f"2026-01-0{index + 1}T10:00:00+00:00",
+                        "has_snapshot": True,
+                    }
+                ]
+            },
+        )
+        upload = client.put(
+            f"/api/v1/edge/events/{event_id}/snapshot",
+            headers={**headers, "Content-Type": "image/jpeg"},
+            content=b"x" * 1000,
+        )
+        assert upload.status_code == 200
+
+    # Kvota: 2 ta snapshot sig'adi, 3-chisi eng eskisini siqib chiqaradi.
+    monkeypatch.setenv("CHAQIMCHI_SITE_MEDIA_MAX_BYTES", "2000")
+    main._purge_expired_events()
+
+    store = main.get_event_store()
+    events = {e["event_id"]: e for e in store.list_events(site["site_id"], limit=10)}
+    assert len(events) == 3, "hodisa yozuvlari o'chmasligi kerak"
+    assert not events["evt-quota-0"]["snapshot_key"], "eng eski media bo'shatiladi"
+    assert events["evt-quota-2"]["snapshot_key"], "eng yangi media qoladi"
+    assert store.media_usage_bytes(site["site_id"]) <= 2000
+
+
+def test_claim_is_rate_limited(production_client) -> None:
+    """Pairing kodni qo'pol kuch bilan terib bo'lmasin.
+
+    Kod 6 hex belgi va 48 soat yashaydi; cheklovsiz bu endpoint begona
+    do'konning qurilma tokenini (u orqali RTSP parollarini) topib olish
+    uchun ochiq eshik bo'lardi.  Halol qurilma 1-2 marta claim qiladi.
+    """
+    client, _messages = production_client
+
+    responses = [
+        client.post("/api/v1/devices/claim", json={"pairing_code": "AAAAAA"}).status_code
+        for _ in range(12)
+    ]
+
+    assert 429 in responses, "claim so'rovlari chegaralanishi shart"
+    assert responses[0] == 400, "birinchi urinishlar odatdagidek tekshirilsin"
 
 
 def test_event_ingestion_is_idempotent_and_snapshot_is_private(production_client) -> None:
@@ -90,12 +191,8 @@ def test_event_ingestion_is_idempotent_and_snapshot_is_private(production_client
     assert client.get("/api/v1/owner/events/evt-1/clip").status_code == 401
 
     owner_headers = _login_owner(client, site["site_id"], telegram_id="102")
-    private_snapshot = client.get(
-        "/api/v1/owner/events/evt-1/snapshot", headers=owner_headers
-    )
-    private_clip = client.get(
-        "/api/v1/owner/events/evt-1/clip", headers=owner_headers
-    )
+    private_snapshot = client.get("/api/v1/owner/events/evt-1/snapshot", headers=owner_headers)
+    private_clip = client.get("/api/v1/owner/events/evt-1/clip", headers=owner_headers)
     assert private_snapshot.content == b"jpeg-data"
     assert private_snapshot.headers["content-type"] == "image/jpeg"
     assert private_clip.content == b"mp4-data"
@@ -118,18 +215,15 @@ def test_late_clip_retry_does_not_duplicate_the_telegram_alert(production_client
         "has_snapshot": True,
     }
 
-    first = client.post(
-        "/api/v1/edge/events/batch", headers=headers, json={"events": [event]}
-    )
+    first = client.post("/api/v1/edge/events/batch", headers=headers, json={"events": [event]})
     event["has_clip"] = True
-    second = client.post(
-        "/api/v1/edge/events/batch", headers=headers, json={"events": [event]}
-    )
+    second = client.post("/api/v1/edge/events/batch", headers=headers, json={"events": [event]})
 
     assert first.json()["accepted"] == ["evt-late-clip"]
     assert second.json()["accepted"] == ["evt-late-clip"]
     assert len(messages) == 1
-    assert "Rasm va klip" in messages[0][1]
+    # Yangi format: do'kon nomi sarlavhada, hodisa odam tilida.
+    assert "Kamera yopildi" in messages[0][1]
 
 
 def test_edge_health_heartbeat_is_visible_to_owner(production_client) -> None:
@@ -158,9 +252,7 @@ def test_edge_health_heartbeat_is_visible_to_owner(production_client) -> None:
         },
     )
     assert heartbeat.status_code == 200
-    health = client.get(
-        "/api/v1/owner/health", headers={"Authorization": f"Bearer {token}"}
-    ).json()
+    health = client.get("/api/v1/owner/health", headers={"Authorization": f"Bearer {token}"}).json()
     assert health["devices"][0]["health"]["cameras_active"] == 8
     assert health["cameras_expected"] == 8
 
@@ -173,9 +265,7 @@ def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
         headers={"X-Cloud-Admin-Key": "test-admin"},
         json={"telegram_id": "202", "role": "owner", "display_name": "Owner"},
     )
-    requested = client.post(
-        "/api/v1/owner/auth/request", json={"telegram_id": "202"}
-    )
+    requested = client.post("/api/v1/owner/auth/request", json={"telegram_id": "202"})
     assert requested.status_code == 200
     assert requested.json()["debug_code"] == "123456"
     assert messages and messages[-1][0] == "202"
@@ -242,7 +332,10 @@ def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
     invoice = client.post("/api/v1/owner/invoices", headers=owner_headers, json={"months": 1})
     assert invoice.status_code == 200
     assert invoice.json()["pay_url"].startswith("/pay/")
-    assert client.get("/api/v1/owner/invoices", headers=owner_headers).json()[0]["id"] == invoice.json()["id"]
+    assert (
+        client.get("/api/v1/owner/invoices", headers=owner_headers).json()[0]["id"]
+        == invoice.json()["id"]
+    )
     assert client.get("/owner").status_code == 200
 
 
@@ -356,3 +449,1073 @@ def test_owner_trend_returns_a_full_week(production_client) -> None:
     assert trend["total"] == 1
     # Bugun oxirgi ustun bo'lishi kerak — grafik chapdan o'ngga o'sadi.
     assert trend["daily"][-1]["entered"] == 1
+
+
+# ── Kirish havolasi: `/owner?key=<token>` ────────────────────────────────
+#
+# Kodsiz kirishning xavfsiz ko'rinishi.  Ilgari bu o'rinda Telegram ID
+# ro'yxati (`CHAQIMCHI_OTP_BYPASS_IDS`) bor edi — ID sir emasligi uchun
+# olib tashlandi.  Endi credential — uzun tasodifiy token: faqat admin
+# yaratadi, yangi havola eskisini bekor qiladi, a'zolik har kirishda
+# qayta tekshiriladi.
+
+
+def _member(client, site_id: str, telegram_id: str, role: str = "owner") -> None:
+    client.post(
+        f"/api/v1/admin/sites/{site_id}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": telegram_id, "role": role},
+    )
+
+
+def _make_link(client, site_id: str, telegram_id: str):
+    return client.post(
+        f"/api/v1/admin/sites/{site_id}/members/{telegram_id}/login-link",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+    )
+
+
+def _key_of(response) -> str:
+    url = response.json()["url"]
+    assert "/owner?key=" in url
+    return url.split("key=", 1)[1]
+
+
+def test_link_opens_the_panel(production_client) -> None:
+    """Havola bosilishi bilan panel ochiladi — kod so'ralmaydi."""
+    client, messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000010")
+
+    key = _key_of(_make_link(client, site["site_id"], "5476000010"))
+    session = client.post("/api/v1/owner/auth/link", json={"key": key})
+
+    assert session.status_code == 200
+    token = session.json()["access_token"]
+    assert session.json()["site_id"] == site["site_id"]
+    events = client.get("/api/v1/owner/events", headers={"Authorization": f"Bearer {token}"})
+    assert events.status_code == 200
+    # Havola OTP emas — Telegramga xabar ketmasin.
+    assert not messages
+
+
+def test_link_needs_a_real_member(production_client) -> None:
+    """Havola faqat mavjud a'zoga yaratiladi — begona ID uchun yo'q."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+
+    response = _make_link(client, site["site_id"], "5476000011")
+
+    assert response.status_code == 404
+
+
+def test_guessed_key_is_rejected(production_client) -> None:
+    client, _messages = production_client
+    _provision(client)
+
+    response = client.post("/api/v1/owner/auth/link", json={"key": "x" * 43})
+
+    assert response.status_code == 401
+
+
+def test_new_link_revokes_the_old_one(production_client) -> None:
+    """ "Havola tarqalib ketdi" muammosi bitta tugma bilan yopiladi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000012")
+
+    old_key = _key_of(_make_link(client, site["site_id"], "5476000012"))
+    new_key = _key_of(_make_link(client, site["site_id"], "5476000012"))
+
+    assert client.post("/api/v1/owner/auth/link", json={"key": old_key}).status_code == 401
+    assert client.post("/api/v1/owner/auth/link", json={"key": new_key}).status_code == 200
+
+
+def test_revoked_link_stops_working(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000013")
+    key = _key_of(_make_link(client, site["site_id"], "5476000013"))
+
+    revoke = client.delete(
+        f"/api/v1/admin/sites/{site['site_id']}/members/5476000013/login-link",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+    )
+
+    assert revoke.status_code == 200
+    assert revoke.json()["revoked"] == 1
+    assert client.post("/api/v1/owner/auth/link", json={"key": key}).status_code == 401
+
+
+def test_expired_link_is_rejected(production_client) -> None:
+    """Muddat tekshiruvi ham ishlaydi — abadiy havola yo'q."""
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000014")
+
+    key = main.get_event_store().create_login_link(
+        site["site_id"],
+        "5476000014",
+        secret="owner-secret-with-more-than-32-characters",
+        ttl_days=0,
+    )
+
+    assert client.post("/api/v1/owner/auth/link", json={"key": key}).status_code == 401
+
+
+def test_disabled_member_link_stops_working(production_client) -> None:
+    """A'zolik har kirishda qayta tekshiriladi.
+
+    A'zo o'chirilgach uning qo'lidagi eski havola ham darhol o'lishi
+    shart — aks holda "xodim ketdi, kirishi qoldi" bo'lardi.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000015")
+    key = _key_of(_make_link(client, site["site_id"], "5476000015"))
+    member = main.get_event_store().member_for_site(site["site_id"], "5476000015")
+    main.get_event_store().disable_member(site["site_id"], member["id"])
+
+    assert client.post("/api/v1/owner/auth/link", json={"key": key}).status_code == 401
+
+
+def test_otp_test_code_is_ignored_in_production(production_client, monkeypatch) -> None:
+    """Production'da qat'iy test kodi ishlatilmaydi.
+
+    Lifespan bunday serverni umuman yoqmaydi, lekin himoya bir qavat
+    bilan qolmasin: env qanday bo'lmasin, so'rov paytida ham test kod
+    faqat test muhitida qo'llanadi.
+    """
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000016")
+    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
+
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "5476000016"})
+    verified = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "5476000016", "site_id": site["site_id"], "code": "123456"},
+    )
+
+    assert verified.status_code == 401, "test kod production'da o'tmasin"
+
+
+def test_production_startup_refuses_test_doors(tmp_path, monkeypatch) -> None:
+    """Sinov eshiklari qolgan production server umuman yonmaydi."""
+    import cloud.main as main
+
+    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
+    monkeypatch.setenv("CHAQIMCHI_OTP_TEST_CODE", "123456")
+    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "42")
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
+    monkeypatch.setattr(main, "_store", None)
+    monkeypatch.setattr(main, "_event_store", None)
+    monkeypatch.setattr(main, "_event_store_key", None)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        with TestClient(main.app):
+            pass
+
+    assert "CHAQIMCHI_OTP_TEST_CODE" in str(excinfo.value)
+    assert "CHAQIMCHI_OTP_BYPASS_IDS" in str(excinfo.value)
+
+
+def test_code_login_still_works(production_client) -> None:
+    """Odatdagi OTP yo'li buzilmaganini tekshiramiz."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "424242")
+
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "424242"})
+    verified = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "424242", "site_id": site["site_id"], "code": "123456"},
+    )
+
+    assert verified.status_code == 200
+    assert verified.json()["access_token"]
+
+
+# ── Telegram tartibi (minimal rejim) ─────────────────────────────────────
+
+
+def test_member_gets_at_most_ten_alerts_per_hour(production_client) -> None:
+    """Soatlik shaxsiy limit: undan ko'pi baribir o'qilmaydi va mijoz
+    botni o'chirtiradi.  Kamera/tur soni qancha bo'lmasin — 10 ta."""
+    client, messages = production_client
+    site, _device, headers = _provision(client)
+    _member(client, site["site_id"], "5476100001")
+
+    for index in range(12):
+        client.post(
+            "/api/v1/edge/events/batch",
+            headers=headers,
+            json={
+                "events": [
+                    {
+                        "event_id": f"evt-cap-{index}",
+                        "event_type": "camera_tampered",
+                        "severity": "critical",
+                        "camera_id": f"cam-{index:02d}",
+                    }
+                ]
+            },
+        )
+
+    assert len(messages) == 10, "soatiga 10 tadan oshmasin"
+
+
+def test_alert_throttle_survives_a_restart(production_client) -> None:
+    """Tormoz bazada: deploy'dan keyin xabar bo'roni bo'lmasin."""
+    import cloud.main as main
+
+    client, _messages = production_client
+    _provision(client)
+
+    store = main.get_store()
+    assert store.alert_throttle_allow("site-x", "camera_tampered:cam-1") is True
+    assert store.alert_throttle_allow("site-x", "camera_tampered:cam-1") is False
+
+    # "Restart": xuddi shu DB ustida yangi CloudStore ochamiz.
+    from cloud.store import CloudStore
+
+    fresh = CloudStore(store.db_path)
+    assert fresh.alert_throttle_allow("site-x", "camera_tampered:cam-1") is False, (
+        "tormoz restartdan keyin ham eslab qolsin"
+    )
+
+
+def test_missing_chat_stops_future_sends(production_client, monkeypatch) -> None:
+    """ "Chat not found" — a'zo botga /start bosmagan.  3 urinishdan keyin
+    unga yuborish to'xtaydi; ilgari har batch'da log xatoga to'lardi."""
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    _member(client, site["site_id"], "5476100002")
+
+    attempts = []
+
+    async def failing_send(chat_id, text, *, reply_markup=None):
+        attempts.append(chat_id)
+        raise main.TelegramSendError(400, '{"description":"Bad Request: chat not found"}')
+
+    monkeypatch.setattr(main, "_send_owner_telegram", failing_send)
+
+    for index in range(5):
+        client.post(
+            "/api/v1/edge/events/batch",
+            headers=headers,
+            json={
+                "events": [
+                    {
+                        "event_id": f"evt-nf-{index}",
+                        "event_type": "camera_tampered",
+                        "severity": "critical",
+                        "camera_id": f"cam-nf-{index}",
+                    }
+                ]
+            },
+        )
+
+    assert len(attempts) == 3, "3 muvaffaqiyatsizlikdan keyin urinish to'xtasin"
+    member = main.get_event_store().list_members(site["site_id"])[0]
+    assert int(member["notify_failures"]) >= 3
+
+
+def test_owner_can_mute_the_daily_digest(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476100003")
+    key = _key_of(_make_link(client, site["site_id"], "5476100003"))
+    token = client.post("/api/v1/owner/auth/link", json={"key": key}).json()["access_token"]
+
+    response = client.put(
+        "/api/v1/owner/digest",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"muted": True},
+    )
+
+    assert response.status_code == 200
+    import cloud.main as main
+
+    member = main.get_event_store().list_members(site["site_id"])[0]
+    assert int(member["digest_muted"]) == 1
+
+
+def test_lite_plan_includes_every_feature_out_of_the_box(production_client) -> None:
+    """Yagona tarif (2026-08-17): Chaqimchi Lite'da HAMMA funksiya ichida.
+
+    Ilgari cloud_features faqat qo'lda approve qilingan assignmentlardan
+    kelardi va hech bir saytga avto-biriktirilmasdi — pullik mijozning
+    qurilmasi litsenziya filtri sabab hodisalarni jimgina tashlab yuborardi.
+    """
+    client, _messages = production_client
+
+    site = client.post(
+        "/api/v1/admin/sites",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"name": "Lite do'kon", "plan": "lite"},
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
+    headers = {
+        "X-Site-Id": device["site_id"],
+        "X-Device-Id": device["device_id"],
+        "X-Device-Token": device["device_token"],
+    }
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    codes = {item["code"] for item in config["cloud_features"]}
+    assert codes == {"person_count", "queue_length", "store_security"}
+    assert all(item["camera_count"] == 4 for item in config["cloud_features"])
+
+
+def test_non_sellable_plan_still_needs_assignments(production_client) -> None:
+    """Maxsus tariflar (enterprise) assignment orqali boshqarilaveradi."""
+    client, _messages = production_client
+    _site, _device, headers = _provision(client)  # plan="enterprise"
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    assert config["cloud_features"] == []
+
+
+def test_alert_goes_out_with_the_snapshot_photo(production_client, monkeypatch) -> None:
+    """Rasmli alert: snapshot bo'lsa xabar sendPhoto bilan ketadi.
+
+    Bot "xunuk" bo'lishining bosh sababi shu edi: snapshot cloudda yotar,
+    bot esa quruq matn yuborar edi.
+    """
+    import asyncio
+
+    import cloud.main as main
+    from chaqimchi_ai.event_models import EdgeEvent
+
+    client, messages = production_client
+    site, _device, headers = _provision(client)
+    _member(client, site["site_id"], "5476200001")
+
+    photos = []
+
+    async def fake_photo(chat_id, photo, caption, *, reply_markup=None):
+        photos.append((chat_id, photo, caption, reply_markup))
+
+    monkeypatch.setattr(main, "_send_owner_photo", fake_photo)
+
+    event = EdgeEvent(
+        event_id="evt-photo-1",
+        event_type="camera_tampered",
+        severity="critical",
+        camera_id="camera-01",
+        has_snapshot=True,
+    )
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-photo-1",
+                    "event_type": "camera_tampered",
+                    "severity": "critical",
+                    "camera_id": "camera-01",
+                    "has_snapshot": True,
+                }
+            ]
+        },
+    )
+    # Batch paytida rasm hali kelmagan — matn ketdi.  Endi snapshot yetib
+    # keldi deb faraz qilib, alert oqimini qayta chaqiramiz.
+    client.put(
+        "/api/v1/edge/events/evt-photo-1/snapshot",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"jpeg-bytes",
+    )
+    asyncio.run(main._notify_alert(site["site_id"], [event]))
+
+    assert photos, "snapshot bor — sendPhoto ishlatilsin"
+    chat_id, photo, caption, _markup = photos[-1]
+    assert photo == b"jpeg-bytes"
+    assert "Set-1" in caption, "do'kon nomi sarlavhada bo'lsin"
+    assert "Kamera yopildi" in caption
+
+
+# ── Bot buyruqlari (/hisobot, /kamera, /panel, /yordam) ──────────────────
+
+
+def _webhook(client, text: str, chat_id: int = 900111):
+    return client.post(
+        "/api/v1/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-test"},
+        json={"message": {"chat": {"id": chat_id, "type": "private"}, "text": text}},
+    )
+
+
+@pytest.fixture
+def bot_member_client(production_client, monkeypatch):
+    """Webhook + saytga ulangan a'zo bilan tayyor muhit."""
+    client, messages = production_client
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
+    site, device, headers = _provision(client)
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": "900111", "role": "owner"},
+    )
+    return client, messages, site, headers
+
+
+def test_hisobot_command_sends_the_daily_report(bot_member_client) -> None:
+    client, messages, site, headers = bot_member_client
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-in-1",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                }
+            ]
+        },
+    )
+    messages.clear()
+
+    assert _webhook(client, "/hisobot").status_code == 200
+
+    assert len(messages) == 1
+    text = messages[0][1]
+    assert "kunlik hisobot" in text
+    assert "Kirdi: <b>1</b> kishi" in text
+    assert "📷 Kamera:" in text
+
+
+def test_old_commands_stay_as_aliases(bot_member_client) -> None:
+    """/today va /status yodlab qolganlar uchun ishlashda davom etadi."""
+    client, messages, _site, _headers = bot_member_client
+
+    assert _webhook(client, "/today").status_code == 200
+
+    assert len(messages) == 1
+    assert "Bugun hali hodisa yo'q" in messages[0][1]
+
+
+def test_yordam_lists_the_commands(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "/yordam")
+
+    assert "/hisobot" in messages[0][1]
+    assert "/kamera" in messages[0][1]
+
+
+def test_panel_command_gives_a_fresh_login_link(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "/panel")
+
+    assert "oldingi kirish havolangiz endi ishlamaydi" in messages[0][1]
+
+
+def test_unknown_text_gets_a_short_hint(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "salom")
+
+    assert messages[0][1] == "Buyruqlar: /hisobot, /kamera, /panel, /yordam"
+
+
+def test_kamera_without_cameras_explains_itself(bot_member_client) -> None:
+    client, messages, _site, _headers = bot_member_client
+
+    _webhook(client, "/kamera")
+
+    assert "Kameralar hali ulanmagan" in messages[0][1]
+
+
+def test_kamera_sends_the_last_preview_and_requests_a_new_one(
+    bot_member_client, monkeypatch
+) -> None:
+    from cryptography.fernet import Fernet
+
+    import cloud.main as main
+
+    client, messages, site, _headers = bot_member_client
+    monkeypatch.setenv("CHAQIMCHI_CAMERA_SECRET_KEY", Fernet.generate_key().decode())
+    store = main.get_store()
+    store.upsert_camera(site["site_id"], "camera-01", label="Kirish", rtsp_url="rtsp://demo/1")
+    main.get_snapshot_store().put("previews/p1.jpg", b"preview-bytes")
+    store.set_camera_preview(site["site_id"], "camera-01", "previews/p1.jpg")
+    photos = []
+
+    async def fake_photo(chat_id, photo, caption, *, reply_markup=None):
+        photos.append((chat_id, photo, caption))
+
+    monkeypatch.setattr(main, "_send_owner_photo", fake_photo)
+
+    _webhook(client, "/kamera")
+
+    assert photos and photos[0][1] == b"preview-bytes"
+    assert "Kirish" in photos[0][2]
+    # Keyingi heartbeat'da yangi kadr kelsin.
+    assert store.pending_preview_cameras(site["site_id"]) == ["camera-01"]
+    assert any("Yangi rasm so'raldi" in m[1] for m in messages)
+
+
+# ── Ichki narx mijozga chiqmasin ─────────────────────────────────────────
+#
+# `public_pricing` izohida qoida aniq yozilgan: tannarx va marja "javobga
+# chiqmaydi — ular faqat admin endpointida qoladi".  Mijoz marshrutlari bu
+# qoidani buzardi: `list_feature_catalog()` `p.cost_usd_cents` ni tanlaydi,
+# `feature_quote()` esa `cost_usd_cents` bilan `gross_margin_percent` ni
+# qaytaradi, ikkalasi ham to'g'ridan-to'g'ri mijoz brauzeriga ketardi.
+#
+# Bu mavhum xavf emas: do'kon egasi F12 bosib biz qancha foyda
+# olayotganimizni o'qiy olardi — narx bo'yicha gaplashayotgan paytda.
+
+#: Mijoz javobida hech qachon uchramasligi kerak bo'lgan kalitlar.
+INTERNAL_MONEY_KEYS = ("cost_usd_cents", "cost_total_usd_cents", "gross_margin_percent")
+
+
+def _assert_no_internal_money(payload, where: str) -> None:
+    """Javobning ISTALGAN chuqurligida ichki narx bo'lmasin."""
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            assert key not in INTERNAL_MONEY_KEYS, f"{where}: `{key}` mijozga ketyapti"
+            _assert_no_internal_money(value, f"{where}.{key}")
+    elif isinstance(payload, list):
+        for index, item in enumerate(payload):
+            _assert_no_internal_money(item, f"{where}[{index}]")
+
+
+def test_owner_never_sees_our_cost_or_margin(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+
+    catalog = client.get("/api/v1/owner/features", headers=owner_headers)
+    assert catalog.status_code == 200
+    _assert_no_internal_money(catalog.json(), "/features")
+
+    quote = client.post(
+        "/api/v1/owner/features/quote",
+        headers=owner_headers,
+        json={"selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    )
+    assert quote.status_code == 200
+    _assert_no_internal_money(quote.json(), "/features/quote")
+
+    draft = client.put(
+        "/api/v1/owner/features/request",
+        headers=owner_headers,
+        json={"selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    )
+    assert draft.status_code == 200
+    _assert_no_internal_money(draft.json(), "/features/request")
+
+
+def test_the_owner_still_gets_the_price_they_need_to_decide(production_client) -> None:
+    """Tannarxni olib tashlash mijozga kerakli narxni ham o'chirmasin —
+    aks holda funksiya so'rash oynasi narxsiz qoladi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+
+    quote = client.post(
+        "/api/v1/owner/features/quote",
+        headers=owner_headers,
+        json={"selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    ).json()
+
+    assert quote["monthly_uzs"] > 0, "mijoz so'mdagi narxni ko'rishi kerak"
+    assert quote["monthly_usd_cents"] > 0
+    assert quote["features"][0]["feature_code"] == "person_count"
+
+    catalog = client.get("/api/v1/owner/features", headers=owner_headers).json()
+    assert catalog["catalog"]["features"][0]["monthly_usd_cents"] > 0
+
+
+def test_the_admin_still_sees_the_margin(production_client) -> None:
+    """Marja bizga KERAK — u faqat admin tomonda qolishi shart."""
+    client, _messages = production_client
+    admin = {"X-Cloud-Admin-Key": "test-admin"}
+
+    catalog = client.get("/api/v1/admin/features", headers=admin).json()
+    assert any("cost_usd_cents" in item for item in catalog["features"])
+
+
+# ── Telegramni bir bosishda ulash ────────────────────────────────────────
+#
+# Panelda a'zo qo'shish uchun RAQAMLI Telegram ID so'ralardi.  Do'kon
+# egasi o'z ID sini ham, xodimining ID sini ham bilmaydi, panel esa uni
+# topish yo'lini ko'rsatmasdi — ya'ni funksiya amalda ishlamasdi.
+#
+# Endi panel havola beradi, odam uni bosadi, bot uni a'zo qiladi.
+
+
+#: Webhook siri — Telegram har so'rovda shu sarlavhani yuboradi.
+BOT_SECRET = "webhook-secret-for-tests"
+
+
+def _bot_start(client, telegram_id: str, payload: str = ""):
+    text = f"/start {payload}".strip()
+    return client.post(
+        "/api/v1/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": BOT_SECRET},
+        json={"message": {"chat": {"id": int(telegram_id), "type": "private"}, "text": text}},
+    )
+
+
+def test_a_customer_connects_telegram_without_typing_any_id(
+    production_client, monkeypatch
+) -> None:
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="900")
+
+    invite = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={"role": "manager"}
+    )
+    assert invite.status_code == 200
+    url = invite.json()["url"]
+    assert url.startswith("https://t.me/chaqimchi_ai_bot?start=")
+    token = url.split("start=")[1]
+
+    # Xodim havolani bosadi — hech qanday raqam yozmaydi.
+    assert _bot_start(client, "901", token).status_code == 200
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert {str(m["telegram_id"]) for m in members} == {"900", "901"}
+    assert next(m for m in members if str(m["telegram_id"]) == "901")["role"] == "manager"
+
+
+def test_an_invite_works_only_once(production_client, monkeypatch) -> None:
+    """Havola credential: uni bosgan odam panelga kiradi.  Bir marta
+    ishlatilgach boshqa hech kimni ichkariga kiritmasin."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="910")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    _bot_start(client, "911", token)
+    _bot_start(client, "912", token)   # o'sha havola, boshqa odam
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "912" not in {str(m["telegram_id"]) for m in members}
+
+
+def test_an_expired_invite_is_refused(production_client, monkeypatch) -> None:
+    import cloud.main as main
+
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="920")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    store = main.get_event_store()
+    with store._connect() as conn:
+        conn.execute(
+            store._sql("UPDATE telegram_invites SET expires_at=?"),
+            ("2020-01-01T00:00:00+00:00",),
+        )
+
+    _bot_start(client, "921", token)
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "921" not in {str(m["telegram_id"]) for m in members}
+
+
+def test_a_random_start_payload_does_not_grant_access(
+    production_client, monkeypatch
+) -> None:
+    """Botga tasodifiy matn bilan `/start` bosgan odam a'zo bo'lib
+    qolmasin."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="930")
+
+    _bot_start(client, "931", "oddiy-matn")
+
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "931" not in {str(m["telegram_id"]) for m in members}
+
+
+def test_a_second_tap_does_not_say_the_link_expired(
+    production_client, monkeypatch
+) -> None:
+    """Telegram javob kelmasa update'ni QAYTA yuboradi.  Havola esa bir
+    martalik — ikkinchi urinishda "eskirgan" deb yozilardi, holbuki
+    o'sha odam allaqachon ulangan edi.
+
+    Ayni holat mijoz havolani ikki marta bosganda ham yuz beradi."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="960")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    _bot_start(client, "961", token)
+    _bot_start(client, "961", token)
+
+    assert "eskirgan" not in messages[-1][1].lower(), messages[-1][1]
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert sum(1 for m in members if str(m["telegram_id"]) == "961") == 1
+
+
+def test_a_failed_telegram_reply_does_not_undo_the_invite(
+    production_client, monkeypatch
+) -> None:
+    """Tasdiq xabari ketmasa ham a'zolik saqlanib qolsin va webhook 200
+    qaytarsin — aks holda Telegram cheksiz qayta urinadi."""
+    import cloud.main as main
+
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="970")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+
+    async def broken_send(chat_id, text, *, reply_markup=None):
+        raise RuntimeError("Telegram javob bermadi")
+
+    monkeypatch.setattr(main, "_send_owner_telegram", broken_send)
+    response = _bot_start(client, "971", token)
+
+    assert response.status_code == 200
+    members = client.get("/api/v1/owner/members", headers=owner_headers).json()["members"]
+    assert "971" in {str(m["telegram_id"]) for m in members}
+
+
+def test_the_register_button_still_works(production_client, monkeypatch) -> None:
+    """Taklif tokenini o'qiyotgan kod `/start register` ni ham yutib
+    yuborardi — saytdagi "Ro'yxatdan o'tish" tugmasi javob bermay qolgandi.
+
+    Taklif tokeni har doim 32 belgi; `register` esa emas."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, messages = production_client
+
+    before = len(messages)
+    response = _bot_start(client, "9501", "register")
+
+    assert response.status_code == 200
+    assert len(messages) > before, "botdan javob kelmadi"
+    assert "eskirgan" not in messages[-1][1].lower()
+
+
+def test_a_manager_cannot_invite_more_people(production_client, monkeypatch) -> None:
+    """Xodim yangi odam taklif qila olmasin — aks holda bitta taklif
+    butun do'konni ochib yuborardi."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="940")
+
+    token = client.post(
+        "/api/v1/owner/telegram-invite", headers=owner_headers, json={}
+    ).json()["url"].split("start=")[1]
+    _bot_start(client, "941", token)
+
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "941"})
+    manager = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "941", "site_id": site["site_id"], "code": "123456"},
+    ).json()["access_token"]
+
+    refused = client.post(
+        "/api/v1/owner/telegram-invite",
+        headers={"Authorization": f"Bearer {manager}"},
+        json={},
+    )
+    assert refused.status_code == 403
+
+
+# ── Uch tarif: chegara va funksiya to'plami ─────────────────────────────
+#
+# Uch tarif e'lon qilingach eng katta xavf — sotilgan farqning aslida
+# yo'qligi.  Bungacha kamera soni qurilmada QOTIRILGAN doimiy edi va
+# funksiyalar "sotiladigan har qanday tarifga hammasi" tamoyili bilan
+# tarqatilardi: 149 000 to'lagan mijoz 299 000 lik mijoz bilan bir xil
+# tizim olardi.  Quyidagilar shu farqni ushlab turadi.
+
+
+def _site_on(client: TestClient, plan: str, name: str = "Tarif do'koni"):
+    site = client.post(
+        "/api/v1/admin/sites",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"name": name, "plan": plan},
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
+    return site, {
+        "X-Site-Id": device["site_id"],
+        "X-Device-Id": device["device_id"],
+        "X-Device-Token": device["device_token"],
+    }
+
+
+def test_boshlangich_device_only_gets_person_counting(production_client) -> None:
+    client, _messages = production_client
+    _site, headers = _site_on(client, "boshlangich")
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    codes = {item["code"] for item in config["cloud_features"]}
+    assert codes == {"person_count"}
+    assert all(item["camera_count"] == 2 for item in config["cloud_features"])
+
+
+def test_biznes_device_gets_queue_and_security(production_client) -> None:
+    client, _messages = production_client
+    _site, headers = _site_on(client, "biznes")
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    codes = {item["code"] for item in config["cloud_features"]}
+    assert codes == {"person_count", "queue_length", "store_security"}
+
+
+def test_edge_config_camera_limit_follows_the_plan(production_client) -> None:
+    """Qurilma tarifdagi kamera sonini bilishi kerak.
+
+    Ilgari `product.max_cameras` har doim 4 edi va lokal sehrgar shu
+    raqamga qarardi — ya'ni 2 kameralik tarifdagi mijoz uchinchi kamerani
+    bemalol ulardi.
+    """
+    client, _messages = production_client
+    for plan, expected in (("boshlangich", 2), ("biznes", 4), ("lite", 4)):
+        _site, headers = _site_on(client, plan, name=f"Do'kon {plan}")
+        config = client.get("/api/v1/sotqin/config", headers=headers).json()
+        assert config["product"]["max_cameras"] == expected, plan
+        assert config["product"]["guaranteed_cameras"] == expected, plan
+
+
+def test_boshlangich_site_cannot_add_a_third_camera(production_client) -> None:
+    """Haqiqiy nazorat cloudda: qurilmadagi fayl mijozning o'zida turadi.
+
+    Shu sabab tekshiruv yozish yo'lining o'zida — `upsert_camera` da —
+    turadi va o'rnatuvchi paneli ham, admin ham, kelajakdagi yo'llar ham
+    shu bitta joydan o'tadi.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, _headers = _site_on(client, "boshlangich")
+    store = main.get_store()
+
+    for index in (1, 2):
+        store.upsert_camera(
+            site["site_id"],
+            f"camera-{index:02d}",
+            label=f"Kamera {index}",
+            rtsp_url=f"rtsp://10.0.0.{index}/1",
+        )
+
+    with pytest.raises(ValueError, match="2 ta kamera"):
+        store.upsert_camera(
+            site["site_id"], "camera-03", label="Uchinchi", rtsp_url="rtsp://10.0.0.3/1"
+        )
+
+    # Mavjud kamerani TAHRIRLASH chegaraga urilmaydi — aks holda 2
+    # kamerali mijoz RTSP parolini ham yangilay olmasdi.
+    store.upsert_camera(
+        site["site_id"], "camera-01", label="Kirish", rtsp_url="rtsp://10.0.0.9/1"
+    )
+
+    # Tarif ko'tarilsa uchinchisi ochiladi.
+    store.set_plan(site["site_id"], "biznes")
+    store.upsert_camera(
+        site["site_id"], "camera-03", label="Uchinchi", rtsp_url="rtsp://10.0.0.3/1"
+    )
+    assert len(store.list_cameras(site["site_id"])) == 3
+
+
+def test_changing_the_plan_reaches_the_device(production_client) -> None:
+    """Mijoz pul to'lagach funksiya keyingi pollda kelsin.
+
+    Tarif qurilmadagi funksiya to'plamini belgilaydi, qurilma esa
+    o'zgarishni faqat config revizyasi bo'yicha sezadi.  Revizya
+    surilmasa mijoz qayta ishga tushirishgacha kutib qolardi.
+    """
+    client, _messages = production_client
+    site, headers = _site_on(client, "boshlangich")
+    admin = {"X-Cloud-Admin-Key": "test-admin"}
+
+    before = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    upgraded = client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/plan", headers=admin, json={"plan": "biznes"}
+    )
+    assert upgraded.status_code == 200
+    assert upgraded.json()["plan"] == "biznes"
+
+    after = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert after["revision"] > before["revision"]
+    assert {item["code"] for item in after["cloud_features"]} == {
+        "person_count",
+        "queue_length",
+        "store_security",
+    }
+    assert after["product"]["max_cameras"] == 4
+
+
+def test_an_unknown_plan_is_refused(production_client) -> None:
+    client, _messages = production_client
+    site, _headers = _site_on(client, "biznes")
+
+    response = client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/plan",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"plan": "oltin"},
+    )
+    assert response.status_code == 422
+
+
+def test_heatmap_and_demography_follow_the_plan(production_client) -> None:
+    """Sotilgan farq haqiqatan ham bo'lsin.
+
+    Ikkalasi ham kodda allaqachon ishlardi va hech qaysi tarifga
+    bog'lanmagan edi — ya'ni 149 000 to'lagan mijoz 299 000 lik bilan bir
+    xil tahlil olardi.
+    """
+    client, _messages = production_client
+    site, headers = _site_on(client, "boshlangich")
+    admin = {"X-Cloud-Admin-Key": "test-admin"}
+
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/members",
+        headers=admin,
+        json={"telegram_id": "707", "role": "owner"},
+    )
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "707"})
+    token = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "707", "site_id": site["site_id"], "code": "123456"},
+    ).json()["access_token"]
+    owner = {"Authorization": f"Bearer {token}"}
+
+    health = client.get("/api/v1/owner/health", headers=owner).json()
+    assert health["plan"]["code"] == "boshlangich"
+    assert "xarita" not in health["plan"]["panel_features"]
+
+    blocked = client.get("/api/v1/owner/heatmap?camera_id=camera-01", headers=owner)
+    assert blocked.status_code == 403
+    assert "Biznes" in blocked.json()["detail"]
+
+    assert "demografiya" not in client.get("/api/v1/owner/report", headers=owner).json()
+
+    # Qurilma to'rni yuborishda XATO olmaydi — aks holda outbox uni
+    # "keyin qayta yuboraman" deb saqlab, do'kon kompyuterining diskini
+    # to'ldirardi.
+    upload = client.post(
+        "/api/v1/edge/heatmap",
+        headers=headers,
+        json={
+            "items": [
+                {
+                    "camera_id": "camera-01",
+                    "hour": "2026-08-21T10",
+                    "grid": [[0] * 48 for _ in range(27)],
+                    "frames": 10,
+                }
+            ]
+        },
+    )
+    assert upload.status_code == 200
+    assert upload.json()["accepted"] == 0
+
+    # Tarif ko'tarilsa ikkalasi ham ochiladi.
+    client.post(f"/api/v1/admin/sites/{site['site_id']}/plan", headers=admin, json={"plan": "biznes"})
+    assert client.get("/api/v1/owner/heatmap?camera_id=camera-01", headers=owner).status_code == 200
+    assert "demografiya" in client.get("/api/v1/owner/report", headers=owner).json()
+
+
+def test_an_expired_subscription_stops_the_features_but_not_the_camera_alarm(
+    production_client,
+) -> None:
+    """To'lamagan mijozning qurilmasi ishlab turaverishi kerak emas.
+
+    Bungacha obuna muddati qurilmada UMUMAN majburlanmasdi:
+    `require_device` faqat tokenni tekshirardi, `/edge/heartbeat` esa
+    litsenziya maydonlarini tashlab yuborardi.  Bitta tarif va tekin
+    sinov paytida bu yumshoq oqim edi; uch xil narx e'lon qilingach —
+    to'lashni to'xtatishning eng oson yo'li.
+
+    Lekin kamera sog'ligi hodisalari qurilmada filtrdan o'tmaydi
+    (`HEALTH_EVENTS`), ya'ni "kamerangiz o'chdi" xabari baribir keladi.
+    """
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, headers = _site_on(client, "biznes")
+    store = main.get_store()
+
+    assert client.get("/api/v1/sotqin/config", headers=headers).json()["cloud_features"]
+
+    # Obunani orqaga suramiz: grace (14 kun) ham o'tib ketsin.
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE sites SET subscription_until = ? WHERE id = ?",
+            ("2020-01-01 00:00:00", site["site_id"]),
+        )
+        conn.commit()
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert config["subscription"]["status"] == "expired"
+    assert config["cloud_features"] == []
+    assert config["attendance"]["enabled"] is False
+    # Javob YARIM emas: qurilma kutadigan maydonlar joyida qoladi.
+    assert "product" in config and "cameras" in config
+
+
+def test_the_grace_period_promised_on_the_site_is_honoured(production_client) -> None:
+    """Sayt FAQ'i: "obuna tugagach tizim yana 14 kun ishlaydi"."""
+    import cloud.main as main
+
+    client, _messages = production_client
+    site, headers = _site_on(client, "biznes")
+    store = main.get_store()
+
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE sites SET subscription_until = datetime('now', '-3 days') WHERE id = ?",
+            (site["site_id"],),
+        )
+        conn.commit()
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+    assert config["subscription"]["status"] == "grace"
+    assert config["cloud_features"], "grace davrida tizim ishlashda davom etadi"

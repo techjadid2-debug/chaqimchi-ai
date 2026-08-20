@@ -1,4 +1,3 @@
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -30,16 +29,22 @@ def test_cloud_plans_and_site(cloud_client) -> None:
     assert data["pairing_code"]
 
 
-def test_new_site_defaults_to_lite(cloud_client) -> None:
+def test_new_site_defaults_to_biznes(cloud_client) -> None:
+    """Tarif berilmasa — asosiy tarif, cheklangani emas.
+
+    Standart `boshlangich` bo'lsa, tarif ko'rsatilmagan yo'ldan
+    (masalan ariza konvertatsiyasi) kelgan mijoz 2 kamera chegarasiga
+    tushib qolardi va sababi hech qayerda yozilmasdi.
+    """
     response = cloud_client.post(
         "/api/v1/admin/sites",
         headers={"X-Cloud-Admin-Key": "test-admin"},
-        json={"name": "Lite Pilot", "subscription_months": 1},
+        json={"name": "Biznes Pilot", "subscription_months": 1},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["plan"] == "lite"
-    assert body["limits"]["monthly_price_usd"] == 20
+    assert body["plan"] == "biznes"
+    assert body["limits"]["monthly_price_usd"] == 23
 
 
 def test_feature_catalog_draft_quote_and_approval(cloud_client) -> None:
@@ -102,15 +107,15 @@ def test_feature_catalog_draft_quote_and_approval(cloud_client) -> None:
         json={"revision": edge_config.json()["revision"], "status": "applied"},
     )
     assert ack.status_code == 200
-    detail = cloud_client.get(
-        f"/api/v1/admin/sites/{site['site_id']}", headers=ADMIN
-    ).json()
+    detail = cloud_client.get(f"/api/v1/admin/sites/{site['site_id']}", headers=ADMIN).json()
     assert detail["devices"][0]["product_name"] == "Sotqin"
     assert detail["devices"][0]["hardware_model"] == "Intel N100"
     assert detail["devices"][0]["config_status"] == "applied"
 
 
-def test_camera_inventory_is_encrypted_for_admin_and_sent_only_to_paired_sotqin(cloud_client) -> None:
+def test_camera_inventory_is_encrypted_for_admin_and_sent_only_to_paired_sotqin(
+    cloud_client,
+) -> None:
     site = _make_site(cloud_client, "Camera inventory", "lite")
     saved = cloud_client.put(
         f"/api/v1/admin/sites/{site['site_id']}/camera-inventory/camera-01",
@@ -242,7 +247,10 @@ def test_admin_panel_page_is_served(cloud_client) -> None:
     r = cloud_client.get("/admin")
     assert r.status_code == 200
     assert "Chaqimchi Cloud" in r.text
-    assert cloud_client.get("/assets/admin.css").status_code == 200
+    # Panel ikkita uslub faylida keladi: umumiy dizayn tizimi (owner.css) va
+    # admin qismlari (panel.css).  Biri yetib bormasa panel uslubsiz ochiladi.
+    assert cloud_client.get("/assets/owner.css").status_code == 200
+    assert cloud_client.get("/assets/panel.css").status_code == 200
 
 
 def test_sotqin_bootstrap_is_only_served_for_a_published_hashed_release(
@@ -298,7 +306,7 @@ def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     )
     assert converted.status_code == 200
     site = converted.json()
-    assert site["plan"] == "lite"
+    assert site["plan"] == "biznes"
     assert site["name"] == "Pilot Savdo"
 
     onboarding = cloud_client.get(
@@ -313,7 +321,7 @@ def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     assert onboarding.json()["pairing"]["code"] == site["pairing_code"]
 
 
-def test_lead_notification_reaches_only_explicit_personal_ids_and_retries_duplicates(
+def test_lead_notification_reaches_only_explicit_personal_ids_once(
     cloud_client, monkeypatch
 ) -> None:
     import cloud.main as cm
@@ -353,9 +361,10 @@ def test_lead_notification_reaches_only_explicit_personal_ids_and_retries_duplic
     assert first.status_code == repeated.status_code == 200
     assert first.json()["duplicate"] is False
     assert repeated.json()["duplicate"] is True
-    assert [chat_id for chat_id, _ in sent] == ["5476913898"] * 2
+    # Takroriy ariza (bir xil telefon) qayta xabar TUG'DIRMAYDI: tugmani
+    # 5 marta bosgan mehmon adminga 5 ta xabar bo'lib tushar edi.
+    assert [chat_id for chat_id, _ in sent] == ["5476913898"]
     assert "Yangi Chaqimchi AI" in sent[0][1]
-    assert "Takroriy Chaqimchi AI" in sent[1][1]
 
 
 def test_public_registration_opens_bot_and_start_returns_role_buttons(
@@ -389,12 +398,12 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
     assert webhook.status_code == 200
     assert sent[0][0] == "5476913898"
     buttons = sent[0][2]["inline_keyboard"]
-    assert buttons[0][0]["url"] == "https://chaqimchi.example/installer"
-    assert buttons[1][0]["url"] == "https://chaqimchi.example/owner"
-    assert (
-        cloud_client.post("/api/v1/telegram/webhook", json={"message": {}}).status_code
-        == 404
-    )
+    assert buttons[0][0]["url"] == "https://chaqimchi.example/owner"
+    assert buttons[1][0]["url"] == "https://chaqimchi.example/installer"
+    assert buttons[2][0]["url"] == "https://chaqimchi.example/#narx"
+    # Ichki kod nomi mijozga ko'rinmasin.
+    assert "Sotqin" not in sent[0][1]
+    assert cloud_client.post("/api/v1/telegram/webhook", json={"message": {}}).status_code == 404
 
 
 def test_admin_readiness_requires_admin_key(cloud_client) -> None:
@@ -407,3 +416,447 @@ def test_admin_readiness_requires_admin_key(cloud_client) -> None:
     )
     assert lead_item["ok"] is False
     assert lead_item["required"] is True
+
+
+QUICK_TRIAL = {
+    "phone": "+998 90 123 45 67",
+    "company": "Test Market",
+    "consent": True,
+    "username": "testmarket",
+    "password": "mening-parolim1",
+}
+
+
+def test_quick_trial_creates_a_site(cloud_client) -> None:
+    res = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True
+    assert data["site_id"]
+    assert data["pairing_code"]
+    assert data["owner_url"]
+
+
+# ── Mijoz o'zi ro'yxatdan o'tadi ────────────────────────────────────────
+#
+# Bungacha login va parolni admin qo'lda yaratib, qo'lda yuborardi.  Ya'ni
+# har bir mijoz operatorning ish vaqtini kutardi va saytdan o'z-o'zidan
+# ulanishning yo'li yo'q edi.
+
+
+def test_the_customer_can_log_in_with_the_password_they_chose(cloud_client, monkeypatch) -> None:
+    """Butun ma'no shu: ro'yxatdan o'tdi — darrov panelga kira oladi."""
+    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
+    created = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).json()
+    assert created["username"] == "testmarket"
+    assert created["login_error"] is None
+
+    login = cloud_client.post(
+        "/api/v1/auth/login",
+        json={"username": "testmarket", "password": "mening-parolim1"},
+    )
+
+    assert login.status_code == 200, login.text
+    assert login.json()["account"]["site_id"] == created["site_id"]
+
+
+def test_the_password_never_comes_back_in_the_response(cloud_client) -> None:
+    body = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).text
+
+    assert "mening-parolim1" not in body
+
+
+def test_a_taken_login_does_not_leave_an_orphan_shop(cloud_client) -> None:
+    """`create_site` ni orqaga qaytarib bo'lmaydi (o'chirish funksiyasi
+    yo'q), shuning uchun login band ekani DO'KON YARATILISHIDAN OLDIN
+    tekshirilishi kerak."""
+    from cloud import ratelimit
+
+    ratelimit.limiter().reset()
+    assert cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).status_code == 200
+    before = len(cloud_client.get("/api/v1/admin/sites", headers=ADMIN).json())
+
+    second = cloud_client.post(
+        "/api/v1/public/quick-trial", json={**QUICK_TRIAL, "phone": "+998 90 999 88 77"}
+    )
+
+    assert second.status_code == 409
+    after = len(cloud_client.get("/api/v1/admin/sites", headers=ADMIN).json())
+    assert after == before, "xato ketgan so'rovdan egasiz do'kon qolmasin"
+
+
+def test_a_weak_password_is_refused_with_a_readable_reason(cloud_client) -> None:
+    res = cloud_client.post(
+        "/api/v1/public/quick-trial", json={**QUICK_TRIAL, "password": "parolparol"}
+    )
+
+    assert res.status_code == 422
+    assert "raqam" in res.json()["detail"], res.text
+
+
+def test_the_trial_seats_are_limited(cloud_client, monkeypatch) -> None:
+    """Mahsulot hali 72 soatlik qabul sinovidan o'tmagan — nosozlik
+    chiqsa u o'nlab do'konga tarqalmasligi kerak."""
+    from cloud import ratelimit
+
+    ratelimit.limiter().reset()
+    monkeypatch.setenv("CHAQIMCHI_SELF_SERVICE_LIMIT", "1")
+
+    first = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL)
+    second = cloud_client.post(
+        "/api/v1/public/quick-trial",
+        json={**QUICK_TRIAL, "username": "boshqadokon", "phone": "+998 90 222 33 44"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 503
+    assert "raqamingizni qoldiring" in second.json()["detail"], "berk ko'cha bo'lmasin"
+
+
+def test_the_trial_runs_long_enough_not_to_expire_mid_pilot(cloud_client) -> None:
+    """Bir oy kam: sinov o'rtasida obuna tugab, mijoz "ishlamay qoldi"
+    deb o'ylardi."""
+    data = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).json()
+
+    assert data["months"] >= 3
+
+
+def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch) -> None:
+    """Sayt tugmani shu javobga qarab ko'rsatadi.
+
+    Ilgari sahifada "115 MB bundle yuklab olish" tugmasi turardi, endpoint
+    esa fayl yo'qligi uchun 503 qaytarardi.  Endi mavjudlik bitta joydan
+    o'qiladi va hajm o'lchanadi.
+    """
+    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    body = cloud_client.get("/api/v1/public/windows-release").json()
+    assert body["available"] is False
+    assert body["size_mb"] is None
+    assert cloud_client.get("/api/v1/public/download-installer").status_code == 503
+
+
+def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_path) -> None:
+    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer.write_bytes(b"MZ" + b"\0" * 2_000_000)
+    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    body = cloud_client.get("/api/v1/public/windows-release").json()
+    assert body["available"] is True
+    assert body["size_mb"] == 2
+
+    response = cloud_client.get("/api/v1/public/download-installer")
+    assert response.status_code == 200
+    assert response.content.startswith(b"MZ")
+    # Fayl nomida versiya bo'lishi shart: usiz har yuklab olishda bir xil
+    # nom va deyarli bir xil hajm tushardi va mijoz yangi versiyani
+    # olganini ko'ra olmasdi.
+    disposition = response.headers.get("content-disposition", "")
+    assert "Chaqimchi_AI_Setup-" in disposition
+    assert disposition.endswith('.exe"')
+
+
+def test_download_filename_carries_version_and_pairing_code(
+    cloud_client, monkeypatch, tmp_path
+) -> None:
+    """Nomdagi kod o'rnatuvchi tomonidan o'qiladi va dastur o'zi ulanadi.
+
+    Versiya qo'shilgach kod nomning **oxirida** qolishi shart — NSIS
+    aynan oxirgi `-XXXXXX` ni o'qiydi.
+    """
+    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    disposition = cloud_client.get("/api/v1/public/download-installer?code=13204e").headers[
+        "content-disposition"
+    ]
+    assert disposition.endswith('-13204E.exe"'), disposition
+
+
+def test_windows_installer_redirects_when_published_externally(cloud_client, monkeypatch) -> None:
+    """~70 MB binarni Docker image ichida tashish shart emas — u GitHub
+    Releases'da turadi va cloud faqat yo'naltiradi."""
+    monkeypatch.setenv(
+        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
+    )
+    monkeypatch.setenv("CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB", "71")
+
+    body = cloud_client.get("/api/v1/public/windows-release").json()
+    assert body["available"] is True
+    assert body["size_mb"] == 71
+
+    response = cloud_client.get("/api/v1/public/download-installer", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("https://github.com/")
+
+
+def test_windows_installer_url_must_be_https(cloud_client, monkeypatch) -> None:
+    """HTTP havola o'rnatuvchini yo'lda almashtirishga imkon berardi."""
+    monkeypatch.setenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", "http://example.com/setup.exe")
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+    assert cloud_client.get("/api/v1/public/windows-release").json()["available"] is False
+
+
+def test_quick_trial_requires_consent(cloud_client) -> None:
+    """Rozilik katagisiz do'kon yozuvi va telefon raqami saqlanmasin.
+
+    Oldin `consent` maydonining standart qiymati `True` edi — ya'ni forma
+    katagi belgilanmasa ham ma'lumot bazaga tushardi.  `/public/leads` esa
+    doim rozilik talab qilgan; ikki endpoint bir xil qoidada bo'lishi kerak.
+    """
+    res = cloud_client.post(
+        "/api/v1/public/quick-trial",
+        json={
+            "phone": "+998 90 123 45 67",
+            "company": "Rozilik yo'q",
+            "username": "dokonchi",
+            "password": "parol12345",
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_quick_trial_is_rate_limited(cloud_client) -> None:
+    """Bu endpoint har chaqiruvda haqiqiy `site` yaratadi — cheksiz bo'lmasin."""
+    from cloud import ratelimit
+
+    ratelimit.limiter().reset()
+    codes = [
+        cloud_client.post(
+            "/api/v1/public/quick-trial",
+            json={
+                "phone": "+998 90 111 22 33",
+                "consent": True,
+                # Har so'rovda boshqa login: aks holda ikkinchisi 409
+                # ("login band") bo'lib, cheklov sinovi ma'nosini yo'qotardi.
+                "username": f"dokon{index}",
+                "password": "parol12345",
+            },
+        ).status_code
+        for index in range(5)
+    ]
+    assert codes.count(200) == 3, codes
+    assert codes[-1] == 429
+
+
+def test_windows_release_version_comes_from_the_file_not_the_server(tmp_path, monkeypatch):
+    """Sayt ko'rsatgan versiya yuklab olinadigan fayl bilan bir xil bo'lsin.
+
+    Haqiqiy xato: bu yerda serverning o'z `__version__` i qaytarilardi.
+    Yangi o'rnatuvchi yuklangach sayt hamon eski raqamni ko'rsatardi,
+    fayl nomi esa yangisini — "yangisi chiqdimi?" degan savolga javob
+    berib bo'lmasdi.
+    """
+    from cloud import main as cloud_main
+
+    releases = tmp_path / "releases"
+    releases.mkdir()
+    exe = releases / "chaqimchi-windows-9.9.9.exe"
+    exe.write_bytes(b"x" * 2048)
+    exe.with_suffix(".json").write_text('{"version": "9.9.9"}', encoding="utf-8")
+
+    monkeypatch.setattr(cloud_main, "_release_dirs", lambda: [releases])
+    monkeypatch.setattr(cloud_main, "_windows_installer_url", lambda: "")
+    monkeypatch.setattr(cloud_main, "_windows_installer_file", lambda: exe)
+
+    with TestClient(cloud_main.app) as client:
+        body = client.get("/api/v1/public/windows-release").json()
+
+    assert body["available"] is True
+    assert body["version"] == "9.9.9", "versiya relizdan olinishi kerak"
+    assert body["version"] != cloud_main.__version__
+
+
+# ── Faqat telefon bilan ariza → tasdiqlash → panelga kirish ─────────────
+#
+# Mijoz saytda ISM yozmaydi: har bir qo'shimcha maydon formani tashlab
+# ketadiganlar sonini oshiradi va ism baribir qo'ng'iroqda aniqlanadi.
+# Admin arizani tasdiqlaganda do'kon HAM, panelga kirish ma'lumoti HAM
+# yaratiladi — aks holda mijozning paneliga kirish yo'li qolmasdi.
+
+
+def test_a_phone_number_alone_is_enough_to_apply(cloud_client) -> None:
+    response = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998 93 222 50 70", "consent": True}
+    )
+
+    assert response.status_code == 200, response.text
+    lead = cloud_client.get("/api/v1/admin/leads", headers=ADMIN).json()[0]
+    assert lead["phone"] == "+998 93 222 50 70"
+    assert not lead["full_name"], "yo'q ismni o'ylab topmaymiz"
+
+
+def test_the_site_form_asks_only_what_self_service_needs(cloud_client) -> None:
+    """Forma maydonlari kodda ham, sahifada ham bir xil bo'lsin.
+
+    Ilgari faqat telefon so'ralardi — chunki qolgan hammasini admin qo'lda
+    qilardi: do'kon ochish, parol yaratish, uni Telegramda yuborish.  Endi
+    mijoz login va parolni O'ZI tanlaydi, ya'ni operatorni kutmaydi.
+    Ko'proq maydon qo'shilmasin: ism ham, do'kon nomi ham baribir keyin
+    aniqlanadi.
+    """
+    page = cloud_client.get("/").text
+    form = page[page.index('id="leadForm"') : page.index("</form>", page.index('id="leadForm"'))]
+
+    visible = [line for line in form.splitlines() if "<input" in line and 'type="hidden"' not in line]
+    assert len(visible) == 5, visible  # telefon, login, parol, honeypot, rozilik
+    assert 'name="full_name"' not in form
+    assert 'name="username"' in form and 'name="password"' in form
+    assert 'type="password"' in form, "parol ekranda ochiq turmasin"
+
+
+def test_the_form_sends_the_customer_to_self_service(cloud_client) -> None:
+    """Tugma ariza emas, haqiqiy ro'yxatdan o'tishni ishga tushirsin."""
+    js = cloud_client.get("/assets/site.js").text
+
+    assert "/api/v1/public/quick-trial" in js
+    assert "trialDownload" in js, "yuklab olish havolasi ko'rsatilsin"
+
+
+def test_a_full_trial_queue_still_takes_the_phone_number(cloud_client) -> None:
+    """Chegara to'lganda forma "yo'q" demasin: berk ko'cha eng yomon
+    variant — mijoz ketadi va qaytmaydi."""
+    js = cloud_client.get("/assets/site.js").text
+    block = js[js.index("startTrial") :]
+
+    assert "response.status === 503" in block
+    assert "submitLead(" in block, "o'sha raqam bilan odatdagi ariza yuborilsin"
+
+
+def test_approving_an_application_hands_over_a_working_login(
+    cloud_client, monkeypatch
+) -> None:
+    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
+    lead_id = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998901112233", "consent": True}
+    ).json()["lead_id"]
+
+    site = cloud_client.post(
+        f"/api/v1/admin/leads/{lead_id}/convert", headers=ADMIN, json={"subscription_months": 1}
+    ).json()
+
+    assert site["login"]["username"] == "998901112233", "login — o'z telefon raqami"
+    signed_in = cloud_client.post(
+        "/api/v1/auth/login",
+        json={"username": site["login"]["username"], "password": site["login"]["password"]},
+    )
+    assert signed_in.status_code == 200, signed_in.text
+    assert signed_in.json()["account"]["role"] == "customer"
+    assert signed_in.json()["account"]["site_id"] == site["site_id"]
+
+
+def test_the_password_can_be_read_out_over_the_phone(cloud_client) -> None:
+    """Parol mijozga TELEFONDA aytiladi — SMS shlyuzi yo'q.
+    `k7Qm2xW9pL` ni aytib bo'lmaydi, "olma anor 4821" ni bo'ladi."""
+    lead_id = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998901112244", "consent": True}
+    ).json()["lead_id"]
+
+    password = cloud_client.post(
+        f"/api/v1/admin/leads/{lead_id}/convert", headers=ADMIN, json={"subscription_months": 1}
+    ).json()["login"]["password"]
+
+    assert password.isascii() and password.isalnum(), password
+    assert password[-4:].isdigit() and password[:-4].isalpha(), password
+
+
+def test_two_shops_on_one_phone_get_different_logins(cloud_client) -> None:
+    """Bitta odam ikkinchi do'kon ochsa login to'qnashadi va ikkinchi
+    do'kon panelsiz qolardi."""
+    logins = []
+    for index in range(2):
+        site = cloud_client.post(
+            "/api/v1/admin/sites",
+            headers=ADMIN,
+            json={"name": f"Do'kon {index}", "contact_phone": "+998900000001"},
+        ).json()
+        created = cloud_client.post(
+            f"/api/v1/admin/sites/{site['site_id']}/login", headers=ADMIN
+        )
+        assert created.status_code == 200, created.text
+        logins.append(created.json()["username"])
+
+    assert logins[0] != logins[1], logins
+
+
+def test_a_shop_cannot_end_up_with_two_logins(cloud_client) -> None:
+    site = cloud_client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Yagona", "contact_phone": "+998900000002"}
+    ).json()
+    cloud_client.post(f"/api/v1/admin/sites/{site['site_id']}/login", headers=ADMIN)
+
+    again = cloud_client.post(f"/api/v1/admin/sites/{site['site_id']}/login", headers=ADMIN)
+
+    assert again.status_code == 409
+    assert "998900000002" in again.json()["detail"], "mavjud login aytilsin"
+
+
+def test_a_lead_without_a_name_still_gets_a_readable_shop_name(cloud_client) -> None:
+    """Do'kon nomi `lead["full_name"]` dan olinardi — ism yo'q bo'lgach
+    nomi bo'sh do'kon ochilardi."""
+    lead_id = cloud_client.post(
+        "/api/v1/public/leads", json={"phone": "+998905550505", "consent": True}
+    ).json()["lead_id"]
+
+    site = cloud_client.post(
+        f"/api/v1/admin/leads/{lead_id}/convert", headers=ADMIN, json={"subscription_months": 1}
+    ).json()
+
+    assert site["name"].strip()
+    assert "998905550505" in site["name"]
+
+
+def test_a_coded_link_keeps_the_code_even_when_a_public_url_is_set(
+    cloud_client, tmp_path, monkeypatch
+) -> None:
+    """Serverga `CHAQIMCHI_WINDOWS_INSTALLER_URL` qo'yilgach kodli havola
+    JIMGINA buzilgan edi.
+
+    Redirect brauzerga manzildagi nomni saqlatadi
+    (`chaqimchi-windows-0.6.8.exe`) — kod yo'qoladi va mijoz sehrgarda
+    6 ta belgini qo'lda kiritishga majbur bo'ladi.  Ya'ni "bir bosishda
+    ulanish" va'dasi bitta env o'zgaruvchisi bilan o'chib qolardi.
+    """
+    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.setenv(
+        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "https://dl.example.uz/releases/chaqimchi-windows-0.6.8.exe",
+    )
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    response = cloud_client.get(
+        "/api/v1/public/download-installer?code=13204e", follow_redirects=False
+    )
+
+    assert response.status_code == 200, "kodli havola redirect bo'lmasin"
+    assert response.headers["content-disposition"].endswith('-13204E.exe"')
+
+
+def test_a_coded_link_still_works_when_the_file_is_only_remote(
+    cloud_client, monkeypatch
+) -> None:
+    """Fayl faqat tashqarida bo'lsa kodni saqlab qololmaymiz — lekin
+    yuklab olish baribir ishlashi kerak (sehrgar kodni so'raydi)."""
+    monkeypatch.setenv(
+        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
+    )
+    monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
+    monkeypatch.setattr("cloud.main._release_dirs", list)
+
+    response = cloud_client.get(
+        "/api/v1/public/download-installer?code=13204e", follow_redirects=False
+    )
+
+    assert response.status_code == 307

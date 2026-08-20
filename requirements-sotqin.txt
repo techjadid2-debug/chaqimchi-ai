@@ -1,6 +1,12 @@
-# Sotqin R1 — control plane, retail analitika va yopiq davomat piloti.
-# Bitta requirements fayli release installer'ini qisman o'rnatilgan holatda
-# qoldirmaydi. OpenCV'ning headless build'i qurilmada GUI talab qilmaydi.
+# Sotqin R1 asosiy o'rnatishi — control plane va do'kon analitikasi.
+#
+# Yuz tanish (davomat piloti) bu yerda **yo'q**: u `requirements-attendance.txt`
+# da va faqat `CHAQIMCHI_ATTENDANCE_PILOT=true` bo'lganda o'rnatiladi.
+# Sababi: insightface tranzitiv ravishda scipy va scikit-image tortadi —
+# 8 GB/128 GB qurilmada bu ~1 GB disk va o'rnatishga qo'shimcha 10 daqiqa,
+# hech qachon yoqilmaydigan modul uchun.
+#
+# OpenCV'ning headless build'i qurilmada GUI talab qilmaydi.
 fastapi>=0.115.0,<1.0.0
 uvicorn[standard]>=0.30.0,<1.0.0
 httpx>=0.27.0,<1.0.0
@@ -12,10 +18,4 @@ PyJWT>=2.8.0,<3.0.0
 numpy>=1.24.0,<3.0.0
 opencv-python-headless>=4.8.0,<5.0.0
 openvino>=2024.4.0,<2026.0.0
-# Davomat piloti uchun lokal Face ID. Tijoriy rejim alohida model manifesti
-# tasdiqlanmaguncha fail-closed; `CHAQIMCHI_ATTENDANCE_PILOT=true` faqat
-# yozma rozilikli bepul pilot uchun ishlatiladi.
-insightface>=0.7.3,<0.8.0
-onnx>=1.14.0,<2.0.0
-onnxruntime>=1.16.0,<2.0.0
 # RTSP/QSV probe va frame/clip capture hostdagi ffmpeg/ffprobe bilan ishlaydi.

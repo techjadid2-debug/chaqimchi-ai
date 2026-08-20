@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="uz">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Uniview NVR ulash — Chaqimchi AI hujjatlari</title>
+<meta name="description" content="Uniview (UNV) NVR: RTSP manzil formati va sozlash.">
+<link rel="stylesheet" href="/docs-static/assets/docs.css"></head>
+<body>
+<nav class="doc-nav"><a class="brand" href="/">Chaqimchi AI · Hujjatlar</a><a href="https://chaqimchi.uz">Asosiy sayt</a><a href="/muammolar">Muammolar</a></nav>
+<main>
+  <p class="crumbs"><a href="/">Hujjatlar</a> → Uniview</p>
+  <h1>Uniview (UNV) NVR</h1>
+  <p class="lead">Odatda dastur hammasini o'zi topadi. Bu sahifa qo'lda kiritish kerak bo'lgan holatlar uchun.</p>
+
+  <h2>RTSP manzil formati</h2>
+  <pre><code>rtsp://LOGIN:PAROL@NVR_IP:554/unicast/c1/s1/live</code></pre>
+  <table>
+    <tr><th>Qism</th><th>Ma'nosi</th></tr>
+    <tr><td><code>c1</code>, <code>c2</code>…</td><td>Kanal raqami</td></tr>
+    <tr><td><code>s0</code></td><td>Asosiy oqim (og'ir — kerak emas)</td></tr>
+    <tr><td><code>s1</code></td><td>Substream (yengil — <b>shuni ishlating</b>)</td></tr>
+  </table>
+
+  <h2>ONVIF</h2>
+  <p>Uniview'da ONVIF odatda standart yoqiq (port 80). Ishlamasa: <b>Setup → Network → Port</b> bo'limida ONVIF/HTTP portini tekshiring va foydalanuvchi huquqlarini ko'ring.</p>
+
+  <h2>Substream sozlash</h2>
+  <p><b>Setup → Camera → Encoding</b>: Sub Stream — H.264, 640×360, 10–15 fps.</p>
+</main>
+</body>
+</html>

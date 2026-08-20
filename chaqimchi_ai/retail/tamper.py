@@ -42,6 +42,7 @@ sabab hodisa `score` bilan chiqadi — panelda ko'rib chegarani sozlash mumkin.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -65,6 +66,18 @@ MIN_BASELINE_SHARPNESS = 15.0
 DARK = "qorong'i"
 BLURRED = "xira"
 MOVED = "ko'rinish o'zgardi"
+FROZEN = "kadr qotib qolgan"
+
+#: `TamperAlert.kind` — hodisa turi shundan tanlanadi.
+TAMPER = "tamper"
+FREEZE = "freeze"
+
+#: Oqim shuncha soniya davomida **bayt-bayt bir xil** kadr bersa qotgan
+#: deb hisoblanadi.  Haqiqiy statik sahna hech qachon bayt-bayt bir xil
+#: bo'lmaydi: sensor shovqini har kadrda bir-ikki birlikka o'zgaradi.
+#: Shu sabab bu tekshiruv yolg'on signal bermaydi va chegara sozlash
+#: talab qilmaydi.
+FROZEN_SEC = 20.0
 
 
 @dataclass(frozen=True)
@@ -73,6 +86,9 @@ class TamperAlert:
     #: Me'yordan qanchalik uzoq (0..1).  Kalibrlash uchun hodisaga qo'shiladi.
     score: float
     duration_sec: float
+    #: `tamper` — kamera yopildi/burildi; `freeze` — oqim qotib qoldi.
+    #: Ikkalasi bir xil yo'ldan chiqadi, lekin hodisa turi boshqa.
+    kind: str = TAMPER
 
 
 def _measure(frame: np.ndarray) -> tuple:
@@ -83,7 +99,11 @@ def _measure(frame: np.ndarray) -> tuple:
     # 8×8 blok o'rtachasi — kadrning "imzosi".  Odam o'tsa bir-ikki blok
     # o'zgaradi, kamera burilsa hammasi.
     signature = cv2.resize(gray, (8, 8), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
-    return brightness, sharpness, signature
+    # Qotib qolishni aniqlash uchun **aniq** nusxa kerak, imzo emas: imzo
+    # 8×8 gacha siqilgani uchun ozgina o'zgargan kadrni ham bir xil deb
+    # ko'rsatishi mumkin.
+    digest = hashlib.blake2b(np.ascontiguousarray(gray).tobytes(), digest_size=16).digest()
+    return brightness, sharpness, signature, digest
 
 
 class TamperDetector:
@@ -97,6 +117,7 @@ class TamperDetector:
         accept_after_sec: float = 600.0,
         adapt: float = 0.02,
         warmup_frames: int = WARMUP_FRAMES,
+        frozen_sec: float = FROZEN_SEC,
     ) -> None:
         if not 0.0 < adapt <= 1.0:
             raise ValueError("adapt 0 va 1 orasida bo'lishi kerak")
@@ -111,6 +132,9 @@ class TamperDetector:
         self.accept_after_sec = float(accept_after_sec)
         self.adapt = float(adapt)
         self.warmup_frames = int(warmup_frames)
+        if frozen_sec <= 0:
+            raise ValueError("frozen_sec musbat bo'lishi kerak")
+        self.frozen_sec = float(frozen_sec)
 
         self._frames = 0
         self._brightness = 0.0
@@ -119,13 +143,26 @@ class TamperDetector:
         self._since: Optional[float] = None
         self._alerted = False
         self._alerts = 0
+        # Qotib qolish holati — buzilish holatidan mustaqil: kamera ham
+        # yopilgan, ham qotgan bo'lishi mumkin va ikkalasi ham aytilishi kerak.
+        self._digest: Optional[bytes] = None
+        self._same_since: Optional[float] = None
+        self._frozen = False
+        self._freezes = 0
 
     # ── O'lchov ──────────────────────────────────────────────────────────
 
     def update(self, frame: np.ndarray, *, now: float) -> Optional[TamperAlert]:
         """Har kadr uchun chaqiriladi.  Hodisa bo'lsa `TamperAlert`."""
-        brightness, sharpness, signature = _measure(frame)
+        brightness, sharpness, signature, digest = _measure(frame)
         self._frames += 1
+
+        # Qotib qolish tekshiruvi eng birinchi va warmup'dan mustaqil:
+        # oqim boshidanoq qotgan bo'lishi mumkin (NVR qayta yuklangan), va
+        # bu holda me'yorni "o'rganish" ham ma'nosiz.
+        frozen = self._check_frozen(digest, now)
+        if frozen is not None:
+            return frozen
 
         if self._signature is None or self._frames <= self.warmup_frames:
             self._learn(brightness, sharpness, signature, weight=1.0 / min(self._frames, 10))
@@ -161,6 +198,35 @@ class TamperDetector:
         self._alerts += 1
         return TamperAlert(reason=reason, score=round(score, 3), duration_sec=round(elapsed, 1))
 
+    def _check_frozen(self, digest: bytes, now: float) -> Optional[TamperAlert]:
+        """Oqim qotib qolganmi.
+
+        Bu eng jimgina buziladigan holat: RTSP ulanish ochiq turadi, `grab()`
+        va `retrieve()` muvaffaqiyatli qaytadi, lekin kadr o'zgarmaydi.
+        Harakat yo'q degani filtr uni to'sadi, buzilish imzosi ham
+        o'zgarmaydi — ya'ni tizim butunlay sog'lom ko'rinadi va do'kon
+        egasi buni faqat hisobotdagi bo'shliqdan biladi.
+        """
+        if digest != self._digest:
+            self._digest = digest
+            self._same_since = now
+            self._frozen = False
+            return None
+        if self._same_since is None:
+            self._same_since = now
+            return None
+        elapsed = now - self._same_since
+        if self._frozen or elapsed < self.frozen_sec:
+            return None
+        self._frozen = True
+        self._freezes += 1
+        return TamperAlert(
+            reason=FROZEN,
+            score=1.0,
+            duration_sec=round(elapsed, 1),
+            kind=FREEZE,
+        )
+
     def _anomaly(self, brightness: float, sharpness: float, signature: np.ndarray):
         if (
             self._brightness >= MIN_BASELINE_BRIGHTNESS
@@ -195,11 +261,17 @@ class TamperDetector:
     def alerted(self) -> bool:
         return self._alerted
 
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
+
     def stats(self) -> Dict[str, Any]:
         return {
             "frames": self._frames,
             "alerts": self._alerts,
             "alerted": self._alerted,
+            "freezes": self._freezes,
+            "frozen": self._frozen,
             "brightness": round(self._brightness, 1),
             "sharpness": round(self._sharpness, 1),
         }

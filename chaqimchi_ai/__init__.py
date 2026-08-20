@@ -1,18 +1,17 @@
-"""Chaqimchi AI paketi; og'ir vision importlari lazy yuklanadi."""
+"""Chaqimchi AI paketi.
 
-from typing import Any
+Lokal Face ID (davomat) to'plami arxivlangan — `archive/attendance-local`
+git tegida turadi.  Yuz tanish keyinchalik **cloud** tomonda quriladi
+(`docs/archive/README.md`).
+"""
 
-__version__ = "0.5.0"
-__all__ = ["FaceEngine", "FaceCompareResult", "VideoFrameResult", "__version__"]
-
-
-def __getattr__(name: str) -> Any:
-    if name in {"FaceEngine", "FaceCompareResult", "VideoFrameResult"}:
-        from chaqimchi_ai.face_engine import FaceCompareResult, FaceEngine, VideoFrameResult
-
-        return {
-            "FaceEngine": FaceEngine,
-            "FaceCompareResult": FaceCompareResult,
-            "VideoFrameResult": VideoFrameResult,
-        }[name]
-    raise AttributeError(name)
+#: Versiya ikki joyda yozilgan: bu yerda va `pyproject.toml` da.
+#:
+#: `importlib.metadata` ishlatilmaydi — paket qurilmada hech qachon pip bilan
+#: o'rnatilmaydi (venv faqat requirements'ni oladi), ya'ni u `PackageNotFound`
+#: bilan import paytida ikkala xizmatni ham o'ldirardi.  `pyproject.toml` ni
+#: o'qish ham mumkin emas: u reliz paketiga kirmaydi.
+#:
+#: Ikkalasining mosligini `tests/test_sotqin_release_contract.py` ushlab turadi.
+__version__ = "0.6.8"
+__all__ = ["__version__"]

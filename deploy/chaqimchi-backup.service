@@ -1,0 +1,40 @@
+# Chaqimchi Cloud kunlik backup — FAQAT BAZA.
+#
+# Ilgari backup FAQAT deploy paytida olinardi (scripts/deploy_cloud.sh).
+# Uch hafta deploy bo'lmasa va VPS o'lsa — uch haftalik hodisa, hisob-faktura
+# va akkauntlar yo'qolardi.  Bu unit backup'ni deploy'dan uzadi.
+#
+# Media (rasm/kliplar) bu yerda YO'Q — u haftalik `chaqimchi-backup-media`
+# unitida.  Sabab: har kecha butun MinIO nusxalanib, arxiv 14 kun saqlanardi
+# va media hajmi diskda ~15 barobar takrorlanardi.  96 GB server ikki-uch
+# do'kondan keyin to'lardi.  Kunlik arxiv endi ~50-200 MB.
+#
+# O'rnatish (VPS'da, root):
+#   cp deploy/backup.env.example /etc/chaqimchi/backup.env  # va tahrirlang
+#   chmod 600 /etc/chaqimchi/backup.env
+#   cp deploy/chaqimchi-backup.{service,timer} /etc/systemd/system/
+#   cp deploy/chaqimchi-backup-failed.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now chaqimchi-backup.timer
+#   systemctl start chaqimchi-backup.service   # birinchi sinov darhol
+
+[Unit]
+Description=Chaqimchi Cloud kunlik backup (PostgreSQL + cloud-state)
+Wants=docker.service
+After=docker.service network-online.target
+# Zaxira yiqilsa jim qolmasin — Telegramga xabar ketadi.
+OnFailure=chaqimchi-backup-failed.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/chaqimchi-ai
+EnvironmentFile=/etc/chaqimchi/backup.env
+ExecStart=/home/deploy/chaqimchi-ai/scripts/backup_production.sh
+# 14 kundan eski BAZA arxivlari o'chiriladi.  Naqsh `chaqimchi-[0-9]*`:
+# media arxivlari (`chaqimchi-media-*`) bu qoidaga tushmasin — ular
+# o'z unitida, boshqa muddat bilan tozalanadi.
+# Muhim nusxalarni restic/tashqi joyga ko'chirish backup skriptining o'zida
+# (RESTIC_REPOSITORY berilsa) bajariladi.
+ExecStartPost=/usr/bin/find ${CHAQIMCHI_BACKUP_DIR} -name chaqimchi-[0-9]*.tar.gz.enc -mtime +14 -delete
+Nice=10
+IOSchedulingClass=idle

@@ -99,7 +99,12 @@ PLANS: Dict[PlanTier, PlanLimits] = {
     "lite": PlanLimits(
         # 8 kamera apparat maksimumi, ammo sotiladigan SLA hozir 4 kamera.
         max_cameras=GUARANTEED_CAMERAS,
-        max_persons=200,
+        # Xodim davomati (Face ID) Lite ichida, tekin.  10 — ataylab
+        # kichik: bitta do'konda shuncha xodim bo'ladi va har xodimning
+        # embeddingi har yuz kadrida qayta deshifrlanadi, ya'ni son
+        # o'sishi bilan tanish narxi ham o'sadi.  Ilgari bu yerda 200
+        # turardi va hech qayerda majburlanmasdi.
+        max_persons=10,
         retention_days=30,
         telegram_allowed=True,
         # Faqat fallback/display qiymat; amaldagi invoice `monthly_price()`

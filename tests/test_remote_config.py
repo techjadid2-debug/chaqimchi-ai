@@ -176,7 +176,9 @@ def test_half_filled_hours_are_ignored(local, tmp_path: Path, monkeypatch) -> No
     assert _config(tmp_path)["retail"].get("open_from") is None
 
 
-def test_camera_without_a_source_is_ignored(local, tmp_path: Path, monkeypatch) -> None:
+def test_camera_without_a_source_does_not_become_the_camera_list(
+    local, tmp_path: Path, monkeypatch
+) -> None:
     """Cloudda kamera yaratilgan, lekin RTSP hali kiritilmagan bo'lishi
     mumkin — bunday yozuv zanjirni kamerasiz qoldirardi."""
     _reply(
@@ -184,8 +186,59 @@ def test_camera_without_a_source_is_ignored(local, tmp_path: Path, monkeypatch) 
         {"revision": 6, "cameras": [{"camera_id": "camera-01", "source": ""}], "config": {}},
         monkeypatch,
     )
-    assert local.sync_once() is None
-    assert not local.cache_path().exists()
+
+    assert local.sync_once() is None, "qo'llanadigan o'zgarish yo'q"
+    assert _config(tmp_path)["retail"].get("cameras_source") != "auto", (
+        "manba lokal ro'yxatda qolsin"
+    )
+
+
+# ── Davomat sozlamasi qurilmaga yetadimi ────────────────────────────────
+#
+# Haqiqiy nosozlik: kesh yozish `if cameras:` shartining ichida edi.
+# Mijoz kamerani lokal sehrgarda qo'shsa, cloudda ro'yxat bo'sh qoladi —
+# ya'ni kesh umuman yozilmasdi.  Kesh esa kameralardan tashqari davomat
+# sozlamasini ham olib keladi, demak xodim Face ID bunday do'konda hech
+# qachon ishlamasdi va hech qanday xato ham chiqmasdi.
+
+
+def test_attendance_settings_arrive_without_cloud_cameras(
+    local, tmp_path: Path, monkeypatch
+) -> None:
+    _reply(
+        local,
+        {
+            "revision": 61,
+            "cameras": [],
+            "config": {"attendance_camera_ids": ["camera-01"]},
+            "attendance": {"enabled": True},
+        },
+        monkeypatch,
+    )
+
+    local.sync_once()
+
+    cached = json.loads(local.cache_path().read_text(encoding="utf-8"))
+    assert cached["attendance"]["enabled"] is True
+    assert cached["config"]["attendance_camera_ids"] == ["camera-01"]
+    assert _config(tmp_path)["retail"]["sotqin_config_path"] == str(local.cache_path()), (
+        "yo'l qo'yilmasa zanjir standart Linux yo'lini qidiradi"
+    )
+
+
+def test_an_empty_cloud_list_does_not_erase_working_cameras(
+    local, tmp_path: Path, monkeypatch
+) -> None:
+    """Kesh endi har doim yoziladi — lekin u ishlab turgan kamerani
+    o'chirib yubormasligi kerak."""
+    _reply(local, {"revision": 62, "cameras": [CAMERA], "config": {}}, monkeypatch)
+    local.sync_once()
+
+    _reply(local, {"revision": 63, "cameras": [], "config": {}}, monkeypatch)
+    local.sync_once()
+
+    cached = json.loads(local.cache_path().read_text(encoding="utf-8"))
+    assert [item["camera_id"] for item in cached["cameras"]] == ["camera-01"]
 
 
 # ── Sikl va aloqa ────────────────────────────────────────────────────────

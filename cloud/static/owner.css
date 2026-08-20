@@ -219,6 +219,19 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
 .face-item figcaption { font-size: .72rem; margin-top: 4px; }
 .face-item small { display: block; opacity: .65; }
 .face-unknown b { opacity: .6; }
+/* Xodimlar ro'yxati: har qator — rasm, ism va tugmalar.  Telefonda
+   tugmalar pastga tushadi, barmoq o'lchami saqlanadi. */
+.staff-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--line); }
+.staff-row:first-child { border-top: 0; }
+.staff-face { width: 52px; height: 52px; border-radius: 12px; object-fit: cover; background: rgba(127,127,127,.12); border: 1px solid rgba(127,127,127,.18); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex: none; }
+.staff-main { flex: 1 1 160px; min-width: 0; }
+.staff-main b { display: block; }
+.staff-main small { color: var(--muted); font-size: .78rem; }
+.staff-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Fayl tanlash maydoni ko'rinmaydi — uni tugma ochadi (telefonda
+   to'g'ridan-to'g'ri kamera). */
+.staff-file { display: none; }
+
 
 /* Do'kon xaritasi (issiqlik) */
 .heat-wrap { width: 100%; max-width: 640px; }
@@ -233,7 +246,7 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
  */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
   background: rgba(243, 240, 232, .96);
   border-top: 1px solid var(--line);
@@ -290,7 +303,7 @@ table.events { min-width: 560px; }
 @media (min-width: 900px) {
   /* Kompyuterda tugmalar tepaga: pastki panel keng ekranda ortiqcha. */
   .tabbar {
-    position: static; grid-template-columns: repeat(4, max-content);
+    position: static; grid-template-columns: repeat(5, max-content);
     gap: 6px; margin: 0 auto 16px; max-width: 1120px; padding: 0 16px;
     border-top: 0; background: none; backdrop-filter: none;
   }

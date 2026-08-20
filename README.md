@@ -25,10 +25,11 @@ Canonical mahsulot kontrakti va joriy holat:
 - kamera ulash: qo‘lda RTSP, ONVIF qidiruv va NVR kanal skaneri (bitta
   login/parol bilan barcha kanallar).
 
-Tizim o‘g‘rilik, jinoyat yoki niyatni taxmin qilmaydi. Yuz tanish (davomat
-Face ID) faol scope’da **emas**: lokal to‘plam arxivlangan
-(`git tag archive/attendance-local`), keyinchalik cloud tomonda quriladi.
-Orange Pi mahsuloti va 8 kamera va’dasi ham scope’da emas.
+Tizim o‘g‘rilik, jinoyat yoki niyatni taxmin qilmaydi. **Xodim davomati
+(Face ID)** Lite ichida: mijoz panelda 10 tagacha xodim qo‘shadi va
+rasmini telefondan oladi, tanish cloudda bo‘ladi (qurilma yuzni
+tanimaydi). Xaridorni tanish — scope’da emas. Orange Pi mahsuloti va
+8 kamera va’dasi ham scope’da emas.
 
 ## Ishga tushirish
 

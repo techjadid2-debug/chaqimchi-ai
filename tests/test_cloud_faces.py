@@ -343,7 +343,7 @@ def _owner_headers(client: TestClient, site_id: str) -> dict:
     return {"Authorization": f"Bearer {verified.json()['access_token']}"}
 
 
-def test_owner_sees_employees_gallery_and_images_read_only(pilot_client) -> None:
+def test_owner_sees_employees_gallery_and_images(pilot_client) -> None:
     site, headers = _site_with_device(pilot_client)
     employee = _employee(pilot_client, site["site_id"])
     _upload_photo(pilot_client, site["site_id"], employee["id"], b"rasm-ali-1")
@@ -368,13 +368,141 @@ def test_owner_sees_employees_gallery_and_images_read_only(pilot_client) -> None
         ).status_code
         == 200
     )
-    # Mijozda yozish endpointi yo'q — rasm yuklash faqat admin.
-    upload = pilot_client.post(
-        f"/api/v1/owner/faces/employees/{employee['id']}/photos",
-        headers=owner,
-        content=b"rasm-ali-2",
+
+
+# ── Mijoz o'zi rasm qo'shadi ────────────────────────────────────────────
+#
+# Ilgari rasm yuklash faqat admin panelda edi ("rozilikni kim olganini
+# bitta qo'lda ushlab turish uchun").  Amalda bu har bir xodim uchun
+# do'kon egasi operatorga murojaat qilishi kerak degani edi — ya'ni
+# funksiya ishlamasdi.
+
+
+def _owner_upload(client, owner: dict, employee_id: str, data: bytes, content_type="image/jpeg"):
+    return client.post(
+        f"/api/v1/owner/faces/employees/{employee_id}/photos",
+        headers={**owner, "Content-Type": content_type},
+        content=data,
     )
-    assert upload.status_code in (404, 405)
+
+
+def test_the_customer_can_enroll_an_employee_from_their_own_panel(pilot_client) -> None:
+    site, _headers = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    response = _owner_upload(pilot_client, owner, employee["id"], b"rasm-ali-1")
+
+    assert response.status_code == 200, response.text
+    listing = pilot_client.get("/api/v1/owner/faces", headers=owner).json()
+    assert listing["employees"][0]["photos"], "rasm ro'yxatda ko'rinsin"
+    assert listing["employees"][0]["enrollment_status"] == "enrolled"
+
+
+def test_the_customer_cannot_touch_another_shops_employee(pilot_client) -> None:
+    """`employee_id` havolada keladi — boshqa do'konning xodimiga rasm
+    yuklab bo'lmasligi shu yerda qulflanadi."""
+    first, _ = _site_with_device(pilot_client)
+    second = pilot_client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Begona", "plan": "lite"}
+    ).json()
+    stranger = _employee(pilot_client, second["site_id"], name="Begona xodim")
+    owner = _owner_headers(pilot_client, first["site_id"])
+
+    response = _owner_upload(pilot_client, owner, stranger["id"], b"rasm-ali-1")
+
+    assert response.status_code == 404
+
+
+def test_a_photo_without_a_face_is_refused_with_a_readable_reason(pilot_client) -> None:
+    site, _ = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    response = _owner_upload(pilot_client, owner, employee["id"], b"logotip")
+
+    assert response.status_code == 422
+    assert "yuz topilmadi" in response.json()["detail"]
+
+
+def test_only_images_are_accepted(pilot_client) -> None:
+    """Boshqa turdagi fayl bekorga CPU yemasin (har rasm ~0.5 s)."""
+    site, _ = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    response = _owner_upload(
+        pilot_client, owner, employee["id"], b"rasm-ali-1", content_type="application/pdf"
+    )
+
+    assert response.status_code == 415
+
+
+def test_the_customer_can_delete_a_photo(pilot_client) -> None:
+    site, _ = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+    photo = _owner_upload(pilot_client, owner, employee["id"], b"rasm-ali-1").json()
+
+    assert (
+        pilot_client.delete(
+            f"/api/v1/owner/faces/photos/{photo['id']}", headers=owner
+        ).status_code
+        == 200
+    )
+    listing = pilot_client.get("/api/v1/owner/faces", headers=owner).json()
+    assert not listing["employees"][0]["photos"]
+    assert listing["employees"][0]["enrollment_status"] == "pending", (
+        "oxirgi rasm o'chsa xodim yana 'rasm kutilmoqda' bo'lsin"
+    )
+
+
+# ── Tarif chegarasi ─────────────────────────────────────────────────────
+
+
+def test_lite_stops_at_ten_employees(pilot_client) -> None:
+    """Chegara `plans.py` da yozilgan, lekin bungacha hech qayerda
+    majburlanmasdi — faqat javoblarda qaytardi."""
+    site, _ = _site_with_device(pilot_client)
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    codes = [
+        pilot_client.post(
+            "/api/v1/owner/employees",
+            headers=owner,
+            json={"name": f"Xodim {index}", "consent": True},
+        ).status_code
+        for index in range(11)
+    ]
+
+    assert codes.count(200) == 10, codes
+    assert codes[-1] == 422
+    detail = pilot_client.post(
+        "/api/v1/owner/employees", headers=owner, json={"name": "Ortiqcha", "consent": True}
+    ).json()["detail"]
+    assert "10" in detail and "ro'yxatdan chiqaring" in detail
+
+
+def test_a_removed_employee_frees_a_seat(pilot_client) -> None:
+    site, _ = _site_with_device(pilot_client)
+    owner = _owner_headers(pilot_client, site["site_id"])
+    created = [
+        pilot_client.post(
+            "/api/v1/owner/employees",
+            headers=owner,
+            json={"name": f"Xodim {index}", "consent": True},
+        ).json()
+        for index in range(10)
+    ]
+
+    pilot_client.put(
+        f"/api/v1/owner/employees/{created[0]['id']}", headers=owner, json={"active": False}
+    )
+
+    again = pilot_client.post(
+        "/api/v1/owner/employees", headers=owner, json={"name": "Yangi", "consent": True}
+    )
+    assert again.status_code == 200, again.text
 
 
 # ── Retensiya ────────────────────────────────────────────────────────────

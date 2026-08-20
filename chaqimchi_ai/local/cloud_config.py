@@ -99,6 +99,20 @@ def _write_cache(payload: Dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _cached_cameras() -> Any:
+    """Keshda turgan kamera ro'yxati (bo'lmasa `None`).
+
+    Cloud bo'sh ro'yxat yuborsa keshdagi kameralarni **saqlab qolamiz**:
+    `cameras_source: "auto"` bo'lgan qurilmada bo'sh ro'yxat zanjirni
+    kamerasiz qoldirardi va do'kon nazoratsiz qolardi.
+    """
+    try:
+        data = json.loads(cache_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data.get("cameras") if isinstance(data, dict) else None
+
+
 def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Cloud sozlamasini lokal configga qo'llaydi.
 
@@ -106,17 +120,37 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     changed: Dict[str, Any] = {"cameras": 0, "lines": 0, "zones": 0, "limits": False}
 
+    # Keshni HAR DOIM yozamiz va yo'lini configga qo'yamiz.
+    #
+    # Ilgari ikkalasi ham `if cameras:` ichida edi va bu jimgina nosozlik
+    # berardi: mijoz kamerani lokal sehrgarda qo'shsa, cloudda kamera
+    # ro'yxati bo'sh qoladi — ya'ni kesh umuman yozilmasdi.  Kesh esa
+    # kameralardan tashqari **davomat sozlamasini** ham olib keladi
+    # (`attendance.enabled`, `attendance_camera_ids`), demak xodim Face ID
+    # bunday do'konda hech qachon ishlamasdi va hech qanday xato ham
+    # chiqmasdi.  Yo'l qo'yilmagani esa yana battar edi: `retail/service.py`
+    # standart **Linux** yo'lini qidiradi va Windows'da hech narsa topmaydi.
     cameras = [item for item in (payload.get("cameras") or []) if item.get("source")]
+    to_cache = dict(payload)
+    if not cameras:
+        previous = _cached_cameras()
+        if previous:
+            to_cache["cameras"] = previous
+    _write_cache(to_cache)
+    config_store.update("retail", {"sotqin_config_path": str(cache_path())})
     if cameras:
-        _write_cache(payload)
         # Kameralar keshdan olinsin va revizya o'zgarganda zanjir o'zini
         # qayta ishga tushirsin — aks holda cloudda qo'shilgan kamera
         # keyingi qo'lda restartgacha tahlil qilinmasdi.
+        #
+        # `cameras_source: "auto"` faqat SHU YERDA qo'yiladi: cloudda
+        # kamera bo'lmasa mijozning lokal ro'yxati yagona haqiqat bo'lib
+        # qolishi kerak, aks holda bo'sh cloud javobi ishlab turgan
+        # kameralarni o'chirib yuborardi.
         config_store.update(
             "retail",
             {
                 "cameras_source": "auto",
-                "sotqin_config_path": str(cache_path()),
                 "restart_on_config_change": True,
             },
         )

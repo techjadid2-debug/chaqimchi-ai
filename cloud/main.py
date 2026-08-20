@@ -3995,6 +3995,29 @@ async def owner_employees(
     }
 
 
+def _check_employee_limit(site_id: str) -> None:
+    """Tarifdagi xodim chegarasi.
+
+    Chegara `plans.py` da yozilgan, ammo bungacha u faqat javoblarda
+    qaytardi — hech qayerda majburlanmasdi.  Kamera chegarasi bilan bir
+    xil naqsh (`chaqimchi_ai/local/app.py`): sanoq yaratishdan OLDIN
+    tekshiriladi.
+    """
+    site = get_store().get_site(site_id)
+    if not site:
+        raise HTTPException(404, "Sayt topilmadi")
+    limit = get_plan(str(site.get("plan") or "lite")).effective_max_persons(
+        int(site.get("billable_persons") or 0)
+    )
+    current = len(get_event_store().list_employees(site_id))
+    if current >= limit:
+        raise HTTPException(
+            422,
+            f"Tarifingizda ko'pi bilan {limit} ta xodim. "
+            f"Yangisini qo'shish uchun avval kimnidir ro'yxatdan chiqaring.",
+        )
+
+
 @app.post("/api/v1/owner/employees")
 async def owner_create_employee(
     body: EmployeeCreateBody,
@@ -4004,6 +4027,7 @@ async def owner_create_employee(
     require_owner_role(owner, "owner", "service_admin")
     if not body.consent:
         raise HTTPException(422, "Xodimning yozma roziligi qayd etilishi shart")
+    _check_employee_limit(owner.site_id)
     try:
         employee = get_event_store().create_employee(
             owner.site_id,
@@ -4141,8 +4165,13 @@ async def owner_attendance_csv(
 
 # \u2500\u2500 Yuz tanish: admin enrollment \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 #
-# Rasm yuklash faqat admin panelda: xodimning yozma roziligini kim olganini
-# bitta qo'lda ushlab turish uchun.  Mijoz paneli faqat o'qiydi.
+# Rasm yuklashning IKKI yo'li bor: admin paneli va mijozning o'z paneli.
+#
+# Ilgari faqat admin yo'li bor edi ("rozilikni kim olganini bitta qo'lda
+# ushlab turish uchun").  Amalda bu shuni anglatardi: har bir xodim uchun
+# do'kon egasi operatorga murojaat qilishi kerak — ya'ni funksiya
+# ishlamasdi.  Endi mijoz xodimini o'zi qo'shadi va rasmni telefon
+# kamerasidan oladi; rozilik esa do'kon egasining zimmasida.
 
 FACE_PHOTO_MAX_BYTES = 2 * 1024 * 1024
 
@@ -4191,6 +4220,7 @@ async def admin_create_employee(
         raise HTTPException(404, "Sayt topilmadi")
     if not body.consent:
         raise HTTPException(422, "Xodimning yozma roziligi qayd etilishi shart")
+    _check_employee_limit(site_id)
     try:
         employee = get_event_store().create_employee(
             site_id,
@@ -4323,13 +4353,107 @@ async def owner_faces(owner: OwnerPrincipal = Depends(require_active_owner)) -> 
             {"id": face["id"], "created_at": face["created_at"]}
         )
     ok, _reason = faces.available()
+    site = get_store().get_site(owner.site_id) or {}
     return {
         "ready": ok,
+        # Panel chegarani ko'rsatadi va tugmani o'chiradi — mijoz 11-xodimni
+        # kiritib bo'lgandan keyin "bo'lmaydi" degan javob olmasin.
+        "max_employees": get_plan(str(site.get("plan") or "lite")).effective_max_persons(
+            int(site.get("billable_persons") or 0)
+        ),
         "employees": [
             {**employee, "photos": photos.get(str(employee["id"]), [])}
             for employee in store.list_employees(owner.site_id)
         ],
     }
+
+
+def _owner_employee_or_404(site_id: str, employee_id: str) -> Dict[str, Any]:
+    """Xodim shu do'konga tegishlimi.
+
+    Mijoz paneli faqat o'z saytini ko'radi, lekin `employee_id` havolada
+    keladi — boshqa do'konning xodimiga rasm yuklab bo'lmasligi shu yerda
+    tekshiriladi.
+    """
+    employee = get_event_store().employee(site_id, employee_id)
+    if employee is None:
+        raise HTTPException(404, "Xodim topilmadi")
+    return employee
+
+
+@app.post("/api/v1/owner/faces/employees/{employee_id}/photos")
+async def owner_add_employee_face(
+    employee_id: str,
+    request: Request,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Mijoz xodimining rasmini yuklaydi (telefon kamerasidan).
+
+    Admin variantidan farqi faqat kirish huquqida: bu yerda sayt
+    tokendan olinadi, ya'ni mijoz boshqa do'konga yozolmaydi.
+    """
+    require_attendance()
+    require_owner_role(owner, "owner", "service_admin")
+    _require_face_service()
+    _owner_employee_or_404(owner.site_id, employee_id)
+
+    # Telefon kamerasi HEIC/PNG ham berishi mumkin; `embed_jpeg` cv2 bilan
+    # dekodlaydi, shuning uchun PNG ham qabul qilinadi.  Boshqa turdagi
+    # fayl (masalan PDF) bekorga CPU yemasin.
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip()
+    if content_type not in {"image/jpeg", "image/png"}:
+        raise HTTPException(415, "Faqat JPEG yoki PNG rasm qabul qilinadi")
+
+    # Har rasm ~0.5 s CPU va bu ochiq (mijoz tokeni bilan) yo'l — kunlik
+    # chegara qo'yilmasa bitta mijoz butun serverni band qila olardi.
+    ratelimit.check(
+        "face-enroll",
+        owner.site_id,
+        limit=60,
+        window_sec=86_400,
+        message="Kunlik rasm yuklash chegarasi oshdi — ertaga davom eting",
+    )
+
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(422, "Rasm bo'sh")
+    if len(payload) > FACE_PHOTO_MAX_BYTES:
+        raise HTTPException(413, "Rasm 2 MB dan katta")
+    embedding = await asyncio.to_thread(faces.get_face_service().embed_jpeg, payload)
+    if embedding is None:
+        raise HTTPException(422, "Rasmda yuz topilmadi — yaqinroq, yorug' rasm oling")
+
+    face_id = uuid.uuid4().hex[:12]
+    photo_key = f"{owner.site_id}/faces/enroll/{employee_id}-{face_id}.jpg"
+    try:
+        record = get_event_store().add_employee_face(
+            owner.site_id,
+            employee_id,
+            photo_key=photo_key,
+            embedding_b64=faces.encrypt_embedding(embedding.vector),
+            det_score=round(float(embedding.det_score), 3),
+            photo_bytes=len(payload),
+        )
+    except ValueError as exc:
+        raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
+    get_snapshot_store().put(photo_key, payload, content_type="image/jpeg")
+    get_event_store().touch_site_config(owner.site_id)
+    return record
+
+
+@app.delete("/api/v1/owner/faces/photos/{face_id}")
+async def owner_delete_employee_face(
+    face_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_attendance()
+    require_owner_role(owner, "owner", "service_admin")
+    photo_key = get_event_store().delete_employee_face(owner.site_id, face_id)
+    if photo_key is None:
+        raise HTTPException(404, "Rasm topilmadi")
+    get_snapshot_store().delete(photo_key)
+    get_event_store().touch_site_config(owner.site_id)
+    return {"ok": True, "id": face_id}
 
 
 @app.get("/api/v1/owner/faces/events")

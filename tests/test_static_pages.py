@@ -314,18 +314,46 @@ def test_owner_panel_is_light_branded_not_admin_dark() -> None:
     assert "chaqimchi-logo" in html, "brend logotipi ko'rinsin"
 
 
-def test_owner_attendance_card_stays_hidden_until_the_pilot_allows_it() -> None:
+def test_owner_staff_tab_disappears_when_the_feature_is_off() -> None:
     """Davomat cloud-pilot sifatida qaytdi, lekin ESKI XATO qaytmasin.
 
-    Ilgari davomat kartasi production'da har ochilishda 403 xato ko'rsatib
-    turardi — mijozning birinchi taassuroti "buzuq narsa" edi.  Yangi
-    qoida: karta standart holatda yashirin, faqat API ruxsat bersa
-    ochiladi; 403 esa jim o'tkaziladi.
+    Ilgari davomat kartasi production'da har ochilishda 403 xato
+    ko'rsatib turardi — mijozning birinchi taassuroti "buzuq narsa" edi.
+    Endi xodimlar alohida bo'lim: funksiya yoqilmagan saytda **tugmaning
+    o'zi chizilmaydi**, ya'ni mijoz bo'sh va tushunarsiz bo'limga umuman
+    tusha olmaydi.
     """
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
-    assert 'class="card hidden" id="attendanceCard"' in html, "karta standart yashirin bo'lsin"
     assert "/api/v1/owner/faces" in html
-    assert '$("attendanceCard").classList.add("hidden")' in html, "403 da karta jim yopilsin"
+    assert "staffEnabled = false" in html, "403 da bo'lim tugmasi olib tashlansin"
+    assert "visibleTabs()" in html, "tabbar faqat ochiq bo'limlarni chizsin"
+
+
+def test_owner_can_add_staff_and_photos_without_us() -> None:
+    """Butun ma'no shu: mijoz operatorga murojaat qilmasin."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert '"/api/v1/owner/employees"' in html, "xodim qo'shish"
+    assert "/photos" in html and 'method: "POST"' in html, "rasm yuklash"
+    assert 'accept="image/*"' in html, "telefonda kamera/galereya ochilsin"
+    assert "toJpeg" in html, (
+        "iPhone HEIC beradi va server uni qabul qilmaydi — brauzerda JPEG ga aylantirilsin"
+    )
+
+
+def test_owner_panel_does_not_break_binary_uploads() -> None:
+    """`api()` chaqiruvchi bergan Content-Type ni o'chirib yuborardi —
+    rasm `application/json` bo'lib ketardi va server 415 qaytarardi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert 'if (options.body && !headers["Content-Type"])' in html
+
+
+def test_the_attendance_camera_can_be_chosen_in_the_panel() -> None:
+    """Kamera tanlanmasa qurilma yuz kadri umuman yubormaydi — ya'ni
+    butun funksiya jimgina ishlamaydi."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "attendance_camera_ids" in html
+    assert "attendance_camera_roles" in html
+    assert '"/api/v1/owner/config"' in html, "mavjud sozlama endpointi ishlatilsin"
 
 
 def test_owner_panel_has_no_raw_json_editors() -> None:

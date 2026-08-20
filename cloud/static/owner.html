@@ -270,26 +270,79 @@
         <div id="billingStatus"></div>
       </div>
 
-      <!-- Davomat (yopiq pilot): funksiya yoqilmagan saytda umuman
-           ko'rinmaydi — kartani JS 403 bo'lmasa ochadi. -->
-      <div class="card hidden" id="attendanceCard">
-        <div class="card-head">
-          <h2>Davomat</h2>
-          <button class="button ghost small" id="attendanceCsvBtn" type="button">CSV yuklab olish</button>
-        </div>
-        <p class="hint" id="attendanceHint">Xodimlar kirish kamerasida yuz orqali avtomatik qayd etiladi (yozma rozilik bilan).</p>
-        <div class="scroll-x">
-          <table class="events">
-            <thead><tr><th>Xodim</th><th>Keldi</th><th>Ketdi</th><th>Holat</th></tr></thead>
-            <tbody id="attendanceRows"></tbody>
-          </table>
-        </div>
-        <div id="faceEmployees" class="face-grid" style="margin-top:12px"></div>
-        <p class="hint" style="margin-top:14px;margin-bottom:6px">So‘nggi kadrlar</p>
-        <div id="faceGallery" class="face-grid"></div>
-      </div>
-
       </div><!-- /paneDokon -->
+
+      <!-- ── XODIMLAR ────────────────────────────────────────────────────
+           Yuz tanish yoqilmagan saytda butun bo'lim ko'rinmaydi: JS
+           `/owner/faces` 403 bersa tab ham chizilmaydi. -->
+      <div class="pane" id="paneXodimlar" hidden>
+
+        <div class="card wide">
+          <div class="card-head">
+            <h2>Xodimlar</h2>
+            <span class="hint" id="staffCount"></span>
+          </div>
+          <p class="hint" style="margin-top:0">
+            Xodimni qo‘shib, rasmini oling — kamera uni tanib, kelgan-ketgan
+            vaqtini o‘zi yozib boradi. Har xodimga <b>1–3 rasm</b>: yuz aniq
+            va yorug‘ ko‘rinsin.
+          </p>
+          <div id="staffList"></div>
+          <div id="staffStatus"></div>
+
+          <form id="staffForm" class="actions" style="margin-top:12px">
+            <label class="field" style="flex:1 1 200px;margin:0">
+              <span class="hidden">Xodim ismi</span>
+              <input type="text" id="staffName" placeholder="Xodim ismi" maxlength="120" required>
+            </label>
+            <button class="button" type="submit" id="staffAddBtn">Qo‘shish</button>
+          </form>
+          <p class="hint" style="margin-bottom:0">
+            Xodim rasmini olishdan oldin undan roziligini so‘rang —
+            <a href="/rozilik-shabloni" target="_blank" rel="noopener noreferrer">shablon</a>.
+          </p>
+        </div>
+
+        <!-- Davomat jadvali: kim soat nechada kelgan va ketgan. -->
+        <div class="card wide" id="attendanceCard">
+          <div class="card-head">
+            <h2>Davomat</h2>
+            <div class="actions" style="margin:0">
+              <button class="button ghost small" id="attendanceTodayBtn" type="button">Bugun</button>
+              <button class="button ghost small" id="attendanceMonthBtn" type="button">Shu oy</button>
+              <button class="button ghost small" id="attendanceCsvBtn" type="button">CSV</button>
+            </div>
+          </div>
+          <p class="hint" id="attendanceHint" style="margin-top:0"></p>
+          <div class="scroll-x">
+            <table class="events">
+              <thead><tr><th>Xodim</th><th>Keldi</th><th>Ketdi</th><th>Necha soat</th></tr></thead>
+              <tbody id="attendanceRows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Kamera tanlanmasa qurilma yuz kadri umuman yubormaydi —
+             shuning uchun bu karta ro'yxatdan keyin darrov turadi. -->
+        <div class="card">
+          <div class="card-head"><h2>Qaysi kamera taniydi?</h2></div>
+          <p class="hint" style="margin-top:0">Xodimlar o‘tadigan kamerani belgilang —
+            odatda kirish eshigi. Ko‘pi bilan <b>2 kamera</b>. Belgilanmasa davomat ishlamaydi.</p>
+          <div id="attendanceCameras"></div>
+          <div class="actions">
+            <button class="button" id="attendanceCamSave" type="button">Saqlash</button>
+          </div>
+          <div id="attendanceCamStatus"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>So‘nggi kadrlar</h2></div>
+          <p class="hint" style="margin-top:0">Tanilmagan kadr ko‘p bo‘lsa — xodimga
+            yana bitta aniqroq rasm qo‘shing.</p>
+          <div id="faceGallery" class="face-grid"></div>
+        </div>
+
+      </div><!-- /paneXodimlar -->
 
       <!-- Panelda to'rt joyda "bizga yozing" deyiladi, aloqa havolasi esa
            faqat KIRISH ekranida edi — u kirgandan keyin yashiriladi.
@@ -344,7 +397,10 @@
 
   async function api(path, options = {}) {
     const headers = { Authorization: `Bearer ${token}`, ...(options.headers || {}) };
-    if (options.body) headers["Content-Type"] = "application/json";
+    // JSON — standart, lekin chaqiruvchi o'zi bergan turni BUZMAYMIZ.
+    // Ilgari bu qator shartsiz edi va rasm yuklashda `image/jpeg` ni
+    // `application/json` ga almashtirib qo'yardi — server 415 qaytarardi.
+    if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
     let response;
     try {
       response = await fetch(path, { ...options, headers });
@@ -373,6 +429,7 @@
   const S = {
     health: null, cameras: null, report: null, trend: null,
     events: null, config: null, members: null, billing: null, features: null,
+    staff: null,
   };
 
   const LOADERS = {
@@ -385,6 +442,7 @@
     members: () => api("/api/v1/owner/members"),
     billing: () => api("/api/v1/owner/invoices?limit=6"),
     features: () => api("/api/v1/owner/features"),
+    staff: () => api("/api/v1/owner/faces"),
   };
 
   async function needSettled(keys) {
@@ -425,7 +483,17 @@
       deps: ["health", "cameras", "report", "events"] },
     { id: "dokon", label: "Do‘kon", icon: "dokon", pane: "paneDokon",
       deps: ["health", "cameras", "config", "members", "billing", "features"] },
+    { id: "xodimlar", label: "Xodimlar", icon: "odamlar", pane: "paneXodimlar",
+      deps: ["health", "cameras", "config", "staff"] },
   ];
+
+  //: Yuz tanish yoqilmagan saytda "Xodimlar" tugmasi umuman chizilmaydi —
+  //: bosilgach 403 ko'rsatadigan bo'sh bo'lim eng yomon variant.
+  let staffEnabled = true;
+
+  function visibleTabs() {
+    return TABS.filter((tab) => tab.id !== "xodimlar" || staffEnabled);
+  }
 
   function currentTab() {
     const raw = (location.hash || "").replace(/^#\/?/, "");
@@ -435,7 +503,7 @@
 
   function drawTabs() {
     const active = currentTab();
-    $("tabbar").innerHTML = TABS.map((tab) => `
+    $("tabbar").innerHTML = visibleTabs().map((tab) => `
       <a class="tab" href="#/${tab.id}"${tab.id === active.id ? ' aria-current="page"' : ""}>
         <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#${tab.icon}"></use></svg>
         <span>${esc(tab.label)}</span>
@@ -1223,18 +1291,33 @@
     }
   }
 
-  /* ── Davomat (yopiq pilot) ──────────────────────────────────────────── */
+  /* ── Xodimlar va davomat ────────────────────────────────────────────── */
 
   let faceUrls = [];
+  let attendanceRange = "today";
 
-  const ATTENDANCE_STATUS = {
-    present: "Keldi",
-    late: "Kechikdi",
-    absent: "Kelmadi",
-    pending: "Kutilmoqda",
-    unscheduled: "Jadvalsiz",
-    off: "Dam olish",
-  };
+  //: Rasm yuborishdan oldin brauzerda JPEG ga aylantiriladi.  Sabab:
+  //: iPhone galereyasi HEIC beradi (server uni qabul qilmaydi), zamonaviy
+  //: telefon esa 4-8 MB rasm chiqaradi (chegara 2 MB).  Yuz uchun 1024px
+  //: yetarli — model baribir 112x112 ga keltiradi.
+  const PHOTO_MAX_SIDE = 1024;
+
+  async function toJpeg(file) {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    return new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Rasm o‘qilmadi"))),
+        "image/jpeg",
+        0.9,
+      ),
+    );
+  }
 
   async function authedImage(url, img) {
     try {
@@ -1246,53 +1329,210 @@
     } catch (_) {}
   }
 
-  async function loadAttendance() {
-    let data;
-    try {
-      data = await api("/api/v1/owner/faces");
-    } catch (_) {
-      // 403 — funksiya bu saytda yoqilmagan; karta ko'rinmaydi.
-      $("attendanceCard").classList.add("hidden");
-      return;
-    }
-    $("attendanceCard").classList.remove("hidden");
-    faceUrls.forEach((u) => URL.revokeObjectURL(u));
+  function drawStaff(data) {
+    faceUrls.forEach((url) => URL.revokeObjectURL(url));
     faceUrls = [];
 
-    $("faceEmployees").innerHTML = data.employees.map((emp) => `
-      <figure class="face-item">
-        ${emp.photos.length
-          ? `<img data-src="/api/v1/owner/faces/photos/${esc(emp.photos[0].id)}/image" alt="">`
-          : `<div class="face-empty">🙂</div>`}
-        <figcaption><b>${esc(emp.name)}</b><small>${emp.enrollment_status === "enrolled" ? "ro‘yxatda" : "rasm kutilmoqda"}</small></figcaption>
-      </figure>`).join("") ||
-      '<p class="hint">Xodimlar hali kiritilmagan — qo‘shish uchun bizga yozing.</p>';
+    const employees = data.employees || [];
+    const limit = Number(data.max_employees) || 10;
+    $("staffCount").textContent = `${employees.length} / ${limit}`;
+    $("staffAddBtn").disabled = employees.length >= limit;
 
+    $("staffList").innerHTML = employees.map((emp) => {
+      const photo = emp.photos && emp.photos[0];
+      const ready = emp.enrollment_status === "enrolled";
+      return `
+        <div class="staff-row">
+          ${photo
+            ? `<img class="staff-face" data-src="/api/v1/owner/faces/photos/${esc(photo.id)}/image" alt="">`
+            : `<div class="staff-face">🙂</div>`}
+          <div class="staff-main">
+            <b>${esc(emp.name)}</b>
+            <small>${ready
+              ? `${emp.photos.length} ta rasm · kamera taniydi`
+              : "rasm kutilmoqda — kamera hali tanimaydi"}</small>
+          </div>
+          <div class="staff-actions">
+            <input type="file" class="staff-file" accept="image/*" id="staffFile-${esc(emp.id)}">
+            <button class="button small" type="button" data-act="photo" data-id="${esc(emp.id)}">Rasm qo‘shish</button>
+            ${photo
+              ? `<button class="button ghost small" type="button" data-act="photo-del" data-id="${esc(photo.id)}">Rasmni o‘chirish</button>`
+              : ""}
+            <button class="button ghost small" type="button" data-act="remove" data-id="${esc(emp.id)}" data-name="${esc(emp.name)}">Chiqarish</button>
+          </div>
+        </div>`;
+    }).join("") || '<p class="hint">Hali xodim qo‘shilmagan.</p>';
+
+    if (employees.length >= limit) {
+      note("staffStatus", "warn",
+        `Tarifingizda ${limit} ta xodim. Yangisini qo‘shish uchun kimnidir ro‘yxatdan chiqaring.`);
+    } else {
+      $("staffStatus").innerHTML = "";
+    }
+    if (data.ready === false) {
+      note("staffStatus", "warn", "Yuz tanish xizmati hozir tayyor emas — bizga yozing.");
+    }
+
+    document.querySelectorAll("#staffList img[data-src]")
+      .forEach((img) => authedImage(img.dataset.src, img));
+  }
+
+  async function staffAction(act, id, name) {
     try {
-      const report = await api("/api/v1/owner/attendance");
+      if (act === "photo") {
+        const input = $(`staffFile-${id}`);
+        input.onchange = async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          note("staffStatus", "warn", "Rasm yuborilmoqda…");
+          try {
+            const blob = await toJpeg(file);
+            await api(`/api/v1/owner/faces/employees/${id}/photos`, {
+              method: "POST",
+              headers: { "Content-Type": "image/jpeg" },
+              body: blob,
+            });
+            note("staffStatus", "ok", "Rasm qo‘shildi — kamera endi taniydi.");
+            reload("staff");
+          } catch (error) {
+            note("staffStatus", "err", error.message);
+          }
+          input.value = "";
+        };
+        input.click();
+        return;
+      }
+      if (act === "photo-del") {
+        await api(`/api/v1/owner/faces/photos/${id}`, { method: "DELETE" });
+        reload("staff");
+        return;
+      }
+      if (act === "remove") {
+        if (!confirm(`${name} ro‘yxatdan chiqarilsinmi? Rasmlari ham o‘chadi.`)) return;
+        await api(`/api/v1/owner/employees/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ active: false }),
+        });
+        note("staffStatus", "ok", "Xodim ro‘yxatdan chiqarildi.");
+        reload("staff");
+      }
+    } catch (error) {
+      note("staffStatus", "err", error.message);
+    }
+  }
+
+  /* Davomat jadvali ------------------------------------------------------ */
+
+  // Sana DOIM do'kon kuni bo'yicha (`shopDate`, Asia/Tashkent).  UTC
+  // ishlatilsa Toshkentda yarim tundan 05:00 gacha kechagi kun so'ralardi
+  // va jadval bo'sh ko'rinardi — bu xato panelda bir marta bo'lgan.
+  function attendanceQuery() {
+    const today = shopDate();
+    return attendanceRange === "month"
+      ? `?start=${today.slice(0, 8)}01&end=${today}`
+      : `?start=${today}&end=${today}`;
+  }
+
+  function workedHours(row) {
+    if (!row.first_seen || !row.last_seen) return "—";
+    const minutes = Math.round(
+      (new Date(row.last_seen) - new Date(row.first_seen)) / 60000);
+    if (minutes <= 0) return "—";
+    return `${Math.floor(minutes / 60)}s ${String(minutes % 60).padStart(2, "0")}d`;
+  }
+
+  async function loadAttendanceTable() {
+    $("attendanceHint").textContent = attendanceRange === "month"
+      ? "Shu oy boshidan bugungacha."
+      : "Bugungi kun.";
+    try {
+      const report = await api(`/api/v1/owner/attendance${attendanceQuery()}`);
       const rows = (report.rows || []).map((row) => `
         <tr>
-          <td>${esc(row.employee_name)}</td>
+          <td>${esc(row.employee_name)}${attendanceRange === "month"
+            ? `<small class="hint"> ${esc((row.work_date || "").slice(5))}</small>` : ""}</td>
           <td>${esc((row.first_seen || "").slice(11, 16) || "—")}</td>
           <td>${esc((row.last_seen || "").slice(11, 16) || "—")}</td>
-          <td>${esc(ATTENDANCE_STATUS[row.status] || row.status)}${row.late_minutes ? ` (+${esc(row.late_minutes)} daq)` : ""}</td>
+          <td>${esc(workedHours(row))}</td>
         </tr>`).join("");
       $("attendanceRows").innerHTML = rows ||
-        '<tr><td colspan="4" class="hint">Bugun hali qayd yo‘q.</td></tr>';
-    } catch (_) {}
+        '<tr><td colspan="4" class="hint">Hali qayd yo‘q. Kamera tanlanganini tekshiring.</td></tr>';
+    } catch (error) {
+      $("attendanceRows").innerHTML =
+        `<tr><td colspan="4" class="hint">${esc(error.message)}</td></tr>`;
+    }
+  }
 
+  /* Davomat kamerasi ----------------------------------------------------- */
+
+  const ATTENDANCE_ROLES = [
+    ["both", "Kirish va chiqish"],
+    ["arrival", "Faqat kirish"],
+    ["departure", "Faqat chiqish"],
+  ];
+
+  function drawAttendanceCameras() {
+    const chosen = (currentConfig && currentConfig.attendance_camera_ids) || [];
+    const roles = (currentConfig && currentConfig.attendance_camera_roles) || {};
+    $("attendanceCameras").innerHTML = cameraList.map((camera) => {
+      const id = camera.camera_id;
+      const on = chosen.includes(id);
+      return `
+        <div class="staff-row">
+          <label class="staff-main" style="display:flex;gap:10px;align-items:center">
+            <input type="checkbox" data-cam="${esc(id)}"${on ? " checked" : ""}>
+            <span><b>${esc(camera.label || id)}</b></span>
+          </label>
+          <select data-cam-role="${esc(id)}">
+            ${ATTENDANCE_ROLES.map(([value, label]) =>
+              `<option value="${value}"${roles[id] === value ? " selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </div>`;
+    }).join("") || '<p class="hint">Avval kamera ulang.</p>';
+  }
+
+  async function saveAttendanceCameras() {
+    const ids = [...document.querySelectorAll("#attendanceCameras input[data-cam]")]
+      .filter((box) => box.checked).map((box) => box.dataset.cam);
+    if (ids.length > 2) {
+      note("attendanceCamStatus", "err", "Ko‘pi bilan 2 kamera tanlash mumkin.");
+      return;
+    }
+    const roles = {};
+    ids.forEach((id) => {
+      const select = document.querySelector(`#attendanceCameras select[data-cam-role="${id}"]`);
+      if (select) roles[id] = select.value;
+    });
+    try {
+      // Butun config qaytariladi: faqat o'zgargan maydonni yuborsak
+      // qolganlari (chiziq, zona, ish vaqti) o'chib ketardi.
+      await api("/api/v1/owner/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          ...currentConfig,
+          attendance_camera_ids: ids,
+          attendance_camera_roles: roles,
+        }),
+      });
+      note("attendanceCamStatus", "ok",
+        ids.length ? "Saqlandi — qurilma bir necha daqiqada oladi." : "Davomat o‘chirildi.");
+      reload("config");
+    } catch (error) {
+      note("attendanceCamStatus", "err", error.message);
+    }
+  }
+
+  async function loadFaceGallery() {
     try {
       const gallery = await api("/api/v1/owner/faces/events?limit=12");
       $("faceGallery").innerHTML = gallery.events.map((ev) => `
         <figure class="face-item${ev.person_id ? "" : " face-unknown"}">
           <img data-src="/api/v1/owner/faces/events/${esc(ev.event_id)}/image" alt="">
           <figcaption><b>${ev.person_id ? esc(ev.person_name || "?") : "Notanish"}</b><small>${esc((ev.occurred_at || "").slice(11, 16))}</small></figcaption>
-        </figure>`).join("") || '<p class="hint">Kirish kamerasidan hali kadr kelmagan.</p>';
+        </figure>`).join("") || '<p class="hint">Kameradan hali kadr kelmagan.</p>';
+      document.querySelectorAll("#faceGallery img[data-src]")
+        .forEach((img) => authedImage(img.dataset.src, img));
     } catch (_) {}
-
-    document
-      .querySelectorAll("#attendanceCard img[data-src]")
-      .forEach((img) => authedImage(img.dataset.src, img));
   }
 
   /* ── Sozlamalar ─────────────────────────────────────────────────────── */
@@ -1518,6 +1758,13 @@
     await needSettled(tab.deps);
     if (mine !== renderToken) return;   // foydalanuvchi boshqa bo'limga o'tdi
 
+    // Funksiya yoqilmagan saytda 403 keladi — tugmani olib tashlaymiz,
+    // aks holda mijoz bosib, bo'sh va tushunarsiz bo'lim ko'rardi.
+    if (S.staff && !S.staff.ok && /403|yoq|topilmadi/i.test(S.staff.error || "")) {
+      staffEnabled = false;
+      drawTabs();
+    }
+
     // Aloqa holati har bo'limda: qurilma o'chiq bo'lsa istalgan
     // bo'limdagi raqam yolg'on bo'ladi.
     if (S.health.ok) drawStatus(S.health.data);
@@ -1553,7 +1800,14 @@
         const quote = S.features.ok ? S.features.data.summary.active_quote : null;
         drawBilling(S.billing.data, quote ? quote.monthly_uzs : 0);
       } else note("billingStatus", "err", S.billing.error);
-      loadAttendance();
+    } else if (tab.id === "xodimlar") {
+      if (S.config.ok) currentConfig = S.config.data.config;
+      if (S.staff.ok) {
+        drawStaff(S.staff.data);
+        drawAttendanceCameras();
+        loadAttendanceTable();
+        loadFaceGallery();
+      } else cardError("staffList", S.staff, "staff");
     }
   }
 
@@ -1603,9 +1857,44 @@
     const retry = event.target.closest("[data-retry]");
     if (retry) reload(...retry.dataset.retry.split(","));
   });
+  // Xodimlar ro'yxatidagi tugmalar dinamik chiziladi — delegatsiya.
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("#staffList [data-act]");
+    if (!button) return;
+    staffAction(button.dataset.act, button.dataset.id, button.dataset.name || "");
+  });
+  $("staffForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = $("staffName").value.trim();
+    if (!name) return;
+    $("staffAddBtn").disabled = true;
+    try {
+      await api("/api/v1/owner/employees", {
+        method: "POST",
+        // Rozilikni do'kon egasi o'zi oladi — panel buni so'ramaydi.
+        body: JSON.stringify({ name, consent: true }),
+      });
+      $("staffName").value = "";
+      note("staffStatus", "ok", "Xodim qo‘shildi — endi rasmini oling.");
+      reload("staff");
+    } catch (error) {
+      note("staffStatus", "err", error.message);
+    } finally {
+      $("staffAddBtn").disabled = false;
+    }
+  });
+  $("attendanceCamSave").addEventListener("click", saveAttendanceCameras);
+  $("attendanceTodayBtn").addEventListener("click", () => {
+    attendanceRange = "today";
+    loadAttendanceTable();
+  });
+  $("attendanceMonthBtn").addEventListener("click", () => {
+    attendanceRange = "month";
+    loadAttendanceTable();
+  });
   $("attendanceCsvBtn").addEventListener("click", async () => {
     try {
-      const response = await fetch("/api/v1/owner/attendance.csv", {
+      const response = await fetch(`/api/v1/owner/attendance.csv${attendanceQuery()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("CSV olinmadi");

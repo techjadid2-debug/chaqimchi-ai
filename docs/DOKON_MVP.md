@@ -16,7 +16,7 @@ lokal Face ID davomat to‘plami ham arxivlandi
 | Video | To‘liq arxiv NVR’da; qurilma faqat event buffer/klip |
 | Kamera ulash | Sozlash ustasi: ONVIF qidiruv, NVR kanal skaneri yoki qo‘lda RTSP; admin panelda masofadan ham kiritish mumkin |
 | AI | Odam deteksiyasi/tracking lokal (OpenVINO, CPU; yaroqli iGPU bo‘lsa GPU); event/hisobot/alert cloud |
-| Yuz tanish | Faol scope’da YO‘Q — keyinchalik **cloud** tomonda quriladi |
+| Xodim davomati (Face ID) | Lite ichida, **10 xodimgacha**, hozircha tekin. Qurilma yuzni tanimaydi — kadrni kesib yuboradi, tanish cloudda |
 | Panelga kirish | Kirish havolasi (`?key=`, admin/bot beradi) yoki Telegram OTP; parolli portal akkauntlar |
 
 ## MVP’da bor
@@ -53,11 +53,32 @@ ochilmaydi. `CHAQIMCHI_AVAILABLE_FEATURES` ning o‘zi yetarli emas:
 ## MVP’da yo‘q
 
 - o‘g‘rilik, jinoyatchi yoki “shubhali niyat” klassifikatsiyasi;
-- yuz tanish: mijoz Face ID ham, xodim davomati ham (davomat keyin cloudda);
+- mijoz Face ID (do‘konga kirgan xaridorni tanish) — faqat xodim davomati bor;
 - uzluksiz videoni cloudga ko‘chirish;
 - POS/savdo konversiyasi, shelf/stock va heatmap;
 - vendor P2P (faqat lokal tarmoqdagi RTSP/ONVIF bilan ishlaymiz);
 - QSV hardware decode va 8 kamera SLA;
+
+## Xodim davomati (Face ID)
+
+Do‘kon egasi `app.chaqimchi.uz` → **Xodimlar** bo‘limida xodimini o‘zi
+qo‘shadi va rasmini telefon kamerasidan oladi (1–3 rasm). Kamera uni
+tanib, kelgan-ketgan vaqtini yozib boradi; jadval "Bugun"/"Shu oy" va CSV
+bo‘lib chiqadi.
+
+| Nima | Qiymat |
+|---|---|
+| Chegara | 10 xodim (`plans.py: lite.max_persons`) |
+| Narx | hozircha tekin |
+| Qaysi kamera | mijoz panelda o‘zi tanlaydi, ko‘pi bilan 2 ta |
+| Rasm | brauzerda JPEG ga aylantiriladi (iPhone HEIC beradi), ≤ 2 MB |
+| Biometrika | embedding Fernet bilan shifrlanadi; xodim ro‘yxatdan
+chiqarilsa rasm ham, embedding ham o‘chadi; yuz kadri 14 kun yashaydi |
+
+**Sotuvdan oldin hal qilinadigan band:** hozirgi model (`buffalo_l`) —
+tadqiqot litsenziyasida. Funksiya tekin ekan bu qabul qilingan xavf;
+pullik qilishdan oldin tijoratga ruxsat etilgan modelga o‘tish shart
+(kod bitta joyda — `cloud/faces.py`).
 
 ## Qabul mezoni
 
@@ -116,7 +137,7 @@ do‘kon videosida ≥ 60 soniya; verdict 4 kamera uchun warning’siz `ok`; soa
 5. Natija o‘tgach public feature’larni ochish (`person_count`,
    `queue_length`, `store_security`).
 6. Keyingi bosqich: o‘rnatuvchini Authenticode bilan imzolash, Box
-   sotuvini qayta ochish, cloud yuz tanish davomati.
+   sotuvini qayta ochish.
 
 Bajarildi (0.6.8): nazorat kompyuter yonganda avtomatik ishga tushadi —
 rejalashtirilgan vazifa, SYSTEM nomidan, tizimga kirish shart emas

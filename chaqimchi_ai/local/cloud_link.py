@@ -332,24 +332,65 @@ def status() -> Dict[str, Any]:
     }
 
 
-def pending_events() -> Optional[int]:
-    """Cloudga yuborilmagan hodisalar soni.
+#: `outbox.priority` — `severity` dan kelib chiqadi (`chaqimchi_ai/outbox.py`):
+#: critical=30, warning=20, qolgani=10.  "Yo'qolgan kritik hodisa 0"
+#: mezoni aynan shu chegara bilan o'lchanadi.
+CRITICAL_PRIORITY = 30
 
-    Bu raqam o'sib borsa — aloqa uzilgan.  Panel shuni ko'rsatadi, chunki
-    "ulangan" yozuvi turgani holda hodisalar to'planib qolishi mumkin.
+
+def outbox_stats() -> Dict[str, Optional[int]]:
+    """Navbat holati: yuborilmaganlar, kritiklar va tashlanganlar.
+
+    Baza **faqat o'qish** rejimida ochiladi: uni retail zanjiri yozadi va
+    panel uni qulflab qo'ymasligi kerak.
+
+    Nega alohida funksiya: bungacha bitta `SELECT COUNT(*) FROM outbox`
+    ishlatilardi — `WHERE sent_at IS NULL` siz.  `acknowledge()` yozuvni
+    o'chirmaydi, `sent_at` qo'yadi va `prune()` uni ikki kun saqlaydi
+    (panel kunlik hisobotni shu bazadan o'qiydi).  Natijada muvaffaqiyatli
+    yuborilgan hodisalar ham "yuborilmagan" bo'lib sanalardi: panel
+    bekordan "N hodisa yuborilmagan — internetni tekshiring" deb
+    qo'rqitardi va heartbeat cloudga shishgan raqam yuborardi.
     """
     import sqlite3
 
     from chaqimchi_ai.local import paths
 
+    empty: Dict[str, Optional[int]] = {"pending": 0, "critical": 0, "poisoned": 0}
     db = paths.outbox_path()
     if not db.is_file():
-        return 0
+        return empty
     try:
         conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2.0)
         try:
-            return int(conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0])
+            pending, critical = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(priority >= ?), 0) "
+                "FROM outbox WHERE sent_at IS NULL",
+                (CRITICAL_PRIORITY,),
+            ).fetchone()
+            # `dead_letter` — umidsiz deb tashlangan hodisalar, ya'ni
+            # BUTUNLAY yo'qolganlar.  Jadval eski bazada bo'lmasligi mumkin.
+            try:
+                poisoned = int(
+                    conn.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0]
+                )
+            except sqlite3.Error:
+                poisoned = 0
+            return {
+                "pending": int(pending or 0),
+                "critical": int(critical or 0),
+                "poisoned": poisoned,
+            }
         finally:
             conn.close()
     except sqlite3.Error:
-        return None
+        return {"pending": None, "critical": None, "poisoned": None}
+
+
+def pending_events() -> Optional[int]:
+    """Cloudga **yuborilmagan** hodisalar soni.
+
+    Bu raqam o'sib borsa — aloqa uzilgan.  Panel shuni ko'rsatadi, chunki
+    "ulangan" yozuvi turgani holda hodisalar to'planib qolishi mumkin.
+    """
+    return outbox_stats()["pending"]

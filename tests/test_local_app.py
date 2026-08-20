@@ -856,3 +856,56 @@ def test_service_launcher_does_not_open_a_browser(
     assert app_module._browser_enabled() is False
     monkeypatch.setenv("CHAQIMCHI_LOCAL_NO_BROWSER", "0")
     assert app_module._browser_enabled() is True
+
+
+# ── O'tgan kun hisoboti ─────────────────────────────────────────────────
+#
+# 72 soatlik barqarorlik sinovida kunlik son qo'lda sanash bilan
+# solishtiriladi.  Bungacha hisobot faqat "hozir" ni bilardi — uchinchi
+# kuni birinchi kunning raqamini olishning iloji yo'q edi.
+
+
+def test_report_can_look_back_at_an_earlier_day(client: TestClient, tmp_path: Path) -> None:
+    now = datetime.now().astimezone()
+    yesterday = now - timedelta(days=1)
+    _seed_outbox(
+        tmp_path,
+        [
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": yesterday.isoformat(),
+            },
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": yesterday.isoformat(),
+            },
+            {
+                "event_type": "line_crossed",
+                "direction": "in",
+                "camera_id": "camera-01",
+                "occurred_at": now.isoformat(),
+            },
+        ],
+    )
+
+    kecha = client.get(f"/api/report?date={yesterday.date().isoformat()}").json()
+
+    assert kecha["date"] == yesterday.date().isoformat()
+    assert kecha["entered"] == 2, "faqat o'sha kunning hodisalari sanalsin"
+
+    bugun = client.get("/api/report").json()
+    assert bugun["entered"] == 1, "bugungi hisobot o'zgarmasin"
+
+
+def test_a_broken_date_is_refused_clearly(client: TestClient) -> None:
+    assert client.get("/api/report?date=kecha").status_code == 422
+    assert client.get("/api/report?date=2026-13-40").status_code == 422
+
+
+def test_a_future_day_has_no_report(client: TestClient) -> None:
+    tomorrow = (datetime.now().astimezone() + timedelta(days=1)).date()
+    assert client.get(f"/api/report?date={tomorrow.isoformat()}").status_code == 422

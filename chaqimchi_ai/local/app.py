@@ -40,6 +40,7 @@ from chaqimchi_ai.local import (
     cloud_config,
     cloud_link,
     config_store,
+    counters,
     onvif_client,
     paths,
 )
@@ -886,7 +887,9 @@ async def service_log() -> Dict[str, Any]:
 _REPORT_ROW_CAP = 20_000
 
 
-def _read_events(since: Optional[datetime] = None) -> List[Dict[str, Any]]:
+def _read_events(
+    since: Optional[datetime] = None, until: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
     """Hodisalarni outbox'dan o'qiydi.
 
     Outbox — zanjir yozadigan yagona joy, ya'ni panel ham, Telegram
@@ -897,6 +900,11 @@ def _read_events(since: Optional[datetime] = None) -> List[Dict[str, Any]]:
     `since` — shu vaqtdan keyingi yozuvlar.  Ilgari eng yangi 500 tasi
     olinib, **keyin** bugungi kunga filtrlanardi: gavjum do'konda ertalabki
     kirishlar ro'yxat oxiridan tushib qolardi va panel kam ko'rsatardi.
+
+    `until` — o'tgan kun hisoboti uchun (`/api/report?date=`).  Usiz
+    o'tgan kunni so'raganda o'sha kundan BUGUNGACHA bo'lgan hamma yozuv
+    o'qilib, chegaradan (`_REPORT_ROW_CAP`) oshib ketardi va so'ralgan
+    kunning o'zi ro'yxatdan tushib qolardi.
     """
     db = paths.outbox_path()
     if not db.is_file():
@@ -911,11 +919,21 @@ def _read_events(since: Optional[datetime] = None) -> List[Dict[str, Any]]:
                     "SELECT payload FROM outbox ORDER BY created_at DESC LIMIT ?",
                     (_REPORT_ROW_CAP,),
                 ).fetchall()
-            else:
+            elif until is None:
                 rows = conn.execute(
                     "SELECT payload FROM outbox WHERE created_at >= ? "
                     "ORDER BY created_at DESC LIMIT ?",
                     (since.astimezone(timezone.utc).isoformat(), _REPORT_ROW_CAP),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT payload FROM outbox WHERE created_at >= ? AND created_at < ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (
+                        since.astimezone(timezone.utc).isoformat(),
+                        until.astimezone(timezone.utc).isoformat(),
+                        _REPORT_ROW_CAP,
+                    ),
                 ).fetchall()
         finally:
             conn.close()
@@ -935,21 +953,36 @@ def _read_events(since: Optional[datetime] = None) -> List[Dict[str, Any]]:
 
 
 @app.get("/api/report")
-async def report() -> Dict[str, Any]:
-    """Bugungi qisqacha hisobot — mijoz birinchi navbatda shuni ko'radi.
+async def report(date: Optional[str] = None) -> Dict[str, Any]:
+    """Kunlik qisqacha hisobot — mijoz birinchi navbatda shuni ko'radi.
 
     "Bugun" — do'konning **mahalliy** kuni, UTC emas.  Toshkent UTC+5
     bo'lgani uchun ertalabki savdo UTC bo'yicha kechagi kunga tushib qolardi
     va do'kon egasi ochilishdan keyin ham nol ko'rardi.
+
+    `?date=YYYY-MM-DD` — o'tgan kun.  72 soatlik barqarorlik sinovida
+    kunlik sonni qo'lda sanash bilan solishtirish kerak, lekin uchinchi
+    kuni birinchi kunning raqamini olishning iloji yo'q edi: hisobot
+    faqat "hozir" ni bilardi.
     """
     now_local = datetime.now().astimezone()
-    today = now_local.date()
+    if date:
+        try:
+            today = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lishi kerak") from exc
+        if today > now_local.date():
+            raise HTTPException(422, "Kelajakdagi kun uchun hisobot yo'q")
+    else:
+        today = now_local.date()
     # Kun boshidan bir soat oldin: `created_at` (navbatga qo'yilgan vaqt) va
     # `occurred_at` (hodisa vaqti) biroz farq qilishi mumkin.
     day_start = datetime.combine(
         today, datetime.min.time(), tzinfo=now_local.tzinfo
     ) - timedelta(hours=1)
-    events = _read_events(since=day_start)
+    # Kun oxiri ham shunday zaxira bilan.
+    day_end = day_start + timedelta(days=1, hours=2)
+    events = _read_events(since=day_start, until=day_end)
     entered = exited = 0
     hourly = Counter()
     alerts: List[Dict[str, Any]] = []
@@ -1212,6 +1245,10 @@ def main() -> None:
 
     # Updater uchun: dastur hech bo'lmasa shu nuqtagacha yetib keldi.
     _write_alive("starting")
+    # Panel jarayoni necha marta ko'tarilgani — kompyuter qayta yonishi
+    # ham shu yerda ko'rinadi.  72 soatlik sinovda "kutilmagan restart"
+    # ni aynan shu son bilan tekshiramiz.
+    counters.bump("panel_boots")
 
     print("=" * 62)
     print("  Chaqimchi AI — do'kon nazorati")

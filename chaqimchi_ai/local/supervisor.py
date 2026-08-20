@@ -23,7 +23,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 
-from chaqimchi_ai.local import config_store, paths
+from chaqimchi_ai.local import config_store, counters, paths
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +164,7 @@ class RetailSupervisor:
             creationflags=creationflags,
         )
         self._started_at = time.time()
+        counters.bump("chain_starts")
         logger.info("Retail zanjiri ishga tushdi (pid %s)", self._process.pid)
 
         if self._watch_thread is None or not self._watch_thread.is_alive():
@@ -228,6 +229,10 @@ class RetailSupervisor:
                 else:
                     self._crashes.clear()
 
+                # Bu — qabul mezonidagi "kutilmagan qayta ishga tushish".
+                # Mijoz o'zi bosgan `restart()` bu yerga tushmaydi: u
+                # `_auto_restart` ni o'chirib, keyin `start()` chaqiradi.
+                counters.bump("chain_crashes")
                 logger.warning("Zanjir to'xtab qoldi — qayta ishga tushirilmoqda")
                 self._spawn()
 
@@ -261,6 +266,19 @@ class RetailSupervisor:
             # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel
             # "hisobot cloudga bormayapti" ogohlantirishini shundan chiqaradi.
             "plan_filtered": status_file.get("plan_filtered", 0),
+            # Bu uchtasi holat faylida allaqachon bor edi, lekin shu yerdan
+            # o'tmasdi — natijada `cloud_config.send_heartbeat()` ularni
+            # `status` dan o'qiy olmay, cloudga DOIM `0, 0, 0` yuborardi va
+            # cloudning "qurilma jimgina ishlamay qoldi" detektori
+            # (`cloud/main.py`) Windows yo'lida umuman ishlamasdi.
+            "analyzed": int(status_file.get("analyzed") or 0),
+            "errors": int(status_file.get("errors") or 0),
+            "action_errors": int(status_file.get("action_errors") or 0),
+            "events": int(status_file.get("events") or 0),
+            # 72 soatlik sinovning asosiy mezoni: zanjir o'zi necha marta
+            # yiqilib, qayta ko'tarilgan.  Xotiradagi hisoblagich restart
+            # paytida yo'qolardi, shuning uchun diskdan o'qiladi.
+            "restart_count": int(counters.read().get("chain_crashes") or 0),
             # Zanjir ishlayapti-yu holat fayli eskirgan bo'lsa — u qotib
             # qolgan.  Mijoz uchun bu "ishlamayapti" bilan bir xil, shuning
             # uchun panel buni alohida ko'rsatishi kerak.

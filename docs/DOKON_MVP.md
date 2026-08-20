@@ -58,7 +58,6 @@ ochilmaydi. `CHAQIMCHI_AVAILABLE_FEATURES` ning o‘zi yetarli emas:
 - POS/savdo konversiyasi, shelf/stock va heatmap;
 - vendor P2P (faqat lokal tarmoqdagi RTSP/ONVIF bilan ishlaymiz);
 - QSV hardware decode va 8 kamera SLA;
-- Windows xizmat (service) rejimi — hozircha user sessiyasida ishlaydi.
 
 ## Qabul mezoni
 
@@ -74,6 +73,30 @@ Sotuvga ochishdan oldin real do‘kon kompyuterida:
 
 Natija qabul JSON fayliga yoziladi va `CHAQIMCHI_N100_ACCEPTANCE_FILE`
 orqali ulanadi (fayl nomi tarixiy — mexanizm bitta).
+
+Amalda:
+
+```bash
+# 1. Sig'imni o'lchash (RTSP manzili haqiqiy kameradan)
+python scripts/benchmark_n100.py --device CPU --source rtsp://... \
+  --seconds 300 --cameras 4 --json benchmark-windows.json
+
+# 2. 72 soat kuzatish (do'kon kompyuterida, fon rejimida)
+python scripts/soak_windows.py --hours 72 --cameras 4 \
+  --output soak-windows.json --samples-file soak-samples.jsonl
+
+# 3. Qabul fayli — uchta maydonni odam tasdiqlaydi
+python scripts/accept_n100_pilot.py --platform windows \
+  --benchmark benchmark-windows.json --soak soak-windows.json \
+  --daily-count-delta 4.2 --clip-delivered --ota-ok \
+  --approved-by "Ism" --output acceptance-windows.json
+```
+
+Windows profili (`CHAQIMCHI-WINDOWS-W1`) N100 dan **faqat ikki joyda**
+farq qiladi: benchmark CPU'da bo'lishi mumkin (do'kon kompyuterlarining
+iGPU'si odatda OpenVINO uchun yaroqsiz) va harorat o'lchanmasligi mumkin
+(Windows uni bermaydi).  Qolgan hamma mezon bir xil, chunki mijozga
+beriladigan va'da bir xil.
 
 ### Box / N100 yo‘li (keyingi bosqich)
 
@@ -92,8 +115,12 @@ do‘kon videosida ≥ 60 soniya; verdict 4 kamera uchun warning’siz `ok`; soa
 4. 72 soat barqarorlik sinovi va qabul artefaktini yaratish.
 5. Natija o‘tgach public feature’larni ochish (`person_count`,
    `queue_length`, `store_security`).
-6. Keyingi bosqich: o‘rnatuvchini Authenticode bilan imzolash, Windows
-   service rejimi, Box sotuvini qayta ochish, cloud yuz tanish davomati.
+6. Keyingi bosqich: o‘rnatuvchini Authenticode bilan imzolash, Box
+   sotuvini qayta ochish, cloud yuz tanish davomati.
+
+Bajarildi (0.6.8): nazorat kompyuter yonganda avtomatik ishga tushadi —
+rejalashtirilgan vazifa, SYSTEM nomidan, tizimga kirish shart emas
+(`docs/INSTALLER.md`, "Avtomatik ishga tushish qanday ishlaydi").
 
 ## Ochiq qarorlar
 

@@ -169,10 +169,21 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
     except OSError:
         free_bytes = 0
 
+    # Navbat holati bitta so'rovda olinadi: uchta raqamning uchalasi ham
+    # cloud modelida allaqachon bor edi, lekin Windows yo'li faqat
+    # birinchisini (va uni ham noto'g'ri) yuborardi.
+    queue = _outbox_stats()
+
     payload = {
         "cameras_active": int(status.get("cameras_active") or 0),
         "disk_free_bytes": int(free_bytes),
-        "outbox_pending": int(_pending_events() or 0),
+        "outbox_pending": int(queue.get("pending") or 0),
+        # Kritik hodisa navbatda qolib ketsa — bu oddiy kechikish emas.
+        "outbox_critical_pending": int(queue.get("critical") or 0),
+        # Umidsiz deb tashlanganlar: noldan katta bo'lsa hodisa BUTUNLAY
+        # yo'qolgan.  "Yo'qolgan kritik hodisa 0" mezoni shu raqam bilan
+        # tekshiriladi.
+        "outbox_poisoned": int(queue.get("poisoned") or 0),
         # Jimgina ishlamay qolishni cloud shu uchtasidan biladi:
         # `analyzed`ga nisbatan `analysis_errors` ko'p bo'lsa tahlil
         # zanjiri buzilgan, `queue_errors` noldan katta bo'lsa hodisa
@@ -206,6 +217,12 @@ def _pending_events() -> Optional[int]:
     from chaqimchi_ai.local import cloud_link
 
     return cloud_link.pending_events()
+
+
+def _outbox_stats() -> Dict[str, Optional[int]]:
+    from chaqimchi_ai.local import cloud_link
+
+    return cloud_link.outbox_stats()
 
 
 # ── Jonli ko'rish va preview (media so'rovlari) ──────────────────────────

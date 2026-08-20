@@ -26,12 +26,16 @@ RESTORE = SCRIPTS / "restore_production.sh"
 CRITICAL_KEYS = ("CHAQIMCHI_CAMERA_SECRET_KEY", "CHAQIMCHI_SNAPSHOT_KEY")
 
 
+def _archive_contents() -> list[str]:
+    """`contents=(...)` — arxivga nima kirishi shu yerda hal bo'ladi."""
+    groups = re.findall(r"contents=\(([^)]*)\)", BACKUP.read_text(encoding="utf-8"))
+    assert groups, "arxiv mazmuni `contents=(...)` da yig'iladi"
+    return groups
+
+
 def test_the_archive_carries_the_encryption_keys() -> None:
-    source = BACKUP.read_text(encoding="utf-8")
-    tar_line = next(line for line in source.splitlines() if line.startswith("tar -C"))
-    assert "env.production" in tar_line, (
-        "sirlarsiz arxivdan kamera parollari va media tiklanmaydi"
-    )
+    for group in _archive_contents():
+        assert "env.production" in group, "sirlarsiz arxivdan kamera parollari va media tiklanmaydi"
 
 
 def test_the_backup_password_does_not_live_in_the_archived_env() -> None:
@@ -60,7 +64,7 @@ def test_the_restore_drill_does_not_touch_production() -> None:
     check_block = source[source.index('if [[ "$mode" == "check" ]]') :]
     guard = source[: source.index('if [[ "$mode" == "check" ]]')]
     assert "exit 0" in check_block.split("fi")[0], "mashq tiklashgacha bormasin"
-    for destructive in ("dropdb", "mc mirror --overwrite", "compose[@]}\" stop"):
+    for destructive in ("dropdb", "mc mirror --overwrite", 'compose[@]}" stop'):
         assert destructive not in guard, f"mashqdan oldin buzuvchi amal: {destructive}"
 
 
@@ -104,3 +108,76 @@ def test_the_backup_unit_example_matches_the_real_compose_file() -> None:
         if line.startswith("CHAQIMCHI_COMPOSE_FILE=")
     )
     assert (SCRIPTS.parent / compose).is_file(), f"{compose} repoda yo'q"
+
+
+# ── Kunlik arxiv media'ni ko'tarmaydi ───────────────────────────────────
+#
+# Haqiqiy holat: har kecha butun MinIO diskka `mc mirror` qilinardi,
+# arxiv 14 kun saqlanardi, ya'ni media hajmi diskda ~15 barobar
+# takrorlanardi.  96 GB server ikki-uch do'kondan keyin to'lardi va
+# birinchi belgi "disk 85%" degan Telegram xabari bo'lardi.
+
+UNITS = SCRIPTS.parent / "deploy"
+
+
+def test_the_daily_archive_leaves_media_out() -> None:
+    groups = _archive_contents()
+    daily = [g for g in groups if "postgres.dump" in g]
+    assert daily, "kunlik arxivda PostgreSQL dump bo'lishi kerak"
+    for group in daily:
+        assert "minio" not in group, "kunlik arxivga media kirmasin — disk shu sabab to'lardi"
+
+
+def test_media_backup_is_a_separate_opt_in_run() -> None:
+    source = BACKUP.read_text(encoding="utf-8")
+    assert "--media" in source, "media rejimi ataylab so'ralsin"
+    assert "chaqimchi-media-$stamp" in source, "media arxivi alohida nom oladi"
+    media = [g for g in _archive_contents() if "minio" in g]
+    assert media, "media rejimida MinIO arxivga kirishi kerak"
+
+
+def test_media_mirror_only_runs_in_media_mode() -> None:
+    """`mc mirror` — eng qimmat qadam; u har kecha ishlamasin."""
+    source = BACKUP.read_text(encoding="utf-8")
+    guard = source.rindex('if [[ "$with_media" == "1" ]]; then', 0, source.index("mc mirror src/"))
+    fi = source.index("\nfi", source.index("mc mirror src/"))
+    assert guard < source.index("mc mirror src/") < fi, "mirror shart ichida bo'lsin"
+
+
+def test_the_two_units_clean_up_different_files() -> None:
+    """Kunlik unit media arxivini o'chirib yubormasin va aksincha."""
+    daily = (UNITS / "chaqimchi-backup.service").read_text(encoding="utf-8")
+    media = (UNITS / "chaqimchi-backup-media.service").read_text(encoding="utf-8")
+    assert "chaqimchi-[0-9]*.tar.gz.enc" in daily, "kunlik tozalash faqat baza arxivlarini olsin"
+    assert "chaqimchi-media-*.tar.gz.enc" in media
+    assert "--media" in media, "haftalik unit media rejimida chaqirsin"
+    assert (UNITS / "chaqimchi-backup-media.timer").is_file()
+
+
+def test_the_snapshot_does_not_go_to_the_container_tmpfs() -> None:
+    """Konteynerning `/tmp` i 64 MB tmpfs — `cloud.db` o'sganda backup
+    jimgina yiqilardi va buni faqat tiklash kerak bo'lgan kuni bilardik."""
+    source = BACKUP.read_text(encoding="utf-8")
+    assert "/tmp/cloud-snapshot.db" not in source
+    assert "/app/data/cloud/.backup-snapshot.db" in source
+
+
+def test_restore_understands_both_archive_kinds() -> None:
+    source = RESTORE.read_text(encoding="utf-8")
+    assert 'kind="media"' in source and 'kind="baza"' in source
+    # Media arxivi bazani o'chirib yubormasin.
+    media_block = source[
+        source.index('if [[ "$kind" == "media" ]]; then', source.index("Haqiqiy tiklash")) :
+    ]
+    media_block = media_block[: media_block.index("exit 0")]
+    assert "dropdb" not in media_block, "media tiklash bazaga tegmasin"
+    assert "mc mirror" in media_block
+
+
+def test_missing_offsite_copy_is_reported() -> None:
+    """Zaxira faqat serverda yotsa — bu jim qolmasin."""
+    source = BACKUP.read_text(encoding="utf-8")
+    assert "RESTIC_REPOSITORY sozlanmagan" in source
+    preflight = (SCRIPTS / "production_preflight.py").read_text(encoding="utf-8")
+    assert "def check_backup(" in preflight
+    assert "RESTIC_REPOSITORY" in preflight

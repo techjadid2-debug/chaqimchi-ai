@@ -1,0 +1,13 @@
+# Haftalik media zaxirasi.  Yakshanba 04:30 — kunlik baza zaxirasi (03:30)
+# allaqachon tugagan payt, ya'ni ikkalasi bir vaqtda diskni talashmaydi.
+
+[Unit]
+Description=Chaqimchi Cloud haftalik media zaxirasi
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -87,7 +87,21 @@ alohida staging hostda restore drill o‘tkazing. Restore drill bajarilmaguncha
 ### 2.1 Kunlik avtomatik backup (majburiy)
 
 Deploy paytidagi backup yetarli emas: deploy bo‘lmagan har kun — backup
-bo‘lmagan kun. VPS’da bir marta o‘rnatiladi:
+bo‘lmagan kun.
+
+**Ikki xil zaxira bor va bu ataylab:**
+
+| Nima | Qachon | Hajmi | Nechta saqlanadi |
+|---|---|---|---|
+| Baza (PostgreSQL + `cloud.db` + kalitlar) | har kuni 03:30 | ~50–200 MB | 14 kun + tashqi nusxa |
+| Media (MinIO — rasm/kliplar) | yakshanba 04:30 | o‘nlab GB | 8 kun (2 nusxa) |
+
+Sabab: ilgari har kecha butun MinIO diskka nusxalanardi va arxiv 14 kun
+saqlanardi — media hajmi diskda ~15 barobar takrorlanib, 96 GB server
+ikki-uch do‘kondan keyin to‘lardi. Hisob-faktura va akkauntlar yo‘qolsa
+biznes to‘xtaydi; bir haftalik klip yo‘qolsa — yo‘q.
+
+VPS’da bir marta o‘rnatiladi:
 
 ```bash
 sudo mkdir -p /etc/chaqimchi
@@ -101,8 +115,29 @@ sudo systemctl start chaqimchi-backup.service   # birinchi sinov darhol
 systemctl list-timers chaqimchi-backup.timer    # keyingi ishga tushish vaqti
 ```
 
-Har kuni 03:30 da backup olinadi, 14 kundan eskilari o‘chiriladi.
+Har kuni 03:30 da baza backupi olinadi, 14 kundan eskilari o‘chiriladi.
 Holatni tekshirish: `journalctl -u chaqimchi-backup.service -n 20`.
+
+Media uchun ikkinchi unit (bir marta):
+
+```bash
+sudo cp deploy/chaqimchi-backup-media.service deploy/chaqimchi-backup-media.timer \
+  /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chaqimchi-backup-media.timer
+sudo systemctl start chaqimchi-backup-media.service   # birinchi sinov
+```
+
+Qo‘lda media zaxirasi: `./scripts/backup_production.sh --media`.
+
+**Tashqi nusxa.** `RESTIC_REPOSITORY` sozlanmasa arxiv faqat shu serverda
+yotadi va server bilan birga yo‘qoladi. Kunlik arxiv endi kichik, ya’ni
+bepul 10–15 GB lik ombor bir necha oyga yetadi. Preflight buni tekshiradi:
+
+```bash
+python3 scripts/production_preflight.py --env-file .env.production \
+  --backup-env /etc/chaqimchi/backup.env
+```
 
 ### 2.2 Restore mashqi (oyiga 1 marta)
 
@@ -125,6 +160,11 @@ Skript to'rt narsani tekshiradi va bittasi ham yetishmasa xato beradi:
 | MinIO obyektlari soni | rasm va kliplar |
 | **Shifrlash kalitlari** (`CHAQIMCHI_CAMERA_SECRET_KEY`, `CHAQIMCHI_SNAPSHOT_KEY`) | ularsiz kamera parollari va barcha media o'qib bo'lmaydi |
 
+Skript arxiv turini mazmunidan aniqlaydi: baza arxivida MinIO tekshiruvi
+o‘tkazilmaydi (u yerda media ataylab yo‘q), media arxivida esa faqat
+obyektlar soni tekshiriladi. Media arxivini `--restore` qilish bazaga
+tegmaydi va aksincha.
+
 Natijani sana bilan quyidagi jadvalga yozing.
 
 ### 2.3 Haqiqiy tiklash (server yo'qolganda)
@@ -137,9 +177,11 @@ Skript `TIKLASH` deb yozishni so'raydi, so'ng joriy `.env.production` ni
 zaxiralab, sozlamalarni, PostgreSQL'ni, `cloud.db` ni va MinIO'ni
 arxivdagisiga almashtiradi. Undan keyin qo'lda ikki ish qoladi:
 
-1. Yuz modellari — `python scripts/fetch_face_models.py` (ular arxivga
+1. Rasm va kliplar — eng yangi `chaqimchi-media-*.tar.gz.enc` arxivini
+   ham `--restore` qiling (ular kunlik arxivda yo'q)
+2. Yuz modellari — `python scripts/fetch_face_models.py` (ular arxivga
    ataylab kirmaydi: o'zgarmaydi va ~180 MB joy egallaydi)
-2. Telegram webhook — `python scripts/set_telegram_webhook.py`
+3. Telegram webhook — `python scripts/set_telegram_webhook.py`
 
 Restore mashqlari jurnali:
 

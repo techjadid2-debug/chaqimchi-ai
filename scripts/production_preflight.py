@@ -166,15 +166,52 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     return errors, warnings
 
 
+#: Zaxira sozlamalari alohida faylda turadi (`chaqimchi-backup.service`
+#: shuni o'qiydi), shuning uchun `.env.production` bilan bir qatorda
+#: tekshiriladi.
+DEFAULT_BACKUP_ENV = Path("/etc/chaqimchi/backup.env")
+
+
+def check_backup(path: Path) -> List[str]:
+    """Zaxira nusxa server bilan birga yo'qolmaydimi.
+
+    Server bir marta to'lov uzilishi sabab o'chgan.  Agar zaxira faqat
+    o'sha serverda yotsa — hisob-faktura, obuna va portal loginlari u
+    bilan birga ketadi.  Bu tekshiruv shuni ogohlantiradi.
+    """
+    if not path.is_file():
+        return [
+            f"{path} topilmadi — kunlik zaxira o'rnatilmagan bo'lishi mumkin "
+            "(docs/PRODUCTION_RUNBOOK.md, 2.1-bo'lim)"
+        ]
+    values = read_env(path)
+    warnings: List[str] = []
+    if not values.get("RESTIC_REPOSITORY", "").strip():
+        warnings.append(
+            "RESTIC_REPOSITORY sozlanmagan: zaxira faqat shu serverda yotibdi. "
+            "Server yo'qolsa hisob-faktura va akkauntlar bilan birga zaxira ham yo'qoladi"
+        )
+    elif not values.get("RESTIC_PASSWORD", "").strip():
+        warnings.append("RESTIC_REPOSITORY bor, lekin RESTIC_PASSWORD yo'q — nusxa chiqmaydi")
+    return warnings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Cloud production preflight")
     parser.add_argument("--env-file", type=Path, default=Path(".env.production"))
+    parser.add_argument(
+        "--backup-env",
+        type=Path,
+        default=DEFAULT_BACKUP_ENV,
+        help="zaxira sozlamalari fayli (chaqimchi-backup.service o'qiydigan)",
+    )
     args = parser.parse_args()
     if not args.env_file.is_file():
         print(f"XATO: {args.env_file} topilmadi")
         return 1
     mode = stat.S_IMODE(args.env_file.stat().st_mode)
     errors, warnings = validate(read_env(args.env_file))
+    warnings.extend(check_backup(args.backup_env))
     if mode & 0o077:
         errors.append(f"{args.env_file} ruxsati {mode:o}; 600 bo'lishi shart")
     for warning in warnings:

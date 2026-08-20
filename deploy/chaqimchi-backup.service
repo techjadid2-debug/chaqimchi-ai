@@ -1,11 +1,13 @@
-# Chaqimchi Cloud kunlik backup.
+# Chaqimchi Cloud kunlik backup — FAQAT BAZA.
 #
 # Ilgari backup FAQAT deploy paytida olinardi (scripts/deploy_cloud.sh).
 # Uch hafta deploy bo'lmasa va VPS o'lsa — uch haftalik hodisa, hisob-faktura
-# va akkauntlar yo'qolardi.  Bu unit backup'ni deploy'dan uzadi: timer uni
-# har kuni chaqiradi, skript esa deploy'dagi bilan aynan bitta
-# (scripts/backup_production.sh — PostgreSQL + SQLite cloud-state + MinIO,
-# AES-256 bilan shifrlangan).
+# va akkauntlar yo'qolardi.  Bu unit backup'ni deploy'dan uzadi.
+#
+# Media (rasm/kliplar) bu yerda YO'Q — u haftalik `chaqimchi-backup-media`
+# unitida.  Sabab: har kecha butun MinIO nusxalanib, arxiv 14 kun saqlanardi
+# va media hajmi diskda ~15 barobar takrorlanardi.  96 GB server ikki-uch
+# do'kondan keyin to'lardi.  Kunlik arxiv endi ~50-200 MB.
 #
 # O'rnatish (VPS'da, root):
 #   cp deploy/backup.env.example /etc/chaqimchi/backup.env  # va tahrirlang
@@ -16,7 +18,7 @@
 #   systemctl start chaqimchi-backup.service   # birinchi sinov darhol
 
 [Unit]
-Description=Chaqimchi Cloud backup (PostgreSQL + cloud-state + MinIO)
+Description=Chaqimchi Cloud kunlik backup (PostgreSQL + cloud-state)
 Wants=docker.service
 After=docker.service network-online.target
 # Zaxira yiqilsa jim qolmasin — Telegramga xabar ketadi.
@@ -28,9 +30,11 @@ User=deploy
 WorkingDirectory=/home/deploy/chaqimchi-ai
 EnvironmentFile=/etc/chaqimchi/backup.env
 ExecStart=/home/deploy/chaqimchi-ai/scripts/backup_production.sh
-# 14 kundan eski arxivlar o'chiriladi — disk backup tufayli to'lib qolmasin.
+# 14 kundan eski BAZA arxivlari o'chiriladi.  Naqsh `chaqimchi-[0-9]*`:
+# media arxivlari (`chaqimchi-media-*`) bu qoidaga tushmasin — ular
+# o'z unitida, boshqa muddat bilan tozalanadi.
 # Muhim nusxalarni restic/tashqi joyga ko'chirish backup skriptining o'zida
 # (RESTIC_REPOSITORY berilsa) bajariladi.
-ExecStartPost=/usr/bin/find ${CHAQIMCHI_BACKUP_DIR} -name chaqimchi-*.tar.gz.enc -mtime +14 -delete
+ExecStartPost=/usr/bin/find ${CHAQIMCHI_BACKUP_DIR} -name chaqimchi-[0-9]*.tar.gz.enc -mtime +14 -delete
 Nice=10
 IOSchedulingClass=idle

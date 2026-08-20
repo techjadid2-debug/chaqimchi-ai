@@ -54,11 +54,25 @@ echo "→ Arxiv ochilmoqda…"
 openssl enc -d -aes-256-cbc -pbkdf2 -pass env:CHAQIMCHI_BACKUP_PASSWORD \
   -in "$archive" | tar -C "$stage" -xzf -
 
+# Ikki xil arxiv bor (`backup_production.sh` ga qarang):
+#   baza  — PostgreSQL + cloud.db + kalitlar (har kuni)
+#   media — MinIO'dagi rasm/kliplar + kalitlar (haftada bir)
+# Turini mazmunidan aniqlaymiz, nomidan emas: fayl qayta nomlangan
+# bo'lishi mumkin.
+if [[ -f "$stage/postgres.dump" ]]; then
+  kind="baza"
+elif [[ -d "$stage/minio" ]]; then
+  kind="media"
+else
+  echo "✗ Arxiv tanilmadi: ichida na postgres.dump, na minio/ bor." >&2
+  exit 1
+fi
+
 # ── Tekshiruv (ikkala rejimda ham) ──────────────────────────────────────
 fail=0
 note() { printf '  %-38s %s\n' "$1" "$2"; }
 
-echo "→ Mazmuni tekshirilmoqda:"
+echo "→ Mazmuni tekshirilmoqda (arxiv turi: $kind):"
 
 # `pg_restore` hostda bo'lmasligi mumkin — PostgreSQL konteynerda ishlaydi.
 # Vositaning yo'qligi "dump bo'sh" degani EMAS: ikkisini aralashtirib
@@ -72,7 +86,9 @@ list_dump() {
   fi
 }
 
-if [[ -s "$stage/postgres.dump" ]]; then
+if [[ "$kind" == "media" ]]; then
+  note "PostgreSQL dump" "bu arxivda yo'q (media arxivi)"
+elif [[ -s "$stage/postgres.dump" ]]; then
   listing="$(list_dump "$stage/postgres.dump" || true)"
   if [[ -z "$listing" ]]; then
     note "PostgreSQL dump" "TEKSHIRIB BO'LMADI (pg_restore ishga tushmadi)"
@@ -89,7 +105,9 @@ else
   note "PostgreSQL dump" "YO'Q"; fail=1
 fi
 
-if [[ -s "$stage/cloud-state/cloud.db" ]]; then
+if [[ "$kind" == "media" ]]; then
+  note "cloud.db" "bu arxivda yo'q (media arxivi)"
+elif [[ -s "$stage/cloud-state/cloud.db" ]]; then
   # Yaxlitlik + haqiqiy mazmun: bo'sh, lekin "sog'lom" baza ham
   # integrity_check dan o'tadi.
   summary="$(python3 - "$stage/cloud-state/cloud.db" <<'PY'
@@ -113,7 +131,17 @@ else
 fi
 
 objects="$(find "$stage/minio" -type f 2>/dev/null | wc -l | tr -d ' ')"
-note "MinIO obyektlari" "$objects ta"
+if [[ "$kind" == "media" ]]; then
+  note "MinIO obyektlari" "$objects ta"
+  if [[ "$objects" -eq 0 ]]; then
+    note "MinIO obyektlari" "BO'SH — media arxivi ma'nosiz"
+    fail=1
+  fi
+else
+  # Kunlik arxivda media ATAYLAB yo'q (disk 15 barobar shishmasligi uchun).
+  # Rasm va kliplar alohida `chaqimchi-media-*` arxividan tiklanadi.
+  note "MinIO obyektlari" "kunlik arxivda yo'q — media arxividan tiklanadi"
+fi
 
 # Eng muhim tekshiruv: kalitlarsiz tiklangan baza yaroqsiz.  Kamera
 # parollari va barcha media aynan shu ikki kalit bilan shifrlangan.
@@ -146,12 +174,31 @@ fi
 
 # ── Haqiqiy tiklash ─────────────────────────────────────────────────────
 echo
-echo "DIQQAT: joriy baza, fayllar va sozlamalar O'CHADI va arxivdagisiga"
-echo "almashadi. Compose: $compose_file"
+if [[ "$kind" == "media" ]]; then
+  echo "DIQQAT: MinIO'dagi rasm va kliplar arxivdagisiga almashadi."
+  echo "Baza, sozlamalar va akkauntlarga TEGILMAYDI. Compose: $compose_file"
+else
+  echo "DIQQAT: joriy baza, akkauntlar va sozlamalar O'CHADI va arxivdagisiga"
+  echo "almashadi. Rasm/kliplar tegilmaydi — ular media arxivida."
+  echo "Compose: $compose_file"
+fi
 read -r -p "Davom etish uchun 'TIKLASH' deb yozing: " answer
 [[ "$answer" == "TIKLASH" ]] || { echo "Bekor qilindi."; exit 1; }
 
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
+
+if [[ "$kind" == "media" ]]; then
+  # Media arxivida `env.production` bor (kalitlar uchun), lekin u joriy
+  # sozlamalarni ALMASHTIRMAYDI: media haftalik, sozlamalar esa undan
+  # keyin o'zgargan bo'lishi mumkin.
+  echo "→ MinIO tiklanmoqda…"
+  "${compose[@]}" run --rm --no-deps --entrypoint sh \
+    -v "$stage/minio:/backup" minio-init -c \
+    'mc alias set dst http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing dst/"$CHAQIMCHI_S3_BUCKET" && mc mirror --overwrite /backup dst/"$CHAQIMCHI_S3_BUCKET"'
+  echo
+  echo "✓ Media tiklandi."
+  exit 0
+fi
 
 echo "→ Sozlamalar tiklanmoqda ($env_file)…"
 if [[ -f "$env_file" ]]; then
@@ -172,17 +219,14 @@ echo "→ PostgreSQL tiklanmoqda…"
 echo "→ cloud.db tiklanmoqda…"
 "${compose[@]}" cp "$stage/cloud-state/cloud.db" cloud:/app/data/cloud/cloud.db
 
-echo "→ MinIO tiklanmoqda…"
-"${compose[@]}" run --rm --no-deps --entrypoint sh \
-  -v "$stage/minio:/backup" minio-init -c \
-  'mc alias set dst http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing dst/"$CHAQIMCHI_S3_BUCKET" && mc mirror --overwrite /backup dst/"$CHAQIMCHI_S3_BUCKET"'
-
 echo "→ Xizmatlar ko'tarilmoqda…"
 "${compose[@]}" up -d --wait --wait-timeout 180
 
 echo
 echo "✓ Tiklandi."
 echo "Qolgan qo'l ishlari:"
-echo "  1. Yuz modellari: python scripts/fetch_face_models.py (arxivga kirmaydi)"
-echo "  2. Telegram webhook: python scripts/set_telegram_webhook.py"
-echo "  3. /health va admin panelga kirishni tekshiring"
+echo "  1. Rasm va kliplar: eng yangi chaqimchi-media-*.tar.gz.enc arxivini"
+echo "     shu skript bilan --restore qiling (ular kunlik arxivda yo'q)"
+echo "  2. Yuz modellari: python scripts/fetch_face_models.py (arxivga kirmaydi)"
+echo "  3. Telegram webhook: python scripts/set_telegram_webhook.py"
+echo "  4. /health va admin panelga kirishni tekshiring"

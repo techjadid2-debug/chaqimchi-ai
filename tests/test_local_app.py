@@ -581,6 +581,95 @@ def test_old_config_without_rules_is_healed(tmp_path: Path, monkeypatch) -> None
     )
 
 
+def test_old_cameras_get_a_record_url_so_clips_start_working(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Yangilanishdan oldin saqlangan kameralar ham klip yoza olsin.
+
+    `record_url` bo'lmasa kameraga halqa buferi berilmaydi
+    (`retail/service.py`: `RingBuffer(...) if camera.record_url else None`),
+    ya'ni `save_clip` qoidasi jimgina bajarilmaydi — hodisa ketadi,
+    videosi esa yo'q.
+
+    Yangi kamera qo'shilganda u 0.6.9 dan beri to'ldiriladi, lekin
+    BUNGACHA saqlanganlar bo'sh qolardi.  Jonli do'konda aynan shu holat
+    (2026-08-21): `camera_tampered` ikki marta chiqqan, klip NOL ta.
+    """
+    from chaqimchi_ai.local import app as app_module
+    from chaqimchi_ai.local import config_store
+
+    monkeypatch.setattr(
+        app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (200, "OK")
+    )
+    monkeypatch.setattr(app_module, "_record_url_backfilled", False)
+
+    config_store.save_camera(
+        camera_id="camera-01",
+        stream_url="rtsp://u:p@10.0.0.5:554/Streaming/Channels/102",
+        label="Kirish",
+        record_url=None,
+        priority="retail",
+    )
+    assert not config_store.cameras()[0].get("record_url")
+
+    listed = client.get("/api/setup/cameras")
+    assert listed.status_code == 200
+    assert listed.json()["cameras"][0]["record_url_set"] is True
+
+    stored = config_store.cameras()[0]["record_url"]
+    assert "101" in stored, "substream asosiy oqimga o'girilsin"
+    saved = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
+    assert saved["retail"]["cameras"][0].get("record_url"), (
+        "to'ldirish faylga ham yozilsin — keyingi restartda ham tursin"
+    )
+
+
+def test_backfill_never_stores_an_unreachable_guess(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Tekshirilmagan taxmin yozilsa ffmpeg abadiy xato aylanardi.
+
+    Bu qoida yangi kamera saqlashda allaqachon bor edi; to'ldirish ham
+    unga bo'ysunishi shart.
+    """
+    from chaqimchi_ai.local import app as app_module
+    from chaqimchi_ai.local import config_store
+
+    monkeypatch.setattr(
+        app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (404, "Not Found")
+    )
+    monkeypatch.setattr(app_module, "_record_url_backfilled", False)
+
+    config_store.save_camera(
+        camera_id="camera-01",
+        stream_url="rtsp://u:p@10.0.0.5:554/Streaming/Channels/102",
+        label="Kirish",
+        record_url=None,
+        priority="retail",
+    )
+    client.get("/api/setup/cameras")
+    assert config_store.cameras()[0].get("record_url") is None
+
+
+def test_backfill_does_not_overwrite_a_url_the_customer_set(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Mijoz o'zi kiritgan manzil ustiga yozilmasin."""
+    from chaqimchi_ai.local import app as app_module
+    from chaqimchi_ai.local import config_store
+
+    monkeypatch.setattr(app_module, "_record_url_backfilled", False)
+    config_store.save_camera(
+        camera_id="camera-01",
+        stream_url="rtsp://u:p@10.0.0.5:554/Streaming/Channels/102",
+        label="Kirish",
+        record_url="rtsp://u:p@10.0.0.5:554/qolga/yozilgan",
+        priority="retail",
+    )
+    client.get("/api/setup/cameras")
+    assert config_store.cameras()[0]["record_url"].endswith("/qolga/yozilgan")
+
+
 # ── Klip uchun asosiy oqim (record_url) ──────────────────────────────────
 #
 # Bag tarixi: `record_url` hech qachon to'ldirilmasdi — kliplar Windows'da

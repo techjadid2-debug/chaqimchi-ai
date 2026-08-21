@@ -717,6 +717,7 @@ class CameraSaveBody(BaseModel):
 @app.get("/api/setup/cameras")
 async def list_cameras() -> Dict[str, Any]:
     """Saqlangan kameralar.  RTSP paroli hech qachon qaytarilmaydi."""
+    _backfill_record_urls()
     return {
         "cameras": [
             {
@@ -766,6 +767,52 @@ async def save_camera(body: CameraSaveBody) -> Dict[str, Any]:
         "record_url_found": bool(record_url),
         **config_store.summary(),
     }
+
+
+_record_url_backfilled = False
+
+
+def _backfill_record_urls() -> None:
+    """Eski kameralarga klip oqimini bir marta to'ldiradi.
+
+    `record_url` bo'lmasa kameraga halqa buferi berilmaydi
+    (`retail/service.py`: `RingBuffer(...) if camera.record_url else None`),
+    ya'ni `save_clip` qoidasi JIMGINA bajarilmaydi — hodisa cloudga
+    ketadi, videosi esa yo'q.  Jonli do'konda aynan shu holat kuzatildi
+    (2026-08-21): `camera_tampered` ikki marta chiqqan, klip NOL ta.
+
+    Yangi kamera saqlanganda manzil 0.6.9 dan beri to'ldiriladi, lekin
+    bungacha saqlanganlar bo'sh qolgan.
+
+    **Taxmin tekshirilmasdan yozilmaydi.**  Ishlamaydigan manzil
+    saqlansa ffmpeg abadiy xato aylanardi — buni alohida test
+    qo'riqlaydi (`test_unreachable_main_stream_is_not_stored`).
+
+    Bir jarayonda bir marta: har ro'yxat so'rovida tarmoqni
+    tekshirmaymiz.
+    """
+    global _record_url_backfilled
+    if _record_url_backfilled:
+        return
+    _record_url_backfilled = True
+    for item in config_store.cameras():
+        if item.get("record_url"):
+            continue
+        stream = str(item.get("stream_url") or "").strip()
+        if not stream:
+            continue
+        verified = _verified_record_url(stream)
+        if not verified:
+            continue
+        config_store.save_camera(
+            camera_id=str(item.get("id")),
+            stream_url=stream,
+            label=str(item.get("label") or item.get("id") or ""),
+            record_url=verified,
+            priority=str(item.get("priority") or "retail"),
+            codec=(item.get("codec") or None),
+        )
+        logger.info("Klip oqimi to'ldirildi: %s", item.get("id"))
 
 
 def _verified_record_url(stream_url: str) -> Optional[str]:

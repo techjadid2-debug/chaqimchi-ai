@@ -120,11 +120,18 @@ def _heal(raw: Dict[str, Any]) -> Dict[str, Any]:
     narsa talab qilinmaydi.
     """
     retail = raw.get("retail")
-    if isinstance(retail, dict) and not retail.get("rules_path"):
+    if not isinstance(retail, dict):
+        return raw
+
+    changed = False
+    if not retail.get("rules_path"):
         rules = paths.rules_path()
         if rules.is_file():
             retail["rules_path"] = str(rules)
-            _write_raw_unlocked(raw)
+            changed = True
+
+    if changed:
+        _write_raw_unlocked(raw)
     return raw
 
 

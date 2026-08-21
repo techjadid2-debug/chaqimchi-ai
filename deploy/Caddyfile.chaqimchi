@@ -27,9 +27,42 @@
 	header X-Robots-Tag "noindex, nofollow"
 }
 
+# Statik fayllar uchun kesh muddati.
+#
+# Bungacha `Cache-Control` HECH QAYERDA yo'q edi.  Starlette faqat `ETag`
+# va `Last-Modified` qo'yadi, ya'ni brauzer har safar "o'zgardimi?" deb
+# so'rab chiqardi: qayta kelgan mijoz uchun 14 ta bekorga borib-kelish.
+# Toshkentdan Germaniyagacha bitta borib-kelish ~120 ms (o'lchandi).
+#
+# Uch xil muddat, chunki fayllar uch xil:
+#   - `?v=<hash>` bor  → nomi mazmundan chiqadi, hech qachon o'zgarmaydi;
+#   - rasm            → nomida `-v1`/`-v2` bor, yangisi yangi nom oladi;
+#   - qolgani         → `owner.css`, `icons.svg` — versiyasiz, ya'ni
+#                       tuzatish tez yetishi kerak.  5 daqiqa: seans
+#                       ichidagi takror so'rovlarni yo'qotadi, lekin
+#                       nosozlik tuzatilsa hamma darrov oladi.
+(static_cache) {
+	@versioned {
+		path /assets/*
+		query v=*
+	}
+	header @versioned Cache-Control "public, max-age=31536000, immutable"
+
+	@images path /assets/*.webp /assets/*.jpg /assets/*.png /assets/*.svg
+	header @images Cache-Control "public, max-age=2592000"
+
+	@other_assets {
+		path /assets/*
+		not query v=*
+		not path /assets/*.webp /assets/*.jpg /assets/*.png /assets/*.svg
+	}
+	header @other_assets Cache-Control "public, max-age=300"
+}
+
 # ── Landing (marketing) ──────────────────────────────────────────────────
 chaqimchi.uz {
 	import security
+	import static_cache
 	encode zstd gzip
 	# Landing + ochiq sahifalar + public API (lead, narx, pay callback).
 	# Panellar bu yerdan subdomenlarga 301 bo'ladi (ilova ichida).
@@ -48,12 +81,14 @@ chaqimchi.uz {
 
 www.chaqimchi.uz {
 	import security
+	import static_cache
 	redir https://chaqimchi.uz{uri} permanent
 }
 
 # ── API: qurilmalar, to'lov, Telegram (ENG BARQAROR shartnoma) ──────────
 api.chaqimchi.uz {
 	import security
+	import static_cache
 	import noindex
 	encode zstd gzip
 	@allowed path /api/* /health /releases/* /downloads/* /robots.txt
@@ -80,6 +115,7 @@ api.chaqimchi.uz {
 # ── Mijoz paneli ─────────────────────────────────────────────────────────
 app.chaqimchi.uz {
 	import security
+	import static_cache
 	import noindex
 	encode zstd gzip
 	@allowed path / /owner /owner/* /assets/* /vendor/* /robots.txt /api/v1/owner/* /api/v1/owner* /api/v1/auth/* /api/v1/public/urls /api/v1/public/windows-release /pay/* /api/v1/invoices/* /api/v1/payments/*
@@ -104,6 +140,7 @@ app.chaqimchi.uz {
 # ── Montajchi (hamkor) portali ───────────────────────────────────────────
 partner.chaqimchi.uz {
 	import security
+	import static_cache
 	import noindex
 	encode zstd gzip
 	@allowed path / /installer /installer/* /installer-guide /assets/* /vendor/* /robots.txt /api/v1/auth/* /api/v1/installer/* /api/v1/public/urls
@@ -128,6 +165,7 @@ partner.chaqimchi.uz {
 # ── Admin (faqat egasi) ──────────────────────────────────────────────────
 admin.chaqimchi.uz {
 	import security
+	import static_cache
 	import noindex
 	encode zstd gzip
 	# Kelajakda VPN/IP cheklovi uchun tayyor joy (hozircha parol bilan):
@@ -155,6 +193,7 @@ admin.chaqimchi.uz {
 # ── Yuklab olish (keyin CDN'ga DNS bilan ko'chadi) ───────────────────────
 dl.chaqimchi.uz {
 	import security
+	import static_cache
 	import noindex
 	encode zstd gzip
 	@allowed path / /downloads/* /releases/* /install /assets/* /robots.txt /api/v1/public/*
@@ -179,6 +218,7 @@ dl.chaqimchi.uz {
 # ── Hujjatlar (SEO ochiq, statik) ────────────────────────────────────────
 docs.chaqimchi.uz {
 	import security
+	import static_cache
 	encode zstd gzip
 	@allowed path / /ornatish-windows /nvr-hikvision /nvr-dahua /nvr-uniview /muammolar /xavfsizlik /docs-static/* /assets/* /robots.txt
 	handle @allowed {

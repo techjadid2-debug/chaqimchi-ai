@@ -145,3 +145,27 @@ def test_har_bir_reverse_proxy_haqiqiy_mijoz_manzilini_yuboradi() -> None:
             f"{guards} tasida X-Forwarded-For almashtirilyapti — qolganida "
             "mijoz o'z manzilini o'zi yozib yubora oladi"
         )
+
+
+def test_statik_fayllarda_kesh_muddati_bor() -> None:
+    """`Cache-Control` bo'lmasa brauzer har safar qayta so'rab chiqadi.
+
+    Starlette `StaticFiles` faqat `ETag` va `Last-Modified` qo'yadi —
+    ular "o'zgardimi?" degan savolga javob beradi, lekin savolning
+    O'ZINI yo'qotmaydi.  Natijada qayta kelgan mijoz bosh sahifa uchun
+    14 ta bekorga borib-kelish qiladi; Toshkentdan serverga bitta
+    borib-kelish ~120 ms (jonli o'lchov).
+
+    Mazmun bo'yicha nomlangan fayl (`?v=<hash>`) hech qachon o'zgarmaydi,
+    ya'ni uni bir yilga keshlash xavfsiz.
+    """
+    for name, path in CADDYFILES.items():
+        text = path.read_text(encoding="utf-8")
+        assert "Cache-Control" in text, (
+            f"{path.name} ({name}): statik fayllar uchun Cache-Control yo'q — "
+            "keshlash ishlamaydi va har tashrifda hamma fayl qayta so'raladi"
+        )
+        assert "immutable" in text, (
+            f"{path.name} ({name}): `?v=<hash>` li fayllar uchun `immutable` "
+            "yo'q — mazmun bo'yicha nomlangan fayl bekorga qayta so'raladi"
+        )

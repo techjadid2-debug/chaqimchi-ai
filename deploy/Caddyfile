@@ -7,6 +7,25 @@
         # o'tilardi.
         header_up X-Forwarded-For {remote_host}
     }
+    # Statik fayllar keshi — sabab `Caddyfile.chaqimchi` dagi bilan bir
+    # xil: `Cache-Control` yo'q bo'lsa brauzer har safar "o'zgardimi?"
+    # deb so'rab chiqadi.
+    @versioned {
+        path /assets/*
+        query v=*
+    }
+    header @versioned Cache-Control "public, max-age=31536000, immutable"
+
+    @images path /assets/*.webp /assets/*.jpg /assets/*.png /assets/*.svg
+    header @images Cache-Control "public, max-age=2592000"
+
+    @other_assets {
+        path /assets/*
+        not query v=*
+        not path /assets/*.webp /assets/*.jpg /assets/*.png /assets/*.svg
+    }
+    header @other_assets Cache-Control "public, max-age=300"
+
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"

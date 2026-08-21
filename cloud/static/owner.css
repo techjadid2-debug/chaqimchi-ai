@@ -115,6 +115,8 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .camera-card .shot.empty { display: flex; align-items: center; justify-content: center; color: #8a978f; font-size: 12px; }
 .camera-card .meta { display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 13px; }
 .camera-card .meta b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Kamera holati so'z bilan: rangni ko'rmaydigan mijoz ham tushunsin. */
+.camera-card .meta .sub { color: var(--muted); font-size: 12px; flex: none; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #b9c4be; flex: none; }
 .dot.on { background: #2ac976; }
 .dot.off { background: var(--danger); }
@@ -149,6 +151,9 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
   font-size: 13px; font-weight: 650; cursor: pointer;
 }
 .chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+/* Bir-biriga tegishli chiplar (masalan xaritadagi vaqt oralig'i) —
+   qolganlaridan ko'z bilan ajralib tursin. */
+.chip-group { display: inline-flex; gap: 6px; }
 
 table.events { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.events th, table.events td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); }
@@ -219,6 +224,8 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
 .face-item figcaption { font-size: .72rem; margin-top: 4px; }
 .face-item small { display: block; opacity: .65; }
 .face-unknown b { opacity: .6; }
+/* "Shablon qilish" — tanilmagan kadrni xodimga biriktirish. */
+.face-assign { width: 100%; margin-top: 4px; font-size: .72rem; padding: 4px 6px; min-height: 0; }
 /* Xodimlar ro'yxati: har qator — rasm, ism va tugmalar.  Telefonda
    tugmalar pastga tushadi, barmoq o'lchami saqlanadi. */
 .staff-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--line); }
@@ -228,6 +235,16 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
 .staff-main b { display: block; }
 .staff-main small { color: var(--muted); font-size: .78rem; }
 .staff-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Xodimning hamma shabloni yonma-yon: qaysi biri xira ekanini ko'rib,
+   o'sha bittasini o'chirish mumkin bo'lsin. */
+.staff-faces { display: flex; gap: 6px; flex: none; }
+.staff-face-wrap { position: relative; display: inline-flex; }
+.face-del {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;
+  border-radius: 50%; border: 1px solid var(--line); background: #fff;
+  color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; padding: 0;
+}
+.face-del:hover { color: var(--danger); border-color: var(--danger); }
 /* Fayl tanlash maydoni ko'rinmaydi — uni tugma ochadi (telefonda
    to'g'ridan-to'g'ri kamera). */
 .staff-file { display: none; }

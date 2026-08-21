@@ -511,3 +511,49 @@ def test_describe_result_is_cached_briefly(monkeypatch) -> None:
 
     assert calls["n"] == 1, "ikkinchi chaqiruv keshdan qaytsin"
     camera_probe._DESCRIBE_CACHE.clear()
+
+
+def test_h265_substream_is_tried_before_mjpeg_and_main_stream() -> None:
+    """H.265 kamerasi ham qo'shilishi kerak.
+
+    Ilgari tartib "H.264 substream → H.264 main → MJPEG → qolgani" edi va
+    H.265 eng oxirida turardi.  Sinaladigan oqim esa faqat BITTA edi,
+    ya'ni H.265 substream'li NVR bilan kelgan mijoz kamerani umuman
+    qo'sha olmasdi — garchi FFmpeg HEVC ni dekodlay olsa ham.
+    """
+    profiles = [
+        onvif_client.StreamProfile(
+            token="main-h264", name="main", encoding="H264",
+            width=1920, height=1080, uri="rtsp://cam/main",
+        ),
+        onvif_client.StreamProfile(
+            token="sub-h265", name="sub", encoding="H265",
+            width=640, height=360, uri="rtsp://cam/sub265",
+        ),
+        onvif_client.StreamProfile(
+            token="mjpeg", name="mjpeg", encoding="JPEG",
+            width=640, height=360, uri="rtsp://cam/mjpeg",
+        ),
+    ]
+
+    order = [profile.token for profile in onvif_client.rank_profiles(profiles)]
+
+    assert order == ["sub-h265", "main-h264", "mjpeg"]
+
+
+def test_h264_substream_still_wins() -> None:
+    """Eng yengil oqim afzalligi saqlanadi: i5-4590 da bu muhim."""
+    profiles = [
+        onvif_client.StreamProfile(
+            token="sub-h265", name="sub", encoding="H265",
+            width=640, height=360, uri="rtsp://cam/sub265",
+        ),
+        onvif_client.StreamProfile(
+            token="sub-h264", name="sub", encoding="H264",
+            width=640, height=360, uri="rtsp://cam/sub264",
+        ),
+    ]
+
+    best = onvif_client.pick_best_profile(profiles)
+
+    assert best is not None and best.token == "sub-h264"

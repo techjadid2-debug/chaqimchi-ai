@@ -405,10 +405,22 @@ def find_working_url(
     return None, None, last
 
 
+#: ONVIF bergan oqimlardan ko'pi bilan shuncha tasi sinaladi.  Ko'p
+#: kanalli NVR'da har profil uchun 6 soniya kutish sehrgarni juda
+#: sekinlashtirardi; amalda ishlaydigan oqim doim birinchi uchtada.
+MAX_ONVIF_PROFILE_TRIES = 3
+
+
 def _try_onvif(
     host: str, *, username: str, password: str, timeout_sec: int
 ) -> Tuple[Optional[str], Optional[str], ProbeResult]:
-    """ONVIF orqali oqim manzilini olib, kadr kelishini tekshiradi."""
+    """ONVIF oqimlarini birma-bir sinab, ROSTDAN ishlaydiganini tanlaydi.
+
+    Ilgari faqat BITTA (tavsiya etilgan) oqim sinalardi va kadr kelmasa
+    "NVR'ni H.264 ga o'zgartiring" deyilardi.  H.265 substream'li kamera
+    shu sababli qo'shilmasdi — garchi FFmpeg uni dekodlay olsa ham, va
+    garchi o'sha kamerada ishlaydigan boshqa oqim bo'lsa ham.
+    """
     from chaqimchi_ai.local import onvif_client
 
     clean_host = re.sub(r"^rtsps?://", "", host.strip(), flags=re.I).split("/")[0].split(":")[0]
@@ -417,18 +429,22 @@ def _try_onvif(
     answer = onvif_client.describe(clean_host, username=username, password=password, port=0)
     if not answer.ok:
         return None, None, ProbeResult(ok=False, error="", hint="")
-    best = onvif_client.pick_best_profile(answer.profiles)
-    if best is None or not best.uri:
+    ordered = [item for item in onvif_client.rank_profiles(answer.profiles) if item.uri]
+    if not ordered:
         return None, None, ProbeResult(ok=False, error="", hint="")
-    url = onvif_client.with_credentials(best.uri, username, password, host=clean_host)
-    result = grab_frame(url, timeout_sec=timeout_sec)
-    if result.ok:
-        brand = onvif_client.normalise_brand(answer.device.brand) or "ONVIF"
-        logger.info("ONVIF orqali topildi: %s (%s)", brand, best.encoding)
-        return f"{brand} (ONVIF)", url, result
-    # Manzil ONVIF'dan keldi-yu kadr kelmadi — deyarli har doim sabab
-    # kodek.  Umumiy "topilmadi" o'rniga aniq sababni beramiz.
-    warning, advice = onvif_client.compatibility_note(best)
+
+    brand = onvif_client.normalise_brand(answer.device.brand) or "ONVIF"
+    for profile in ordered[:MAX_ONVIF_PROFILE_TRIES]:
+        url = onvif_client.with_credentials(profile.uri, username, password, host=clean_host)
+        result = grab_frame(url, timeout_sec=timeout_sec)
+        if result.ok:
+            logger.info("ONVIF orqali topildi: %s (%s)", brand, profile.encoding)
+            return f"{brand} (ONVIF)", url, result
+        logger.info("ONVIF oqimi ochilmadi (%s) — keyingisi sinaladi", profile.encoding)
+
+    # Hech biri ochilmadi.  Sabab birinchi (eng mos) oqim bo'yicha
+    # tushuntiriladi — odatda H.265+ (Smart Codec).
+    warning, advice = onvif_client.compatibility_note(ordered[0])
     if warning:
         return None, None, ProbeResult(ok=False, error=warning, hint=advice)
     return None, None, ProbeResult(ok=False, error="", hint="")

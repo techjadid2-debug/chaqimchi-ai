@@ -425,38 +425,54 @@ def with_credentials(url: str, username: str, password: str, *, host: str = "") 
     return urlunparse((parts.scheme, netloc, parts.path, "", parts.query, ""))
 
 
-def pick_best_profile(profiles: List[StreamProfile]) -> Optional[StreamProfile]:
-    """Tahlil uchun eng mos oqimni tanlaydi.
+#: Bir xil kodekning turli yozilishi.  Kamera "H.264", "H264" yoki "AVC"
+#: deb yozishi mumkin — uchalasi bitta narsa.
+H264_NAMES = ("H264", "H.264", "AVC")
+H265_NAMES = ("H265", "H.265", "HEVC")
+MJPEG_NAMES = ("JPEG", "MJPEG")
+
+
+def rank_profiles(profiles: List[StreamProfile]) -> List[StreamProfile]:
+    """Oqimlarni sinash tartibida qaytaradi.
 
     Tartib ataylab shunday:
 
     1. **H.264 substream** — ideal: yengil dekodlash, kichik kadr.
-    2. H.264 (har qanday o'lcham) — ishlaydi, protsessorga og'irroq.
-    3. Qolgani (H.265/MJPEG) — oxirgi chora; ishlamasligi mumkin va
-       mijozga bu haqda ogohlantirish beriladi.
+    2. **H.265 substream** — kichik kadr, dekodlash biroz og'irroq.
+    3. H.264 asosiy oqim — ishlaydi, protsessorga og'ir.
+    4. H.265 asosiy oqim.
+    5. MJPEG — tarmoqni ko'p band qiladi, lekin ishlaydi.
 
-    H.265 ataylab oxirida: to'plamdagi OpenCV uni har doim ham
-    dekodlamaydi, dekodlagan taqdirda ham eski protsessorda tahlilga
-    joy qolmaydi.
+    Ilgari H.265 MJPEG dan ham PASTDA turardi va faqat BITTA oqim
+    sinalardi: ya'ni H.265 substream'li kamera qo'shilmasdi, garchi
+    to'plamdagi OpenCV (FFmpeg) HEVC ni dekodlay olsa ham.  Endi tartib
+    faqat TAVSIYA — haqiqiy tanlov kadr kelishi bo'yicha qilinadi
+    (`camera_probe._try_onvif`).
     """
     if not profiles:
-        return None
+        return []
     with_uri = [p for p in profiles if p.uri] or profiles
 
     def rank(profile: StreamProfile) -> Tuple[int, int]:
-        h264 = profile.encoding in ("H264", "H.264", "AVC")
-        if h264 and profile.is_substream:
-            group = 0
-        elif h264:
-            group = 1
-        elif profile.encoding in ("JPEG", "MJPEG"):
-            group = 2
+        encoding = profile.encoding.upper()
+        if encoding in H264_NAMES:
+            group = 0 if profile.is_substream else 2
+        elif encoding in H265_NAMES:
+            group = 1 if profile.is_substream else 3
+        elif encoding in MJPEG_NAMES:
+            group = 4
         else:
-            group = 3
+            group = 5
         # Guruh ichida kichikroq kadr afzal.
         return (group, profile.pixels or 10**9)
 
-    return sorted(with_uri, key=rank)[0]
+    return sorted(with_uri, key=rank)
+
+
+def pick_best_profile(profiles: List[StreamProfile]) -> Optional[StreamProfile]:
+    """Tavsiya etilgan bitta oqim (ro'yxatdagi birinchisi)."""
+    ordered = rank_profiles(profiles)
+    return ordered[0] if ordered else None
 
 
 def compatibility_note(profile: StreamProfile) -> Tuple[str, str]:
@@ -466,14 +482,18 @@ def compatibility_note(profile: StreamProfile) -> Tuple[str, str]:
     qo'shilgunga qadar** ishlaydi: aks holda mijoz hisobot bo'sh
     chiqqanda, bir necha kundan keyin bilardi.
     """
-    if profile.encoding in ("H265", "H.265", "HEVC"):
+    if profile.encoding.upper() in H265_NAMES:
+        # H.265 ning O'ZI ishlaydi (dastur uni sinab ko'radi).  Ishlamasa
+        # sabab deyarli har doim **H.265+** (Smart Codec / H.265 Pro) —
+        # ishlab chiqaruvchining yopiq kengaytmasi, uni hech bir standart
+        # dekoder ocholmaydi.
         return (
-            "Bu oqim H.265 (HEVC) formatida.",
-            "Dastur H.264 bilan ishonchli ishlaydi. NVR menyusida shu kamera "
-            "uchun substream'ni H.264 ga o'zgartiring: "
-            "Configuration → Video → Sub Stream → Encoding: H.264.",
+            "Bu oqim H.265 formatida ochilmadi.",
+            "Ko'pincha sabab — H.265+ (Smart Codec). NVR menyusida shu kamera "
+            "uchun substream'ni oddiy H.265 yoki H.264 ga o'zgartiring: "
+            "Configuration → Video → Sub Stream → Encoding.",
         )
-    if profile.encoding in ("JPEG", "MJPEG"):
+    if profile.encoding.upper() in MJPEG_NAMES:
         return (
             "Bu oqim MJPEG formatida.",
             "MJPEG tarmoqni ko'p band qiladi. Iloji bo'lsa H.264 substream'ni "

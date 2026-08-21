@@ -80,7 +80,13 @@ def bump(name: str, *, amount: int = 1) -> int:
     temporary = path.with_name(f".{path.name}.tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False)
+            # Tok o'chganda yarim yozilgan fayl qolmasin: hisoblagich
+            # buzilsa 72 soatlik sinovning "qayta ishga tushish soni"
+            # mezoni o'lchanmay qolardi.
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
     except OSError:
         logger.warning("Hisoblagich yozilmadi: %s", name, exc_info=True)

@@ -100,25 +100,40 @@
       $("uptimeText").textContent = status.error || "Xizmat to‘xtatilgan.";
     }
 
-    const configured = status.cameras || {};
-    const names = new Map((status.cameras_list || []).map((c) => [c.camera_id, c.label]));
-    const rows = Object.keys(configured);
+    // Sog'liq zanjirdan keladi (`cameras`), nomlar esa sozlamadan
+    // (`cameras_list`).  Ro'yxat ikkalasining BIRLASHMASI: zanjir hali
+    // ochmagan kamera ham qatorda ko'rinsin, aks holda mijoz "kamera
+    // yo'qolib qoldi" deb o'ylaydi.
+    const health = status.cameras || {};
+    const saved = status.cameras_list || [];
+    const names = new Map(saved.map((c) => [c.camera_id, c.label]));
+    const rows = [...new Set([...saved.map((c) => c.camera_id), ...Object.keys(health)])];
+    const online = (id) => Boolean(health[id] && health[id].connected && !health[id].offline);
+    const activeCount = rows.filter(online).length;
+    $("cameraCount").textContent = rows.length
+      ? `${rows.length} kameradan ${activeCount} tasi ulangan`
+      : "";
     $("cameraStatus").innerHTML = rows.length
       ? rows
           .map((id) => {
-            const item = configured[id] || {};
-            const online = item.connected && !item.offline;
+            const known = Object.prototype.hasOwnProperty.call(health, id);
+            const up = online(id);
+            const state = up
+              ? "tasvir kelmoqda"
+              : known
+                ? "javob bermayapti"
+                : "hali ulanmadi";
             return `
         <div class="camera-row">
-          <span class="dot ${online ? "on" : "off"}"></span>
+          <span class="dot ${up ? "on" : "off"}"></span>
           <div class="meta">
             <b>${esc(names.get(id) || id)}</b>
-            <code>${online ? "tasvir kelmoqda" : "javob bermayapti"}</code>
+            <code>${state}</code>
           </div>
         </div>`;
           })
           .join("")
-      : '<p class="hint">Kameralar holati hali kelmadi. Xizmat ishga tushgach bir daqiqada paydo bo‘ladi.</p>';
+      : '<p class="hint">Kamera qo‘shilmagan. «Sozlash» bo‘limidan kamera qo‘shing.</p>';
 
     drawFeatures(status);
   }
@@ -231,6 +246,15 @@
       pending > 20
         ? ` · <b>${pending} hodisa yuborilmagan</b> — internetni tekshiring`
         : "";
+    // Tashlangan hodisa — YO'QOLGAN hodisa.  Soni ham, sababi ham
+    // ko'rinsin: sababsiz raqamni tuzatib bo'lmaydi.
+    const poisoned = Number(cloud.poisoned_events || 0);
+    const dropped = poisoned
+      ? ` · <b>${poisoned} hodisa yo‘qoldi</b>` +
+        ((cloud.poisoned_reasons || []).length
+          ? ` (${esc(cloud.poisoned_reasons[0])})`
+          : "")
+      : "";
     // Sozlama masofadan kelgan bo'lsa buni aytish kerak: mijoz kamerani
     // shu yerdan o'zgartirmoqchi bo'lsa, o'zgarishi keyingi sinxronda
     // qaytib ketishini bilishi lozim.
@@ -244,7 +268,7 @@
     bar.innerHTML =
       `<b>Cloudga ulangan</b>To‘liq kunlik hisobot endi mijoz panelida: ` +
       `<a href="${esc(cloud.owner_url)}" target="_blank" rel="noopener noreferrer">${esc(cloud.owner_url)}</a>` +
-      `${queue}${source}`;
+      `${queue}${dropped}${source}`;
   }
 
   async function refresh() {
@@ -256,7 +280,9 @@
         api("/api/setup/cameras"),
         api("/api/setup/cloud-status"),
       ]);
-      drawStatus({ ...status, cameras_list: cameraList.cameras });
+      // `cameras_list` endi `/api/status` ning o'zida bor; `/api/setup/cameras`
+      // esa qo'shimcha (manzil, format) beradi — nomlar ikkalasida bir xil.
+      drawStatus({ ...status, cameras_list: cameraList.cameras || status.cameras_list });
       drawReport(report);
       drawEvents(events.events);
       drawCloud(cloud);

@@ -226,8 +226,30 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
     # birinchisini (va uni ham noto'g'ri) yuborardi.
     queue = _outbox_stats()
 
+    # Kamera boshiga holat: qaysi biri tirik, qaysi biri uzilib turibdi.
+    # Faqat SON yuborilganda panel qaysi kamera o'chganini ko'rsatolmasdi.
+    codecs = {
+        str(item.get("id")): item.get("codec")
+        for item in (config_store.read_raw().get("retail") or {}).get("cameras") or []
+        if item.get("id")
+    }
+    cameras = [
+        {
+            "camera_id": str(camera_id),
+            "connected": bool(item.get("connected")),
+            "offline": bool(item.get("offline")),
+            "reconnects": int(item.get("reconnects") or 0),
+            # Format sozlamada turadi (sehrgar aniqlagan), holat faylida
+            # emas — sekin ishlayotgan kameraning sababi shundan ko'rinadi.
+            "codec": codecs.get(str(camera_id)),
+        }
+        for camera_id, item in (status.get("cameras") or {}).items()
+        if isinstance(item, dict)
+    ][:16]
+
     payload = {
         "cameras_active": int(status.get("cameras_active") or 0),
+        "cameras": cameras,
         "disk_free_bytes": int(free_bytes),
         "outbox_pending": int(queue.get("pending") or 0),
         # Kritik hodisa navbatda qolib ketsa — bu oddiy kechikish emas.
@@ -236,6 +258,18 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # yo'qolgan.  "Yo'qolgan kritik hodisa 0" mezoni shu raqam bilan
         # tekshiriladi.
         "outbox_poisoned": int(queue.get("poisoned") or 0),
+        # Sabab bo'lmasa raqamning foydasi yo'q: qaysi xato takrorlanayotgani
+        # ko'rinmasa, tashlangan hodisani tuzatib bo'lmaydi.
+        "outbox_poisoned_reasons": list(queue.get("poisoned_reasons") or [])[:3],
+        # Klip yozilyaptimi: hodisa bor-u klip yo'q bo'lsa sabab shu uchta
+        # sondan ko'rinadi (`unavailable` — kamera uchun yozuv manzili yo'q).
+        "clips": {
+            key: int((status.get("clips") or {}).get(key) or 0)
+            for key in ("written", "missing", "dropped", "unavailable", "pending")
+        },
+        # 72 soatlik sinovning asosiy mezoni: zanjir necha marta o'zi
+        # yiqilib qayta ko'tarilgan.  Cloudda bu son umuman ko'rinmasdi.
+        "chain_restarts": int(status.get("restart_count") or 0),
         # Jimgina ishlamay qolishni cloud shu uchtasidan biladi:
         # `analyzed`ga nisbatan `analysis_errors` ko'p bo'lsa tahlil
         # zanjiri buzilgan, `queue_errors` noldan katta bo'lsa hodisa
@@ -265,13 +299,76 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
     return True
 
 
+#: Oxirgi muvaffaqiyatli yuborilgan ro'yxatning barmoq izi.  Ro'yxat
+#: o'zgarmasa har 20 soniyada bir xil so'rov ketmasin.
+_published_cameras: Dict[str, Any] = {"value": None}
+
+
+def publish_cameras() -> bool:
+    """Do'kondagi kamera ro'yxatini cloudga bildiradi.
+
+    Kamera oqimi bir tomonlama edi: cloud -> qurilma.  Mijoz kamerani o'z
+    kompyuteridagi sehrgarda qo'shsa, cloud ular haqida hech narsa
+    bilmasdi va panelda kamera ro'yxati bo'sh qolardi — jonli ko'rish,
+    do'kon xaritasi, davomat kamerasini tanlash va kamera rollari,
+    to'rttasi ham jimgina ishlamasdi.
+
+    **Manzil yuborilmaydi** — faqat ID va nom.  RTSP ichida NVR
+    login/paroli bor va u do'kon tarmog'idan chiqmasligi kerak.
+    """
+    raw_all = config_store.read_raw()
+    cloud = raw_all.get("cloud_sync") or {}
+    if not cloud.get("enabled") or not cloud.get("device_token"):
+        return False
+    cameras = [
+        {
+            "camera_id": str(item.get("id")),
+            "label": str(item.get("label") or item.get("id") or ""),
+        }
+        for item in ((raw_all.get("retail") or {}).get("cameras") or [])
+        if item.get("id")
+    ]
+    fingerprint = json.dumps(cameras, sort_keys=True, ensure_ascii=False)
+    if fingerprint == _published_cameras.get("value"):
+        return False
+    try:
+        response = httpx.post(
+            f"{str(cloud['url']).rstrip('/')}/api/v1/edge/cameras",
+            headers=_headers(cloud),
+            json={"cameras": cameras},
+            timeout=TIMEOUT_SEC,
+        )
+    except httpx.HTTPError as exc:
+        # Tarmoq xatosi — xesh yangilanmaydi, keyingi siklda yana urinadi.
+        logger.info("Kamera ro'yxati yuborilmadi: %s", exc)
+        return False
+    if 400 <= response.status_code < 500 and response.status_code != 429:
+        # Cloud ATAYLAB rad etdi (masalan tarif chegarasi).  Har 20
+        # soniyada qayta yuborish foydasiz: ro'yxat o'zgarmaguncha javob
+        # ham o'zgarmaydi.  Xesh yozib qo'yiladi, ya'ni keyingi urinish
+        # faqat mijoz kamera qo'shgan/olib tashlaganda bo'ladi.
+        _published_cameras["value"] = fingerprint
+        logger.warning(
+            "Kamera ro'yxati qabul qilinmadi (%s): %s",
+            response.status_code,
+            response.text[:200],
+        )
+        return False
+    if response.status_code >= 500:
+        logger.info("Kamera ro'yxati yuborilmadi: server %s", response.status_code)
+        return False
+    _published_cameras["value"] = fingerprint
+    logger.info("Kamera ro'yxati cloudga yuborildi: %d ta", len(cameras))
+    return True
+
+
 def _pending_events() -> Optional[int]:
     from chaqimchi_ai.local import cloud_link
 
     return cloud_link.pending_events()
 
 
-def _outbox_stats() -> Dict[str, Optional[int]]:
+def _outbox_stats() -> Dict[str, Any]:
     from chaqimchi_ai.local import cloud_link
 
     return cloud_link.outbox_stats()

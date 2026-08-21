@@ -130,6 +130,14 @@
             <select id="heatCamera" style="width:auto"></select>
             <input type="date" id="heatDate" style="width:auto">
             <select id="heatHour" style="width:auto"><option value="">Kun bo‘yi</option></select>
+            <!-- Vaqt oralig'i: bitta kun ko'pincha kam ma'lumot beradi
+                 (ayniqsa yangi do'konda).  Server `days` ni allaqachon
+                 qabul qilardi, panel esa uni HECH QACHON yubormasdi. -->
+            <span class="chip-group" id="heatDays">
+              <button class="chip active" type="button" data-heatdays="1">Shu kun</button>
+              <button class="chip" type="button" data-heatdays="7">7 kun</button>
+              <button class="chip" type="button" data-heatdays="30">30 kun</button>
+            </span>
           </div>
         </div>
         <p class="hint" style="margin-top:0" id="heatHint">Rang qancha issiq bo‘lsa, mijozlar shuncha ko‘p yurgan: ko‘k — kam, qizil — eng ko‘p. Bo‘yalmagan joylar — hech kim yurmagan (javon yoki jihoz). Bir hafta ma’lumot yig‘ilgach xarita barqarorlashadi.</p>
@@ -148,7 +156,8 @@
         <div class="note" id="heatLocked" hidden>
           <b>Do‘kon xaritasi Biznes tarifida ochiladi.</b>
           Mijozlar do‘konning qaysi joyida ko‘p turishini ko‘rasiz — javonni
-          shunga qarab joylashtirasiz.
+          shunga qarab joylashtirasiz. Ma’lumot tarif ko‘tarilgan kundan
+          boshlab yig‘iladi: birinchi xarita bir necha kunda to‘liq bo‘ladi.
         </div>
       </div>
 
@@ -655,7 +664,28 @@
 
   /* ── Holat banneri ──────────────────────────────────────────────────── */
 
+  //: Kamera boshiga holat — heartbeat'dan (`devices[].health.cameras`).
+  //  Ilgari yashil nuqta preview RASMI ochilganidan qo'yilardi: o'chgan
+  //  kamera ham eski rasmi bo'lsa yashil turaverardi.
+  let cameraHealth = {};
+
+  function readCameraHealth(health) {
+    const state = {};
+    (health.devices || []).forEach((device) => {
+      ((device.health || {}).cameras || []).forEach((camera) => {
+        if (!camera || !camera.camera_id) return;
+        state[camera.camera_id] = {
+          online: Boolean(camera.connected) && !camera.offline,
+          reconnects: Number(camera.reconnects || 0),
+          codec: camera.codec || "",
+        };
+      });
+    });
+    return state;
+  }
+
   function drawStatus(health) {
+    cameraHealth = readCameraHealth(health);
     const banner = $("statusBanner");
     $("siteName").textContent = health.site_name || "";
     if (health.plan && Array.isArray(health.plan.panel_features)) {
@@ -708,6 +738,21 @@
     filter.value = selected;
   }
 
+  function cameraState(cameraId) {
+    const item = cameraHealth[cameraId];
+    if (!item) return "";          // qurilma hali aytmadi — kulrang
+    return item.online ? "on" : "off";
+  }
+
+  function cameraStateLabel(cameraId) {
+    const item = cameraHealth[cameraId];
+    if (!item) return "holat kelmadi";
+    if (!item.online) return "javob bermayapti";
+    // Uzilib-ulanib turgan kamera "ishlayapti" deb ko'rsatilsa, hisobot
+    // nega kam chiqqani tushunarsiz bo'lardi.
+    return item.reconnects > 5 ? "uzilib turibdi" : "ishlayapti";
+  }
+
   async function drawCameras() {
     const grid = $("cameraGrid");
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -721,7 +766,7 @@
     grid.innerHTML = cameraList.map((camera) => `
       <button class="camera-card" type="button" data-camera="${esc(camera.camera_id)}">
         <div class="shot empty" data-shot="${esc(camera.camera_id)}">rasm yuklanmoqda…</div>
-        <div class="meta"><span class="dot" data-dot="${esc(camera.camera_id)}"></span><b>${esc(camera.label || camera.camera_id)}</b></div>
+        <div class="meta"><span class="dot ${cameraState(camera.camera_id)}" data-dot="${esc(camera.camera_id)}"></span><b>${esc(camera.label || camera.camera_id)}</b><span class="sub">${esc(cameraStateLabel(camera.camera_id))}</span></div>
       </button>`).join("");
 
     grid.querySelectorAll(".camera-card").forEach((cardButton) => {
@@ -749,7 +794,8 @@
       img.src = url;
       holder.replaceWith(img);
       img.dataset.shot = cameraId;
-      if (dot) dot.className = "dot on";
+      // Chiroq RASMdan emas, qurilma holatidan (`drawCameras` qo'yadi).
+      if (dot) dot.className = `dot ${cameraState(cameraId)}`;
     } catch (err) {
       if (holder) holder.textContent = "rasm hali kelmagan";
     }
@@ -774,8 +820,6 @@
      Kataklar sonlari serverdan keladi; kamera rasmi fonga chiziladi va
      ustiga och-to'q qizil qatlam tushadi. */
 
-  let heatLoaded = false;
-
   function fillHeatControls() {
     const select = $("heatCamera");
     const current = select.value;
@@ -791,10 +835,9 @@
         $("heatHour").appendChild(option);
       }
     }
-    if (!heatLoaded && cameraList.length) {
-      heatLoaded = true;
-      loadHeatmap();
-    }
+    // Sana bo'sh turardi va xarita "buzilgan" ko'rinardi — server
+    // standarti bugun bo'lsa ham, mijoz buni bilmasdi.
+    if (!$("heatDate").value) $("heatDate").value = shopDate();
   }
 
   /* ── Issiqlik xaritasi ranglari ──────────────────────────────────────
@@ -852,6 +895,8 @@
     const params = new URLSearchParams({ camera_id: cameraId });
     if ($("heatDate").value) params.set("date", $("heatDate").value);
     if ($("heatHour").value !== "") params.set("hour", $("heatHour").value);
+    // Bir necha kunlik yig'indi: `heatDate` — oralikning OXIRGI kuni.
+    if (heatDays > 1) params.set("days", String(heatDays));
     let data;
     try {
       data = await api(`/api/v1/owner/heatmap?${params.toString()}`);
@@ -896,9 +941,10 @@
         ctx.fillRect(c * cellW, r * cellH, Math.ceil(cellW), Math.ceil(cellH));
       }
     }
+    const span = heatDays > 1 ? `${heatDays} kunda` : "shu kunda";
     $("heatSummary").textContent = data.points
-      ? `${data.points} ta qadam nuqtasi yig‘ildi · eng gavjum katakda ${peak} ta`
-      : "Bu kun uchun hali ma’lumot yo‘q — qurilma har 10 daqiqada yuboradi.";
+      ? `${span} ${data.points} ta qadam nuqtasi yig‘ildi · eng gavjum katakda ${peak} ta`
+      : `Bu oraliq uchun hali ma’lumot yo‘q (${span}) — qurilma har 10 daqiqada yuboradi.`;
     if (heatEditing) drawQuadOverlay();
   }
 
@@ -910,6 +956,7 @@
      plani trafikdan o'z-o'zidan chiziladi (taxminiy!). */
 
   let heatMode = "camera";
+  let heatDays = 1;
   let heatEditing = false;
   let dragCorner = -1;
 
@@ -1081,6 +1128,8 @@
     $("heatCamera").style.display = cameraMode ? "" : "none";
     $("heatDate").style.display = cameraMode ? "" : "none";
     $("heatHour").style.display = cameraMode ? "" : "none";
+    // Plan rejimi doim 7 kunlik yig'indi bilan chiziladi.
+    $("heatDays").style.display = cameraMode ? "" : "none";
     $("heatEditBtn").style.display = cameraMode ? "" : "none";
     $("heatHint").textContent = cameraMode
       ? "Ko‘kdan qizilgacha: qizil joylarda mijozlar eng ko‘p yurgan. Kamera ko‘rinishi ustida."
@@ -1458,11 +1507,16 @@
     } catch (_) {}
   }
 
+  //: Galereya "shablon qilish" ro'yxati uchun: xodimlar bir marta
+  //  yuklanadi va ikkinchi so'rov qilinmaydi.
+  let staffCache = [];
+
   function drawStaff(data) {
     faceUrls.forEach((url) => URL.revokeObjectURL(url));
     faceUrls = [];
 
     const employees = data.employees || [];
+    staffCache = employees;
     // `|| 10` EMAS: Boshlang'ich tarifida chegara 0 va u yolg'on qiymat,
     // ya'ni panel "0 / 10" ko'rsatib, qo'shish tugmasini ochiq qoldirardi —
     // mijoz bosardi va server 422 qaytarardi.
@@ -1471,26 +1525,39 @@
     $("staffCount").textContent = `${employees.length} / ${limit}`;
     $("staffAddBtn").disabled = employees.length >= limit;
 
+    // Shablon = bitta rasmdan olingan yuz o'lchovi.  Uch xil rasm (to'g'ri
+    // qaragan, biroz yonboshdan, boshqa yorug'likda) tanishni sezilarli
+    // yaxshilaydi — server ularning ENG YAXSHISI bo'yicha moslaydi.
+    // Panel esa faqat BIRINCHI rasmni ko'rsatardi: ikkinchi va uchinchi
+    // shablon ko'rinmasdi ham, o'chirilmasdi ham.
+    const maxPhotos = Number(data.max_photos) || 3;
+    // `capture="user"` — telefonda darhol old kamera ochiladi.  Usiz
+    // galereya ochilardi va mijoz "rasmga olish" o'rniga eski rasm
+    // qidirardi (hujjatda "telefondan rasm oladi" deb yozilgan-u).
+    // Kompyuterda bu atribut e'tiborsiz qoladi — fayl tanlash ishlayveradi.
     $("staffList").innerHTML = employees.map((emp) => {
-      const photo = emp.photos && emp.photos[0];
+      const photos = emp.photos || [];
       const ready = emp.enrollment_status === "enrolled";
+      const weak = photos.filter((item) => item.score && item.score < 0.9).length;
       return `
         <div class="staff-row">
-          ${photo
-            ? `<img class="staff-face" data-src="/api/v1/owner/faces/photos/${esc(photo.id)}/image" alt="">`
-            : `<div class="staff-face">🙂</div>`}
+          <div class="staff-faces">
+            ${photos.map((photo) => `
+              <span class="staff-face-wrap">
+                <img class="staff-face" data-src="/api/v1/owner/faces/photos/${esc(photo.id)}/image" alt="" title="${photo.score ? `sifat: ${photo.score}` : ""}">
+                <button class="face-del" type="button" title="Shu shablonni o‘chirish" data-act="photo-del" data-id="${esc(photo.id)}">×</button>
+              </span>`).join("")
+            || '<div class="staff-face">🙂</div>'}
+          </div>
           <div class="staff-main">
             <b>${esc(emp.name)}</b>
             <small>${ready
-              ? `${emp.photos.length} ta rasm · kamera taniydi`
+              ? `${photos.length} / ${maxPhotos} shablon · kamera taniydi${weak ? " · bittasi xira" : ""}`
               : "rasm kutilmoqda — kamera hali tanimaydi"}</small>
           </div>
           <div class="staff-actions">
-            <input type="file" class="staff-file" accept="image/*" id="staffFile-${esc(emp.id)}">
-            <button class="button small" type="button" data-act="photo" data-id="${esc(emp.id)}">Rasm qo‘shish</button>
-            ${photo
-              ? `<button class="button ghost small" type="button" data-act="photo-del" data-id="${esc(photo.id)}">Rasmni o‘chirish</button>`
-              : ""}
+            <input type="file" class="staff-file" accept="image/*" capture="user" id="staffFile-${esc(emp.id)}">
+            <button class="button small" type="button" data-act="photo" data-id="${esc(emp.id)}" ${photos.length >= maxPhotos ? "disabled" : ""}>${photos.length ? "Yana shablon" : "Rasm qo‘shish"}</button>
             <button class="button ghost small" type="button" data-act="remove" data-id="${esc(emp.id)}" data-name="${esc(emp.name)}">Chiqarish</button>
           </div>
         </div>`;
@@ -1696,10 +1763,20 @@
   async function loadFaceGallery() {
     try {
       const gallery = await api("/api/v1/owner/faces/events?limit=12");
+      // Tanilmagan kadrni xodimga shablon qilib berish — eng yaxshi
+      // shablon aynan shu: haqiqiy kamera, haqiqiy yorug'lik, haqiqiy
+      // burchak.  Ilgari izohda "yana bitta rasm qo'shing" deb yozilardi,
+      // lekin buni qiladigan tugma yo'q edi.
+      const enrollable = (staffCache || []).filter((emp) => emp.active !== 0);
       $("faceGallery").innerHTML = gallery.events.map((ev) => `
         <figure class="face-item${ev.person_id ? "" : " face-unknown"}">
           <img data-src="/api/v1/owner/faces/events/${esc(ev.event_id)}/image" alt="">
           <figcaption><b>${ev.person_id ? esc(ev.person_name || "?") : "Notanish"}</b><small>${esc((ev.occurred_at || "").slice(11, 16))}</small></figcaption>
+          ${ev.person_id || !enrollable.length ? "" : `
+          <select class="face-assign" data-event="${esc(ev.event_id)}">
+            <option value="">shablon qilish…</option>
+            ${enrollable.map((emp) => `<option value="${esc(emp.id)}">${esc(emp.name)}</option>`).join("")}
+          </select>`}
         </figure>`).join("") || '<p class="hint">Kameradan hali kadr kelmagan.</p>';
       document.querySelectorAll("#faceGallery img[data-src]")
         .forEach((img) => authedImage(img.dataset.src, img));
@@ -1996,6 +2073,9 @@
       loadTrend();
       if (S.report.ok) drawDwell(S.report.data.dwell);
       else cardError("dwellList", S.report, "report");
+      // Bitta yuklash: ilgari `fillHeatControls()` ham chaqirardi va
+      // ikkita parallel oqim bitta kanvasga chizardi — kamera rasmi
+      // issiqlik qatlamini ustidan bo'yab, xarita bo'sh ko'rinardi.
       if (S.config.ok) { currentConfig = S.config.data.config; fillHeatControls(); loadHeatmap(); }
       else cardError("heatSummary", S.config, "config");
     } else if (tab.id === "xavfsizlik") {
@@ -2079,6 +2159,25 @@
     if (!button) return;
     staffAction(button.dataset.act, button.dataset.id, button.dataset.name || "");
   });
+  // Galereyadagi tanilmagan kadrni xodimga biriktirish.
+  document.addEventListener("change", async (event) => {
+    const select = event.target.closest("#faceGallery .face-assign");
+    if (!select || !select.value) return;
+    const employeeId = select.value;
+    select.disabled = true;
+    try {
+      await api(
+        `/api/v1/owner/faces/employees/${employeeId}/photos/from-event/${select.dataset.event}`,
+        { method: "POST" },
+      );
+      note("staffStatus", "ok", "Kadr shablon qilib qo‘shildi — kamera endi aniqroq taniydi.");
+      reload("staff");
+    } catch (error) {
+      note("staffStatus", "err", error.message);
+      select.disabled = false;
+      select.value = "";
+    }
+  });
   $("staffForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const name = $("staffName").value.trim();
@@ -2160,6 +2259,17 @@
   $("heatCamera").addEventListener("change", loadHeatmap);
   $("heatDate").addEventListener("change", loadHeatmap);
   $("heatHour").addEventListener("change", loadHeatmap);
+  // Vaqt oralig'i — "Kunlar bo'yicha" trend chiplari bilan bir xil naqsh.
+  $("heatDays").querySelectorAll("[data-heatdays]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      $("heatDays").querySelectorAll(".chip").forEach((item) => item.classList.remove("active"));
+      chip.classList.add("active");
+      heatDays = Number(chip.dataset.heatdays) || 1;
+      // Bir necha kunlik yig'indida soat tanlash mantiqsiz emas (har
+      // kunning o'sha soati qo'shiladi), shuning uchun tegilmaydi.
+      loadHeatmap();
+    });
+  });
   document.querySelectorAll("[data-heatmode]").forEach((chip) =>
     chip.addEventListener("click", () => setHeatMode(chip.dataset.heatmode)));
   $("heatEditBtn").addEventListener("click", () => {

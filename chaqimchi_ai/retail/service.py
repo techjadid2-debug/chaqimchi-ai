@@ -560,6 +560,12 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # yiqilsa ham panel "4 kamera ishlayapti" deb turardi va hech kim
         # hodisa yozilmayotganini bilmasdi.
         "errors": stats.get("errors", 0),
+        # Klip hisoblagichlari zanjirda allaqachon sanalardi, lekin bu
+        # yerga chiqmasdi — natijada "hodisa bor, klip yo'q" holatini
+        # cloudda ham, panelda ham KO'RIB BO'LMASDI.  `unavailable` —
+        # kameraga `record_url` berilmagan, `missing` — ffmpeg fayl
+        # yozmadi, `dropped` — navbat to'lgan.
+        "clips": stats.get("clips") or {},
         # Hodisani navbatga yozib bo'lmadi (odatda disk to'lgan) — bu
         # hodisa butunlay yo'qoldi degani, uni keyin tiklab bo'lmaydi.
         "action_errors": stats.get("action_errors", 0),
@@ -571,9 +577,13 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # u ham xato beradi, va holat fayli yozilmagani uchun butun
         # zanjirni to'xtatish noto'g'ri bo'lardi.
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary.write_text(
-            json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-        )
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"))
+            # Yarim yozilgan holat fayli panelda "kameralar holati hali
+            # kelmadi" bo'lib ko'rinardi va tokdan keyin shu holatda
+            # qotib qolardi.
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
     except OSError:
         logger.warning("Holat fayli yozilmadi: %s", path)

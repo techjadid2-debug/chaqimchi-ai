@@ -217,13 +217,19 @@ def _seed_outbox(
         "priority INTEGER DEFAULT 0, sent_at TEXT)"
     )
     for index, event in enumerate(events):
+        # `created_at` HAR DOIM UTC bo'lishi shart: navbatga yozadigan
+        # `OutboxQueue.enqueue` aynan shunday yozadi va panel hisoboti
+        # ustunni SATR sifatida solishtiradi.  Mahalliy siljish bilan
+        # yozilsa (`+05:00`) test faqat UTC kompyuterda o'tardi —
+        # Toshkentdagi ishlab chiqish mashinasida esa qizil bo'lardi.
+        stored = datetime.fromisoformat(event["occurred_at"]).astimezone(timezone.utc).isoformat()
         conn.execute(
             "INSERT INTO outbox (event_id, payload, created_at, sent_at) VALUES (?,?,?,?)",
             (
                 f"e{index}",
                 json.dumps(event),
-                event["occurred_at"],
-                event["occurred_at"] if sent else None,
+                stored,
+                stored if sent else None,
             ),
         )
     conn.commit()
@@ -964,3 +970,87 @@ def test_an_offline_device_keeps_the_hardware_limit(client: TestClient) -> None:
     from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
 
     assert client.get("/api/setup/summary").json()["max_cameras"] == SHOP_MAX_CAMERAS
+
+
+# ── Panel kamera holati ─────────────────────────────────────────────────
+
+
+def test_status_keeps_camera_health_and_names_apart(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Ikki xil "cameras" bir-birini yutmasin.
+
+    `supervisor.status()` sog'liq LUG'ATINI beradi, `config_store.summary()`
+    esa nom RO'YXATINI.  Ikkalasi bitta kalitda edi va ro'yxat sog'liqni
+    ustidan yozardi — panel har kamerani qizil nuqta bilan "javob
+    bermayapti" deb ko'rsatar, nom o'rniga `0`, `1` chiqarardi.
+    """
+    import json
+    import time
+
+    from chaqimchi_ai.local import paths
+
+    client.post(
+        "/api/setup/cameras",
+        json={"camera_id": "camera-01", "label": "Kirish", "rtsp_url": "rtsp://10.0.0.5/1"},
+    )
+    client.post(
+        "/api/setup/cameras",
+        json={"camera_id": "camera-02", "label": "Kassa", "rtsp_url": "rtsp://10.0.0.6/1"},
+    )
+    paths.status_path().write_text(
+        json.dumps(
+            {
+                "updated_at": time.time(),
+                "cameras_configured": 2,
+                "cameras_active": 1,
+                "cameras": {
+                    "camera-01": {"connected": True, "offline": False, "frames": 10},
+                    "camera-02": {"connected": False, "offline": True, "frames": 0},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    data = client.get("/api/status").json()
+
+    assert data["cameras"]["camera-01"]["connected"] is True
+    assert data["cameras"]["camera-02"]["offline"] is True
+    assert [item["label"] for item in data["cameras_list"]] == ["Kirish", "Kassa"]
+    # "2 kameradan 1 tasi ulangan" — maxraj sozlamadagi kameralar soni.
+    assert data["cameras_configured"] == 2
+    assert data["cameras_active"] == 1
+
+
+def test_status_counts_cameras_even_when_the_chain_is_down(client: TestClient) -> None:
+    """Zanjir to'xtaganda ham "0/0" emas, "2 kameradan 0 tasi" ko'rinsin."""
+    client.post(
+        "/api/setup/cameras",
+        json={"camera_id": "camera-01", "label": "Kirish", "rtsp_url": "rtsp://10.0.0.5/1"},
+    )
+    client.post(
+        "/api/setup/cameras",
+        json={"camera_id": "camera-02", "label": "Kassa", "rtsp_url": "rtsp://10.0.0.6/1"},
+    )
+
+    data = client.get("/api/status").json()
+
+    assert data["cameras_configured"] == 2
+    assert data["cameras_active"] == 0
+
+
+def test_camera_codec_is_remembered(client: TestClient, tmp_path: Path) -> None:
+    """ONVIF aniqlagan format saqlansin — diagnostika uchun."""
+    client.post(
+        "/api/setup/cameras",
+        json={
+            "camera_id": "camera-01",
+            "label": "Kirish",
+            "rtsp_url": "rtsp://10.0.0.5/1",
+            "codec": "h265",
+        },
+    )
+
+    saved = client.get("/api/setup/cameras").json()["cameras"][0]
+    assert saved["codec"] == "H265"

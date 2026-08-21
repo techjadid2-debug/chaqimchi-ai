@@ -358,8 +358,29 @@ class LinkLoginBody(BaseModel):
     key: str = Field(min_length=20, max_length=128)
 
 
+class EdgeCameraHealth(BaseModel):
+    """Bitta kameraning holati — panel yolg'on chiroq ko'rsatmasin.
+
+    Bungacha cloudga faqat SON kelardi ("2 ta kamera ishlayapti"), mijoz
+    paneli esa qaysi biri ekanini bilmasdi va yashil nuqtani preview
+    rasmi ochilganidan chiqarardi — ya'ni o'chgan kamera ham eski rasmi
+    bo'lsa yashil turardi.
+    """
+
+    camera_id: str = Field(min_length=1, max_length=40)
+    connected: bool = False
+    offline: bool = False
+    #: Qayta ulanishlar soni — flapping (ulanib-uzilib turish) shundan
+    #: ko'rinadi; bitta suratda "ishlayapti" bo'lsa ham.
+    reconnects: int = Field(default=0, ge=0)
+    codec: Optional[str] = Field(default=None, max_length=16)
+
+
 class EdgeHeartbeatBody(BaseModel):
     cameras_active: int = Field(default=0, ge=0, le=64)
+    #: Kamera boshiga holat.  Eski qurilma yubormaydi — bo'sh ro'yxat
+    #: "ma'lumot yo'q" degani, "hammasi o'chgan" degani emas.
+    cameras: List[EdgeCameraHealth] = Field(default_factory=list, max_length=16)
     temperature_c: Optional[float] = Field(default=None, ge=-40, le=150)
     disk_free_bytes: int = Field(default=0, ge=0)
     outbox_pending: int = Field(default=0, ge=0)
@@ -368,6 +389,14 @@ class EdgeHeartbeatBody(BaseModel):
     #: Qurilma umidsiz deb tashlagan hodisalar.  Nolga teng bo'lmasa cloud
     #: biror narsani doimiy rad etyapti — bu kod xatosi, tarmoq emas.
     outbox_poisoned: int = Field(default=0, ge=0)
+    #: Eng ko'p uchragan uch sabab ("2730× 413 Payload Too Large" kabi).
+    #: Sonning o'zi nima buzilganini aytmasdi.
+    outbox_poisoned_reasons: List[str] = Field(default_factory=list, max_length=3)
+    #: Klip yozish hisoblagichlari — hodisa bor-u klip yo'q holatini
+    #: cloudda ko'rish uchun.
+    clips: Dict[str, int] = Field(default_factory=dict)
+    #: Zanjir necha marta o'zi yiqilib ko'tarilgan (72 soat mezoni).
+    chain_restarts: int = Field(default=0, ge=0)
     #: Jimgina ishlamay qolishni aniqlash uchun (`plan_device_health_alerts`).
     #: `analysis_errors` `analyzed`ga nisbatan ko'p bo'lsa tahlil zanjiri
     #: buzilgan; `queue_errors` noldan katta bo'lsa hodisa saqlanmayapti.
@@ -3119,9 +3148,20 @@ async def admin_site_detail(
     _: None = Depends(require_admin),
 ) -> Dict[str, Any]:
     try:
-        return get_store().site_detail(site_id)
+        detail = get_store().site_detail(site_id)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+    # Qurilma diagnostikasi admin panelida KO'RINSIN.  Bungacha
+    # heartbeat'dagi raqamlar (tashlangan hodisalar, klip hisoblagichlari,
+    # zanjirning qayta ishga tushishlari) faqat bazada yotardi va
+    # do'kondagi nosozlikni faqat SSH bilan ko'rish mumkin edi.
+    health = {item["device_id"]: item for item in get_event_store().health(site_id)}
+    for device in detail.get("devices") or []:
+        record = health.get(device.get("id")) or health.get(device.get("device_id"))
+        if record:
+            device["health"] = record.get("health") or {}
+            device["health_at"] = record.get("received_at")
+    return detail
 
 
 @app.get("/api/v1/admin/sites/{site_id}/onboarding")
@@ -3455,6 +3495,48 @@ async def edge_health_heartbeat(
         # qurilma muddati o'tguncha har 2-3 soniyada kadr yuboradi.
         "live_requested": get_store().live_cameras(device["site_id"]),
         "received": body.model_dump(),
+    }
+
+
+class EdgeCameraItem(BaseModel):
+    camera_id: str = Field(min_length=1, max_length=40)
+    label: str = Field(default="", max_length=120)
+
+
+class EdgeCamerasBody(BaseModel):
+    #: Tarif chegarasi `register_device_cameras` da tekshiriladi; bu yerdagi
+    #: chegara faqat buzuq qurilmadan himoya.
+    cameras: List[EdgeCameraItem] = Field(default_factory=list, max_length=16)
+
+
+@app.post("/api/v1/edge/cameras")
+@app.post("/api/v1/sotqin/cameras")
+async def edge_register_cameras(
+    body: EdgeCamerasBody,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Qurilma o'zining kamera ro'yxatini cloudga bildiradi.
+
+    Mijoz kamerani do'kon kompyuteridagi sehrgarda qo'shadi, cloudda esa
+    kamera yozadigan yo'l faqat admin va o'rnatuvchi portalida edi.  Natijada
+    o'zi ro'yxatdan o'tgan do'konda panel kameralarni umuman ko'rmasdi va
+    to'rtta bo'lim (jonli ko'rish, xarita, davomat kamerasi, kamera rollari)
+    jimgina bo'sh turardi.
+
+    Manzil YUBORILMAYDI — faqat ID va nom (`register_device_cameras`).
+    """
+    try:
+        cameras = get_store().register_device_cameras(
+            device["site_id"], [item.model_dump() for item in body.cameras]
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {
+        "ok": True,
+        "cameras": [
+            {"camera_id": item["camera_id"], "label": item["label"], "origin": item["origin"]}
+            for item in cameras
+        ],
     }
 
 
@@ -4131,9 +4213,14 @@ async def owner_stats(owner: OwnerPrincipal = Depends(require_active_owner)) -> 
 @app.get("/api/v1/owner/health")
 async def owner_health(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
     detail = get_store().site_detail(owner.site_id)
+    # `cameras_expected` obyekt yaratilganda qo'lda kiritiladi va o'zi
+    # ro'yxatdan o'tgan do'konda u BO'SH qoladi — natijada panel "4 dan 2
+    # tasi" o'rniga quruq "Qurilma ulangan" deb turardi.  Ro'yxatdagi
+    # kamera soni yaxshiroq zaxira: uni qurilmaning o'zi bildiradi.
+    registered = len(get_store().list_cameras(owner.site_id))
     return {
         "devices": get_event_store().health(owner.site_id),
-        "cameras_expected": detail["cameras_expected"],
+        "cameras_expected": detail["cameras_expected"] or registered or None,
         "connection": detail["connection"],
         # Panel sarlavhasi uchun: do'kon nomi va oxirgi aloqadan beri
         # o'tgan vaqt — "Qurilma 2 soatdan beri aloqada emas" kabi oddiy
@@ -4706,7 +4793,15 @@ async def owner_faces(owner: OwnerPrincipal = Depends(require_active_owner)) -> 
     photos: Dict[str, List[Dict[str, Any]]] = {}
     for face in store.list_employee_faces(owner.site_id):
         photos.setdefault(str(face["employee_id"]), []).append(
-            {"id": face["id"], "created_at": face["created_at"]}
+            {
+                "id": face["id"],
+                "created_at": face["created_at"],
+                # Yuz qanchalik aniq topilgani.  Bazada bor edi, lekin
+                # panelga chiqmasdi — mijoz "nega tanimayapti" degan
+                # savolga javob topolmasdi.  Past ball = xira yoki
+                # yonboshdan olingan rasm; yechim — yana bitta shablon.
+                "score": round(float(face.get("det_score") or 0.0), 2),
+            }
         )
     ok, _reason = faces.available()
     site = get_store().get_site(owner.site_id) or {}
@@ -4717,6 +4812,10 @@ async def owner_faces(owner: OwnerPrincipal = Depends(require_active_owner)) -> 
         "max_employees": get_plan(str(site.get("plan") or "lite")).effective_max_persons(
             int(site.get("billable_persons") or 0)
         ),
+        # Xodim boshiga shablon chegarasi.  Bungacha faqat serverda
+        # majburlanardi: panel to'rtinchi rasmni ham yuborar, mijoz esa
+        # 422 xatosini ko'rardi.
+        "max_photos": get_event_store().MAX_FACES_PER_EMPLOYEE,
         "employees": [
             {**employee, "photos": photos.get(str(employee["id"]), [])}
             for employee in store.list_employees(owner.site_id)
@@ -4796,6 +4895,61 @@ async def owner_add_employee_face(
     except ValueError as exc:
         raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
     get_snapshot_store().put(photo_key, payload, content_type="image/jpeg")
+    get_event_store().touch_site_config(owner.site_id)
+    return record
+
+
+@app.post("/api/v1/owner/faces/employees/{employee_id}/photos/from-event/{event_id}")
+async def owner_add_face_from_capture(
+    employee_id: str,
+    event_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Galereyadagi "tanilmagan" kadrni xodimga shablon qilib biriktiradi.
+
+    Panelda "Tanilmagan kadr ko'p bo'lsa — xodimga yana bitta aniqroq
+    rasm qo'shing" deb yozilardi, lekin buni qiladigan tugma ham,
+    endpoint ham yo'q edi: mijoz telefondan qaytadan rasm olishga majbur
+    edi.  Holbuki eng yaxshi shablon aynan shu — do'kondagi haqiqiy
+    kamera, haqiqiy yorug'lik va haqiqiy burchak.
+    """
+    require_attendance()
+    require_owner_role(owner, "owner", "service_admin")
+    _require_face_service()
+    _owner_employee_or_404(owner.site_id, employee_id)
+
+    event = get_event_store().event(owner.site_id, event_id)
+    if not event or event.get("event_type") != "face_captured" or not event.get("snapshot_key"):
+        raise HTTPException(404, "Kadr topilmadi")
+    try:
+        payload = get_snapshot_store().get(str(event["snapshot_key"]))
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Kadr o'chib ketgan (14 kundan keyin o'chadi)") from exc
+
+    embedding = await asyncio.to_thread(faces.get_face_service().embed_jpeg, payload)
+    if embedding is None:
+        raise HTTPException(422, "Bu kadrda yuz topilmadi — boshqasini tanlang")
+
+    face_id = uuid.uuid4().hex[:12]
+    photo_key = f"{owner.site_id}/faces/enroll/{employee_id}-{face_id}.jpg"
+    try:
+        record = get_event_store().add_employee_face(
+            owner.site_id,
+            employee_id,
+            photo_key=photo_key,
+            embedding_b64=faces.encrypt_embedding(embedding.vector),
+            embedding_dim=int(embedding.vector.shape[0]),
+            det_score=round(float(embedding.det_score), 3),
+            photo_bytes=len(payload),
+        )
+    except ValueError as exc:
+        raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
+    # Kadr galereyada 14 kun yashaydi va o'chadi — shablon esa qolishi
+    # kerak, shuning uchun NUSXA olinadi.
+    get_snapshot_store().put(photo_key, payload, content_type="image/jpeg")
+    get_event_store().set_face_result(
+        owner.site_id, event_id, matched=True, employee_id=employee_id, score=1.0
+    )
     get_event_store().touch_site_config(owner.site_id)
     return record
 

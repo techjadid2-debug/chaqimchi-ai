@@ -524,3 +524,41 @@ def test_the_updater_task_is_also_stopped() -> None:
     """O'chirilgan dasturni qayta o'rnatishga urinmasin."""
     block = _uninstall_block()
     assert 'schtasks /Delete /F /TN "Chaqimchi AI Update"' in block
+
+
+# ── Avtostartni dastur o'zi tiklaydi ────────────────────────────────────
+
+
+def test_autostart_task_name_matches_the_installer() -> None:
+    """Nom farq qilsa ikkita vazifa paydo bo'lardi — dastur ikki nusxada.
+
+    O'rnatuvchi vazifani `Chaqimchi AI` deb yaratadi; dastur esa
+    yo'qligini tekshirib o'zi yaratadi (0.6.7 gacha o'rnatilgan
+    kompyuterlarda avtostart `Run` kaliti bo'lib, tokdan keyin nazorat
+    umuman boshlanmasdi).
+    """
+    from chaqimchi_ai.local import autostart
+
+    assert f'/TN "{autostart.TASK_NAME}"' in NSIS.read_text(encoding="utf-8")
+
+
+def test_autostart_uses_the_windowless_launcher() -> None:
+    """Kassirning ekranida qora oyna turmasin (u yopiladi)."""
+    from chaqimchi_ai.local import autostart
+
+    nsis = NSIS.read_text(encoding="utf-8")
+    assert autostart.SERVICE_LAUNCHER in nsis
+    builder = BUILDER.read_text(encoding="utf-8")
+    assert autostart.SERVICE_LAUNCHER in builder
+
+
+def test_autostart_is_a_no_op_outside_windows() -> None:
+    """Linux/mac'da (CI va ishlab chiqish) hech narsa qilinmasin."""
+    import os
+
+    from chaqimchi_ai.local import autostart
+
+    if os.name == "nt":  # pragma: no cover - CI Linux/mac
+        pytest.skip("bu test Windows bo'lmagan tizim uchun")
+    answer = autostart.ensure()
+    assert answer == {"ok": True, "created": False, "reason": "Windows emas"}

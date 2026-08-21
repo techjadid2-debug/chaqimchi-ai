@@ -269,4 +269,165 @@ def test_a_missing_outbox_is_not_an_error(
     for module in (paths, cloud_link):
         importlib.reload(module)
 
-    assert cloud_link.outbox_stats() == {"pending": 0, "critical": 0, "poisoned": 0}
+    assert cloud_link.outbox_stats() == {
+        "pending": 0,
+        "critical": 0,
+        "poisoned": 0,
+        # Sabablar ro'yxati doim bo'ladi (bo'sh bo'lsa ham): heartbeat
+        # modeli uni kutadi.
+        "poisoned_reasons": [],
+    }
+
+
+# ── Kamera ro'yxati qurilmadan cloudga ──────────────────────────────────
+
+
+def test_camera_list_goes_up_to_the_cloud(
+    local, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sehrgarda qo'shilgan kamera cloud panelida ko'rinishi kerak.
+
+    Bungacha oqim faqat bir tomonlama edi (cloud → qurilma) va o'zi
+    ro'yxatdan o'tgan do'konda panel kameralarni umuman ko'rmasdi:
+    jonli ko'rish, xarita, davomat kamerasi va kamera rollari — to'rttasi
+    ham jimgina bo'sh turardi.
+    """
+    from chaqimchi_ai.local import config_store
+
+    config_store.save_camera(
+        camera_id="camera-01", stream_url="rtsp://u:p@10.0.0.5/1", label="Kirish"
+    )
+    calls: list[Dict[str, Any]] = []
+
+    class _Response:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def _post(url, headers=None, json=None, timeout=None):
+        calls.append({"url": url, "json": json})
+        return _Response()
+
+    monkeypatch.setattr(local.httpx, "post", _post)
+
+    assert local.publish_cameras() is True
+    assert calls[0]["url"].endswith("/api/v1/edge/cameras")
+    assert calls[0]["json"] == {"cameras": [{"camera_id": "camera-01", "label": "Kirish"}]}
+    # Parol cloudga ketmasin: manzil umuman yuborilmaydi.
+    assert "rtsp" not in json.dumps(calls[0]["json"])
+
+    # O'zgarmagan ro'yxat qayta yuborilmaydi — har 20 soniyada bir xil
+    # so'rov serverni bekorga bezovta qilardi.
+    assert local.publish_cameras() is False
+    assert len(calls) == 1
+
+    config_store.save_camera(
+        camera_id="camera-02", stream_url="rtsp://u:p@10.0.0.6/1", label="Kassa"
+    )
+    assert local.publish_cameras() is True
+    assert len(calls) == 2
+
+
+def test_camera_health_reaches_the_cloud(
+    local, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Panel qaysi kamera o'chganini ko'rsatishi uchun holat kerak."""
+    from chaqimchi_ai.local import config_store
+
+    config_store.save_camera(
+        camera_id="camera-01", stream_url="rtsp://u:p@10.0.0.5/1", label="Kirish", codec="H265"
+    )
+    sent = _capture_heartbeat(local, monkeypatch)
+
+    assert (
+        local.send_heartbeat(
+            {
+                "cameras_active": 1,
+                "cameras": {
+                    "camera-01": {"connected": True, "offline": False, "reconnects": 9},
+                    "camera-02": {"connected": False, "offline": True, "reconnects": 0},
+                },
+            }
+        )
+        is True
+    )
+
+    by_id = {item["camera_id"]: item for item in sent["cameras"]}
+    assert by_id["camera-01"]["connected"] is True
+    # Format sozlamadan qo'shiladi: sekin ishlayotgan kameraning sababi
+    # kodekmi yoki tarmoqmi — buni faqat shu maydon aytadi.
+    assert by_id["camera-01"]["codec"] == "H265"
+    assert by_id["camera-02"]["offline"] is True
+
+
+def test_heartbeat_shows_why_events_were_dropped(
+    local, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tashlangan hodisalar SONI bor edi, SABABI yo'q edi.
+
+    Haqiqiy do'konda 2730 ta yozuv tashlangani ko'rinardi-yu, nega
+    tashlangani na panelda, na cloudda yozilmasdi.
+    """
+    import sqlite3
+
+    from chaqimchi_ai.local import paths
+
+    db = paths.outbox_path()
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE outbox (event_id TEXT PRIMARY KEY, payload TEXT, created_at TEXT, "
+        "priority INTEGER DEFAULT 0, sent_at TEXT, snapshot_size INTEGER DEFAULT 0, "
+        "clip_size INTEGER DEFAULT 0, next_attempt_at TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE dead_letter (event_id TEXT PRIMARY KEY, payload TEXT, attempts INTEGER, "
+        "last_error TEXT, created_at TEXT, failed_at TEXT)"
+    )
+    for index in range(3):
+        conn.execute(
+            "INSERT INTO dead_letter VALUES (?,?,?,?,?,?)",
+            (f"e{index}", "{}", 20, "413 Payload Too Large", "2026-08-21", "2026-08-21"),
+        )
+    conn.commit()
+    conn.close()
+
+    sent = _capture_heartbeat(local, monkeypatch)
+    assert local.send_heartbeat({"cameras_active": 1}) is True
+
+    assert sent["outbox_poisoned"] == 3
+    assert sent["outbox_poisoned_reasons"] == ["3× 413 Payload Too Large"]
+
+
+def test_a_rejected_camera_list_is_not_retried_forever(
+    local, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cloud ataylab rad etsa (tarif chegarasi) — har 20 soniyada urinmaymiz.
+
+    Aynan shu naqsh qurilmadagi `dead_letter` ni to'ldirgan edi: doimiy
+    rad javobga cheksiz qayta urinish.
+    """
+    from chaqimchi_ai.local import config_store
+
+    config_store.save_camera(camera_id="camera-01", stream_url="rtsp://x/1", label="Kirish")
+    calls = []
+
+    class _Rejected:
+        status_code = 422
+        text = "Tarifingizda ko'pi bilan 2 ta kamera."
+
+    def _post(url, headers=None, json=None, timeout=None):
+        calls.append(url)
+        return _Rejected()
+
+    monkeypatch.setattr(local.httpx, "post", _post)
+
+    assert local.publish_cameras() is False
+    assert local.publish_cameras() is False
+    assert len(calls) == 1, "rad etilgan ro'yxat qayta-qayta yuborilmasin"
+
+    # Mijoz kamerani olib tashlasa — bu YANGI ro'yxat, qayta urinamiz.
+    config_store.delete_camera("camera-01")
+    assert local.publish_cameras() is False
+    assert len(calls) == 2

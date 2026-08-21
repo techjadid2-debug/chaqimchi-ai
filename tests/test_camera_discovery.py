@@ -291,3 +291,75 @@ def test_ws_discovery_does_not_claim_rtsp():
     assert "has_rtsp" not in found[0]
     assert "rtsp_port" not in found[0]
     assert found[0]["onvif_port"] == 8899, "xaddr'dagi port ajratib olinsin"
+
+
+def test_onvif_tries_every_stream_until_one_opens(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Birinchi oqim ochilmasa ikkinchisi sinalsin.
+
+    Haqiqiy do'kondagi nosozlik: ONVIF tavsiya qilgan bitta oqim
+    ochilmagach dastur "NVR'ni H.264 ga o'zgartiring" deb to'xtardi —
+    holbuki o'sha kamerada ishlaydigan boshqa oqim bor edi.
+    """
+    from chaqimchi_ai.local import camera_probe, onvif_client
+
+    profiles = [
+        onvif_client.StreamProfile(
+            token="sub-h265", name="sub", encoding="H265",
+            width=640, height=360, uri="rtsp://cam/sub265",
+        ),
+        onvif_client.StreamProfile(
+            token="main-h264", name="main", encoding="H264",
+            width=1920, height=1080, uri="rtsp://cam/main",
+        ),
+    ]
+    answer = onvif_client.OnvifResult(
+        ok=True, device=onvif_client.DeviceInfo(manufacturer="Hikvision"), profiles=profiles
+    )
+    monkeypatch.setattr(onvif_client, "describe", lambda *a, **k: answer)
+
+    tried = []
+
+    def _grab(url, timeout_sec=0):
+        tried.append(url)
+        ok = "main" in url
+        return camera_probe.ProbeResult(ok=ok, error="" if ok else "ochilmadi", hint="")
+
+    monkeypatch.setattr(camera_probe, "grab_frame", _grab)
+
+    name, url, result = camera_probe._try_onvif(
+        "192.168.1.64", username="admin", password="parol", timeout_sec=1
+    )
+
+    assert len(tried) == 2, "birinchi oqim ochilmagach ikkinchisi sinalishi kerak"
+    assert url is not None and "main" in url
+    assert result.ok
+    assert name is not None and name.startswith("Hikvision")
+
+
+def test_onvif_explains_the_reason_when_no_stream_opens(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hech biri ochilmasa — sabab H.265+ (Smart Codec) deb aytiladi."""
+    from chaqimchi_ai.local import camera_probe, onvif_client
+
+    profiles = [
+        onvif_client.StreamProfile(
+            token="sub-h265", name="sub", encoding="H265",
+            width=640, height=360, uri="rtsp://cam/sub265",
+        ),
+    ]
+    answer = onvif_client.OnvifResult(
+        ok=True, device=onvif_client.DeviceInfo(manufacturer="Hikvision"), profiles=profiles
+    )
+    monkeypatch.setattr(onvif_client, "describe", lambda *a, **k: answer)
+    monkeypatch.setattr(
+        camera_probe,
+        "grab_frame",
+        lambda url, timeout_sec=0: camera_probe.ProbeResult(ok=False, error="", hint=""),
+    )
+
+    _name, url, result = camera_probe._try_onvif(
+        "192.168.1.64", username="admin", password="parol", timeout_sec=1
+    )
+
+    assert url is None
+    assert "H.265" in result.error
+    assert "Sub Stream" in result.hint

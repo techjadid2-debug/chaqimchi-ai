@@ -16,6 +16,7 @@
     );
 
   let pendingUrl = ""; // tasdiqlanishi kutilayotgan kamera manzili
+  let pendingCodec = ""; // ONVIF aniqlagan format ("H264", "H265")
   let cameras = [];
   let editor = null;
   let currentStep = 1;
@@ -284,10 +285,12 @@
       return found.rtsp_url;
     }
 
-    // ONVIF: yo'lni taxmin qilmaymiz — kameradan so'raymiz va tahlil
-    // uchun eng mos oqimni (H.264 substream) o'zi tanlaydi.
+    // ONVIF: yo'lni taxmin qilmaymiz — kameradan so'raymiz.  Server
+    // oqimlarni birma-bir sinab, ROSTDAN ochiladiganini tanlaydi:
+    // H.264 ham, H.265 ham bo'lishi mumkin.
     if ($("brand").value === "onvif") {
-      note("testResult", "warn", "Kameradan so‘ralmoqda…", " ONVIF so‘rovi 5–15 soniya oladi.");
+      note("testResult", "warn", "Kameradan so‘ralmoqda…",
+        " Dastur kameraning oqimlarini birma-bir sinaydi — 30 soniyagacha ketishi mumkin.");
       const answer = await api("/api/setup/onvif", {
         method: "POST",
         body: JSON.stringify({
@@ -303,10 +306,14 @@
       }
       const best = answer.streams.find((item) => item.recommended) || answer.streams[0];
       if (!best) throw new Error("Kamerada mos oqim topilmadi.");
-      if (best.warning) {
+      pendingCodec = best.encoding || "";
+      if (answer.verified) {
+        note("testResult", "ok", `${answer.brand || "Kamera"}: ${best.encoding} oqim tanlandi`, "");
+      } else if (best.warning) {
+        // Sinalgan oqimlarning hech biri ochilmadi — sabab bilan.
         note("testResult", "warn", best.warning, " " + best.advice);
       } else {
-        note("testResult", "ok", `${answer.brand || "Kamera"}: ${best.encoding} oqim tanlandi`, "");
+        note("testResult", "warn", `${answer.brand || "Kamera"}: ${best.encoding} oqim sinaladi`, "");
       }
       return best.rtsp_url;
     }
@@ -428,6 +435,7 @@
               body: JSON.stringify({
                 label: (field && field.value.trim()) || `${item.channel}-kanal`,
                 rtsp_url: item.rtsp_url,
+                codec: item.codec || "",
               }),
             });
           }
@@ -480,9 +488,11 @@
           label: $("label").value.trim() || (preset ? preset.label : ""),
           rtsp_url: pendingUrl,
           priority: preset ? preset.priority : "retail",
+          codec: pendingCodec,
         }),
       });
       pendingUrl = "";
+      pendingCodec = "";
       $("password").value = "";
       $("manualUrl").value = "";
       $("label").value = "";

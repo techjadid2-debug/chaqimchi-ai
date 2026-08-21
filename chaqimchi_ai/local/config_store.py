@@ -134,6 +134,13 @@ def _write_raw_unlocked(raw: Dict[str, Any]) -> None:
     tmp = path.with_suffix(".tmp")
     with tmp.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(raw, handle, allow_unicode=True, sort_keys=False)
+        # `os.replace` atomik, lekin YOZUV diskka tushgani kafolatlanmagan:
+        # tok o'chganda `config.yaml` bo'sh yoki yarim qolishi mumkin edi
+        # (modul izohi buni allaqachon va'da qilardi).  Bo'sh config esa
+        # `is_ready()` ni `False` qiladi — kompyuter yonadi-yu, mijoz
+        # o'rniga sozlash sehrgarini ko'radi.
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(tmp, path)
 
 
@@ -175,6 +182,7 @@ def save_camera(
     label: str = "",
     record_url: Optional[str] = None,
     priority: str = "retail",
+    codec: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Kamerani qo'shadi yoki mavjudini almashtiradi (id bo'yicha).
 
@@ -192,6 +200,8 @@ def save_camera(
         entry["label"] = label
     if record_url:
         entry["record_url"] = record_url
+    if codec:
+        entry["codec"] = codec
 
     with _LOCK:
         raw = read_raw()

@@ -41,7 +41,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from chaqimchi_ai import __version__
-from chaqimchi_ai.local import config_store, paths
+from chaqimchi_ai.local import autostart, config_store, paths
 from chaqimchi_ai.signed_update import UpdateVerificationError, verify_release_manifest
 
 logger = logging.getLogger(__name__)
@@ -391,6 +391,17 @@ def _resolve_pending(state: Dict[str, Any]) -> Optional[str]:
 
 def run_once(*, dry_run: bool = False) -> int:
     """Bir marta tekshiradi va kerak bo'lsa yangilaydi."""
+    # Bu vazifa SYSTEM nomidan ishlaydi, ya'ni avtostart vazifasini
+    # yaratishga huquqi bor.  Eski (0.6.7 dan oldingi) o'rnatishda
+    # avtostart `Run` kaliti edi — u kompyuter yonganda emas, odam
+    # kirganda ishlaydi va tokdan keyin nazorat boshlanmasdi.
+    # Yangilanish o'rnatuvchini qayta ishlatmaydi, shuning uchun
+    # tuzatish shu yerda ham qilinadi.
+    try:
+        autostart.ensure()
+    except Exception:  # noqa: BLE001 — yangilash bundan to'xtamasin
+        logger.warning("Avtostart tekshiruvi bajarilmadi", exc_info=True)
+
     state = _read_state()
     if state and _resolve_pending(state) == "wait":
         return 0

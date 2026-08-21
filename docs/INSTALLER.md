@@ -58,6 +58,30 @@ Tekshirish (do‘kon kompyuterida):
 schtasks /Query /TN "Chaqimchi AI" /V /FO LIST
 ```
 
+**0.6.7 dan oldin o‘rnatilgan kompyuterlar.** Ularda avtostart hamon
+`Run` kaliti bo‘lishi mumkin: masofadan yangilash o‘rnatuvchini qayta
+ishlatmaydi, ya’ni yangi versiyaga o‘tgan qurilma ham eski usulda
+qolaveradi. Shuning uchun dastur buni **o‘zi to‘g‘irlaydi**
+(`chaqimchi_ai/local/autostart.py`): ishga tushganda va har 15 daqiqalik
+yangilanish vazifasida vazifa bor-yo‘qligini tekshiradi, yo‘q bo‘lsa
+yaratadi va eski `Run` kalitini olib tashlaydi. Vazifa SYSTEM huquqini
+talab qiladi — shuning uchun uni odatda yangilanish vazifasi bajaradi.
+
+### Tok o‘chib yonganda
+
+Ikki narsa kerak, ikkalasi ham do‘konda tekshiriladi:
+
+1. **Kompyuterning o‘zi yonsin.** BIOS/UEFI sozlamasi:
+   `Restore on AC Power Loss` (yoki `AC Back`, `After Power Failure`) →
+   **Power On**. Standart qiymat ko‘pincha `Power Off` — bunda tok kelsa
+   ham kompyuter o‘chiq turaveradi va hech qanday dastur yordam bermaydi.
+2. **Dastur o‘zi ko‘tarilsin.** Buni yuqoridagi vazifa qiladi. Kamera
+   yoki NVR kompyuterdan kechroq yonsa AI zanjiri bir necha marta
+   yiqilishi mumkin — bu normal: nazoratchi 1 → 5 → 15 daqiqa oralig‘ida
+   o‘zi qayta urinadi va **hech qachon butunlay to‘xtamaydi**
+   (`chaqimchi_ai/local/supervisor.py: COOLDOWN_STEPS_SEC`). Panelda
+   sababi va keyingi urinishgacha qolgan vaqt ko‘rinib turadi.
+
 Bu rejimda kamera ro‘yxati lokal `config.yaml` da turadi
 (`retail.cameras_source: config`) va cloud ulanmasa ham tahlil ishlaydi.
 Cloudga ulash keyinroq, pairing kod bilan bajariladi (3-bo‘lim).

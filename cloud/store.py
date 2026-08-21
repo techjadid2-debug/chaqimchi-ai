@@ -496,7 +496,12 @@ class CloudStore:
             item["preview_requested"] = bool(item.get("preview_requested"))
             item["has_preview"] = bool(item.get("preview_key"))
             item.pop("rtsp_ciphertext", None)
-            if cipher is not None:
+            item.setdefault("origin", "panel")
+            # Qurilmadan kelgan qatorda manzil yo'q.  `source` ni bo'sh satr
+            # bilan qaytarish MUMKIN EMAS: `cloud_config.apply()` aynan
+            # `if item.get("source")` bo'yicha ishlaydi va bo'sh manzil
+            # do'kondagi ishlab turgan ro'yxatni o'chirib yuborardi.
+            if cipher is not None and row["rtsp_ciphertext"]:
                 try:
                     encrypted = row["rtsp_ciphertext"].encode("ascii")
                     item["source"] = cipher.decrypt(encrypted).decode("utf-8")
@@ -539,15 +544,88 @@ class CloudStore:
         now = _iso(_utc_now())
         conn = self._connect()
         conn.execute(
-            "INSERT INTO site_cameras(site_id,camera_id,label,rtsp_ciphertext,enabled,updated_at) "
-            "VALUES(?,?,?,?,?,?) ON CONFLICT(site_id,camera_id) DO UPDATE SET "
+            "INSERT INTO site_cameras"
+            "(site_id,camera_id,label,rtsp_ciphertext,enabled,updated_at,origin) "
+            "VALUES(?,?,?,?,?,?,'panel') ON CONFLICT(site_id,camera_id) DO UPDATE SET "
             "label=excluded.label,rtsp_ciphertext=excluded.rtsp_ciphertext,enabled=excluded.enabled,"
-            "probe_status='pending',probe_error=NULL,updated_at=excluded.updated_at",
+            "probe_status='pending',probe_error=NULL,updated_at=excluded.updated_at,"
+            "origin='panel'",
             (site_id, camera_id, clean_label[:120], ciphertext, int(enabled), now),
         )
         conn.commit()
         conn.close()
         return next(item for item in self.list_cameras(site_id) if item["camera_id"] == camera_id)
+
+    def register_device_cameras(
+        self, site_id: str, cameras: List[Dict[str, str]]
+    ) -> List[Dict[str, Any]]:
+        """Do'kon kompyuteridagi kamera ro'yxatini cloudga yozadi.
+
+        Bungacha kamerani faqat admin va o'rnatuvchi portali yozardi.  Mijoz
+        kamerani o'z kompyuteridagi sehrgarda qo'shsa, cloud ular haqida
+        HECH NARSA bilmasdi va panelda `cameraList` bo'sh qolardi — ya'ni
+        jonli ko'rish, do'kon xaritasi, davomat kamerasini tanlash va kamera
+        rollari, to'rttasi ham jimgina ishlamasdi.
+
+        **Manzil yuborilmaydi.**  RTSP ichida NVR login/paroli bor va u
+        do'konda qolishi kerak (README va'dasi).  Shuning uchun bu yerda
+        faqat `camera_id` va nom yoziladi, `rtsp_ciphertext` bo'sh qoladi.
+
+        Admin yoki o'rnatuvchi kiritgan qator (`origin='panel'`) HECH QACHON
+        ustidan yozilmaydi: unda haqiqiy manzil bor va u qurilmaga
+        yuboriladi.  Qurilma ro'yxatidan chiqib ketgan `device` qatori esa
+        o'chiriladi — mijoz sehrgardan kamerani olib tashlasa, u panelda
+        ham qolib ketmasin.
+        """
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+        seen: Dict[str, str] = {}
+        for item in cameras:
+            camera_id = str(item.get("camera_id") or "").strip()
+            if not self._camera_id_is_valid(camera_id):
+                raise ValueError(
+                    f"Pilot kamera ID camera-01..camera-{GUARANTEED_CAMERAS:02d} bo'lishi kerak"
+                )
+            label = str(item.get("label") or camera_id).strip() or camera_id
+            seen[camera_id] = label[:120]
+        now = _iso(_utc_now())
+        conn = self._connect()
+        existing = {
+            str(row["camera_id"]): str(row["origin"] or "panel")
+            for row in conn.execute(
+                "SELECT camera_id,origin FROM site_cameras WHERE site_id=?", (site_id,)
+            )
+        }
+        # Chegara JAMI kamera bo'yicha: panelda kiritilganlari o'rnida
+        # qoladi, ya'ni ularni ham sanash kerak — aks holda 4 kameralik
+        # tarifda 4 ta panel + 4 ta qurilma kamerasi yig'ilib qolardi.
+        panel_cameras = {key for key, origin in existing.items() if origin == "panel"}
+        limit = get_plan(str(self.get_site(site_id)["plan"])).max_cameras
+        if len(panel_cameras | set(seen)) > limit:
+            conn.close()
+            raise ValueError(
+                f"Tarifingizda ko'pi bilan {limit} ta kamera. "
+                "Yana kamera ulash uchun tarifni ko'taring."
+            )
+        for camera_id, label in seen.items():
+            if existing.get(camera_id, "device") == "panel":
+                continue
+            conn.execute(
+                "INSERT INTO site_cameras"
+                "(site_id,camera_id,label,rtsp_ciphertext,enabled,updated_at,origin) "
+                "VALUES(?,?,?,'',1,?,'device') ON CONFLICT(site_id,camera_id) DO UPDATE SET "
+                "label=excluded.label,updated_at=excluded.updated_at",
+                (site_id, camera_id, label, now),
+            )
+        for camera_id, origin in existing.items():
+            if origin == "device" and camera_id not in seen:
+                conn.execute(
+                    "DELETE FROM site_cameras WHERE site_id=? AND camera_id=?",
+                    (site_id, camera_id),
+                )
+        conn.commit()
+        conn.close()
+        return self.list_cameras(site_id)
 
     def delete_camera(self, site_id: str, camera_id: str) -> bool:
         conn = self._connect()
@@ -1020,6 +1098,11 @@ class CloudStore:
             # Jonli ko'rish: shu vaqtgacha qurilma har 2-3 soniyada kadr
             # yuboradi (panel ochiq ekan muddat uzaytirib turiladi).
             "live_until": "TEXT",
+            # Kamerani kim yozdi: `panel` (admin/o'rnatuvchi, RTSP manzili
+            # bilan) yoki `device` (do'kon kompyuteridagi sehrgar, manzilsiz
+            # — parol do'konda qoladi).  Farq muhim: `device` qatorining
+            # manzili yo'q, ya'ni u qurilmaga qaytarilmaydi.
+            "origin": "TEXT NOT NULL DEFAULT 'panel'",
         }
         for name, definition in camera_additions.items():
             if name not in camera_columns:

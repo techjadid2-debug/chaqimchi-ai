@@ -32,9 +32,21 @@ logger = logging.getLogger(__name__)
 #: ko'rmasdan qolardi.
 CRASH_WINDOW_SEC = 20
 
-#: Ketma-ket shuncha marta tez yiqilgandan keyin to'xtaymiz va sababni
-#: panelda ko'rsatamiz.
+#: Ketma-ket shuncha marta tez yiqilgandan keyin darhol qayta urinishni
+#: to'xtatamiz va sababni panelda ko'rsatamiz — lekin BUTUNLAY taslim
+#: bo'lmaymiz (pastdagi `COOLDOWN_STEPS_SEC` ga qarang).
 MAX_RAPID_CRASHES = 3
+
+#: Ketma-ket tez yiqilishdan keyin shuncha kutib yana urinamiz: 1, 5,
+#: keyin har 15 daqiqada.
+#:
+#: Ilgari bu holatda `_auto_restart` ABADIY `False` bo'lardi va zanjirni
+#: faqat odam qo'lda ko'tarardi — do'kon egasi uchun bu aynan "svet
+#: o'chib yongandan keyin dasturni o'chirib yoqish kerak" edi.  Sabab
+#: odatda vaqtinchalik: tok kelganda kompyuter NVR va routerdan oldin
+#: yonadi, kamera esa hali javob bermaydi.  Bir necha daqiqadan keyin
+#: hammasi joyida bo'ladi — dastur buni o'zi kutib olishi kerak.
+COOLDOWN_STEPS_SEC = (60, 300, 900)
 
 #: Panelga ko'rsatiladigan log qatorlari soni.
 LOG_TAIL_LINES = 200
@@ -56,7 +68,11 @@ class RetailSupervisor:
 
     def __init__(self) -> None:
         self._process: Optional[subprocess.Popen] = None
-        self._lock = threading.Lock()
+        # `RLock`: `restart()` qulfni ushlab turib `start()` ni chaqiradi.
+        # Oddiy `Lock` bilan qulfni oraliqda bo'shatishga to'g'ri kelardi
+        # va aynan o'sha oynada kuzatuvchi ip "to'xtatilgan" deb chiqib
+        # ketishi mumkin edi — zanjir nazoratsiz qolardi.
+        self._lock = threading.RLock()
         self._log_path = paths.logs_dir() / "retail.log"
         self._log_handle: Optional[Any] = None
         self._crashes: Deque[float] = deque(maxlen=MAX_RAPID_CRASHES)
@@ -64,6 +80,10 @@ class RetailSupervisor:
         self._started_at: Optional[float] = None
         self._auto_restart = True
         self._watch_thread: Optional[threading.Thread] = None
+        #: Sovish oralig'i: shu vaqtdan keyin yana urinamiz (0 — darhol).
+        self._retry_at: float = 0.0
+        #: Nechanchi sovish qadamidamiz (`COOLDOWN_STEPS_SEC` indeksi).
+        self._cooldown_step: int = 0
 
     # ── Boshqaruv ────────────────────────────────────────────────────────
 
@@ -86,6 +106,8 @@ class RetailSupervisor:
             self._last_error = ""
             self._crashes.clear()
             self._auto_restart = True
+            self._retry_at = 0.0
+            self._cooldown_step = 0
             self._spawn()
             return self.status()
 
@@ -104,13 +126,15 @@ class RetailSupervisor:
         murakkab va xatoga moyil bo'lardi.  Qayta ishga tushish bir necha
         soniya oladi va natijasi aniq.
         """
+        # Hammasi BITTA qulf ichida (`RLock`): ilgari qulf `terminate` bilan
+        # `start` orasida bo'shardi va kuzatuvchi ip o'sha oynada
+        # "to'xtatilgan" deb chiqib ketishi mumkin edi — zanjir ishlab
+        # turgani holda uni hech kim kuzatmasdi va keyingi yiqilish
+        # abadiy bo'lardi.
         with self._lock:
-            # Avval avtomatik qayta ishga tushirishni o'chiramiz: aks holda
-            # kuzatuvchi ip biz `start()` ga yetgunimizcha bo'sh o'rinni
-            # ko'rib, ikkinchi jarayonni ochib yuborardi.
             self._auto_restart = False
             self._terminate()
-        return self.start()
+            return self.start()
 
     # ── Ichki ────────────────────────────────────────────────────────────
 
@@ -202,39 +226,107 @@ class RetailSupervisor:
         self._started_at = None
 
     def _watch(self) -> None:
-        """Jarayon yiqilsa qayta ishga tushiradi (cheklangan urinish bilan)."""
+        """Jarayon yiqilsa qayta ishga tushiradi — hech qachon taslim bo'lmay.
+
+        Tez ketma-ket yiqilish odatda vaqtinchalik sabab: tok kelganda
+        kompyuter NVR'dan oldin yonadi, kamera hali javob bermaydi.
+        Shuning uchun urinish TO'XTAMAYDI, faqat sekinlashadi
+        (`COOLDOWN_STEPS_SEC`).
+        """
         while True:
             time.sleep(2)
             with self._lock:
-                if not self._auto_restart:
-                    if not self._alive():
-                        return
-                    continue
-                if self._alive():
-                    continue
+                if not self._tick(time.time()):
+                    return
 
-                ran_for = time.time() - (self._started_at or time.time())
-                self._terminate()
+    def _tick(self, now: float) -> bool:
+        """Kuzatuvchi siklining bitta qadami.  `False` — ip yopilsin.
 
-                if ran_for < CRASH_WINDOW_SEC:
-                    self._crashes.append(time.time())
-                    if len(self._crashes) >= MAX_RAPID_CRASHES:
-                        self._auto_restart = False
-                        self._last_error = (
-                            "AI xizmati ketma-ket bir necha marta to'xtadi. "
-                            "Kamera manzilini tekshiring yoki jurnalni ko'ring."
-                        )
-                        logger.error("Zanjir %s marta tez yiqildi — to'xtatildi", MAX_RAPID_CRASHES)
-                        return
-                else:
-                    self._crashes.clear()
+        Alohida usul, chunki tiklanish mantig'i aynan shu yerda va uni
+        soatga bog'liq bo'lmagan holda sinash kerak: "svet o'chib
+        yongandan keyin o'zi ko'tariladimi" degan savol shu qadamlar
+        ketma-ketligi bilan hal bo'ladi.
+        """
+        if not self._auto_restart:
+            if not self._alive():
+                # Mijoz o'zi to'xtatgan.  Ip yopiladi; keyingi `_spawn()`
+                # yangisini ochadi (shuning uchun havola shu yerda
+                # tozalanadi — `is_alive()` hali `True` qaytarayotgan ip
+                # yangisini to'sib qo'ymasin).
+                self._watch_thread = None
+                return False
+            return True
 
-                # Bu — qabul mezonidagi "kutilmagan qayta ishga tushish".
-                # Mijoz o'zi bosgan `restart()` bu yerga tushmaydi: u
-                # `_auto_restart` ni o'chirib, keyin `start()` chaqiradi.
-                counters.bump("chain_crashes")
-                logger.warning("Zanjir to'xtab qoldi — qayta ishga tushirilmoqda")
-                self._spawn()
+        if self._alive():
+            # Bir marta uzoq ishlab ketdi — sovish qadami nolga qaytadi,
+            # keyingi nosozlikda yana tezda ko'tariladi.
+            if self._cooldown_step and now - (self._started_at or 0) > CRASH_WINDOW_SEC:
+                self._cooldown_step = 0
+                self._last_error = ""
+            return True
+
+        if self._retry_at:
+            if now < self._retry_at:
+                return True
+            # Kutish tugadi — hisob-kitobsiz, to'g'ridan-to'g'ri qayta
+            # urinamiz.  Bu yerda `_note_exit` chaqirilsa KUTILGAN
+            # vaqtning o'zi "zanjir uzoq ishladi" bo'lib hisoblanardi va
+            # sovish qadami har safar nolga qaytardi: 1 → 5 → 15
+            # daqiqalik o'sish hech qachon ishlamasdi.
+            self._retry_at = 0.0
+            counters.bump("chain_crashes")
+            logger.warning("Sovish oralig'i tugadi — zanjir qayta urinilmoqda")
+            self._spawn()
+            return True
+
+        ran_for = now - (self._started_at or now)
+        self._terminate()
+        if not self._note_exit(ran_for, now=now):
+            return True
+
+        # Bu — qabul mezonidagi "kutilmagan qayta ishga tushish".  Mijoz
+        # o'zi bosgan `restart()` bu yerga tushmaydi: u `_auto_restart`
+        # ni o'chirib, keyin `start()` chaqiradi.
+        counters.bump("chain_crashes")
+        logger.warning("Zanjir to'xtab qoldi — qayta ishga tushirilmoqda")
+        self._spawn()
+        return True
+
+    def _note_exit(self, ran_for: float, *, now: Optional[float] = None) -> bool:
+        """Zanjir to'xtadi — HOZIR qayta ko'tarilsinmi?
+
+        `False` — hozir emas: ketma-ket tez yiqilish sabab sovish oralig'i
+        qo'yildi (`_retry_at`).  Kutish tugagach kuzatuvchi o'zi qayta
+        urinadi; taslim bo'lish YO'Q.
+        """
+        moment = time.time() if now is None else now
+        if ran_for >= CRASH_WINDOW_SEC:
+            # Uzoq ishlab, keyin to'xtadi — bu "xato" emas, oddiy yiqilish.
+            self._crashes.clear()
+            self._cooldown_step = 0
+            self._retry_at = 0.0
+            return True
+
+        self._crashes.append(moment)
+        if len(self._crashes) < MAX_RAPID_CRASHES:
+            self._retry_at = 0.0
+            return True
+
+        wait = COOLDOWN_STEPS_SEC[min(self._cooldown_step, len(COOLDOWN_STEPS_SEC) - 1)]
+        self._cooldown_step += 1
+        self._crashes.clear()
+        self._retry_at = moment + wait
+        self._last_error = (
+            "AI xizmati ketma-ket bir necha marta to'xtadi. "
+            f"{wait // 60} daqiqadan keyin o'zi yana urinadi — "
+            "kamera yoki NVR o'chgan bo'lishi mumkin."
+        )
+        logger.error(
+            "Zanjir %s marta tez yiqildi — %s soniyadan keyin qayta urinamiz",
+            MAX_RAPID_CRASHES,
+            wait,
+        )
+        return False
 
     # ── Holat ────────────────────────────────────────────────────────────
 
@@ -257,12 +349,21 @@ class RetailSupervisor:
         return {
             "running": running,
             "auto_restart": self._auto_restart,
+            # Sovish oralig'i: panel "necha daqiqadan keyin o'zi urinadi"
+            # deb aniq yozsin — mijoz kutsinmi yoki NVR'ni tekshirsinmi,
+            # bilib tursin.
+            "retry_in_sec": (
+                max(0, int(self._retry_at - time.time())) if self._retry_at else 0
+            ),
             "started_at": self._started_at,
             "uptime_sec": (time.time() - self._started_at) if (running and self._started_at) else 0,
             "error": self._last_error,
             "cameras_configured": status_file.get("cameras_configured", 0),
             "cameras_active": status_file.get("cameras_active", 0),
             "cameras": status_file.get("cameras", {}),
+            # Klip hisoblagichlari: "hodisa bor, klip yo'q" holatini panel
+            # ham, cloud ham ko'rsin.
+            "clips": status_file.get("clips") or {},
             # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel
             # "hisobot cloudga bormayapti" ogohlantirishini shundan chiqaradi.
             "plan_filtered": status_file.get("plan_filtered", 0),

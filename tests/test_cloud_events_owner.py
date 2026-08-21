@@ -1549,3 +1549,199 @@ def test_owner_sees_the_annual_offer_with_real_amounts(production_client) -> Non
     )
     assert invoice.status_code == 200
     assert invoice.json()["amount_uzs"] == data["annual_uzs"]
+
+
+# ── Kamera inventari: qurilma o'zi bildiradi ───────────────────────────
+
+
+def test_device_registers_its_own_cameras(production_client) -> None:
+    """Sehrgarda qo'shilgan kamera mijoz panelida ko'rinsin.
+
+    Haqiqiy do'konda `site_cameras` BO'M-BO'SH edi: mijoz kameralarni o'z
+    kompyuteridagi sehrgarda qo'shgan, cloudga esa kamera yozadigan yo'l
+    faqat admin va o'rnatuvchi portalida bor edi.  Natijada panelda
+    `cameraList` bo'sh qolib, jonli ko'rish, do'kon xaritasi, davomat
+    kamerasi va kamera rollari — to'rttasi ham jimgina ishlamasdi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7001")
+
+    assert client.get("/api/v1/owner/cameras", headers=owner_headers).json()["cameras"] == []
+
+    answer = client.post(
+        "/api/v1/edge/cameras",
+        headers=headers,
+        json={
+            "cameras": [
+                {"camera_id": "camera-01", "label": "Kirish"},
+                {"camera_id": "camera-02", "label": "Kassa"},
+            ]
+        },
+    )
+    assert answer.status_code == 200
+
+    cameras = client.get("/api/v1/owner/cameras", headers=owner_headers).json()["cameras"]
+    assert [item["camera_id"] for item in cameras] == ["camera-01", "camera-02"]
+    assert cameras[0]["label"] == "Kirish"
+    assert cameras[0]["origin"] == "device"
+
+    # Manzilsiz kamera qurilmaga QAYTARILMAYDI: `cloud_config.apply()`
+    # aynan `source` bo'yicha ishlaydi va bo'sh manzil do'kondagi ishlab
+    # turgan ro'yxatni o'chirib yuborardi.
+    config = client.get("/api/v1/edge/config", headers=headers).json()
+    assert all(not item.get("source") for item in config["cameras"])
+
+    # Sehrgardan kamera olib tashlansa panelda ham qolib ketmasin.
+    client.post(
+        "/api/v1/edge/cameras",
+        headers=headers,
+        json={"cameras": [{"camera_id": "camera-01", "label": "Kirish"}]},
+    )
+    cameras = client.get("/api/v1/owner/cameras", headers=owner_headers).json()["cameras"]
+    assert [item["camera_id"] for item in cameras] == ["camera-01"]
+
+
+def test_device_does_not_overwrite_cameras_entered_in_the_panel(production_client) -> None:
+    """Admin kiritgan manzil qurilma xabaridan keyin ham qolishi shart.
+
+    Aks holda o'rnatuvchi kiritgan RTSP manzili (parol bilan) yo'qolib,
+    qurilma qayta ulanganda kamera manzilsiz qolardi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    saved = client.put(
+        f"/api/v1/admin/sites/{site['site_id']}/camera-inventory/camera-01",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={
+            "label": "O'rnatuvchi qo'ygan",
+            "rtsp_url": "rtsp://admin:parol@10.0.0.9:554/Streaming/Channels/102",
+        },
+    )
+    assert saved.status_code == 200
+
+    client.post(
+        "/api/v1/edge/cameras",
+        headers=headers,
+        json={"cameras": [{"camera_id": "camera-01", "label": "Sehrgar nomi"}]},
+    )
+
+    config = client.get("/api/v1/edge/config", headers=headers).json()
+    camera = next(item for item in config["cameras"] if item["camera_id"] == "camera-01")
+    assert camera["source"].startswith("rtsp://")
+    assert camera["label"] == "O'rnatuvchi qo'ygan"
+
+
+def test_camera_count_falls_back_to_the_registered_list(production_client) -> None:
+    """Panel "4 dan 2 tasi" deyishi uchun maxraj kerak.
+
+    `cameras_expected` obyekt yaratilganda QO'LDA kiritiladi va o'zi
+    ro'yxatdan o'tgan do'konda bo'sh qoladi — panel esa quruq "Qurilma
+    ulangan" deb turardi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7002")
+
+    client.post(
+        "/api/v1/edge/cameras",
+        headers=headers,
+        json={
+            "cameras": [
+                {"camera_id": "camera-01", "label": "Kirish"},
+                {"camera_id": "camera-02", "label": "Kassa"},
+            ]
+        },
+    )
+    health = client.get("/api/v1/owner/health", headers=owner_headers).json()
+    assert health["cameras_expected"] == 2
+
+
+def test_camera_health_is_stored_per_camera(production_client) -> None:
+    """Panelda yashil chiroq preview RASMIDAN emas, qurilmadan kelsin."""
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7003")
+
+    client.post(
+        "/api/v1/edge/heartbeat",
+        headers=headers,
+        json={
+            "cameras_active": 1,
+            "cameras": [
+                {"camera_id": "camera-01", "connected": True, "offline": False, "codec": "H265"},
+                {"camera_id": "camera-02", "connected": False, "offline": True, "reconnects": 12},
+            ],
+        },
+    )
+
+    health = client.get("/api/v1/owner/health", headers=owner_headers).json()
+    reported = health["devices"][0]["health"]["cameras"]
+    by_id = {item["camera_id"]: item for item in reported}
+    assert by_id["camera-01"]["codec"] == "H265"
+    assert by_id["camera-02"]["offline"] is True
+
+
+def test_heatmap_can_be_asked_for_a_range_of_days(production_client) -> None:
+    """Xaritada vaqt oralig'i: bitta kun ko'pincha juda kam ma'lumot.
+
+    Server `days` ni allaqachon qabul qilardi, panel esa uni HECH QACHON
+    yubormasdi — mijoz uchun bu "xarita bo'sh" degani edi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner = _login_owner(client, site["site_id"], telegram_id="7004")
+
+    grid = [[0] * 48 for _ in range(27)]
+    grid[3][4] = 5
+    for hour in ("2026-08-20T10", "2026-08-21T10"):
+        client.post(
+            "/api/v1/edge/heatmap",
+            headers=headers,
+            json={"items": [{"camera_id": "camera-01", "hour": hour, "grid": grid, "frames": 10}]},
+        )
+
+    one_day = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&date=2026-08-21", headers=owner
+    ).json()
+    week = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&date=2026-08-21&days=7", headers=owner
+    ).json()
+
+    assert one_day["points"] == 5
+    assert week["points"] == 10, "oraliq so'ralganda oldingi kunlar ham qo'shilsin"
+
+
+def test_device_cannot_exceed_the_plan_camera_limit(production_client) -> None:
+    """Kamera chegarasi qurilma tomonidan aylanib o'tilmasin.
+
+    Qurilmadagi tekshiruv mijozning O'Z kompyuterida turadi va uni
+    tahrirlash mumkin — haqiqiy nazorat shu yerda.
+    """
+    client, _messages = production_client
+    site = client.post(
+        "/api/v1/admin/sites",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"name": "Ikki kamera", "plan": "boshlangich"},
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
+    headers = {
+        "X-Site-Id": device["site_id"],
+        "X-Device-Id": device["device_id"],
+        "X-Device-Token": device["device_token"],
+    }
+
+    answer = client.post(
+        "/api/v1/edge/cameras",
+        headers=headers,
+        json={
+            "cameras": [
+                {"camera_id": f"camera-0{index}", "label": f"K{index}"} for index in range(1, 4)
+            ]
+        },
+    )
+
+    assert answer.status_code == 422
+    assert "2 ta kamera" in answer.json()["detail"]

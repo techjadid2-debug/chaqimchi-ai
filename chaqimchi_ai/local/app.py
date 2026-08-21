@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 from chaqimchi_ai import __version__
 from chaqimchi_ai.limits import NVR_SCAN_CHANNELS, SHOP_MAX_CAMERAS
 from chaqimchi_ai.local import (
+    autostart,
     camera_probe,
     cloud_config,
     cloud_link,
@@ -50,6 +51,11 @@ logger = logging.getLogger(__name__)
 
 PORT = int(os.environ.get("CHAQIMCHI_LOCAL_PORT", "8760"))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+#: ONVIF oqimini sinashda bitta kadr uchun shuncha kutamiz.  Uchta oqim
+#: sinalishi mumkin, ya'ni eng yomon holatda sehrgar ~18 soniya kutadi —
+#: ishlamaydigan kamera bilan qolishdan yaxshiroq.
+ONVIF_TRY_TIMEOUT_SEC = 6
 
 #: Do'kon profili: ko'pi bilan 4 kamera qabul qilingan (`docs/DOKON_MVP.md`).
 #: Sehrgar bundan ortig'ini taklif qilmaydi — o'lchanmagan sig'imni va'da
@@ -419,12 +425,19 @@ def _scan_via_onvif(body: ScanChannelsBody, deadline: float) -> List[Dict[str, A
             break
         number = channel if channel > 0 else index
         _SCAN_JOB["current"] = number
-        best = onvif_client.pick_best_profile(profiles)
-        if best is None or not best.uri:
-            continue
-        url = onvif_client.with_credentials(best.uri, body.username, body.password, host=clean_host)
-        result = camera_probe.grab_frame(url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC)
-        if result.ok:
+        # Har kanalda bir nechta oqim bo'ladi (substream/main, H.264/H.265).
+        # Ilgari faqat bittasi sinalardi va u ochilmasa kanal butunlay
+        # tashlab ketilardi — H.265 substream'li NVR shu sababli
+        # "kamerasiz" ko'rinardi.
+        for candidate in [item for item in onvif_client.rank_profiles(profiles) if item.uri][
+            : camera_probe.MAX_ONVIF_PROFILE_TRIES
+        ]:
+            url = onvif_client.with_credentials(
+                candidate.uri, body.username, body.password, host=clean_host
+            )
+            result = camera_probe.grab_frame(url, timeout_sec=camera_probe.SCAN_TIMEOUT_SEC)
+            if not result.ok:
+                continue
             _PREVIEW_CACHE.put(url, result.jpeg or b"")
             found.append(
                 {
@@ -433,8 +446,10 @@ def _scan_via_onvif(body: ScanChannelsBody, deadline: float) -> List[Dict[str, A
                     "safe_url": camera_probe.redact(url),
                     "width": result.width,
                     "height": result.height,
+                    "codec": candidate.encoding or "",
                 }
             )
+            break
     return found
 
 
@@ -592,9 +607,10 @@ async def onvif_probe(body: OnvifBody) -> Dict[str, Any]:
     bo'lmagan yoki nostandart sozlangan kamera faqat shu yo'l bilan
     ishlaydi.
 
-    Ustiga ustak, javobda kodek ham keladi — ya'ni H.265 muammosini
-    mijoz kamerani qo'shishdan **oldin** biladi, hisobot bo'sh chiqqanda
-    emas.
+    Oqimlar shu yerda ROSTDAN sinaladi: dastur birinchi ochiladigan
+    oqimni o'zi tanlaydi (H.264, H.265 — farqi yo'q).  Mijozdan kodek
+    haqida hech narsa so'ralmaydi; hech biri ochilmasagina NVR menyusida
+    nima o'zgartirish kerakligi yoziladi.
     """
     import anyio
 
@@ -617,10 +633,36 @@ async def onvif_probe(body: OnvifBody) -> Dict[str, Any]:
             "brand": onvif_client.normalise_brand(result.device.brand),
         }
 
-    best = onvif_client.pick_best_profile(result.profiles)
+    # Oqimlar TAVSIYA tartibida sinaladi va tanlov kadr kelishi bo'yicha
+    # qilinadi.  Ilgari faqat tartibning birinchisi "tavsiya etilgan" deb
+    # belgilanardi va H.265 ro'yxat oxirida turardi — ya'ni H.265
+    # substream'li kamerada mijoz ishlamaydigan oqimni tanlab, "kamera
+    # qo'shilmadi" degan xabarni olardi.
+    ordered = onvif_client.rank_profiles(result.profiles)
+    tried: Dict[str, bool] = {}
+    working_token = ""
+    for profile in ordered[: camera_probe.MAX_ONVIF_PROFILE_TRIES]:
+        if not profile.uri:
+            continue
+        url = onvif_client.with_credentials(
+            profile.uri, body.username, body.password, host=body.host.strip()
+        )
+        probe = await anyio.to_thread.run_sync(
+            functools.partial(camera_probe.grab_frame, url, timeout_sec=ONVIF_TRY_TIMEOUT_SEC)
+        )
+        tried[profile.token] = probe.ok
+        if probe.ok:
+            working_token = profile.token
+            break
+
     streams = []
-    for profile in result.profiles:
-        warning, advice = onvif_client.compatibility_note(profile)
+    for profile in ordered:
+        works = tried.get(profile.token)
+        # Ogohlantirish faqat SINALGAN va ochilmagan oqim uchun: ishlab
+        # turgan H.265 ga "H.264 ga o'zgartiring" deyish noto'g'ri edi.
+        warning, advice = ("", "")
+        if works is False:
+            warning, advice = onvif_client.compatibility_note(profile)
         url = onvif_client.with_credentials(
             profile.uri, body.username, body.password, host=body.host.strip()
         )
@@ -634,7 +676,14 @@ async def onvif_probe(body: OnvifBody) -> Dict[str, Any]:
                 "fps": profile.fps,
                 "rtsp_url": url,
                 "safe_url": camera_probe.redact(url),
-                "recommended": bool(best and profile.token == best.token),
+                # Sinovdan o'tgani bo'lsa — o'sha; bo'lmasa tartibning
+                # birinchisi (mijoz baribir "Sinash" tugmasini bosadi).
+                "recommended": (
+                    profile.token == working_token
+                    if working_token
+                    else bool(ordered and profile.token == ordered[0].token)
+                ),
+                "works": works,
                 "warning": warning,
                 "advice": advice,
             }
@@ -647,6 +696,9 @@ async def onvif_probe(body: OnvifBody) -> Dict[str, Any]:
         "firmware": result.device.firmware,
         "streams": streams,
         "count": len(streams),
+        # Hech bir oqim ochilmasa sehrgar aniq sabab ko'rsatadi (odatda
+        # H.265+ / Smart Codec).
+        "verified": bool(working_token),
     }
 
 
@@ -656,6 +708,9 @@ class CameraSaveBody(BaseModel):
     rtsp_url: str = Field(min_length=7, max_length=500)
     record_url: Optional[str] = Field(default=None, max_length=500)
     priority: str = Field(default="retail", pattern="^(security|retail|background)$")
+    #: ONVIF aniqlagan format.  Sehrgar biladi, panel esa kamera sekin
+    #: ishlaganda sababni ko'rsatishi kerak.
+    codec: Optional[str] = Field(default=None, max_length=16)
 
 
 @app.get("/api/setup/cameras")
@@ -668,6 +723,8 @@ async def list_cameras() -> Dict[str, Any]:
                 "label": item.get("label") or item.get("id"),
                 "safe_url": camera_probe.redact(str(item.get("stream_url") or "")),
                 "priority": item.get("priority", "retail"),
+                "codec": item.get("codec") or "",
+                "record_url_set": bool(item.get("record_url")),
             }
             for item in config_store.cameras()
         ],
@@ -700,6 +757,7 @@ async def save_camera(body: CameraSaveBody) -> Dict[str, Any]:
         label=body.label.strip(),
         record_url=record_url,
         priority=body.priority,
+        codec=(body.codec or "").strip().upper() or None,
     )
     return {
         "ok": True,
@@ -812,10 +870,16 @@ class PairBody(BaseModel):
 
 @app.get("/api/setup/cloud-status")
 async def cloud_status() -> Dict[str, Any]:
+    queue = cloud_link.outbox_stats()
     return {
         **cloud_link.status(),
         **cloud_config.status(),
         "pending_events": cloud_link.pending_events(),
+        # Umidsiz deb tashlangan hodisalar — panel ularni KO'RSATISHI
+        # kerak: haqiqiy do'konda 2730 ta yozuv shu holatga tushgan-u,
+        # buni na panel, na cloud aytmasdi.
+        "poisoned_events": queue.get("poisoned") or 0,
+        "poisoned_reasons": queue.get("poisoned_reasons") or [],
     }
 
 
@@ -874,9 +938,23 @@ async def pull_config() -> Dict[str, Any]:
 
 @app.get("/api/status")
 async def status() -> Dict[str, Any]:
+    # `summary()` ham, `supervisor.status()` ham `cameras` kalitini beradi:
+    # birinchisi NOM ro'yxati, ikkinchisi SOG'LIQ lug'ati.  Ilgari ikkalasi
+    # ketma-ket yoyilardi va ro'yxat sog'liqni ustidan yozib yuborardi —
+    # panel har kamerani qizil nuqta bilan "javob bermayapti" deb
+    # ko'rsatardi va nom o'rniga `0`, `1` chiqarardi.
+    info = config_store.summary()
+    saved = info.pop("cameras", [])
+    state = supervisor.status()
     return {
-        **supervisor.status(),
-        **config_store.summary(),
+        **info,
+        **state,
+        # Nomlar alohida kalitda (panel allaqachon shuni kutadi).
+        "cameras_list": saved,
+        # Maxraj: mijoz sehrgarda nechta kamera qo'shgan.  Zanjirning
+        # `cameras_configured` i faqat u ochgan oqimlarni sanaydi — zanjir
+        # to'xtab qolsa u 0 bo'lib qoladi va "0/0 kamera" ko'rinardi.
+        "cameras_configured": len(saved) or int(state.get("cameras_configured") or 0),
         # Har funksiya holati va sababi — panelda "yashil chiroq yolg'oni"
         # o'rniga aniq ro'yxat ko'rinadi.
         "features": config_store.feature_status(),
@@ -1189,6 +1267,10 @@ def _start_config_sync() -> None:
                 # versiyada ekanini bilishi kerak, hatto zanjir
                 # to'xtagan bo'lsa ham.
                 cloud_config.send_heartbeat(supervisor.status())
+                # Kamera ro'yxati (manzilsiz) — mijoz sehrgarda kamera
+                # qo'shsa panel uni ko'rsin.  O'zgarmagan bo'lsa so'rov
+                # umuman ketmaydi.
+                cloud_config.publish_cameras()
                 cloud_config.upload_heatmaps()
 
                 applied = cloud_config.sync_once()
@@ -1270,6 +1352,14 @@ def main() -> None:
 
     # Updater uchun: dastur hech bo'lmasa shu nuqtagacha yetib keldi.
     _write_alive("starting")
+    # Avtostart: eski usulda (Run kaliti bilan) o'rnatilgan kompyuterda
+    # tok o'chib yonganda nazorat umuman boshlanmasdi — kompyuter qulf
+    # ekranida turardi.  Masofadan yangilash o'rnatuvchini qayta
+    # ishlatmaydi, shuning uchun dastur buni o'zi to'g'irlaydi.
+    try:
+        autostart.ensure()
+    except Exception:  # noqa: BLE001 — avtostart dasturni to'xtatmasin
+        logger.warning("Avtostart tekshiruvi bajarilmadi", exc_info=True)
     # Panel jarayoni necha marta ko'tarilgani — kompyuter qayta yonishi
     # ham shu yerda ko'rinadi.  72 soatlik sinovda "kutilmagan restart"
     # ni aynan shu son bilan tekshiramiz.

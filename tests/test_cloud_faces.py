@@ -710,3 +710,89 @@ def test_reembedding_restores_matching(pilot_client) -> None:
     matched = faces.FaceService.match(vector(0.05), candidates)
     assert matched is not None
     assert matched[0] == employee["id"]
+
+
+def test_the_panel_learns_the_template_limit_and_quality(pilot_client) -> None:
+    """Xodimga bir nechta shablon: panel chegarani OLDINDAN bilishi kerak.
+
+    Server chegarani allaqachon majburlardi (`MAX_FACES_PER_EMPLOYEE`),
+    lekin `GET /owner/faces` uni qaytarmasdi — panel to'rtinchi rasmni
+    ham yuborardi va mijoz 422 xatosini ko'rardi.  Rasm sifati
+    (`det_score`) ham bazada bor edi-yu, javobda tashlab yuborilardi:
+    "nega tanimayapti" degan savolga javob yo'q edi.
+    """
+    site, _ = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    _owner_upload(pilot_client, owner, employee["id"], b"rasm-ali-1")
+
+    listing = pilot_client.get("/api/v1/owner/faces", headers=owner).json()
+
+    assert listing["max_photos"] >= 2, "shablon chegarasi panelga aytilsin"
+    photo = listing["employees"][0]["photos"][0]
+    assert "score" in photo, "rasm sifati ko'rinsin — xira shablonni almashtirish uchun"
+
+
+def test_every_template_is_listed_not_just_the_first(pilot_client) -> None:
+    """Ikkinchi va uchinchi shablon panelda KO'RINISHI kerak.
+
+    Ilgari panel faqat `photos[0]` ni chizardi: qolganlarini na ko'rish,
+    na o'chirish mumkin edi — mijoz "yana rasm qo'shdim, nega bittasi
+    turibdi?" deb so'rardi.
+    """
+    site, _ = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    first = _owner_upload(pilot_client, owner, employee["id"], b"rasm-ali-1")
+    second = _owner_upload(pilot_client, owner, employee["id"], b"rasm-ali-2")
+    assert first.status_code == 200 and second.status_code == 200
+
+    photos = pilot_client.get("/api/v1/owner/faces", headers=owner).json()["employees"][0]["photos"]
+
+    assert len(photos) == 2
+    assert len({item["id"] for item in photos}) == 2
+
+
+def test_an_unknown_capture_can_become_a_template(pilot_client) -> None:
+    """Do'kondagi haqiqiy kadr — eng yaxshi shablon.
+
+    Panelda "tanilmagan kadr ko'p bo'lsa yana bitta rasm qo'shing" deb
+    yozilardi, lekin buni qiladigan yo'l yo'q edi: mijoz telefondan
+    qaytadan rasm olishga majbur bo'lardi.
+    """
+    site, headers = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+    _owner_upload(pilot_client, owner, employee["id"], b"rasm-ali-1")
+    _send_face_capture(pilot_client, headers, "evt-face-tpl", b"rasm-ali-2")
+
+    response = pilot_client.post(
+        f"/api/v1/owner/faces/employees/{employee['id']}/photos/from-event/evt-face-tpl",
+        headers=owner,
+    )
+
+    assert response.status_code == 200, response.text
+    photos = pilot_client.get("/api/v1/owner/faces", headers=owner).json()["employees"][0]["photos"]
+    assert len(photos) == 2, "kadr yangi shablon bo'lib qo'shilsin"
+
+    # Kadr endi "tanilgan" bo'lib ko'rinadi — galereyada yana notanish
+    # bo'lib turishi mijozni chalg'itardi.
+    events = pilot_client.get(
+        f"/api/v1/admin/sites/{site['site_id']}/faces/events", headers=ADMIN
+    ).json()["events"]
+    assert events[0]["person_id"] == employee["id"]
+
+
+def test_a_capture_from_another_shop_cannot_become_a_template(pilot_client) -> None:
+    site, _headers = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    owner = _owner_headers(pilot_client, site["site_id"])
+
+    response = pilot_client.post(
+        f"/api/v1/owner/faces/employees/{employee['id']}/photos/from-event/evt-yoq",
+        headers=owner,
+    )
+
+    assert response.status_code == 404

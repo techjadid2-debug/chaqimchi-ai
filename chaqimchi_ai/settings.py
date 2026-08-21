@@ -160,6 +160,11 @@ class RetailCameraSettings(BaseModel):
     stream_url: str = ""
     #: Berilmasa bu kamerada klip bo'lmaydi — hodisa baribir yuboriladi.
     record_url: Optional[str] = None
+    #: Sehrgar aniqlagan format ("H264", "H265", "JPEG").  Tahlilga
+    #: ta'sir qilmaydi — diagnostika uchun: kamera sekin ishlayotganda
+    #: sabab kodekmi yoki tarmoqmi, buni bilish kerak (heartbeat orqali
+    #: cloudga ham ketadi).
+    codec: Optional[str] = Field(default=None, max_length=16)
     #: `security` — taqiqlangan zona va ish vaqtidan tashqari harakat;
     #: `retail` — sanash, navbat, dwell; `background` — statistika.
     priority: Literal["security", "retail", "background"] = "retail"

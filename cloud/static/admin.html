@@ -597,16 +597,45 @@
                 <td>${badge(PROBE_LABEL[c.probe_status] || "Tekshirilmagan", PROBE_BADGE[c.probe_status] || "mute")}
                   ${c.probe_error ? `<div class="hint">${esc(c.probe_error)}</div>` : ""}</td>
                 <td>${esc([c.codec, c.width && c.height ? `${c.width}×${c.height}` : "", c.fps ? `${c.fps} FPS` : ""].filter(Boolean).join(" · ") || "—")}</td>
-                <td>${c.enabled ? "Yoqilgan" : "O'chirilgan"}</td>
+                <td>${c.enabled ? "Yoqilgan" : "O'chirilgan"}${c.origin === "device" ? '<div class="hint">qurilmadan (manzilsiz)</div>' : ""}</td>
               </tr>`).join("")}</tbody></table></div>`
         : `<p class="hint">Kamera kiritilmagan. RTSP manzillarini kiritmaguningizcha video tahlil boshlanmaydi.</p>`;
+
+      // Qurilma diagnostikasi: bu raqamlar heartbeat'da allaqachon kelardi,
+      // lekin hech qayerda ko'rinmasdi — do'kondagi nosozlikni faqat SSH
+      // bilan ko'rish mumkin edi.  Aynan shu sabab "hodisa bor, klip yo'q"
+      // va "2730 ta yozuv tashlangan" holatlari uzoq vaqt sezilmadi.
+      const deviceDiagnostics = (health) => {
+        if (!health) return "";
+        const parts = [];
+        const clips = health.clips || {};
+        if (Number(health.outbox_poisoned)) {
+          parts.push(`<b>${Number(health.outbox_poisoned)} ta hodisa tashlangan</b>`);
+          (health.outbox_poisoned_reasons || []).forEach((reason) =>
+            parts.push(`<span class="mono">${esc(reason)}</span>`));
+        }
+        if (Number(health.outbox_pending)) parts.push(`${Number(health.outbox_pending)} ta navbatda`);
+        if (Object.keys(clips).length) {
+          parts.push(`klip: ${Number(clips.written || 0)} yozildi` +
+            (Number(clips.unavailable) ? `, ${Number(clips.unavailable)} tasida yozuv manzili yo'q` : "") +
+            (Number(clips.missing) ? `, ${Number(clips.missing)} tasi yozilmadi` : ""));
+        }
+        if (Number(health.chain_restarts)) parts.push(`zanjir ${Number(health.chain_restarts)} marta qayta ishga tushgan`);
+        (health.cameras || []).forEach((camera) => {
+          const state = camera.connected && !camera.offline ? "ishlayapti" : "javob bermayapti";
+          parts.push(`${esc(camera.camera_id)}: ${state}${camera.codec ? ` · ${esc(camera.codec)}` : ""}` +
+            (Number(camera.reconnects) > 5 ? ` · ${Number(camera.reconnects)} marta uzilgan` : ""));
+        });
+        return parts.length ? `<div class="hint">${parts.join(" · ")}</div>` : "";
+      };
 
       const devices = (d.devices || []).map((dev, i) => `
         <div class="member-row">
           <span class="who"><b>Qurilma ${i + 1}</b>
             <small>${esc(dev.hardware_model || dev.product_name || "Sotqin")}
               · dastur ${dev.app_version ? esc(dev.app_version) : "noma'lum"}
-              · ${esc(CONFIG_LABEL[dev.config_status] || "Sozlama holati noma'lum")}</small></span>
+              · ${esc(CONFIG_LABEL[dev.config_status] || "Sozlama holati noma'lum")}</small>
+            ${deviceDiagnostics(dev.health)}</span>
           ${badge(CONN_LABEL[dev.connection] || dev.connection, CONN_BADGE[dev.connection] || "mute")}
           <span class="hint">${esc(sinceLabel(dev.minutes_since_seen))}</span>
         </div>`).join("");

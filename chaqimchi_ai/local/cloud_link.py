@@ -338,7 +338,7 @@ def status() -> Dict[str, Any]:
 CRITICAL_PRIORITY = 30
 
 
-def outbox_stats() -> Dict[str, Optional[int]]:
+def outbox_stats() -> Dict[str, Any]:
     """Navbat holati: yuborilmaganlar, kritiklar va tashlanganlar.
 
     Baza **faqat o'qish** rejimida ochiladi: uni retail zanjiri yozadi va
@@ -356,7 +356,12 @@ def outbox_stats() -> Dict[str, Optional[int]]:
 
     from chaqimchi_ai.local import paths
 
-    empty: Dict[str, Optional[int]] = {"pending": 0, "critical": 0, "poisoned": 0}
+    empty: Dict[str, Any] = {
+        "pending": 0,
+        "critical": 0,
+        "poisoned": 0,
+        "poisoned_reasons": [],
+    }
     db = paths.outbox_path()
     if not db.is_file():
         return empty
@@ -374,17 +379,29 @@ def outbox_stats() -> Dict[str, Optional[int]]:
                 poisoned = int(
                     conn.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0]
                 )
+                # Sababsiz raqam diagnostika bermaydi: 2730 ta tashlangan
+                # hodisa ko'rinardi-yu, NEGA tashlangani na panelda, na
+                # cloudda yozilmasdi.  Eng ko'p uchragan uch sabab yetadi.
+                reasons = [
+                    f"{int(count)}× {str(error or 'sabab yozilmagan')[:120]}"
+                    for error, count in conn.execute(
+                        "SELECT last_error, COUNT(*) c FROM dead_letter "
+                        "GROUP BY last_error ORDER BY c DESC LIMIT 3"
+                    )
+                ]
             except sqlite3.Error:
                 poisoned = 0
+                reasons = []
             return {
                 "pending": int(pending or 0),
                 "critical": int(critical or 0),
                 "poisoned": poisoned,
+                "poisoned_reasons": reasons,
             }
         finally:
             conn.close()
     except sqlite3.Error:
-        return {"pending": None, "critical": None, "poisoned": None}
+        return {"pending": None, "critical": None, "poisoned": None, "poisoned_reasons": []}
 
 
 def pending_events() -> Optional[int]:

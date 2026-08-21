@@ -55,7 +55,10 @@ ochilmaydi. `CHAQIMCHI_AVAILABLE_FEATURES` ning o‘zi yetarli emas:
 - o‘g‘rilik, jinoyatchi yoki “shubhali niyat” klassifikatsiyasi;
 - mijoz Face ID (do‘konga kirgan xaridorni tanish) — faqat xodim davomati bor;
 - uzluksiz videoni cloudga ko‘chirish;
-- POS/savdo konversiyasi, shelf/stock va heatmap;
+- POS/savdo konversiyasi;
+  (do'kon xaritasi/heatmap endi Biznes tarifida SOTILADI —
+  `plans.py: BIZNES_PANEL_FEATURES`; bo'sh javon nazorati esa
+  `retail/shelf.py` da, hali sinovda)
 - vendor P2P (faqat lokal tarmoqdagi RTSP/ONVIF bilan ishlaymiz);
 - QSV hardware decode va 8 kamera SLA;
 

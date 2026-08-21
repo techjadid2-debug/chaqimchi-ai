@@ -811,7 +811,7 @@ def test_the_landing_shows_the_real_panel_not_a_drawing() -> None:
     test bilan tekshiriladi.
     """
     site = (STATIC / "site.html").read_text(encoding="utf-8")
-    for image in ("panel-bugun-v1.webp", "panel-xarita-v1.webp"):
+    for image in ("panel-bugun-v1.webp", "panel-xarita-v2.webp"):
         assert image in site, image
         assert (STATIC / image).is_file(), image
     # Ekrandan pastda — birinchi ochilishni sekinlashtirmasin.
@@ -926,3 +926,31 @@ def test_the_cloud_image_carries_the_model_manifests() -> None:
     manifest = json.loads((root / "models" / "faces_manifest.json").read_text(encoding="utf-8"))
     assert manifest["license"] == "Apache-2.0"
     assert len(manifest["files"]) == 6, "har model uchun .xml va .bin"
+
+
+def test_the_heatmap_explains_its_colours() -> None:
+    """Xarita rangi qat'iy qizil emas, ko'kdan qizilgacha — va izohli.
+
+    Ilgari bitta qizil rangning faqat shaffofligi o'zgarardi: 0.25 va
+    0.45 shaffoflik ko'zga deyarli bir xil ko'rinadi, ayniqsa rangli
+    kamera kadri ustida.  Rang shkalasi (legenda) esa umuman yo'q edi —
+    mijoz rangni raqamga bog'lay olmasdi.
+    """
+    owner = (STATIC / "owner.html").read_text(encoding="utf-8")
+    css = (STATIC / "owner.css").read_text(encoding="utf-8")
+
+    assert "HEAT_STOPS" in owner
+    assert "heatColor(" in owner
+    assert "heatLegendGradient(" in owner
+    assert 'id="heatLegend"' in owner
+    assert ".heat-legend" in css
+
+    # Eski qotirilgan qizil ikkala chizish joyidan ham ketgan bo'lsin —
+    # bittasi qolib ketsa xarita ikki xil ko'rinardi.
+    assert "rgba(220, 38, 38" not in owner
+
+    # Legenda qulflash ro'yxatida: Boshlang'ich tarifida yolg'iz
+    # osilib qolmasin.
+    locks = owner[owner.index("function applyPlanLocks") :]
+    locks = locks[: locks.index("\n  }")]
+    assert "heatLegend" in locks

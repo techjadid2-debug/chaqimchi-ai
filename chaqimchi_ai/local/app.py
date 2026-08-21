@@ -1187,7 +1187,26 @@ def _reserve_panel_port(port: int = PORT) -> Optional[Any]:
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if os.name == "nt":
+            # **Windows'da `SO_REUSEADDR` ma'nosi TESKARI.**  POSIX'da u
+            # faqat `TIME_WAIT` dagi eski ulanishni chetlab o'tadi va
+            # ishlab turgan tinglovchi bo'lsa `bind` baribir yiqiladi.
+            # Windows'da esa u ikkinchi jarayonga BAND portni tortib
+            # olishga ruxsat beradi — ya'ni "bitta nusxa" qo'riqchisi
+            # aynan asosiy platformada umuman ishlamasdi.
+            #
+            # Oqibati do'konda ko'rindi: 0.6.9 ga yangilangandan keyin
+            # eski va yangi nusxa BIRGA ishladi, ikkalasi o'z AI zanjirini
+            # ko'tardi va bitta RTSP oqimini ikkitasi o'qidi — kamera
+            # soni 4 dan 2 ga tushdi, cloudga esa ikki xil versiyadan
+            # navbatma-navbat heartbeat keldi.
+            #
+            # `SO_EXCLUSIVEADDRUSE` — Windows'ning to'g'ri javobi: port
+            # band bo'lsa `bind` yiqiladi va ikkinchi nusxa (yuqorida)
+            # panelni ochib, jimgina chiqib ketadi.
+            sock.setsockopt(socket.SOL_SOCKET, getattr(socket, "SO_EXCLUSIVEADDRUSE", -5), 1)
+        else:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", port))
         sock.listen(2048)
     except OSError:

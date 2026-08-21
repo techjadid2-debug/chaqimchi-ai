@@ -1054,3 +1054,46 @@ def test_camera_codec_is_remembered(client: TestClient, tmp_path: Path) -> None:
 
     saved = client.get("/api/setup/cameras").json()["cameras"][0]
     assert saved["codec"] == "H265"
+
+
+def test_the_second_copy_is_refused_on_windows_too() -> None:
+    """Ikkinchi nusxa portni TORTIB OLMASIN.
+
+    `SO_REUSEADDR` Windows'da POSIX'dagidan boshqacha ishlaydi: u ikkinchi
+    jarayonga band portni egallashga RUXSAT beradi.  Shu sabab "bitta
+    nusxa" qo'riqchisi aynan asosiy platformada ishlamasdi va do'konda
+    0.6.9 ga yangilangandan keyin ikkita dastur birga ishlab, bitta
+    kamerani ikkalasi o'qidi.
+
+    Test kodni o'qiydi: haqiqiy xatti-harakatni faqat Windows'da
+    tekshirib bo'ladi, lekin bayroq tanlovini shu yerda qulflash mumkin.
+    """
+    from pathlib import Path as _Path
+
+    source = (_Path(__file__).resolve().parents[1] / "chaqimchi_ai/local/app.py").read_text(
+        encoding="utf-8"
+    )
+    guard = source.split("def _reserve_panel_port")[1].split("def ")[0]
+
+    assert "SO_EXCLUSIVEADDRUSE" in guard, "Windows uchun eksklyuziv bayroq shart"
+    assert 'if os.name == "nt"' in guard, "bayroq faqat Windows'da qo'yiladi"
+    # POSIX'da `SO_REUSEADDR` KERAK: usiz qayta ishga tushirishda
+    # `TIME_WAIT` sabab port bir necha daqiqa band bo'lib turardi.
+    assert "SO_REUSEADDR" in guard
+
+
+def test_only_one_panel_can_bind_the_port(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bitta nusxa qoidasi: ikkinchi `bind` `None` qaytarsin."""
+    import importlib
+
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    from chaqimchi_ai.local import app as app_module
+
+    importlib.reload(app_module)
+
+    first = app_module._reserve_panel_port(8791)
+    assert first is not None
+    try:
+        assert app_module._reserve_panel_port(8791) is None
+    finally:
+        first.close()

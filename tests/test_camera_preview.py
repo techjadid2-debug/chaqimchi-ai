@@ -613,3 +613,116 @@ def test_live_frame_is_size_capped(client: TestClient) -> None:
         content=b"x" * (512 * 1024 + 1),
     )
     assert response.status_code == 413
+
+
+# ── Admin masofadan sozlash ──────────────────────────────────────────────
+
+
+def test_admin_do_konni_masofadan_sozlay_oladi(client: TestClient) -> None:
+    """Admin chiziq va zonani mijozning oldiga bormasdan qo'ya olsin.
+
+    Bungacha buni faqat USTA paneli yoki do'kondagi sehrgar qila olardi.
+    Jonli do'konda oqibati o'lchandi (2026-08-21): `lines: []`, `zones: []`
+    va shu sabab kuniga atigi 5 ta kirish sanalgan, navbat esa umuman
+    ishlamagan — navbat uchun zona SHART.
+    """
+    site, _headers = _site_with_camera(client)
+    site_id = site["site_id"]
+
+    before = client.get(f"/api/v1/admin/sites/{site_id}/config", headers=ADMIN)
+    assert before.status_code == 200
+    assert before.json()["config"].get("lines") == []
+
+    saved = client.put(
+        f"/api/v1/admin/sites/{site_id}/config",
+        headers=ADMIN,
+        json={
+            "camera_roles": {"camera-01": "entrance"},
+            "lines": [
+                {
+                    "name": "kirish",
+                    "camera_id": "camera-01",
+                    "start": [0.1, 0.5],
+                    "end": [0.9, 0.5],
+                }
+            ],
+            "zones": [
+                {
+                    "name": "kassa",
+                    "camera_id": "camera-01",
+                    "polygon": [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4]],
+                    # Navbat aynan shu bayroq bilan yoqiladi.  Jonli
+                    # do'konda zona umuman yo'q edi, shu sabab navbat
+                    # signali HECH QACHON chiqa olmasdi.
+                    "queue": True,
+                }
+            ],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    config = client.get(f"/api/v1/admin/sites/{site_id}/config", headers=ADMIN).json()["config"]
+    assert len(config["lines"]) == 1
+    assert len(config["zones"]) == 1
+    assert config["zones"][0]["queue"] is True
+    assert config["camera_roles"]["camera-01"] == "entrance"
+
+
+def test_admin_sozlamasi_uchun_kalit_shart(client: TestClient) -> None:
+    """Kalitsiz sozlab bo'lmasin — bu butun do'kon tahlilini o'zgartiradi."""
+    site, _headers = _site_with_camera(client)
+    site_id = site["site_id"]
+
+    assert client.get(f"/api/v1/admin/sites/{site_id}/config").status_code == 401
+    assert (
+        client.put(f"/api/v1/admin/sites/{site_id}/config", json={"lines": []}).status_code == 401
+    )
+    assert client.post(f"/api/v1/admin/sites/{site_id}/cameras/camera-01/live").status_code == 401
+
+
+def test_admin_yo_q_do_konni_sozlay_olmaydi(client: TestClient) -> None:
+    """Mavjud bo'lmagan do'kon uchun 404 — jimgina yozib qo'yilmasin."""
+    assert client.get("/api/v1/admin/sites/yo-q-sayt/config", headers=ADMIN).status_code == 404
+    assert (
+        client.put(
+            "/api/v1/admin/sites/yo-q-sayt/config", headers=ADMIN, json={"lines": []}
+        ).status_code
+        == 404
+    )
+
+
+def test_admin_kamerani_jonli_ko_ra_oladi(client: TestClient) -> None:
+    """Admin ham kadr so'ray oladi — chiziqni to'g'ri qo'yish uchun shart."""
+    site, headers = _site_with_camera(client)
+    site_id = site["site_id"]
+
+    live = client.post(f"/api/v1/admin/sites/{site_id}/cameras/camera-01/live", headers=ADMIN)
+    assert live.status_code == 200
+    assert live.json()["ok"] is True
+
+    assert (
+        client.post(
+            f"/api/v1/admin/sites/{site_id}/cameras/camera-01/preview", headers=ADMIN
+        ).status_code
+        == 200
+    )
+
+    # Kadr hali kelmagan — 404, lekin bu xato emas.
+    assert (
+        client.get(
+            f"/api/v1/admin/sites/{site_id}/cameras/camera-01/preview", headers=ADMIN
+        ).status_code
+        == 404
+    )
+
+    # Qurilma kadr yuborgach admin uni ko'radi.
+    client.put(
+        "/api/v1/edge/cameras/camera-01/preview",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"jpeg-bytes",
+    ).raise_for_status()
+    shown = client.get(
+        f"/api/v1/admin/sites/{site_id}/cameras/camera-01/preview", headers=ADMIN
+    )
+    assert shown.status_code == 200
+    assert shown.content == b"jpeg-bytes"

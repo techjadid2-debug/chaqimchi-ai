@@ -2752,6 +2752,89 @@ async def admin_list_camera_inventory(
         raise HTTPException(404, str(exc)) from exc
 
 
+# ── Admin: masofadan sozlash ─────────────────────────────────────────────
+#
+# Bugungacha chiziq va zonani faqat USTA paneli yoki do'kondagi sehrgar
+# chiza olardi.  Amalda bu shuni anglatardi: do'kon sozlanmasa, uni
+# masofadan tuzatishning YO'LI YO'Q edi.
+#
+# Jonli do'konda oqibati o'lchandi (2026-08-21): `lines: []`, `zones: []`,
+# ya'ni kuniga atigi 5 ta kirish sanalgan (chiqqan esa 7 ta) va navbat
+# umuman ishlamagan — navbat uchun zona SHART.
+#
+# Endpointlar ataylab yupqa: mantiq usta variantidagi bilan bir xil
+# yordamchilarga tayanadi, faqat autentifikatsiya boshqa.
+
+
+@app.get("/api/v1/admin/sites/{site_id}/config")
+async def admin_get_config(site_id: str, _: None = Depends(require_admin)) -> Dict[str, Any]:
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Sayt topilmadi")
+    return get_event_store().get_site_config(site_id)
+
+
+@app.put("/api/v1/admin/sites/{site_id}/config")
+async def admin_update_config(
+    site_id: str,
+    body: SiteConfigBody,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Chiziq, zona va kamera rollarini admin qo'yadi.
+
+    Mijozning oldiga bormasdan tuzatish uchun.  Usta variantidan farqi
+    faqat autentifikatsiyada — tekshiruv va saqlash bir xil.
+    """
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Sayt topilmadi")
+    _validate_site_config(body)
+    updated = get_event_store().update_site_config(site_id, body.model_dump())
+    get_store().audit_portal_action(
+        "admin.config.saved",
+        # `require_admin` statik kalit ishlatilganda `None` qaytaradi —
+        # o'sha holatda audit yozuvi egasiz qoladi, bu mavjud naqsh.
+        actor_id=admin.account_id if admin else None,
+        target_type="site",
+        target_id=site_id,
+        detail={"zones": len(body.zones), "lines": len(body.lines)},
+    )
+    return updated
+
+
+@app.post("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/preview")
+async def admin_request_camera_preview(
+    site_id: str, camera_id: str, _: None = Depends(require_admin)
+) -> Dict[str, Any]:
+    """"Rasmni ko'rsat" — qurilma keyingi heartbeat'da bitta kadr yuboradi."""
+    try:
+        camera = get_store().request_camera_preview(site_id, camera_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"camera": camera, "wait_sec": PREVIEW_WAIT_HINT_SEC}
+
+
+@app.get("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/preview")
+async def admin_camera_preview(
+    site_id: str, camera_id: str, _: None = Depends(require_admin)
+) -> Response:
+    return _camera_preview_response(site_id, camera_id)
+
+
+@app.post("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/live")
+async def admin_request_live(
+    site_id: str, camera_id: str, _: None = Depends(require_admin)
+) -> Dict[str, Any]:
+    """Jonli ko'rish — mijoz panelidagi bilan bir xil mexanizm.
+
+    Video oqim emas: qurilma har 2-3 soniyada bitta JPEG yuboradi.
+    Chiziqni to'g'ri joyga qo'yish uchun kadrni ko'rish shart.
+    """
+    try:
+        until = get_store().request_live(site_id, camera_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"ok": True, "until": until, "first_frame_wait_sec": 25}
+
+
 # Eslatma: bu yerda ilgari `/discover-cameras` (admin va installer varianti)
 # bor edi.  U **VPS konteynerining o'z tarmog'ini** skanerlardi — do'kon
 # tarmog'ini emas, ya'ni hech qachon kamera topa olmasdi; ustiga

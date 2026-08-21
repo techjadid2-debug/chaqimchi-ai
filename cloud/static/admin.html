@@ -85,6 +85,11 @@
     </form>
   </template>
 
+  <!-- Chizish vositasi qurilmadagi sehrgar bilan UMUMIY (`/vendor/`),
+       atrofidagi panel esa usta paneli bilan umumiy (`geometry-panel.js`).
+       Ikkalasi ham `defer` — inline skript ulardan keyin ishga tushadi. -->
+  <script src="/vendor/zone-editor.js" defer></script>
+  <script src="/assets/geometry-panel.js" defer></script>
   <script>
     // ── Platforma manzillari ───────────────────────────────────────────
     // Yuklab olish dl'dan, qurilma buyrug'i api'dan keladi.  location.origin
@@ -681,6 +686,7 @@
             <button class="button ghost" type="button" data-act="cameras" data-id="${esc(d.id)}">Kamera soni</button>
             <button class="button ghost" type="button" data-act="pairing" data-id="${esc(d.id)}">Yangi ulanish havolasi</button>
             <button class="button ghost" type="button" data-act="update-policy" data-id="${esc(d.id)}">Yangilanish siyosati</button>
+            <button class="button ghost" type="button" data-act="geometry" data-id="${esc(d.id)}">Chiziq va zona</button>
           </div>
         </section>
 
@@ -1046,6 +1052,7 @@
       "owner-add": (el) => askOwner(el.dataset.id),
       "owner-link": (el) => askOwnerLink(el.dataset.id),
       "cameras": (el) => askExpectedCameras(el.dataset.id),
+      "geometry": (el) => openGeometry(el.dataset.id),
       "camera-add": (el) => askCamera(el.dataset.id),
       "update-policy": (el) => askUpdatePolicy(el.dataset.id),
       "features": (el) => openFeatures(el.dataset.id),
@@ -1340,6 +1347,61 @@
     }
 
     // ── Kamera ─────────────────────────────────────────────────────────
+    /* Chiziq va zona — do'konni masofadan sozlash.
+     *
+     * Bugungacha buni faqat USTA paneli yoki do'kondagi sehrgar qila
+     * olardi.  Jonli do'konda oqibati: `lines: []`, `zones: []` va shu
+     * sabab kuniga atigi 5 ta kirish sanalgan, navbat esa umuman
+     * ishlamagan — navbat uchun zona SHART.
+     *
+     * Chizish mantiqi `geometry-panel.js` da va u usta paneli bilan
+     * UMUMIY — ikki nusxa bo'lsa ular albatta bir-biridan uzoqlashardi.
+     */
+    async function openGeometry(siteId) {
+      const base = `/api/v1/admin/sites/${siteId}`;
+      await openModal({
+        title: "Chiziq va zona",
+        wide: true,
+        html: `
+          <div class="action-row" style="margin-bottom: 10px">
+            <select data-geo="camera" aria-label="Kamera"></select>
+            <select data-geo="mode" aria-label="Nima chiziladi">
+              <option value="line">Chiziq (kirish/chiqish)</option>
+              <option value="zone">Zona</option>
+            </select>
+            <button class="button ghost small" type="button" data-geo="reload">Kadrni yangilash</button>
+            <button class="button primary small" type="button" data-geo="save">Saqlash</button>
+          </div>
+          <canvas data-geo="canvas" width="640" height="360"
+                  style="max-width: 100%; border-radius: 10px; background: #0f172a"></canvas>
+          <p class="hint" data-geo="status" style="min-height: 1.2em"></p>
+          <div data-geo="list"></div>`,
+        onReady: (form) => {
+          if (typeof GeometryPanel === "undefined") {
+            form.querySelector('[data-geo="status"]').textContent =
+              "Chizish vositasi yuklanmadi — sahifani yangilang.";
+            return;
+          }
+          const el = (name) => form.querySelector(`[data-geo="${name}"]`);
+          GeometryPanel.mount({
+            els: {
+              canvas: el("canvas"), camera: el("camera"), mode: el("mode"),
+              status: el("status"), list: el("list"),
+              save: el("save"), reload: el("reload"),
+            },
+            api,
+            paths: {
+              config: `${base}/config`,
+              cameras: `${base}/camera-inventory`,
+              preview: (id) => `${base}/cameras/${id}/preview`,
+              askPreview: (id) => `${base}/cameras/${id}/preview`,
+            },
+            onSaved: () => { invalidate("sites"); },
+          });
+        },
+      });
+    }
+
     async function askExpectedCameras(siteId) {
       const site = siteById(siteId);
       const current = site ? Number(site.cameras_expected || 0) : 0;

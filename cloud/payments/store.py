@@ -10,7 +10,6 @@ import sqlite3
 import uuid
 from typing import Any, Dict, List, Optional
 
-from chaqimchi_ai.licensing.plans import get_plan
 from cloud.store import CloudStore, _iso, _utc_now
 
 #: Hisob-faktura holatlari.
@@ -112,15 +111,11 @@ class PaymentStore:
             raise ValueError("Sayt topilmadi")
         months = max(1, min(60, int(months)))
 
-        limits = get_plan(site["plan"])
-        feature_summary = self.cloud.site_feature_summary(site_id)
-        if feature_summary["assignments"]:
-            # Published price-book qiymatlari assignment ichida snapshot qilingan.
-            # Shu sabab katalog keyin o'zgarsa mavjud mijoz invoice'i muzlaydi.
-            monthly = int(feature_summary["active_quote"]["monthly_uzs"])
-        else:
-            # Davomat tarifida summa xodim soniga bog'liq.
-            monthly = limits.monthly_price(int(site.get("billable_persons") or 0))
+        # Narx tarmog'i `CloudStore.effective_monthly_uzs()` da — o'sha bitta
+        # manbadan panel ham, hisob-faktura ham oladi.  Shartnoma bo'lsa
+        # undagi muzlatilgan kotirovka ishlatiladi (katalog keyin o'zgarsa
+        # mavjud mijoz narxi siljimaydi), aks holda tarif narxi.
+        monthly = self.cloud.effective_monthly_uzs(site_id)
         # Yillik chegirma barcha tarifga bir xil qo'llanadi: rasmiy saytdagi
         # "2 oy bepul" va'dasi va hisob-faktura bitta qoidadan chiqishi shart.
         charged_months = billable_months(months)
@@ -205,13 +200,28 @@ class PaymentStore:
             raise ValueError("Bekor qilingan hisob-fakturani to'lab bo'lmaydi")
 
         conn = self._connect()
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE invoices SET state = 'paid', provider = ?, provider_txn_id = ?, paid_at = ?"
             " WHERE id = ? AND state = 'pending'",
             (provider, provider_txn_id, _iso(_utc_now()), invoice_id),
         )
+        changed = cursor.rowcount
         conn.commit()
         conn.close()
+
+        if not changed:
+            # Boshqa oqim bizdan oldin to'ladi deb belgilagan.
+            #
+            # Yuqoridagi `state == PAID` tekshiruvi buni USHLAMAYDI: u
+            # o'qish, bu esa yozish — orasida bo'shliq bor.  Payme va Click
+            # bir vaqtda javob qaytarsa (yoki provayder qayta urinsa)
+            # ikkalasi ham `pending` ni o'qiydi, ikkinchisining UPDATE'i
+            # 0 qator o'zgartiradi, lekin bungacha `extend_subscription`
+            # BARIBIR chaqirilardi — obuna ikki barobar uzayardi.
+            #
+            # Endi darvoza `rowcount`: obunani faqat holatni HAQIQATAN
+            # o'zgartirgan oqim uzaytiradi.
+            return self.get_invoice(invoice_id)  # type: ignore[return-value]
 
         self.cloud.extend_subscription(invoice["site_id"], invoice["months"])
         return self.get_invoice(invoice_id)  # type: ignore[return-value]
@@ -222,9 +232,18 @@ class PaymentStore:
         if not invoice:
             raise ValueError("Hisob-faktura topilmadi")
 
-        was_paid = invoice["state"] == PAID
         conn = self._connect()
-        conn.execute("UPDATE invoices SET state = 'cancelled' WHERE id = ?", (invoice_id,))
+        # `WHERE state = 'paid'` — `mark_paid` dagi bilan bir xil sabab:
+        # ikki marta qaytarish obunani ikki barobar qisqartirmasin.
+        cursor = conn.execute(
+            "UPDATE invoices SET state = 'cancelled' WHERE id = ? AND state = 'paid'",
+            (invoice_id,),
+        )
+        was_paid = bool(cursor.rowcount)
+        if not was_paid:
+            # To'lanmagan hisob ham bekor qilinaveradi — faqat obunaga
+            # tegilmaydi.
+            conn.execute("UPDATE invoices SET state = 'cancelled' WHERE id = ?", (invoice_id,))
         conn.commit()
         conn.close()
 

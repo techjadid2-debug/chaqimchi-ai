@@ -94,6 +94,27 @@ def _iso(dt: datetime) -> str:
 #: Obuna tugagach necha kun ichida tizim ishlashda davom etadi (grace).
 GRACE_DAYS = 14
 
+
+def subscription_days(months: int) -> int:
+    """Obuna necha kunga uzayadi.
+
+    To'liq yil — 365 kun, qolgan oylar — 30 kundan.  Bungacha hamma oy
+    30 kun edi, ya'ni 12 oy = 360 kun: yillik to'lagan mijoz har yili
+    besh kunini to'lab, olmasdi.
+
+    Nega kalendar oyi EMAS: `reduce_subscription` (to'lov qaytarilganda)
+    `extend_subscription` ning ANIQ teskarisi bo'lishi shart.  Kalendar
+    arifmetikasida 31-yanvar + 1 oy = 28-fevral, − 1 oy = 28-yanvar —
+    ya'ni pulini qaytargan mijoz uch kunini yo'qotardi.  Kun arifmetikasi
+    esa teskarilanadi.
+
+    Shakli `billable_months()` (cloud/payments/store.py) bilan ataylab
+    bir xil — ikkalasi ham "to'liq yil alohida hisoblanadi" qoidasiga
+    tayanadi va yonma-yon o'qilishi kerak.
+    """
+    years, rest = divmod(max(1, int(months)), 12)
+    return years * 365 + rest * 30
+
 # ── Aloqa holati ─────────────────────────────────────────────────────────
 #
 # Edge har `heartbeat_interval_sec` (standart 1800s = 30 daqiqa) da bir marta
@@ -1613,7 +1634,7 @@ class CloudStore:
     ) -> Dict[str, Any]:
         limits = get_plan(plan)
         site_id = str(uuid.uuid4())[:12]
-        until = _utc_now() + timedelta(days=30 * max(1, subscription_months))
+        until = _utc_now() + timedelta(days=subscription_days(subscription_months))
         now = _iso(_utc_now())
         persons = max(0, int(billable_persons))
 
@@ -1904,6 +1925,25 @@ class CloudStore:
                 site["cloud_features_active"] = len(feature_summary["assignments"])
             out.append(site)
         return out
+
+    def effective_monthly_uzs(self, site_id: str) -> int:
+        """Do'konning haqiqiy oylik summasi — bitta manba.
+
+        Narx ikki yo'ldan chiqadi: funksiya shartnomasi bo'lsa undagi
+        muzlatilgan kotirovkadan, aks holda tarifdan (davomatda xodim
+        soniga bog'liq).  Shu tarmoq `create_invoice` va `list_sites` da
+        allaqachon ikki marta yozilgan; mijozga ko'rsatiladigan yillik
+        taklif uchinchi nusxa bo'lsa, mijoz panelda bir raqamni ko'rib,
+        hisob-fakturada boshqasini olardi.
+        """
+        site = self.get_site(site_id)
+        if not site:
+            raise ValueError("Sayt topilmadi")
+        summary = self.site_feature_summary(site_id)
+        if summary["assignments"]:
+            return int(summary["active_quote"]["monthly_uzs"])
+        limits = get_plan(site["plan"])
+        return int(limits.monthly_price(int(site.get("billable_persons") or 0)))
 
     def subscription_status(self, site_id: str) -> Dict[str, Any]:
         """Obuna holati — hisob-kitobsiz, faqat holat.
@@ -2379,7 +2419,7 @@ class CloudStore:
         now_naive = _utc_now().replace(tzinfo=None)
         if base < now_naive:
             base = now_naive
-        new_until = base + timedelta(days=30 * max(1, months))
+        new_until = base + timedelta(days=subscription_days(months))
         conn = self._connect()
         conn.execute(
             "UPDATE sites SET subscription_until = ?, status = 'active' WHERE id = ?",
@@ -2395,7 +2435,7 @@ class CloudStore:
         if not site:
             raise ValueError("Sayt topilmadi")
         base = datetime.strptime(site["subscription_until"], "%Y-%m-%d %H:%M:%S")
-        new_until = base - timedelta(days=30 * max(1, months))
+        new_until = base - timedelta(days=subscription_days(months))
         conn = self._connect()
         conn.execute(
             "UPDATE sites SET subscription_until = ? WHERE id = ?", (_iso(new_until), site_id)

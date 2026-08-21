@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 from cloud.payments.store import PaymentStore, billable_months
-from cloud.store import CloudStore
+from cloud.store import CloudStore, subscription_days
 
 
 @pytest.fixture
@@ -15,6 +15,22 @@ def stores(tmp_path):
 def _until(cloud: CloudStore, site_id: str) -> datetime:
     site = cloud.get_site(site_id)
     return datetime.strptime(site["subscription_until"], "%Y-%m-%d %H:%M:%S")
+
+
+def test_a_year_is_365_days_not_360() -> None:
+    """Yillik obuna 365 kun bo'lsin.
+
+    Bungacha har oy 30 kun edi va 12 oy 360 kun berardi — yillik to'lagan
+    mijoz har yili besh kunini to'lab, olmasdi.  Yillik to'lovni sotishdan
+    oldin shu tuzatildi.
+    """
+    assert subscription_days(12) == 365
+    assert subscription_days(24) == 730
+    # Yildan kichigi o'zgarmaydi — mavjud oylik mijozlar uchun hech narsa
+    # siljimasin.
+    assert subscription_days(1) == 30
+    assert subscription_days(3) == 90
+    assert subscription_days(11) == 330
 
 
 def test_billable_months_gives_two_free_per_year() -> None:
@@ -91,6 +107,80 @@ def test_mark_paid_extends_subscription_once(stores) -> None:
     # Takroriy chaqiruv obunani ikkinchi marta uzaytirmaydi.
     pay.mark_paid(invoice["id"], "naqd")
     assert _until(cloud, site["site_id"]) == after
+
+
+def test_a_stale_pending_read_does_not_extend_the_subscription_twice(stores) -> None:
+    """Eskirgan `pending` o'qishi obunani ikkinchi marta uzaytirmasin.
+
+    Haqiqiy holat: Payme va Click (yoki provayderning qayta urinishi) bir
+    vaqtda javob qaytaradi.  Ikkala oqim ham hisobni `pending` deb o'qiydi,
+    keyin ikkalasi ham UPDATE qiladi — lekin faqat bittasi qator
+    o'zgartiradi.
+
+    Iplar bilan bu poygani ishonchli qo'lga tushirib bo'lmaydi: SQLite
+    qulfi ularni ketma-ket qo'yadi va ikkinchisi allaqachon `paid` ni
+    ko'radi.  Shu sabab bu yerda AYNAN o'sha eskirgan o'qish
+    modellashtiriladi — `get_invoice` bir marta eski holatni qaytaradi.
+    Tuzatishsiz bu test 180 kun ko'rsatadi.
+    """
+    cloud, pay = stores
+    site = cloud.create_site("Eskirgan o'qish", "starter", subscription_months=1)
+    before = _until(cloud, site["site_id"])
+    invoice = pay.create_invoice(site["site_id"], 3)
+
+    pay.mark_paid(invoice["id"], "payme")
+    after_first = _until(cloud, site["site_id"])
+    assert (after_first - before).days == 90
+
+    # Ikkinchi provayder hisobni hali `pending` deb ko'radi.
+    stale = dict(invoice)
+    stale["state"] = "pending"
+    real_get = pay.get_invoice
+    calls = {"n": 0}
+
+    def stale_once(invoice_id: str):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return stale
+        return real_get(invoice_id)
+
+    pay.get_invoice = stale_once  # type: ignore[method-assign]
+    try:
+        pay.mark_paid(invoice["id"], "click")
+    finally:
+        pay.get_invoice = real_get  # type: ignore[method-assign]
+
+    assert _until(cloud, site["site_id"]) == after_first
+
+
+def test_a_stale_paid_read_does_not_shorten_the_subscription_twice(stores) -> None:
+    """Qaytarish ham bir marta hisoblansin — `mark_paid` bilan bir xil sabab."""
+    cloud, pay = stores
+    site = cloud.create_site("Ikki qaytarish", "starter", subscription_months=1)
+    before = _until(cloud, site["site_id"])
+
+    invoice = pay.create_invoice(site["site_id"], 2)
+    pay.mark_paid(invoice["id"], "naqd")
+    pay.mark_refunded(invoice["id"])
+    assert _until(cloud, site["site_id"]) == before
+
+    # Ikkinchi oqim hisobni hali `paid` deb ko'radi.
+    stale = dict(pay.get_invoice(invoice["id"]) or {})
+    stale["state"] = "paid"
+    real_get = pay.get_invoice
+    calls = {"n": 0}
+
+    def stale_once(invoice_id: str):
+        calls["n"] += 1
+        return stale if calls["n"] == 1 else real_get(invoice_id)
+
+    pay.get_invoice = stale_once  # type: ignore[method-assign]
+    try:
+        pay.mark_refunded(invoice["id"])
+    finally:
+        pay.get_invoice = real_get  # type: ignore[method-assign]
+
+    assert _until(cloud, site["site_id"]) == before
 
 
 def test_refund_rolls_subscription_back(stores) -> None:

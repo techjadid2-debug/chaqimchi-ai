@@ -28,6 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -1215,6 +1216,21 @@ def _reserve_panel_port(port: int = PORT) -> Optional[Any]:
     return sock
 
 
+def _running_instance_version() -> str:
+    """Portni ushlab turgan nusxa qaysi versiyada.  Bilinmasa bo'sh satr.
+
+    Panelning o'z API'sidan so'raladi: ikkinchi nusxa uchun bu yagona
+    ishonchli yo'l (jarayon ro'yxatini o'qish uchun qo'shimcha kutubxona
+    kerak bo'lardi).
+    """
+    try:
+        response = httpx.get(f"http://127.0.0.1:{PORT}/api/setup/cloud-status", timeout=2.0)
+        response.raise_for_status()
+        return str((response.json() or {}).get("app_version") or "")
+    except Exception:  # noqa: BLE001 — diagnostika dasturni to'xtatmasin
+        return ""
+
+
 def _open_browser(url: str, delay_sec: float = 1.5) -> None:
     """Server ko'tarilgach brauzerni ochadi.
 
@@ -1360,6 +1376,24 @@ def main() -> None:
     # ko'tarardi.
     listener = _reserve_panel_port()
     if listener is None:
+        # Portni kim ushlab turganini AYTAMIZ.  Odatda bu shu dasturning
+        # o'zi (mijoz yorliqni ikkinchi marta bosgan) — u holda hammasi
+        # joyida.  Lekin do'konda boshqa holat uchradi: eski versiya
+        # BOSHQA PAPKADAN ishga tushgan va portni ushlab turgan, ya'ni
+        # yangilangan kod umuman ishlamayotgan edi va buni hech narsa
+        # aytmasdi.  Endi jurnalda aniq yoziladi.
+        other = _running_instance_version()
+        if other and other != __version__:
+            logger.error(
+                "Port %s ni boshqa versiya (%s) ushlab turibdi — bu nusxa (%s) "
+                "ishga tushmadi.  Eski nusxa boshqa papkadan ochilgan bo'lishi "
+                "mumkin: kompyuterni qayta yuklang yoki eski nusxani o'chiring.",
+                PORT,
+                other,
+                __version__,
+            )
+            print(f"DIQQAT: portni eski versiya ({other}) ushlab turibdi.")
+            print("Kompyuterni qayta yuklang — shundan keyin bitta nusxa qoladi.")
         print("Chaqimchi AI allaqachon ishlab turibdi — yangi nusxa kerak emas.")
         print(f"Boshqaruv paneli: {url}")
         if _browser_enabled():

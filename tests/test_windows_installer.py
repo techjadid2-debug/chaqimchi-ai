@@ -562,3 +562,36 @@ def test_autostart_is_a_no_op_outside_windows() -> None:
         pytest.skip("bu test Windows bo'lmagan tizim uchun")
     answer = autostart.ensure()
     assert answer == {"ok": True, "created": False, "reason": "Windows emas"}
+
+
+def test_the_installer_stops_copies_started_from_another_folder() -> None:
+    """Boshqa papkadagi eski nusxa ham to'xtatilsin.
+
+    O'chirish bo'limi jarayonlarni faqat `$INSTDIR` yo'li bo'yicha
+    filtrlaydi.  Do'konda aynan shu bo'shliq ochildi: 0.6.9 o'rnatilgach
+    eski nusxa (boshqa papkadan) tirik qoldi, ikkita AI zanjiri bitta
+    kamerani o'qidi va cloudga ikki xil versiyadan heartbeat keldi.
+    """
+    nsis = NSIS.read_text(encoding="utf-8")
+
+    assert "Win32_Process" in nsis, "buyruq qatori bo'yicha filtr shart"
+    assert "chaqimchi_ai.(local.app|retail.service)" in nsis
+    # Yangilovchi FILTRGA tushmasin: u o'rnatuvchini ishga tushirgan
+    # jarayon, o'zini o'ldirsa rollback belgisi yozilmay qolardi.
+    # (Izohda nomi tilga olinadi — shuning uchun aynan filtr tekshiriladi.)
+    pattern = "chaqimchi_ai.(local.app|retail.service)"
+    assert "updater" not in pattern
+
+
+def test_the_stale_copy_check_runs_on_upgrade_not_only_on_uninstall() -> None:
+    """Tekshiruv `.onInit` da bo'lsin.
+
+    Yangilanishda ESKI o'rnatuvchining o'chirish bo'limi ishlaydi
+    (`ExecWait '$R0 /S ...'`), ya'ni o'sha bo'limga qo'shilgan tuzatish
+    faqat KEYINGI relizda kuchga kirardi.  `.onInit` esa yangi
+    o'rnatuvchining o'zidan bajariladi — shu sababli darhol ishlaydi.
+    """
+    nsis = NSIS.read_text(encoding="utf-8")
+    on_init = nsis.split("Function .onInit")[1].split("FunctionEnd")[0]
+
+    assert "Win32_Process" in on_init

@@ -404,6 +404,26 @@ Function .onInit
     uninstall_old:
       ExecWait '$R0 /S _?=$INSTDIR'
   ${EndIf}
+
+  ; Boshqa papkadan ishga tushgan nusxani ham to'xtatamiz.
+  ;
+  ; O'chirish bo'limi jarayonlarni YO'L bo'yicha filtrlaydi
+  ; (`$INSTDIR\*`) — ya'ni boshqa papkadagi yoki tizim Python'i bilan
+  ; ko'tarilgan nusxa TIRIK qoladi.  Aynan shu holat do'konda yuz berdi:
+  ; 0.6.9 o'rnatilgandan keyin cloudga ikki xil versiyadan navbatma-navbat
+  ; heartbeat keldi, ikkita AI zanjiri bitta kamerani o'qidi va kamera
+  ; soni 4 dan 2 ga tushdi.
+  ;
+  ; Filtr endi BUYRUQ QATORI bo'yicha: qayerdan ishga tushirilganidan
+  ; qat'i nazar bizning modulimizni yuklagan Python to'xtaydi.  Yangilovchi
+  ; (`chaqimchi_ai.local.updater`) ataylab ro'yxatda YO'Q — u shu
+  ; o'rnatuvchini ishga tushirgan jarayon, o'zini o'ldirsa yangilanish
+  ; hisobi va rollback belgisi yozilmay qolardi.
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command \
+    "Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
+     Where-Object { $$_.CommandLine -match $\"chaqimchi_ai.(local.app|retail.service)$\" } | \
+     ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"'
+  Sleep 1500
 FunctionEnd
 
 ; ── O'chirish ───────────────────────────────────────────────────────────

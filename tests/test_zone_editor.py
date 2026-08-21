@@ -167,10 +167,32 @@ def test_panels_load_the_editor_and_owner_cannot_edit_raw_json() -> None:
     """
     installer = (ROOT / "cloud" / "static" / "installer.html").read_text(encoding="utf-8")
     owner = (ROOT / "cloud" / "static" / "owner.html").read_text(encoding="utf-8")
+    admin = (ROOT / "cloud" / "static" / "admin.html").read_text(encoding="utf-8")
+    panel = (ROOT / "cloud" / "static" / "geometry-panel.js").read_text(encoding="utf-8")
 
+    # Chizish vositasi va uning atrofidagi panel — ikkalasi ham ulangan.
     assert "zone-editor.js" in installer
     assert 'id="geoCanvas"' in installer
-    assert "installer/sites/${activeSite}/config" in installer
+    assert "geometry-panel.js" in installer
+
+    # Manzil endi `base` o'zgaruvchisidan yig'iladi (bir joyda), shuning
+    # uchun to'liq satr o'rniga uning ikki qismi tekshiriladi.
+    assert "/api/v1/installer/sites/${activeSite}" in installer
+    assert "config:`${base}/config`" in installer.replace(" ", "")
+
+    # 2026-08-21: admin ham sozlay oladi.  Bungacha do'kon sozlanmagan
+    # bo'lsa uni masofadan tuzatishning yo'li yo'q edi — jonli do'konda
+    # `lines: []` va `zones: []` bo'lib qolgan va kirish soni kuniga
+    # 5 ta ko'rsatilgan.
+    assert "geometry-panel.js" in admin
+    assert "zone-editor.js" in admin
+    assert "/api/v1/admin/sites/${siteId}" in admin
+
+    # Mantiq bitta joyda: ikki nusxa bo'lsa ular uzoqlashardi.
+    assert "GeometryPanel" in panel
+    # `onclick=` ATRIBUTI bo'lmasin.  Izohda so'zning o'zi uchrashi
+    # mumkin — shu sabab tenglik belgisi bilan qidiriladi.
+    assert "onclick=" not in panel, "admin panelida inline ishlov beruvchi taqiqlangan"
 
     # Yangi panelda (2026-08-17) ega geometriyani UMUMAN ko'rmaydi: JSON
     # textarealar oddiy mijozni cho'chitardi.  Chiziq/zona faqat o'rnatuvchi

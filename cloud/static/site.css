@@ -97,6 +97,28 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 
 /* Izometrik sahna.  Rasm o'rniga SVG: 64 KB fotosurat o'rniga ~8 KB
    belgilash, va u sahifaning o'z ranglaridan foydalanadi. */
+/* Hero fotosurati.  `cd787a6` da sahnaga almashtirilgan edi va shu
+   bilan uslubi ham o'chgan; endi ikkalasi ham sahifada — fotosurat
+   tepada ("bu mening do'konim haqida"), sahna pastda ("qanday
+   ishlaydi"). */
+.hero-photo { position: relative; margin: 0; min-height: 500px; overflow: hidden; border-radius: 30px; background: var(--green); box-shadow: var(--shadow); transform: rotate(1.2deg); }
+.hero-photo img { width: 100%; height: 500px; object-fit: cover; object-position: 65% center; display: block; }
+.hero-photo-badge { position: absolute; right: 22px; bottom: 22px; display: inline-flex; align-items: center; gap: 9px; padding: 11px 14px; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(19,35,29,.86); color: white; font-size: 12px; font-weight: 750; backdrop-filter: blur(8px); }
+.hero-photo-badge span { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); }
+
+/* "Qanday ishlaydi": uch qadam + sahna.  To'q fon — sahna ham to'q
+   yashil, ular bir butun bo'lib ko'rinsin. */
+.how { background: var(--green); color: var(--paper); border-radius: var(--radius); margin: 0 24px; }
+.how .section-intro h2, .how .eyebrow { color: var(--paper); }
+.how .section-intro p { color: #acbeb5; }
+.how-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 0 0 32px; padding: 0; list-style: none; counter-reset: step; }
+.how-steps li { display: grid; gap: 8px; padding: 22px 20px; border-radius: 18px; background: rgba(255,255,255,.06); }
+.how-steps b { font-size: 17px; }
+.how-steps span { color: #acbeb5; font-size: 14px; line-height: 1.6; }
+.how-steps .icon { width: 30px; height: 30px; color: var(--lime); }
+/* Sahna keng ekranda butun bo'limni egallab ketmasin: u tushuntirish
+   vositasi, sahifaning o'zi emas. */
+.how .scene { max-width: 760px; margin: 0 auto; }
 .scene { position: relative; margin: 0; padding: 0; border-radius: 30px; background: var(--paper-2); box-shadow: var(--shadow); overflow: hidden; }
 .scene svg { display: block; width: 100%; height: auto; }
 .scene-badge { position: absolute; right: 22px; bottom: 22px; display: inline-flex; align-items: center; gap: 9px; padding: 11px 14px; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(19,35,29,.86); color: white; font-size: 12px; font-weight: 750; backdrop-filter: blur(8px); }
@@ -106,12 +128,21 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
    xabari chiqadi.  Faqat `transform` va `opacity` — ikkalasi ham
    kompozitorda ishlaydi, ya'ni sahifa qayta chizilmaydi va arzon
    telefonda ham silliq ketadi. */
-#scene-beam { transform-origin: 126px 132px; animation: scene-sweep 7s ease-in-out infinite; }
-#scene-pulse { opacity: 0; transform-origin: 266px 234px; animation: scene-detect 7s ease-in-out infinite; }
+/* Aylanish markazi — viewBox koordinatasida (piksel emas, SVG birligi).
+   Sahna qayta chizilsa BULAR HAM ko'chirilishi shart: nur kamera
+   linzasidan emas, boshqa nuqtadan aylanib, do'kondan chiqib ketardi. */
+#scene-beam { transform-origin: 437px 84px; animation: scene-sweep 7s ease-in-out infinite; }
+#scene-pulse { opacity: 0; transform-origin: 478px 290px; animation: scene-detect 7s ease-in-out infinite; }
 #scene-phone { opacity: 0; animation: scene-notify 7s ease-in-out infinite; }
-#scene-people .person { animation: scene-walk 7s ease-in-out infinite; }
-#scene-people .person:nth-child(2) { animation-delay: -2.4s; }
-#scene-people .person:nth-child(3) { animation-delay: -4.6s; }
+
+/* Kechikish `:nth-child` bilan EMAS, `--delay` o'zgaruvchisi bilan.
+   Ilgari `:nth-child(2)/(3)` turardi va bu jimgina buziladigan bog'lanish
+   edi: sahnaga to'rtinchi odam yoki `.person` bo'lmagan biror element
+   qo'shilsa, kechikish noto'g'ri odamga tushardi — yangi odam
+   birinchisi bilan AYNAN bir xil qadam tashlardi va buni faqat ko'z
+   bilan sezish mumkin edi. */
+#scene-people .person { animation: scene-walk 7s ease-in-out infinite; animation-delay: var(--delay, 0s); }
+#scene-queue .queuer { animation: scene-shuffle 7s ease-in-out infinite; animation-delay: var(--delay, 0s); }
 
 @keyframes scene-sweep {
   0%, 100% { transform: rotate(-5deg); opacity: .2; }
@@ -126,6 +157,13 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
   0%, 58%   { opacity: 0; transform: translateY(10px); }
   70%, 94%  { opacity: 1; transform: translateY(0); }
   100%      { opacity: 0; transform: translateY(10px); }
+}
+/* Navbat kassa tomonga siljiydi.  9:5 nisbati izometriyaning +gx
+   yo'nalishi (TX:TY = 52:26) — odamlar polga nisbatan qiyshiq emas,
+   aynan kassa tomon qadam tashlaydi. */
+@keyframes scene-shuffle {
+  0%, 60%, 100% { transform: translate(0, 0); }
+  74%, 90%      { transform: translate(9px, 4.5px); }
 }
 @keyframes scene-walk {
   0%, 100% { transform: translate(0, 0); }
@@ -341,5 +379,9 @@ footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   * { transition: none !important; animation: none !important; }
+  /* `opacity: 0` dan boshlanadigan HAR BIR element shu yerda tiklanadi,
+     aks holda harakatni o'chirgan foydalanuvchi yarim chizilgan sahna
+     ko'radi.  Qoida bitta qatorda qolsin — test blokni birinchi
+     ustundagi `}` gacha kesadi. */
   #scene-beam, #scene-pulse, #scene-phone { opacity: 1; transform: none; }
 }

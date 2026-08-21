@@ -15,7 +15,7 @@
        ham qaytgan mijoz brauzer keshidan **eskisini** olardi va tuzatish
        unga yetib bormasdi.  Endi qiymat mazmundan kelib chiqadi va
        `test_static_pages.py` mos kelishini tekshiradi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=dd581ebbcf">
+  <link rel="stylesheet" href="/assets/site.css?v=eb2f1998e6">
 </head>
 <body>
   <!-- Sahifa ataylab qisqa: hero (bitta asosiy tugma) → mahsulot
@@ -34,6 +34,7 @@
         <span>Chaqimchi <b>AI</b></span>
       </a>
       <div class="nav-links">
+        <a href="#qanday">Qanday ishlaydi</a>
         <a href="#imkoniyat">Imkoniyatlar</a>
         <a href="#narx">Narxlar</a>
         <a href="#faq">Savollar</a>
@@ -119,105 +120,165 @@
         </div>
       </div>
 
-      <!-- Izometrik sahna — SVG SAHIFA ICHIDA, alohida fayl emas.
-           Sabab: alohida `.svg` `<img>` orqali ulansa ota-sahifadagi CSS
-           uning ichiga yeta olmaydi, ya'ni `site.css` dagi
-           `prefers-reduced-motion` qoidasi unga TA'SIR QILMAYDI va
-           harakatni o'chirgan foydalanuvchi baribir animatsiya ko'radi.
-           Ichkarida esa hamma narsa bitta uslub faylidan boshqariladi.
-
-           `icons.svg` sprayti ham to'g'ri joy emas — u to'qqizta sahifaga
-           yuklanadi, sahna esa faqat shu yerda kerak.
-
-           Haqiqiy 3D (`rotateX`, `perspective`) ATAYLAB yo'q: yopishqoq
-           sarlavhadagi `backdrop-filter` bilan yonma-yon turganda u
-           arzon Android va eski iOS Safari'da qatlam yaratib, sahifani
-           silkitadi.  Izometriya koordinatalarning o'zida. -->
-      <figure class="scene" id="scene">
-        <svg viewBox="0 0 640 420" role="img" aria-labelledby="sceneTitle sceneDesc"
-             xmlns="http://www.w3.org/2000/svg">
-          <title id="sceneTitle">Do‘kon sxemasi</title>
-          <desc id="sceneDesc">Kamera mijozni ko‘radi, tizim uni sanaydi va
-            Telegramga xabar yuboradi.</desc>
-
-          <!-- Pol: izometrik romb va to'r -->
-          <g id="scene-floor">
-            <path d="M320 92 L612 246 L320 400 L28 246 Z" fill="#173d2d" opacity="0.92"/>
-            <g stroke="#f3f0e8" stroke-opacity="0.13" stroke-width="1.5" fill="none">
-              <path d="M174 169 L466 323"/><path d="M247 130 L539 284"/>
-              <path d="M393 130 L101 284"/><path d="M466 169 L174 323"/>
-            </g>
-          </g>
-
-          <!-- Javonlar (chap tomonda) -->
-          <g id="scene-shelves">
-            <g>
-              <path d="M150 196 L206 226 L206 262 L150 232 Z" fill="#0e2a1e"/>
-              <path d="M206 226 L258 198 L258 234 L206 262 Z" fill="#123527"/>
-              <path d="M150 196 L202 168 L258 198 L206 226 Z" fill="#1c4a37"/>
-            </g>
-            <g>
-              <path d="M246 245 L302 275 L302 311 L246 281 Z" fill="#0e2a1e"/>
-              <path d="M302 275 L354 247 L354 283 L302 311 Z" fill="#123527"/>
-              <path d="M246 245 L298 217 L354 247 L302 275 Z" fill="#1c4a37"/>
-            </g>
-          </g>
-
-          <!-- Kassa (o'ng past) -->
-          <g id="scene-counter">
-            <path d="M392 268 L448 298 L448 330 L392 300 Z" fill="#0e2a1e"/>
-            <path d="M448 298 L512 264 L512 296 L448 330 Z" fill="#123527"/>
-            <path d="M392 268 L456 234 L512 264 L448 298 Z" fill="#d9f55f" opacity="0.85"/>
-          </g>
-
-          <!-- Kamera va ko'rish konusi -->
-          <g id="scene-camera">
-            <path d="M96 128 L136 108 L136 132 L96 152 Z" fill="#13231d"/>
-            <path d="M96 128 L124 114 L136 108 L108 122 Z" fill="#2b4a3c"/>
-            <circle cx="130" cy="122" r="6" fill="#d9f55f"/>
-          </g>
-          <path id="scene-beam" d="M126 132 L392 214 L236 306 Z" fill="#d9f55f" opacity="0.26"/>
-
-          <!-- Mijozlar -->
-          <g id="scene-people">
-            <g class="person" transform="translate(0 0)">
-              <ellipse cx="266" cy="252" rx="13" ry="6" fill="#0b1f16" opacity="0.5"/>
-              <path d="M259 252 q7 -30 14 0 z" fill="#f3f0e8"/>
-              <circle cx="266" cy="219" r="8" fill="#f3f0e8"/>
-            </g>
-            <g class="person" transform="translate(0 0)">
-              <ellipse cx="352" cy="300" rx="13" ry="6" fill="#0b1f16" opacity="0.5"/>
-              <path d="M345 300 q7 -30 14 0 z" fill="#e7e4da"/>
-              <circle cx="352" cy="267" r="8" fill="#e7e4da"/>
-            </g>
-            <g class="person" transform="translate(0 0)">
-              <ellipse cx="430" cy="262" rx="13" ry="6" fill="#0b1f16" opacity="0.5"/>
-              <path d="M423 262 q7 -30 14 0 z" fill="#e7e4da"/>
-              <circle cx="430" cy="229" r="8" fill="#e7e4da"/>
-            </g>
-          </g>
-
-          <!-- Aniqlash ramkasi -->
-          <g id="scene-pulse">
-            <rect x="242" y="203" width="48" height="62" rx="6" fill="none"
-                  stroke="#d9f55f" stroke-width="3"/>
-            <rect x="242" y="188" width="62" height="14" rx="7" fill="#d9f55f"/>
-            <text x="248" y="199" font-size="10" font-weight="700" fill="#13231d">+1 kirdi</text>
-          </g>
-
-          <!-- Telegram xabari -->
-          <g id="scene-phone">
-            <rect x="404" y="60" width="212" height="86" rx="18" fill="#f3f0e8"
-                  stroke="#13231d" stroke-opacity="0.12"/>
-            <circle cx="430" cy="88" r="12" fill="#173d2d"/>
-            <path d="M424 88 l12 -5 -4 12 -3 -4 -5 -3z" fill="#d9f55f"/>
-            <text x="452" y="84" font-size="13" font-weight="700" fill="#13231d">Chaqimchi AI</text>
-            <text x="452" y="104" font-size="12" fill="#4d5c55">Kassada navbat: 6 kishi</text>
-            <text x="452" y="124" font-size="12" fill="#4d5c55">Bugun kirdi: 268</text>
-          </g>
-        </svg>
-        <figcaption class="scene-badge"><span></span> Jonli tahlil · Telegram xabari</figcaption>
+      <!-- Hero'da FOTOSURAT: do'kon egasi birinchi soniyada "bu mening
+           do'konim haqida" deb tushunishi kerak.  Izometrik sahna esa
+           jarayonni tushuntiradi va u endi pastda, "Qanday ishlaydi"
+           bo'limida turadi. -->
+      <figure class="hero-photo" aria-label="Do‘kon kameralarining sun’iy intellekt tahlili">
+        <img src="/assets/dokon-hero-v1.webp" alt="Savdo do‘konida mijozlar va kameralar tahlili"
+             width="1672" height="941" fetchpriority="high">
+        <figcaption class="hero-photo-badge"><span></span> Jonli tahlil · Telegram xabari</figcaption>
       </figure>
+    </section>
+
+    <!-- ── QANDAY ISHLAYDI: uch qadam + izometrik sahna ── -->
+    <!--
+         Sahna hero'dan SHU YERGA ko'chirildi.  Tepada mijozga "bu nima"
+         degan savolga javob kerak (fotosurat), bu yerda esa "qanday
+         ishlaydi" degan savolga — sxema aynan shunga javob beradi.
+
+         SVG sahifa ICHIDA, alohida fayl emas: alohida `.svg` `<img>`
+         orqali ulansa ota-sahifadagi CSS uning ichiga yeta olmaydi,
+         ya'ni `prefers-reduced-motion` qoidasi unga TA'SIR QILMAYDI.
+         `icons.svg` sprayti ham to'g'ri joy emas — u to'qqizta sahifaga
+         yuklanadi, sahna esa faqat shu yerda kerak.
+
+         Haqiqiy 3D (`rotateX`, `perspective`) ATAYLAB yo'q: yopishqoq
+         sarlavhadagi `backdrop-filter` bilan yonma-yon turganda u arzon
+         Android va eski iOS Safari'da qatlam yaratib, sahifani silkitadi.
+         Hajm izometriya KOORDINATALARIDA — `iso(gx, gy, gz)` formulasi
+         bilan yasalgan, qo'lda terilmagan.
+    -->
+    <section id="qanday" class="how section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> Qanday ishlaydi</p>
+        <h2>Uch qadam, o&#8216;n daqiqa</h2>
+        <p>Yangi kamera ham, yangi sim ham kerak emas &#8212; bor tizimingiz
+          ustiga dastur qo&#8216;yiladi.</p>
+      </div>
+
+      <ol class="how-steps">
+        <li>
+          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kompyuter"></use></svg>
+          <b>Dasturni o&#8216;rnatasiz</b>
+          <span>Do&#8216;kondagi Windows kompyuterga. Keyingi &#8594; Keyingi &#8594; Tayyor.</span>
+        </li>
+        <li>
+          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kamera"></use></svg>
+          <b>Kamerani ulaysiz</b>
+          <span>Brauzerda NVR&#8217;ni tanlaysiz &#8212; kanallar o&#8216;zi topiladi.</span>
+        </li>
+        <li>
+          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg>
+          <b>Telefoningizda kuzatasiz</b>
+          <span>Kundalik hisobot panelda, muhim hodisa Telegramda.</span>
+        </li>
+      </ol>
+
+      <figure class="scene" id="scene">
+        <svg viewBox="20 20 860 560" role="img" aria-labelledby="sceneTitle sceneDesc"
+             xmlns="http://www.w3.org/2000/svg">
+          <title id="sceneTitle">Do&#8216;kon sxemasi</title>
+          <desc id="sceneDesc">Shiftdagi kamera do&#8216;konni ko&#8216;radi, tizim
+            kirgan mijozni sanaydi, kassadagi navbatni o&#8216;lchaydi va
+            Telegramga xabar yuboradi.</desc>
+          <g id="scene-floor">
+          <polygon points="400.0,150.0 868.0,384.0 504.0,566.0 36.0,332.0" fill="#173d2d"/>
+          <path d="M452.0 176.0 L88.0 358.0 M504.0 202.0 L140.0 384.0 M556.0 228.0 L192.0 410.0 M608.0 254.0 L244.0 436.0 M660.0 280.0 L296.0 462.0 M712.0 306.0 L348.0 488.0 M764.0 332.0 L400.0 514.0 M816.0 358.0 L452.0 540.0 M348.0 176.0 L816.0 410.0 M296.0 202.0 L764.0 436.0 M244.0 228.0 L712.0 462.0 M192.0 254.0 L660.0 488.0 M140.0 280.0 L608.0 514.0 M88.0 306.0 L556.0 540.0" stroke="#f3f0e8" stroke-opacity=".1" stroke-width="1.2" fill="none"/>
+          </g>
+          <g id="scene-walls">
+          <polygon points="400.0,30.4 868.0,264.4 868.0,384.0 400.0,150.0" fill="#10281d"/>
+          <polygon points="400.0,30.4 36.0,212.4 36.0,332.0 400.0,150.0" fill="#0c2017"/>
+          <polygon points="706.8,213.7 800.4,260.5 800.4,350.2 706.8,303.4" fill="#e7e4da" opacity=".95"/>
+          <polygon points="706.8,213.7 751.0,235.8 751.0,325.5 706.8,303.4" fill="#f3f0e8" opacity=".6"/>
+          <polygon points="706.8,303.4 800.4,350.2 756.2,356.7 693.8,325.5" fill="#f3f0e8" opacity=".13"/>
+          <polygon points="462.4,84.6 587.2,147.0 587.2,197.6 462.4,135.2" fill="#e7e4da" opacity=".22"/>
+          </g>
+          <g id="scene-shelves">
+          <polygon points="290.8,182.9 348.0,211.5 348.0,264.4 290.8,235.8" fill="#0e2a1e"/><polygon points="426.0,172.5 348.0,211.5 348.0,264.4 426.0,225.4" fill="#123527"/><polygon points="368.8,143.9 426.0,172.5 348.0,211.5 290.8,182.9" fill="#1c4a37"/>
+          <polygon points="324.1,161.6 336.6,167.8 336.6,179.8 324.1,173.5" fill="#c1bdb0"/><polygon points="367.8,152.2 336.6,167.8 336.6,179.8 367.8,164.2" fill="#d8d4c7"/><polygon points="355.3,146.0 367.8,152.2 336.6,167.8 324.1,161.6" fill="#e7e4da"/>
+          <polygon points="340.2,166.0 352.7,172.2 352.7,187.8 340.2,181.6" fill="#9bb04a"/><polygon points="383.9,156.6 352.7,172.2 352.7,187.8 383.9,172.2" fill="#b3c957"/><polygon points="371.4,150.4 383.9,156.6 352.7,172.2 340.2,166.0" fill="#d9f55f"/>
+          <polygon points="356.3,177.7 368.8,183.9 368.8,195.9 356.3,189.7" fill="#c1bdb0"/><polygon points="400.0,168.3 368.8,183.9 368.8,195.9 400.0,180.3" fill="#d8d4c7"/><polygon points="387.5,162.1 400.0,168.3 368.8,183.9 356.3,177.7" fill="#e7e4da"/>
+          <polygon points="176.4,240.1 233.6,268.7 233.6,321.6 176.4,293.0" fill="#0e2a1e"/><polygon points="311.6,229.7 233.6,268.7 233.6,321.6 311.6,282.6" fill="#123527"/><polygon points="254.4,201.1 311.6,229.7 233.6,268.7 176.4,240.1" fill="#1c4a37"/>
+          <polygon points="209.7,218.8 222.2,225.0 222.2,237.0 209.7,230.7" fill="#c1bdb0"/><polygon points="253.4,209.4 222.2,225.0 222.2,237.0 253.4,221.4" fill="#d8d4c7"/><polygon points="240.9,203.2 253.4,209.4 222.2,225.0 209.7,218.8" fill="#e7e4da"/>
+          <polygon points="225.8,223.2 238.3,229.4 238.3,245.0 225.8,238.8" fill="#9bb04a"/><polygon points="269.5,213.8 238.3,229.4 238.3,245.0 269.5,229.4" fill="#b3c957"/><polygon points="257.0,207.6 269.5,213.8 238.3,229.4 225.8,223.2" fill="#d9f55f"/>
+          <polygon points="241.9,234.9 254.4,241.1 254.4,253.1 241.9,246.9" fill="#c1bdb0"/><polygon points="285.6,225.5 254.4,241.1 254.4,253.1 285.6,237.5" fill="#d8d4c7"/><polygon points="273.1,219.3 285.6,225.5 254.4,241.1 241.9,234.9" fill="#e7e4da"/>
+          <polygon points="228.4,359.7 285.6,388.3 285.6,441.2 228.4,412.6" fill="#0e2a1e"/><polygon points="363.6,349.3 285.6,388.3 285.6,441.2 363.6,402.2" fill="#123527"/><polygon points="306.4,320.7 363.6,349.3 285.6,388.3 228.4,359.7" fill="#1c4a37"/>
+          <polygon points="261.7,338.4 274.2,344.6 274.2,356.6 261.7,350.3" fill="#c1bdb0"/><polygon points="305.4,329.0 274.2,344.6 274.2,356.6 305.4,341.0" fill="#d8d4c7"/><polygon points="292.9,322.8 305.4,329.0 274.2,344.6 261.7,338.4" fill="#e7e4da"/>
+          <polygon points="277.8,342.8 290.3,349.0 290.3,364.6 277.8,358.4" fill="#9bb04a"/><polygon points="321.5,333.4 290.3,349.0 290.3,364.6 321.5,349.0" fill="#b3c957"/><polygon points="309.0,327.2 321.5,333.4 290.3,349.0 277.8,342.8" fill="#d9f55f"/>
+          <polygon points="293.9,354.5 306.4,360.7 306.4,372.7 293.9,366.5" fill="#c1bdb0"/><polygon points="337.6,345.1 306.4,360.7 306.4,372.7 337.6,357.1" fill="#d8d4c7"/><polygon points="325.1,338.9 337.6,345.1 306.4,360.7 293.9,354.5" fill="#e7e4da"/>
+          </g>
+          <g id="scene-counter">
+          <polygon points="462.4,405.6 566.4,457.6 566.4,503.6 462.4,451.6" fill="#8fa244"/><polygon points="618.4,431.6 566.4,457.6 566.4,503.6 618.4,477.6" fill="#a8bf50"/><polygon points="514.4,379.6 618.4,431.6 566.4,457.6 462.4,405.6" fill="#d9f55f"/>
+          </g>
+          <g id="scene-camera">
+          <path d="M449.4 60.0 L433.8 81.6" stroke="#e7e4da" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+          <ellipse cx="433.8" cy="81.6" rx="15" ry="10" fill="#e7e4da"/>
+          <circle cx="436.8" cy="83.6" r="5.5" fill="#13231d"/>
+          <circle cx="436.8" cy="83.6" r="2.4" fill="#d9f55f"/>
+          </g>
+          <polygon id="scene-beam" points="426.0,90.1 649.6,347.6 233.6,368.4" fill="#d9f55f" opacity=".22"/>
+          <g id="scene-people">
+          <g class="person" style="--delay: 0s"><ellipse cx="660.0" cy="326.8" rx="11" ry="5" fill="#0b1f16" opacity=".45"/><path d="M653.0 326.8 q7 -28 14 0 z" fill="#f3f0e8"/><circle cx="660.0" cy="288.8" r="7.5" fill="#f3f0e8"/></g>
+          <g class="person" style="--delay: -2.4s"><ellipse cx="478.0" cy="313.8" rx="11" ry="5" fill="#0b1f16" opacity=".45"/><path d="M471.0 313.8 q7 -28 14 0 z" fill="#e7e4da"/><circle cx="478.0" cy="275.8" r="7.5" fill="#e7e4da"/></g>
+          <g class="person" style="--delay: -4.6s"><ellipse cx="285.6" cy="316.4" rx="11" ry="5" fill="#0b1f16" opacity=".45"/><path d="M278.6 316.4 q7 -28 14 0 z" fill="#e7e4da"/><circle cx="285.6" cy="278.4" r="7.5" fill="#e7e4da"/></g>
+          </g>
+          <g id="scene-queue">
+          <g class="queuer" style="--delay: 0s"><ellipse cx="582.0" cy="417.8" rx="11" ry="5" fill="#0b1f16" opacity=".45"/><path d="M575.0 417.8 q7 -28 14 0 z" fill="#f3f0e8"/><circle cx="582.0" cy="379.8" r="7.5" fill="#f3f0e8"/></g>
+          <g class="queuer" style="--delay: 0s"><ellipse cx="639.2" cy="415.2" rx="11" ry="5" fill="#0b1f16" opacity=".45"/><path d="M632.2 415.2 q7 -28 14 0 z" fill="#e7e4da"/><circle cx="639.2" cy="377.2" r="7.5" fill="#e7e4da"/></g>
+          <g class="queuer" style="--delay: 0s"><ellipse cx="696.4" cy="412.6" rx="11" ry="5" fill="#0b1f16" opacity=".45"/><path d="M689.4 412.6 q7 -28 14 0 z" fill="#e7e4da"/><circle cx="696.4" cy="374.6" r="7.5" fill="#e7e4da"/></g>
+          </g>
+          <g id="scene-pulse">
+          <rect x="458.0" y="261.8" width="40" height="56" rx="6" fill="none" stroke="#d9f55f" stroke-width="3"/>
+          <rect x="458.0" y="245.8" width="62" height="15" rx="7.5" fill="#d9f55f"/>
+          <text x="464.0" y="256.8" font-size="10" font-weight="700" fill="#13231d">+1 kirdi</text>
+          </g>
+          <g id="scene-phone"><rect x="516" y="40" width="228" height="92" rx="18" fill="#f3f0e8" stroke="#13231d" stroke-opacity=".12"/><circle cx="544" cy="70" r="13" fill="#173d2d"/><path d="M537 70 l13 -6 -4 13 -3.5 -4.5 -5.5 -2.5z" fill="#d9f55f"/><text x="568" y="66" font-size="13" font-weight="700" fill="#13231d">Chaqimchi AI</text><text x="568" y="87" font-size="12" fill="#4d5c55">Kassada navbat: 3 kishi</text><text x="568" y="107" font-size="12" fill="#4d5c55">Bugun kirdi: 268</text></g>
+        </svg>
+        <figcaption class="scene-badge"><span></span> Jonli tahlil &#183; Telegram xabari</figcaption>
+      </figure>
+    </section>
+
+    <!-- ── MAVJUD KAMERANGIZ ── -->
+    <!--
+         Rasmda mini-kompyuter ham bor, lekin matn u haqda GAPIRMAYDI:
+         "Chaqimchi Box" hozir sotilmaydi va sayt uni va'da qilmasligi
+         kerak (`docs/DOKON_MVP.md`).  Matn faqat mavjud kamera va NVR
+         haqida — bu esa haqiqat.  Rasm kesimi ham o'ngga surilgan
+         (`object-position`), shunda NVR va kameralar oldinga chiqadi.
+    -->
+    <section id="kameralar" class="sales-visual section-pad">
+      <div class="sales-photo">
+        <img src="/assets/dokon-nvr-v1.webp"
+             alt="Do&#8216;kondagi NVR va xavfsizlik kameralari"
+             width="1672" height="941" loading="lazy" decoding="async">
+      </div>
+      <div class="sales-copy">
+        <p class="eyebrow"><span></span> Uskuna sotib olish shart emas</p>
+        <h2>Mavjud kameralaringiz shundoq qoladi</h2>
+        <p>Chaqimchi brendga emas, <b>RTSP oqimiga</b> ulanadi. Kamerangiz yoki
+          NVR&#8217;ingiz lokal tarmoqda oqim bersa &#8212; tizim shu oqim bilan
+          ishlaydi. Sinovdan o&#8216;tgan qurilmalar: <b>Hikvision, HiLook,
+          Dahua va Uniview</b> NVR&#8217;lari.</p>
+        <p class="hint">Boshqa brendni ulashdan oldin bepul tekshirib beramiz.
+          Rasmdagi kompyuter &#8212; do&#8216;konning o&#8216;z kompyuteri; biz
+          uskuna sotmaymiz.</p>
+      </div>
+    </section>
+
+    <!-- ── KAMERADAN TELEFONGACHA ── -->
+    <section id="xabar" class="store-proof section-pad">
+      <img src="/assets/dokon-bulut-v1.webp"
+           alt="Kameralardan bulutga, bulutdan telefonga xabar"
+           width="1717" height="916" loading="lazy" decoding="async">
+      <div>
+        <p class="eyebrow"><span></span> Video sizda qoladi</p>
+        <h2>Kameradan to&#8216;g&#8216;ridan-to&#8216;g&#8216;ri telefoningizga</h2>
+        <p>Hodisa aniqlanganda Telegram xabari bir necha soniyada keladi:
+          kassada navbat, tungi harakat, kamera o&#8216;chib qolishi.</p>
+        <p>To&#8216;liq video arxiv sizning NVR va kompyuteringizda qoladi &#8212;
+          cloudga faqat hodisa statistikasi va qisqa kliplar boradi.</p>
+      </div>
     </section>
 
     <!-- ── NIMA KO'RASIZ: haqiqiy panel ekrani ── -->

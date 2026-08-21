@@ -11,6 +11,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # HTTP/3 (QUIC) UDP ustida ishlaydi.  Bu qator bo'lmasa Caddy
+      # `alt-svc: h3=":443"` deb E'LON QILAVERADI, brauzer QUIC'ga
+      # urinadi, paket konteynerga yetmaydi va u TCP'ga qaytadi —
+      # har ulanishda bekorga kutish.  O'lchandi: sarlavha jonli
+      # saytda bor edi, port esa yopiq.
+      - "443:443/udp"
     volumes:
       - ./deploy/Caddyfile.chaqimchi:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

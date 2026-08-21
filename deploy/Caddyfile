@@ -1,6 +1,12 @@
 {$CHAQIMCHI_DOMAIN} {
     encode zstd gzip
-    reverse_proxy cloud:8750
+    reverse_proxy cloud:8750 {
+        # Mijoz yuborgan X-Forwarded-For'ni ALMASHTIRAMIZ (qo'shmaymiz):
+        # uvicorn `*` bilan eng chapdagi qiymatni oladi, ya'ni mijoz
+        # o'zi yozgan manzil qabul qilinib, IP cheklovlari aylanib
+        # o'tilardi.
+        header_up X-Forwarded-For {remote_host}
+    }
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"

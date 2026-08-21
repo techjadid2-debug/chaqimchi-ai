@@ -33,7 +33,14 @@ chaqimchi.uz {
 	encode zstd gzip
 	# Landing + ochiq sahifalar + public API (lead, narx, pay callback).
 	# Panellar bu yerdan subdomenlarga 301 bo'ladi (ilova ichida).
-	reverse_proxy cloud:8750
+	reverse_proxy cloud:8750 {
+		# Mijoz yuborgan X-Forwarded-For'ni QO'SHMAYMIZ, ALMASHTIRAMIZ.
+		# Caddy standart holda qo'shadi, uvicorn esa `*` bilan eng
+		# CHAPDAGI qiymatni oladi — ya'ni mijoz o'zi yozgan manzil
+		# qabul qilinardi va IP bo'yicha barcha cheklovlar aylanib
+		# o'tilardi (sinov ro'yxati, kirish urinishlari).
+		header_up X-Forwarded-For {remote_host}
+	}
 	request_body {
 		max_size 5MB
 	}
@@ -51,7 +58,14 @@ api.chaqimchi.uz {
 	encode zstd gzip
 	@allowed path /api/* /health /releases/* /downloads/* /robots.txt
 	handle @allowed {
-		reverse_proxy cloud:8750
+		reverse_proxy cloud:8750 {
+			# Mijoz yuborgan X-Forwarded-For'ni QO'SHMAYMIZ, ALMASHTIRAMIZ.
+			# Caddy standart holda qo'shadi, uvicorn esa `*` bilan eng
+			# CHAPDAGI qiymatni oladi — ya'ni mijoz o'zi yozgan manzil
+			# qabul qilinardi va IP bo'yicha barcha cheklovlar aylanib
+			# o'tilardi (sinov ro'yxati, kirish urinishlari).
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		respond "Topilmadi" 404
@@ -70,7 +84,14 @@ app.chaqimchi.uz {
 	encode zstd gzip
 	@allowed path / /owner /owner/* /assets/* /vendor/* /robots.txt /api/v1/owner/* /api/v1/owner* /api/v1/auth/* /api/v1/public/urls /api/v1/public/windows-release /pay/* /api/v1/invoices/* /api/v1/payments/*
 	handle @allowed {
-		reverse_proxy cloud:8750
+		reverse_proxy cloud:8750 {
+			# Mijoz yuborgan X-Forwarded-For'ni QO'SHMAYMIZ, ALMASHTIRAMIZ.
+			# Caddy standart holda qo'shadi, uvicorn esa `*` bilan eng
+			# CHAPDAGI qiymatni oladi — ya'ni mijoz o'zi yozgan manzil
+			# qabul qilinardi va IP bo'yicha barcha cheklovlar aylanib
+			# o'tilardi (sinov ro'yxati, kirish urinishlari).
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		respond "Topilmadi" 404
@@ -87,7 +108,14 @@ partner.chaqimchi.uz {
 	encode zstd gzip
 	@allowed path / /installer /installer/* /installer-guide /assets/* /vendor/* /robots.txt /api/v1/auth/* /api/v1/installer/* /api/v1/public/urls
 	handle @allowed {
-		reverse_proxy cloud:8750
+		reverse_proxy cloud:8750 {
+			# Mijoz yuborgan X-Forwarded-For'ni QO'SHMAYMIZ, ALMASHTIRAMIZ.
+			# Caddy standart holda qo'shadi, uvicorn esa `*` bilan eng
+			# CHAPDAGI qiymatni oladi — ya'ni mijoz o'zi yozgan manzil
+			# qabul qilinardi va IP bo'yicha barcha cheklovlar aylanib
+			# o'tilardi (sinov ro'yxati, kirish urinishlari).
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		respond "Topilmadi" 404
@@ -107,7 +135,14 @@ admin.chaqimchi.uz {
 	#   handle @tashqi { respond "Ruxsat yo'q" 403 }
 	@allowed path / /admin /admin/* /assets/* /vendor/* /robots.txt /api/v1/admin/* /api/v1/auth/* /api/v1/public/urls /installer-guide
 	handle @allowed {
-		reverse_proxy cloud:8750
+		reverse_proxy cloud:8750 {
+			# Mijoz yuborgan X-Forwarded-For'ni QO'SHMAYMIZ, ALMASHTIRAMIZ.
+			# Caddy standart holda qo'shadi, uvicorn esa `*` bilan eng
+			# CHAPDAGI qiymatni oladi — ya'ni mijoz o'zi yozgan manzil
+			# qabul qilinardi va IP bo'yicha barcha cheklovlar aylanib
+			# o'tilardi (sinov ro'yxati, kirish urinishlari).
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		respond "Topilmadi" 404
@@ -124,7 +159,14 @@ dl.chaqimchi.uz {
 	encode zstd gzip
 	@allowed path / /downloads/* /releases/* /install /assets/* /robots.txt /api/v1/public/*
 	handle @allowed {
-		reverse_proxy cloud:8750
+		reverse_proxy cloud:8750 {
+			# Mijoz yuborgan X-Forwarded-For'ni QO'SHMAYMIZ, ALMASHTIRAMIZ.
+			# Caddy standart holda qo'shadi, uvicorn esa `*` bilan eng
+			# CHAPDAGI qiymatni oladi — ya'ni mijoz o'zi yozgan manzil
+			# qabul qilinardi va IP bo'yicha barcha cheklovlar aylanib
+			# o'tilardi (sinov ro'yxati, kirish urinishlari).
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		respond "Topilmadi" 404
@@ -140,7 +182,14 @@ docs.chaqimchi.uz {
 	encode zstd gzip
 	@allowed path / /ornatish-windows /nvr-hikvision /nvr-dahua /nvr-uniview /muammolar /xavfsizlik /docs-static/* /assets/* /robots.txt
 	handle @allowed {
-		reverse_proxy cloud:8750
+		reverse_proxy cloud:8750 {
+			# Mijoz yuborgan X-Forwarded-For'ni QO'SHMAYMIZ, ALMASHTIRAMIZ.
+			# Caddy standart holda qo'shadi, uvicorn esa `*` bilan eng
+			# CHAPDAGI qiymatni oladi — ya'ni mijoz o'zi yozgan manzil
+			# qabul qilinardi va IP bo'yicha barcha cheklovlar aylanib
+			# o'tilardi (sinov ro'yxati, kirish urinishlari).
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		respond "Topilmadi" 404

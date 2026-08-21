@@ -158,3 +158,49 @@ def test_base_includes_come_from_the_biznes_plan(client) -> None:
 
     data = client.get("/api/v1/public/pricing").json()
     assert data["base"]["includes"] == list(PLANS["biznes"].includes)
+
+
+def test_every_bullet_icon_exists_in_the_sprite(client) -> None:
+    """Xato yozilgan ikonka kartada BO'SH JOY bo'lib qoladi.
+
+    Brauzer noma'lum `<use href="...#nomaʼlum">` uchun hech narsa
+    chizmaydi va konsolga ham yozmaydi — ya'ni nuqsonni faqat ko'z
+    bilan, o'sha kartani ochib ko'rgandagina sezish mumkin.
+    """
+    import re
+    from pathlib import Path
+
+    sprite = (Path(__file__).resolve().parents[1] / "cloud" / "static" / "icons.svg").read_text(
+        encoding="utf-8"
+    )
+    known = set(re.findall(r'<symbol id="([\w-]+)"', sprite))
+
+    for plan in client.get("/api/v1/public/pricing").json()["plans"]:
+        for bullet in plan["bullets"]:
+            assert bullet["icon"] in known, f"{plan['code']}: {bullet['icon']}"
+
+
+def test_the_flat_list_is_derived_from_the_bullets() -> None:
+    """Ikki ro'yxat qo'lda yuritilsa ular albatta uzoqlashadi.
+
+    Biri yangilanadi, ikkinchisi unutiladi — va sayt bir narsani,
+    `<noscript>` yoki panel boshqasini aytadi.
+    """
+    from chaqimchi_ai.licensing.plans import PLANS
+
+    for code in ("boshlangich", "biznes", "lite"):
+        limits = PLANS[code]
+        assert limits.includes == tuple(b.summary for b in limits.bullets), code
+        assert limits.includes, code
+
+
+def test_every_bullet_has_a_short_label(client) -> None:
+    """Kartada uzun jumla emas, 2-3 so'z turishi kerak.
+
+    Aks holda akkordeon ma'nosini yo'qotadi: qisqartirish uchun
+    kiritilgan bo'lib, o'zi uzun matn ko'rsatib turadi.
+    """
+    for plan in client.get("/api/v1/public/pricing").json()["plans"]:
+        for bullet in plan["bullets"]:
+            assert len(bullet["label"]) <= 30, f"{plan['code']}: {bullet['label']}"
+            assert len(bullet["label"].split()) <= 4, f"{plan['code']}: {bullet['label']}"

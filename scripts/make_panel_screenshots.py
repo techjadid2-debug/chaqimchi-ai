@@ -207,6 +207,10 @@ SHOTS = (
     },
     {
         "name": "panel-xarita",
+        # Rang oralig'i o'zgargach fayl nomi ham o'zgarishi SHART:
+        # nom bir xil qolsa qaytgan mijoz brauzer keshidan eski qizil
+        # xaritani oladi va sayt panelda yo'q rangni reklama qiladi.
+        "version": "v2",
         "hash": "#/tahlil",
         "selector": "#heatCard",
         "caption": "Do'kon xaritasi: mijozlar eng ko'p yurgan joylar",
@@ -321,7 +325,7 @@ def main() -> int:
                     continue
                 png = out_dir / f"{shot['name']}.png"
                 node.screenshot(path=str(png))
-                webp = out_dir / f"{shot['name']}-v1.webp"
+                webp = out_dir / f"{shot['name']}-{shot.get('version', 'v1')}.webp"
                 to_webp(png, webp)
                 png.unlink(missing_ok=True)
                 size_kb = webp.stat().st_size // 1024

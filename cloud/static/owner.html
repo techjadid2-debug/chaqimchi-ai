@@ -132,8 +132,11 @@
             <select id="heatHour" style="width:auto"><option value="">Kun bo‘yi</option></select>
           </div>
         </div>
-        <p class="hint" style="margin-top:0" id="heatHint">To‘q qizil — mijozlar eng ko‘p yurgan joylar. Bo‘sh joylar — javon yoki jihoz uchun. Bir hafta ma’lumot yig‘ilgach xarita barqarorlashadi.</p>
+        <p class="hint" style="margin-top:0" id="heatHint">Rang qancha issiq bo‘lsa, mijozlar shuncha ko‘p yurgan: ko‘k — kam, qizil — eng ko‘p. Bo‘yalmagan joylar — hech kim yurmagan (javon yoki jihoz). Bir hafta ma’lumot yig‘ilgach xarita barqarorlashadi.</p>
         <div class="heat-wrap" id="heatWrap"><canvas id="heatCanvas" width="640" height="360"></canvas></div>
+        <p class="heat-legend" id="heatLegend">
+          <span>kam</span><i id="heatLegendBar" aria-hidden="true"></i><span>ko‘p</span>
+        </p>
         <div class="actions" style="margin-top:8px" id="heatActions">
           <button class="button ghost small" id="heatEditBtn" type="button">Pol burchaklarini to‘g‘irlash</button>
           <button class="button primary small hidden" id="heatSaveBtn" type="button">Burchaklarni saqlash</button>
@@ -545,7 +548,10 @@
 
   function applyPlanLocks() {
     const mapOpen = hasFeature("xarita");
-    ["heatControls", "heatWrap", "heatActions", "heatSummary", "heatHint"].forEach((id) => {
+    // `heatLegend` ham shu ro'yxatda: aks holda Boshlang'ich tarifida
+    // qulflangan kartada rang shkalasi yolg'iz osilib qolardi.
+    ["heatControls", "heatWrap", "heatActions", "heatSummary", "heatHint",
+     "heatLegend"].forEach((id) => {
       const node = $(id);
       if (node) node.hidden = !mapOpen;
     });
@@ -788,6 +794,44 @@
     }
   }
 
+  /* ── Issiqlik xaritasi ranglari ──────────────────────────────────────
+     Ilgari bitta qizil rangning FAQAT shaffofligi o'zgarardi:
+     `rgba(220,38,38, 0.12 + 0.6*value/peak)`.  Muammo shundaki, 0.25 va
+     0.45 shaffoflik ko'zga deyarli bir xil ko'rinadi — ayniqsa rangli
+     kamera kadri ustida — va "kam" bilan "ko'p"ni ajratib bo'lmasdi.
+
+     Endi RANGning o'zi o'zgaradi: ko'k → moviy → yashil → sariq → qizil.
+     Bu tartibni odam o'rgatilmasdan o'qiydi (sovuq = kam, issiq = ko'p),
+     shu sabab u ob-havo va issiqlik xaritalarida hamma joyda shunday.
+
+     `t` — NISBIY qiymat (katak / eng gavjum katak), 0..1.  Mutlaq emas:
+     eng gavjum katak har so'rovda qaytadan hisoblanadi. */
+  const HEAT_STOPS = [
+    [ 37,  99, 235],  // ko'k   — eng kam
+    [ 34, 211, 238],  // moviy
+    [ 34, 197,  94],  // yashil
+    [250, 204,  21],  // sariq
+    [220,  38,  38],  // qizil  — eng ko'p
+  ];
+
+  function heatColor(t, alpha) {
+    const x = Math.min(1, Math.max(0, t)) * (HEAT_STOPS.length - 1);
+    const i = Math.min(HEAT_STOPS.length - 2, Math.floor(x));
+    const f = x - i;
+    const a = HEAT_STOPS[i], b = HEAT_STOPS[i + 1];
+    const c = (k) => Math.round(a[k] + (b[k] - a[k]) * f);
+    return `rgba(${c(0)}, ${c(1)}, ${c(2)}, ${alpha.toFixed(3)})`;
+  }
+
+  /** Rang shkalasi uchun gradient — AYNI shu to'xtashlardan.
+      CSSga qo'lda yozilsa u kanvasdan uzoqlashib ketardi va izoh
+      yolg'on gapirardi. */
+  function heatLegendGradient() {
+    const stops = HEAT_STOPS.map(([r, g, b], i) =>
+      `rgb(${r}, ${g}, ${b}) ${Math.round((i / (HEAT_STOPS.length - 1)) * 100)}%`);
+    return `linear-gradient(90deg, ${stops.join(", ")})`;
+  }
+
   async function loadHeatmap() {
     // Kamera yo'q bo'lsa xarita bo'sh oq quti bo'lib qolardi, "burchaklarni
     // to'g'irlash" tugmasi esa hech nima qilmasdi.
@@ -842,9 +886,10 @@
       for (let c = 0; c < data.cols; c += 1) {
         const value = data.grid[r][c];
         if (!value) continue;
-        // Och → to'q: qiymat oshgani sari qatlam quyuqlashadi.
-        const alpha = 0.12 + 0.6 * (value / peak);
-        ctx.fillStyle = `rgba(220, 38, 38, ${alpha.toFixed(3)})`;
+        // Kamera kadri ostida turgani uchun shaffoflik yumshoq:
+        // kattalikni endi RANG ko'rsatadi, quyuqlik emas.
+        const t = value / peak;
+        ctx.fillStyle = heatColor(t, 0.38 + 0.34 * t);
         ctx.fillRect(c * cellW, r * cellH, Math.ceil(cellW), Math.ceil(cellH));
       }
     }
@@ -1000,11 +1045,14 @@
             Math.min(data.cols - 1, Math.floor(px * data.cols))];
           const cw = tileW / CELLS, ch = tileH / CELLS;
           if (value) {
-            const alpha = 0.15 + 0.6 * (value / peak);
-            ctx.fillStyle = `rgba(220, 38, 38, ${alpha.toFixed(3)})`;
+            const t = value / peak;
+            ctx.fillStyle = heatColor(t, 0.55 + 0.30 * t);
           } else if (enoughData) {
             // Hafta davomida hech kim bosmagan joy — jihoz/o'tib bo'lmas.
-            ctx.fillStyle = "rgba(55, 65, 81, 0.55)";
+            // Kulrang ataylab TO'YINMAGAN: ko'k to'xtash bilan
+            // adashtirmasin.  Ko'k — "kam odam", kulrang — "umuman
+            // odam yo'q"; bular boshqa gap.
+            ctx.fillStyle = "rgba(31, 41, 55, 0.62)";
           } else {
             continue;
           }
@@ -1018,7 +1066,7 @@
       ctx.fillText(camera.label || camera.camera_id, ox + 8, oy + 18);
     }
     $("heatSummary").textContent = totalPoints
-      ? "Oxirgi 7 kun · qora joylar — odam yurmagan (jihozlar, taxminiy)"
+      ? "Oxirgi 7 kun · kulrang joylar — odam yurmagan (jihozlar, taxminiy)"
       : "Plan uchun hali ma’lumot yetarli emas — bir necha kun yig‘ilsin.";
   }
 
@@ -1032,7 +1080,7 @@
     $("heatHour").style.display = cameraMode ? "" : "none";
     $("heatEditBtn").style.display = cameraMode ? "" : "none";
     $("heatHint").textContent = cameraMode
-      ? "To‘q qizil — mijozlar eng ko‘p yurgan joylar. Kamera ko‘rinishi ustida."
+      ? "Ko‘kdan qizilgacha: qizil joylarda mijozlar eng ko‘p yurgan. Kamera ko‘rinishi ustida."
       : "Tepadan ko‘rinish (taxminiy): har kamera o‘z pol to‘rtburchagi orqali akslantiriladi.";
     if (cameraMode) loadHeatmap(); else loadPlanView();
   }
@@ -2061,6 +2109,9 @@
   $("cameraFilter").addEventListener("change", () => reload("events"));
   $("modalClose").addEventListener("click", closeModal);
   $("modalLiveBtn").addEventListener("click", () => (liveTimer ? stopLive() : startLive()));
+  // Gradient CSSda emas, `HEAT_STOPS` dan yasaladi — rang ikki joyda
+  // yozilsa kanvas bilan izoh bir-biridan uzoqlashib ketardi.
+  $("heatLegendBar").style.backgroundImage = heatLegendGradient();
   $("heatCamera").addEventListener("change", loadHeatmap);
   $("heatDate").addEventListener("change", loadHeatmap);
   $("heatHour").addEventListener("change", loadHeatmap);

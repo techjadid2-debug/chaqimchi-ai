@@ -235,6 +235,10 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
 
 /* Do'kon xaritasi (issiqlik) */
 .heat-wrap { width: 100%; max-width: 640px; }
+/* Rang shkalasi.  Gradient CSSda EMAS, JSda `HEAT_STOPS` dan yasaladi —
+   rang ikki joyda yozilsa kanvas bilan izoh uzoqlashib ketardi. */
+.heat-legend { display: flex; align-items: center; gap: 10px; max-width: 640px; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.heat-legend i { flex: 1; height: 10px; border-radius: 999px; background: rgba(127,127,127,.2); }
 .heat-wrap canvas { width: 100%; height: auto; border-radius: 12px; background: rgba(127, 127, 127, .1); display: block; }
 
 /* ── Bo'limlar: pastdagi 4 ta tugma ──────────────────────────────────────

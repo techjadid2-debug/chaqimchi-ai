@@ -163,3 +163,25 @@ def test_the_plan_cards_hardcode_no_feature_list() -> None:
     grid = html[html.index('id="planGrid"') : html.index("<noscript>")]
     assert "<li>" not in grid, "punktlar API'dan chizilsin"
     assert "so‘m" not in grid, "narx HTMLga yozilmasin"
+
+
+def test_a_bullet_opens_in_place_not_in_a_modal() -> None:
+    """Telefonda modal butun ekranni yopadi va mijoz kartadan uziladi.
+
+    `<details>` ataylab tanlangan: klaviatura, ekran o'quvchi va telefon
+    xatti-harakati brauzerdan tekin keladi.
+    """
+    js = SITE_JS.read_text(encoding="utf-8")
+    assert '<details class="bullet"' in js
+    assert "line.label" in js and "line.detail" in js
+    assert "showModal" not in js and "<dialog" not in js
+
+
+def test_the_card_falls_back_when_the_response_has_no_bullets() -> None:
+    """`?v=` faqat KEYINGI yuklashga ta'sir qiladi.
+
+    Hozir sahifada o'tirgan mijozda eski JS ishlab turadi va u eski
+    javobni ham ko'rishi mumkin — karta bo'sh qolmasin.
+    """
+    js = SITE_JS.read_text(encoding="utf-8")
+    assert "plan.includes" in js, "zaxira ro'yxat saqlansin"

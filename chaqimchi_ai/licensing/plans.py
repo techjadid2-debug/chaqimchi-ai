@@ -94,6 +94,34 @@ def uzs_from_cents(cents: int) -> int:
 
 
 @dataclass(frozen=True)
+class PlanBullet:
+    """Tarif kartasidagi bitta punkt.
+
+    Ilgari bu oddiy satr edi va kartada oltita uzun jumla turardi —
+    do'kon egasi ularni o'qimay, faqat narxga qarab qaror qilardi.
+    Endi kartada FAQAT `label` (2-3 so'z) ko'rinadi, qolgani bosilganda
+    ochiladi.
+
+    `example` alohida maydon: umumiy ta'rifdan ko'ra aniq misol tez
+    tushuniladi ("kassa oldida 3 barobar ko'p turishadi").
+    """
+
+    #: `cloud/static/icons.svg` dagi symbol id.
+    icon: str
+    #: 2-3 so'z — kartada doim ko'rinadi.
+    label: str
+    #: 1-2 gap: nima qiladi.
+    detail: str = ""
+    #: Aniq misol.  Bo'sh bo'lishi mumkin.
+    example: str = ""
+
+    @property
+    def summary(self) -> str:
+        """JS'siz ko'rinadigan bitta satr (`noscript`, panel, bot)."""
+        return f"{self.label} — {self.detail}" if self.detail else self.label
+
+
+@dataclass(frozen=True)
 class PlanLimits:
     max_cameras: int
     max_persons: int
@@ -120,9 +148,19 @@ class PlanLimits:
     panel_features: tuple[str, ...] = ()
     #: Tarif kartasidagi punktlar.  Sayt ham, panel ham shu ro'yxatni
     #: o'qiydi — matn ikki joyda yozilib, bir-biridan uzoqlashmasin.
-    includes: tuple[str, ...] = ()
+    bullets: tuple[PlanBullet, ...] = ()
     #: Yangi sotuvda taklif qilinmaydi, lekin hisob-kitob to'liq ishlaydi.
     legacy: bool = False
+
+    @property
+    def includes(self) -> tuple[str, ...]:
+        """Tekis matnli ro'yxat — `bullets` dan HOSILA.
+
+        Ikki ro'yxat qo'lda yuritilsa ular albatta uzoqlashadi: biri
+        yangilanadi, ikkinchisi unutiladi va sayt bir narsani, panel
+        boshqasini aytadi.  Shu sabab manba bitta.
+        """
+        return tuple(bullet.summary for bullet in self.bullets)
 
     @property
     def is_per_person(self) -> bool:
@@ -179,18 +217,103 @@ BIZNES_PANEL_FEATURES = (
 )
 BOSHLANGICH_PANEL_FEATURES = ("bugun", "hisobot", "telegram")
 
-BIZNES_INCLUDES = (
-    "4 kameragacha · bitta do'kon",
-    "Boshlang'ichdagi hammasi",
-    "Kassa navbati tahlili",
-    "Xavfsizlik: tungi harakat, taqiqlangan zona, kamera buzilishi",
-    "Do'kon issiqlik xaritasi — mijozlar qayerda ko'p yuradi",
-    "Mijoz portreti: yosh va jins (anonim, rasm saqlanmaydi)",
-    # 2026-08-21 dan sotuvga ochiq: modellar Apache-2.0 ga o'tkazildi.
-    # Bungacha bu qator ataylab yo'q edi — yuz tanish modeli tadqiqot
-    # litsenziyasida bo'lgani uchun uni tarif ichida sotib bo'lmasdi.
-    "Xodim davomati: 10 xodimgacha, yuz orqali (yozma rozilik bilan)",
-    "Imzolangan avtomatik yangilanishlar",
+#: Boshlang'ich tarifidagi punktlar.
+#:
+#: Har punkt uch qismdan: kartada ko'rinadigan qisqa nom, bosilganda
+#: ochiladigan izoh va ANIQ MISOL.  Misol ataylab: "kirish-chiqish
+#: sanog'i" degan ta'rif do'kon egasiga hech narsa aytmaydi, "shanba
+#: 18:00 da 41 kishi kirgan" esa darrov tushunarli.
+BOSHLANGICH_BULLETS = (
+    PlanBullet(
+        icon="kamera",
+        label="2 kameragacha",
+        detail="Bitta do'konda ikkita kamera ulanadi.",
+        example="Odatda: kirish eshigi va savdo zali.",
+    ),
+    PlanBullet(
+        icon="odamlar",
+        label="Kirish-chiqish sanog'i",
+        detail="Nechta odam kirdi va chiqdi — soat bo'yicha. Do'konda hozir "
+               "nechta odam borligi ham ko'rinadi.",
+        example="Masalan: shanba kuni 18:00 da 41 kishi kirgan.",
+    ),
+    PlanBullet(
+        icon="soat",
+        label="Kunlik hisobot",
+        detail="Har kuni kechqurun Telegramga o'sha kunning xulosasi keladi.",
+        example="\u00abBugun 268 kishi kirdi, eng gavjum soat 18:00\u00bb.",
+    ),
+    PlanBullet(
+        icon="qalqon",
+        label="Kamera nazorati",
+        detail="Kamera o'chsa yoki tasvir qotib qolsa darhol xabar beriladi.",
+        example="Tunda kabel uzilsa — ertalab emas, o'sha zahoti bilasiz.",
+    ),
+    PlanBullet(
+        icon="quti",
+        label="Arxiv 30 kun",
+        detail="Aniqlangan hodisalar va kunlik raqamlar 30 kun saqlanadi.",
+        example="O'tgan oyning eng gavjum kunini solishtira olasiz.",
+    ),
+    PlanBullet(
+        icon="yuklash",
+        label="Avtomatik yangilanish",
+        detail="Dastur imzolangan yangilanishni o'zi oladi — siz hech narsa "
+               "o'rnatmaysiz.",
+    ),
+)
+
+BIZNES_BULLETS = (
+    PlanBullet(
+        icon="kamera",
+        label="4 kameragacha",
+        detail="Bitta do'konda to'rtta kamera.",
+        example="Kirish, kassa, savdo zali va ombor.",
+    ),
+    PlanBullet(
+        icon="dokon",
+        label="Boshlang'ichdagi hammasi",
+        detail="Sanoq, kunlik hisobot, kamera nazorati va Telegram xabarlari.",
+    ),
+    PlanBullet(
+        icon="navbat",
+        label="Kassa navbati",
+        detail="Kassada nechta odam turgani o'lchanadi; navbat uzayganda "
+               "xabar keladi.",
+        example="\u00abNavbatda 7 kishi \u2014 ikkinchi kassani oching\u00bb.",
+    ),
+    PlanBullet(
+        icon="qalqon",
+        label="Xavfsizlik signallari",
+        detail="Ish vaqtidan tashqari harakat, taqiqlangan zonaga kirish va "
+               "kamera buzilishi.",
+        example="Do'kon yopiq, kamera esa odamni ko'rdi — telefon jiringlaydi.",
+    ),
+    PlanBullet(
+        icon="xarita",
+        label="Do'kon issiqlik xaritasi",
+        detail="Mijozlar do'konning qaysi joyida ko'p turishini ko'rasiz — "
+               "javonni shunga qarab joylashtirasiz.",
+        example="Kirish yo'lagida ko'p, burchakda deyarli hech kim yo'q.",
+    ),
+    PlanBullet(
+        icon="portret",
+        label="Mijoz portreti",
+        detail="Mijozlarning taxminiy yoshi va jinsi. Anonim baho: rasm "
+               "saqlanmaydi.",
+        example="Xaridorlarning 58% ayol, asosiy yosh guruhi 18-30.",
+    ),
+    PlanBullet(
+        icon="yuz",
+        label="Xodim davomati",
+        detail="10 xodimgacha, yuz orqali. Xodimning yozma roziligi bilan.",
+        example="Kim kechikdi va necha daqiqa — oylik jadval va CSV.",
+    ),
+    PlanBullet(
+        icon="yuklash",
+        label="Avtomatik yangilanish",
+        detail="Dastur imzolangan yangilanishni o'zi oladi.",
+    ),
 )
 
 PLANS: Dict[PlanTier, PlanLimits] = {
@@ -208,14 +331,7 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         display_name="Boshlang'ich",
         edge_features=BOSHLANGICH_EDGE_FEATURES,
         panel_features=BOSHLANGICH_PANEL_FEATURES,
-        includes=(
-            "2 kameragacha · bitta do'kon",
-            "Kirish-chiqish sanash va bandlik",
-            "Kunlik hisobot va mijoz paneli",
-            "Kamera o'chsa yoki qotib qolsa — darhol Telegram xabari",
-            "Hodisa arxivi 30 kun",
-            "Imzolangan avtomatik yangilanishlar",
-        ),
+        bullets=BOSHLANGICH_BULLETS,
     ),
     "biznes": PlanLimits(
         # Asosiy tarif — `lite` ning aynan cheklovlari, narxi $20 → $23.
@@ -229,7 +345,7 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         display_name="Biznes",
         edge_features=BIZNES_EDGE_FEATURES,
         panel_features=BIZNES_PANEL_FEATURES,
-        includes=BIZNES_INCLUDES,
+        bullets=BIZNES_BULLETS,
     ),
     "lite": PlanLimits(
         # 8 kamera apparat maksimumi, ammo sotiladigan SLA hozir 4 kamera.
@@ -255,7 +371,7 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         display_name="Biznes (2026-08 narxi)",
         edge_features=BIZNES_EDGE_FEATURES,
         panel_features=BIZNES_PANEL_FEATURES,
-        includes=BIZNES_INCLUDES,
+        bullets=BIZNES_BULLETS,
         legacy=True,
     ),
     "starter": PlanLimits(

@@ -1519,3 +1519,33 @@ def test_the_grace_period_promised_on_the_site_is_honoured(production_client) ->
     config = client.get("/api/v1/sotqin/config", headers=headers).json()
     assert config["subscription"]["status"] == "grace"
     assert config["cloud_features"], "grace davrida tizim ishlashda davom etadi"
+
+
+def test_owner_sees_the_annual_offer_with_real_amounts(production_client) -> None:
+    """Yillik taklif summasi hisob-fakturadagi bilan bir xil chiqsin.
+
+    Panelga qo'lda yozilgan raqam eng xavflisi: mijoz bir summani ko'rib,
+    to'lovda boshqasini olardi.  Shu sabab bu yerda ikkalasi solishtiriladi.
+    """
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"])
+
+    body = client.get("/api/v1/owner/subscription", headers=owner_headers)
+    assert body.status_code == 200
+    data = body.json()
+
+    # 2 oy bepul — bu saytdagi va'da.
+    assert data["free_months"] == 2
+    assert data["annual_uzs"] == data["monthly_uzs"] * 10
+    assert data["annual_saving_uzs"] == data["monthly_uzs"] * 2
+    assert data["status"] in {"active", "grace", "expired", "suspended"}
+    assert data["subscription_until"]
+    assert data["grace_days"] == 14
+
+    # Va endi eng muhimi: haqiqiy hisob-faktura ham xuddi shu summani bersin.
+    invoice = client.post(
+        "/api/v1/owner/invoices", headers=owner_headers, json={"months": 12}
+    )
+    assert invoice.status_code == 200
+    assert invoice.json()["amount_uzs"] == data["annual_uzs"]

@@ -81,7 +81,7 @@ from cloud.portal_auth import (
     validate_password,
 )
 from cloud.snapshots import SnapshotStore, snapshot_store_from_env
-from cloud.store import DEFAULT_FEATURES, CloudStore, available_feature_codes
+from cloud.store import DEFAULT_FEATURES, GRACE_DAYS, CloudStore, available_feature_codes
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = Path(os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
@@ -5396,6 +5396,41 @@ async def owner_list_invoices(
     limit: int = 30, owner: OwnerPrincipal = Depends(require_active_owner)
 ) -> List[Dict[str, Any]]:
     return [_with_links(i) for i in get_payments().list_invoices(owner.site_id, limit=limit)]
+
+
+@app.get("/api/v1/owner/subscription")
+async def owner_subscription(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Obuna holati va yillik taklif — mijoz paneli uchun.
+
+    `owner_health` tarif cheklovlarini beradi, lekin obuna qachon
+    tugashini ham, narxni ham bermaydi.  Yillik taklifni ko'rsatish uchun
+    ikkalasi kerak.
+
+    Summalar `plans.py` va `billable_months()` dan HISOBLANADI — panelga
+    qo'lda yozilgan raqam hisob-fakturadagidan farq qilib qolardi.
+    """
+    store = get_store()
+    site = store.get_site(owner.site_id)
+    if not site:
+        raise HTTPException(404, "Do'kon topilmadi")
+    status = store.subscription_status(owner.site_id)
+    monthly = store.effective_monthly_uzs(owner.site_id)
+    charged = YEARLY_MONTHS_CHARGED
+    return {
+        "status": status["status"],
+        "days_left": status["days_left"],
+        "message": status.get("message", ""),
+        # `_compute_status` sanani qaytarmaydi — u faqat holat hisoblaydi.
+        "subscription_until": site["subscription_until"],
+        "grace_days": GRACE_DAYS,
+        "plan": plan_display_name(str(site.get("plan") or "")),
+        "monthly_uzs": monthly,
+        "annual_uzs": monthly * charged,
+        "annual_saving_uzs": monthly * (12 - charged),
+        "free_months": 12 - charged,
+    }
 
 
 @app.post("/api/v1/owner/invoices")

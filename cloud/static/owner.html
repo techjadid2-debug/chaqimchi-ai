@@ -278,9 +278,11 @@
       <div class="card quiet">
         <h2>To‘lov</h2>
         <p id="tariffLine" class="lead" style="margin-bottom:10px">—</p>
+        <p id="subLine" class="hint" style="margin-bottom:10px"></p>
         <div id="invoiceList"></div>
         <div class="actions" style="margin-top:10px">
           <button class="button" id="invoiceBtn" type="button">To‘lov hisobini ochish</button>
+          <button class="button primary hidden" id="annualBtn" type="button">Yillik to‘lov</button>
         </div>
         <p class="hint">Funksiyalarni o‘zgartirish (qo‘shish/olib tashlash) uchun bizga yozing — keyingi oydan qayta hisoblanadi.</p>
         <div id="billingStatus"></div>
@@ -469,7 +471,7 @@
   const S = {
     health: null, cameras: null, report: null, trend: null,
     events: null, config: null, members: null, billing: null, features: null,
-    staff: null,
+    staff: null, subscription: null,
   };
 
   const LOADERS = {
@@ -481,6 +483,7 @@
     config: () => api("/api/v1/owner/config"),
     members: () => api("/api/v1/owner/members"),
     billing: () => api("/api/v1/owner/invoices?limit=6"),
+    subscription: () => api("/api/v1/owner/subscription"),
     features: () => api("/api/v1/owner/features"),
     staff: () => api("/api/v1/owner/faces"),
   };
@@ -522,7 +525,7 @@
     { id: "xavfsizlik", label: "Xavfsizlik", icon: "qalqon", pane: "paneXavfsizlik",
       deps: ["health", "cameras", "report", "events"] },
     { id: "dokon", label: "Do‘kon", icon: "dokon", pane: "paneDokon",
-      deps: ["health", "cameras", "config", "members", "billing", "features"] },
+      deps: ["health", "cameras", "config", "members", "billing", "features", "subscription"] },
     { id: "xodimlar", label: "Xodimlar", icon: "odamlar", pane: "paneXodimlar",
       deps: ["health", "cameras", "config", "staff"] },
   ];
@@ -1853,12 +1856,17 @@
 
   /* ── To'lov ─────────────────────────────────────────────────────────── */
 
-  function drawBilling(invoices, monthlyUzs) {
+  function drawBilling(invoices, monthlyUzs, sub) {
     {
-      const uzs = Number(monthlyUzs || 0);
+      // Tarif nomi serverdan keladi.  Ilgari bu yerda "Chaqimchi Lite" deb
+      // yozib qo'yilgandi — Boshlang'ich va Biznes mijozlari o'z tarifini
+      // emas, boshqasining nomini ko'rib turardi.
+      const uzs = Number((sub && sub.monthly_uzs) || monthlyUzs || 0);
+      const planName = (sub && sub.plan) || "Chaqimchi";
       $("tariffLine").textContent = uzs
-        ? `Joriy tarif: Chaqimchi Lite — oyiga ${uzs.toLocaleString("ru-RU")} so‘m`
-        : "Joriy tarif: Chaqimchi Lite";
+        ? `Joriy tarif: ${planName} — oyiga ${uzs.toLocaleString("ru-RU")} so‘m`
+        : `Joriy tarif: ${planName}`;
+      drawSubscription(sub);
       $("invoiceList").innerHTML = invoices.length
         ? invoices.slice(0, 5).map((invoice) => `
           <div class="member-row">
@@ -1870,9 +1878,41 @@
     }
   }
 
-  async function createInvoice() {
+  function drawSubscription(sub) {
+    const line = $("subLine");
+    const btn = $("annualBtn");
+    if (!sub) { line.textContent = ""; btn.classList.add("hidden"); return; }
+
+    const left = Number(sub.days_left);
+    if (sub.status === "grace") {
+      line.textContent = `Obuna muddati tugadi — tizim yana ${sub.grace_days} kun ishlaydi.`;
+    } else if (sub.status === "active" && Number.isFinite(left)) {
+      line.textContent = left <= 7
+        ? `Obuna tugashiga ${Math.max(0, left)} kun qoldi.`
+        : `Obuna ${String(sub.subscription_until || "").slice(0, 10)} gacha faol.`;
+    } else {
+      line.textContent = sub.message || "";
+    }
+
+    // Summalar SERVERDAN keladi — panelga qo'lda yozilgan raqam
+    // hisob-fakturadagidan farq qilib qolardi.
+    const saving = Number(sub.annual_saving_uzs || 0);
+    const annual = Number(sub.annual_uzs || 0);
+    if (annual > 0 && saving > 0) {
+      btn.textContent = `Yillik — ${sub.free_months} oy bepul (${annual.toLocaleString("ru-RU")} so‘m)`;
+      btn.title = `${saving.toLocaleString("ru-RU")} so‘m tejaysiz`;
+      btn.classList.remove("hidden");
+    } else {
+      btn.classList.add("hidden");
+    }
+  }
+
+  async function createInvoice(months) {
     try {
-      const invoice = await api("/api/v1/owner/invoices", { method: "POST", body: JSON.stringify({ months: 1 }) });
+      const invoice = await api("/api/v1/owner/invoices", {
+        method: "POST",
+        body: JSON.stringify({ months: Number(months) || 1 }),
+      });
       location.href = invoice.pay_url;
     } catch (err) { note("billingStatus", "err", err.message); }
   }
@@ -1968,8 +2008,12 @@
       if (S.members.ok) drawMembers(S.members.data);
       else note("memberStatus", "err", S.members.error);
       if (S.billing.ok) {
-        const quote = S.features.ok ? S.features.data.summary.active_quote : null;
-        drawBilling(S.billing.data, quote ? quote.monthly_uzs : 0);
+        // `?.` ataylab: funksiya javobi kutilmagan shaklda kelsa butun
+        // "Do'kon" bo'limi chizilmay qolardi.  Narx endi obuna javobidan
+        // ham keladi, ya'ni bu qiymat yo'q bo'lsa ham karta to'liq chiqadi.
+        const quote = S.features.ok ? S.features.data?.summary?.active_quote : null;
+        drawBilling(S.billing.data, quote ? quote.monthly_uzs : 0,
+          S.subscription?.ok ? S.subscription.data : null);
       } else note("billingStatus", "err", S.billing.error);
     } else if (tab.id === "xodimlar") {
       if (S.config.ok) currentConfig = S.config.data.config;
@@ -2104,7 +2148,8 @@
   $("inviteStaffBtn").addEventListener("click", inviteStaff);
   $("inviteCopyBtn").addEventListener("click", copyInvite);
   $("digestToggle").addEventListener("change", toggleDigest);
-  $("invoiceBtn").addEventListener("click", createInvoice);
+  $("invoiceBtn").addEventListener("click", () => createInvoice(1));
+  $("annualBtn").addEventListener("click", () => createInvoice(12));
   $("typeFilter").addEventListener("change", () => reload("events"));
   $("cameraFilter").addEventListener("change", () => reload("events"));
   $("modalClose").addEventListener("click", closeModal);

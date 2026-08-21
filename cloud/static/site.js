@@ -218,8 +218,36 @@
     const note = plan.note
       ? `<p class="preset-note">${esc(plan.note)}</p>`
       : "";
-    const items = (plan.includes || [])
-      .map((item) => `<li>${esc(item)}</li>`)
+    // Punkt = ikonka + 2-3 so'z; batafsili BOSILGANDA o'sha joyda
+    // ochiladi.  Ilgari har kartada oltita uzun jumla turardi va do'kon
+    // egasi ularni o'qimay, faqat narxga qarab qaror qilardi.
+    //
+    // `<details>` ataylab: klaviatura (Enter/Bo'sh joy), ekran o'quvchi
+    // va telefon xatti-harakati brauzerdan tekin keladi — `aria-expanded`
+    // ni qo'lda boshqarish shart emas.  `name` bir kartada bittasi ochiq
+    // turishini ta'minlaydi (qo'llab-quvvatlamagan brauzerda bir nechtasi
+    // ochiladi — bu ham yomon emas).
+    const bullets = (plan.bullets || [])
+      .map(
+        (line) => `
+        <li>
+          <details class="bullet" name="bullet-${esc(plan.code)}">
+            <summary>
+              <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#${esc(line.icon)}"></use></svg>
+              <span>${esc(line.label)}</span>
+            </summary>
+            ${line.detail ? `<p>${esc(line.detail)}</p>` : ""}
+            ${line.example ? `<p class="bullet-example">${esc(line.example)}</p>` : ""}
+          </details>
+        </li>`,
+      )
+      .join("");
+
+    // Zaxira: keshdagi eski javobda `bullets` bo'lmasligi mumkin —
+    // `?v=` faqat KEYINGI yuklashga ta'sir qiladi, hozirgi mijozda esa
+    // eski JS ishlab turadi.  Bunday holatda karta bo'sh qolmasin.
+    const items = bullets || (plan.includes || [])
+      .map((item) => `<li><span>${esc(item)}</span></li>`)
       .join("");
     return `
       <article class="preset${featured}" data-plan="${esc(plan.code)}">

@@ -36,6 +36,7 @@ from chaqimchi_ai.jwt_auth import JwtError
 from chaqimchi_ai.licensing.plans import (
     PLANS,
     SELLABLE_PLANS,
+    PlanBullet,
     PlanTier,
     cheapest_plan_for,
     get_plan,
@@ -1485,12 +1486,33 @@ NETWORK_PLAN_CARD = {
     "retention_days": 90,
     "highlight": False,
     "badge": None,
-    "includes": (
-        "Bir nechta do'kon",
-        "Har do'konda 4 kameragacha",
-        "Biznesdagi hammasi",
-        "Hodisa arxivi 90 kun",
-        "Ulash va sozlashda biz yordam beramiz",
+    "bullets": (
+        PlanBullet(
+            icon="dokon",
+            label="Bir nechta do'kon",
+            detail="Har do'kon alohida ulanadi, shartlar birga kelishiladi.",
+        ),
+        PlanBullet(
+            icon="kamera",
+            label="Har do'konda 4 kamera",
+            detail="Har obyekt uchun to'rttagacha kamera.",
+        ),
+        PlanBullet(
+            icon="qalqon",
+            label="Biznesdagi hammasi",
+            detail="Navbat, xavfsizlik, xarita, mijoz portreti va xodim davomati.",
+        ),
+        PlanBullet(
+            icon="quti",
+            label="Arxiv 90 kun",
+            detail="Hodisalar va hisobotlar uch oy saqlanadi.",
+            example="Mavsumiy taqqoslash uchun yetadi.",
+        ),
+        PlanBullet(
+            icon="kompyuter",
+            label="Ulashda yordam",
+            detail="Kamera sozlash va ulashni biz bilan birga qilasiz.",
+        ),
     ),
     # Halollik: bitta login bilan hamma do'konni ko'rish kodi HALI YO'Q
     # (`portal_accounts.site_id` bitta).  Buni sayt va'da qilmasin.
@@ -1500,6 +1522,24 @@ NETWORK_PLAN_CARD = {
     ),
     "cta": "Bog'lanish",
 }
+
+
+def _bullet_payload(bullets: Any) -> List[Dict[str, str]]:
+    """`PlanBullet` -> JSON.
+
+    `icon` `cloud/static/icons.svg` dagi symbol id bo'lishi shart:
+    xato yozilsa kartada shunchaki bo'sh joy qoladi va buni ko'z bilan
+    sezish qiyin — shu sabab test uni tekshiradi.
+    """
+    return [
+        {
+            "icon": bullet.icon,
+            "label": bullet.label,
+            "detail": bullet.detail,
+            "example": bullet.example,
+        }
+        for bullet in bullets
+    ]
 
 
 def _public_plan_card(code: str) -> Dict[str, Any]:
@@ -1522,6 +1562,10 @@ def _public_plan_card(code: str) -> Dict[str, Any]:
         "retention_days": limits.retention_days,
         "highlight": code == "biznes",
         "badge": "Eng ommabop" if code == "biznes" else None,
+        # `bullets` — kartada ikonka + qisqa nom, bosilganda izoh.
+        "bullets": _bullet_payload(limits.bullets),
+        # `includes` — tekis matn.  Saqlanadi: keshdagi eski `site.js`
+        # hali shuni o'qiydi, va `<noscript>` uchun ham kerak.
         "includes": list(limits.includes),
         "note": None,
         "cta": f"{limits.display_name or code}ni tanlash",
@@ -1547,7 +1591,13 @@ async def public_pricing() -> Dict[str, Any]:
         # Uchta tarif kartasi.  Sayt shu ro'yxatni chizadi va so'm
         # summasini o'zi hisoblamaydi.
         "plans": [_public_plan_card(code) for code in PUBLIC_PLAN_ORDER]
-        + [dict(NETWORK_PLAN_CARD, includes=list(NETWORK_PLAN_CARD["includes"]))],
+        + [
+            dict(
+                NETWORK_PLAN_CARD,
+                bullets=_bullet_payload(NETWORK_PLAN_CARD["bullets"]),
+                includes=[b.summary for b in NETWORK_PLAN_CARD["bullets"]],
+            )
+        ],
         # `base` — alohida funksiya shartnomalari (`feature_quote`) uchun
         # platforma bazasi.  Tarif narxi endi `plans` dan olinadi.
         "base": {

@@ -235,6 +235,19 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 .preset-price b { font-size: 32px; letter-spacing: -.04em; }
 .preset-price span { color: var(--muted); font-size: 14px; }
 .preset .button { width: 100%; }
+/* Tarif punkti: ikonka + qisqa nom, batafsili bosilganda ochiladi.
+   Modal EMAS — telefonda modal butun ekranni yopadi va mijoz kartadan
+   uzilib qoladi.  Uslub `.faq details` dan alohida nomlangan, aks holda
+   savol-javob ko'rinishi kartalarga sizib o'tardi. */
+.preset-items li { list-style: none; }
+.preset-items li::before { content: none; }
+.bullet summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; }
+.bullet summary::-webkit-details-marker { display: none; }
+.bullet summary .icon { width: 22px; height: 22px; flex: none; color: var(--orange); }
+.bullet summary::after { content: ""; flex: none; width: 7px; height: 7px; margin-left: auto; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .18s ease; }
+.bullet[open] summary::after { transform: rotate(-135deg); }
+.bullet p { margin: 4px 0 10px 32px; color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.6; }
+.bullet-example { color: var(--ink); opacity: .78; }
 .preset-hint { margin: 0 0 32px; color: var(--muted); font-size: 14px; text-align: center; }
 
 /* Konfigurator: valyuta tugmasi, baza ro'yxati va funksiya bo'yicha kamera soni. */

@@ -1781,7 +1781,14 @@ def test_loitering_snapshot_is_accepted_but_not_stored(production_client) -> Non
     owner_headers = _login_owner(client, site["site_id"], telegram_id="103")
     events = client.get("/api/v1/owner/events", headers=owner_headers)
     assert events.status_code == 200
-    assert any(item["event_id"] == "loi-1" for item in events.json()["events"])
+    row = next(item for item in events.json()["events"] if item["event_id"] == "loi-1")
+
+    # "Rasm bor" bayrog'i O'CHIRILGAN bo'lishi shart.  U qurilmaning
+    # da'vosi bilan keladi va eski qurilmalarda `true` bo'lib turaveradi;
+    # tozalanmasa panel rasm tugmasini ko'rsatib, mijoz bosganda 404
+    # olardi.  Jonli serverda aynan shu holat kuzatildi (2026-08-21):
+    # `snapshot_key` bo'sh, `snapshot_bytes` nol, lekin bayroq 1 edi.
+    assert row["has_snapshot"] is False
 
     # Lekin rasm yo'q.
     assert client.get(

@@ -3291,6 +3291,15 @@ async def ingest_event_batch(
         message="Event yuborish chegarasi oshdi — keyinroq qayta yuboriladi",
     )
     event_store = get_event_store()
+    # Media olinmaydigan hodisada "rasm bor" bayrog'ini O'CHIRAMIZ.
+    #
+    # Bayroq qurilmaning DA'VOSI bilan keladi va u eski qurilmalarda
+    # `true` bo'lib turaveradi.  Rasm esa saqlanmaydi (`MEDIALESS_EVENTS`).
+    # Tozalanmasa panel "rasm bor" deb ko'rsatib, mijoz bosganda 404
+    # olardi — ya'ni bazadagi ma'lumot yolg'on bo'lardi.
+    for event in body.events:
+        if event.event_type in MEDIALESS_EVENTS:
+            event.has_snapshot = False
     existing = event_store.existing_event_ids(
         device["site_id"], [event.event_id for event in body.events]
     )

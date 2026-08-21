@@ -46,6 +46,14 @@ POLL_INTERVAL_SEC = 20
 
 TIMEOUT_SEC = 20
 
+#: Server jonli ko'rish so'ralishini shuncha soniya kutib turadi.
+#:
+#: 25 soniya ataylab `POLL_INTERVAL_SEC` dan katta: kutish tugagach
+#: darhol yangi so'rov ketadi, ya'ni qurilma amalda doim "eshitib"
+#: turadi va bo'sh aylanish yo'qoladi.  Serverda kutish bazani
+#: so'ramaydi — xotiradagi signal.
+HEARTBEAT_WAIT_SEC = 25
+
 #: Jonli kadr yuborish qadami (soniya).
 LIVE_UPLOAD_INTERVAL_SEC = 2.5
 
@@ -279,13 +287,25 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         "queue_errors": int(status.get("action_errors") or 0),
         "app_version": __version__,
         "product_name": "Chaqimchi Windows",
+        # Server jonli ko'rish so'ralishini shuncha soniya kutib tursin.
+        #
+        # Bungacha panel "Jonli" tugmasini bosgach birinchi kadr 14-27
+        # soniyada kelardi va eng katta ulush shu yerda edi: buyruq faqat
+        # keyingi salomda ko'rinardi (`POLL_INTERVAL_SEC = 20`).  Endi
+        # server so'rov kelishi bilan darhol javob beradi.
+        #
+        # Eski server bu maydonni e'tiborsiz qoldiradi va darhol javob
+        # beradi — ya'ni yangi qurilma eski cloud bilan ham ishlayveradi.
+        "wait_sec": HEARTBEAT_WAIT_SEC,
     }
     try:
         response = httpx.post(
             f"{str(raw['url']).rstrip('/')}/api/v1/edge/heartbeat",
             headers=_headers(raw),
             json=payload,
-            timeout=TIMEOUT_SEC,
+            # Kutish vaqti + javob uchun zaxira.  Aks holda o'z
+            # so'rovimizni o'zimiz uzib qo'yardik.
+            timeout=HEARTBEAT_WAIT_SEC + TIMEOUT_SEC,
         )
         response.raise_for_status()
         answer = response.json()

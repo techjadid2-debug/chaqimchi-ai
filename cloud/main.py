@@ -377,6 +377,16 @@ class EdgeCameraHealth(BaseModel):
 
 
 class EdgeHeartbeatBody(BaseModel):
+    #: Qurilma javobni shuncha soniyagacha KUTIB turishga tayyor.
+    #:
+    #: Nol (yoki eski qurilma) — darhol javob, ya'ni bugungi xatti-harakat.
+    #: Noldan katta bo'lsa server jonli ko'rish so'ralishini kutadi va
+    #: so'ralishi bilan DARHOL javob beradi.
+    #:
+    #: Nega kerak: bungacha panel "Jonli" tugmasini bosgach birinchi kadr
+    #: 14-27 soniyada kelardi — eng katta ulush qurilmaning 20 soniyalik
+    #: "salom" oralig'i edi.
+    wait_sec: int = Field(default=0, ge=0, le=55)
     cameras_active: int = Field(default=0, ge=0, le=64)
     #: Kamera boshiga holat.  Eski qurilma yubormaydi — bo'sh ro'yxat
     #: "ma'lumot yo'q" degani, "hammasi o'chgan" degani emas.
@@ -736,6 +746,31 @@ async def _setup_bot_commands() -> None:
             logger.warning("setMyCommands xatosi: %s %s", response.status_code, response.text[:200])
     except Exception:
         logger.warning("Bot buyruqlar menyusi o'rnatilmadi", exc_info=True)
+
+
+#: Jonli ko'rish so'ralganda qurilmani uyg'otish uchun.
+#:
+#: Kutish bazani so'rab turmaydi: har obyekt uchun bitta `asyncio.Event`
+#: va u faqat `request_live` chaqirilganda qo'yiladi.  Ya'ni yuz qurilma
+#: kutib tursa ham bazaga bitta ham qo'shimcha so'rov ketmaydi.
+#:
+#: Xotirada — `ratelimit` bilan bir xil sabab: server bitta ishchi
+#: jarayonda ishlaydi.  Ikkinchi jarayon paydo bo'lsa bu ham umumiy
+#: signalga ko'chirilishi kerak.
+_live_wakeups: Dict[str, asyncio.Event] = {}
+
+
+def _live_wakeup(site_id: str) -> asyncio.Event:
+    event = _live_wakeups.get(site_id)
+    if event is None:
+        event = asyncio.Event()
+        _live_wakeups[site_id] = event
+    return event
+
+
+def _wake_live_watchers(site_id: str) -> None:
+    """Jonli ko'rish so'raldi — kutayotgan qurilma darhol javob olsin."""
+    _live_wakeup(site_id).set()
 
 
 class _DurableAlertThrottle:
@@ -2830,6 +2865,7 @@ async def admin_request_live(
     """
     try:
         until = get_store().request_live(site_id, camera_id)
+        _wake_live_watchers(site_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"ok": True, "until": until, "first_frame_wait_sec": 25}
@@ -3153,6 +3189,7 @@ async def owner_request_live(
     """
     try:
         until = get_store().request_live(owner.site_id, camera_id)
+        _wake_live_watchers(owner.site_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     # Birinchi kadrgacha kutish: qurilma so'rovni keyingi heartbeat'da
@@ -3604,6 +3641,26 @@ async def edge_health_heartbeat(
     # og'ir so'rov, javob esa deyarli har doim bir xil. Endi javobdagi shu
     # bitta son qurilmaga o'zgarish bor-yo'qligini aytadi.
     revision = get_event_store().config_revision(device["site_id"])
+
+    # Qurilma kutishga tayyor bo'lsa va hozir ish yo'q bo'lsa — jonli
+    # ko'rish so'ralishini kutamiz.  So'ralishi bilan darhol qaytamiz.
+    #
+    # Kutish bazani so'rab turmaydi (`_live_wakeups` — xotirada).  Kutish
+    # tugagach ro'yxat BIR MARTA qayta o'qiladi: shu oraliqda so'ralgan
+    # bo'lsa u ham tushadi.
+    live = get_store().live_cameras(device["site_id"])
+    previews = get_store().pending_preview_cameras(device["site_id"])
+    if body.wait_sec and not live and not previews:
+        wakeup = _live_wakeup(device["site_id"])
+        wakeup.clear()
+        try:
+            await asyncio.wait_for(wakeup.wait(), timeout=float(body.wait_sec))
+        except asyncio.TimeoutError:
+            pass
+        else:
+            live = get_store().live_cameras(device["site_id"])
+            previews = get_store().pending_preview_cameras(device["site_id"])
+
     return {
         "ok": True,
         "config_revision": revision,
@@ -3612,10 +3669,10 @@ async def edge_health_heartbeat(
         # orqali kelmaydi: revizya o'zgarsa retail xizmati o'zini qayta ishga
         # tushiradi (`restart_on_config_change`), ya'ni har "rasmni ko'rsat"
         # bosilganda do'kon analitikasi bir necha soniyaga uzilardi.
-        "preview_requested": get_store().pending_preview_cameras(device["site_id"]),
+        "preview_requested": previews,
         # Jonli ko'rish: panel ochiq turgan kameralar. Muddat bilan keladi —
         # qurilma muddati o'tguncha har 2-3 soniyada kadr yuboradi.
-        "live_requested": get_store().live_cameras(device["site_id"]),
+        "live_requested": live,
         "received": body.model_dump(),
     }
 

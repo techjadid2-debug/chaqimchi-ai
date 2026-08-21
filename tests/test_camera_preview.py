@@ -726,3 +726,89 @@ def test_admin_kamerani_jonli_ko_ra_oladi(client: TestClient) -> None:
     )
     assert shown.status_code == 200
     assert shown.content == b"jpeg-bytes"
+
+
+# ── Jonli ko'rish tez ochilishi ──────────────────────────────────────────
+
+
+def test_qurilma_jonli_so_ralishini_kutadi_va_darhol_uyg_onadi(client: TestClient) -> None:
+    """"Jonli" bosilgach qurilma darhol xabar olsin.
+
+    Bungacha panel tugmani bosgach birinchi kadr 14-27 soniyada kelardi
+    va eng katta ulush qurilmaning 20 soniyalik "salom" oralig'i edi:
+    buyruq faqat keyingi salomda ko'rinardi.
+
+    Endi qurilma javobni kutib turadi, server esa jonli ko'rish
+    so'ralishi bilan DARHOL javob beradi.  Kutish bazani so'rab
+    turmaydi — xotiradagi signal (`_live_wakeups`).
+    """
+    import asyncio
+    import time
+
+
+    site, headers = _site_with_camera(client)
+    site_id = site["site_id"]
+
+    async def scenario() -> tuple[dict, float]:
+        loop = asyncio.get_running_loop()
+        started = time.monotonic()
+
+        async def ask_live() -> None:
+            # Qurilma kutishni boshlashiga ulguraylik.
+            await asyncio.sleep(0.15)
+            await loop.run_in_executor(
+                None,
+                lambda: client.post(
+                    f"/api/v1/admin/sites/{site_id}/cameras/camera-01/live", headers=ADMIN
+                ),
+            )
+
+        async def heartbeat() -> dict:
+            return await loop.run_in_executor(
+                None,
+                lambda: client.post(
+                    "/api/v1/edge/heartbeat",
+                    headers=headers,
+                    json={"wait_sec": 10, "cameras_active": 1},
+                ).json(),
+            )
+
+        beat, _ = await asyncio.gather(heartbeat(), ask_live())
+        return beat, time.monotonic() - started
+
+    answer, elapsed = asyncio.run(scenario())
+
+    assert [c["camera_id"] for c in answer["live_requested"]] == ["camera-01"], answer
+    # Kutish 10 soniya edi — javob esa so'rov bilanoq kelishi kerak.
+    assert elapsed < 4.0, f"uyg'onish juda sekin: {elapsed:.1f}s"
+
+
+def test_kutish_so_ralmasa_javob_darhol_qaytadi(client: TestClient) -> None:
+    """Eski qurilma (`wait_sec` yubormaydi) avvalgidek ishlasin."""
+    import time
+
+    site, headers = _site_with_camera(client)
+    started = time.monotonic()
+    answer = client.post(
+        "/api/v1/edge/heartbeat", headers=headers, json={"cameras_active": 1}
+    )
+    assert answer.status_code == 200
+    assert answer.json()["live_requested"] == []
+    assert time.monotonic() - started < 2.0, "kutish so'ralmagan — ushlab turilmasin"
+
+
+def test_kutish_ish_bor_bo_lsa_umuman_boshlanmaydi(client: TestClient) -> None:
+    """Allaqachon jonli so'ralgan bo'lsa kutib o'tirilmaydi."""
+    import time
+
+    site, headers = _site_with_camera(client)
+    site_id = site["site_id"]
+    client.post(f"/api/v1/admin/sites/{site_id}/cameras/camera-01/live", headers=ADMIN)
+
+    started = time.monotonic()
+    answer = client.post(
+        "/api/v1/edge/heartbeat", headers=headers, json={"wait_sec": 10, "cameras_active": 1}
+    )
+    listed = [c["camera_id"] for c in answer.json()["live_requested"]]
+    assert listed == ["camera-01"]
+    assert time.monotonic() - started < 2.0, "ish bor edi — kutish kerak emas"

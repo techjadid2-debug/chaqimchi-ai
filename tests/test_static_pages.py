@@ -819,19 +819,63 @@ def test_the_landing_shows_the_real_panel_not_a_drawing() -> None:
     assert proof.count('loading="lazy"') == 2
 
 
+def live_css(css: str) -> str:
+    """Brauzer HAQIQATAN ko'radigan CSS: izohlar olib tashlangan.
+
+    Oddiy regex yetmaydi va buning aniq sababi bor.  2026-08-21 da
+    `site.css` da yopilmagan izoh paydo bo'ldi (o'lik qoidalarni
+    tozalaydigan skript izohlarni bilmasdi va ular ichidagi `{ }` ni
+    qoida deb o'yladi).  Natijada ro'yxatdan o'tish formasining butun
+    uslubi izoh ichida qolib ketdi — jonli saytda forma tarqalib, spam
+    tuzog'i (`.honey`) esa mijozga KO'RINIB turdi.
+
+    Yopilmagan izoh o'zidan keyingi hamma narsani yutadi, shuning uchun
+    bu yerda u ataylab "shu joydan keyin hech narsa yo'q" deb
+    hisoblanadi — brauzer aynan shunday qiladi.
+    """
+    out, index = [], 0
+    while True:
+        start = css.find("/*", index)
+        if start == -1:
+            out.append(css[index:])
+            return "".join(out)
+        out.append(css[index:start])
+        end = css.find("*/", start + 2)
+        if end == -1:
+            return "".join(out)  # yopilmagan — qolgani o'lik
+        index = end + 2
+
+
+def test_the_stylesheet_has_no_unterminated_comment() -> None:
+    """Bitta yopilmagan `/*` butun fayl oxirini o'ldiradi.
+
+    Buni bitta qator bilan ushlash mumkin edi va ushlanmadi: jonli
+    saytda forma bir necha soat buzuq turdi.
+    """
+    for name in ("site.css", "owner.css", "admin.css", "docs/docs.css"):
+        path = STATIC / name
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert text.count("/*") == text.count("*/"), f"{name}: izoh yopilmagan"
+
+
 def test_shared_pages_keep_the_styles_they_use() -> None:
     """`site.css` ni TO'QQIZTA sahifa bo'lishadi.
 
-    Bosh sahifa qayta qurilganda o'lik qoidalar tozalandi (38 KB → 21 KB).
-    Xavf aniq edi: `install.html` yoki `installer-guide.html` ishlatadigan
-    sinf ham "landingda ishlatilmayapti" degan sabab bilan o'chib
-    ketishi mumkin — va buni hech qanday test ushlamasdi, sahifa
-    shunchaki uslubsiz ochilardi.
+    Bosh sahifa qayta qurilganda o'lik qoidalar tozalandi.  Xavf aniq
+    edi: `install.html` yoki `installer-guide.html` ishlatadigan sinf ham
+    "landingda ishlatilmayapti" degan sabab bilan o'chib ketishi mumkin —
+    va sahifa shunchaki uslubsiz ochilardi.
 
-    Shu sabab tekshiruv ro'yxatga emas, HAQIQATGA tayanadi: har sahifada
-    uchraydigan har bir sinf uchun `site.css` da qoida bo'lishi shart.
+    Tekshiruv ro'yxatga emas, HAQIQATGA tayanadi: har sahifada uchraydigan
+    har bir sinf uchun `site.css` da **tirik** qoida bo'lishi shart.
+
+    "Tirik" so'zi bu yerda asosiy: ilgari sinf nomi izoh ICHIDA
+    turgani ham "qoida bor" deb hisoblanardi va shu sabab test buzilgan
+    faylni yashil deb o'tkazib yubordi.
     """
-    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    css = live_css((STATIC / "site.css").read_text(encoding="utf-8"))
     pages = [
         page
         for page in STATIC.glob("*.html")
@@ -851,7 +895,9 @@ def test_shared_pages_keep_the_styles_they_use() -> None:
         # Sahifaning O'Z `<style>` bloki ham hisobga olinadi: ba'zi
         # sahifalar (yo'riqnoma, rozilik shabloni) uslubini o'zida
         # olib yuradi.
-        inline = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", markup, re.S))
+        inline = live_css(
+            "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", markup, re.S))
+        )
         known = shared | set(re.findall(r"\.([a-zA-Z][\w-]*)", inline))
         for attr in re.findall(r'class="([^"]+)"', markup):
             for name in attr.split():

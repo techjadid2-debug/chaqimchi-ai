@@ -595,3 +595,44 @@ def test_the_stale_copy_check_runs_on_upgrade_not_only_on_uninstall() -> None:
     on_init = nsis.split("Function .onInit")[1].split("FunctionEnd")[0]
 
     assert "Win32_Process" in on_init
+
+
+def test_eski_nusxa_avval_ota_jarayondan_o_ldiriladi() -> None:
+    """`local.app` `retail.service` dan OLDIN to'xtatilishi shart.
+
+    `local.app` ichidagi kuzatuvchi har 2 soniyada tekshiradi va zanjir
+    20 soniyadan ko'p ishlagan bo'lsa uni darhol qayta ko'taradi
+    (`chaqimchi_ai/local/supervisor.py`: `time.sleep(2)`,
+    `CRASH_WINDOW_SEC = 20`).
+
+    Agar ikkalasi bitta o'tishda o'ldirilsa va `retail.service` birinchi
+    tushsa, kuzatuvchi 2 soniyada yangi zanjir ko'taradi.  Natijada yangi
+    o'rnatmadan keyin bitta RTSP oqimida IKKITA zanjir qoladi — o'rnatuvchi
+    izohining o'zi bu holatni tasvirlaydi: *"ikkita AI zanjiri bitta
+    kamerani o'qidi va kamera soni 4 dan 2 ga tushdi"*.
+
+    Ota jarayon birinchi o'lsa, qayta ko'taradigan hech kim qolmaydi.
+    """
+    text = NSIS.read_text(encoding="utf-8")
+    app = text.find("Kill-Match $\\\"chaqimchi_ai.local.app")
+    service = text.find("Kill-Match $\\\"chaqimchi_ai.retail.service")
+    assert app != -1, "local.app alohida to'xtatilmayapti"
+    assert service != -1, "retail.service alohida to'xtatilmayapti"
+    assert app < service, (
+        "retail.service local.app dan oldin o'ldirilyapti — kuzatuvchi "
+        "zanjirni 2 soniyada qayta ko'taradi va ikkita nusxa qoladi"
+    )
+
+
+def test_eski_nusxa_o_lganini_tekshirmasdan_davom_etilmaydi() -> None:
+    """Qat'iy `Sleep` yetarli emas — ro'yxat bo'shagani tekshirilsin.
+
+    Bungacha o'ldirishdan keyin `Sleep 1500` turardi.  Sekin kompyuterda
+    yoki qayta ko'tarilish holatida bu vaqt yetmasdi va o'rnatuvchi tirik
+    jarayon ustiga o'rnatishni boshlardi.
+    """
+    text = NSIS.read_text(encoding="utf-8")
+    assert "-not $$left" in text, (
+        "o'ldirishdan keyin jarayonlar ro'yxati bo'shagani tekshirilmayapti"
+    )
+    assert "for ($$i = 0; $$i -lt 20" in text, "qayta tekshirish sikli yo'q"

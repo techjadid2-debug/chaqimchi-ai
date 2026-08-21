@@ -419,11 +419,36 @@ Function .onInit
   ; (`chaqimchi_ai.local.updater`) ataylab ro'yxatda YO'Q — u shu
   ; o'rnatuvchini ishga tushirgan jarayon, o'zini o'ldirsa yangilanish
   ; hisobi va rollback belgisi yozilmay qolardi.
+  ; TARTIB MUHIM: avval `local.app` (ota jarayon), keyin `retail.service`.
+  ;
+  ; `local.app` ichidagi kuzatuvchi har 2 soniyada tekshiradi va zanjir
+  ; 20 soniyadan ko'p ishlagan bo'lsa uni DARHOL qayta ko'taradi
+  ; (`supervisor.py`: `time.sleep(2)`, `CRASH_WINDOW_SEC = 20`).  Ikkalasi
+  ; bitta o'tishda o'ldirilsa va `retail.service` birinchi tushsa,
+  ; kuzatuvchi 2 soniyada yangi zanjir ko'taradi — o'rnatuvchi esa atigi
+  ; 1.5 soniya kutardi.  Natija: yangi o'rnatmadan keyin bitta RTSP
+  ; oqimida IKKITA zanjir — ya'ni bu tuzatish qochmoqchi bo'lgan aynan
+  ; o'sha holat.
+  ;
+  ; Ota jarayon birinchi o'lsa, qayta ko'taradigan hech kim qolmaydi.
+  ;
+  ; Va kutish endi qat'iy emas: ro'yxat bo'shaguncha tekshiriladi
+  ; (ko'pi bilan ~5 soniya).  Qat'iy `Sleep` sekin kompyuterda yetmasdi.
   nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command \
-    "Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
-     Where-Object { $$_.CommandLine -match $\"chaqimchi_ai.(local.app|retail.service)$\" } | \
-     ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"'
-  Sleep 1500
+    "$$pat = $\"chaqimchi_ai.(local.app|retail.service)$\"; \
+     function Kill-Match($$rx) { Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
+       Where-Object { $$_.CommandLine -match $$rx } | \
+       ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue } }; \
+     Kill-Match $\"chaqimchi_ai.local.app$\"; \
+     Start-Sleep -Milliseconds 300; \
+     Kill-Match $\"chaqimchi_ai.retail.service$\"; \
+     for ($$i = 0; $$i -lt 20; $$i++) { \
+       $$left = Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
+         Where-Object { $$_.CommandLine -match $$pat }; \
+       if (-not $$left) { break }; \
+       Kill-Match $$pat; \
+       Start-Sleep -Milliseconds 250 }"'
+  Sleep 500
 FunctionEnd
 
 ; ── O'chirish ───────────────────────────────────────────────────────────

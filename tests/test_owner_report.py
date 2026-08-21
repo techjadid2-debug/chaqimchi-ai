@@ -789,3 +789,126 @@ def test_digest_gets_a_demography_line(tmp_path: Path) -> None:
 def test_quiet_day_digest_has_no_demography_line(tmp_path: Path) -> None:
     text = digest_for(tmp_path, [crossing(12, "in")])
     assert "🚻" not in text
+
+
+# ── Obuna eslatmasi ──────────────────────────────────────────────────────
+
+
+def _renewal_service(store, sent, sites):
+    from cloud.digest import DailyDigestService
+
+    async def sender(chat_id, text, **kwargs):
+        sent.append((chat_id, text))
+
+    return DailyDigestService(store, lambda: sites, sender)
+
+
+def _renewal_noon():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    return datetime(DAY.year, DAY.month, DAY.day, 12, 0, tzinfo=ZoneInfo("Asia/Tashkent"))
+
+
+def _site(days_left: int, status: str = "active", until: str = "2026-09-20 10:00:00"):
+    return {
+        "id": "site-1",
+        "name": "Oq Saroy",
+        "license_status": status,
+        "days_left": days_left,
+        "subscription_until": until,
+        "monthly_price_uzs": 149000,
+    }
+
+
+def test_renewal_reminder_is_sent_once_per_period(tmp_path: Path) -> None:
+    """Bir davr uchun bitta eslatma — kuniga qayta-qayta emas."""
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _renewal_service(store, sent, [_site(5)])
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+    # Ikkinchi tik — hech narsa ketmaydi.
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 0
+    assert len(sent) == 1
+    assert "5 kun qoldi" in sent[0][1]
+    # Yillik taklif ham shu xabarda: 149 000 × 10 = 1 490 000
+    assert "1 490 000" in sent[0][1] or "1490000" in sent[0][1]
+
+
+def test_paying_moves_the_date_so_the_next_period_reminds_again(tmp_path: Path) -> None:
+    """To'lovdan keyin eslatmalar QAYTA ishlasin.
+
+    Belgi obuna tugash sanasiga bog'langan — sana siljisa belgi ham yangi
+    bo'ladi.  Aks holda mijoz bir marta eslatma olib, keyingi yili
+    umuman eslatilmasdi.
+    """
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+
+    service = _renewal_service(store, sent, [_site(5, until="2026-09-20 10:00:00")])
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+
+    # Mijoz to'ladi — sana bir yilga siljidi.
+    service = _renewal_service(store, sent, [_site(5, until="2027-09-20 10:00:00")])
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+    assert len(sent) == 2
+
+
+def test_a_healthy_subscription_is_not_nagged(tmp_path: Path) -> None:
+    """Obunaga 40 kun bor — hech qanday xabar ketmasin."""
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _renewal_service(store, sent, [_site(40)])
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 0
+    assert sent == []
+
+
+def test_expired_site_gets_no_automatic_reminder(tmp_path: Path) -> None:
+    """Muddati o'tgan do'konga avtomatik xabar emas — qo'ng'iroq kerak."""
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _renewal_service(store, sent, [_site(-30, status="expired")])
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 0
+    assert sent == []
+
+
+def test_only_the_owner_is_reminded_not_the_shop_assistant(tmp_path: Path) -> None:
+    """Hisobni ega to'laydi — sotuvchi bezovta qilinmaydi."""
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    store.add_member("site-1", "222", role="manager")
+    sent: List = []
+    service = _renewal_service(store, sent, [_site(3)])
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+    assert [chat for chat, _ in sent] == ["111"]
+
+
+def test_grace_reminder_says_how_long_the_system_keeps_working(tmp_path: Path) -> None:
+    """Grace xabarida aniq kun turishi kerak — saytdagi va'da shu."""
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _renewal_service(store, sent, [_site(-2, status="grace")])
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+    assert "14 kun" in sent[0][1]

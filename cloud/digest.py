@@ -20,6 +20,8 @@ from zoneinfo import ZoneInfo
 
 from cloud import botfmt
 from cloud.event_store import EventStore
+from cloud.payments.store import billable_months
+from cloud.store import GRACE_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,13 @@ WEEKLY_HOUR = 9
 #: bu normal, ular boshqa savolga javob beradi.
 MONTHLY_DAY = 1
 MONTHLY_HOUR = 10
+
+#: Obuna eslatmasi yuboriladigan soat.  Ertalab emas: to'lov qilish uchun
+#: mijoz do'konda va ish holatida bo'lishi kerak.
+RENEWAL_HOUR = 11
+
+#: Obuna tugashiga shuncha kun qolganda birinchi eslatma ketadi.
+RENEWAL_FIRST_DAYS = 7
 
 
 def _duration(seconds: float) -> str:
@@ -181,6 +190,61 @@ def build_shifts(site_name: str, month_label: str, summary: Dict[str, Any]) -> s
     return "\n".join(lines)
 
 
+def build_renewal(
+    site_name: str,
+    *,
+    stage: str,
+    days_left: int,
+    monthly_uzs: int,
+    grace_days: int,
+) -> str:
+    """Obuna tugashi haqida mijozga eslatma va yillik taklif.
+
+    Bungacha obuna tugashini FAQAT xodim ko'rardi (admin panelidagi
+    "e'tibor talab qiladi" ro'yxati).  Mijozga hech qanday xabar
+    bormasdi — u to'lashni unutib, grace'ga tushib, keyin tizim
+    o'chganda "buzildi" deb o'ylardi.
+
+    Yillik summa `billable_months()` dan hisoblanadi — saytdagi
+    "2 oy bepul" va'dasi, hisob-faktura va bu xabar bitta qoidadan
+    chiqishi shart.
+    """
+    charged = billable_months(12)
+    annual = monthly_uzs * charged
+    saving = monthly_uzs * (12 - charged)
+
+    if stage == "grace":
+        lines = [
+            f"⏳ {botfmt.header(site_name)} — obuna muddati tugadi",
+            "",
+            f"Tizim yana <b>{grace_days} kun</b> ishlaydi. Shu vaqt ichida "
+            f"to'lov qilinmasa, tahlil va ogohlantirishlar to'xtaydi.",
+        ]
+    elif stage == "1":
+        lines = [
+            f"⚠️ {botfmt.header(site_name)} — obuna ertaga tugaydi",
+            "",
+            f"To'lovdan keyin ham <b>{grace_days} kun</b> muhlat bor — "
+            f"tizim darrov o'chmaydi.",
+        ]
+    else:
+        lines = [
+            f"🔔 {botfmt.header(site_name)} — obuna tugashiga {days_left} kun qoldi",
+            "",
+            f"Oylik to'lov: <b>{botfmt.number(monthly_uzs)}</b> so'm",
+        ]
+
+    lines += [
+        "",
+        f"💡 Yillik to'lasangiz <b>{12 - charged} oy bepul</b>: "
+        f"{botfmt.number(annual)} so'm "
+        f"(<b>{botfmt.number(saving)}</b> so'm tejaysiz)",
+        "",
+        "To'lovni panelda ochasiz.",
+    ]
+    return "\n".join(lines)
+
+
 def build_weekly(
     site_name: str,
     *,
@@ -272,6 +336,7 @@ class DailyDigestService:
         sent = 0
         sent += await self._weekly_once(now)
         sent += await self._monthly_shifts_once(now)
+        sent += await self._renewal_once(now)
         if now.hour < self.hour:
             return sent
         digest_date = now.date().isoformat()
@@ -311,6 +376,64 @@ class DailyDigestService:
             site_sent = await self._deliver(site_id, members, text)
             if site_sent:
                 self.events.mark_digest_sent(site_id, digest_date)
+                sent += site_sent
+        return sent
+
+    async def _renewal_once(self, now: datetime) -> int:
+        """Obuna tugashidan oldin mijozga eslatma.
+
+        Belgi obuna TUGASH SANASIGA bog'lanadi (`renew-2026-09-20-7`), bugungi
+        sanaga emas.  Sababi: mijoz to'lagach `extend_subscription` sanani
+        siljitadi, ya'ni keyingi davr uchun belgilar O'ZI yangi bo'ladi va
+        eslatmalar qaytadan ishlaydi.  Tozalash ishi ham, belgining muddati
+        ham kerak emas.
+
+        Faqat `owner` roliga yuboriladi: hisobni do'kon egasi to'laydi,
+        sotuvchini bezovta qilishning ma'nosi yo'q.
+        """
+        if now.hour < RENEWAL_HOUR:
+            return 0
+        sent = 0
+        for site in self.sites():
+            status = str(site.get("license_status") or "")
+            days_left = site.get("days_left")
+            if status == "active" and isinstance(days_left, int):
+                if days_left <= 1:
+                    stage = "1"
+                elif days_left <= RENEWAL_FIRST_DAYS:
+                    # `days_left` — butun songa kesilgan farq, ya'ni bir qiymat
+                    # tik chegarasida sakrab o'tishi mumkin.  Shuning uchun
+                    # `<=`, `==` emas.
+                    stage = "7"
+                else:
+                    continue
+            elif status == "grace":
+                stage = "grace"
+            else:
+                # expired/suspended — eslatma bermaymiz.  Bu bosqichda
+                # gap avtomatik xabarda emas, qo'ng'iroqda.
+                continue
+
+            site_id = str(site["id"])
+            until = str(site.get("subscription_until") or "")[:10]
+            if not until:
+                continue
+            marker = f"renew-{until}-{stage}"
+            if self.events.digest_was_sent(site_id, marker):
+                continue
+            owners = [m for m in self.events.list_members(site_id) if m.get("role") == "owner"]
+            if not owners:
+                continue
+            text = build_renewal(
+                str(site["name"]),
+                stage=stage,
+                days_left=max(0, int(days_left or 0)),
+                monthly_uzs=int(site.get("monthly_price_uzs") or 0),
+                grace_days=GRACE_DAYS,
+            )
+            site_sent = await self._deliver(site_id, owners, text)
+            if site_sent:
+                self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
         return sent
 

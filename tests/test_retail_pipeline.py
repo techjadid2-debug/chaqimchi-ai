@@ -381,8 +381,8 @@ def test_ready_clip_is_attached_to_its_event(tmp_path: Path) -> None:
 
 def test_security_event_has_private_snapshot_before_cloud_action(tmp_path: Path) -> None:
     event = EdgeEvent(
-        event_type="loitering",
-        severity="warning",
+        event_type="camera_tampered",
+        severity="critical",
         camera_id="kassa-01",
     )
     pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[event], snapshots=True)
@@ -395,6 +395,34 @@ def test_security_event_has_private_snapshot_before_cloud_action(tmp_path: Path)
     assert sent.cloud_payload()["has_snapshot"] is True
     assert "snapshot_path" not in sent.cloud_payload()
     assert pipeline.stats()["snapshots"] == {"written": 1, "missing": 0}
+
+
+def test_loitering_does_not_burn_the_snapshot_budget(tmp_path: Path) -> None:
+    """Uzoq turish uchun rasm OLINMAYDI — hodisaning o'zi esa ketaveradi.
+
+    Jonli o'lchov (2026-08-21, bitta do'kon, 7.4 soat): 321 hodisadan 300
+    tasi loitering edi va 29 MB rasmning 28.9 MB'i shundan chiqqan.  Do'kon
+    kunlik 500 talik snapshot chegarasining 302 tasini yeb qo'ygan — ya'ni
+    kechqurun haqiqiy o'g'rilik hodisasiga rasm ilinmay qolardi.
+
+    Hodisaning o'zi saqlanishi SHART: issiqlik xaritasi va "eng ko'p
+    turilgan joy" hisoboti unga tayanadi.
+    """
+    event = EdgeEvent(
+        event_type="loitering",
+        severity="warning",
+        camera_id="kassa-01",
+    )
+    pipeline, _analyzer, recorder, _buffer = build(tmp_path, events=[event], snapshots=True)
+
+    run(pipeline)
+
+    sent = recorder.actions[0][1]
+    assert sent.event_type == "loitering"  # hodisa ketdi
+    assert sent.snapshot_path is None  # lekin rasmsiz
+    assert sent.cloud_payload()["has_snapshot"] is False
+    # "missing" ham 0: rasm YOZILMADI, ya'ni urinib ko'rib yiqilgani emas.
+    assert pipeline.stats()["snapshots"] == {"written": 0, "missing": 0}
 
 
 def test_normal_zone_event_does_not_capture_a_security_snapshot(tmp_path: Path) -> None:

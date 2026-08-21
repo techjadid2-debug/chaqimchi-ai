@@ -61,8 +61,19 @@ MIN_LATENCY_SEC = 1e-6
 #: o'smasin — eng eskisi tashlanadi va `dropped` da ko'rinadi.
 MAX_PENDING_CLIPS = 200
 
+#: Rasm olinadigan xavfsizlik hodisalari.
+#:
+#: `loitering` ATAYLAB YO'Q.  U kunlik holat, xavfsizlik hodisasi emas —
+#: mijoz uni panelda raqam sifatida ko'radi va rasmiga qaramaydi.  Jonli
+#: o'lchov (2026-08-21, bitta do'kon, 7.4 soat): 321 hodisadan 300 tasi
+#: loitering edi va 29 MB rasmning 28.9 MB'i (99.6%) shundan chiqqan.
+#: Bundan ham yomoni — do'kon kunlik 500 talik snapshot chegarasining
+#: 302 tasini kechgacha yeb qo'ygan, ya'ni haqiqiy o'g'rilik hodisasiga
+#: rasm ilinmay qolardi.
+#:
+#: Hodisaning o'zi saqlanaveradi — issiqlik xaritasi shunga tayanadi.
 SECURITY_MEDIA_EVENTS = frozenset(
-    {"camera_tampered", "after_hours_presence", "zone_entered", "loitering"}
+    {"camera_tampered", "after_hours_presence", "zone_entered"}
 )
 
 

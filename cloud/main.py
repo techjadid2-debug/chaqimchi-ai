@@ -815,6 +815,20 @@ async def _notify_site_members(
             continue
 
 
+#: Media OLINMAYDIGAN hodisalar — rasm saqlanmaydi.
+#:
+#: `loitering` (uzoq turish) kunlik holat, xavfsizlik hodisasi emas: mijoz
+#: uni panelda raqam sifatida ko'radi va rasmga umuman qaramaydi.  Lekin u
+#: hodisalarning ~93% ini tashkil qiladi.  Jonli o'lchov (2026-08-21, bitta
+#: do'kon, 7.4 soat): 321 hodisadan 300 tasi loitering va 29 MB rasmning
+#: 28.9 MB'i (99.6%) aynan shundan edi.  Bundan ham yomoni — o'sha do'kon
+#: kunlik 500 talik snapshot chegarasining 302 tasini yeb qo'ygan, ya'ni
+#: kechqurun HAQIQIY o'g'rilik hodisasiga rasm ilinmay qolardi.
+#:
+#: Hodisaning O'ZI saqlanadi — issiqlik xaritasi va "eng ko'p turilgan joy"
+#: hisoboti unga tayanadi.
+MEDIALESS_EVENTS = frozenset({"loitering"})
+
 #: Snapshot batchdan KEYIN alohida yuklanadi — rasm yetib kelishini shu
 #: muddatgacha kutamiz (2 soniyalik qadamlar bilan).
 ALERT_SNAPSHOT_WAIT_SEC = 20
@@ -3300,6 +3314,25 @@ async def upload_event_snapshot(
     background_tasks: BackgroundTasks,
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
+    event = get_event_store().event(device["site_id"], event_id)
+    if not event or event["device_id"] != device["device_id"]:
+        raise HTTPException(404, "Event topilmadi")
+
+    # Media olinmaydigan hodisa: 200 qaytariladi, lekin rasm SAQLANMAYDI
+    # va kunlik chegara ham SARFLANMAYDI.
+    #
+    # 4xx EMAS — `cloud_sync.py:142` da yuklash xatosi butun hodisani
+    # `outbox.fail()` ga tashlaydi va u 20 marta qayta yuboriladi, oxirida
+    # esa hodisaning O'ZI dead_letter'ga tushib yo'qoladi.  Ya'ni rad javob
+    # bizga kerakli ma'lumotni ham o'ldirardi.  Xuddi `edge/heatmap` dagi
+    # kabi: qabul qilamiz, yozmaymiz.
+    #
+    # Chegara tekshiruvi ataylab shu tekshiruvdan KEYIN: aks holda
+    # tashlab yuboriladigan rasm kunlik 500 talik byudjetni yeb qo'yardi —
+    # muammoning o'zi shu edi.
+    if event["event_type"] in MEDIALESS_EVENTS:
+        return {"ok": True, "stored": False}
+
     # Snapshot 8 MB gacha bo'lishi mumkin — kunlik chegara S3 hisobini va
     # diskni bitta buzuq qurilmadan himoya qiladi.
     ratelimit.check(
@@ -3309,9 +3342,6 @@ async def upload_event_snapshot(
         window_sec=86_400,
         message="Kunlik snapshot chegarasi oshdi",
     )
-    event = get_event_store().event(device["site_id"], event_id)
-    if not event or event["device_id"] != device["device_id"]:
-        raise HTTPException(404, "Event topilmadi")
     if event["event_type"] == "employee_seen":
         # `employee_seen` — moslash NATIJASI, media'siz qoladi.  Yuz kadri
         # faqat `face_captured` orqali keladi va davomat darvozasi ortida.

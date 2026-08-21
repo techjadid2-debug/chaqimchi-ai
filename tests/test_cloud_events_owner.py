@@ -1745,3 +1745,106 @@ def test_device_cannot_exceed_the_plan_camera_limit(production_client) -> None:
 
     assert answer.status_code == 422
     assert "2 ta kamera" in answer.json()["detail"]
+
+
+def test_loitering_snapshot_is_accepted_but_not_stored(production_client) -> None:
+    """Uzoq turish rasmi saqlanmaydi — lekin qurilmaga XATO ham qaytmaydi.
+
+    4xx qaytarilsa `cloud_sync.py` yuklash xatosini butun hodisaga yozadi
+    (`outbox.fail`), hodisa 20 marta qayta yuboriladi va oxirida
+    `dead_letter` ga tushib YO'QOLADI.  Ya'ni rad javob bizga kerakli
+    ma'lumotni ham o'ldirardi.  Shu sabab `edge/heatmap` dagi kabi:
+    qabul qilamiz, yozmaymiz.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    event = {
+        "event_id": "loi-1",
+        "event_type": "loitering",
+        "severity": "warning",
+        "camera_id": "cam-1",
+        "has_snapshot": True,
+    }
+    assert (
+        client.post("/api/v1/edge/events/batch", headers=headers, json={"events": [event]})
+    ).status_code == 200
+
+    upload = client.put(
+        "/api/v1/edge/events/loi-1/snapshot",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"jpeg-data",
+    )
+    assert upload.status_code == 200
+    assert upload.json()["stored"] is False
+
+    # Hodisaning O'ZI saqlanadi — xarita va hisobot unga tayanadi.
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="103")
+    events = client.get("/api/v1/owner/events", headers=owner_headers)
+    assert events.status_code == 200
+    assert any(item["event_id"] == "loi-1" for item in events.json()["events"])
+
+    # Lekin rasm yo'q.
+    assert client.get(
+        "/api/v1/owner/events/loi-1/snapshot", headers=owner_headers
+    ).status_code == 404
+
+
+def test_loitering_does_not_consume_the_daily_snapshot_budget(production_client) -> None:
+    """Tashlab yuboriladigan rasm kunlik 500 talik byudjetni YEMASLIGI shart.
+
+    Muammoning o'zi aynan shu edi: jonli do'kon 7.4 soatda 302 ta rasmni
+    loitering'ga sarflagan va kechqurun haqiqiy o'g'rilik hodisasiga rasm
+    ilinmay qolardi.  Shu sabab chegara tekshiruvi hodisa turini
+    aniqlagandan KEYIN turadi.
+    """
+    from cloud import ratelimit
+
+    client, _messages = production_client
+    _site, _device, headers = _provision(client)
+
+    events = [
+        {
+            "event_id": f"loi-{index}",
+            "event_type": "loitering",
+            "severity": "warning",
+            "camera_id": "cam-1",
+            "has_snapshot": True,
+        }
+        for index in range(5)
+    ] + [
+        {
+            "event_id": "tamper-1",
+            "event_type": "camera_tampered",
+            "severity": "critical",
+            "camera_id": "cam-1",
+            "has_snapshot": True,
+        }
+    ]
+    client.post("/api/v1/edge/events/batch", headers=headers, json={"events": events})
+
+    # Hodisa qabuli o'z chegarasini ishlatadi — uni hisobdan chiqaramiz,
+    # shunda keyingi o'lchov FAQAT snapshot byudjetini ko'rsatadi.
+    ratelimit.limiter().reset()
+
+    for index in range(5):
+        assert (
+            client.put(
+                f"/api/v1/edge/events/loi-{index}/snapshot",
+                headers={**headers, "Content-Type": "image/jpeg"},
+                content=b"jpeg-data",
+            )
+        ).status_code == 200
+
+    # Beshta loitering rasmi kelgan bo'lsa ham byudjetga umuman
+    # tegilmagan: hisoblagichda birorta ham yozuv yo'q.
+    assert ratelimit.limiter().size() == 0
+
+    # Haqiqiy xavfsizlik hodisasi esa byudjetni ishlatadi va rasm saqlanadi.
+    tamper = client.put(
+        "/api/v1/edge/events/tamper-1/snapshot",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"jpeg-data",
+    )
+    assert tamper.status_code == 200
+    assert tamper.json().get("stored") is not False
+    assert ratelimit.limiter().size() == 1

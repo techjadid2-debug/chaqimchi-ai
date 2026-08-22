@@ -123,6 +123,18 @@ class SceneSettings(BaseModel):
     analyze_fps: float = Field(default=2.0, ge=0.2, le=30.0)
     burst_fps: float = Field(default=5.0, ge=0.2, le=30.0)
     motion_min_area_ratio: float = Field(default=0.01, ge=0.0001, le=1.0)
+    #: Odam kadr balandligining kamida shuncha ulushini egallashi shart.
+    #:
+    #: Bungacha o'lcham filtri UMUMAN yo'q edi — faqat ishonch chegarasi.
+    #: Jonli do'konda oqibati o'lchandi (2026-08-21): 6x12 pikselli dog'
+    #: "odam" deb tanilib, `track=16604` bo'lib abadiy kuzatilgan va har
+    #: sovish oralig'ida "uzoq turish" bergan.  Bir kechada 48 ta yolg'on
+    #: hodisa — do'kon yopiq bo'lsa ham.
+    #:
+    #: 0.08 = 320 px balandlikdagi kadrda ~26 px.  O'sha dog'lar 12 px
+    #: edi, ya'ni tashlanadi.  Haqiqiy mijoz do'kon kamerasida bundan
+    #: ancha katta ko'rinadi.  Chegara do'kon kadrida o'lchab aniqlanadi.
+    min_person_height_ratio: float = Field(default=0.08, ge=0.0, le=0.9)
     loitering_sec: int = Field(default=60, ge=5, le=86400)
     occupancy_limit: int = Field(default=20, ge=1, le=10000)
     event_debounce_sec: int = Field(default=30, ge=1, le=3600)

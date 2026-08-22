@@ -378,6 +378,18 @@ class SceneAnalyzer:
             self._track_demography[track_id] = result
         return result
 
+    def _big_enough(self, detections: List[Dict[str, Any]], height: int) -> List[Dict[str, Any]]:
+        """Kadr balandligiga nisbatan juda kichik ramkalarni tashlaydi."""
+        ratio = float(getattr(self.settings, "min_person_height_ratio", 0.0) or 0.0)
+        if ratio <= 0 or height <= 0:
+            return detections
+        floor = ratio * height
+        return [
+            item
+            for item in detections
+            if (item["bbox"][3] - item["bbox"][1]) >= floor
+        ]
+
     def _emit_allowed(self, kind: str, key: str, now: float) -> bool:
         token = (kind, key)
         previous = self._emitted.get(token, 0.0)
@@ -411,9 +423,19 @@ class SceneAnalyzer:
         self._last_analysis = now
         self.heatmap.frame_done()
 
-        detections = self.tracker.update(self.detector.detect(frame))
-        events: List[EdgeEvent] = []
         height, width = frame.shape[:2]
+        # Juda kichik ramkalarni kuzatuvchiga UMUMAN bermaymiz.
+        #
+        # Bungacha o'lcham filtri yo'q edi va oqibati jonli do'konda
+        # o'lchandi (2026-08-21): 6x12 pikselli qimirlamaydigan dog'
+        # "odam" bo'lib, bitta track sifatida soatlab yashagan va har
+        # sovish oralig'ida "uzoq turish" bergan.  Bir kechada 48 ta
+        # yolg'on hodisa — do'kon yopiq bo'lsa ham.
+        #
+        # Filtr aynan shu yerda: kuzatuvchiga tushsa, u track ochadi va
+        # keyingi hamma hisob-kitob (navbat, bandlik, xarita) buziladi.
+        detections = self.tracker.update(self._big_enough(self.detector.detect(frame), height))
+        events: List[EdgeEvent] = []
         active_ids: set[int] = set()
         #: Shu kadrda har zonada nechta odam bor.  Navbat aynan shundan
         #: hisoblanadi — `_track_zones` da 120 sekundgacha eskirgan tracklar
@@ -510,8 +532,21 @@ class SceneAnalyzer:
                 )
 
             elapsed = now - self._track_first_seen[track_id]
-            if elapsed >= self.settings.loitering_sec and self._emit_allowed(
-                "loitering", str(track_id), now
+            # Qimirlamaydigan obyekt "uzoq turgan odam" emas.
+            #
+            # `MotionTracker.is_static()` allaqachon yozilgan va sinalgan
+            # edi — izohida aynan shu holat ko'rsatilgan: "maneken,
+            # plakat".  Lekin u HECH QAYERDA chaqirilmagan, ya'ni himoya
+            # amalda yo'q edi.
+            #
+            # Jonli do'konda oqibati (2026-08-21): `track=3920` bitta
+            # joyda 6354 soniya (1 soat 46 daqiqa) "turgan" va har
+            # sovish oralig'ida hodisa bergan.
+            static_object = self.tracker.is_static(track_id)
+            if (
+                not static_object
+                and elapsed >= self.settings.loitering_sec
+                and self._emit_allowed("loitering", str(track_id), now)
             ):
                 events.append(
                     EdgeEvent(

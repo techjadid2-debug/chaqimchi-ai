@@ -763,14 +763,23 @@
       return;
     }
     $("cameraHint").textContent = "Rasmni bossangiz kattaroq ochiladi";
+    // Tugma kartochka ICHIDA emas: `<button>` ichida `<button>` — noto'g'ri
+    // HTML va bosish hodisasi ikkalasiga ham tegadi.
     grid.innerHTML = cameraList.map((camera) => `
+      <div class="camera-slot">
       <button class="camera-card" type="button" data-camera="${esc(camera.camera_id)}">
         <div class="shot empty" data-shot="${esc(camera.camera_id)}">rasm yuklanmoqda…</div>
         <div class="meta"><span class="dot ${cameraState(camera.camera_id)}" data-dot="${esc(camera.camera_id)}"></span><b>${esc(camera.label || camera.camera_id)}</b><span class="sub">${esc(cameraStateLabel(camera.camera_id))}</span></div>
-      </button>`).join("");
+      </button>
+      <button class="button ghost small" type="button" data-shot-refresh="${esc(camera.camera_id)}">Rasmni yangilash</button>
+      </div>`).join("");
 
     grid.querySelectorAll(".camera-card").forEach((cardButton) => {
       cardButton.addEventListener("click", () => openCameraModal(cardButton.dataset.camera));
+    });
+    grid.querySelectorAll("[data-shot-refresh]").forEach((refreshButton) => {
+      refreshButton.addEventListener("click", () =>
+        requestFrame(refreshButton.dataset.shotRefresh, refreshButton));
     });
 
     for (const camera of cameraList) {
@@ -797,7 +806,41 @@
       // Chiroq RASMdan emas, qurilma holatidan (`drawCameras` qo'yadi).
       if (dot) dot.className = `dot ${cameraState(cameraId)}`;
     } catch (err) {
-      if (holder) holder.textContent = "rasm hali kelmagan";
+      // Ikkinchi urinishda `holder` allaqachon `<img>` bo'ladi va unga
+      // `textContent` yozish ekranda HECH NARSA qilmaydi — eski rasm
+      // qotib qolardi.  Shuning uchun element almashtiriladi.
+      if (!holder) return;
+      const empty = document.createElement("div");
+      empty.className = "shot empty";
+      empty.dataset.shot = cameraId;
+      empty.textContent = "rasm hali kelmagan — «Rasmni yangilash» ni bosing";
+      holder.replaceWith(empty);
+    }
+  }
+
+  /* Qurilmadan bitta yangi kadr so'raydi.
+
+     Bungacha bu faqat admin va o'rnatuvchida bor edi: ustasiz ochilgan
+     do'konda kadr hech qachon kelmasdi va mijozda uni tuzatadigan
+     birorta tugma yo'q edi. */
+  async function requestFrame(cameraId, button) {
+    const label = button ? button.textContent : "";
+    if (button) { button.disabled = true; button.textContent = "So‘ralmoqda…"; }
+    try {
+      await api(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, {
+        method: "POST",
+      });
+      note("cameraHint", "ok", "Rasm so‘raldi — bir necha soniyada keladi.");
+      // Qurilma so'rovni "salom"da ko'radi; uch marta qayta urinamiz.
+      for (let i = 0; i < 3; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        await loadPreview(cameraId);
+        if (document.querySelector(`img[data-shot="${CSS.escape(cameraId)}"]`)) break;
+      }
+    } catch (err) {
+      note("cameraHint", "err", err.message);
+    } finally {
+      if (button) { button.disabled = false; button.textContent = label; }
     }
   }
 
@@ -812,7 +855,7 @@
       `/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`,
       "image",
       `${cameraId}.jpg`,
-      "Bu kameradan rasm hali kelmagan. Qurilma ulanganda o‘zi paydo bo‘ladi.",
+      "Bu kameradan rasm hali kelmagan. «Rasmni yangilash» tugmasini bosing.",
     );
   }
 

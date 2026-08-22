@@ -848,6 +848,85 @@ def test_qurilma_jonli_so_ralishini_kutadi_va_darhol_uyg_onadi(client: TestClien
     assert elapsed < 4.0, f"uyg'onish juda sekin: {elapsed:.1f}s"
 
 
+def test_ega_kadr_soray_oladi(client: TestClient) -> None:
+    """Mijozda "rasm hali kelmagan" boshi berk ko'cha bo'lmasin.
+
+    Bungacha kadr so'rash faqat admin va o'rnatuvchida bor edi: ustasiz
+    ochilgan do'konda kadr HECH QACHON kelmasdi.
+    """
+    site, headers = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+
+    answer = client.post("/api/v1/owner/cameras/camera-01/preview", headers=owner)
+    assert answer.status_code == 200
+    assert answer.json()["wait_sec"] > 0
+
+    beat = client.post(
+        "/api/v1/edge/heartbeat",
+        headers=headers,
+        json={"cameras_active": 1, "app_version": "0.6.6"},
+    ).json()
+    assert beat["preview_requested"] == ["camera-01"]
+
+
+def test_ega_kadr_sorovi_darhol_yetadi(client: TestClient) -> None:
+    """Kutib turgan qurilma keyingi "salom"ni kutmasin.
+
+    Uyg'otish mexanizmi jonli ko'rish uchun yozilgan edi, lekin kadr
+    so'rashda chaqirilmagan — mijoz tugmani bosib 60 soniya kutardi.
+    """
+    import asyncio
+    import time
+
+    site, headers = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+
+    async def scenario() -> tuple[dict, float]:
+        loop = asyncio.get_running_loop()
+        started = time.monotonic()
+
+        async def ask() -> None:
+            await asyncio.sleep(0.15)
+            await loop.run_in_executor(
+                None,
+                lambda: client.post("/api/v1/owner/cameras/camera-01/preview", headers=owner),
+            )
+
+        async def heartbeat() -> dict:
+            return await loop.run_in_executor(
+                None,
+                lambda: client.post(
+                    "/api/v1/edge/heartbeat",
+                    headers=headers,
+                    json={"wait_sec": 10, "cameras_active": 1},
+                ).json(),
+            )
+
+        beat, _ = await asyncio.gather(heartbeat(), ask())
+        return beat, time.monotonic() - started
+
+    answer, elapsed = asyncio.run(scenario())
+    assert answer["preview_requested"] == ["camera-01"], answer
+    assert elapsed < 4.0, f"uyg'onish juda sekin: {elapsed:.1f}s"
+
+
+def test_ega_begona_dokon_kadrini_soray_olmaydi(client: TestClient) -> None:
+    site, _ = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+    assert client.post("/api/v1/owner/cameras/camera-99/preview", headers=owner).status_code == 404
+
+
+def test_ega_kadr_sorovi_cheklangan(client: TestClient) -> None:
+    """Cheklovsiz tugma kunlik yuklash byudjetini bir daqiqada yeb qo'yardi."""
+    site, _ = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+    for _ in range(30):
+        assert (
+            client.post("/api/v1/owner/cameras/camera-01/preview", headers=owner).status_code == 200
+        )
+    assert client.post("/api/v1/owner/cameras/camera-01/preview", headers=owner).status_code == 429
+
+
 def test_kutish_so_ralmasa_javob_darhol_qaytadi(client: TestClient) -> None:
     """Eski qurilma (`wait_sec` yubormaydi) avvalgidek ishlasin."""
     import time

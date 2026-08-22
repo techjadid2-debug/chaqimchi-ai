@@ -107,6 +107,10 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 
 /* ── Kameralar: rasm + holat ─────────────────────────────────────────── */
 .camera-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+/* Kartochka va "Rasmni yangilash" tugmasi: tugma kartochka ICHIDA
+   bo'la olmaydi (`<button>` ichida `<button>`). */
+.camera-slot { display: grid; gap: 6px; align-content: start; }
+.camera-slot .button.small { justify-self: stretch; }
 .camera-card {
   border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff;
   cursor: pointer; padding: 0; text-align: left;

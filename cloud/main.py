@@ -2846,6 +2846,10 @@ async def admin_request_camera_preview(
     """"Rasmni ko'rsat" — qurilma keyingi heartbeat'da bitta kadr yuboradi."""
     try:
         camera = get_store().request_camera_preview(site_id, camera_id)
+        # Kutib turgan qurilma darhol javob olsin: usiz keyingi
+        # "salom"gacha 60 soniyagacha ketardi.  Mexanizm jonli ko'rish
+        # uchun yozilgan edi, lekin bu yerda chaqirilmagan.
+        _wake_live_watchers(site_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"camera": camera, "wait_sec": PREVIEW_WAIT_HINT_SEC}
@@ -3144,6 +3148,7 @@ async def installer_request_camera_preview(
     _require_installer_site(installer, site_id)
     try:
         camera = get_store().request_camera_preview(site_id, camera_id)
+        _wake_live_watchers(site_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"camera": camera, "wait_sec": PREVIEW_WAIT_HINT_SEC}
@@ -3200,6 +3205,40 @@ async def owner_camera_preview(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Response:
     return _camera_preview_response(owner.site_id, camera_id)
+
+
+@app.post("/api/v1/owner/cameras/{camera_id}/preview")
+async def owner_request_camera_preview(
+    camera_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Mijoz kadrni O'ZI so'raydi.
+
+    Bungacha bu tugma faqat admin va o'rnatuvchida bor edi.  Ustasiz
+    ochilgan do'konda kadr HECH QACHON kelmasdi va panelda "rasm hali
+    kelmagan" degan yozuv boshi berk ko'cha bo'lardi — mijozda uni
+    tuzatadigan birorta tugma yo'q edi.
+
+    Rol talab qilinmaydi (`owner_request_live` bilan bir xil): kadrni
+    ko'rish sozlamani o'zgartirish emas.
+
+    Chegara SHART: yuklash tomonidagi kunlik byudjet 96 ta kadr
+    (`upload_camera_preview`) — cheklovsiz tugma uni bir daqiqada yeb
+    qo'yardi va bot `/kamera` buyrug'i ishlamay qolardi.
+    """
+    ratelimit.check(
+        "owner-preview",
+        owner.site_id,
+        limit=30,
+        window_sec=3600,
+        message="Juda ko'p rasm so'raldi. Bir soatdan keyin urinib ko'ring.",
+    )
+    try:
+        camera = get_store().request_camera_preview(owner.site_id, camera_id)
+        _wake_live_watchers(owner.site_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"camera": camera, "wait_sec": PREVIEW_WAIT_HINT_SEC}
 
 
 @app.get("/api/v1/owner/cameras/{camera_id}/live-frame")

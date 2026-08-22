@@ -372,6 +372,25 @@ def test_owner_panel_shows_camera_previews_and_refreshes() -> None:
     assert "setInterval(refresh" in html, "avto-yangilanish bo'lsin"
 
 
+def test_owner_can_ask_for_a_fresh_camera_frame() -> None:
+    """Rasm kelmagan bo'lsa mijozda tuzatish tugmasi bo'lsin.
+
+    Bungacha panel faqat GET qilardi va "rasm hali kelmagan" yozuvi
+    boshi berk ko'cha edi: ustasiz ochilgan do'konda kadrni so'raydigan
+    hech kim yo'q edi.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "data-shot-refresh" in html, "kartochkada yangilash tugmasi bo'lsin"
+    assert "requestFrame" in html
+    assert 'onclick=' not in html.split("data-shot-refresh")[1][:400], "inline onclick yo'q"
+
+
+def test_owner_live_view_uses_its_own_endpoint() -> None:
+    """Jonli kadr tayanch rasmni — ya'ni xarita fonini — almashtirmasin."""
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "/live-frame" in html, "jonli oqim o'z endpointidan o'qilsin"
+
+
 def test_owner_media_opens_in_a_modal_with_errors_shown() -> None:
     """`window.open(blob)` popup-blockerda yutilardi va xato jim qolardi."""
     html = (STATIC / "owner.html").read_text(encoding="utf-8")

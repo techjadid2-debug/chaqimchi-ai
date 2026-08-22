@@ -100,6 +100,30 @@ rsync -azn --delete --itemize-changes ...  # yuqoridagi bilan bir xil, faqat -n
 
 ---
 
+### TUZOQ: `Caddyfile` o'zgarsa — konteynerni QAYTA YARATISH kerak
+
+`docker-compose` da Caddyfile bitta FAYL sifatida ulangan
+(`./deploy/Caddyfile.chaqimchi:/etc/caddy/Caddyfile:ro`).  Fayl bind-mount'i
+yo'lga emas, **inode'ga** bog'lanadi.  `rsync` esa faylni joyida
+o'zgartirmaydi — vaqtinchalik nusxa yozib, uni `rename` qiladi, ya'ni
+inode almashadi va konteyner ESKI nusxani ushlab qoladi.
+
+Natijada `caddy reload` "muvaffaqiyatli" deb yozadi-yu, hech narsa
+o'zgarmaydi (2026-08-23 da aynan shunday bo'ldi: `/health/deep` reload'dan
+keyin ham 404 berardi).
+
+To'g'ri yo'l:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.chaqimchi.yml \
+  up -d --no-deps --force-recreate caddy
+
+# Tasdiqlash — HOST fayli emas, KONTEYNER ichidagisi o'qilsin:
+docker exec chaqimchi-caddy-1 sh -c "grep -n 'allowed path' /etc/caddy/Caddyfile"
+```
+
+---
+
 ## 4. Yuz modellarini o'rnatish (YANGI qadam)
 
 ```bash

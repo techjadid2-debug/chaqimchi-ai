@@ -57,7 +57,40 @@ SERVER_SITE_ID = "__server__"
 PAIRING_GRACE_HOURS = 48
 
 #: Ogohlantirish talab qiladigan holatlar.
-PROBLEM_STATES = ("offline", "not_paired")
+PROBLEM_STATES = ("offline", "not_paired", "silent")
+
+#: Qurilma shuncha soatdan ko'p jim qolsa — bu qisqa uzilish emas.
+#:
+#: `stale` (1-24 soat) ataylab jim edi: internetning bir-ikki daqiqalik
+#: uzilishi odatiy hol va har safar xabar yuborish shovqin bo'lardi.
+#: Lekin oraliq juda keng olingan — 23 soat jim turgan do'kon ham
+#: "stale" bo'lib, HECH QANDAY ogohlantirish bermasdi.
+#:
+#: Jonli holat (2026-08-22): do'kon kompyuteri 05:38 da o'chgan va
+#: 10 soatdan ko'p jim turgan — do'kon 08:30 da ochilgan bo'lsa ham.
+#: Buni na mijoz, na biz bildik.
+#:
+#: Uch soat — "internet uzildi" bilan "kompyuter o'chgan" ni ajratadigan
+#: chegara.  Kechasi ham xabar beriladi: tungi kuzatuv mahsulotning
+#: asosiy qiymati, ya'ni o'chgan kompyuter kechasi ham muammo.
+SILENT_ALERT_HOURS = 3
+
+
+def is_silent(site: Dict[str, Any]) -> bool:
+    """Sayt `SILENT_ALERT_HOURS` dan uzoq jim turibdimi.
+
+    `stale` oralig'i (1-24 soat) juda keng: uning boshi odatiy internet
+    uzilishi, oxiri esa o'chgan kompyuter.  Bu funksiya ikkisini ajratadi.
+
+    Ikki xil ishlatiladi: aloqa xabarini YUBORISH uchun, va kamera /
+    sog'liq xabarlarini SUSTLASH uchun — jim qurilmada ular ham jim, ya'ni
+    bitta muammo haqida uchta xabar ketardi.
+    """
+    if site.get("connection") != "stale":
+        return False
+    minutes = site.get("minutes_since_seen")
+    return isinstance(minutes, int) and minutes >= SILENT_ALERT_HOURS * 60
+
 
 STATE_LABEL = {
     "online": "ishlayapti",
@@ -145,6 +178,22 @@ def _since_label(minutes: Optional[int]) -> str:
     return f"{hours // 24} kun oldin"
 
 
+def _silent_label(minutes: Optional[int]) -> str:
+    """«10 soatdan beri» — davomiylik, «oldin» emas.
+
+    `_since_label` voqea nuqtasini bildiradi ("oxirgi aloqa 10 soat
+    oldin"); jim qolish esa davom etayotgan holat.
+    """
+    if minutes is None:
+        return "boshidan beri"
+    if minutes < 60:
+        return f"{minutes} daqiqadan beri"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} soatdan beri"
+    return f"{hours // 24} kundan beri"
+
+
 def _site_age_hours(created_at: Optional[str], now: datetime) -> Optional[float]:
     if not created_at:
         return None
@@ -166,6 +215,14 @@ def _problem_text(site: Dict[str, Any]) -> str:
             f"⚠️ <b>{name}</b> — o‘rnatish tugallanmagan\n"
             f"Qurilma juftlanmagan (tarif: {plan}).\n"
             f"O‘rnatuvchi bilan bog‘laning.{tail}"
+        )
+    if site["connection"] == "stale":
+        # Bu yerga faqat `SILENT_ALERT_HOURS` dan uzoq jim turgan qurilma
+        # tushadi — qisqa uzilish bu yergacha yetib kelmaydi.
+        return (
+            f"🟠 <b>{name}</b> — {_silent_label(site.get('minutes_since_seen'))} jim\n"
+            f"Hodisa ham, kamera holati ham kelmayapti (tarif: {plan}).\n"
+            f"Do‘kon kompyuteri yoqilganini tekshiring.{tail}"
         )
     return (
         f"🔴 <b>{name}</b> — tizim ishlamayapti\n"
@@ -219,9 +276,11 @@ def plan_camera_alerts(
         site_id = site["id"]
         prev = previous.get(site_id)
 
-        watched = site.get("license_status") in ("active", "grace") and site.get("connection") in (
-            "online",
-            "stale",
+        watched = (
+            site.get("license_status") in ("active", "grace")
+            and site.get("connection") in ("online", "stale")
+            # Jim qurilma haqida aloqa xabari allaqachon ketgan.
+            and not is_silent(site)
         )
         if not watched:
             if prev is not None:
@@ -363,7 +422,9 @@ def _device_text(site: Dict[str, Any], description: str) -> str:
 
 
 def _device_recovery_text(site: Dict[str, Any]) -> str:
-    return f"✅ <b>{site.get('name', '?')}</b> — do'kon kompyuteri tuzaldi, hisobot yana to'planyapti."
+    return (
+        f"✅ <b>{site.get('name', '?')}</b> — do'kon kompyuteri tuzaldi, hisobot yana to'planyapti."
+    )
 
 
 def plan_device_health_alerts(
@@ -383,9 +444,11 @@ def plan_device_health_alerts(
     for site in sites:
         site_id = site["id"]
         prev = previous.get(site_id)
-        watched = site.get("license_status") in ("active", "grace") and site.get("connection") in (
-            "online",
-            "stale",
+        watched = (
+            site.get("license_status") in ("active", "grace")
+            and site.get("connection") in ("online", "stale")
+            # Jim qurilma haqida aloqa xabari allaqachon ketgan.
+            and not is_silent(site)
         )
         health = health_by_site.get(site_id)
         if not watched or health is None:
@@ -403,7 +466,9 @@ def plan_device_health_alerts(
         state, description = problem
         if prev != state:
             alerts.append(
-                Alert(site_id, state, _device_text(site, description), remember=state, kind="device")
+                Alert(
+                    site_id, state, _device_text(site, description), remember=state, kind="device"
+                )
             )
 
     return alerts, forget
@@ -426,7 +491,8 @@ def plan_alerts(
     - Xabar faqat holat **o‘zgarganda** ketadi.
     - Yangi mijoz `PAIRING_GRACE_HOURS` ichida juftlanmasa ham jim — o‘rnatuvchi
       hali bormagan bo‘lishi mumkin.
-    - `stale` (1–24 soat) uchun xabar yo‘q: internet qisqa uzilishi odatiy hol.
+    - Qisqa `stale` uchun xabar yo‘q (internet uzilishi odatiy hol), lekin
+      `SILENT_ALERT_HOURS` dan uzoq jimlik — xabar beriladi.
     """
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     alerts: List[Alert] = []
@@ -449,6 +515,12 @@ def plan_alerts(
             age = _site_age_hours(site.get("created_at"), now)
             if age is not None and age < PAIRING_GRACE_HOURS:
                 continue
+
+        # Uzoq jim turgan `stale` ham muammo.  Holat nomi alohida
+        # (`silent`), aks holda qurilma qaytib `stale` ga tushganda
+        # "tiklandi" deb yolg'on xabar ketardi.
+        if is_silent(site):
+            state = "silent"
 
         if state in PROBLEM_STATES:
             if prev != state:

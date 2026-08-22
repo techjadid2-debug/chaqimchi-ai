@@ -7,10 +7,12 @@ import pytest
 
 from cloud.alerts import (
     PAIRING_GRACE_HOURS,
+    SILENT_ALERT_HOURS,
     AlertConfig,
     AlertService,
     TelegramSender,
     plan_alerts,
+    plan_camera_alerts,
     run_check,
 )
 from cloud.store import CloudStore
@@ -104,6 +106,59 @@ def test_stale_alone_does_not_alert() -> None:
     """1–24 soatlik uzilish odatiy hol — bezovta qilmaydi."""
     alerts, _ = plan_alerts([_site(connection="stale")], {})
     assert alerts == []
+
+
+def test_long_silence_alerts_even_while_stale() -> None:
+    """Jonli holat: do'kon kompyuteri 10 soat jim, hech kim bilmagan.
+
+    `stale` oralig'i 1 dan 24 soatgacha cho'zilgani uchun 10 soatlik
+    jimlik hech qanday xabar bermasdi — do'kon ochiq bo'lsa ham.
+    """
+    site = _site(connection="stale", minutes_since_seen=10 * 60)
+    alerts, _ = plan_alerts([site], {})
+    assert len(alerts) == 1
+    assert alerts[0].remember == "silent"
+    assert "10 soatdan beri jim" in alerts[0].text
+
+
+def test_short_outage_still_stays_silent() -> None:
+    """Chegaradan bir daqiqa berisi — internet uzilishi, xabar yo'q."""
+    site = _site(connection="stale", minutes_since_seen=SILENT_ALERT_HOURS * 60 - 1)
+    assert plan_alerts([site], {})[0] == []
+
+
+def test_silence_alert_is_not_repeated() -> None:
+    site = _site(connection="stale", minutes_since_seen=10 * 60)
+    assert plan_alerts([site], {"s1": "silent"})[0] == []
+
+
+def test_silence_escalates_to_offline() -> None:
+    """24 soatdan keyin ikkinchi, jiddiyroq xabar ketadi."""
+    site = _site(connection="offline", minutes_since_seen=30 * 60)
+    alerts, _ = plan_alerts([site], {"s1": "silent"})
+    assert len(alerts) == 1
+    assert alerts[0].remember == "offline"
+
+
+def test_recovery_after_silence() -> None:
+    alerts, _ = plan_alerts([_site(connection="online")], {"s1": "silent"})
+    assert len(alerts) == 1
+    assert "qayta ishga tushdi" in alerts[0].text
+    assert alerts[0].remember is None
+
+
+def test_silent_site_does_not_also_raise_camera_alert() -> None:
+    """Bitta muammo — bitta xabar.
+
+    Kompyuter o'chganda kameralar ham yo'qoladi; aloqa xabari ustiga
+    kamera xabarini qo'shish shovqin.
+    """
+    site = _site(connection="stale", minutes_since_seen=10 * 60)
+    site.update({"cameras_expected": 4, "cameras_active": 0})
+    assert plan_camera_alerts([site], {})[0] == []
+
+    site["minutes_since_seen"] = 30
+    assert len(plan_camera_alerts([site], {})[0]) == 1
 
 
 def test_online_site_is_quiet() -> None:

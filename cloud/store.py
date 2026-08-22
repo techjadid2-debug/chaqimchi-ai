@@ -238,6 +238,10 @@ class CloudStore:
                 config_status TEXT NOT NULL DEFAULT 'pending',
                 config_error TEXT,
                 config_reported_at TEXT,
+                -- Versiya OXIRGI MARTA qachon o'zgargan.  "Qancha vaqtdan
+                -- beri bir xil" degan savolga javob beradi — yangilanish
+                -- qotib qolganini aynan shu ko'rsatadi.
+                app_version_at TEXT,
                 last_seen TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (site_id) REFERENCES sites(id)
@@ -1105,6 +1109,8 @@ class CloudStore:
             # allaqachon kelardi, lekin hech qayerda saqlanmasdi — ya'ni
             # yangilanish qaysi do'konga yetganini bilishning iloji yo'q edi.
             "app_version": "TEXT",
+            # Versiya o'zgargan payt (`record_device_version` qarang).
+            "app_version_at": "TEXT",
         }
         for name, definition in device_additions.items():
             if name not in device_columns:
@@ -2165,9 +2171,47 @@ class CloudStore:
         if not version or version == "unknown":
             return
         conn = self._connect()
-        conn.execute("UPDATE devices SET app_version = ? WHERE id = ?", (version, device_id))
+        # Vaqt FAQAT versiya o'zgarganda yoziladi.  Har heartbeat'da
+        # yangilansa "qachondan beri bir xil" degan savolga javob
+        # bo'lmasdi — aynan shu savol yangilanish qotib qolganini
+        # ko'rsatadi (`cloud/alerts.py: plan_update_stuck_alerts`).
+        row = conn.execute(
+            "SELECT app_version, app_version_at FROM devices WHERE id = ?", (device_id,)
+        ).fetchone()
+        if row is None:
+            conn.close()
+            return
+        # `app_version_at` bo'sh bo'lsa ham yoziladi: bu ustun keyinroq
+        # qo'shilgan, ya'ni eski qurilmalarda NULL.  Sanani `created_at`
+        # dan olib bo'lmaydi — bir yil oldin ochilgan do'kon deploy
+        # kuniyoq "qotib qolgan" deb xabar berardi.
+        if str(row["app_version"] or "") != version or not row["app_version_at"]:
+            conn.execute(
+                "UPDATE devices SET app_version = ?, app_version_at = ? WHERE id = ?",
+                (version, _iso(_utc_now()), device_id),
+            )
         conn.commit()
         conn.close()
+
+    def device_versions(self) -> Dict[str, Dict[str, Any]]:
+        """Har sayt uchun qurilmadagi versiya va u qachondan beri bir xil.
+
+        Sayt boshiga bitta qurilma bo'ladi; ko'p bo'lsa eng yaqinda
+        ko'ringani olinadi.
+        """
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT site_id, app_version, app_version_at, last_seen FROM devices"
+            " WHERE app_version IS NOT NULL ORDER BY site_id, last_seen"
+        ).fetchall()
+        conn.close()
+        out: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            out[str(row["site_id"])] = {
+                "version": str(row["app_version"]),
+                "since": str(row["app_version_at"]) if row["app_version_at"] else None,
+            }
+        return out
 
     def set_update_policy(
         self, site_id: str, *, channel: str, version: Optional[str] = None

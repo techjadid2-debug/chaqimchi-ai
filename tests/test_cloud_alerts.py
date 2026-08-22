@@ -384,6 +384,35 @@ def test_unpaired_site_does_not_bother_the_owner(store: CloudStore) -> None:
     assert to_owner == []  # mijozga yo'q
 
 
+def test_run_check_reports_a_stuck_update(store: CloudStore, monkeypatch) -> None:
+    """Ulash tekshiruvi: `run_check` yangilanish holatini ham ko'radi.
+
+    Planer sof funksiya, lekin u chaqirilmasa foydasi yo'q — jonli
+    do'konda aynan shunday bo'lgan edi (mexanizm bor, chaqiruv yo'q).
+    """
+    import cloud.alerts as alerts_module
+
+    site = store.create_site("Do'kon", "starter")
+    device = store.claim_device(site["pairing_code"])
+    store.heartbeat(device["site_id"], device["device_token"], active_cameras=1)
+    store.record_device_version(device["device_id"], "0.6.8")
+    conn = store._connect()
+    conn.execute("UPDATE devices SET app_version_at = ?", (_stamp(24 * 5),))
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(alerts_module, "_latest_release_version", lambda: "0.6.12")
+    sender = FakeSender()
+    run = asyncio.run(run_check(store, sender))
+
+    assert run.sent == 1, sender.sent
+    assert "0.6.12" in sender.sent[0]
+    assert store.alert_states("update") == {site["site_id"]: "stuck"}
+
+    # Ikkinchi tekshiruvda takrorlanmaydi.
+    assert asyncio.run(run_check(store, sender)).sent == 0
+
+
 def test_failed_send_is_retried_next_time(store: CloudStore) -> None:
     """Telegram javob bermasa holat yozilmaydi — xabar butunlay yo‘qolmaydi."""
     _make_offline_site(store)

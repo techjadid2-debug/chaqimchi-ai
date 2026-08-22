@@ -75,6 +75,20 @@ PROBLEM_STATES = ("offline", "not_paired", "silent")
 #: asosiy qiymati, ya'ni o'chgan kompyuter kechasi ham muammo.
 SILENT_ALERT_HOURS = 3
 
+#: Qurilma shuncha kun bir xil versiyada qolsa — yangilanish qotib qolgan.
+#:
+#: Yangilash vazifasi har 15 daqiqada ishlaydi, ya'ni sog'lom do'kon
+#: reliz chiqqan kuni yangilanadi.  Ikki kun — sekin internet va tunda
+#: o'chirilgan kompyuter uchun ham yetarli zaxira.
+#:
+#: Jonli holat (2026-08-22): do'kon 0.6.8 da qolgan, bulut 0.6.12
+#: taklif qilyapti — uch reliz o'tib ketgan.  Sababi qurilmadagi
+#: `local/updater.py`: oldingi yangilanish taqdiri aniqlanmasa u
+#: MUDDATSIZ "kutish" holatida qoladi va yangi versiyani umuman
+#: tekshirmaydi.  Ya'ni tuzatishni qurilmaga yubora olmaymiz — u aynan
+#: yangilanmayapti.  Shu sabab aniqlash BULUT tomonida.
+UPDATE_STUCK_DAYS = 2
+
 
 def is_silent(site: Dict[str, Any]) -> bool:
     """Sayt `SILENT_ALERT_HOURS` dan uzoq jim turibdimi.
@@ -264,6 +278,21 @@ def owner_recovery_text() -> str:
     return "✅ <b>Kuzatuv tiklandi</b>\nKameralar yana yozmoqda."
 
 
+def _update_stuck_text(site: Dict[str, Any], version: str, latest: str, days: int) -> str:
+    phone = site.get("contact_phone")
+    tail = f"\n📞 {phone}" if phone else ""
+    return (
+        f"🧊 <b>{site.get('name', '?')}</b> — yangilanish yetib bormayapti\n"
+        f"Do‘konda {version}, yangi versiya {latest}.\n"
+        f"{days} kundan beri o‘zgarmagan (kanal: avto).\n"
+        f"Do‘kon kompyuteridagi yangilash vazifasini tekshiring.{tail}"
+    )
+
+
+def _update_recovery_text(site: Dict[str, Any], version: str) -> str:
+    return f"✅ <b>{site.get('name', '?')}</b> — yangilandi ({version})."
+
+
 def _recovery_text(site: Dict[str, Any]) -> str:
     return f"✅ <b>{site.get('name', '?')}</b> — qayta ishga tushdi\nAloqa tiklandi."
 
@@ -339,6 +368,91 @@ def plan_camera_alerts(
         elif prev is not None:
             alerts.append(
                 Alert(site_id, state, _camera_recovery_text(site), remember=None, kind="cameras")
+            )
+
+    return alerts, forget
+
+
+def plan_update_stuck_alerts(
+    sites: List[Dict[str, Any]],
+    versions_by_site: Dict[str, Dict[str, Any]],
+    latest_version: Optional[str],
+    previous: Dict[str, str],
+    *,
+    now: Optional[datetime] = None,
+) -> Tuple[List[Alert], List[str]]:
+    """Yangilanish qurilmaga yetib bormayotganini aniqlaydi.
+
+    Buni FAQAT bulut ko'ra oladi: qurilmadagi yangilovchi qotib qolsa u
+    hech kimga hech narsa demaydi va tuzatish ham unga yetib bormaydi.
+    Tashqaridan qaraganda esa manzara aniq — reliz chiqqan, kanal avto,
+    do'kon onlayn, lekin versiya kunlab o'zgarmayapti.
+
+    Kuzatilmaydi:
+    - `hold` / `pin` kanallari — bu BIZNING qarorimiz, nosozlik emas;
+    - jim qurilma — u yangilana olmaydi va u haqda aloqa ogohlantirishi
+      allaqachon ketgan (`plan_alerts`);
+    - sanasi noma'lum qurilma — o'lchab bo'lmaydi.
+    """
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    alerts: List[Alert] = []
+    forget: List[str] = []
+    if not latest_version:
+        # Nashr qilingan reliz yo'q — solishtiradigan narsa ham yo'q.
+        return alerts, forget
+
+    for site in sites:
+        site_id = site["id"]
+        prev = previous.get(site_id)
+        watched = (
+            site.get("license_status") in ("active", "grace")
+            and site.get("connection") == "online"
+            and not is_silent(site)
+            and str(site.get("update_channel") or "auto") == "auto"
+        )
+        if not watched:
+            if prev is not None:
+                forget.append(site_id)
+            continue
+
+        entry = versions_by_site.get(site_id)
+        if not entry or not entry.get("since"):
+            continue
+
+        if str(entry.get("version")) == latest_version:
+            if prev is not None:
+                alerts.append(
+                    Alert(
+                        site_id,
+                        "ok",
+                        _update_recovery_text(site, str(entry["version"])),
+                        remember=None,
+                        kind="update",
+                    )
+                )
+            continue
+
+        try:
+            # `CloudStore._iso` formati — naiv UTC.
+            since = datetime.strptime(str(entry["since"]), "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+        days = (now - since).days
+        if days < UPDATE_STUCK_DAYS:
+            continue
+
+        # Holat ataylab SONSIZ ("stuck:0.6.8" emas): keyingi reliz
+        # chiqqanda o'sha do'kon uchun ikkinchi xabar ketmasin.  Qaysi
+        # versiya va necha kun — matnda baribir yoziladi.
+        if prev != "stuck":
+            alerts.append(
+                Alert(
+                    site_id,
+                    "stuck",
+                    _update_stuck_text(site, str(entry["version"]), latest_version, days),
+                    remember="stuck",
+                    kind="update",
+                )
             )
 
     return alerts, forget
@@ -629,6 +743,18 @@ def _latest_health() -> Dict[str, Dict[str, Any]]:
     return get_event_store().latest_health_by_site()
 
 
+def _latest_release_version() -> Optional[str]:
+    """Bulut hozir qaysi Windows versiyasini taklif qilyapti.
+
+    Import shu yerda — `alerts` moduli `cloud.main` dan mustaqil qolsin
+    (`_latest_health` bilan bir xil sabab).
+    """
+    from cloud.main import latest_windows_release
+
+    release = latest_windows_release()
+    return str(release["version"]) if release else None
+
+
 async def run_check(
     store: Any,
     sender: TelegramSender,
@@ -667,12 +793,33 @@ async def run_check(
         store.clear_alert_state(site_id, kind="connection")
     for site_id in cam_forget:
         store.clear_alert_state(site_id, kind="cameras")
+    # Yangilanish qotib qolganini ham shu yerda tekshiramiz: reliz
+    # ro'yxati diskdan o'qiladi, ya'ni xato bo'lsa qolgan
+    # ogohlantirishlar to'xtab qolmasligi kerak.
+    update_alerts: List[Alert] = []
+    update_forget: List[str] = []
+    try:
+        # Global to'xtatuvchi yoqilgan bo'lsa hech kim yangilanmaydi —
+        # bu bizning qarorimiz, nosozlik emas.
+        if not store.updates_paused():
+            update_alerts, update_forget = plan_update_stuck_alerts(
+                sites,
+                store.device_versions(),
+                _latest_release_version(),
+                store.alert_states("update"),
+                now=now,
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("Yangilanish holati tekshirilmadi")
+
     for site_id in device_forget:
         store.clear_alert_state(site_id, kind="device")
+    for site_id in update_forget:
+        store.clear_alert_state(site_id, kind="update")
 
     sites_by_id = {site["id"]: site for site in sites}
 
-    for alert in conn_alerts + cam_alerts + device_alerts + disk_alerts:
+    for alert in conn_alerts + cam_alerts + device_alerts + update_alerts + disk_alerts:
         if await sender.send(alert.text):
             run.sent += 1
             run.messages.append(alert.text)
@@ -790,12 +937,15 @@ __all__ = [
     "AlertService",
     "DISK_ALERT_PERCENT",
     "PAIRING_GRACE_HOURS",
+    "SILENT_ALERT_HOURS",
+    "UPDATE_STUCK_DAYS",
     "TelegramSender",
     "disk_usage_percent",
     "disk_watch_path",
     "plan_alerts",
     "plan_camera_alerts",
     "plan_disk_alert",
+    "plan_update_stuck_alerts",
     "run_check",
     "test_message",
 ]

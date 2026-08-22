@@ -302,3 +302,51 @@ def test_feature_catalog_quote_and_draft_activation(tmp_path) -> None:
         "queue_length",
     }
     assert active["drafts"] == []
+
+
+def test_versiya_vaqti_faqat_ozgarganda_yoziladi(tmp_path) -> None:
+    """"Qachondan beri bir xil" — yangilanish qotib qolganini shu ko'rsatadi.
+
+    Har heartbeat'da yozilsa bu savolga javob bo'lmasdi: qurilma har
+    daqiqada "salom" yuboradi va sana doim hozirgi payt bo'lib qolardi.
+    """
+    store = CloudStore(tmp_path / "cloud.db")
+    site = store.create_site("Do'kon", "lite")
+    device = store.claim_device(site["pairing_code"])
+
+    store.record_device_version(device["device_id"], "0.6.8")
+    birinchi = store.device_versions()[site["site_id"]]["since"]
+    assert birinchi
+
+    conn = store._connect()
+    conn.execute("UPDATE devices SET app_version_at = '2020-01-01 00:00:00'")
+    conn.commit()
+    conn.close()
+
+    store.record_device_version(device["device_id"], "0.6.8")
+    assert store.device_versions()[site["site_id"]]["since"] == "2020-01-01 00:00:00"
+
+    store.record_device_version(device["device_id"], "0.6.12")
+    yangi = store.device_versions()[site["site_id"]]
+    assert yangi["version"] == "0.6.12"
+    assert yangi["since"] != "2020-01-01 00:00:00"
+
+
+def test_eski_qurilmaga_versiya_vaqti_birinchi_salomda_qoyiladi(tmp_path) -> None:
+    """Ustun keyinroq qo'shilgan — eski qatorlarda u bo'sh.
+
+    Sanani `created_at` dan olib bo'lmaydi: bir yil oldin ochilgan
+    do'kon deploy kuniyoq "qotib qolgan" deb xabar berardi.  Shu sabab
+    bo'sh sana birinchi heartbeat'da hozirgi paytga qo'yiladi.
+    """
+    store = CloudStore(tmp_path / "cloud.db")
+    site = store.create_site("Do'kon", "lite")
+    device = store.claim_device(site["pairing_code"])
+    conn = store._connect()
+    conn.execute("UPDATE devices SET app_version = '0.6.8', app_version_at = NULL")
+    conn.commit()
+    conn.close()
+    assert store.device_versions()[site["site_id"]]["since"] is None
+
+    store.record_device_version(device["device_id"], "0.6.8")
+    assert store.device_versions()[site["site_id"]]["since"] is not None

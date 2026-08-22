@@ -229,15 +229,29 @@
 
       <div class="card wide">
         <h2>Do‘kon sozlamalari</h2>
+        <!-- Bandlik chegarasi (`occupancy_limit`) maydoni OLIB TASHLANDI
+             (2026-08-22).  Hodisa qurilmada chiqadi va bulutga yoziladi,
+             lekin kunlik hisobotda yo'q, hodisa filtrida yo'q va botga
+             ham bormaydi (`warning`, bot esa faqat `critical` yuboradi).
+             Ya'ni mijoz raqamni o'zgartirsa HECH NARSA sezmasdi.
+             Qiymat configda qoladi (`...currentConfig`). -->
+        <div id="queueWarn"></div>
         <div class="grid-3">
-          <label class="field">Odam limiti<input id="occupancy" type="number" min="1"></label>
-          <label class="field">Navbat limiti<input id="queueLimit" type="number" min="1"></label>
-          <label class="field">Uzoq turish (soniya)<input id="loitering" type="number" min="5"></label>
+          <label class="field">Navbat limiti
+            <input id="queueLimit" type="number" min="1">
+            <small>Kassa oldidagi zonada shuncha odam tursa ogohlantiriladi.
+              Faqat <b>navbat zonasi chizilgan</b> kamerada ishlaydi.</small></label>
+          <label class="field">Uzoq turish (soniya)
+            <input id="loitering" type="number" min="5">
+            <small>Bitta odam kadrda shuncha vaqt ko‘rinsa belgilanadi.
+              Zonaga bog‘liq emas — <b>butun kadr</b> bo‘yicha.</small></label>
           <!-- Daqiqada: "300 soniya" degan sozlama do'kon egasiga hech
                narsa aytmaydi.  Soniyaga o'girish serverdan qurilmaga
                ketayotganda bo'ladi. -->
           <label class="field">Kassa bo‘sh qolsa (daqiqa)
-            <input id="checkoutIdle" type="number" min="1" max="60"></label>
+            <input id="checkoutIdle" type="number" min="1" max="60">
+            <small>Kassa zonasi shuncha daqiqa bo‘sh qolsa xabar keladi.
+              Bu ham <b>navbat zonasisiz ishlamaydi</b>.</small></label>
         </div>
         <div class="grid-2">
           <label class="field">Ochilish vaqti<input id="openFrom" type="time"></label>
@@ -1856,7 +1870,14 @@
 
   function drawConfig(config) {
     currentConfig = config;
-    $("occupancy").value = config.occupancy_limit ?? "";
+    // Navbat ham, kassa nazorati ham `zone.queue` siz UMUMAN ishlamaydi
+    // (`chaqimchi_ai/scene_analytics.py`: ikkalasi `if queue_zones:`
+    // ichida).  Mijoz raqam kiritib, natijasini behuda kutmasin.
+    const queueReady = (config.zones || []).some((zone) => zone.queue);
+    $("queueWarn").innerHTML = queueReady ? "" :
+      '<div class="note warn"><b>Navbat va kassa nazorati hali ishlamaydi.</b> ' +
+      'Buning uchun kassa oldida navbat zonasi chizilishi kerak — buni ' +
+      'o‘rnatuvchi qiladi. Bizga yozing.</div>';
     $("queueLimit").value = config.queue_limit ?? "";
     $("loitering").value = config.loitering_sec ?? "";
     $("checkoutIdle").value = config.checkout_idle_minutes ?? "";
@@ -1874,7 +1895,6 @@
     }
     const body = {
       ...currentConfig,
-      occupancy_limit: Number($("occupancy").value || currentConfig.occupancy_limit),
       queue_limit: Number($("queueLimit").value || currentConfig.queue_limit),
       loitering_sec: Number($("loitering").value || currentConfig.loitering_sec),
       checkout_idle_minutes: Number(

@@ -385,6 +385,34 @@ def test_owner_can_ask_for_a_fresh_camera_frame() -> None:
     assert 'onclick=' not in html.split("data-shot-refresh")[1][:400], "inline onclick yo'q"
 
 
+def test_owner_settings_explain_what_each_number_does() -> None:
+    """Raqam so'ralsa, u nimaga ta'sir qilishi yozilgan bo'lsin.
+
+    Navbat ham, kassa nazorati ham `zone.queue` siz UMUMAN ishlamaydi
+    (`chaqimchi_ai/scene_analytics.py` — ikkalasi `if queue_zones:`
+    ichida).  Mijoz raqam kiritib, natijasini behuda kutmasin.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "navbat zonasi chizilgan" in html
+    assert "navbat zonasisiz ishlamaydi" in html
+    assert "butun kadr" in html, "uzoq turish zonaga bog'liq emasligi aytilsin"
+    assert 'id="queueWarn"' in html, "zona chizilmagan bo'lsa ogohlantirish bo'lsin"
+
+
+def test_owner_panel_hides_the_unobservable_occupancy_limit() -> None:
+    """Ko'rinmaydigan sozlama panelda turmasin.
+
+    `occupancy_exceeded` qurilmada chiqadi va bulutga yoziladi, lekin
+    hisobotda yo'q, hodisa filtrida yo'q va botga bormaydi (`warning`,
+    bot esa faqat `critical`).  Ya'ni raqamni o'zgartirgan mijoz hech
+    narsa sezmasdi.  Qiymat configda qoladi.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "Odam limiti" not in html
+    assert 'id="occupancy"' not in html
+    assert "...currentConfig" in html, "yashirin qiymat saqlashda yo'qolmasin"
+
+
 def test_owner_panel_does_not_ask_for_a_camera_role() -> None:
     """Kamera roli hech kim o'qimaydigan maydon edi.
 

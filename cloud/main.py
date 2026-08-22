@@ -430,9 +430,15 @@ class ConfigAckBody(BaseModel):
 
 class SiteConfigBody(BaseModel):
     camera_labels: Dict[str, str] = Field(default_factory=dict)
-    camera_roles: Dict[str, Literal["entrance", "checkout", "sales_floor", "storage"]] = Field(
-        default_factory=dict
-    )
+    # `camera_roles` OLIB TASHLANDI (2026-08-22).  Uni hech kim o'qimasdi:
+    # qurilma kirish kamerasini CHIZIQDAN biladi
+    # (`retail/service.py: entrance_cameras`).  Panelda esa bo'sh variant
+    # yo'q edi, ya'ni birinchi saqlashda hamma kamera jimgina "kirish"
+    # bo'lib qolardi.  Eski configdagi maydon Pydantic'da jimgina
+    # tashlanadi (`extra="ignore"`), ya'ni 422 chiqmaydi.
+    #
+    # DIQQAT: `attendance_camera_roles` BOSHQA narsa va u HAQIQATAN
+    # o'qiladi (`event_store.py`) — u qoladi.
     occupancy_limit: int = Field(default=20, ge=1, le=10000)
     loitering_sec: int = Field(default=60, ge=5, le=86400)
     queue_limit: int = Field(default=5, ge=1, le=1000)
@@ -4525,7 +4531,6 @@ def _validate_site_config(body: SiteConfigBody) -> None:
     allowed_cameras = {f"camera-{number:02d}" for number in range(1, GUARANTEED_CAMERAS + 1)}
     configured_ids = (
         set(body.camera_labels)
-        | set(body.camera_roles)
         | set(body.attendance_camera_ids)
         | set(body.attendance_camera_roles)
     )

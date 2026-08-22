@@ -243,7 +243,6 @@
           <label class="field">Ochilish vaqti<input id="openFrom" type="time"></label>
           <label class="field">Yopilish vaqti<input id="openTo" type="time"></label>
         </div>
-        <div id="cameraRoles"></div>
         <div class="actions" style="margin-top:12px">
           <button class="button primary" id="saveConfigBtn" type="button">Saqlash</button>
         </div>
@@ -532,7 +531,9 @@
     { id: "tahlil", label: "Tahlil", icon: "soat", pane: "paneTahlil",
       deps: ["health", "cameras", "trend", "config", "report"] },
     { id: "xavfsizlik", label: "Xavfsizlik", icon: "qalqon", pane: "paneXavfsizlik",
-      deps: ["health", "cameras", "report", "events"] },
+      // `config` SHART: kamera kartochkasi chiziq/zonadan nimaga
+      // sozlanganini hisoblaydi (`cameraSetup`).
+      deps: ["health", "cameras", "report", "events", "config"] },
     { id: "dokon", label: "Do‘kon", icon: "dokon", pane: "paneDokon",
       deps: ["health", "cameras", "config", "members", "billing", "features", "subscription"] },
     { id: "xodimlar", label: "Xodimlar", icon: "odamlar", pane: "paneXodimlar",
@@ -770,6 +771,7 @@
       <button class="camera-card" type="button" data-camera="${esc(camera.camera_id)}">
         <div class="shot empty" data-shot="${esc(camera.camera_id)}">rasm yuklanmoqda…</div>
         <div class="meta"><span class="dot ${cameraState(camera.camera_id)}" data-dot="${esc(camera.camera_id)}"></span><b>${esc(camera.label || camera.camera_id)}</b><span class="sub">${esc(cameraStateLabel(camera.camera_id))}</span></div>
+        <div class="setup" data-setup="${esc(camera.camera_id)}">${esc(cameraSetup(camera.camera_id))}</div>
       </button>
       <button class="button ghost small" type="button" data-shot-refresh="${esc(camera.camera_id)}">Rasmni yangilash</button>
       </div>`).join("");
@@ -1832,12 +1834,25 @@
 
   /* ── Sozlamalar ─────────────────────────────────────────────────────── */
 
-  const ROLE_OPTIONS = [
-    ["entrance", "Kirish"],
-    ["checkout", "Kassa"],
-    ["sales_floor", "Savdo zali"],
-    ["storage", "Ombor"],
-  ];
+  /* Kamera nimaga sozlangan — CHIZIQ va ZONAdan hisoblanadi.
+
+     Ilgari bu yerda qo'lda tanlanadigan "rol" bor edi.  Uni hech kim
+     o'qimasdi (qurilma kirish kamerasini chiziqdan biladi), standart
+     variant esa "Kirish" edi — ya'ni birinchi "Saqlash" bosilishi bilan
+     hamma kamera jimgina "kirish" bo'lib qolardi.  Yolg'on sozlamadan
+     ko'ra hisoblangan haqiqat yaxshiroq. */
+  function cameraSetup(cameraId) {
+    const config = currentConfig || {};
+    const lines = (config.lines || []).filter((line) => line.camera_id === cameraId);
+    const zones = (config.zones || []).filter((zone) => zone.camera_id === cameraId);
+    const parts = [];
+    if (lines.length) parts.push("Kirish chizig‘i bor");
+    if (zones.some((zone) => zone.queue)) parts.push("Navbat zonasi bor");
+    if (zones.some((zone) => zone.restricted)) parts.push("Taqiqlangan zona bor");
+    if (zones.some((zone) => zone.shelf)) parts.push("Javon nazorati bor");
+    if (!parts.length && zones.length) parts.push("Zona chizilgan");
+    return parts.length ? parts.join(" · ") : "Sozlanmagan";
+  }
 
   function drawConfig(config) {
     currentConfig = config;
@@ -1847,17 +1862,6 @@
     $("checkoutIdle").value = config.checkout_idle_minutes ?? "";
     $("openFrom").value = config.open_from || "";
     $("openTo").value = config.open_to || "";
-    const roles = config.camera_roles || {};
-    $("cameraRoles").innerHTML = cameraList.length
-      ? cameraList.map((camera) => `
-        <div class="member-row">
-          <div class="who"><b>${esc(camera.label || camera.camera_id)}</b></div>
-          <select data-role="${esc(camera.camera_id)}" style="width:auto">
-            ${ROLE_OPTIONS.map(([value, label]) =>
-              `<option value="${value}" ${roles[camera.camera_id] === value ? "selected" : ""}>${label}</option>`).join("")}
-          </select>
-        </div>`).join("")
-      : "";
   }
 
   async function saveConfig() {
@@ -1868,11 +1872,8 @@
       note("configStatus", "err", "Ochilish va yopilishni birga kiriting yoki ikkalasini bo‘sh qoldiring.");
       return;
     }
-    const camera_roles = {};
-    document.querySelectorAll("[data-role]").forEach((select) => { camera_roles[select.dataset.role] = select.value; });
     const body = {
       ...currentConfig,
-      camera_roles,
       occupancy_limit: Number($("occupancy").value || currentConfig.occupancy_limit),
       queue_limit: Number($("queueLimit").value || currentConfig.queue_limit),
       loitering_sec: Number($("loitering").value || currentConfig.loitering_sec),
@@ -2126,6 +2127,10 @@
       if (S.config.ok) { currentConfig = S.config.data.config; fillHeatControls(); loadHeatmap(); }
       else cardError("heatSummary", S.config, "config");
     } else if (tab.id === "xavfsizlik") {
+      // `cameraSetup()` chiziq/zonani o'qiydi — kartochka chizilishidan
+      // OLDIN config qo'yilishi kerak, aks holda hamma kamera
+      // "Sozlanmagan" bo'lib ko'rinadi.
+      if (S.config.ok) currentConfig = S.config.data.config;
       await drawCameras();
       if (S.report.ok) drawSecurity(S.report.data.security);
       drawEvents();

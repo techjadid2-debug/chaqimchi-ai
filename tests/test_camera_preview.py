@@ -705,6 +705,8 @@ def test_admin_do_konni_masofadan_sozlay_oladi(client: TestClient) -> None:
         f"/api/v1/admin/sites/{site_id}/config",
         headers=ADMIN,
         json={
+            # Eski panel yuborgan `camera_roles` endi jimgina tashlanadi —
+            # 422 chiqmasligi ham shu yerda qo'riqlanadi.
             "camera_roles": {"camera-01": "entrance"},
             "lines": [
                 {
@@ -733,7 +735,7 @@ def test_admin_do_konni_masofadan_sozlay_oladi(client: TestClient) -> None:
     assert len(config["lines"]) == 1
     assert len(config["zones"]) == 1
     assert config["zones"][0]["queue"] is True
-    assert config["camera_roles"]["camera-01"] == "entrance"
+    assert "camera_roles" not in config, "hech kim o'qimaydigan maydon saqlanmasin"
 
 
 def test_admin_sozlamasi_uchun_kalit_shart(client: TestClient) -> None:

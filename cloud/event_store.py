@@ -1380,7 +1380,6 @@ class EventStore:
                 "revision": 0,
                 "config": {
                     "camera_labels": {},
-                    "camera_roles": {},
                     "occupancy_limit": 20,
                     # 60 s juda tajovuzkor edi: band do'konda deyarli har
                     # xaridor "uzoq turish" bo'lib chiqar va shovqin

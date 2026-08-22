@@ -167,7 +167,6 @@ DEMO = {
                 "camera-03": "Savdo zali",
                 "camera-04": "Ombor",
             },
-            "camera_roles": {"camera-01": "entrance", "camera-02": "checkout"},
             "occupancy_limit": 20,
             "queue_limit": 5,
             "loitering_sec": 300,

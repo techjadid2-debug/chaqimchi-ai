@@ -385,6 +385,21 @@ def test_owner_can_ask_for_a_fresh_camera_frame() -> None:
     assert 'onclick=' not in html.split("data-shot-refresh")[1][:400], "inline onclick yo'q"
 
 
+def test_owner_panel_does_not_ask_for_a_camera_role() -> None:
+    """Kamera roli hech kim o'qimaydigan maydon edi.
+
+    Qurilma kirish kamerasini CHIZIQDAN biladi
+    (`chaqimchi_ai/retail/service.py: entrance_cameras`), roldan emas.
+    Ro'yxatda bo'sh variant ham yo'q edi — birinchi "Saqlash" bosilishi
+    bilan hamma kamera jimgina "Kirish" bo'lib qolardi.
+    """
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "ROLE_OPTIONS" not in html
+    assert "camera_roles" not in html.replace("attendance_camera_roles", "")
+    assert "attendance_camera_roles" in html, "davomat roli BOSHQA narsa — qolsin"
+    assert "cameraSetup" in html, "kamera holati chiziq/zonadan hisoblansin"
+
+
 def test_owner_live_view_uses_its_own_endpoint() -> None:
     """Jonli kadr tayanch rasmni — ya'ni xarita fonini — almashtirmasin."""
     html = (STATIC / "owner.html").read_text(encoding="utf-8")

@@ -121,6 +121,9 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .camera-card .meta b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Kamera holati so'z bilan: rangni ko'rmaydigan mijoz ham tushunsin. */
 .camera-card .meta .sub { color: var(--muted); font-size: 12px; flex: none; }
+/* Kamera nimaga sozlangan — chiziq/zonadan hisoblanadi. */
+.camera-card .setup { padding: 0 12px 9px; font-size: 12px; color: var(--muted);
+  text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #b9c4be; flex: none; }
 .dot.on { background: #2ac976; }
 .dot.off { background: var(--danger); }

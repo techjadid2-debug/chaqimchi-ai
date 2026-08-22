@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from cloud import botfmt
+from cloud import botfmt, trust_score
 from cloud.event_store import EventStore
 from cloud.payments.store import billable_months
 from cloud.store import GRACE_DAYS
@@ -55,6 +55,7 @@ def build_digest(
     *,
     open_from: Optional[str] = None,
     first_movement: Optional[str] = None,
+    score: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Kunlik xabar matni.
 
@@ -67,12 +68,27 @@ def build_digest(
     "0 ta buzilish" deb yozish xabarni uzaytiradi va o'qilmay qoladi.
     """
     traffic = report["traffic"]
-    lines = [
-        f"📊 {botfmt.header(site_name)} — kunlik hisobot",
-        botfmt.day_title(day + "T12:00:00+05:00") or day,
-        "",
-        f"👥 Kirdi: <b>{botfmt.number(traffic['entered'])}</b> kishi",
-    ]
+
+    # Birinchi qator — KUNNING HOLATI, hisobot sarlavhasi emas.
+    #
+    # Do'kon egasi telefonda xabarning faqat birinchi qatorini ko'radi
+    # (bildirishnoma shuni ko'rsatadi).  "kunlik hisobot" unga hech narsa
+    # aytmaydi; "Bugun: 94 — A'lo kun" esa xabarni ochmasdan ham javob
+    # beradi.  Ball yo'q bo'lsa eski sarlavha qoladi.
+    if score and score.get("available"):
+        headline = f"🏪 {botfmt.header(site_name)} — Bugun: <b>{score['total']}</b>"
+        subtitle = trust_score.label(score["total"])
+    elif score:
+        headline = f"🏪 {botfmt.header(site_name)}"
+        subtitle = str(score.get("reason") or "")
+    else:
+        headline = f"📊 {botfmt.header(site_name)} — kunlik hisobot"
+        subtitle = ""
+
+    lines = [headline, botfmt.day_title(day + "T12:00:00+05:00") or day]
+    if subtitle:
+        lines.append(subtitle)
+    lines += ["", f"👥 Kirdi: <b>{botfmt.number(traffic['entered'])}</b> kishi"]
 
     change = traffic.get("change_percent")
     if change is not None:
@@ -357,14 +373,39 @@ class DailyDigestService:
                 self.events.mark_digest_sent(site_id, digest_date)
                 continue
             open_from = None
+            queue_configured = False
             try:
                 config = self.events.get_site_config(site_id)["config"]
                 open_from = config.get("open_from") or None
+                # Navbat zonasi chizilganmi — ball uchun SHART: zonasiz
+                # `queue_threshold_exceeded` hech qachon chiqmaydi, ya'ni
+                # "0 ta signal" mukammal navbat degani emas.
+                queue_configured = any(
+                    bool(zone.get("queue"))
+                    for zone in (config.get("zones") or [])
+                    if isinstance(zone, dict)
+                )
             except Exception:
                 open_from = None
             first_movement = (
                 self.events.first_movement_time(site_id, day=now.date()) if open_from else None
             )
+            # `list_sites()` aloqa holati va kamera sonini allaqachon
+            # beradi — ball uchun qo'shimcha so'rov kerak emas.
+            try:
+                score = trust_score.score(
+                    report=report,
+                    shifts=self.events.shift_summary(
+                        site_id, start=now.date(), end=now.date()
+                    ),
+                    minutes_since_seen=site.get("minutes_since_seen"),
+                    cameras_active=int(site.get("cameras_active") or 0),
+                    cameras_expected=int(site.get("cameras_expected") or 0),
+                    queue_configured=queue_configured,
+                )
+            except Exception:  # noqa: BLE001 — ball xabarni yiqitmasin
+                logger.exception("Ishonch ballini hisoblab bo'lmadi: %s", site_id)
+                score = None
             text = build_digest(
                 str(site["name"]),
                 digest_date,
@@ -372,6 +413,7 @@ class DailyDigestService:
                 report,
                 open_from=open_from,
                 first_movement=first_movement,
+                score=score,
             )
             site_sent = await self._deliver(site_id, members, text)
             if site_sent:

@@ -354,3 +354,40 @@ table.events { min-width: 560px; }
   /* Pastdagi panel kontentni yopib qolmasin. */
   .shell { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
+
+/* ── Ishonch balli: kunning bitta raqami ────────────────────────────────
+   Ataylab eng katta element.  Pastdagi kartalar kunning TAFSILOTI, bu
+   esa kunning JAVOBI — do'kon egasi kuniga shunga qaraydi.
+
+   Rang ballning o'zidan kelib chiqadi (`data-tone`), chunki raqamning
+   yaxshi yoki yomonligini rangsiz aytib bo'lmaydi.  Lekin rang YAGONA
+   belgi emas: yonida so'z ham turadi ("A'lo kun") — rang ko'rmaydigan
+   mijoz uchun. */
+.score-card { background: var(--green); color: #f7fbf4; border-color: var(--green); }
+.score-main { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.score-number {
+  font-size: 64px; line-height: 1; font-weight: 700; letter-spacing: -0.03em;
+  min-width: 96px;
+}
+.score-card[data-tone="good"] .score-number { color: var(--lime); }
+.score-card[data-tone="warn"] .score-number { color: #ffd166; }
+.score-card[data-tone="bad"] .score-number { color: #ff9b85; }
+.score-card[data-tone="none"] .score-number { color: #f7fbf4; font-size: 40px; }
+.score-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 140px; }
+.score-text strong { font-size: 18px; }
+.score-card .hint { color: rgba(247, 251, 244, 0.72); }
+.score-card .button.ghost {
+  border-color: rgba(247, 251, 244, 0.4); color: #f7fbf4; background: transparent;
+}
+.score-card .button.ghost:hover { background: rgba(247, 251, 244, 0.12); }
+
+.score-parts { margin-top: 16px; display: grid; gap: 8px; }
+.score-part {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border-radius: 12px; background: rgba(247, 251, 244, 0.08);
+}
+.score-part small { color: rgba(247, 251, 244, 0.72); display: block; }
+.score-part b { white-space: nowrap; }
+/* O'lchanmagan qism — u ballga KIRMAYDI va buni ko'rsatib turish kerak,
+   aks holda mijoz "nega 20 emas?" deb o'ylaydi. */
+.score-part.unmeasured { opacity: 0.65; }

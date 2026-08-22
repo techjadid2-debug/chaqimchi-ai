@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+import cloud.main as main
 from cloud.snapshots import LocalSnapshotStore
 
 
@@ -1855,3 +1857,78 @@ def test_loitering_does_not_consume_the_daily_snapshot_budget(production_client)
     assert tamper.status_code == 200
     assert tamper.json().get("stored") is not False
     assert ratelimit.limiter().size() == 1
+
+
+# ── Ishonch balli ────────────────────────────────────────────────────────
+
+
+def test_trust_score_refuses_to_grade_a_silent_shop(production_client) -> None:
+    """Kompyuter o'chiq bo'lsa ball KO'RSATILMAYDI.
+
+    Aks holda o'chib qolgan do'kon har kuni "94" ko'rsatib turardi va
+    mijoz mahsulot ishlayapti deb o'ylab yurardi — bu mumkin bo'lgan
+    eng yomon nosozlik.  Aynan shunday holat 2026-08-22 da bo'lgan:
+    qurilma 19 soat jim turgan.
+    """
+    client, _messages = production_client
+    site, device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="900")
+
+    # Qurilmani ataylab jim qilamiz — oxirgi aloqa 20 soat oldin.
+    store = main.get_store()
+    conn = store._connect()
+    stale = (datetime.now(timezone.utc) - timedelta(hours=20)).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("UPDATE devices SET last_seen=? WHERE id=?", (stale, device["device_id"]))
+    conn.commit()
+    conn.close()
+
+    body = client.get("/api/v1/owner/trust-score", headers=owner_headers).json()
+    assert body["available"] is False
+    assert body["total"] is None
+    assert "jim" in body["reason"]
+    assert body["label"] == "Ma'lumot yo'q"
+
+
+def test_trust_score_needs_a_login(production_client) -> None:
+    client, _messages = production_client
+    assert client.get("/api/v1/owner/trust-score").status_code == 401
+
+
+def test_trust_score_reports_real_events(production_client) -> None:
+    """Ball haqiqiy hodisalardan hisoblanadi va qismlarini tushuntiradi."""
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="901")
+
+    # Heartbeat qurilmani "online" qiladi.
+    client.post("/api/v1/edge/heartbeat", headers=headers, json={"cameras": []})
+    # Buzilgan kamera — jiddiy hodisa, ball buni ko'rsatishi kerak.
+    occurred = datetime.now(timezone.utc).isoformat()
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "trust-1",
+                    "event_type": "camera_tampered",
+                    "severity": "critical",
+                    "camera_id": "camera-01",
+                    "occurred_at": occurred,
+                    "edge_version": "0.6.12",
+                }
+            ]
+        },
+    )
+
+    body = client.get("/api/v1/owner/trust-score", headers=owner_headers).json()
+    assert body["available"] is True
+    assert 0 <= body["total"] <= 100
+    codes = {part["code"] for part in body["parts"]}
+    assert codes == {"traffic", "queue", "staff", "security", "cameras"}
+
+    security = next(part for part in body["parts"] if part["code"] == "security")
+    assert security["points"] == 4, "buzilgan kamera ballni tushirishi kerak"
+    # Navbat zonasi chizilmagan — bu qism o'lchanmaydi, "mukammal" emas.
+    queue = next(part for part in body["parts"] if part["code"] == "queue")
+    assert queue["measured"] is False

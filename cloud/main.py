@@ -58,7 +58,7 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import botfmt, faces, ratelimit, urls
+from cloud import botfmt, faces, ratelimit, trust_score, urls
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
@@ -4617,6 +4617,64 @@ async def owner_report(
     if not _panel_feature_open(owner.site_id, "demografiya"):
         report.pop("demografiya", None)
     return report
+
+
+def _trust_score_for(site_id: str, day: Optional[date_type] = None) -> Dict[str, Any]:
+    """Ball uchun kirish ma'lumotini yig'adi.
+
+    Hammasi MAVJUD funksiyalardan keladi — yangi ma'lumot yig'ilmaydi.
+    Hisoblashning o'zi `cloud/trust_score.py` da: u sof funksiya va
+    panel, Telegram xabari hamda bu endpoint uchun bitta manba.
+    """
+    events = get_event_store()
+    store = get_store()
+    day = day or datetime.now(ZoneInfo("Asia/Tashkent")).date()
+
+    detail = store.site_detail(site_id)
+    # `cameras_expected` obyekt yaratilganda qo'lda kiritiladi va o'zi
+    # ro'yxatdan o'tgan do'konda BO'SH qoladi — `owner_health` dagi kabi
+    # ro'yxatdagi kamera soni zaxira sifatida olinadi.
+    expected = int(detail.get("cameras_expected") or 0) or len(store.list_cameras(site_id))
+
+    # Navbat zonasi chizilganmi.  Bu SHART: zonasiz `queue_threshold_exceeded`
+    # hech qachon chiqmaydi, ya'ni "0 ta signal" mukammal navbat emas.
+    config = events.get_site_config(site_id).get("config") or {}
+    queue_configured = any(
+        bool(zone.get("queue")) for zone in (config.get("zones") or []) if isinstance(zone, dict)
+    )
+
+    return trust_score.score(
+        report=events.retail_report(site_id, day=day),
+        shifts=events.shift_summary(site_id, start=day, end=day),
+        minutes_since_seen=detail.get("minutes_since_seen"),
+        cameras_active=int(detail.get("cameras_active") or 0),
+        cameras_expected=expected,
+        queue_configured=queue_configured,
+    )
+
+
+@app.get("/api/v1/owner/trust-score")
+def owner_trust_score(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    """Kunning bitta raqami — panel va Telegram uchun.
+
+    `async def` EMAS: ichida faqat bloklovchi baza chaqiruvlari bor va
+    FastAPI oddiy `def` ni o'zi alohida oqimda ishlatadi.  `async` qilib
+    qo'yilsa, bu endpoint yagona hodisa halqasini ushlab turardi.
+    """
+    today = _trust_score_for(owner.site_id)
+    result = {**today, "label": trust_score.label(today["total"])}
+
+    # Kechagi ball — raqamning yo'nalishi raqamning o'zicha muhim.
+    # Kecha ma'lumot bo'lmasa jimgina tashlab ketiladi.
+    try:
+        yesterday = _trust_score_for(
+            owner.site_id, datetime.now(ZoneInfo("Asia/Tashkent")).date() - timedelta(days=1)
+        )
+        result["yesterday"] = yesterday["total"]
+    except Exception:  # noqa: BLE001 — kechagi ball bugungisini yiqitmasin
+        logger.exception("Kechagi ballni hisoblab bo'lmadi: %s", owner.site_id)
+        result["yesterday"] = None
+    return result
 
 
 @app.get("/api/v1/owner/trend")

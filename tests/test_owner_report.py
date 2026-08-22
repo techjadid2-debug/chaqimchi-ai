@@ -912,3 +912,53 @@ def test_grace_reminder_says_how_long_the_system_keeps_working(tmp_path: Path) -
 
     assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
     assert "14 kun" in sent[0][1]
+
+
+# ── Ishonch balli xabar sarlavhasida ─────────────────────────────────────
+
+
+def test_digest_headline_leads_with_the_score_not_the_word_report(tmp_path: Path) -> None:
+    """Telefon bildirishnomasi faqat BIRINCHI qatorni ko'rsatadi.
+
+    "kunlik hisobot" do'kon egasiga hech narsa aytmaydi — u xabarni
+    ochishi kerak.  "Bugun: 94 — A'lo kun" esa ochmasdan javob beradi.
+    """
+    store = store_with([], tmp_path)
+    text = build_digest(
+        "Oq Saroy",
+        DAY.isoformat(),
+        store.stats("site-1", day=DAY),
+        store.retail_report("site-1", day=DAY),
+        score={"available": True, "total": 94, "reason": None, "parts": []},
+    )
+    first = text.splitlines()[0]
+    assert "Bugun: <b>94</b>" in first
+    assert "hisobot" not in first
+    assert "A'lo kun" in text
+
+
+def test_digest_says_why_when_the_score_is_missing(tmp_path: Path) -> None:
+    """Ball yo'q bo'lsa sababi yozilsin — jim sarlavha mijozni chalg'itadi."""
+    store = store_with([], tmp_path)
+    reason = "Do'kon kompyuteri 19 soatdan beri jim — ma'lumot to'liq emas"
+    text = build_digest(
+        "Oq Saroy",
+        DAY.isoformat(),
+        store.stats("site-1", day=DAY),
+        store.retail_report("site-1", day=DAY),
+        score={"available": False, "total": None, "reason": reason, "parts": []},
+    )
+    assert reason in text
+    assert "Bugun:" not in text
+
+
+def test_digest_without_a_score_keeps_the_old_headline(tmp_path: Path) -> None:
+    """Ball hisoblanmasa xabar baribir chiqsin — orqaga moslik."""
+    store = store_with([], tmp_path)
+    text = build_digest(
+        "Oq Saroy",
+        DAY.isoformat(),
+        store.stats("site-1", day=DAY),
+        store.retail_report("site-1", day=DAY),
+    )
+    assert "kunlik hisobot" in text.splitlines()[0]

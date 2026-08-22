@@ -71,6 +71,28 @@
       <!-- ── BUGUN ────────────────────────────────────────────────── -->
       <div class="pane" id="paneBugun">
 
+      <!-- ── ISHONCH BALLI ────────────────────────────────────────────
+           Eng tepada va ataylab katta: pastdagi kartalar kunning
+           TAFSILOTI, bu esa kunning JAVOBI.  Do'kon egasi dashboardni
+           o'qimaydi — kuniga bitta raqamga qaraydi.
+
+           Ball ko'rsatilmasligi ham holat: qurilma jim bo'lsa raqam
+           o'rniga sabab chiqadi.  Raqam chiqarib qo'yish o'chib qolgan
+           do'konni "94" deb ko'rsatardi. -->
+      <div class="card score-card" id="scoreCard" hidden>
+        <div class="score-main">
+          <div class="score-number" id="scoreValue">—</div>
+          <div class="score-text">
+            <strong id="scoreLabel">—</strong>
+            <span class="hint" id="scoreDelta"></span>
+          </div>
+          <button class="button ghost small" id="scoreToggle" type="button" aria-expanded="false">
+            Nega?
+          </button>
+        </div>
+        <div class="score-parts hidden" id="scoreParts"></div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <h2>Kunlik hisobot</h2>
@@ -493,7 +515,7 @@
   const S = {
     health: null, cameras: null, report: null, trend: null,
     events: null, config: null, members: null, billing: null, features: null,
-    staff: null, subscription: null,
+    staff: null, subscription: null, score: null,
   };
 
   const LOADERS = {
@@ -508,6 +530,7 @@
     subscription: () => api("/api/v1/owner/subscription"),
     features: () => api("/api/v1/owner/features"),
     staff: () => api("/api/v1/owner/faces"),
+    score: () => api("/api/v1/owner/trust-score"),
   };
 
   async function needSettled(keys) {
@@ -541,7 +564,7 @@
 
   const TABS = [
     { id: "bugun", label: "Bugun", icon: "odamlar", pane: "paneBugun",
-      deps: ["health", "cameras", "report"] },
+      deps: ["health", "cameras", "report", "score"] },
     { id: "tahlil", label: "Tahlil", icon: "soat", pane: "paneTahlil",
       deps: ["health", "cameras", "trend", "config", "report"] },
     { id: "xavfsizlik", label: "Xavfsizlik", icon: "qalqon", pane: "paneXavfsizlik",
@@ -1270,6 +1293,57 @@
   // ajratadi — ikkalasi bir xil kunni tushunishi shart.
   const SHOP_TZ = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tashkent" });
   const shopDate = (offsetDays = 0) => SHOP_TZ.format(new Date(Date.now() + offsetDays * 86400000));
+
+  /* ── Ishonch balli ─────────────────────────────────────────────────
+     Ball ko'rsatilmasligi ham javob: qurilma jim bo'lsa raqam o'rniga
+     SABAB chiqadi.  Raqam chiqarib qo'yish o'chib qolgan do'konni
+     "94" deb ko'rsatardi va mijoz hammasi joyida deb o'ylab yurardi. */
+  function scoreTone(total) {
+    if (total === null || total === undefined) return "none";
+    if (total >= 75) return "good";
+    if (total >= 55) return "warn";
+    return "bad";
+  }
+
+  function drawScore(entry) {
+    const card = $("scoreCard");
+    if (!card) return;
+    if (!entry || !entry.ok) { card.hidden = true; return; }
+    const data = entry.data || {};
+    card.hidden = false;
+    card.dataset.tone = scoreTone(data.total);
+
+    const available = data.available && data.total !== null;
+    $("scoreValue").textContent = available ? data.total : "—";
+    $("scoreLabel").textContent = available
+      ? (data.label || "")
+      : (data.reason || "Ma’lumot yo‘q");
+
+    // Kechagi ball bilan farq — raqamning YO'NALISHI raqamning o'zicha
+    // muhim: 78 tushayotgan bo'lsa 78 ko'tarilayotganidan boshqa xabar.
+    const delta = $("scoreDelta");
+    if (available && typeof data.yesterday === "number") {
+      const diff = data.total - data.yesterday;
+      const arrow = diff > 0 ? "▲" : diff < 0 ? "▼" : "=";
+      delta.textContent = diff === 0
+        ? `Kecha ham ${data.yesterday}`
+        : `${arrow} ${Math.abs(diff)} (kecha ${data.yesterday})`;
+    } else {
+      delta.textContent = "";
+    }
+
+    const parts = Array.isArray(data.parts) ? data.parts : [];
+    const toggle = $("scoreToggle");
+    toggle.hidden = parts.length === 0;
+    $("scoreParts").innerHTML = parts.map((part) => {
+      // O'lchanmagan qism ballga KIRMAYDI va buni aytish shart, aks holda
+      // mijoz "nega 20 emas?" deb o'ylaydi.
+      const value = part.measured ? `${part.points}/${part.max}` : "o‘lchanmadi";
+      return `<div class="score-part${part.measured ? "" : " unmeasured"}">` +
+        `<span><b>${esc(part.label)}</b><small>${esc(part.note || "")}</small></span>` +
+        `<b>${esc(value)}</b></div>`;
+    }).join("");
+  }
 
   function drawReport(report) {
     const traffic = report.traffic;
@@ -2135,6 +2209,7 @@
     }
 
     if (tab.id === "bugun") {
+      drawScore(S.score);
       if (S.report.ok) drawReport(S.report.data);
       else cardError("hourReadout", S.report, "report");
     } else if (tab.id === "tahlil") {
@@ -2271,6 +2346,16 @@
     }
   });
   $("attendanceCamSave").addEventListener("click", saveAttendanceCameras);
+  // «Nega?» — ball qanday yig'ilganini ochadi.  Yopiq holat standart:
+  // kuniga bitta raqamga qarash 30 soniyalik ish, tafsilot esa faqat
+  // raqam yoqmagan kunda kerak bo'ladi.
+  $("scoreToggle").addEventListener("click", () => {
+    const parts = $("scoreParts");
+    const open = parts.classList.toggle("hidden") === false;
+    $("scoreToggle").setAttribute("aria-expanded", String(open));
+    $("scoreToggle").textContent = open ? "Yopish" : "Nega?";
+  });
+
   $("attendanceTodayBtn").addEventListener("click", () => {
     attendanceRange = "today";
     loadAttendanceTable();

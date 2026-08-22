@@ -735,8 +735,15 @@
     const minutes = health.minutes_since_seen;
 
     let kind = "ok";
-    let title = "Hammasi ishlayapti";
-    let sub = expected ? `${active}/${expected} kamera ulangan` : "Qurilma ulangan";
+    // Banner ALOQA holatini aytadi, do'kon ishini emas.
+    //
+    // Ilgari bu yerda "Hammasi ishlayapti" turardi va u ishonch balli
+    // bilan ziddiyatga kirardi: tepada yashil "Hammasi ishlayapti",
+    // ostida esa "60 — E'tibor talab qiladi".  Banner do'konda nima
+    // bo'layotganini BILMAYDI — u faqat qurilma ulanganini biladi.
+    // Kunga baho beradigan yagona joy — ball.
+    let title = "Qurilma ulangan";
+    let sub = expected ? `${active}/${expected} kamera ishlayapti` : "Aloqa bor";
 
     if (health.connection === "not_paired") {
       kind = "err"; title = "Qurilma hali ulanmagan";

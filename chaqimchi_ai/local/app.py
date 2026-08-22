@@ -1356,9 +1356,16 @@ def _start_config_sync() -> None:
                 cloud_config.upload_heatmaps()
 
                 applied = cloud_config.sync_once()
-                if applied and applied.get("cameras"):
-                    # Kamera ro'yxati o'zgardi — zanjir uni faqat startda
-                    # o'qiydi, shuning uchun qayta ishga tushiramiz.
+                if applied and (applied.get("cameras") or applied.get("hours")):
+                    # Kamera ro'yxati YOKI ish vaqti o'zgardi — zanjir
+                    # ikkalasini ham faqat startda o'qiydi
+                    # (`retail/service.py`: `build_runner`), shuning uchun
+                    # qayta ishga tushiramiz.
+                    #
+                    # Ish vaqti bungacha ro'yxatda yo'q edi: yangi soat
+                    # faylga yozilardi-yu, ishlab turgan zanjir uni hech
+                    # qachon ko'rmasdi.  Natijada "ish vaqtidan tashqari
+                    # harakat" hodisasi umuman chiqmasdi.
                     if supervisor.status()["running"]:
                         supervisor.restart()
                     else:

@@ -127,7 +127,20 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     Qaytaradi: nima o'zgargani (panel va log uchun).
     """
-    changed: Dict[str, Any] = {"cameras": 0, "lines": 0, "zones": 0, "limits": False}
+    changed: Dict[str, Any] = {
+        "cameras": 0,
+        "lines": 0,
+        "zones": 0,
+        "limits": False,
+        # Ish vaqti ham hisobga olinadi.  Bungacha bu kalit YO'Q edi va
+        # oqibati jimgina nosozlik bo'lardi: `save_store_hours()` yangi
+        # soatni faylga yozardi, `changed` esa bo'sh qolardi, `sync_once()`
+        # `None` qaytarardi va zanjir qayta ishga tushmasdi.  Zanjir esa
+        # ish vaqtini FAQAT startda o'qiydi (`service.py:357`), ya'ni
+        # paneldagi maydon jonli qurilmada hech qachon ishlamasdi va
+        # "ish vaqtidan tashqari harakat" hech qachon chiqmasdi.
+        "hours": False,
+    }
 
     # Keshni HAR DOIM yozamiz va yo'lini configga qo'yamiz.
     #
@@ -202,7 +215,10 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
     # Ish vaqti: ikkalasi ham berilgan bo'lsagina.  Yarmi bo'lsa
     # `AppSettings` validatsiyasi yiqiladi va config umuman o'qilmay qoladi.
     if site.get("open_from") and site.get("open_to"):
+        before = config_store.read_raw().get("retail") or {}
+        was = (before.get("open_from"), before.get("open_to"))
         config_store.save_store_hours(site["open_from"], site["open_to"])
+        changed["hours"] = was != (site["open_from"], site["open_to"])
 
     return changed
 

@@ -1186,3 +1186,56 @@ def test_only_one_panel_can_bind_the_port(tmp_path: Path, monkeypatch: pytest.Mo
         assert app_module._reserve_panel_port(8791) is None
     finally:
         first.close()
+
+
+# ── Ish vaqti o'zgarsa zanjir qayta ishga tushsin ────────────────────────
+#
+# Bag tarixi: `save_store_hours()` yangi soatni faylga yozardi, lekin
+# `changed` lug'atida "hours" kaliti YO'Q edi.  Natijada `sync_once()`
+# `None` qaytarardi va zanjir qayta ishga tushmasdi.  Zanjir esa ish
+# vaqtini FAQAT startda o'qiydi (`retail/service.py`: `build_runner`).
+#
+# Oqibati jonli do'konda: panelda 08:30-22:00 turardi, qurilma esa uni
+# hech qachon ko'rmadi va "ish vaqtidan tashqari harakat" bir marta ham
+# chiqmadi — tunda 48 ta hodisa bo'lgan bo'lsa ham.
+
+
+def test_ish_vaqti_ozgarishi_sezib_qolinadi(client: TestClient, tmp_path: Path) -> None:
+    """Yangi ish vaqti kelsa `changed["hours"]` rost bo'lsin."""
+    from chaqimchi_ai.local import cloud_config
+
+    # Ish vaqti `config` kalitida keladi (`cloud_config.py`: `site =
+    # payload.get("config")`), alohida `site` blokida emas.
+    payload = {
+        "product": {"max_cameras": 4},
+        "cameras": [],
+        "config": {"open_from": "08:30", "open_to": "22:00"},
+    }
+    first = cloud_config.apply(payload)
+    assert first["hours"] is True, "birinchi marta kelgan soat o'zgarish hisoblanadi"
+
+    # Ikkinchi marta o'sha soat — qayta ishga tushirishga hojat yo'q.
+    again = cloud_config.apply(payload)
+    assert again["hours"] is False, "o'zgarmagan soat zanjirni qayta yoqmasin"
+
+    # Endi haqiqiy o'zgarish.
+    payload["config"]["open_to"] = "23:00"
+    third = cloud_config.apply(payload)
+    assert third["hours"] is True, "yangi yopilish vaqti sezilishi shart"
+
+    saved = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
+    assert saved["retail"]["open_to"] == "23:00"
+
+
+def test_ish_vaqti_ozgarsa_zanjir_qayta_yoqiladi() -> None:
+    """Sinxronizatsiya sikli soat o'zgarishini ham hisobga olsin.
+
+    Bungacha shart faqat `applied.get("cameras")` edi.
+    """
+    source = (
+        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "app.py"
+    ).read_text(encoding="utf-8")
+    assert 'applied.get("cameras") or applied.get("hours")' in source, (
+        "ish vaqti o'zgarganda zanjir qayta ishga tushmaydi — "
+        "paneldagi maydon jonli qurilmada ishlamay qoladi"
+    )

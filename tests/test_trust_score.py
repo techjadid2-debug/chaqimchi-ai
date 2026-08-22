@@ -19,6 +19,8 @@ GOOD_REPORT: Dict[str, Any] = {
 GOOD_SHIFTS: Dict[str, Any] = {
     "employees": 2,
     "jami": {"kechikish_daq": 0, "kelmagan_kunlar": 0},
+    # `ish_kunlari` SHART: usiz davomat o'lchanmagan deb qaraladi.
+    "rows": [{"ish_kunlari": 1}, {"ish_kunlari": 1}],
 }
 
 
@@ -147,7 +149,11 @@ def test_a_day_with_no_customers_at_all_is_not_a_perfect_day() -> None:
 
 
 def test_absent_staff_shows_up_in_the_score() -> None:
-    shifts = {"employees": 2, "jami": {"kechikish_daq": 0, "kelmagan_kunlar": 1}}
+    shifts = {
+        "employees": 2,
+        "jami": {"kechikish_daq": 0, "kelmagan_kunlar": 1},
+        "rows": [{"ish_kunlari": 1}, {"ish_kunlari": 1}],
+    }
     staff = next(item for item in _score(shifts=shifts)["parts"] if item["code"] == "staff")
     assert staff["points"] == 4
     assert "kelmadi" in staff["note"]
@@ -181,3 +187,30 @@ def test_the_cap_does_not_punish_an_ordinary_dip() -> None:
     report = {**GOOD_REPORT, "traffic": {"entered": 112, "entered_yesterday": 140}}
     result = _score(report=report)
     assert result["total"] > 70
+
+
+def test_staff_without_a_schedule_is_not_scored_as_punctual() -> None:
+    """Ish kuni belgilanmagan bo'lsa nol kechikish nol O'LCHOVdan keladi.
+
+    Jonli pilotda aynan shu holat topildi: bitta xodim bor, rasmi yo'q,
+    `ish_kunlari: 0` — ball esa "Hammasi vaqtida keldi, 20/20" derdi.
+    """
+    shifts = {
+        "employees": 1,
+        "jami": {"kechikish_daq": 0, "kelmagan_kunlar": 0},
+        "rows": [{"employee_name": "Abduvohid", "ish_kunlari": 0}],
+    }
+    staff = next(item for item in _score(shifts=shifts)["parts"] if item["code"] == "staff")
+    assert staff["measured"] is False
+    assert "jadval" in staff["note"]
+
+
+def test_staff_with_a_schedule_is_scored() -> None:
+    shifts = {
+        "employees": 1,
+        "jami": {"kechikish_daq": 0, "kelmagan_kunlar": 0},
+        "rows": [{"employee_name": "Aziz", "ish_kunlari": 1}],
+    }
+    staff = next(item for item in _score(shifts=shifts)["parts"] if item["code"] == "staff")
+    assert staff["measured"] is True
+    assert staff["points"] == 20

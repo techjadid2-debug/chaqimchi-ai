@@ -119,6 +119,14 @@ def _staff_part(shifts: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not shifts or not int(shifts.get("employees") or 0):
         return _part("staff", "Xodimlar", None, "Xodim qo'shilmagan")
 
+    # Xodim BOR, lekin ish kuni belgilanmagan — davomat umuman
+    # o'lchanmagan.  Bunda "hammasi vaqtida keldi" deyish ballning yana
+    # bir jimgina yolg'oni bo'lardi: nol kechikish nol o'lchovdan
+    # kelib chiqadi, yaxshi ishdan emas.  Jonli do'konda aynan shu
+    # holat topildi (`ish_kunlari: 0`, xodim rasmi yo'q).
+    if not sum(int(row.get("ish_kunlari") or 0) for row in shifts.get("rows") or []):
+        return _part("staff", "Xodimlar", None, "Ish jadvali belgilanmagan — davomat o'lchanmayapti")
+
     total = shifts.get("jami") or {}
     absent = int(total.get("kelmagan_kunlar") or 0)
     late_min = int(total.get("kechikish_daq") or 0)

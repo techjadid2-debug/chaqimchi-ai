@@ -269,6 +269,12 @@ class CloudStore:
                 preview_requested INTEGER NOT NULL DEFAULT 0,
                 preview_key TEXT,
                 preview_at TEXT,
+                -- Jonli kadr TAYANCH kadrdan alohida saqlanadi.  Ilgari
+                -- ikkalasi bitta kalitga yozilardi: mijoz jonli ko'rishni
+                -- ochsa, do'kon xaritasining foni o'sha lahzadagi kadrga
+                -- almashib ketardi.
+                live_key TEXT,
+                live_at TEXT,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (site_id, camera_id),
                 FOREIGN KEY (site_id) REFERENCES sites(id)
@@ -495,6 +501,7 @@ class CloudStore:
             item["enabled"] = bool(item["enabled"])
             item["preview_requested"] = bool(item.get("preview_requested"))
             item["has_preview"] = bool(item.get("preview_key"))
+            item["has_live"] = bool(item.get("live_key"))
             item.pop("rtsp_ciphertext", None)
             item.setdefault("origin", "panel")
             # Qurilmadan kelgan qatorda manzil yo'q.  `source` ni bo'sh satr
@@ -720,6 +727,35 @@ class CloudStore:
         conn = self._connect()
         row = conn.execute(
             "SELECT preview_key FROM site_cameras WHERE site_id=? AND camera_id=?",
+            (site_id, camera_id),
+        ).fetchone()
+        conn.close()
+        return str(row[0]) if row and row[0] else None
+
+    def set_camera_live_frame(self, site_id: str, camera_id: str, key: str) -> None:
+        """Jonli kadr keldi.
+
+        `set_camera_preview` dan ikki farqi bor va ikkalasi ham ataylab:
+        boshqa ustunga yozadi (tayanch kadr o'z joyida qoladi) va
+        `preview_requested` ga TEGMAYDI — jonli oqim ketayotgani "bir
+        martalik rasm so'raldi" bayrog'ini bekor qilmasligi kerak.
+        """
+        now = _iso(_utc_now())
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET live_key=?,live_at=?,updated_at=? "
+            "WHERE site_id=? AND camera_id=?",
+            (key, now, now, site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+
+    def camera_live_key(self, site_id: str, camera_id: str) -> Optional[str]:
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT live_key FROM site_cameras WHERE site_id=? AND camera_id=?",
             (site_id, camera_id),
         ).fetchone()
         conn.close()
@@ -1103,6 +1139,10 @@ class CloudStore:
             # — parol do'konda qoladi).  Farq muhim: `device` qatorining
             # manzili yo'q, ya'ni u qurilmaga qaytarilmaydi.
             "origin": "TEXT NOT NULL DEFAULT 'panel'",
+            # Jonli kadr o'z kalitida — `preview_key` barqaror tayanch
+            # bo'lib qoladi (xarita foni va zona muharriri o'shani oladi).
+            "live_key": "TEXT",
+            "live_at": "TEXT",
         }
         for name, definition in camera_additions.items():
             if name not in camera_columns:

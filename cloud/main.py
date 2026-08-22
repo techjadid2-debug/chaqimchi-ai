@@ -2858,6 +2858,19 @@ async def admin_camera_preview(
     return _camera_preview_response(site_id, camera_id)
 
 
+@app.get("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/live-frame")
+async def admin_camera_live_frame(
+    site_id: str, camera_id: str, _: None = Depends(require_admin)
+) -> Response:
+    """Jonli oqimning oxirgi kadri.
+
+    Jonli ko'rish tayanch kadrdan ajratilgach shu endpoint SHART bo'ldi:
+    `.../live` ni yoqish mumkin edi-yu, natijasini ko'rishning yo'li
+    qolmasdi.
+    """
+    return _camera_preview_response(site_id, camera_id, live=True)
+
+
 @app.post("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/live")
 async def admin_request_live(
     site_id: str, camera_id: str, _: None = Depends(require_admin)
@@ -3003,14 +3016,24 @@ def _require_installer_site(installer: PortalPrincipal, site_id: str) -> Dict[st
     return assignment
 
 
-def _camera_preview_response(site_id: str, camera_id: str) -> Response:
+def _camera_preview_response(site_id: str, camera_id: str, *, live: bool = False) -> Response:
     """Kameraning oxirgi kadri.  Hali kelmagan bo'lsa 404.
+
+    `live=False` — TAYANCH kadr: bir marta so'ralib olinadi va xarita
+    foni, zona muharriri, kamera kartochkasi o'shani ishlatadi.
+    `live=True` — jonli oqimning oxirgi kadri; u tez o'zgaradi va
+    tayanchni almashtirmasligi kerak.
 
     Rasm hech qachon to'g'ridan-to'g'ri obyekt saqlagichdan berilmaydi —
     faqat autentifikatsiyadan o'tgan so'rov orqali, `site_id` esa
     chaqiruvchining o'z tokenidan olinadi.
     """
-    key = get_store().camera_preview_key(site_id, camera_id)
+    store = get_store()
+    key = (
+        store.camera_live_key(site_id, camera_id)
+        if live
+        else store.camera_preview_key(site_id, camera_id)
+    )
     if not key:
         raise HTTPException(404, "Kamera rasmi hali yuborilmagan")
     try:
@@ -3177,6 +3200,15 @@ async def owner_camera_preview(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Response:
     return _camera_preview_response(owner.site_id, camera_id)
+
+
+@app.get("/api/v1/owner/cameras/{camera_id}/live-frame")
+async def owner_camera_live_frame(
+    camera_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Response:
+    """Jonli oqimning oxirgi kadri — tayanch kadrga tegmaydi."""
+    return _camera_preview_response(owner.site_id, camera_id, live=True)
 
 
 @app.post("/api/v1/owner/cameras/{camera_id}/live")
@@ -3848,8 +3880,13 @@ async def upload_live_frame(
 ) -> Dict[str, Any]:
     """Jonli ko'rish kadri (har 2-3 soniyada, panel ochiq ekan).
 
-    Oddiy preview bilan bitta kalitga yoziladi — panel o'sha GET
-    endpointdan o'qiyveradi.  Limit alohida va saxiy: 2.5 soniyalik
+    Tayanch kadrdan ALOHIDA kalitga yoziladi.  Ilgari ikkalasi bitta
+    kalitni bo'lishardi va oqibati ko'rinib turardi: mijoz jonli
+    ko'rishni ochishi bilan do'kon xaritasining foni o'sha lahzadagi
+    kadrga — odamlari va boshqa yorug'ligi bilan — almashib ketardi.
+    Endi xarita va zona muharriri barqaror tayanch kadrni oladi.
+
+    Limit alohida va saxiy: 2.5 soniyalik
     qadam bilan bu kuniga ~3 soat tomoshaga yetadi.  Javobdagi
     `continue` qurilmaga davom etish-etmaslikni aytadi — muddat panel
     tomonidan uzaytirilmasa oqim o'zi to'xtaydi.
@@ -3869,10 +3906,10 @@ async def upload_live_frame(
     if len(content) > 512 * 1024:
         # Jonli kadr 640px va past sifat — 512 KB ham ortig'i bilan yetadi.
         raise HTTPException(413, "Jonli kadr 512 KB dan katta")
-    key = f"{device['site_id']}/preview/{camera_id}.jpg"
+    key = f"{device['site_id']}/live/{camera_id}.jpg"
     get_snapshot_store().put(key, content, content_type="image/jpeg")
     try:
-        get_store().set_camera_preview(device["site_id"], camera_id, key)
+        get_store().set_camera_live_frame(device["site_id"], camera_id, key)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return {

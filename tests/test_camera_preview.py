@@ -147,6 +147,11 @@ def test_camera_listing_reports_preview_state(store: CloudStore) -> None:
     store.set_camera_preview(site["site_id"], "camera-01", "k.jpg")
     camera = store.list_cameras(site["site_id"])[0]
     assert camera["preview_requested"] is False and camera["has_preview"] is True
+    assert camera["has_live"] is False, "jonli kadr alohida hisoblanadi"
+
+    store.set_camera_live_frame(site["site_id"], "camera-01", "jonli.jpg")
+    camera = store.list_cameras(site["site_id"])[0]
+    assert camera["has_live"] is True
     # RTSP manzili hech qachon ro'yxatda chiqmaydi.
     assert "secret" not in str(camera)
 
@@ -563,9 +568,9 @@ def test_live_frames_flow_until_the_ttl_expires(client: TestClient) -> None:
     assert upload.status_code == 200
     assert upload.json()["continue"] is True
 
-    # Kadr odatdagi preview kaliti orqali panelga darhol ko'rinadi.
-    preview = client.get("/api/v1/owner/cameras/camera-01/preview", headers=owner)
-    assert preview.status_code == 200 and preview.content == JPEG
+    # Kadr O'Z endpointi orqali panelga darhol ko'rinadi.
+    live_frame = client.get("/api/v1/owner/cameras/camera-01/live-frame", headers=owner)
+    assert live_frame.status_code == 200 and live_frame.content == JPEG
 
     # Muddat tugadi — qurilmaga "to'xta" deyiladi.
     store = main.get_store()
@@ -587,6 +592,69 @@ def test_live_frames_flow_until_the_ttl_expires(client: TestClient) -> None:
         json={"cameras_active": 1, "app_version": "0.6.6"},
     ).json()
     assert beat["live_requested"] == []
+
+
+def test_jonli_kadr_tayanch_rasmni_almashtirmaydi(client: TestClient) -> None:
+    """Jonli ko'rish yoqilsa do'kon xaritasining foni o'zgarmasin.
+
+    Ilgari ikkalasi bitta kalitga yozilardi: mijoz jonli ko'rishni
+    ochishi bilan xarita foni o'sha lahzadagi kadrga — odamlari va
+    boshqa yorug'ligi bilan — almashib ketardi.
+    """
+    site, headers = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+
+    # 1. Tayanch kadr (bir martalik so'rov yo'li).
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/cameras/camera-01/preview", headers=ADMIN
+    ).raise_for_status()
+    client.put(
+        "/api/v1/edge/cameras/camera-01/preview",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=JPEG,
+    ).raise_for_status()
+
+    # 2. Jonli kadr — BOSHQA baytlar.
+    jonli = JPEG + b"\x00jonli"
+    client.post("/api/v1/owner/cameras/camera-01/live", headers=owner)
+    client.put(
+        "/api/v1/edge/cameras/camera-01/live-frame",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=jonli,
+    ).raise_for_status()
+
+    # 3. Tayanch o'z joyida, jonli o'z joyida.
+    assert client.get("/api/v1/owner/cameras/camera-01/preview", headers=owner).content == JPEG
+    assert client.get("/api/v1/owner/cameras/camera-01/live-frame", headers=owner).content == jonli
+
+
+def test_jonli_kadr_rasm_sorovini_yopmaydi(client: TestClient) -> None:
+    """Jonli oqim ketayotgani "bitta rasm so'raldi" bayrog'ini o'chirmasin."""
+    site, headers = _site_with_camera(client)
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/cameras/camera-01/preview", headers=ADMIN
+    ).raise_for_status()
+    client.put(
+        "/api/v1/edge/cameras/camera-01/live-frame",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=JPEG,
+    ).raise_for_status()
+
+    beat = client.post(
+        "/api/v1/edge/heartbeat",
+        headers=headers,
+        json={"cameras_active": 1, "app_version": "0.6.6"},
+    ).json()
+    assert beat["preview_requested"] == ["camera-01"]
+
+
+def test_jonli_kadr_yoq_bolsa_404(client: TestClient) -> None:
+    """Bo'sh 200 emas, aniq 404 — panel farqni bilishi kerak."""
+    site, _ = _site_with_camera(client)
+    owner = _owner(client, site["site_id"])
+    assert (
+        client.get("/api/v1/owner/cameras/camera-01/live-frame", headers=owner).status_code == 404
+    )
 
 
 def test_live_frames_have_their_own_generous_budget(client: TestClient) -> None:
@@ -721,9 +789,7 @@ def test_admin_kamerani_jonli_ko_ra_oladi(client: TestClient) -> None:
         headers={**headers, "Content-Type": "image/jpeg"},
         content=b"jpeg-bytes",
     ).raise_for_status()
-    shown = client.get(
-        f"/api/v1/admin/sites/{site_id}/cameras/camera-01/preview", headers=ADMIN
-    )
+    shown = client.get(f"/api/v1/admin/sites/{site_id}/cameras/camera-01/preview", headers=ADMIN)
     assert shown.status_code == 200
     assert shown.content == b"jpeg-bytes"
 
@@ -732,7 +798,7 @@ def test_admin_kamerani_jonli_ko_ra_oladi(client: TestClient) -> None:
 
 
 def test_qurilma_jonli_so_ralishini_kutadi_va_darhol_uyg_onadi(client: TestClient) -> None:
-    """"Jonli" bosilgach qurilma darhol xabar olsin.
+    """ "Jonli" bosilgach qurilma darhol xabar olsin.
 
     Bungacha panel tugmani bosgach birinchi kadr 14-27 soniyada kelardi
     va eng katta ulush qurilmaning 20 soniyalik "salom" oralig'i edi:
@@ -744,7 +810,6 @@ def test_qurilma_jonli_so_ralishini_kutadi_va_darhol_uyg_onadi(client: TestClien
     """
     import asyncio
     import time
-
 
     site, headers = _site_with_camera(client)
     site_id = site["site_id"]
@@ -789,9 +854,7 @@ def test_kutish_so_ralmasa_javob_darhol_qaytadi(client: TestClient) -> None:
 
     site, headers = _site_with_camera(client)
     started = time.monotonic()
-    answer = client.post(
-        "/api/v1/edge/heartbeat", headers=headers, json={"cameras_active": 1}
-    )
+    answer = client.post("/api/v1/edge/heartbeat", headers=headers, json={"cameras_active": 1})
     assert answer.status_code == 200
     assert answer.json()["live_requested"] == []
     assert time.monotonic() - started < 2.0, "kutish so'ralmagan — ushlab turilmasin"

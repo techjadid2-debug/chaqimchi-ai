@@ -1163,8 +1163,12 @@
     let firstFrameAt = 0;
     liveTimer = setInterval(async () => {
       try {
+        // Jonli oqim O'Z endpointidan o'qiladi.  Ilgari bu yerda
+        // `/preview` turardi va jonli kadr tayanch rasmning ustiga
+        // yozilardi — natijada do'kon xaritasining foni jonli ko'rish
+        // yoqilishi bilan almashib ketardi.
         const r = await fetch(
-          `/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/preview`,
+          `/api/v1/owner/cameras/${encodeURIComponent(liveCameraId)}/live-frame`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
         if (!r.ok) return;

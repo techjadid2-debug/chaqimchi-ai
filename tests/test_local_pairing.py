@@ -33,7 +33,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     for module in (paths, config_store, cloud_link, supervisor, app_module):
         importlib.reload(module)
-    return TestClient(app_module.app)
+    # `base_url` ataylab haqiqiy manzil: panel endi begona `Host` bilan
+    # kelgan so'rovni rad etadi (DNS rebinding himoyasi), TestClient esa
+    # sukut bo'yicha `testserver` yuboradi.
+    return TestClient(app_module.app, base_url="http://127.0.0.1:8760")
 
 
 def _cloud_sync(tmp_path: Path) -> Dict[str, Any]:

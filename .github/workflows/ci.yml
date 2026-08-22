@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    # `soddalashtirish-*` ham qo'shildi: asosiy ish shu branch'da ketyapti
-    # va CI faqat main'ni kuzatsa, o'nlab commit tekshirilmasdan yig'ilib
-    # qolar edi.
-    branches: [main, master, "soddalashtirish-*"]
+    # Ro'yxat emas, HAMMA shox.  Ilgari bu yerda uchta nom sanalgan edi va
+    # ish har safar boshqa nomdagi shoxda ketardi: `loitering-rasmsiz` da
+    # 27 commit CI'ga umuman kirmagan.  Nomlarni yodda tutish kerak
+    # bo'lgan ro'yxat — ishlamaydigan ro'yxat.
   pull_request:
 
 jobs:

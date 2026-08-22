@@ -214,3 +214,52 @@ def test_purge_uses_each_plan_retention_not_a_fixed_30_days(cloud) -> None:
     assert store.list_events(lite["site_id"], limit=50) == []
     # 365 kunlik arxiv uchun to'lagan mijoz 100 kunlik hodisani ko'rib turishi kerak.
     assert len(store.list_events(big["site_id"], limit=50)) == 2
+
+
+def test_clips_expire_sooner_than_the_archive_the_customer_paid_for(cloud) -> None:
+    """Disk sig'imini kliplar belgilaydi — lekin hodisa arxivi tegilmasin.
+
+    Bitta klip 50 MB gacha, snapshot esa ~100 KB: 30 kunlik klip saqlash
+    bitta VPS'ni ~10-13 do'konga tushirardi.  Kliplarni 7 kunda o'chirsak
+    ~50-80 do'kon sig'adi.  Ammo `retention_days` (30/90/365) mijozga
+    SOTILGAN arxiv — statistika va rasm o'z muddatida qolishi shart.
+    """
+    main, client, _sent = cloud
+    site, headers = _site(client, "Klipli do'kon", plan="enterprise")  # arxiv 365 kun
+
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={"events": _events(1, days_ago=20, prefix="c")},
+    )
+    store = main.get_event_store()
+    event_id = store.list_events(site["site_id"], limit=5)[0]["event_id"]
+    store.set_clip(site["site_id"], event_id, f"{site['site_id']}/{event_id}.mp4", size_bytes=1024)
+    assert store.event(site["site_id"], event_id)["has_clip"] == 1
+
+    main._purge_expired_events()
+
+    event = store.event(site["site_id"], event_id)
+    assert event is not None, "hodisaning o'zi 365 kunlik arxivda qolishi kerak"
+    assert event["has_clip"] == 0, "20 kunlik klip o'chirilishi kerak edi"
+    assert event["clip_key"] is None
+
+
+def test_clip_retention_is_configurable(cloud, monkeypatch) -> None:
+    """Muddatni env bilan uzaytirib bo'lsin — aks holda orqaga qaytish yo'li yo'q."""
+    main, client, _sent = cloud
+    monkeypatch.setenv("CHAQIMCHI_CLIP_RETENTION_DAYS", "60")
+    site, headers = _site(client, "Uzoq klip", plan="enterprise")
+
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={"events": _events(1, days_ago=20, prefix="k")},
+    )
+    store = main.get_event_store()
+    event_id = store.list_events(site["site_id"], limit=5)[0]["event_id"]
+    store.set_clip(site["site_id"], event_id, f"{site['site_id']}/{event_id}.mp4", size_bytes=1024)
+
+    main._purge_expired_events()
+
+    assert store.event(site["site_id"], event_id)["has_clip"] == 1

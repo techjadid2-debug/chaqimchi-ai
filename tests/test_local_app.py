@@ -36,11 +36,42 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     importlib.reload(config_store)
     importlib.reload(supervisor)
     importlib.reload(app_module)
-    return TestClient(app_module.app)
+    # `base_url` ataylab haqiqiy manzil: panel endi begona `Host` bilan
+    # kelgan so'rovni rad etadi (DNS rebinding himoyasi), TestClient esa
+    # sukut bo'yicha `testserver` yuboradi.
+    return TestClient(app_module.app, base_url="http://127.0.0.1:8760")
 
 
 def _config(tmp_path: Path) -> Dict[str, Any]:
     return yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
+
+
+# ── Xavfsizlik: DNS rebinding ────────────────────────────────────────────
+
+
+def test_foreign_host_header_is_refused(client: TestClient) -> None:
+    """Zararli sahifa o'z domenini 127.0.0.1 ga qayta hal qilib panelga kira olmasin.
+
+    `127.0.0.1` ga bog'lanish o'zi yetmaydi: DNS rebinding'dan keyin brauzer
+    uchun hujumchi sahifasi panel bilan bir xil manba bo'lib qoladi.  O'shanda
+    yagona farq — `Host` sarlavhasi, uni JavaScript o'zgartira olmaydi.
+    """
+    for host in ("evil.example", "evil.example:8760", "192.168.1.50:8760"):
+        response = client.get("/api/setup/summary", headers={"Host": host})
+        assert response.status_code == 403, host
+
+
+def test_loopback_hosts_still_work(client: TestClient) -> None:
+    """Halol yo'l yopilib qolmasin — mijoz `localhost` deb ham yozishi mumkin."""
+    for host in ("127.0.0.1:8760", "localhost:8760"):
+        response = client.get("/api/setup/summary", headers={"Host": host})
+        assert response.status_code == 200, host
+
+
+def test_panel_cannot_be_framed(client: TestClient) -> None:
+    """Clickjacking: `Host` to'g'ri bo'lgani uchun yuqoridagi tekshiruv to'smaydi."""
+    response = client.get("/")
+    assert response.headers.get("X-Frame-Options") == "DENY"
 
 
 # ── Sozlash oqimi ────────────────────────────────────────────────────────

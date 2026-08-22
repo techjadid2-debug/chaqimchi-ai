@@ -161,7 +161,10 @@ def local_client(tmp_path, monkeypatch):
     importlib.reload(config_store)
     importlib.reload(supervisor)
     importlib.reload(app_module)
-    return TestClient(app_module.app)
+    # `base_url` ataylab haqiqiy manzil: panel endi begona `Host` bilan
+    # kelgan so'rovni rad etadi (DNS rebinding himoyasi), TestClient esa
+    # sukut bo'yicha `testserver` yuboradi.
+    return TestClient(app_module.app, base_url="http://127.0.0.1:8760")
 
 
 def test_scan_endpoint_calls_the_real_discovery(local_client):

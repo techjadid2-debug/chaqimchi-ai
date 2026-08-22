@@ -860,3 +860,53 @@ def test_a_coded_link_still_works_when_the_file_is_only_remote(
     )
 
     assert response.status_code == 307
+
+
+# ── Sog'liq tekshiruvi ───────────────────────────────────────────────────
+
+
+def test_liveness_stays_cheap_and_always_ok(cloud_client) -> None:
+    """`/health` ni Docker chaqiradi — u bog'liqlikka bog'lanmasligi kerak."""
+    response = cloud_client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert "checks" not in response.json()
+
+
+def test_deep_health_actually_touches_dependencies(cloud_client) -> None:
+    """Bungacha `/health` bazani ochmasdan ham 'ok' derdi."""
+    response = cloud_client.get("/health/deep")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    names = {item["name"] for item in body["checks"]}
+    assert names == {"control_db", "event_db", "media", "disk"}
+    assert all(item["ok"] for item in body["checks"])
+
+
+def test_deep_health_reports_503_when_a_dependency_is_down(cloud_client, monkeypatch) -> None:
+    """Nosozlik 200 bilan yashirilsa, tashqi monitoring uni hech qachon ko'rmaydi."""
+    import cloud.main as main
+
+    def broken() -> None:
+        raise RuntimeError("baza yiqildi")
+
+    original = main._probe
+    monkeypatch.setattr(main, "_probe", lambda name, check: original(name, broken))
+    response = cloud_client.get("/health/deep")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["ok"] is False
+    assert "baza yiqildi" in body["checks"][0]["error"]
+
+
+def test_deep_health_warns_before_the_disk_is_full(cloud_client, monkeypatch) -> None:
+    """Disk to'lgach SQLite yozuvi ham yiqiladi — oldindan bilish kerak."""
+    import cloud.main as main
+
+    monkeypatch.setattr(main, "HEALTH_MIN_FREE_GB", 10**9)
+    response = cloud_client.get("/health/deep")
+    assert response.status_code == 503
+    disk = next(item for item in response.json()["checks"] if item["name"] == "disk")
+    assert disk["ok"] is False
+    assert "GB qoldi" in disk["error"]

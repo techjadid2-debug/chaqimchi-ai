@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -87,6 +87,40 @@ def max_cameras() -> int:
 supervisor = RetailSupervisor()
 
 app = FastAPI(title="Chaqimchi AI — lokal", docs_url=None, redoc_url=None)
+
+#: Panel faqat shu nomlar orqali ochiladi.
+#:
+#: `127.0.0.1` ga bog'lanish O'ZI YETMAYDI.  Klassik hujum — **DNS
+#: rebinding**: zararli sahifa o'z domenini bir necha soniyadan keyin
+#: `127.0.0.1` ga qayta hal qiladi, natijada brauzer uchun sahifa
+#: `http://evil.example:8760` bilan BIR XIL MANBA bo'lib qoladi va CORS
+#: ham, "faqat loopback" cheklovi ham kuchini yo'qotadi.  O'sha paytdan
+#: boshlab sahifa `/api/setup/*` ning hammasini o'qiy va yoza oladi:
+#: kamera sozlamasini almashtirish, ichki tarmoqni skanerlash, qurilmani
+#: juftlikdan chiqarish.
+#:
+#: Yagona ishonchli to'siq — `Host` sarlavhasi, chunki uni brauzer
+#: manzildan o'zi qo'yadi va JavaScript uni o'zgartira olmaydi.  Rebinding
+#: qilingan so'rovda u `evil.example` bo'lib qoladi.
+ALLOWED_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+@app.middleware("http")
+async def _only_loopback_host(request: Request, call_next: Any) -> Any:
+    """Begona `Host` bilan kelgan so'rovni rad etadi (DNS rebinding himoyasi)."""
+    hostname = (request.url.hostname or "").lower()
+    if hostname not in ALLOWED_LOCAL_HOSTS:
+        return JSONResponse(
+            {"detail": "Bu panel faqat shu kompyuterda, 127.0.0.1 manzili orqali ochiladi."},
+            status_code=403,
+        )
+    response = await call_next(request)
+    # Panelni begona sahifa `iframe` ichiga solib, mijozning bosishlarini
+    # o'g'irlashi (clickjacking) mumkin edi: `Host` to'g'ri bo'lgani uchun
+    # yuqoridagi tekshiruv bunga to'sqinlik qilmaydi.
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
+
 
 if STATIC_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR)), name="assets")

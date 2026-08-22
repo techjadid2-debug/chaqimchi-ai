@@ -2498,6 +2498,40 @@ class EventStore:
         return [str(key) for row in rows for key in (row["snapshot_key"], row["clip_key"]) if key]
 
 
+    def purge_clips_older_than(self, site_id: str, *, retention_days: int) -> List[str]:
+        """Faqat VIDEO kliplarni o'chiradi — hodisa va rasm joyida qoladi.
+
+        Disk hisobi: bitta klip 50 MB gacha, kuniga 100 tagacha ruxsat
+        etilgan; snapshot esa ~100 KB.  Ya'ni diskni deyarli butunlay
+        kliplar yeydi va sig'imni aynan shular belgilaydi.
+
+        Muddat tarifdagi `retention_days` dan ALOHIDA ataylab: 30/90/365
+        kun — bu mijozga sotilgan HODISA ARXIVI (statistika, hisobot,
+        rasm) va uni qisqartirish to'langan narsani olib qo'yish bo'lardi.
+        Klip esa hodisani tekshirish uchun kerak — bir haftadan keyin
+        deyarli hech kim ochmaydi.  Sayt ham aniq kun sonini va'da
+        qilmaydi ("qisqa video parchalar").
+        """
+        cutoff = (_now() - timedelta(days=max(1, retention_days))).isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT event_id,clip_key FROM production_events "
+                    "WHERE site_id=? AND occurred_at<? AND clip_key IS NOT NULL"
+                ),
+                (site_id, cutoff),
+            ).fetchall()
+            if rows:
+                conn.execute(
+                    self._sql(
+                        "UPDATE production_events SET clip_key=NULL,has_clip=0,clip_bytes=0 "
+                        "WHERE site_id=? AND occurred_at<? AND clip_key IS NOT NULL"
+                    ),
+                    (site_id, cutoff),
+                )
+        return [str(self._dict(row)["clip_key"]) for row in rows]
+
+
 def event_store_from_env(base_dir: Path) -> EventStore:
     return EventStore(
         os.environ.get("DATABASE_URL", ""),

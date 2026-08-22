@@ -16,6 +16,8 @@ import logging
 import os
 import re
 import secrets
+import shutil
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date as date_type
@@ -159,6 +161,32 @@ def get_snapshot_store() -> SnapshotStore:
     if _snapshots is None:
         _snapshots = snapshot_store_from_env(BASE_DIR)
     return _snapshots
+
+
+# ── Media: HAR DOIM alohida oqimda ───────────────────────────────────────
+#
+# MinIO mijozi sinxron: `put`/`get` tarmoq bilan ishlaydi va tugaguncha
+# qaytmaydi.  `async def` ichidan to'g'ridan-to'g'ri chaqirilganda u yagona
+# hodisa halqasini ushlab turadi — ya'ni 50 MB klip yuklanayotganda BUTUN
+# server (barcha do'konning heartbeat'i, panel, bot) javob bermay turadi.
+#
+# Server bitta uvicorn ishchisida ishlagani uchun bu nazariy emas: klip
+# chegarasi aynan 50 MB (`CLIP_MAX_BYTES`) va sekin do'kon internetida
+# yuklash o'nlab soniya davom etadi.
+#
+# Shu sabab media bilan ishlashning yagona yo'li — quyidagi uchta funksiya.
+
+
+async def media_put(key: str, data: bytes, *, content_type: str) -> None:
+    await asyncio.to_thread(get_snapshot_store().put, key, data, content_type=content_type)
+
+
+async def media_get(key: str) -> bytes:
+    return await asyncio.to_thread(get_snapshot_store().get, key)
+
+
+async def media_delete(key: str) -> None:
+    await asyncio.to_thread(get_snapshot_store().delete, key)
 
 
 def require_admin(
@@ -906,7 +934,7 @@ async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
             key = (row or {}).get("snapshot_key")
             if key:
                 try:
-                    photo = get_snapshot_store().get(str(key))
+                    photo = await media_get(str(key))
                 except Exception:
                     photo = None
                 break
@@ -928,6 +956,27 @@ async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
 SITE_MEDIA_MAX_BYTES_DEFAULT = 10 * 1024**3
 
 
+#: Video kliplar shuncha kundan keyin o'chadi.
+#:
+#: Tarifdagi `retention_days` (30/90/365) — bu HODISA ARXIVI: statistika,
+#: hisobot va rasm.  Uni qisqartirish mijoz to'lagan narsani olib qo'yish
+#: bo'lardi.  Diskni esa deyarli butunlay kliplar yeydi (bittasi 50 MB
+#: gacha, snapshot ~100 KB), shuning uchun sig'im aynan shu raqamga
+#: bog'liq: 30 kunda bitta VPS ~10-13 do'konni ko'taradi, 7 kunda esa
+#: ~50-80 tasini.  Klip hodisani tekshirish uchun kerak — bir haftadan
+#: keyin uni deyarli hech kim ochmaydi.
+CLIP_RETENTION_DAYS_DEFAULT = 7
+
+
+def _clip_retention_days() -> int:
+    raw = os.environ.get("CHAQIMCHI_CLIP_RETENTION_DAYS", "").strip()
+    try:
+        return max(1, int(raw)) if raw else CLIP_RETENTION_DAYS_DEFAULT
+    except ValueError:
+        logger.warning("CHAQIMCHI_CLIP_RETENTION_DAYS son emas — standart qiymat")
+        return CLIP_RETENTION_DAYS_DEFAULT
+
+
 def _site_media_quota_bytes() -> int:
     raw = os.environ.get("CHAQIMCHI_SITE_MEDIA_MAX_BYTES", "").strip()
     try:
@@ -945,6 +994,7 @@ def _purge_expired_events() -> int:
     """
     removed = 0
     quota = _site_media_quota_bytes()
+    clip_retention = _clip_retention_days()
     for site in get_store().list_sites():
         try:
             retention = get_plan(str(site["plan"])).retention_days
@@ -952,6 +1002,13 @@ def _purge_expired_events() -> int:
             retention = 30
         site_id = str(site["id"])
         for key in get_event_store().purge_site(site_id, retention_days=retention):
+            get_snapshot_store().delete(key)
+            removed += 1
+        # Kliplar hodisadan OLDIN va qisqaroq muddatda ketadi — disk
+        # sig'imini aynan shular belgilaydi.
+        for key in get_event_store().purge_clips_older_than(
+            site_id, retention_days=clip_retention
+        ):
             get_snapshot_store().delete(key)
             removed += 1
         for key in get_event_store().purge_site_media_over_quota(site_id, quota):
@@ -1108,7 +1165,105 @@ if STATIC_DIR.is_dir():
 
 @app.get("/health")
 async def health() -> Dict[str, Any]:
+    """Tiriklik tekshiruvi — jarayon javob beryaptimi.
+
+    ATAYLAB yengil va ATAYLAB doim 200.  Buni Docker `HEALTHCHECK` chaqiradi,
+    Caddy esa `depends_on: service_healthy` bilan kutadi: bu yerga bazani
+    qo'shsak, Postgres bir soniyaga uzilgan paytda konteyner "unhealthy"
+    bo'lib, deploy paytida Caddy umuman ko'tarilmay qolardi.
+
+    Bog'liqliklar `/health/deep` da tekshiriladi — UptimeRobot o'shanga
+    qaratilishi kerak.
+    """
     return {"ok": True, "service": "chaqimchi-cloud"}
+
+
+#: Diskda shundan kam joy qolsa `/health/deep` ogohlantiradi.  Klip va
+#: rasm oqimi to'xtaganda buni oldindan bilish kerak: disk to'lgach
+#: SQLite yozuvi ham yiqiladi, ya'ni butun bulut o'ladi.
+HEALTH_MIN_FREE_GB = 5.0
+
+
+def _probe(name: str, check: Any) -> Dict[str, Any]:
+    """Bitta bog'liqlikni tekshiradi va xatoni yutmasdan qaytaradi."""
+    started = time.monotonic()
+    try:
+        detail = check()
+    except Exception as exc:  # noqa: BLE001 — sabab javobda ko'rinishi kerak
+        return {
+            "name": name,
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}"[:200],
+            "ms": round((time.monotonic() - started) * 1000, 1),
+        }
+    out = {"name": name, "ok": True, "ms": round((time.monotonic() - started) * 1000, 1)}
+    if isinstance(detail, dict):
+        out.update(detail)
+    return out
+
+
+def _health_checks() -> List[Dict[str, Any]]:
+    def control_db() -> Dict[str, Any]:
+        conn = get_store()._connect()
+        try:
+            sites = conn.execute("SELECT COUNT(*) AS n FROM sites").fetchone()["n"]
+        finally:
+            conn.close()
+        return {"sites": int(sites)}
+
+    def event_db() -> Dict[str, Any]:
+        store = get_event_store()
+        with store._connect() as conn:
+            conn.execute(store._sql("SELECT 1"))
+        return {"engine": "postgres" if store.postgres else "sqlite"}
+
+    def media() -> Dict[str, Any]:
+        store = get_snapshot_store()
+        client = getattr(store, "client", None)
+        if client is None:
+            # Lokal papka — MinIO'siz ishlash yo'li (test va Sotqin).
+            return {"engine": "local"}
+        if not client.bucket_exists(store.bucket):
+            raise RuntimeError(f"MinIO bucket topilmadi: {store.bucket}")
+        return {"engine": "minio", "bucket": store.bucket}
+
+    def disk() -> Dict[str, Any]:
+        usage = shutil.disk_usage(get_store().db_path.parent)
+        free_gb = round(usage.free / 1024**3, 1)
+        if free_gb < HEALTH_MIN_FREE_GB:
+            raise RuntimeError(f"Diskda atigi {free_gb} GB qoldi")
+        return {"free_gb": free_gb, "used_percent": round(usage.used / usage.total * 100, 1)}
+
+    return [
+        _probe("control_db", control_db),
+        _probe("event_db", event_db),
+        _probe("media", media),
+        _probe("disk", disk),
+    ]
+
+
+@app.get("/health/deep")
+async def health_deep(response: Response) -> Dict[str, Any]:
+    """Bog'liqliklar bilan birga tekshiruv — nosozlikda 503.
+
+    Bungacha `/health` bazani ham, MinIO'ni ham, diskni ham tekshirmasdan
+    `{"ok": true}` qaytarardi: Postgres o'lgan bulut ham "sog'lom" bo'lib
+    ko'rinardi va tashqi monitoring nosozlikni umuman ko'rmasdi.
+
+    Tekshiruvlar bloklovchi (SQLite, MinIO, disk), shuning uchun ular
+    alohida oqimda bajariladi — aks holda bu endpoint butun serverni
+    to'xtatib turardi.
+    """
+    checks = await asyncio.to_thread(_health_checks)
+    ok = all(item["ok"] for item in checks)
+    if not ok:
+        response.status_code = 503
+    return {
+        "ok": ok,
+        "service": "chaqimchi-cloud",
+        "version": __version__,
+        "checks": checks,
+    }
 
 
 def _static_page(name: str) -> FileResponse:
@@ -2865,7 +3020,7 @@ async def admin_request_camera_preview(
 async def admin_camera_preview(
     site_id: str, camera_id: str, _: None = Depends(require_admin)
 ) -> Response:
-    return _camera_preview_response(site_id, camera_id)
+    return await _camera_preview_response(site_id, camera_id)
 
 
 @app.get("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/live-frame")
@@ -2878,7 +3033,7 @@ async def admin_camera_live_frame(
     `.../live` ni yoqish mumkin edi-yu, natijasini ko'rishning yo'li
     qolmasdi.
     """
-    return _camera_preview_response(site_id, camera_id, live=True)
+    return await _camera_preview_response(site_id, camera_id, live=True)
 
 
 @app.post("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/live")
@@ -3026,7 +3181,9 @@ def _require_installer_site(installer: PortalPrincipal, site_id: str) -> Dict[st
     return assignment
 
 
-def _camera_preview_response(site_id: str, camera_id: str, *, live: bool = False) -> Response:
+async def _camera_preview_response(
+    site_id: str, camera_id: str, *, live: bool = False
+) -> Response:
     """Kameraning oxirgi kadri.  Hali kelmagan bo'lsa 404.
 
     `live=False` — TAYANCH kadr: bir marta so'ralib olinadi va xarita
@@ -3047,7 +3204,7 @@ def _camera_preview_response(site_id: str, camera_id: str, *, live: bool = False
     if not key:
         raise HTTPException(404, "Kamera rasmi hali yuborilmagan")
     try:
-        content = get_snapshot_store().get(key)
+        content = await media_get(key)
     except FileNotFoundError as exc:
         raise HTTPException(404, "Kamera rasmi topilmadi") from exc
     # Kamera qayta qaratilganda eski rasm ko'rinib qolmasin.
@@ -3202,7 +3359,7 @@ async def installer_camera_preview(
     installer: PortalPrincipal = Depends(require_active_installer),
 ) -> Response:
     _require_installer_site(installer, site_id)
-    return _camera_preview_response(site_id, camera_id)
+    return await _camera_preview_response(site_id, camera_id)
 
 
 @app.get("/api/v1/owner/cameras/{camera_id}/preview")
@@ -3210,7 +3367,7 @@ async def owner_camera_preview(
     camera_id: str,
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Response:
-    return _camera_preview_response(owner.site_id, camera_id)
+    return await _camera_preview_response(owner.site_id, camera_id)
 
 
 @app.post("/api/v1/owner/cameras/{camera_id}/preview")
@@ -3253,7 +3410,7 @@ async def owner_camera_live_frame(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Response:
     """Jonli oqimning oxirgi kadri — tayanch kadrga tegmaydi."""
-    return _camera_preview_response(owner.site_id, camera_id, live=True)
+    return await _camera_preview_response(owner.site_id, camera_id, live=True)
 
 
 @app.post("/api/v1/owner/cameras/{camera_id}/live")
@@ -3585,7 +3742,7 @@ async def upload_event_snapshot(
         if face_capture
         else f"{device['site_id']}/{event_id}.jpg"
     )
-    get_snapshot_store().put(key, content, content_type="image/jpeg")
+    await media_put(key, content, content_type="image/jpeg")
     get_event_store().set_snapshot(device["site_id"], event_id, key, size_bytes=len(content))
     if face_capture:
         background_tasks.add_task(
@@ -3610,7 +3767,7 @@ async def _process_face_capture(site_id: str, device_id: str, event_id: str) -> 
     if not event or not event.get("snapshot_key"):
         return
     try:
-        content = get_snapshot_store().get(str(event["snapshot_key"]))
+        content = await media_get(str(event["snapshot_key"]))
     except FileNotFoundError:
         return
     try:
@@ -3696,7 +3853,7 @@ async def upload_event_clip(
     if len(content) > CLIP_MAX_BYTES:
         raise HTTPException(413, "Videoklip 50 MB dan katta")
     key = f"{device['site_id']}/{event_id}.mp4"
-    get_snapshot_store().put(key, content, content_type="video/mp4")
+    await media_put(key, content, content_type="video/mp4")
     get_event_store().set_clip(device["site_id"], event_id, key, size_bytes=len(content))
     return {"ok": True, "event_id": event_id}
 
@@ -3826,7 +3983,7 @@ async def upload_camera_preview(
     if len(content) > 2 * 1024 * 1024:
         raise HTTPException(413, "Rasm 2 MB dan katta")
     key = f"{device['site_id']}/preview/{camera_id}.jpg"
-    get_snapshot_store().put(key, content, content_type="image/jpeg")
+    await media_put(key, content, content_type="image/jpeg")
     try:
         get_store().set_camera_preview(device["site_id"], camera_id, key)
     except ValueError as e:
@@ -3952,7 +4109,7 @@ async def upload_live_frame(
         # Jonli kadr 640px va past sifat — 512 KB ham ortig'i bilan yetadi.
         raise HTTPException(413, "Jonli kadr 512 KB dan katta")
     key = f"{device['site_id']}/live/{camera_id}.jpg"
-    get_snapshot_store().put(key, content, content_type="image/jpeg")
+    await media_put(key, content, content_type="image/jpeg")
     try:
         get_store().set_camera_live_frame(device["site_id"], camera_id, key)
     except ValueError as e:
@@ -4974,7 +5131,7 @@ async def admin_add_employee_face(
         )
     except ValueError as exc:
         raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
-    get_snapshot_store().put(photo_key, payload, content_type="image/jpeg")
+    await media_put(photo_key, payload, content_type="image/jpeg")
     get_event_store().touch_site_config(site_id)
     return record
 
@@ -4989,7 +5146,7 @@ async def admin_delete_employee_face(
     photo_key = get_event_store().delete_employee_face(site_id, face_id)
     if photo_key is None:
         raise HTTPException(404, "Rasm topilmadi")
-    get_snapshot_store().delete(photo_key)
+    await media_delete(photo_key)
     return {"ok": True, "id": face_id}
 
 
@@ -5003,12 +5160,12 @@ async def admin_employee_face_image(
     face = get_event_store().employee_face(site_id, face_id)
     if face is None:
         raise HTTPException(404, "Rasm topilmadi")
-    return _face_image_response(str(face["photo_key"]))
+    return await _face_image_response(str(face["photo_key"]))
 
 
-def _face_image_response(key: str) -> Response:
+async def _face_image_response(key: str) -> Response:
     try:
-        content = get_snapshot_store().get(key)
+        content = await media_get(key)
     except FileNotFoundError as exc:
         raise HTTPException(404, "Rasm fayli topilmadi") from exc
     return Response(
@@ -5040,7 +5197,7 @@ async def admin_face_event_image(
     event = get_event_store().event(site_id, event_id)
     if not event or event.get("event_type") != "face_captured" or not event.get("snapshot_key"):
         raise HTTPException(404, "Kadr topilmadi")
-    return _face_image_response(str(event["snapshot_key"]))
+    return await _face_image_response(str(event["snapshot_key"]))
 
 
 # ── Yuz tanish: mijoz paneli (faqat o'qish) ──────────────────────────────
@@ -5158,7 +5315,7 @@ async def owner_add_employee_face(
         )
     except ValueError as exc:
         raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
-    get_snapshot_store().put(photo_key, payload, content_type="image/jpeg")
+    await media_put(photo_key, payload, content_type="image/jpeg")
     get_event_store().touch_site_config(owner.site_id)
     return record
 
@@ -5186,7 +5343,7 @@ async def owner_add_face_from_capture(
     if not event or event.get("event_type") != "face_captured" or not event.get("snapshot_key"):
         raise HTTPException(404, "Kadr topilmadi")
     try:
-        payload = get_snapshot_store().get(str(event["snapshot_key"]))
+        payload = await media_get(str(event["snapshot_key"]))
     except FileNotFoundError as exc:
         raise HTTPException(404, "Kadr o'chib ketgan (14 kundan keyin o'chadi)") from exc
 
@@ -5210,7 +5367,7 @@ async def owner_add_face_from_capture(
         raise HTTPException(404 if "topilmadi" in str(exc) else 422, str(exc)) from exc
     # Kadr galereyada 14 kun yashaydi va o'chadi — shablon esa qolishi
     # kerak, shuning uchun NUSXA olinadi.
-    get_snapshot_store().put(photo_key, payload, content_type="image/jpeg")
+    await media_put(photo_key, payload, content_type="image/jpeg")
     get_event_store().set_face_result(
         owner.site_id, event_id, matched=True, employee_id=employee_id, score=1.0
     )
@@ -5228,7 +5385,7 @@ async def owner_delete_employee_face(
     photo_key = get_event_store().delete_employee_face(owner.site_id, face_id)
     if photo_key is None:
         raise HTTPException(404, "Rasm topilmadi")
-    get_snapshot_store().delete(photo_key)
+    await media_delete(photo_key)
     get_event_store().touch_site_config(owner.site_id)
     return {"ok": True, "id": face_id}
 
@@ -5249,7 +5406,7 @@ async def owner_face_event_image(
     event = get_event_store().event(owner.site_id, event_id)
     if not event or event.get("event_type") != "face_captured" or not event.get("snapshot_key"):
         raise HTTPException(404, "Kadr topilmadi")
-    return _face_image_response(str(event["snapshot_key"]))
+    return await _face_image_response(str(event["snapshot_key"]))
 
 
 @app.get("/api/v1/owner/faces/photos/{face_id}/image")
@@ -5260,7 +5417,7 @@ async def owner_employee_face_image(
     face = get_event_store().employee_face(owner.site_id, face_id)
     if face is None:
         raise HTTPException(404, "Rasm topilmadi")
-    return _face_image_response(str(face["photo_key"]))
+    return await _face_image_response(str(face["photo_key"]))
 
 
 #: Bizning ichki pul ko'rsatkichlarimiz.  Ular admin javoblarida qoladi,
@@ -5449,7 +5606,7 @@ async def owner_snapshot(
     if not event or not event.get("snapshot_key"):
         raise HTTPException(404, "Snapshot topilmadi")
     try:
-        content = get_snapshot_store().get(event["snapshot_key"])
+        content = await media_get(event["snapshot_key"])
     except FileNotFoundError as exc:
         raise HTTPException(404, "Snapshot topilmadi") from exc
     return Response(content=content, media_type="image/jpeg")
@@ -5464,7 +5621,7 @@ async def owner_clip(
     if not event or not event.get("clip_key"):
         raise HTTPException(404, "Videoklip topilmadi")
     try:
-        content = get_snapshot_store().get(event["clip_key"])
+        content = await media_get(event["clip_key"])
     except FileNotFoundError as exc:
         raise HTTPException(404, "Videoklip topilmadi") from exc
     return Response(content=content, media_type="video/mp4")
@@ -5739,7 +5896,7 @@ async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]
             photo: Optional[bytes] = None
             if key:
                 try:
-                    photo = get_snapshot_store().get(str(key))
+                    photo = await media_get(str(key))
                 except FileNotFoundError:
                     photo = None
             if photo is None:

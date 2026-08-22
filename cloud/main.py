@@ -1000,7 +1000,11 @@ def get_alerts() -> AlertService:
     global _alerts
     store = get_store()
     if _alerts is None or _alerts.store is not store:
-        _alerts = AlertService(store)
+        # Tizim to'xtaganini do'kon egasi ham bilishi kerak: `camera_offline`
+        # ni qurilma yuboradi, kompyuter o'chganda esa uni yuboradigan hech
+        # kim qolmaydi.  `_notify_site_members` tarif, chegara va "botga
+        # /start bosmagan a'zo" mantiqini o'zi hal qiladi.
+        _alerts = AlertService(store, owner_notify=_notify_site_members)
     return _alerts
 
 

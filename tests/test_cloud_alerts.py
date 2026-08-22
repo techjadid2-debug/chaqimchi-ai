@@ -289,6 +289,101 @@ def test_run_check_sends_and_remembers(store: CloudStore) -> None:
     assert len(sender.sent) == 1
 
 
+def _make_silent_site(store: CloudStore, hours: float) -> str:
+    site = store.create_site("Do'kon", "starter")
+    store.claim_device(site["pairing_code"])
+    conn = store._connect()
+    conn.execute(
+        "UPDATE devices SET last_seen = ? WHERE site_id = ?",
+        (_stamp(hours), site["site_id"]),
+    )
+    conn.commit()
+    conn.close()
+    return site["site_id"]
+
+
+def test_owner_is_told_when_the_system_stops(store: CloudStore) -> None:
+    """Egasi kuzatuv to'xtaganini BILISHI kerak.
+
+    `camera_offline` ni qurilmaning o'zi yuboradi — kompyuter o'chganda
+    uni yuboradigan hech kim qolmaydi.  Ya'ni eng yomon holatda egasi
+    hech narsa eshitmasdi.
+    """
+    site_id = _make_silent_site(store, hours=10)
+    sender = FakeSender()
+    to_owner: list[tuple[str, str]] = []
+
+    async def owner_notify(sid: str, text: str) -> None:
+        to_owner.append((sid, text))
+
+    run = asyncio.run(run_check(store, sender, owner_notify))
+
+    assert run.sent == 1
+    assert len(to_owner) == 1
+    assert to_owner[0][0] == site_id
+    assert "Kuzatuv to'xtadi" in to_owner[0][1]
+    # Egasiga tarif, telefon yoki ichki atamalar yozilmaydi.
+    assert "tarif" not in to_owner[0][1].lower()
+
+
+def test_owner_is_told_when_it_comes_back(store: CloudStore) -> None:
+    site_id = _make_silent_site(store, hours=10)
+    sender = FakeSender()
+    to_owner: list[tuple[str, str]] = []
+
+    async def owner_notify(sid: str, text: str) -> None:
+        to_owner.append((sid, text))
+
+    asyncio.run(run_check(store, sender, owner_notify))
+    conn = store._connect()
+    conn.execute("UPDATE devices SET last_seen = ? WHERE site_id = ?", (_stamp(0), site_id))
+    conn.commit()
+    conn.close()
+
+    asyncio.run(run_check(store, sender, owner_notify))
+
+    assert len(to_owner) == 2
+    assert "tiklandi" in to_owner[1][1]
+
+
+def test_owner_send_failure_does_not_replay_the_internal_alert(store: CloudStore) -> None:
+    """Mijozga yetmasa ham ichki holat yozilsin.
+
+    Aks holda muammo har tekshiruvda "yangi" bo'lib, ichki chatga har
+    15 daqiqada bir xil xabar ketardi.
+    """
+    _make_silent_site(store, hours=10)
+    sender = FakeSender()
+
+    async def broken(_sid: str, _text: str) -> None:
+        raise RuntimeError("Telegram javob bermadi")
+
+    asyncio.run(run_check(store, sender, broken))
+    run2 = asyncio.run(run_check(store, sender, broken))
+
+    assert run2.sent == 0
+    assert len(sender.sent) == 1
+
+
+def test_unpaired_site_does_not_bother_the_owner(store: CloudStore) -> None:
+    """Juftlanmagan sayt — bizning o'rnatish ishimiz, mijozniki emas."""
+    site = store.create_site("Yangi do'kon", "starter")
+    conn = store._connect()
+    conn.execute("UPDATE sites SET created_at = ? WHERE id = ?", (_stamp(500), site["site_id"]))
+    conn.commit()
+    conn.close()
+    sender = FakeSender()
+    to_owner: list[tuple[str, str]] = []
+
+    async def owner_notify(sid: str, text: str) -> None:
+        to_owner.append((sid, text))
+
+    run = asyncio.run(run_check(store, sender, owner_notify))
+
+    assert run.sent == 1  # ichki chatga ketdi
+    assert to_owner == []  # mijozga yo'q
+
+
 def test_failed_send_is_retried_next_time(store: CloudStore) -> None:
     """Telegram javob bermasa holat yozilmaydi — xabar butunlay yo‘qolmaydi."""
     _make_offline_site(store)

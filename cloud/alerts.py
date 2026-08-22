@@ -32,7 +32,7 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -230,6 +230,38 @@ def _problem_text(site: Dict[str, Any]) -> str:
         f"(tarif: {plan}).\n"
         f"Tok, internet yoki Mini PC ni tekshiring.{tail}"
     )
+
+
+def owner_down_text(site: Dict[str, Any]) -> Optional[str]:
+    """Do'kon egasiga: kuzatuv to'xtaganini FAQAT bulut ayta oladi.
+
+    `camera_offline` xabarini qurilmaning o'zi yuboradi.  Kompyuter
+    o'chgan bo'lsa u hech narsa yubora olmaydi — ya'ni aynan eng yomon
+    holatda egasi hech narsa bilmaydi.  Bu bo'shliqni faqat shu yerdan
+    to'ldirish mumkin.
+
+    `None` — bu holat egasiga tegishli emas (masalan juftlanmagan yangi
+    sayt: bu bizning o'rnatish ishimiz, mijozniki emas).
+    """
+    if site.get("connection") == "stale":
+        return (
+            f"🔴 <b>Kuzatuv to'xtadi</b>\n"
+            f"Do'kon kompyuteri {_silent_label(site.get('minutes_since_seen'))} "
+            f"javob bermayapti — kameralar yozilmayapti.\n"
+            f"Kompyuter yoqilganini va internet borligini tekshiring."
+        )
+    if site.get("connection") == "offline":
+        return (
+            f"🔴 <b>Kuzatuv to'xtadi</b>\n"
+            f"Tizimdan {_since_label(site.get('minutes_since_seen'))} xabar yo'q — "
+            f"kameralar yozilmayapti.\n"
+            f"Kompyuter yoqilganini va internet borligini tekshiring."
+        )
+    return None
+
+
+def owner_recovery_text() -> str:
+    return "✅ <b>Kuzatuv tiklandi</b>\nKameralar yana yozmoqda."
 
 
 def _recovery_text(site: Dict[str, Any]) -> str:
@@ -597,8 +629,17 @@ def _latest_health() -> Dict[str, Dict[str, Any]]:
     return get_event_store().latest_health_by_site()
 
 
-async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
-    """Bir marta tekshirish: holatlarni solishtirib, o‘zgarganlarini yuboradi."""
+async def run_check(
+    store: Any,
+    sender: TelegramSender,
+    owner_notify: Optional[Callable[[str, str], Awaitable[None]]] = None,
+) -> AlertRun:
+    """Bir marta tekshirish: holatlarni solishtirib, o‘zgarganlarini yuboradi.
+
+    `owner_notify(site_id, text)` berilsa, tizim to'xtagani/tiklangani
+    haqida **do'kon egasiga** ham xabar ketadi.  Berilmasa (masalan
+    testlarda) faqat ichki chatga yoziladi.
+    """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     run = AlertRun(ran_at=now.strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -629,10 +670,14 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
     for site_id in device_forget:
         store.clear_alert_state(site_id, kind="device")
 
+    sites_by_id = {site["id"]: site for site in sites}
+
     for alert in conn_alerts + cam_alerts + device_alerts + disk_alerts:
         if await sender.send(alert.text):
             run.sent += 1
             run.messages.append(alert.text)
+            if owner_notify is not None and alert.kind == "connection":
+                await _notify_owner(owner_notify, alert, sites_by_id.get(alert.site_id))
             # Holat faqat xabar **yetib borgandan keyin** yoziladi: aks holda
             # tarmoq uzilganda muammo "xabar berilgan" deb belgilanib,
             # ogohlantirish butunlay yo'qolardi.
@@ -648,18 +693,46 @@ async def run_check(store: Any, sender: TelegramSender) -> AlertRun:
     return run
 
 
+async def _notify_owner(
+    owner_notify: Callable[[str, str], Awaitable[None]],
+    alert: Alert,
+    site: Optional[Dict[str, Any]],
+) -> None:
+    """Egaga xabar — ichki chatdan ALOHIDA va xatosi yutiladi.
+
+    Mijozga yuborish muvaffaqiyatsiz bo'lsa ham ichki xabar allaqachon
+    ketgan va `alert_state` yozilishi kerak: aks holda muammo har
+    tekshiruvda qaytadan "yangi" bo'lib, ichki chatga bo'ron bo'lardi.
+    """
+    if site is None:
+        return
+    text = owner_recovery_text() if alert.remember is None else owner_down_text(site)
+    if not text:
+        return
+    try:
+        await owner_notify(alert.site_id, text)
+    except Exception:  # noqa: BLE001
+        logger.warning("Egaga uzilish xabari yuborilmadi: %s", alert.site_id, exc_info=True)
+
+
 class AlertService:
     """Fon vazifasi + oxirgi natija (admin panel uchun)."""
 
-    def __init__(self, store: Any, config: Optional[AlertConfig] = None) -> None:
+    def __init__(
+        self,
+        store: Any,
+        config: Optional[AlertConfig] = None,
+        owner_notify: Optional[Callable[[str, str], Awaitable[None]]] = None,
+    ) -> None:
         self.store = store
         self.config = config or AlertConfig.from_env()
         self.sender = TelegramSender(self.config)
+        self.owner_notify = owner_notify
         self.last_run: Optional[AlertRun] = None
         self._task: Optional[asyncio.Task] = None
 
     async def check_once(self) -> AlertRun:
-        self.last_run = await run_check(self.store, self.sender)
+        self.last_run = await run_check(self.store, self.sender, self.owner_notify)
         return self.last_run
 
     async def _loop(self) -> None:

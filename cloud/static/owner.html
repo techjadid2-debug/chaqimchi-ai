@@ -286,6 +286,33 @@
         <div id="configStatus"></div>
       </div>
 
+      <!-- ── SAVDO: bitta savol, butun pul qatlami shunga bog'liq ──────
+           Bu raqamsiz mahsulot faqat "navbat 5 marta uzun bo'ldi" deb
+           ayta oladi — do'kon egasiga bu NIMA turishini bildirmaydi.
+           Raqam bilan esa hamma narsa so'mga aylanadi.
+
+           Alohida karta va ataylab sozlamalardan TASHQARIDA: bu
+           qurilma sozlamasi emas, mijozning moliyaviy ma'lumoti. -->
+      <div class="card">
+        <h2>Savdongiz</h2>
+        <p class="hint" style="margin-top:0">
+          Kuniga taxminan qancha savdo qilasiz? Shu raqam bilan
+          hisobotlarda yo‘qotilgan mijoz <b>so‘mda</b> ko‘rsatiladi.
+          Aytmasangiz — pul haqida hech narsa yozilmaydi.
+        </p>
+        <div class="grid-2">
+          <label class="field">O‘rtacha kunlik savdo (so‘m)
+            <input id="dailyRevenue" type="number" min="0" step="100000"
+                   inputmode="numeric" placeholder="Masalan: 4 500 000">
+            <small id="revenuePerVisitor">Har tashrif o‘rtacha qancha olib kelishini
+              o‘zimiz hisoblaymiz — bugungi haqiqiy tashrif soningizdan.</small></label>
+        </div>
+        <div class="actions" style="margin-top:12px">
+          <button class="button primary" id="saveRevenueBtn" type="button">Saqlash</button>
+        </div>
+        <div id="revenueStatus"></div>
+      </div>
+
       <div class="card">
         <h2>Bildirishnomalar</h2>
         <label class="switch">
@@ -515,7 +542,7 @@
   const S = {
     health: null, cameras: null, report: null, trend: null,
     events: null, config: null, members: null, billing: null, features: null,
-    staff: null, subscription: null, score: null,
+    staff: null, subscription: null, score: null, revenue: null,
   };
 
   const LOADERS = {
@@ -531,6 +558,7 @@
     features: () => api("/api/v1/owner/features"),
     staff: () => api("/api/v1/owner/faces"),
     score: () => api("/api/v1/owner/trust-score"),
+    revenue: () => api("/api/v1/owner/revenue"),
   };
 
   async function needSettled(keys) {
@@ -572,7 +600,8 @@
       // sozlanganini hisoblaydi (`cameraSetup`).
       deps: ["health", "cameras", "report", "events", "config"] },
     { id: "dokon", label: "Do‘kon", icon: "dokon", pane: "paneDokon",
-      deps: ["health", "cameras", "config", "members", "billing", "features", "subscription"] },
+      deps: ["health", "cameras", "config", "members", "billing", "features", "subscription",
+             "revenue"] },
     { id: "xodimlar", label: "Xodimlar", icon: "odamlar", pane: "paneXodimlar",
       deps: ["health", "cameras", "config", "staff"] },
   ];
@@ -1350,6 +1379,50 @@
         `<span><b>${esc(part.label)}</b><small>${esc(part.note || "")}</small></span>` +
         `<b>${esc(value)}</b></div>`;
     }).join("");
+  }
+
+  /* ── Savdo: pul qatlamining yagona kirish nuqtasi ─────────────────── */
+
+  function drawRevenue(entry) {
+    const input = $("dailyRevenue");
+    if (!input || !entry || !entry.ok) return;
+    const amount = Number(entry.data.amount_uzs || 0);
+    input.value = amount > 0 ? amount : "";
+
+    // Mijozga o'z hisobini KO'RSATAMIZ: "har tashrif ~X so'm".  Bu bizning
+    // taxminimiz emas — uning o'z savdosi bugungi haqiqiy tashrif soniga
+    // bo'lingan.  Ko'rinib turgan hisobga ishonish oson.
+    const hint = $("revenuePerVisitor");
+    const visitors = S.report && S.report.ok ? Number(S.report.data.traffic.entered || 0) : 0;
+    if (amount > 0 && visitors > 0) {
+      const per = Math.round(amount / visitors);
+      hint.textContent =
+        `Bugun ${visitors} kishi kirdi — har tashrif o‘rtacha ${per.toLocaleString("ru-RU")} so‘m.`;
+    } else {
+      hint.textContent = "Har tashrif o‘rtacha qancha olib kelishini o‘zimiz hisoblaymiz — "
+        + "bugungi haqiqiy tashrif soningizdan.";
+    }
+  }
+
+  async function saveRevenue() {
+    const raw = $("dailyRevenue").value.trim();
+    const amount = raw === "" ? 0 : Number(raw);
+    if (!Number.isFinite(amount) || amount < 0) {
+      note("revenueStatus", "err", "Raqamni tekshiring.");
+      return;
+    }
+    try {
+      await api("/api/v1/owner/revenue", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount_uzs: Math.round(amount) }),
+      });
+      S.revenue = { ok: true, data: { amount_uzs: Math.round(amount) } };
+      drawRevenue(S.revenue);
+      note("revenueStatus", "ok", amount > 0
+        ? "Saqlandi — endi hisobotlarda so‘m ko‘rinadi."
+        : "Saqlandi — pul haqida hech narsa yozilmaydi.");
+    } catch (err) { note("revenueStatus", "err", err.message); }
   }
 
   function drawReport(report) {
@@ -2237,6 +2310,7 @@
       if (S.report.ok) drawSecurity(S.report.data.security);
       drawEvents();
     } else if (tab.id === "dokon") {
+      drawRevenue(S.revenue);
       if (S.config.ok) drawConfig(S.config.data.config);
       else note("configStatus", "err", S.config.error);
       if (S.members.ok) drawMembers(S.members.data);
@@ -2356,6 +2430,8 @@
   // «Nega?» — ball qanday yig'ilganini ochadi.  Yopiq holat standart:
   // kuniga bitta raqamga qarash 30 soniyalik ish, tafsilot esa faqat
   // raqam yoqmagan kunda kerak bo'ladi.
+  $("saveRevenueBtn").addEventListener("click", saveRevenue);
+
   $("scoreToggle").addEventListener("click", () => {
     const parts = $("scoreParts");
     const open = parts.classList.toggle("hidden") === false;

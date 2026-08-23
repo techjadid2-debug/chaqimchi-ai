@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from cloud import botfmt, trust_score
+from cloud import botfmt, trust_score, value
 from cloud.event_store import EventStore
 from cloud.payments.store import billable_months
 from cloud.store import GRACE_DAYS
@@ -56,6 +56,7 @@ def build_digest(
     open_from: Optional[str] = None,
     first_movement: Optional[str] = None,
     score: Optional[Dict[str, Any]] = None,
+    daily_revenue_uzs: int = 0,
 ) -> str:
     """Kunlik xabar matni.
 
@@ -136,6 +137,13 @@ def build_digest(
             parts.append(f"o'rtacha {queue['average']} kishi")
         parts.append(f"eng uzuni {queue['longest']} kishi ({queue['longest_at']})")
         lines.append("🧾 Navbat: " + ", ".join(parts))
+        # Navbat raqami o'z-o'zidan hech narsa aytmaydi — "5 marta uzun
+        # bo'ldi" do'kon egasiga NIMA turishini bildirmaydi.  Mijoz
+        # kunlik savdosini aytgan bo'lsa, o'sha raqam so'mga aylanadi.
+        # Aytmagan bo'lsa qator umuman chiqmaydi (`daily_line` -> None).
+        money = value.daily_line(report, daily_revenue_uzs)
+        if money:
+            lines.append(money)
     if report["dwell"]:
         top = report["dwell"][0]
         lines.append(
@@ -352,6 +360,7 @@ class DailyDigestService:
         sent = 0
         sent += await self._weekly_once(now)
         sent += await self._monthly_shifts_once(now)
+        sent += await self._monthly_value_once(now)
         sent += await self._renewal_once(now)
         if now.hour < self.hour:
             return sent
@@ -414,6 +423,7 @@ class DailyDigestService:
                 open_from=open_from,
                 first_movement=first_movement,
                 score=score,
+                daily_revenue_uzs=int(site.get("avg_daily_revenue_uzs") or 0),
             )
             site_sent = await self._deliver(site_id, members, text)
             if site_sent:
@@ -555,6 +565,62 @@ class DailyDigestService:
                 self.events.mark_digest_sent(site_id, marker)
                 continue
             text = build_shifts(str(site["name"]), f"{first_day:%Y-%m}", summary)
+            site_sent = await self._deliver(site_id, members, text)
+            if site_sent:
+                self.events.mark_digest_sent(site_id, marker)
+                sent += site_sent
+        return sent
+
+    async def _monthly_value_once(self, now: datetime) -> int:
+        """Oyning 1-kuni — «Chaqimchi o'zini qopladimi» cheki.
+
+        Obunani uzaytirish qarori aynan shu savolga bog'liq, shuning
+        uchun bu xabar mahsulotning eng muhim xabarlaridan biri.
+
+        Xabar FAQAT mijoz o'z savdosini aytgan bo'lsa ketadi — usiz
+        yo'qotishni hisoblab bo'lmaydi va taxminan taxmin qilish
+        yolg'on bo'lardi.
+        """
+        if now.day != MONTHLY_DAY or now.hour < MONTHLY_HOUR:
+            return 0
+        last_day = now.date().replace(day=1) - timedelta(days=1)
+        first_day = last_day.replace(day=1)
+        marker = f"{first_day:%Y-%m}-qiymat"
+        sent = 0
+        for site in self.sites():
+            site_id = str(site["id"])
+            revenue = int(site.get("avg_daily_revenue_uzs") or 0)
+            if not revenue:
+                continue
+            members = self.events.list_members(site_id)
+            if not members:
+                continue
+            if self.events.digest_was_sent(site_id, marker):
+                continue
+            try:
+                inputs = self.events.value_inputs(site_id, start=first_day, end=last_day)
+            except Exception:
+                logger.warning("Oylik qiymat hisoblanmadi: site=%s", site_id, exc_info=True)
+                continue
+            days = (last_day - first_day).days + 1
+            cost = value.queue_cost(
+                queue_episodes=inputs["queue_episodes"],
+                # Oylik savdo = kunlik savdo × kunlar; tashrif ham oylik.
+                # Ya'ni "har tashrif o'rtacha X so'm" oy bo'yicha chiqadi.
+                daily_revenue_uzs=revenue * days,
+                visitors=inputs["visitors"],
+            )
+            if not cost:
+                # Yo'qotish topilmadi — maqtanadigan narsa yo'q, jim
+                # turamiz va belgini qo'yamiz (qayta urinmaslik uchun).
+                self.events.mark_digest_sent(site_id, marker)
+                continue
+            text = value.monthly_receipt(
+                site_name=str(site["name"]),
+                month_label=f"{first_day:%Y-%m}",
+                lost_uzs=cost["lost_uzs"],
+                monthly_price_uzs=int(site.get("monthly_price_uzs") or 0),
+            )
             site_sent = await self._deliver(site_id, members, text)
             if site_sent:
                 self.events.mark_digest_sent(site_id, marker)

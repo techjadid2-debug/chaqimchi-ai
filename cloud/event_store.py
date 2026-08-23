@@ -1245,6 +1245,47 @@ class EventStore:
             counts[local.date()] = counts.get(local.date(), 0) + 1
         return counts
 
+    def value_inputs(self, site_id: str, *, start: date, end: date) -> Dict[str, int]:
+        """Oylik pul hisobi uchun ikkita raqam — bitta so'rovda.
+
+        Kunlik `retail_report()` ni 30 marta chaqirish ham mumkin edi,
+        lekin u har kun uchun butun hodisa ro'yxatini o'qiydi va zona,
+        demografiya, soatlik grafikni yig'adi — oylik yig'indi uchun
+        bularning hech biri kerak emas.
+
+        `xodim_chiqarilgan` bu yerda hisobga OLINMAYDI: oylik taxmin
+        uchun bir necha foizlik farq ahamiyatsiz, xodim belgilarini
+        oy bo'yicha qayta hisoblash esa qimmat.
+        """
+        zone = ZoneInfo("Asia/Tashkent")
+        start_utc = (
+            datetime.combine(start, datetime.min.time(), tzinfo=zone)
+            .astimezone(timezone.utc)
+            .isoformat()
+        )
+        end_utc = (
+            datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=zone)
+            .astimezone(timezone.utc)
+            .isoformat()
+        )
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT "
+                    "SUM(CASE WHEN event_type='line_crossed' AND direction='in' THEN 1 ELSE 0 END)"
+                    " AS visitors, "
+                    "SUM(CASE WHEN event_type='queue_threshold_exceeded' THEN 1 ELSE 0 END)"
+                    " AS episodes "
+                    "FROM production_events WHERE site_id=? AND occurred_at>=? AND occurred_at<?"
+                ),
+                (site_id, start_utc, end_utc),
+            ).fetchone()
+        data = self._dict(row) if row else {}
+        return {
+            "visitors": int(data.get("visitors") or 0),
+            "queue_episodes": int(data.get("episodes") or 0),
+        }
+
     def _events_of_day(self, site_id: str, day: date, zone: ZoneInfo) -> List[Dict[str, Any]]:
         start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
         start = start_local.astimezone(timezone.utc).isoformat()

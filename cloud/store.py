@@ -1127,6 +1127,14 @@ class CloudStore:
             # do'konda muammo bergan).  `pin` — aynan `update_version`.
             "update_channel": "TEXT NOT NULL DEFAULT 'auto'",
             "update_version": "TEXT",
+            # Mijozning o'zi aytgan o'rtacha KUNLIK savdosi (so'm).
+            #
+            # Bitta savol, lekin usiz mahsulot faqat raqam ko'rsatadi:
+            # "navbat 5 marta uzun bo'ldi" do'kon egasiga nima turishini
+            # aytmaydi.  Bu raqam bilan hamma narsa so'mga aylanadi.
+            # `0` — mijoz aytmagan; unda pul qatorlari umuman chiqmaydi
+            # (taxminan taxmin qilish — yolg'on).
+            "avg_daily_revenue_uzs": "INTEGER NOT NULL DEFAULT 0",
         }
         for name, definition in site_additions.items():
             if name not in site_columns:
@@ -1941,6 +1949,31 @@ class CloudStore:
             "qualified_leads": by_status.get("qualified", 0),
             "converted_leads": by_status.get("converted", 0),
         }
+
+    #: Mijoz kiritadigan kunlik savdo shundan oshmaydi.  Chegara bor,
+    #: chunki bir nolni ortiqcha yozib yuborish oson va o'shanda hisobot
+    #: "42 mlrd so'm yo'qotdingiz" deb yozardi — bunday raqam butun
+    #: mahsulotga ishonchni yo'qotadi.
+    MAX_DAILY_REVENUE_UZS = 10_000_000_000
+
+    def set_avg_daily_revenue(self, site_id: str, amount_uzs: int) -> Dict[str, Any]:
+        """Mijozning o'zi aytgan o'rtacha kunlik savdosi (so'm).
+
+        `0` — aytilmagan; unda pul hisoblari umuman ko'rsatilmaydi.
+        """
+        amount = int(amount_uzs)
+        if amount < 0:
+            raise ValueError("Savdo manfiy bo'lishi mumkin emas")
+        if amount > self.MAX_DAILY_REVENUE_UZS:
+            raise ValueError("Kunlik savdo juda katta — raqamni tekshiring")
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+
+        conn = self._connect()
+        conn.execute("UPDATE sites SET avg_daily_revenue_uzs = ? WHERE id = ?", (amount, site_id))
+        conn.commit()
+        conn.close()
+        return self.site_detail(site_id)
 
     def set_billable_persons(self, site_id: str, persons: int) -> Dict[str, Any]:
         """Shartnomadagi xodim sonini o‘zgartirish (davomat tariflari uchun)."""

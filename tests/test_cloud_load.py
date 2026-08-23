@@ -263,3 +263,85 @@ def test_clip_retention_is_configurable(cloud, monkeypatch) -> None:
     main._purge_expired_events()
 
     assert store.event(site["site_id"], event_id)["has_clip"] == 1
+
+
+def test_monthly_receipt_is_silent_without_the_owners_revenue(cloud) -> None:
+    """Savdo aytilmagan bo'lsa yo'qotishni hisoblab bo'lmaydi — xabar ketmasin."""
+    import asyncio
+    from datetime import datetime as _dt
+    from zoneinfo import ZoneInfo
+
+    main, client, sent = cloud
+    site, headers = _site(client, "Cheksiz do'kon", plan="biznes")
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={"events": _events(1, days_ago=5, prefix="q")},
+    )
+    from cloud.digest import DailyDigestService
+
+    digest = DailyDigestService(
+        main.get_event_store(), main.get_store().list_sites, lambda *a, **k: None
+    )
+    first_of_month = _dt(2026, 9, 1, 11, 0, tzinfo=ZoneInfo("Asia/Tashkent"))
+    assert asyncio.run(digest._monthly_value_once(first_of_month)) == 0
+
+
+def test_monthly_receipt_uses_the_owners_own_numbers(cloud) -> None:
+    """Savdo aytilgan va uzun navbat bo'lgan do'kon chekni oladi."""
+    import asyncio
+    from datetime import datetime as _dt
+    from datetime import timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    from cloud.digest import DailyDigestService
+
+    main, client, _sent = cloud
+    site, headers = _site(client, "Navbatli do'kon", plan="biznes")
+    site_id = site["site_id"]
+    main.get_store().set_avg_daily_revenue(site_id, 4_500_000)
+
+    # O'tgan oyda tashriflar va uchta uzun navbat epizodi.
+    august = _dt(2026, 8, 15, 12, 0, tzinfo=timezone.utc)
+    events = [
+        {
+            "event_id": f"in-{i}",
+            "event_type": "line_crossed",
+            "severity": "info",
+            "camera_id": "camera-01",
+            "occurred_at": (august + timedelta(minutes=i)).isoformat(),
+            "direction": "in",
+            "edge_version": "0.6.12",
+        }
+        for i in range(100)
+    ] + [
+        {
+            "event_id": f"q-{i}",
+            "event_type": "queue_threshold_exceeded",
+            "severity": "warning",
+            "camera_id": "camera-01",
+            "occurred_at": (august + timedelta(hours=i)).isoformat(),
+            "queue_length": 7,
+            "edge_version": "0.6.12",
+        }
+        for i in range(3)
+    ]
+    client.post("/api/v1/edge/events/batch", headers=headers, json={"events": events})
+
+    messages = []
+
+    async def capture(chat_id, text, **kwargs):
+        messages.append(text)
+
+    client.post(
+        f"/api/v1/admin/sites/{site_id}/members",
+        headers=ADMIN,
+        json={"telegram_id": "777", "role": "owner", "display_name": "Egasi"},
+    )
+    digest = DailyDigestService(main.get_event_store(), main.get_store().list_sites, capture)
+    sent = asyncio.run(
+        digest._monthly_value_once(_dt(2026, 9, 1, 11, 0, tzinfo=ZoneInfo("Asia/Tashkent")))
+    )
+    assert sent == 1
+    assert "hisob-kitobi" in messages[0]
+    assert "taxminiy" in messages[0], "taxmin ekani har doim aytilishi kerak"

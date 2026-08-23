@@ -4730,6 +4730,41 @@ async def owner_cameras(owner: OwnerPrincipal = Depends(require_active_owner)) -
     return {"cameras": get_store().list_cameras(owner.site_id, include_source=False)}
 
 
+class DailyRevenueBody(BaseModel):
+    #: 0 — "aytmayman".  Chegara `CloudStore.MAX_DAILY_REVENUE_UZS` da ham
+    #: bor; bu yerdagisi buzuq so'rovni bazagacha yetkazmaslik uchun.
+    amount_uzs: int = Field(ge=0, le=10_000_000_000)
+
+
+@app.get("/api/v1/owner/revenue")
+def owner_get_revenue(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    """Mijoz aytgan o'rtacha kunlik savdo.
+
+    Panel shu raqam bor-yo'qligiga qarab pul bo'limini ko'rsatadi yoki
+    "savdongizni ayting" degan taklifni chiqaradi.
+    """
+    site = get_store().get_site(owner.site_id) or {}
+    return {"amount_uzs": int(site.get("avg_daily_revenue_uzs") or 0)}
+
+
+@app.put("/api/v1/owner/revenue")
+def owner_set_revenue(
+    body: DailyRevenueBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Bitta savol — «kuniga taxminan qancha savdo qilasiz?».
+
+    Bu raqamsiz mahsulot faqat hodisa sanog'ini ko'rsatadi; u bilan esa
+    hamma narsa so'mga aylanadi.  Faqat egasi o'zgartira oladi: bu
+    do'konning moliyaviy ma'lumoti.
+    """
+    require_owner_role(owner, "owner", "service_admin")
+    try:
+        get_store().set_avg_daily_revenue(owner.site_id, body.amount_uzs)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "amount_uzs": body.amount_uzs}
+
+
 @app.get("/api/v1/owner/config")
 async def owner_get_config(
     owner: OwnerPrincipal = Depends(require_active_owner),

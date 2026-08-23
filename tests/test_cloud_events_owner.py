@@ -1932,3 +1932,48 @@ def test_trust_score_reports_real_events(production_client) -> None:
     # Navbat zonasi chizilmagan — bu qism o'lchanmaydi, "mukammal" emas.
     queue = next(part for part in body["parts"] if part["code"] == "queue")
     assert queue["measured"] is False
+
+
+# ── Pulga tarjima ────────────────────────────────────────────────────────
+
+
+def test_money_is_silent_until_the_owner_tells_us_their_revenue(production_client) -> None:
+    """Standart qiymat bilan to'ldirish — o'ylab topilgan raqamni haqiqat qilib ko'rsatish."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="910")
+
+    body = client.get("/api/v1/owner/revenue", headers=owner_headers).json()
+    assert body["amount_uzs"] == 0
+
+
+def test_owner_can_set_and_read_back_their_revenue(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="911")
+
+    saved = client.put(
+        "/api/v1/owner/revenue", headers=owner_headers, json={"amount_uzs": 4_500_000}
+    )
+    assert saved.status_code == 200
+    assert client.get("/api/v1/owner/revenue", headers=owner_headers).json() == {
+        "amount_uzs": 4_500_000
+    }
+
+
+def test_an_absurd_revenue_is_refused(production_client) -> None:
+    """Bir nolni ortiqcha yozib yuborish oson — «42 mlrd yo'qotdingiz» ishonchni o'ldiradi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="912")
+
+    response = client.put(
+        "/api/v1/owner/revenue", headers=owner_headers, json={"amount_uzs": 99_000_000_000}
+    )
+    assert response.status_code == 422
+
+
+def test_revenue_needs_a_login(production_client) -> None:
+    client, _messages = production_client
+    assert client.get("/api/v1/owner/revenue").status_code == 401
+    assert client.put("/api/v1/owner/revenue", json={"amount_uzs": 1}).status_code == 401

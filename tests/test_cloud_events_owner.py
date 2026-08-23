@@ -1977,3 +1977,157 @@ def test_revenue_needs_a_login(production_client) -> None:
     client, _messages = production_client
     assert client.get("/api/v1/owner/revenue").status_code == 401
     assert client.put("/api/v1/owner/revenue", json={"amount_uzs": 1}).status_code == 401
+
+
+# ── Do'kon gapiradi ──────────────────────────────────────────────────────
+
+
+def test_speak_reaches_the_device_exactly_once(production_client) -> None:
+    """Ikkita heartbeat ketma-ket kelsa ibora ikki marta yangramasin."""
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="920")
+
+    assert client.post(
+        "/api/v1/owner/speak", headers=owner_headers, json={"phrase": "deter"}
+    ).status_code == 200
+
+    first = client.post("/api/v1/edge/heartbeat", headers=headers, json={"cameras": []}).json()
+    assert first["speak_requested"] == ["deter"]
+    second = client.post("/api/v1/edge/heartbeat", headers=headers, json={"cameras": []}).json()
+    assert second["speak_requested"] == [], "ibora ikkinchi marta berilmasligi kerak"
+
+
+def test_only_catalog_phrases_are_accepted(production_client) -> None:
+    """Erkin matn karnaydan aytilsa — bu xodimni haqoratlash vositasi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="921")
+
+    bad = client.post(
+        "/api/v1/owner/speak", headers=owner_headers, json={"phrase": "Sen yomon ishlaysan"}
+    )
+    assert bad.status_code == 422
+
+
+def test_speak_needs_owner_login(production_client) -> None:
+    client, _messages = production_client
+    assert client.post("/api/v1/owner/speak", json={"phrase": "deter"}).status_code == 401
+
+
+def test_a_stale_request_is_never_played(production_client, monkeypatch) -> None:
+    """Qurilma o'chiq bo'lsa navbat to'planmasin.
+
+    Muddatsiz kompyuter ertalab yonganda kechagi «Diqqat! Do'kon
+    kuzatuv ostida» bo'sh do'konda yangrardi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="922")
+    client.post("/api/v1/owner/speak", headers=owner_headers, json={"phrase": "deter"})
+
+    # So'rovni sun'iy ravishda eskirtiramiz.
+    #
+    # Vaqt `cloud.store._iso` formatida yozilishi SHART: baza satrlarni
+    # matn sifatida solishtiradi va "2026-08-23T08:00:00" (T bilan)
+    # "2026-08-23 11:00:00" (probel bilan) dan KATTA chiqadi — ya'ni
+    # noto'g'ri formatda yozilgan "eski" yozuv yangi bo'lib ko'rinadi.
+    from cloud.store import _iso
+
+    store = main.get_store()
+    conn = store._connect()
+    past = _iso(datetime.now(timezone.utc) - timedelta(hours=3))
+    conn.execute("UPDATE speak_requests SET expires_at=?", (past,))
+    conn.commit()
+    conn.close()
+
+    answer = client.post("/api/v1/edge/heartbeat", headers=headers, json={"cameras": []}).json()
+    assert answer["speak_requested"] == []
+
+
+def test_announcement_catalog_is_offered_to_the_panel(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="923")
+
+    body = client.get("/api/v1/owner/announcements", headers=owner_headers).json()
+    codes = {item["code"] for item in body["announcements"]}
+    assert codes == {"deter", "till", "closing"}
+    assert all(item["text"] and item["button"] for item in body["announcements"])
+
+
+# ── Telegram tugmasi ─────────────────────────────────────────────────────
+
+
+def _capture_answers(sink: list):
+    """`_answer_callback` ASINXRON — o'rnini bosuvchi ham shunday bo'lishi kerak."""
+
+    async def _fake(callback_id: str, text: str, *, alert: bool = False) -> None:
+        sink.append(text)
+
+    return _fake
+
+
+def _callback(client, telegram_id: str, data: str):
+    return client.post(
+        "/api/v1/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": BOT_SECRET},
+        json={
+            "callback_query": {
+                "id": "cb-1",
+                "from": {"id": int(telegram_id)},
+                "data": data,
+                "message": {"chat": {"id": int(telegram_id), "type": "private"}},
+            }
+        },
+    )
+
+
+def test_pressing_the_button_makes_the_shop_speak(production_client, monkeypatch) -> None:
+    """Bungacha `callback_query` UMUMAN ushlanmasdi — tugma bosish hech narsa qilmasdi."""
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    _login_owner(client, site["site_id"], telegram_id="931")
+
+    answered: list = []
+    monkeypatch.setattr(main, "_answer_callback", _capture_answers(answered))
+
+    assert _callback(client, "931", "speak:deter").status_code == 200
+    assert "Diqqat" in answered[0]
+
+    answer = client.post("/api/v1/edge/heartbeat", headers=headers, json={"cameras": []}).json()
+    assert answer["speak_requested"] == ["deter"]
+
+
+def test_a_stranger_cannot_make_someone_elses_shop_speak(production_client, monkeypatch) -> None:
+    """`callback_data` ISHONILMAYDI — sayt bosgan odamning a'zoligidan topiladi.
+
+    Aks holda istalgan odam o'z botiga tugma yasab, begona do'kon
+    karnayini yangratardi.
+    """
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+
+    answered: list = []
+    monkeypatch.setattr(main, "_answer_callback", _capture_answers(answered))
+
+    # 999 hech qaysi do'konga a'zo emas.
+    assert _callback(client, "999", "speak:deter").status_code == 200
+    assert "biriktirilmagan" in answered[0]
+
+    answer = client.post("/api/v1/edge/heartbeat", headers=headers, json={"cameras": []}).json()
+    assert answer["speak_requested"] == [], "begona odam do'konni gapirtira olmasligi kerak"
+
+
+def test_an_unknown_button_does_not_crash_the_bot(production_client, monkeypatch) -> None:
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    _login_owner(client, site["site_id"], telegram_id="932")
+
+    answered: list = []
+    monkeypatch.setattr(main, "_answer_callback", _capture_answers(answered))
+    assert _callback(client, "932", "eskirgan-tugma").status_code == 200
+    assert answered

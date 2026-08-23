@@ -218,6 +218,24 @@
         <div id="cameraGrid" class="camera-grid"></div>
       </div>
 
+      <!-- ── DO'KON KARNAYI ───────────────────────────────────────────
+           Tugma bosilganda do'kon kompyuteri gapiradi — egasi uydan
+           turib do'konda HOZIR bo'ladi.  Asosiy yo'l Telegram (ogohlantirish
+           ostidagi tugma), bu esa panel uchun.
+
+           Iboralar serverdan keladi (`/api/v1/owner/announcements`) —
+           ro'yxat `chaqimchi_ai/announcements.py` da va qurilma ham
+           o'shandan foydalanadi. -->
+      <div class="card">
+        <div class="card-head"><h2>Do‘kon karnayi</h2></div>
+        <p class="hint" style="margin-top:0">
+          Tugmani bossangiz do‘kon kompyuteri ovoz chiqaradi. Karnay ulangan
+          bo‘lishi kerak.
+        </p>
+        <div id="speakButtons" class="actions" style="flex-wrap:wrap;gap:8px"></div>
+        <div id="speakStatus"></div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <h2>Xavfsizlik</h2>
@@ -542,7 +560,7 @@
   const S = {
     health: null, cameras: null, report: null, trend: null,
     events: null, config: null, members: null, billing: null, features: null,
-    staff: null, subscription: null, score: null, revenue: null,
+    staff: null, subscription: null, score: null, revenue: null, speak: null,
   };
 
   const LOADERS = {
@@ -559,6 +577,7 @@
     staff: () => api("/api/v1/owner/faces"),
     score: () => api("/api/v1/owner/trust-score"),
     revenue: () => api("/api/v1/owner/revenue"),
+    speak: () => api("/api/v1/owner/announcements"),
   };
 
   async function needSettled(keys) {
@@ -598,7 +617,7 @@
     { id: "xavfsizlik", label: "Xavfsizlik", icon: "qalqon", pane: "paneXavfsizlik",
       // `config` SHART: kamera kartochkasi chiziq/zonadan nimaga
       // sozlanganini hisoblaydi (`cameraSetup`).
-      deps: ["health", "cameras", "report", "events", "config"] },
+      deps: ["health", "cameras", "report", "events", "config", "speak"] },
     { id: "dokon", label: "Do‘kon", icon: "dokon", pane: "paneDokon",
       deps: ["health", "cameras", "config", "members", "billing", "features", "subscription",
              "revenue"] },
@@ -1423,6 +1442,37 @@
         ? "Saqlandi — endi hisobotlarda so‘m ko‘rinadi."
         : "Saqlandi — pul haqida hech narsa yozilmaydi.");
     } catch (err) { note("revenueStatus", "err", err.message); }
+  }
+
+  /* ── Do'kon karnayi ────────────────────────────────────────────────
+     Ro'yxat serverdan: panel iboralarni o'zi yozmaydi, aks holda
+     katalog o'zgarganda sayt eski gapni taklif qilib turardi. */
+
+  function drawSpeakButtons(entry) {
+    const box = $("speakButtons");
+    if (!box) return;
+    if (!entry || !entry.ok) { box.innerHTML = ""; return; }
+    const items = entry.data.announcements || [];
+    box.innerHTML = items.map((item) =>
+      `<button class="button ghost small" type="button" data-speak="${esc(item.code)}"` +
+      ` title="${esc(item.hint || "")}">${esc(item.button)}</button>`).join("");
+    box.querySelectorAll("[data-speak]").forEach((btn) => {
+      btn.addEventListener("click", () => speak(btn.dataset.speak, items));
+    });
+  }
+
+  async function speak(code, items) {
+    const item = (items || []).find((row) => row.code === code);
+    try {
+      await api("/api/v1/owner/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phrase: code }),
+      });
+      note("speakStatus", "ok", item
+        ? `Do‘konda eshitiladi: «${item.text}»`
+        : "Yuborildi.");
+    } catch (err) { note("speakStatus", "err", err.message); }
   }
 
   function drawReport(report) {
@@ -2308,6 +2358,7 @@
       if (S.config.ok) currentConfig = S.config.data.config;
       await drawCameras();
       if (S.report.ok) drawSecurity(S.report.data.security);
+      drawSpeakButtons(S.speak);
       drawEvents();
     } else if (tab.id === "dokon") {
       drawRevenue(S.revenue);

@@ -313,6 +313,10 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # Eski server bu maydonni e'tiborsiz qoldiradi va darhol javob
         # beradi — ya'ni yangi qurilma eski cloud bilan ham ishlayveradi.
         "wait_sec": HEARTBEAT_WAIT_SEC,
+        # Ovoz do'konda yangraydi va biz uni eshitmaymiz — natija
+        # shu yerdan ko'rinadi (fayl bilanmi, tizim ovozi bilanmi,
+        # yoki umuman chiqmadimi).
+        "speak": _audio_counters(),
     }
     try:
         response = httpx.post(
@@ -332,6 +336,7 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
     # Windows qurilmada ishlamasdi (botdagi /kamera yangi kadr olomasdi).
     if isinstance(answer, dict):
         apply_media_requests(answer)
+        apply_speak_requests(answer)
     return True
 
 
@@ -425,6 +430,32 @@ def live_request_path() -> Path:
 
 def live_frames_dir() -> Path:
     return paths.data_dir() / "live"
+
+
+def _audio_counters() -> Dict[str, Any]:
+    """Ovoz hisoblagichlari.  Modul yuklanmasa heartbeat yiqilmasin."""
+    try:
+        from chaqimchi_ai.local import audio
+
+        return audio.counters()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def apply_speak_requests(answer: Dict[str, Any]) -> None:
+    """Bulut so'ragan iboralarni karnayga chiqaradi.
+
+    Bulut iborani BIR MARTA beradi (`take_pending_speak` o'qish bilan
+    birga yetkazilgan deb belgilaydi), shuning uchun bu yerda takrorlanish
+    tekshiruvi kerak emas.
+
+    Ijro alohida oqimda ketadi — uzun fayl heartbeat halqasini
+    to'xtatib qo'ymaydi.
+    """
+    from chaqimchi_ai.local import audio
+
+    for code in answer.get("speak_requested") or []:
+        audio.announce(str(code))
 
 
 def apply_media_requests(answer: Dict[str, Any]) -> None:

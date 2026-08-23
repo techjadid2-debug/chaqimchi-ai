@@ -6,16 +6,95 @@
   <meta name="robots" content="noindex">
   <title>O‘rnatuvchi paneli — Chaqimchi AI</title>
   <link rel="icon" href="/assets/favicon.png" type="image/png">
-  <link rel="stylesheet" href="/assets/admin.css?v=20260815-installer">
+  <link rel="stylesheet" href="/assets/site.css?v=6c828f6e92">
   <script src="/vendor/zone-editor.js?v=2" defer></script>
   <script src="/assets/geometry-panel.js" defer></script>
+  <!-- O'rnatuvchi paneli uslubi.
+       2026-08-24: qorong'i `admin.css` dan yorug' dizaynga o'tdi.
+       Usta saytda oq sahifani, panelda esa "dasturchi terminali"ni
+       ko'rardi — endi ikkalasi bitta mahsulotday.  Ranglar `site.css`
+       tokenlaridan keladi, bu yerda faqat panelga xos qoliplar. -->
   <style>
-    .auth-shell{max-width:980px;margin:42px auto;padding:20px}.auth-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px}.auth-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.auth-card,.job{background:var(--card-bg);border:1px solid var(--glass-border);border-radius:18px;padding:22px}.auth-card h2{margin:0 0 8px}.auth-card input{margin-bottom:10px}.guide-banner{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;margin-bottom:18px;padding:18px;border-radius:16px;background:linear-gradient(120deg,#d8f14a,#f2ffaf);color:#182014}.job-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}.job h3{margin:0 0 6px}.progress{height:9px;background:var(--glass-border);border-radius:999px;overflow:hidden;margin:12px 0}.progress i{display:block;height:100%;background:#96c11f}.step-list{display:grid;gap:8px;margin:14px 0}.step{padding:10px;border:1px solid var(--glass-border);border-radius:10px}.step.done{background:#edf9e5;color:#182014}.command{display:block;overflow:auto;padding:14px;background:#111820;color:#f4f7f1;border-radius:10px;white-space:pre-wrap;word-break:break-word}.camera-builder{margin:12px 0;padding:16px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass-bg)}.camera-builder h4{margin:0 0 12px}.camera-builder-grid{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:9px;align-items:end}.camera-form{display:grid;grid-template-columns:120px 1fr 2fr auto;gap:8px;align-items:end;margin:12px 0}.preview{margin-top:10px}.geometry{margin:18px 0;padding:16px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass-bg)}.geometry canvas{width:100%;max-width:640px;border-radius:10px;cursor:crosshair;display:block;background:#111820}.geometry .hint{font-size:.75rem;line-height:1.6;margin:10px 0}.shape-list{display:grid;gap:6px;margin:10px 0}.shape{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px;border:1px solid var(--glass-border);border-radius:9px;font-size:.8rem}.shape label{display:flex;gap:4px;align-items:center;margin:0}.shape input[type=checkbox]{width:auto}.shape input[type=number]{width:80px}.preview img{max-width:100%;border-radius:10px;display:block}.pending{padding:20px;border-radius:16px;background:#fff3d7;border:1px solid #efcf80;color:#182014}.hidden{display:none!important}@media(max-width:720px){.auth-grid,.camera-builder-grid{grid-template-columns:1fr}.camera-form{grid-template-columns:1fr}.guide-banner{grid-template-columns:1fr}}
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+    .logo { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+    .logo small { display: block; color: var(--muted); font-size: 12px; font-weight: 600; }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .muted { color: var(--muted); }
+    .hint { color: var(--muted); font-size: 13px; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); font-weight: 700; text-decoration: none; cursor: pointer; }
+    .btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue-dark); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--blue-dark); border-color: var(--blue-dark); color: #fff; }
+    .btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+
+    label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 750; }
+    input, select { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); }
+    input:focus, select:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 3px rgba(66,133,244,.16); }
+
+    .card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; font-size: 18px; font-weight: 750; }
+    .toast { margin-top: 12px; padding: 12px 14px; border-radius: 10px; font-size: 14px; }
+    .toast-ok { border: 1px solid #81c995; background: #e6f4ea; }
+    .toast-err { border: 1px solid #f4a9a2; background: #fce8e6; color: #b3261e; }
+
+    .overlay { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px; background: rgba(16,24,40,.45); }
+    .modal { width: min(880px, 100%); max-height: 88vh; overflow: auto; padding: 24px; border-radius: 16px; background: #fff; box-shadow: var(--shadow); }
+
+    .auth-shell { max-width: 980px; margin: 42px auto; padding: 0 20px; }
+    .auth-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
+    /* `align-items: start` — kirish kartasi ro'yxatdan o'tish kartasi
+       balandligiga cho'zilib, ichi bo'sh qolmasin. */
+    .auth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px; }
+    .auth-card, .job { padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
+    .auth-card h2 { margin: 0 0 8px; font-size: 22px; }
+    .auth-card input { margin-bottom: 12px; }
+
+    /* Yo'riqnoma chaqirig'i: yangi usta birinchi navbatda shuni ko'rsin. */
+    .guide-banner { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; margin-bottom: 18px; padding: 18px 20px; border: 1px solid var(--blue-soft); border-radius: 14px; background: var(--blue-soft); color: var(--text); }
+    .guide-banner small { color: var(--muted); }
+
+    .job-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+    .job h3 { margin: 4px 0 6px; font-size: 19px; }
+    .pending { padding: 20px; border: 1px solid #fbbc05; border-radius: 14px; background: #fef7e0; }
+
+    .progress { height: 9px; margin: 12px 0; border-radius: 999px; background: var(--border); overflow: hidden; }
+    .progress i { display: block; height: 100%; background: var(--blue); }
+    .step-list { display: grid; gap: 8px; margin: 14px 0; }
+    .step { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+    /* Bajarilgan qadam atribut bilan belgilanadi, `class` ichidagi
+       shablon ifodasi bilan emas: aks holda sinf nomi `${...}` bo'lib
+       chiqadi va uslub tekshiruvi uni haqiqiy sinf deb o'qiydi. */
+    .step[data-done="1"] { border-color: #81c995; background: #e6f4ea; }
+
+    /* Buyruq bloki ataylab to'q: uni terminalga NUSXALASH kerak va
+       to'q fon "bu — kod" degan signalni beradi. */
+    .command { display: block; overflow: auto; padding: 14px; border-radius: 10px; background: var(--text); color: #a8c7fa; white-space: pre-wrap; word-break: break-word; }
+
+    .camera-builder, .geometry { margin: 14px 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--paper-2); }
+    .camera-builder h4 { margin: 0 0 12px; }
+    .camera-builder-grid { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 10px; align-items: end; }
+    .camera-form { display: grid; grid-template-columns: 130px 1fr 2fr auto; gap: 10px; align-items: end; margin: 12px 0; }
+    .preview { margin-top: 10px; }
+    .preview img { max-width: 100%; border-radius: 10px; display: block; }
+
+    .geometry canvas { display: block; width: 100%; max-width: 640px; border-radius: 10px; background: var(--text); cursor: crosshair; }
+    .shape-list { display: grid; gap: 6px; margin: 10px 0; }
+    .shape { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; font-size: 13px; }
+    .shape label { display: flex; gap: 5px; align-items: center; margin: 0; }
+    .shape input[type=checkbox] { width: auto; min-height: 0; }
+    .shape input[type=number] { width: 80px; }
+
+    .hidden { display: none !important; }
+    @media (max-width: 720px) {
+      .auth-grid, .camera-builder-grid, .camera-form, .guide-banner { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <main id="auth" class="auth-shell">
-    <div class="auth-head"><div class="logo">Chaqimchi Cloud <small>O‘rnatuvchi</small></div><a class="btn" href="/">Asosiy sayt</a></div>
+    <div class="auth-head"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-new.png" alt=""></span><span class="logo">Chaqimchi Cloud <small>O‘rnatuvchi</small></span></a><a class="btn" href="/">Asosiy sayt</a></div>
     <div class="guide-banner"><div><b>Yangi o‘rnatuvchimisiz?</b><br><small>Bo‘sh mini-kompyuterni tayyorlashdan mijozga topshirishgacha rasmli qo‘llanma.</small></div><a class="btn btn-primary" href="/installer-guide">Yo‘riqnomani ochish</a></div>
     <div class="auth-grid">
       <form id="loginForm" class="auth-card"><h2>Kirish</h2><p class="muted">Tasdiqlangan login va parolingizni kiriting.</p><label>Login</label><input id="loginUsername" autocomplete="username" required><label>Parol</label><input id="loginPassword" type="password" autocomplete="current-password" required><button class="btn btn-primary" type="submit">Kirish</button><div id="loginMessage" class="toast" hidden></div></form>
@@ -24,7 +103,7 @@
   </main>
 
   <div id="app" class="wrap" hidden>
-    <header class="header"><div class="logo">Chaqimchi Cloud <small>O‘rnatuvchi paneli</small></div><div class="row"><span id="accountName" class="muted"></span><a class="btn" href="/installer-guide">Yo‘riqnoma</a><button id="logout" class="btn">Chiqish</button></div></header>
+    <header class="header"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-new.png" alt=""></span><span class="logo">Chaqimchi Cloud <small>O‘rnatuvchi paneli</small></span></a><div class="row"><span id="accountName" class="muted"></span><a class="btn" href="/installer-guide">Yo‘riqnoma</a><button id="logout" class="btn">Chiqish</button></div></header>
     <div id="pending" class="pending" hidden><h2>Akkaunt tasdiq kutilmoqda</h2><p>Yo‘riqnoma ochiq. Admin akkauntingizni faollashtirib, obyekt biriktirgandan keyin buyurtmalar shu yerda chiqadi.</p><a class="btn btn-primary" href="/installer-guide">Rasmli yo‘riqnoma</a></div>
     <section id="jobsSection"><div class="card-title"><span>Menga biriktirilgan obyektlar</span><button id="refresh" class="btn">Yangilash</button></div><div id="jobs" class="job-grid"></div></section>
   </div>
@@ -41,7 +120,7 @@
     async function loadJobs(){const data=await api('/api/v1/installer/assignments');$('jobs').innerHTML=data.assignments.length?data.assignments.map(a=>`<article class="job"><small>${esc(a.status)}</small><h3>${esc(a.site_name)}</h3><p class="muted">${esc(a.address||'Manzil kiritilmagan')}</p><p>Aloqa: <b>${esc(a.connection)}</b> · Kamera: <b>${a.cameras_active}/${a.cameras_expected||'?'}</b></p><button class="btn btn-primary" onclick="openSite('${esc(a.site_id)}')">Ishni ochish</button></article>`).join(''):'<div class="pending">Hozircha obyekt biriktirilmagan.</div>'}
     async function openSite(siteId){activeSite=siteId;try{const data=await api(`/api/v1/installer/sites/${siteId}/onboarding`);$('detailTitle').textContent=data.site.name;renderDetail(data);$('detailOverlay').hidden=false;setupGeometry()}catch(err){alert(err.message)}}
     function renderDetail(data){
-      $('detailBody').innerHTML=`<div class="progress"><i style="width:${data.percent}%"></i></div><p><b>${data.completed}/${data.total}</b> bosqich · ${data.percent}%</p><div class="step-list">${data.steps.map(s=>`<div class="step ${s.done?'done':''}">${s.done?'✓':'○'} ${esc(s.label)}</div>`).join('')}</div><h3>O‘rnatish buyrug‘i</h3>${data.install_command?`<code class="command">${esc(data.install_command)}</code><button class="btn" onclick="copyCommand(this)">Nusxalash</button>`:'<p class="muted">Faol pairing kodi yo‘q.</p>'}<button class="btn" onclick="newPairing()">Yangi pairing kodi</button><h3 style="margin-top:22px">Kameralarni sozlash</h3><div class="camera-builder"><h4>Hikvision / Dahua RTSP shabloni</h4><div class="camera-builder-grid"><div><label>Brend</label><select id="cameraBrand"><option value="hikvision">Hikvision / HiLook</option><option value="dahua">Dahua</option><option value="manual">Boshqa / qo‘lda</option></select></div><div><label>NVR IP</label><input id="cameraHost" inputmode="decimal" placeholder="192.168.1.64"></div><div><label>RTSP port</label><input id="cameraPort" inputmode="numeric" value="554"></div><div><label>NVR foydalanuvchi</label><input id="cameraUser" autocomplete="off" placeholder="chaqimchi-view"></div><div><label>NVR parol</label><input id="cameraPass" type="password" autocomplete="new-password"></div><div><label>NVR kanal</label><input id="cameraChannel" type="number" min="1" max="64" value="1"></div></div><button class="btn" type="button" onclick="buildRtsp()">Substream RTSP yaratish</button><p class="muted">Alohida faqat live-view huquqidagi NVR akkauntidan foydalaning. Parol saqlangach forma tozalanadi.</p></div><form class="camera-form" onsubmit="saveCamera(event)"><div><label>ID</label><select id="cameraId">${[1,2,3,4].map(n=>`<option value="camera-0${n}">camera-0${n}</option>`).join('')}</select></div><div><label>Nomi</label><input id="cameraLabel" required placeholder="Asosiy kirish"></div><div><label>RTSP substream</label><input id="cameraRtsp" required placeholder="rtsp://user:password@NVR/..." type="password"></div><button class="btn btn-primary" type="submit">Saqlash</button></form><div id="cameraList"></div>
+      $('detailBody').innerHTML=`<div class="progress"><i style="width:${data.percent}%"></i></div><p><b>${data.completed}/${data.total}</b> bosqich · ${data.percent}%</p><div class="step-list">${data.steps.map(s=>`<div class="step" data-done="${s.done?'1':'0'}">${s.done?'✓':'○'} ${esc(s.label)}</div>`).join('')}</div><h3>O‘rnatish buyrug‘i</h3>${data.install_command?`<code class="command">${esc(data.install_command)}</code><button class="btn" onclick="copyCommand(this)">Nusxalash</button>`:'<p class="muted">Faol pairing kodi yo‘q.</p>'}<button class="btn" onclick="newPairing()">Yangi pairing kodi</button><h3 style="margin-top:22px">Kameralarni sozlash</h3><div class="camera-builder"><h4>Hikvision / Dahua RTSP shabloni</h4><div class="camera-builder-grid"><div><label>Brend</label><select id="cameraBrand"><option value="hikvision">Hikvision / HiLook</option><option value="dahua">Dahua</option><option value="manual">Boshqa / qo‘lda</option></select></div><div><label>NVR IP</label><input id="cameraHost" inputmode="decimal" placeholder="192.168.1.64"></div><div><label>RTSP port</label><input id="cameraPort" inputmode="numeric" value="554"></div><div><label>NVR foydalanuvchi</label><input id="cameraUser" autocomplete="off" placeholder="chaqimchi-view"></div><div><label>NVR parol</label><input id="cameraPass" type="password" autocomplete="new-password"></div><div><label>NVR kanal</label><input id="cameraChannel" type="number" min="1" max="64" value="1"></div></div><button class="btn" type="button" onclick="buildRtsp()">Substream RTSP yaratish</button><p class="muted">Alohida faqat live-view huquqidagi NVR akkauntidan foydalaning. Parol saqlangach forma tozalanadi.</p></div><form class="camera-form" onsubmit="saveCamera(event)"><div><label>ID</label><select id="cameraId">${[1,2,3,4].map(n=>`<option value="camera-0${n}">camera-0${n}</option>`).join('')}</select></div><div><label>Nomi</label><input id="cameraLabel" required placeholder="Asosiy kirish"></div><div><label>RTSP substream</label><input id="cameraRtsp" required placeholder="rtsp://user:password@NVR/..." type="password"></div><button class="btn btn-primary" type="submit">Saqlash</button></form><div id="cameraList"></div>
       <div class="geometry">
         <h3 style="margin-top:0">Chiziq va zona</h3>
         <p class="hint muted">Kadr ustida chizing. <b>Chiziq</b> — kirganlarni sanaydi (2 marta bosing). <b>Zona</b> — navbat, taqiqlangan joy yoki uzoq turishni kuzatadi (nuqta qo‘yib, oxirida ikki marta bosing). O‘ng tugma — o‘chiradi. Nuqtani sudrab ko‘chirish mumkin.<br>Yashil o‘q <b>ichkari</b> tomonni ko‘rsatadi — teskari bo‘lsa “Yo‘nalishni almashtirish”ni bosing.</p>

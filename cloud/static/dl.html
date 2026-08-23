@@ -6,25 +6,31 @@
   <meta name="robots" content="noindex">
   <title>Chaqimchi AI — yuklab olish</title>
   <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/assets/site.css?v=6c828f6e92">
+  <!-- Sahifa `site.css` tokenlariga tayanadi; bu yerda faqat markazga
+       joylashtirilgan bitta kartaning qolipi. -->
   <style>
     :root { color-scheme: light; }
-    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #faf7f2; color: #1f2937; display: grid; min-height: 100vh; place-items: center; }
-    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 32px; max-width: 460px; width: calc(100% - 48px); box-shadow: 0 10px 30px rgba(0,0,0,.06); }
-    h1 { font-size: 1.3rem; margin: 0 0 6px; }
-    p { margin: 8px 0; font-size: .92rem; color: #4b5563; }
-    .btn { display: inline-block; margin-top: 14px; background: #111827; color: #fff; text-decoration: none; padding: 12px 22px; border-radius: 10px; font-weight: 600; }
-    .meta { font-size: .8rem; color: #6b7280; margin-top: 10px; }
-    code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; font-size: .78rem; word-break: break-all; }
-    a.plain { color: #2563eb; }
+    body { display: grid; min-height: 100vh; place-items: center; background: var(--paper-2); }
+    .card { width: calc(100% - 48px); max-width: 470px; padding: 32px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
+    .card .brand { margin-bottom: 20px; }
+    .card h1 { margin: 0 0 8px; font-size: 22px; }
+    .card p { margin: 8px 0; color: var(--muted); font-size: 15px; }
+    .meta { margin-top: 12px; font-size: 13px; }
+    .plain { color: var(--blue-dark); }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Chaqimchi AI — Windows dasturi</h1>
+    <a class="brand" href="/">
+      <span class="brand-mark"><img src="/assets/chaqimchi-logo-new.png" alt=""></span>
+      <span>Chaqimchi <b>AI</b></span>
+    </a>
+    <h1>Windows dasturi</h1>
     <p>Do'kon kompyuteriga o'rnatiladi: yuklab oling, «Keyingi → Keyingi → Tayyor», so'ng brauzerda kamerani ulaysiz.</p>
-    <a class="btn" id="dlBtn" href="/api/v1/public/download-installer?os=windows">Yuklab olish</a>
-    <p class="meta" id="dlMeta">Versiya aniqlanmoqda…</p>
-    <p class="meta">O'rnatish yo'riqnomasi: <a class="plain" href="https://docs.chaqimchi.uz/ornatish-windows">docs.chaqimchi.uz</a></p>
+    <a class="button button-light" id="dlBtn" href="/api/v1/public/download-installer?os=windows">Yuklab olish</a>
+    <p class="meta hint" id="dlMeta">Versiya aniqlanmoqda…</p>
+    <p class="meta hint">O'rnatish yo'riqnomasi: <a class="plain" href="https://docs.chaqimchi.uz/ornatish-windows">docs.chaqimchi.uz</a></p>
   </div>
   <script>
     fetch("/api/v1/public/windows-release").then((r) => r.ok ? r.json() : null).then((d) => {

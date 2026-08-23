@@ -505,17 +505,23 @@ def test_admin_panel_is_light_and_reuses_the_customer_design_system() -> None:
     assert "#0a0c10" not in css, "qorong'u fon qaytib kelmasin"
 
 
-def test_old_admin_css_still_serves_the_installer_panel() -> None:
-    """`admin.css` o'chirilmasin — unda hali bitta iste'molchi bor.
+def test_the_dark_admin_css_is_gone_for_good() -> None:
+    """`admin.css` o'chirilgan va hech bir sahifa uni chaqirmaydi.
 
-    Ilgari uni admin paneli, o'rnatuvchi paneli va to'lov sahifasi
-    ishlatardi.  Admin panel yorug' brend uslubiga o'tdi, to'lov sahifasi
-    ham (mijoz aynan pul to'lash paytida qorong'u ekranga tushmasligi
-    kerak).  Qolgani — o'rnatuvchi paneli, u ichki vosita."""
-    assert (STATIC / "admin.css").is_file()
-    assert "admin.css" in (STATIC / "installer.html").read_text(encoding="utf-8"), (
-        "o'rnatuvchi paneli uslubsiz qolib ketgan"
-    )
+    U qorong'u "dasturchi terminali" uslubi edi: admin paneli, to'lov
+    sahifasi va o'rnatuvchi paneli navbat bilan undan yorug' brend
+    uslubiga o'tdi.  2026-08-24 da oxirgi iste'molchi (o'rnatuvchi
+    paneli) ham ko'chdi — fayl o'chirildi.
+
+    Test qoladi: qorong'u uslub biror sahifaga qaytib kelsa, usta yoki
+    mijoz saytdan panelga o'tganda butunlay boshqa mahsulotga
+    tushgandek bo'ladi."""
+    assert not (STATIC / "admin.css").exists(), "qorong'u uslub qaytib kelmasin"
+    # Faqat HAQIQIY ulanish tekshiriladi, matnda eslatilishi emas:
+    # sahifalardagi izohlar o'tmishni tushuntirib turishi foydali.
+    for page in pages():
+        links = re.findall(r'<link[^>]+href="([^"]+)"', page.read_text(encoding="utf-8"))
+        assert not any("admin.css" in href for href in links), page.name
 
 
 def test_admin_panel_is_responsive() -> None:

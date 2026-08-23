@@ -6,8 +6,8 @@
  * `.button`, `.stat`, `.note`, `.chip`, `.modal`, `label.field` — hammasi
  * `owner.css` dan, ya'ni mijoz paneli bilan bitta til.
  *
- * `admin.css` ga TEGILMAYDI: uni `installer.html` (o'rnatuvchi paneli) va
- * `pay.html` ishlatadi, ular qorong'u uslubda qoladi.
+ * 2026-08-24: qorong'u `admin.css` butunlay o'chirildi — uning oxirgi
+ * iste'molchisi (o'rnatuvchi paneli) ham yorug' uslubga ko'chdi.
  */
 
 /* ── Karkas ──────────────────────────────────────────────────────────── */

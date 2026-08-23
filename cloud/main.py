@@ -32,7 +32,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from chaqimchi_ai import __version__
+from chaqimchi_ai import __version__, announcements
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.jwt_auth import JwtError
 from chaqimchi_ai.licensing.plans import (
@@ -712,6 +712,35 @@ async def _send_owner_telegram(
             raise TelegramSendError(response.status_code, response.text[:300])
 
 
+async def _answer_callback(callback_id: str, text: str, *, alert: bool = False) -> None:
+    """Tugma bosilganini Telegramga tasdiqlaydi.
+
+    Bu chaqiruv MAJBURIY: `answerCallbackQuery` yuborilmasa Telegram
+    tugmada aylanuvchi soatni ~30 soniya ushlab turadi va foydalanuvchi
+    hech narsa bo'lmadi deb o'ylab qayta-qayta bosadi.
+    """
+    import httpx
+
+    token = (
+        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+    )
+    if not token:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                json={
+                    "callback_query_id": callback_id,
+                    "text": text[:200],
+                    "show_alert": alert,
+                },
+            )
+    except Exception:  # noqa: BLE001 — tasdiq yuborilmasa ham ish davom etsin
+        logger.warning("answerCallbackQuery yuborilmadi", exc_info=True)
+
+
 async def _send_owner_photo(
     chat_id: str,
     photo: bytes,
@@ -903,6 +932,15 @@ MEDIALESS_EVENTS = frozenset({"loitering"})
 ALERT_SNAPSHOT_WAIT_SEC = 20
 
 
+#: Shu hodisalarda ogohlantirishga «Ovoz bering» tugmasi qo'yiladi.
+#:
+#: Ro'yxat qisqa va ataylab: uchalasi ham "do'konda kimdir bor yoki
+#: kameraga tegildi" degan ma'noda — aynan shunda do'kon karnayidan
+#: eshitiladigan ovoz ish beradi.  Navbat, bo'sh javon yoki kamera
+#: o'chishi bunga kirmaydi.
+SPEAK_WORTHY_EVENTS = frozenset({"after_hours_presence", "camera_tampered", "zone_entered"})
+
+
 async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
     """Batch ogohlantirishi — imkon bo'lsa hodisa RASMI bilan.
 
@@ -942,7 +980,13 @@ async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
                 await asyncio.sleep(2)
 
     base = urls.app_url().rstrip("/")
-    markup = botfmt.panel_button(base) if base else None
+    # «Ovoz bering» tugmasi FAQAT o'g'rilikka o'xshash hodisalarda.
+    #
+    # Har xabarga qo'yilsa u odatiy tugmaga aylanadi va haqiqiy xavf
+    # paytida e'tiborni tortmay qoladi.  Navbat yoki bo'sh javon
+    # xabariga karnay kerak emas.
+    speak_phrase = "deter" if any(e.event_type in SPEAK_WORTHY_EVENTS for e in events) else ""
+    markup = botfmt.alert_buttons(base, speak_phrase=speak_phrase)
     await _notify_site_members(site_id, text, photo=photo, reply_markup=markup)
 
 
@@ -3899,6 +3943,10 @@ async def edge_health_heartbeat(
             live = get_store().live_cameras(device["site_id"])
             previews = get_store().pending_preview_cameras(device["site_id"])
 
+    # Ovoz navbati HAR heartbeat'da o'qiladi (uzoq kutishdan tashqarida
+    # ham): eski qurilma `wait_sec` yubormaydi va u ham ovozni olishi kerak.
+    speak = get_store().take_pending_speak(device["site_id"])
+
     return {
         "ok": True,
         "config_revision": revision,
@@ -3911,6 +3959,10 @@ async def edge_health_heartbeat(
         # Jonli ko'rish: panel ochiq turgan kameralar. Muddat bilan keladi —
         # qurilma muddati o'tguncha har 2-3 soniyada kadr yuboradi.
         "live_requested": live,
+        # Karnaydan aytiladigan iboralar.  O'qish bilan birga "yetkazildi"
+        # deb belgilanadi — ikkita heartbeat ketma-ket kelsa bir xil
+        # ibora ikki marta yangramaydi.
+        "speak_requested": speak,
         "received": body.model_dump(),
     }
 
@@ -4734,6 +4786,63 @@ class DailyRevenueBody(BaseModel):
     #: 0 — "aytmayman".  Chegara `CloudStore.MAX_DAILY_REVENUE_UZS` da ham
     #: bor; bu yerdagisi buzuq so'rovni bazagacha yetkazmaslik uchun.
     amount_uzs: int = Field(ge=0, le=10_000_000_000)
+
+
+class SpeakBody(BaseModel):
+    phrase: str = Field(min_length=1, max_length=32)
+
+
+def _announce(site_id: str, phrase: str, *, requested_by: str) -> Dict[str, Any]:
+    """Ovozni navbatga qo'yadi va qurilmani DARHOL uyg'otadi.
+
+    Uyg'otish `_wake_live_watchers` orqali: qurilma heartbeat'ni ochiq
+    ushlab turadi va so'rov ~0.4 soniyada yetadi.  Usiz ovoz keyingi
+    odatdagi heartbeat'gacha (60 soniyagacha) kutardi — do'kon egasi
+    esa tugmani bosgach darhol natija kutadi.
+    """
+    if not announcements.is_valid(phrase):
+        raise HTTPException(422, "Noma'lum ibora")
+    # Cheklov ataylab qattiq: karnay do'konda yangraydi va uni takror
+    # bosish xodim uchun ta'qibga aylanishi mumkin.
+    ratelimit.check(
+        "owner-speak",
+        site_id,
+        limit=10,
+        window_sec=3600,
+        message="Soatiga 10 martadan ko'p ovoz berib bo'lmaydi.",
+    )
+    result = get_store().request_speak(site_id, phrase, requested_by=requested_by)
+    _wake_live_watchers(site_id)
+    logger.info("Ovoz so'raldi: site=%s phrase=%s by=%s", site_id, phrase, requested_by)
+    return result
+
+
+@app.post("/api/v1/owner/speak")
+def owner_speak(
+    body: SpeakBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Do'kon karnayidan ibora aytiladi.
+
+    Faqat EGASI: karnay butun do'konda eshitiladi va uni xodim
+    ishlatishi noqulay holatlarga olib keladi.
+    """
+    require_owner_role(owner, "owner", "service_admin")
+    return {"ok": True, **_announce(owner.site_id, body.phrase, requested_by=owner.telegram_id)}
+
+
+@app.get("/api/v1/owner/announcements")
+def owner_announcements(_: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    """Karnaydan aytish mumkin bo'lgan iboralar ro'yxati.
+
+    Panel ro'yxatni o'zi yozmaydi — katalog `chaqimchi_ai/announcements.py`
+    da va qurilma ham o'shandan foydalanadi.
+    """
+    return {
+        "announcements": [
+            {"code": item.code, "text": item.text, "button": item.button, "hint": item.hint}
+            for item in announcements.ANNOUNCEMENTS
+        ]
+    }
 
 
 @app.get("/api/v1/owner/revenue")
@@ -5720,6 +5829,60 @@ async def owner_clip(
     return Response(content=content, media_type="video/mp4")
 
 
+#: Tugma ma'lumoti — `speak:deter` ko'rinishida.  Telegram `callback_data`
+#: uchun 64 baytdan ko'p bermaydi, shuning uchun sayt ID yozilmaydi:
+#: sayt bosgan odamning a'zoligidan aniqlanadi.
+CALLBACK_SPEAK_PREFIX = "speak:"
+
+#: "Ko'rdim" tugmasi — hodisani o'qilgan deb belgilaydi.  Egasi javob
+#: berganini BILISH kerak: aks holda biz uni qayta-qayta bezovta qilamiz.
+CALLBACK_ACK = "ack"
+
+
+async def _handle_callback(callback: Dict[str, Any]) -> Dict[str, Any]:
+    """Telegram tugmasi bosilganda ishlaydi.
+
+    Xavfsizlik: `callback_data` ga sayt ID yozilmaydi va u ISHONILMAYDI.
+    Sayt bosgan odamning a'zoligidan topiladi — aks holda istalgan odam
+    o'z botiga tugma yasab, begona do'kon karnayini yangratardi.
+    """
+    callback_id = str(callback.get("id") or "")
+    data = str(callback.get("data") or "")
+    telegram_id = str(((callback.get("from") or {}).get("id")) or "")
+    if not callback_id or not telegram_id:
+        return {"ok": True}
+
+    members = get_event_store().members_for_telegram(telegram_id)
+    if not members:
+        await _answer_callback(callback_id, "Sizda do'kon biriktirilmagan.", alert=True)
+        return {"ok": True}
+    member = members[0]
+    site_id = str(member["site_id"])
+
+    if data == CALLBACK_ACK:
+        await _answer_callback(callback_id, "Qabul qilindi — rahmat.")
+        return {"ok": True}
+
+    if data.startswith(CALLBACK_SPEAK_PREFIX):
+        phrase = data[len(CALLBACK_SPEAK_PREFIX) :]
+        # Karnay butun do'konda eshitiladi — faqat egasi.
+        if str(member.get("role")) not in {"owner", "service_admin"}:
+            await _answer_callback(callback_id, "Buni faqat do'kon egasi qila oladi.", alert=True)
+            return {"ok": True}
+        try:
+            _announce(site_id, phrase, requested_by=telegram_id)
+        except HTTPException as exc:
+            await _answer_callback(callback_id, str(exc.detail), alert=True)
+            return {"ok": True}
+        item = announcements.BY_CODE.get(phrase)
+        spoken = item.text if item else ""
+        await _answer_callback(callback_id, f"Do'konda eshitiladi: «{spoken}»")
+        return {"ok": True}
+
+    await _answer_callback(callback_id, "Bu tugma endi ishlamaydi.")
+    return {"ok": True}
+
+
 @app.post("/api/v1/telegram/webhook")
 async def owner_telegram_webhook(
     request: Request,
@@ -5742,6 +5905,15 @@ async def owner_telegram_webhook(
         # Guruhlar lead qabul qiluvchi sifatida avtomatik ro'yxatdan o'tmaydi.
         # Leadlar faqat CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS dagi shaxsiy ID'larga boradi.
         return {"ok": True}
+
+    # ── Tugma bosildi ────────────────────────────────────────────────
+    #
+    # Bungacha `callback_query` UMUMAN ushlanmasdi: xabarga tugma
+    # qo'yilsa ham bosish hech narsa qilmasdi.  Ovoz berish aynan shu
+    # yo'ldan ishlaydi.
+    callback = update.get("callback_query") or {}
+    if callback:
+        return await _handle_callback(callback)
 
     message = update.get("message") or {}
     chat = message.get("chat") or {}

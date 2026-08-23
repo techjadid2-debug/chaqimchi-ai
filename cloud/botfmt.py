@@ -112,6 +112,28 @@ def header(site_name: Any, *, icon: str = "") -> str:
     return f"{prefix}<b>{escape(site_name)}</b>"
 
 
+def alert_buttons(base_url: str, *, speak_phrase: str = "") -> Dict[str, Any]:
+    """Ogohlantirish ostidagi tugmalar.
+
+    `speak_phrase` berilsa — «Ovoz bering»: do'kon karnayi darhol
+    gapiradi.  Bu Verisure'ning "Intervene" bosqichi, faqat qo'riqchisiz:
+    egasi telefonidan bosadi va do'konda HOZIR bo'ladi.
+
+    «Ko'rdim» ataylab bor: egasi javob berganini bilmasak, uni bir xil
+    hodisa bilan qayta-qayta bezovta qilamiz.
+    """
+    from chaqimchi_ai import announcements
+
+    rows = []
+    item = announcements.BY_CODE.get(speak_phrase)
+    if item:
+        rows.append([{"text": item.button, "callback_data": f"speak:{item.code}"}])
+    rows.append([{"text": "✅ Ko'rdim", "callback_data": "ack"}])
+    if base_url:
+        rows.append([{"text": "📊 Panelda ochish", "url": f"{base_url.rstrip('/')}/owner"}])
+    return {"inline_keyboard": rows}
+
+
 def panel_button(base_url: str) -> Dict[str, Any]:
     """ "Panelda ochish" tugmasi.
 

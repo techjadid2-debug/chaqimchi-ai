@@ -253,6 +253,16 @@ class CloudStore:
                 used INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (site_id) REFERENCES sites(id)
             );
+            CREATE TABLE IF NOT EXISTS speak_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site_id TEXT NOT NULL,
+                phrase TEXT NOT NULL,
+                requested_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                delivered_at TEXT,
+                FOREIGN KEY (site_id) REFERENCES sites(id)
+            );
             CREATE TABLE IF NOT EXISTS site_cameras (
                 site_id TEXT NOT NULL,
                 camera_id TEXT NOT NULL,
@@ -646,6 +656,71 @@ class CloudStore:
         conn.commit()
         conn.close()
         return bool(cursor.rowcount)
+
+    # ── Do'kon gapiradi ─────────────────────────────────────────────────
+    #
+    # Do'kon kompyuterida karnay bor.  Telegramdagi tugma bosilganda
+    # o'sha karnay gapiradi — ya'ni egasi uydan turib do'konda HOZIR
+    # bo'ladi.  Verisure'da bu "Intervene" bosqichi va u uchun butun
+    # qo'riqchilar kompaniyasi kerak; bizda allaqachon turgan kompyuter
+    # buni bepul qiladi.
+
+    #: So'rov shuncha soniyada eskiradi.
+    #:
+    #: Muddat SHART: qurilma o'chiq bo'lsa navbat to'planib qolardi va
+    #: kompyuter ertalab yonganda kechagi "Diqqat! Do'kon kuzatuv
+    #: ostida" bo'sh do'konda yangrardi.  Kechikkan ovoz foyda emas,
+    #: zarar: mijoz mahsulotni tasodifiy ishlaydi deb hisoblaydi.
+    SPEAK_TTL_SEC = 120
+
+    def request_speak(self, site_id: str, phrase: str, *, requested_by: str = "") -> Dict[str, Any]:
+        """Ovoz so'rovini navbatga qo'yadi.  Qurilma keyingi heartbeat'da oladi."""
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+        now = _utc_now()
+        conn = self._connect()
+        conn.execute(
+            "INSERT INTO speak_requests(site_id,phrase,requested_by,created_at,expires_at) "
+            "VALUES(?,?,?,?,?)",
+            (
+                site_id,
+                phrase,
+                requested_by,
+                _iso(now),
+                _iso(now + timedelta(seconds=self.SPEAK_TTL_SEC)),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return {"phrase": phrase, "expires_in_sec": self.SPEAK_TTL_SEC}
+
+    def take_pending_speak(self, site_id: str) -> List[str]:
+        """Kutayotgan ovozlarni beradi va DARHOL yetkazilgan deb belgilaydi.
+
+        Belgilash o'qish bilan bir tranzaksiyada: aks holda ikkita
+        heartbeat ketma-ket kelsa bir xil ibora ikki marta yangrardi.
+        """
+        now = _iso(_utc_now())
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT id,phrase FROM speak_requests "
+            "WHERE site_id=? AND delivered_at IS NULL AND expires_at>? ORDER BY id",
+            (site_id, now),
+        ).fetchall()
+        if rows:
+            conn.executemany(
+                "UPDATE speak_requests SET delivered_at=? WHERE id=?",
+                [(now, row["id"]) for row in rows],
+            )
+        # Eskirganlarni ham yopamiz — jadval cheksiz o'smasin.
+        conn.execute(
+            "DELETE FROM speak_requests WHERE expires_at<? AND (delivered_at IS NOT NULL "
+            "OR expires_at<?)",
+            (now, _iso(_utc_now() - timedelta(days=1))),
+        )
+        conn.commit()
+        conn.close()
+        return [str(row["phrase"]) for row in rows]
 
     def request_camera_preview(self, site_id: str, camera_id: str) -> Dict[str, Any]:
         """O'rnatuvchi rasm so'radi — qurilma keyingi heartbeat'da yuboradi."""

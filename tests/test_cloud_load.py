@@ -299,7 +299,11 @@ def test_monthly_receipt_uses_the_owners_own_numbers(cloud) -> None:
     main, client, _sent = cloud
     site, headers = _site(client, "Navbatli do'kon", plan="biznes")
     site_id = site["site_id"]
-    main.get_store().set_avg_daily_revenue(site_id, 4_500_000)
+    # Raqamlar HAQIQIY nisbatda bo'lishi kerak: oyiga 100 tashrif va
+    # kuniga 4.5 mln savdo — bu "har tashrif 1.4 mln" degani va
+    # `value.py` uni ataylab rad etadi (sanoq buzuq deb).
+    # Kichik do'kon: kuniga 200 000 so'm, oyiga 100 tashrif.
+    main.get_store().set_avg_daily_revenue(site_id, 200_000)
 
     # O'tgan oyda tashriflar va uchta uzun navbat epizodi.
     august = _dt(2026, 8, 15, 12, 0, tzinfo=timezone.utc)

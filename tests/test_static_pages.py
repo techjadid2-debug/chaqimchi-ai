@@ -845,20 +845,23 @@ def test_owner_hourly_chart_can_show_occupancy() -> None:
     assert "h.exited" in html
 
 
-def test_the_hero_scene_is_inline_so_the_stylesheet_can_reach_it() -> None:
-    """Sahna SVG'si sahifa ICHIDA bo'lishi shart.
+def test_the_hero_shows_the_product_frame_as_live_markup() -> None:
+    """Hero'dagi panel ramkasi HTML bo'lsin, skrinshot emas.
 
-    Alohida `.svg` fayl `<img>` orqali ulansa ota-sahifadagi CSS uning
-    ichiga yeta olmaydi — ya'ni `prefers-reduced-motion` qoidasi unga
-    ta'sir qilmaydi va harakatni o'chirgan foydalanuvchi baribir
-    animatsiya ko'radi.
+    2026-08-24 da eski izometrik sahna o'chirildi: u chizilgan
+    illyustratsiya edi va mahsulotni ko'rsatmasdi.  O'rniga panel
+    ramkasi — jonli kadr ustida ikkita karta.
+
+    Ramka rasmga aylantirilmasin: matn har ekranda o'qiladigan bo'lib
+    qolishi, kichik ekranda esa kartalar CSS bilan yashirinishi kerak.
+    Skrinshotda ikkalasi ham imkonsiz.
     """
     site = (STATIC / "site.html").read_text(encoding="utf-8")
     css = (STATIC / "site.css").read_text(encoding="utf-8")
 
-    assert 'id="scene-beam"' in site, "sahna sahifa ichida bo'lsin"
-    assert "scene.svg" not in site, "sahna alohida faylga chiqarilmasin"
-    assert "#scene-beam" in css, "animatsiya uslub faylidan boshqarilsin"
+    assert 'class="panel-chrome"' in site, "panel ramkasi sahifa ichida bo'lsin"
+    assert "Bugungi mijozlar" in site, "ko'rsatkich kartasi matni sahifada bo'lsin"
+    assert ".panel-card" in css, "kartalar ko'rinishi uslub faylidan boshqarilsin"
     # Haqiqiy 3D ataylab yo'q: yopishqoq sarlavhadagi `backdrop-filter`
     # bilan yonma-yon turganda u arzon telefonlarda sahifani silkitadi.
     assert "rotateX" not in css

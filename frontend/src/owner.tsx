@@ -98,7 +98,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
   const coords = normalized.map((item, index) => `${10 + (index * 580) / Math.max(1, normalized.length - 1)},${190 - (item.value / maximum) * 155}`).join(" ");
   return <div className="chart-wrap">
     <svg className="chart" viewBox="0 0 600 210" preserveAspectRatio="none" role="img" aria-label="Kunlik mijozlar oqimi grafigi">
-      <defs><linearGradient id="areaBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0b5cff" stopOpacity=".23"/><stop offset="1" stopColor="#0b5cff" stopOpacity="0"/></linearGradient></defs>
+      <defs><linearGradient id="areaBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4285f4" stopOpacity=".23"/><stop offset="1" stopColor="#4285f4" stopOpacity="0"/></linearGradient></defs>
       {[35,75,115,155,195].map(y => <line key={y} className="chart-grid" x1="0" y1={y} x2="600" y2={y}/>) }
       <polygon className="chart-area" points={`10,195 ${coords} 590,195`} />
       <polyline className="chart-line" points={coords}/>

@@ -45,7 +45,7 @@
 .drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(13, 17, 23, .45); }
 
 /* ── Ko'rsatkich plitkalari ──────────────────────────────────────────── */
-.stat.alert { background: #fdecea; border-color: #e79a92; }
+.stat.alert { background: #fce8e6; border-color: #f4a9a2; }
 .stat strong.long { font-size: 22px; }
 a.stat { display: block; text-decoration: none; color: inherit; }
 a.stat:hover { border-color: var(--ink); }
@@ -62,7 +62,7 @@ a.stat:hover { border-color: var(--ink); }
 .attention-row .what small { display: block; color: var(--muted); font-size: 12px; }
 .attention-row .go { color: var(--muted); font-weight: 700; flex: none; }
 .attention-row.err { border-left: 4px solid var(--danger); }
-.attention-row.warn { border-left: 4px solid #e9c46a; }
+.attention-row.warn { border-left: 4px solid #fbbc05; }
 
 /* ── Mijoz kartochkasi ───────────────────────────────────────────────── */
 .cust-list { display: flex; flex-direction: column; gap: 8px; }
@@ -83,9 +83,9 @@ a.stat:hover { border-color: var(--ink); }
   font-size: 12px; font-weight: 700; white-space: nowrap;
   background: var(--paper-2); border: 1px solid var(--line); color: var(--ink);
 }
-.badge.ok { background: #e8f7e4; border-color: #9bd48a; }
-.badge.warn { background: #fff4d9; border-color: #e9c46a; }
-.badge.err { background: #fdecea; border-color: #e79a92; color: #8e2b20; }
+.badge.ok { background: #e6f4ea; border-color: #81c995; }
+.badge.warn { background: #fef7e0; border-color: #fbbc05; }
+.badge.err { background: #fce8e6; border-color: #f4a9a2; color: #b3261e; }
 .badge.mute { color: var(--muted); }
 
 /* ── Mijoz sahifasi ──────────────────────────────────────────────────── */
@@ -94,7 +94,7 @@ a.stat:hover { border-color: var(--ink); }
 .detail-head h1 { margin: 0; }
 .detail-sub { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
 .action-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.card.danger { border-color: #e79a92; background: #fffaf9; }
+.card.danger { border-color: #f4a9a2; background: #fef7f6; }
 
 /* Ma'lumot juftliklari — jadval o'rniga, telefonda ham buzilmaydi. */
 .kv { display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
@@ -118,8 +118,8 @@ summary::marker { color: var(--muted); }
   max-width: min(520px, 92vw); padding: 13px 18px; border-radius: 14px;
   font-size: 14px; font-weight: 650; box-shadow: 0 8px 28px rgba(13, 17, 23, .22);
 }
-#toast.ok { background: #e8f7e4; border: 1px solid #9bd48a; }
-#toast.err { background: #fdecea; border: 1px solid #e79a92; }
+#toast.ok { background: #e6f4ea; border: 1px solid #81c995; }
+#toast.err { background: #fce8e6; border: 1px solid #f4a9a2; }
 
 /* ── Oynalar (prompt o'rniga) ────────────────────────────────────────── */
 .modal.form-modal { width: min(480px, 100%); }

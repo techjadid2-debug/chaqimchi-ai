@@ -26,7 +26,7 @@ button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .65; }
 button, input, select, a { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 3px solid rgba(11,92,255,.28); outline-offset: 2px; }
+:focus-visible { outline: 3px solid rgba(66,133,244,.28); outline-offset: 2px; }
 h1,h2,h3,p { margin-top: 0; }
 
 .icon { flex: 0 0 auto; }
@@ -59,7 +59,7 @@ h1,h2,h3,p { margin-top: 0; }
 
 .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 0 16px; background: #fff; color: var(--text); font-weight: 700; font-size: 13px; }
 .btn:hover { border-color: #cbd4e4; background: #fafcff; }
-.btn-primary { border-color: var(--blue); background: var(--blue); color: #fff; box-shadow: 0 6px 15px rgba(11,92,255,.18); }
+.btn-primary { border-color: var(--blue); background: var(--blue); color: #fff; box-shadow: 0 6px 15px rgba(66,133,244,.18); }
 .btn-primary:hover { border-color: var(--blue-dark); background: var(--blue-dark); }
 .btn-danger { color: var(--red); }
 .btn-wide { width: 100%; }
@@ -96,7 +96,7 @@ h1,h2,h3,p { margin-top: 0; }
 .camera-frame { aspect-ratio: 16 / 9; position: relative; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 30% 30%, #293446, #0b111a 65%); color: #a8b2c2; }
 .camera-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .camera-frame .camera-empty { display: grid; place-items: center; gap: 6px; text-align: center; padding: 16px; font-size: 11px; }
-.camera-overlay-badge { position: absolute; top: 9px; right: 9px; padding: 5px 8px; border-radius: 8px; background: rgba(11,92,255,.9); color: #fff; font-size: 10px; font-weight: 800; }
+.camera-overlay-badge { position: absolute; top: 9px; right: 9px; padding: 5px 8px; border-radius: 8px; background: rgba(66,133,244,.9); color: #fff; font-size: 10px; font-weight: 800; }
 .camera-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; background: #fff; }
 .camera-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; font-weight: 700; }
 .camera-name span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

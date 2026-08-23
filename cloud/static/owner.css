@@ -7,15 +7,26 @@
  */
 
 :root {
-  --ink: #202124;
-  --muted: #5f6368;
+  /* Kanonik tokenlar — v2 panel (frontend/src/styles.css) bilan bir xil
+   * nom va qiymat.  Pastdagi eski nomlar (--lime, --green, --orange...)
+   * shu kanoniklarga alias: legacy markup katta diff'siz yashab turadi,
+   * yangi kod esa faqat kanonik nomlarni ishlatadi. */
+  --blue: #4285f4;
+  --blue-dark: #1a73e8;
+  --blue-soft: #e8f0fe;
+  --text: #101828;
+  --border: #e4e9f2;
+  --red: #ea4335;
+
+  --ink: var(--text);
+  --muted: #667085;
   --paper: #ffffff;
-  --paper-2: #f8f9fa;
-  --lime: #4285f4;
-  --green: #1a73e8;
-  --orange: #ea4335;
-  --danger: #ea4335;
-  --line: #dadce0;
+  --paper-2: #f7f9fc;
+  --lime: var(--blue);
+  --green: var(--blue-dark);
+  --orange: var(--red);
+  --danger: var(--red);
+  --line: var(--border);
   --radius: 16px;
 }
 
@@ -47,7 +58,7 @@ button, input, select { font: inherit; }
 }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.02em; text-decoration: none; }
 .brand img { width: 30px; height: 30px; border-radius: 8px; }
-.brand b { color: var(--orange); }
+.brand b { color: var(--blue); }
 .topbar-actions { display: flex; gap: 8px; align-items: center; min-width: 0; }
 #siteName { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -99,7 +110,7 @@ input[type=text], input[type=password], input[type=number], input[type=time], in
   background: #fff; color: var(--ink);
 }
 input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible {
-  outline: 3px solid var(--orange); outline-offset: 2px;
+  outline: 3px solid rgba(66,133,244,.32); outline-offset: 2px;
 }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; }
@@ -139,7 +150,7 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 
 /* ── Statistika va grafiklar ─────────────────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.stat { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: #fffdf8; }
+.stat { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper-2); }
 .stat small { display: block; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .stat strong { display: block; margin-top: 4px; font-size: 30px; letter-spacing: -.04em; }
 .stat span { color: var(--muted); font-size: 12px; }
@@ -152,9 +163,9 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
   border: 0; background: none; padding: 0; font: inherit; color: inherit;
 }
 .bars > div:hover, .bars > div.selected,
-.bars > button:hover, .bars > button.selected { background: rgba(19, 35, 29, .06); }
-.bars i { display: block; background: var(--green); border-radius: 3px 3px 0 0; min-height: 2px; }
-.bars .peak i { background: var(--orange); }
+.bars > button:hover, .bars > button.selected { background: rgba(16, 24, 40, .06); }
+.bars i { display: block; background: #aecbfa; border-radius: 3px 3px 0 0; min-height: 2px; }
+.bars .peak i { background: var(--blue-dark); }
 .bars b { font-weight: 400; font-size: 10px; color: var(--muted); text-align: center; padding-top: 4px; }
 .bar-readout { min-height: 20px; margin-top: 6px; font-size: 13px; color: var(--muted); }
 
@@ -183,7 +194,7 @@ table.events th { color: var(--muted); font-size: 11px; text-transform: uppercas
 }
 .modal {
   width: min(860px, 100%); max-height: 92vh; overflow: auto;
-  background: #fffdf8; border-radius: 16px; padding: 16px;
+  background: var(--paper-2); border-radius: 16px; padding: 16px;
 }
 .modal .media { width: 100%; border-radius: 12px; background: #0d1117; display: block; }
 .modal .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
@@ -209,7 +220,7 @@ table.events th { color: var(--muted); font-size: 11px; text-transform: uppercas
 }
 .switch input:checked + .track { background: #34a853; }
 .switch input:checked + .track::after { transform: translateX(18px); }
-.switch input:focus-visible + .track { outline: 3px solid var(--orange); outline-offset: 2px; }
+.switch input:focus-visible + .track { outline: 3px solid rgba(66,133,244,.32); outline-offset: 2px; }
 
 /* ── Kirish ekrani ───────────────────────────────────────────────────── */
 .login-wrap { max-width: 460px; margin: 8vh auto 0; }

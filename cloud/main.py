@@ -941,6 +941,35 @@ ALERT_SNAPSHOT_WAIT_SEC = 20
 SPEAK_WORTHY_EVENTS = frozenset({"after_hours_presence", "camera_tampered", "zone_entered"})
 
 
+#: Bir vaqtda shuncha ogohlantirish tayyorlanadi, ko'p emas.
+#:
+#: JONLI NOSOZLIKDAN keyin qo'shildi (2026-08-23).  Qurilma uzoq
+#: uzilishdan keyin 3587 ta eski hodisani qayta yubordi; ularning katta
+#: qismi ogohlantirishga arziydigan turda edi va har biri fon vazifasi
+#: ochdi.  Har vazifa rasm kelishini kutib bazaga O'NTA sinxron so'rov
+#: yuboradi — Postgres ulanishi hodisa halqasida ochiladi va u CPU
+#: yemasdan halqani to'xtatadi.  Natijada butun bulut 20-45 soniyaga
+#: javob bermay qoldi va Caddy hamma so'rovni uzdi.
+#:
+#: To'g'ri yechim — hamma baza chaqiruvini oqimga ko'chirish; bu esa
+#: darhol qo'yiladigan to'siq: bir vaqtda nechta bo'lishidan qat'i
+#: nazar, halqa nafas oladi.
+#: Semafor HAR HALQA uchun alohida.  Modul darajasida bitta qilib
+#: yaratilsa u birinchi ishlatgan halqaga bog'lanib qoladi va boshqa
+#: halqada `RuntimeError` beradi (`_live_wakeups` bilan bir xil sabab).
+ALERT_CONCURRENCY = 3
+_alert_slots: Dict[Any, asyncio.Semaphore] = {}
+
+
+def _alert_gate() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    gate = _alert_slots.get(loop)
+    if gate is None:
+        gate = asyncio.Semaphore(ALERT_CONCURRENCY)
+        _alert_slots[loop] = gate
+    return gate
+
+
 async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
     """Batch ogohlantirishi — imkon bo'lsa hodisa RASMI bilan.
 
@@ -949,10 +978,15 @@ async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
     biroz kutiladi; kelmasa matnli xabar ketadi — kechikkanidan ko'ra
     rasmsiz yetib borgani yaxshi.
     """
-    site = get_store().get_site(site_id)
+    async with _alert_gate():
+        await _notify_alert_once(site_id, events)
+
+
+async def _notify_alert_once(site_id: str, events: List[EdgeEvent]) -> None:
+    site = await asyncio.to_thread(get_store().get_site, site_id)
     site_name = str(site.get("name")) if site else None
     try:
-        config = get_event_store().get_site_config(site_id)["config"]
+        config = (await asyncio.to_thread(get_event_store().get_site_config, site_id))["config"]
         labels = {
             str(key): str(value) for key, value in (config.get("camera_labels") or {}).items()
         }
@@ -968,7 +1002,9 @@ async def _notify_alert(site_id: str, events: List[EdgeEvent]) -> None:
     if candidate is not None:
         attempts = max(1, ALERT_SNAPSHOT_WAIT_SEC // 2)
         for attempt in range(attempts):
-            row = get_event_store().event(site_id, candidate.event_id)
+            row = await asyncio.to_thread(
+                get_event_store().event, site_id, candidate.event_id
+            )
             key = (row or {}).get("snapshot_key")
             if key:
                 try:

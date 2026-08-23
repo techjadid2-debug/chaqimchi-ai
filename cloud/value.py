@@ -37,6 +37,21 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+#: Hisob ishonchli bo'lishi uchun oraliqda kamida shuncha tashrif kerak.
+#:
+#: Kam sonda o'rtacha ma'nosini yo'qotadi va bitta chetlanish butun
+#: raqamni buzadi.
+MIN_VISITORS_FOR_ESTIMATE = 30
+
+#: Bitta tashrif shundan ko'p olib keladi deyish — deyarli har doim
+#: SANOQ buzilganini bildiradi, do'konning boyligini emas.
+#:
+#: Jonli ma'lumotda ushlandi: pilot do'konda chiziq noto'g'ri sozlangani
+#: uchun oyiga atigi 26 tashrif sanalgan.  4.5 mln kunlik savdo bilan
+#: hisob "har tashrif 5.4 mln so'm" va "64 mln so'm yo'qotildi" chiqardi.
+#: Bunday raqam mahsulotga bo'lgan ishonchni bir zumda yo'q qiladi.
+MAX_PLAUSIBLE_PER_VISITOR_UZS = 1_000_000
+
 #: Bitta uzun navbat epizodida taxminan shuncha mijoz kutmasdan ketadi.
 #:
 #: Ataylab EHTIYOTKOR (1 kishi).  Haqiqiy son ko'proq bo'lishi mumkin,
@@ -51,9 +66,15 @@ def revenue_per_visitor(*, daily_revenue_uzs: int, visitors: int) -> Optional[in
     Mijozning aytgan kunlik savdosi / o'sha kungi haqiqiy tashrif soni.
     Ikkalasidan biri yo'q bo'lsa — javob ham yo'q.
     """
-    if daily_revenue_uzs <= 0 or visitors <= 0:
+    if daily_revenue_uzs <= 0 or visitors < MIN_VISITORS_FOR_ESTIMATE:
         return None
-    return round(daily_revenue_uzs / visitors)
+    per_visitor = round(daily_revenue_uzs / visitors)
+    # Ishonchsiz natijani KO'RSATMAYMIZ.  Bu yerga tushish deyarli har
+    # doim kirish chizig'i noto'g'ri sozlanganini bildiradi — u holda
+    # to'g'ri javob "hisoblab bo'lmadi", taxminiy raqam emas.
+    if per_visitor > MAX_PLAUSIBLE_PER_VISITOR_UZS:
+        return None
+    return per_visitor
 
 
 def queue_cost(

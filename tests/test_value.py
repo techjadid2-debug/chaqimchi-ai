@@ -97,3 +97,30 @@ def test_large_sums_are_readable() -> None:
     assert uzs(3_200_000) == "3.2 mln so'm"
     assert uzs(2_000_000) == "2 mln so'm"
     assert uzs(299_000) == "299 000 so'm"
+
+
+# ── Ishonchsiz hisobni ko'rsatmaslik ────────────────────────────────────
+
+
+def test_a_broken_visitor_count_produces_no_money_figure() -> None:
+    """Jonli serverda ushlandi.
+
+    Pilot do'konda kirish chizig'i noto'g'ri sozlangani uchun oyiga
+    atigi 26 tashrif sanalgan.  4.5 mln kunlik savdo bilan hisob
+    "har tashrif 5.4 mln so'm" va "64 mln so'm yo'qotildi" chiqardi —
+    bunday raqam mahsulotga ishonchni bir zumda yo'q qiladi.
+    """
+    assert revenue_per_visitor(daily_revenue_uzs=4_500_000 * 31, visitors=26) is None
+    assert queue_cost(queue_episodes=12, daily_revenue_uzs=4_500_000 * 31, visitors=26) is None
+
+
+def test_too_few_visitors_to_average() -> None:
+    """Kam sonda bitta chetlanish butun o'rtachani buzadi."""
+    assert revenue_per_visitor(daily_revenue_uzs=1_000_000, visitors=29) is None
+    assert revenue_per_visitor(daily_revenue_uzs=1_000_000, visitors=30) is not None
+
+
+def test_a_high_ticket_shop_still_works_within_reason() -> None:
+    """Chegara haqiqiy qimmat do'konni ham o'tkazishi kerak."""
+    # 100 tashrif, kuniga 50 mln savdo → har tashrif 500 000 so'm.
+    assert revenue_per_visitor(daily_revenue_uzs=50_000_000, visitors=100) == 500_000

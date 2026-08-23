@@ -3,16 +3,41 @@ export type ApiOptions = RequestInit & { siteId?: string };
 const OWNER_TOKEN = "chaqimchi_owner_token_v2";
 const ADMIN_TOKEN = "chaqimchi_admin_token_v2";
 
+/* Do'kon egasi tokeni `localStorage` da, admin tokeni `sessionStorage` da.
+ *
+ * Farq ataylab.  Egasi panelga Telegram botdagi havoladan va telefon
+ * ekranidan kiradi; `sessionStorage` da token yorliq yopilishi bilan
+ * o'chib, u har safar qaytadan kirishi kerak bo'lardi.  Admin esa
+ * kompyuterda, ko'pincha begona bo'lmagan joyda ishlaydi va uning
+ * huquqi kengroq — qisqa sessiya xavfsizroq. */
+const storeFor = (kind: "owner" | "admin") => (kind === "owner" ? localStorage : sessionStorage);
+const keyFor = (kind: "owner" | "admin") => (kind === "owner" ? OWNER_TOKEN : ADMIN_TOKEN);
+
 export function tokenFor(kind: "owner" | "admin") {
-  return sessionStorage.getItem(kind === "owner" ? OWNER_TOKEN : ADMIN_TOKEN) || "";
+  try {
+    return storeFor(kind).getItem(keyFor(kind)) || "";
+  } catch {
+    return "";
+  }
 }
 
 export function saveToken(kind: "owner" | "admin", token: string) {
-  sessionStorage.setItem(kind === "owner" ? OWNER_TOKEN : ADMIN_TOKEN, token);
+  try {
+    storeFor(kind).setItem(keyFor(kind), token);
+  } catch {
+    /* Telegram ichidagi WebView xotirani taqiqlashi mumkin — token
+       shu sessiyada RAM'da qoladi, kirish baribir ishlaydi. */
+  }
 }
 
 export function clearToken(kind: "owner" | "admin") {
-  sessionStorage.removeItem(kind === "owner" ? OWNER_TOKEN : ADMIN_TOKEN);
+  try {
+    storeFor(kind).removeItem(keyFor(kind));
+    // Eski versiya tokeni sessionStorage'da qolgan bo'lishi mumkin.
+    sessionStorage.removeItem(keyFor(kind));
+  } catch {
+    /* yuqoridagi izohga qarang */
+  }
 }
 
 export async function api<T>(path: string, kind: "owner" | "admin", options: ApiOptions = {}): Promise<T> {
@@ -45,12 +70,101 @@ export async function login(username: string, password: string, kind: "owner" | 
   return result;
 }
 
-export function formatNumber(value: number | null | undefined) {
-  return typeof value === "number" ? new Intl.NumberFormat("uz-UZ").format(value) : "—";
+/** Telegram botdagi bir martalik havola bilan kirish (`/owner?key=...`).
+ *
+ * Bot egaga aynan shunday havola yuboradi — usiz u parol eslab qolishi
+ * kerak bo'lardi.  Kalit ishlatilgach manzil qatoridan olib tashlanadi:
+ * u bir marta ishlaydi va tarixda, ulashilgan skrinshotda yoki
+ * `Referer` sarlavhasida qolib ketmasligi kerak. */
+export async function loginWithLinkKey(): Promise<boolean> {
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get("key");
+  if (!key) return false;
+  try {
+    const result = await api<{ access_token: string }>("/api/v1/owner/auth/link", "owner", {
+      method: "POST",
+      body: JSON.stringify({ key }),
+    });
+    saveToken("owner", result.access_token);
+    return true;
+  } finally {
+    params.delete("key");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+    );
+  }
 }
 
-export function formatMoney(value: number | null | undefined) {
-  return typeof value === "number" ? `${new Intl.NumberFormat("uz-UZ").format(value)} so‘m` : "—";
+/** Telegram Mini App ichida parolsiz kirish. */
+export async function loginWithTelegram(): Promise<boolean> {
+  const telegram = (window as Window & {
+    Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } };
+  }).Telegram?.WebApp;
+  if (!telegram?.initData) return false;
+  telegram.ready?.();
+  telegram.expand?.();
+  const result = await api<{ access_token: string }>("/api/v1/owner/auth/telegram-webapp", "owner", {
+    method: "POST",
+    body: JSON.stringify({ init_data: telegram.initData }),
+  });
+  saveToken("owner", result.access_token);
+  return true;
+}
+
+/** Bot manzili — server `owner.html` qobig'iga o'rnatib beradi. */
+export function telegramBotUrl(): string {
+  const raw = (window as Window & { __CHAQIMCHI_BOT_URL__?: string }).__CHAQIMCHI_BOT_URL__ || "";
+  return raw.startsWith("http") ? raw : "";
+}
+
+const MONTHS_UZ = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
+const WEEKDAYS_UZ = ["yakshanba", "dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba"];
+
+/** "2026-yil 24-avgust, dushanba".
+ *
+ * `Intl` ishlatilmaydi: panel Telegram ichidagi WebView'da ochiladi va
+ * u yerdagi ba'zi Android qurilmalarda `uz-UZ` uchun ICU ma'lumoti
+ * yo'q — sana "M08 24, Mon" bo'lib chiqadi.  O'n ikki oy nomi bilan
+ * bu xavf butunlay yo'qoladi. */
+export function formatDateUz(date: Date = new Date(), withWeekday = true) {
+  const base = `${date.getFullYear()}-yil ${date.getDate()}-${MONTHS_UZ[date.getMonth()]}`;
+  return withWeekday ? `${base}, ${WEEKDAYS_UZ[date.getDay()]}` : base;
+}
+
+/** "24.08.2026" — jadval katakchalari uchun qisqa shakl. */
+export function formatDateShort(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+}
+
+/** "1 234 567" — mingliklar orasida probel.
+ *
+ * `Intl` emas: ba'zi WebView'larda `uz-UZ` uchun ICU yo'q va raqam
+ * "1,234,567" bo'lib chiqadi — o'zbekcha yozuvda vergul kasr belgisi,
+ * ya'ni bu son butunlay boshqacha o'qiladi. */
+export function formatNumber(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  const rounded = Math.round(value * 100) / 100;
+  const [whole, fraction] = String(Math.abs(rounded)).split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${rounded < 0 ? "−" : ""}${grouped}${fraction ? `,${fraction}` : ""}`;
+}
+
+/** Pul.  Million va undan katta summalar qisqartiriladi: "48,6 mln
+ *  so'm" bir qarashda o'qiladi, "48 600 000 so'm" esa kartada ikki
+ *  qatorga sinib ketadi va raqamlarni sanashga majbur qiladi. */
+export function formatMoney(value: number | null | undefined, { short = true } = {}) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (short && Math.abs(value) >= 1_000_000) {
+    const millions = Math.round(value / 100_000) / 10;
+    return `${formatNumber(millions)} mln so‘m`;
+  }
+  return `${formatNumber(value)} so‘m`;
 }
 
 export function relativeMinutes(value: number | null | undefined) {

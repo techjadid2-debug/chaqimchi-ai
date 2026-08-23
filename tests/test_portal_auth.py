@@ -373,3 +373,19 @@ def test_ui_v2_flag_serves_react_shells(
     assert 'id="root"' in owner.text
     assert "/assets/v2/" in owner.text
     assert 'id="root"' in admin.text
+
+    for name, page in (("owner", owner.text), ("admin", admin.text)):
+        assert 'lang="uz"' in page, name
+        assert 'charset="UTF-8"' in page or 'charset="utf-8"' in page, name
+        assert 'rel="icon"' in page, name
+        # Brend rangi bitta: beshinchi ko'k (#0b5cff) qaytib kelmasin.
+        assert 'content="#4285f4"' in page, name
+
+    # Mijoz paneli Telegram ichida ochiladi: SDK yuklanmasa `initData`
+    # hech qachon kelmaydi va bot tugmasi parol so'rab qoladi.
+    assert "telegram-web-app.js" in owner.text
+    # Bot manzili server tomonda almashtiriladi — qobiqda o'rin bo'lishi
+    # SHART, aks holda login ekranida "botdan havola oling" yo'li
+    # jimgina yo'qoladi.
+    assert "__CHAQIMCHI_BOT_URL__" in owner.text
+    assert "__TELEGRAM_BOT_URL__" not in owner.text, "almashtirish ishlamadi"

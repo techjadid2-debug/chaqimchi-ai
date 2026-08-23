@@ -44,7 +44,6 @@ h1,h2,h3,p { margin-top: 0; }
 .sidebar-logout { margin-top: auto; color: #7b8494 !important; }
 .main-shell { min-height: 100vh; padding-left: 244px; }
 .topbar { height: 73px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 32px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.9); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 10; }
-.topbar > div:first-child { display: grid; gap: 2px; }
 .topbar strong { font-size: 15px; }
 .topbar span { color: var(--muted); font-size: 12px; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
@@ -82,7 +81,34 @@ h1,h2,h3,p { margin-top: 0; }
 .metric-value { margin-top: 12px; font-size: clamp(24px, 2.3vw, 31px); font-weight: 800; letter-spacing: -.04em; }
 .metric-note { margin-top: 7px; color: var(--muted); font-size: 11px; }
 
+/* ── Ko'rsatkich kartasi: o'zgarish + tendensiya ───────────────────── */
+.metric-grid-5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
+.metric-grid-6 { grid-template-columns: repeat(6, minmax(0,1fr)); }
+.stat-card { min-height: 168px; display: flex; flex-direction: column; }
+/* Ikonka kartaning burchagida suzib turmaydi, sarlavha bilan bir
+   qatorda: besh-oltita tor karta bir qatorga sig'ganda suzuvchi ikonka
+   matn ustiga chiqib ketardi. */
+.stat-card .metric-icon { position: static; width: 34px; height: 34px; }
+.stat-head { display: flex; align-items: center; gap: 10px; }
+.stat-card .metric-label { width: auto; min-height: 0; }
+/* Kartada oltitasi bir qatorda turganda joy tor: uzun qiymat
+   ("48,6 mln so'm") sig'ishi uchun shrift bir oz kichikroq va so'z
+   bo'yicha ko'chadi. */
+.stat-card .metric-value { margin-top: 10px; font-size: clamp(20px, 1.8vw, 28px); line-height: 1.15; }
+.delta { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; font-weight: 700; }
+.delta em { color: var(--muted); font-style: normal; font-weight: 500; }
+.delta-up { color: var(--green); }
+.delta-down { color: var(--red); }
+.sparkline { width: 100%; height: 30px; margin-top: auto; padding-top: 10px; }
+.sparkline polyline { fill: none; stroke: var(--blue); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.spark-green polyline { stroke: var(--green); }
+.spark-red polyline { stroke: var(--red); }
+
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, .72fr); gap: 18px; }
+/* Bosh sahifa: chapda asosiy oqim, o'ngda lenta.  `minmax(0, …)` shart —
+   ichidagi jadval keng bo'lsa ustun cho'zilib ketardi. */
+.home-grid { display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(300px, .68fr); gap: 18px; }
+.split-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
 .stack { display: grid; align-content: start; gap: 18px; }
 .traffic-card { min-height: 330px; }
 .chart-wrap { padding: 16px 18px 18px; }
@@ -91,12 +117,67 @@ h1,h2,h3,p { margin-top: 0; }
 .chart-area { fill: url(#areaBlue); }
 .chart-line { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .chart-labels { display: flex; justify-content: space-between; gap: 4px; color: var(--muted); font-size: 10px; padding: 0 4px; }
+/* Ikkinchi seriya — uzuq chiziq: rang ko'rmaydigan foydalanuvchi ham
+   ikkalasini ajrata olsin. */
+.chart-line-alt { stroke: #a8c7fa; stroke-dasharray: 6 5; }
+.chart-cursor { stroke: var(--border); stroke-width: 1.5; }
+.chart-dot { fill: #fff; stroke: var(--blue); stroke-width: 3; }
+.chart-hit { fill: transparent; }
+.chart-wrap { position: relative; }
+.chart-tip { position: absolute; top: 8px; transform: translateX(-50%); display: grid; gap: 2px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 9px; background: #fff; box-shadow: var(--shadow); font-size: 11px; white-space: nowrap; pointer-events: none; }
+.chart-tip b { font-size: 12px; }
+.chart-tip span { color: var(--muted); }
+
+/* ── Halqa diagramma ──────────────────────────────────────────────── */
+.donut-wrap { display: grid; grid-template-columns: 150px minmax(0,1fr); align-items: center; gap: 18px; padding: 18px 20px 20px; }
+.donut { width: 150px; height: 150px; transform: rotate(-90deg); }
+.donut-seg { fill: none; stroke-width: 16; stroke-linecap: butt; }
+.donut-seg.tone-green { stroke: var(--green); }
+.donut-seg.tone-yellow { stroke: var(--yellow); }
+.donut-seg.tone-red { stroke: var(--red); }
+.donut-seg.tone-blue { stroke: var(--blue); }
+.donut-value, .donut-label { transform: rotate(90deg); transform-origin: 70px 70px; text-anchor: middle; }
+.donut-value { font-size: 24px; font-weight: 800; fill: var(--text); }
+.donut-label { font-size: 11px; fill: var(--muted); }
+.donut-legend { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.donut-legend li { display: grid; grid-template-columns: 10px minmax(0,1fr) auto auto; align-items: center; gap: 9px; font-size: 12px; }
+.donut-legend i { width: 10px; height: 10px; border-radius: 50%; background: #98a2b3; }
+.donut-legend i.tone-green { background: var(--green); }
+.donut-legend i.tone-yellow { background: var(--yellow); }
+.donut-legend i.tone-red { background: var(--red); }
+.donut-legend i.tone-blue { background: var(--blue); }
+.donut-legend b { font-weight: 700; }
+.donut-legend em { color: var(--muted); font-style: normal; font-size: 11px; }
+
+/* ── Ustunli diagramma ────────────────────────────────────────────── */
+.bars { display: flex; align-items: flex-end; gap: 4px; padding: 18px 20px 10px; }
+.bar-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 6px; }
+.bar-col i { display: block; border-radius: 3px 3px 0 0; background: var(--blue); }
+.bar-col span { color: var(--muted); font-size: 9px; text-align: center; }
+.summary-strip { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; padding: 14px 20px 20px; border-top: 1px solid var(--border); }
+.summary-strip span { display: block; color: var(--muted); font-size: 11px; }
+.summary-strip b { font-size: 15px; }
+.mini-metrics { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; padding: 18px 20px 6px; }
+.mini-metrics span { display: block; color: var(--muted); font-size: 11px; }
+.mini-metrics b { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
 .live-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px; }
 .camera-tile { border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: #0d1420; }
 .camera-frame { aspect-ratio: 16 / 9; position: relative; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 30% 30%, #293446, #0b111a 65%); color: #a8b2c2; }
 .camera-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .camera-frame .camera-empty { display: grid; place-items: center; gap: 6px; text-align: center; padding: 16px; font-size: 11px; }
 .camera-overlay-badge { position: absolute; top: 9px; right: 9px; padding: 5px 8px; border-radius: 8px; background: rgba(66,133,244,.9); color: #fff; font-size: 10px; font-weight: 800; }
+.camera-stamp { position: absolute; top: 9px; right: 9px; padding: 4px 8px; border-radius: 7px; background: rgba(16,24,40,.7); color: #fff; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.camera-overlay-badge ~ .camera-stamp { top: 34px; }
+/* Sarlavha va "Jonli" belgisi kadr USTIDA turadi: shunda plitka
+   balandligi kamera nomi uzunligiga bog'liq bo'lmaydi va to'rt plitka
+   bir xil o'lchamda qoladi. */
+.camera-tile { position: relative; }
+.camera-title { position: absolute; top: 9px; left: 9px; max-width: calc(100% - 90px); padding: 4px 9px; border-radius: 7px; background: rgba(16,24,40,.7); color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.camera-live { position: absolute; left: 9px; bottom: 56px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 7px; background: rgba(16,24,40,.7); color: #fff; font-size: 11px; font-weight: 700; }
+.camera-live i { width: 7px; height: 7px; border-radius: 50%; background: #98a2b3; }
+.camera-live.is-online i { background: var(--green); }
+.camera-live.is-stale i { background: var(--yellow); }
+.camera-live.is-offline i, .camera-live.is-unknown i { background: var(--red); }
 .camera-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; background: #fff; }
 .camera-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; font-weight: 700; }
 .camera-name span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -112,6 +193,81 @@ h1,h2,h3,p { margin-top: 0; }
 .pill-stale { background: var(--blue-soft); color: var(--blue-dark); }
 .pill-grace, .pill-pending { background: var(--yellow-soft); color: #8a5b00; }
 .pill-offline, .pill-expired, .pill-failed, .pill-suspended { background: var(--red-soft); color: #bd262c; }
+
+/* ── Avatar, qator menyusi, qidiruv ───────────────────────────────── */
+.avatar { width: 34px; height: 34px; flex: 0 0 auto; display: inline-grid; place-items: center; border-radius: 50%; font-size: 12px; font-weight: 800; letter-spacing: .01em; }
+.avatar-0 { background: var(--blue-soft); color: var(--blue-dark); }
+.avatar-1 { background: var(--green-soft); color: #08754d; }
+.avatar-2 { background: var(--yellow-soft); color: #8a5b00; }
+.avatar-3 { background: var(--red-soft); color: #bd262c; }
+.avatar-4 { background: #eef0f5; color: #475467; }
+
+.action-menu { position: relative; }
+.action-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 15; min-width: 210px; display: grid; padding: 6px; border: 1px solid var(--border); border-radius: 11px; background: #fff; box-shadow: 0 12px 30px rgba(16,24,40,.14); }
+.action-list button { min-height: 38px; border: 0; border-radius: 8px; padding: 0 11px; background: transparent; color: var(--text); text-align: left; font-size: 13px; font-weight: 600; }
+.action-list button:hover { background: #f4f7fb; }
+.action-list button.danger { color: var(--red); }
+
+.search-trigger { min-height: 40px; display: inline-flex; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; background: #fff; color: var(--muted); font-size: 13px; }
+.search-trigger:hover { border-color: #cbd4e4; }
+.search-trigger kbd { border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--muted); font-family: inherit; font-size: 11px; }
+.palette-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; justify-items: center; align-content: start; padding: 12vh 20px 20px; background: rgba(16,24,40,.4); }
+.palette { width: min(560px, 100%); border: 1px solid var(--border); border-radius: 14px; background: #fff; box-shadow: 0 24px 60px rgba(16,24,40,.24); overflow: hidden; }
+.palette-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.palette-input input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text); font-size: 15px; }
+.palette ul { display: grid; margin: 0; padding: 6px; list-style: none; max-height: 46vh; overflow-y: auto; }
+.palette li button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; border: 0; border-radius: 9px; padding: 0 12px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 600; }
+.palette li button:hover { background: #f4f7fb; }
+.palette li em { color: var(--muted); font-style: normal; font-size: 12px; font-weight: 500; }
+.palette-empty { margin: 0; padding: 22px; color: var(--muted); font-size: 13px; text-align: center; }
+
+/* ── Topbar qo'shimchalari ────────────────────────────────────────── */
+/* `min-width: 0` bo'lmasa flex bolasi o'z mazmunidan kichrayolmaydi:
+   uzun filial nomi telefonda uch qatorga sinib, topbar balandligini
+   buzardi. */
+.topbar-title { min-width: 0; display: grid; gap: 2px; }
+.topbar-title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-date { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.topbar-bell { position: relative; }
+.bell-badge { position: absolute; top: 5px; right: 5px; min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: 9px; font-style: normal; font-weight: 800; }
+.status-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.status-chip i { width: 8px; height: 8px; border-radius: 50%; }
+.status-chip.is-ok { background: var(--green-soft); color: #08754d; }
+.status-chip.is-ok i { background: var(--green); }
+.status-chip.is-warn { background: var(--yellow-soft); color: #8a5b00; }
+.status-chip.is-warn i { background: var(--yellow); }
+
+.sidebar-foot { margin-top: auto; display: grid; gap: 6px; }
+.sidebar-logout { margin-top: 0 !important; }
+.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--paper-2, #f7f9fc); color: var(--muted); }
+.sidebar-user b { display: block; color: var(--text); font-size: 13px; }
+.sidebar-user small { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-user > div { min-width: 0; }
+
+/* ── Jadval: qidiruv, filtr, ism ustuni ──────────────────────────── */
+.table-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 21px 0; }
+.table-search { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 9px; min-height: 44px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; background: #fff; color: var(--muted); }
+.table-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text); font-size: 13px; }
+.table-name { display: flex; align-items: center; gap: 11px; }
+
+/* ── Bosh sahifa bloklari ────────────────────────────────────────── */
+.zone-list, .staff-list { display: grid; gap: 12px; padding: 16px 21px 20px; }
+.zone-row { display: grid; grid-template-columns: minmax(0,1fr) 90px 44px; align-items: center; gap: 12px; }
+.zone-name b { display: block; font-size: 13px; }
+.zone-name small { color: var(--muted); font-size: 11px; }
+.zone-bar { height: 8px; border-radius: 999px; background: #eef1f6; overflow: hidden; }
+.zone-bar i { display: block; height: 100%; border-radius: 999px; background: var(--blue); }
+.staff-row { display: grid; grid-template-columns: 34px minmax(0,1fr) auto auto; align-items: center; gap: 10px; }
+.staff-name b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.staff-name small { color: var(--muted); font-size: 11px; }
+.chip-self { margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue-dark); font-size: 10px; font-weight: 800; }
+.team-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 12px; padding: 16px 21px 20px; text-align: center; }
+.team-member { display: grid; justify-items: center; gap: 4px; }
+.team-member b { font-size: 12px; }
+.team-member small { color: var(--muted); font-size: 10px; }
+
+.login-alt { margin: 14px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
+.login-alt a { color: var(--blue-dark); }
 
 .health-list, .event-list, .simple-list { display: grid; gap: 0; padding: 8px 20px 13px; }
 .health-row, .event-row, .simple-row { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #edf0f5; font-size: 12px; }
@@ -203,17 +359,24 @@ tr:last-child td { border-bottom: 0; }
 .drawer nav button { min-height: 48px; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 10px; padding: 0 12px; background: transparent; color: #475467; text-align: left; font-weight: 600; }
 .drawer nav button.active { background: var(--blue-soft); color: var(--blue); }
 
+/* Tor noutbukda oltita karta bir qatorga sig'maydi — uch ustunga. */
+@media (max-width: 1400px) {
+  .metric-grid-6 { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .metric-grid-5 { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+
 @media (max-width: 1100px) {
-  .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .dashboard-grid { grid-template-columns: 1fr; }
+  .metric-grid, .metric-grid-5, .metric-grid-6 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .dashboard-grid, .home-grid, .split-grid { grid-template-columns: 1fr; }
   .telemetry-grid { grid-template-columns: repeat(2,1fr); }
+  .donut-wrap { grid-template-columns: 130px minmax(0,1fr); }
+  .donut { width: 130px; height: 130px; }
 }
 
 @media (max-width: 760px) {
   .sidebar { display: none; }
   .main-shell { padding-left: 0; padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
   .topbar { height: 62px; padding: 0 17px; }
-  .topbar > div:first-child span { display: none; }
   .content { padding: 20px 15px 32px; }
   .page-header { gap: 12px; margin-bottom: 17px; }
   .page-header h1 { font-size: 24px; }
@@ -225,9 +388,23 @@ tr:last-child td { border-bottom: 0; }
   .bottom-nav span { font-size: 9px; font-weight: 700; }
   .metric-grid { gap: 10px; }
   .metric-card { min-height: 136px; padding: 15px; }
+  .stat-card { min-height: 150px; }
   .metric-icon { width: 34px; height: 34px; right: 13px; top: 13px; }
   .metric-value { font-size: 25px; }
-  .dashboard-grid, .stack { gap: 13px; }
+  .dashboard-grid, .home-grid, .split-grid, .stack { gap: 13px; }
+  /* Topbar telefonda tor: qidiruv, sana va holat chipi sig'maydi —
+     ularning har biri boshqa joyda takrorlanadi (qidiruv ⌘K bilan,
+     holat esa bosh sahifadagi ogohlantirish chizig'ida). */
+  .search-trigger, .topbar-date, .status-chip { display: none; }
+  /* Filial nomi yonidagi ro'yxatda ham turadi — topbarda takrorlash
+     tor ekranda joyni bekorga egallaydi. */
+  .topbar-title { display: none; }
+  .topbar-actions { flex: 1; justify-content: flex-end; min-width: 0; }
+  .topbar-actions .select { min-width: 0; flex: 1; max-width: 260px; }
+  .summary-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .donut-wrap { grid-template-columns: 1fr; justify-items: center; }
+  .zone-row { grid-template-columns: minmax(0,1fr) 60px 38px; }
+  .table-filters { padding: 14px 15px 0; }
   .card { border-radius: 13px; }
   .live-grid { grid-template-columns: 1fr; padding: 12px; }
   .telemetry-grid { grid-template-columns: 1fr; }

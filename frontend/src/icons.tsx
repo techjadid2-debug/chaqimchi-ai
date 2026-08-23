@@ -20,6 +20,12 @@ const paths: Record<string, ReactNode> = {
   more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
   close: <><path d="m5 5 14 14M19 5 5 19"/></>,
   eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></>,
+  search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></>,
+  clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5.5l3.5 2"/></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></>,
+  telegram: <><path d="M21 4 3 11l5 2 2 6 3-4 5 4 3-15Z"/><path d="m8 13 9-6-6 8"/></>,
+  download: <><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"/></>,
+  cpu: <><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></>,
 };
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {

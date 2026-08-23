@@ -1,29 +1,13 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatMoney, formatNumber, login, relativeMinutes, saveToken, tokenFor } from "./api";
+import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, login, loginWithLinkKey, loginWithTelegram, relativeMinutes, telegramBotUrl, tokenFor } from "./api";
 import { AppShell, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, type NavItem } from "./components";
+import { LineChart, type Point } from "./charts";
+import { OwnerHome } from "./OwnerHome";
+import { usePanelRoute } from "./router";
+import type { Camera, Dashboard, Employee, Invoice, Site, TelegramMember, TrendPoint } from "./types";
 import { Icon, Logo } from "./icons";
 import "./styles.css";
-
-type Site = { id: string; name: string; address?: string; connection?: string; cameras_active?: number; cameras_expected?: number; role?: string };
-type CameraState = { camera_id: string; state: string; reason?: string; reported_at?: string };
-type Camera = { camera_id: string; label?: string; enabled?: boolean };
-type EventItem = { id?: string; event_type: string; label?: string; camera_id?: string; created_at?: string; occurred_at?: string };
-type TrendPoint = { date?: string; day?: string; entries?: number; entered?: number; count?: number };
-type Dashboard = {
-  site: { id: string; name: string; address?: string; connection: string; minutes_since_seen?: number | null; cameras_active?: number; cameras_expected?: number; plan?: { name?: string } };
-  today: Record<string, unknown>;
-  cameras: Camera[];
-  camera_states: CameraState[];
-  events: EventItem[];
-  trend: TrendPoint[];
-  subscription?: { status?: string; days_left?: number; monthly_price_uzs?: number; subscription_until?: string };
-  updated_at: string;
-  revision?: string;
-};
-type Employee = { id: string; name?: string; external_id?: string; active?: boolean; enrollment_status?: string; photos?: {id:string}[] };
-type Invoice = { id:string; months:number; amount_uzs:number; state:string; created_at?:string; paid_at?:string; pay_url?:string; payme_url?:string; click_url?:string };
-type TelegramMember = { id:string; telegram_id:string; role:string; display_name?:string; digest_muted?:boolean; created_at?:string };
 
 const NAV: NavItem[] = [
   { id: "home", label: "Bosh sahifa", icon: "home" },
@@ -32,12 +16,18 @@ const NAV: NavItem[] = [
   { id: "employees", label: "Xodimlar", icon: "users" },
   { id: "heatmap", label: "Issiqlik xaritasi", icon: "heat" },
   { id: "branches", label: "Filiallar", icon: "branch" },
-  { id: "alerts", label: "Ogohlantirishlar", icon: "bell" },
   { id: "reports", label: "Hisobotlar", icon: "report" },
   { id: "billing", label: "Tarif va to‘lov", icon: "card" },
-  { id: "telegram", label: "Telegram", icon: "bell" },
+  { id: "telegram", label: "Telegram", icon: "telegram" },
   { id: "settings", label: "Sozlamalar", icon: "settings" },
 ];
+
+/* Ogohlantirishlar menyuda alohida bo'lim emas: ular bosh sahifadagi
+   lentada turadi.  Ammo "Barchasini ko'rish" havolasi va bot xabari
+   `/owner/alerts` ga olib boradi, shuning uchun yo'nalish yashab
+   qoladi. */
+const ROUTE_IDS = [...NAV.map(item => item.id), "alerts"];
+const MOBILE_NAV = ["home", "cameras", "traffic", "employees"];
 
 function value(report: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
@@ -110,6 +100,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
 function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId: string; overlay: boolean; live: boolean }) {
   const [src, setSrc] = useState("");
   const [error, setError] = useState(false);
+  const [stamp, setStamp] = useState("");
   useEffect(() => {
     let timer = 0;
     let stopped = false;
@@ -124,16 +115,27 @@ function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId
         if (stopped) { URL.revokeObjectURL(next); return; }
         if (current) URL.revokeObjectURL(current);
         current = next; setSrc(next); setError(false);
-      } catch { if (!src) setError(true); }
+        setStamp(new Date().toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      } catch {
+        // `current` — shu effektning O'Z holati.  Ilgari bu yerda
+        // `src` tekshirilardi: u effekt yopilmasidan oldingi qiymatni
+        // eslab qolgan edi, shuning uchun birinchi muvaffaqiyatli
+        // kadrdan keyin ham "Kadr kelmadi" yozuvi chiqib ketardi.
+        if (!current) setError(true);
+      }
       if (!stopped && live) timer = window.setTimeout(load, 2500);
     };
     void load();
     return () => { stopped = true; window.clearTimeout(timer); if (current) URL.revokeObjectURL(current); };
   }, [camera.camera_id, live, overlay, siteId]);
-  return <div className="camera-frame">{src ? <img src={src} alt={`${camera.label || camera.camera_id} kamerasi`} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{error ? "Kadr hozircha kelmadi" : "Kadr yuklanmoqda…"}</span></div>}{overlay && src ? <span className="camera-overlay-badge">AI tahlil</span> : null}</div>;
+  return <div className="camera-frame">
+    {src ? <img src={src} alt={`${camera.label || camera.camera_id} kamerasi`} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{error ? "Kadr hozircha kelmadi" : "Kadr yuklanmoqda…"}</span></div>}
+    {overlay && src ? <span className="camera-overlay-badge">AI tahlil</span> : null}
+    {stamp && src ? <span className="camera-stamp">{stamp}</span> : null}
+  </div>;
 }
 
-function CamerasBlock({ dashboard, siteId, expanded = false }: { dashboard: Dashboard; siteId: string; expanded?: boolean }) {
+function CamerasBlock({ dashboard, siteId, expanded = false, onOpenAll }: { dashboard: Dashboard; siteId: string; expanded?: boolean; onOpenAll?: () => void }) {
   const [overlay, setOverlay] = useState(false);
   const [live, setLive] = useState(false);
   const cameras = expanded ? dashboard.cameras : dashboard.cameras.slice(0, 4);
@@ -148,38 +150,33 @@ function CamerasBlock({ dashboard, siteId, expanded = false }: { dashboard: Dash
     if (live) await Promise.all(cameras.map(camera => api(`/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/live`, "owner", { method: "POST", siteId, body: JSON.stringify({ overlay: next }) }).catch(() => null)));
   };
   return <Card>
-    <div className="card-head"><div><h2>Kameralar</h2><p>Do‘kon holati va so‘nggi haqiqiy kadrlar</p></div><div className="page-actions"><button className="btn" onClick={toggleOverlay}><Icon name="eye"/>{overlay ? "AI ramkani yopish" : "AI ramkani ko‘rsatish"}</button><button className={`btn ${live ? "btn-primary" : ""}`} onClick={toggleLive}><Icon name="pulse"/>{live ? "Jonli" : "Jonli ko‘rish"}</button></div></div>
-    {cameras.length ? <div className="live-grid">{cameras.map(camera => { const state = stateMap.get(camera.camera_id); return <article className="camera-tile" key={camera.camera_id}><CameraImage camera={camera} siteId={siteId} overlay={overlay} live={live}/><div className="camera-meta"><div className="camera-name"><StatusDot state={state?.state || "unknown"}/><span>{camera.label || camera.camera_id}</span></div><small>{state?.reason || "Holat olinmoqda"}</small></div></article>; })}</div> : <EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera o‘rnatuvchi tomonidan qo‘shilgach haqiqiy kadrlar shu yerda ko‘rinadi." />}
+    <div className="card-head">
+      <div><h2>Jonli kameralar</h2><p>Do‘kon holati va so‘nggi haqiqiy kadrlar</p></div>
+      <div className="page-actions">
+        <button className="btn" onClick={toggleOverlay}><Icon name="eye"/>{overlay ? "AI ramkani yopish" : "AI ramkani ko‘rsatish"}</button>
+        <button className={`btn ${live ? "btn-primary" : ""}`} onClick={toggleLive}><Icon name="pulse"/>{live ? "Jonli" : "Jonli ko‘rish"}</button>
+        {!expanded && onOpenAll ? <button className="btn" onClick={onOpenAll}>Barchasini ochish</button> : null}
+      </div>
+    </div>
+    {cameras.length ? <div className="live-grid">{cameras.map((camera, index) => {
+      const state = stateMap.get(camera.camera_id)?.state || "unknown";
+      // Uch holat uch xil so'z bilan: "eskirgan" va "oflayn" bir xil
+      // qizil "Aloqa yo'q" bo'lib chiqsa, egasi tuzatib bo'ladigan
+      // kechikishni butunlay uzilish deb o'ylaydi.
+      const live_label = state === "online" ? "Jonli" : state === "stale" ? "Kechikmoqda" : "Aloqa yo‘q";
+      return <article className="camera-tile" key={camera.camera_id}>
+        <CameraImage camera={camera} siteId={siteId} overlay={overlay} live={live}/>
+        {/* Sarlavha kadr USTIDA: namunadagidek, va shu bilan plitka
+            balandligi kamera nomi uzunligiga bog'liq bo'lmay qoladi. */}
+        <span className="camera-title">{index + 1}. {camera.label || camera.camera_id}</span>
+        <span className={`camera-live is-${state}`}><i/>{live_label}</span>
+        <div className="camera-meta">
+          <div className="camera-name"><StatusDot state={state}/><span>{camera.label || camera.camera_id}</span></div>
+          <small>{stateMap.get(camera.camera_id)?.reason || "Holat olinmoqda"}</small>
+        </div>
+      </article>;
+    })}</div> : <EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera o‘rnatuvchi tomonidan qo‘shilgach haqiqiy kadrlar shu yerda ko‘rinadi." />}
   </Card>;
-}
-
-function Overview({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; siteId: string; onNavigate: (id: string) => void }) {
-  const entries = value(dashboard.today, "traffic.entered", "entered", "entries", "visitors", "person_count");
-  const exits = value(dashboard.today, "traffic.exited", "exited", "exits");
-  const peak = textValue(dashboard.today,"traffic.busiest_hour");
-  const queues = value(dashboard.today, "queue.alerts", "queue_events", "queue_alerts", "queue_threshold_exceeded");
-  const connection = dashboard.site.connection;
-  return <>
-    <PageHeader title={`Salom, ${dashboard.site.name}`} subtitle="Bugungi biznes holati — eng muhim raqamlar bitta sahifada." actions={<button className="btn" onClick={() => onNavigate("reports")}><Icon name="report"/><span>Hisobot</span></button>} />
-    {connection !== "online" ? <div className={`alert-strip ${connection === "stale" ? "alert-info" : "alert-warning"}`}><Icon name="bell"/><div><strong>Aloqa {connection === "stale" ? "yangilanmoqda" : "uzilgan"}.</strong> Oxirgi aloqa: {relativeMinutes(dashboard.site.minutes_since_seen)}. Yangi ma’lumot kelguncha oxirgi tasdiqlangan raqamlar ko‘rsatiladi.</div></div> : null}
-    <div className="metric-grid">
-      <MetricCard label="Bugun kirgan mijozlar" value={formatNumber(entries)} note={entries == null ? "Yig‘ilmoqda" : exits != null ? `${formatNumber(exits)} ta chiqish` : "Bugungi hisob"} icon="users" tone="blue"/>
-      <MetricCard label="Eng gavjum vaqt" value={String(peak)} note="Bugungi oqim bo‘yicha" icon="chart" tone="yellow"/>
-      <MetricCard label="Kameralar ishlayapti" value={`${formatNumber(dashboard.site.cameras_active)} / ${formatNumber(dashboard.site.cameras_expected)}`} note={connection === "online" ? "Joriy holat" : "Oxirgi ma’lumot"} icon="camera" tone={connection === "online" ? "green" : "red"}/>
-      <MetricCard label="Navbat signallari" value={formatNumber(queues)} note={queues === 0 ? "Muammo qayd etilmadi" : "Bugungi holatlar"} icon="bell" tone={queues ? "red" : "green"}/>
-    </div>
-    <div className="dashboard-grid">
-      <div className="stack">
-        <Card className="traffic-card"><div className="card-head"><div><h2>Mijozlar oqimi</h2><p>Oxirgi 14 kun</p></div><button className="btn" onClick={() => onNavigate("traffic")}>Batafsil</button></div><TrendChart points={dashboard.trend}/></Card>
-        <CamerasBlock dashboard={dashboard} siteId={siteId}/>
-      </div>
-      <div className="stack">
-        <Card><div className="card-head"><div><h2>Filial holati</h2><p>Qurilma va kameralar</p></div><Pill state={connection}>{connection === "online" ? "Ishlayapti" : connection === "stale" ? "Aloqa eskirgan" : "Oflayn"}</Pill></div><div className="health-list">{dashboard.camera_states.slice(0,6).map(item => <div className="health-row" key={item.camera_id}><div className="health-name"><StatusDot state={item.state}/><div><b>{dashboard.cameras.find(camera => camera.camera_id === item.camera_id)?.label || item.camera_id}</b><small>{item.reason}</small></div></div><span className="list-value">{item.state === "online" ? "Faol" : "Tekshirish kerak"}</span></div>)}</div></Card>
-        <Card><div className="card-head"><div><h2>So‘nggi hodisalar</h2><p>AI va tizim xabarlari</p></div><button className="btn btn-icon" aria-label="Ogohlantirishlarni ko‘rish" onClick={() => onNavigate("alerts")}><Icon name="bell"/></button></div>{dashboard.events.length ? <div className="event-list">{dashboard.events.slice(0,6).map((item,index) => <div className="event-row" key={item.id || index}><div className="event-name"><div className="metric-icon tone-blue" style={{position:"static",width:34,height:34}}><Icon name="pulse" size={17}/></div><div><b>{item.label || item.event_type}</b><small>{item.camera_id || "Tizim"}</small></div></div><span className="list-value">{String(item.occurred_at || item.created_at || "").slice(11,16) || "—"}</span></div>)}</div> : <EmptyState icon="shield" title="Yangi hodisa yo‘q" detail="Bu yaxshi belgi. Tizim yangi muhim holatni shu yerda ko‘rsatadi." />}</Card>
-        <Card><div className="card-head"><div><h2>Tarif</h2><p>{dashboard.subscription?.status === "active" ? "Obuna faol" : "Holatni tekshiring"}</p></div><Pill state={dashboard.subscription?.status}>{dashboard.site.plan?.name || "Tarif"}</Pill></div><div className="card-body"><div className="simple-row"><span>Keyingi to‘lov</span><b>{formatMoney(dashboard.subscription?.monthly_price_uzs)}</b></div><button className="btn btn-wide" onClick={() => onNavigate("billing")}>Tarif va hisoblar</button></div></Card>
-      </div>
-    </div>
-  </>;
 }
 
 function EmployeesPage({ siteId }: { siteId: string }) {
@@ -225,7 +222,7 @@ function BillingPage({dashboard,siteId}:{dashboard:Dashboard;siteId:string}) {
   const load=useCallback(()=>api<Invoice[]>("/api/v1/owner/invoices","owner",{siteId}).then(data=>{setInvoices(data);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:"Hisoblar olinmadi")),[siteId]);
   useEffect(()=>{void load();},[load]);
   const create=async()=>{setBusy(true);setError("");try{const invoice=await api<Invoice>("/api/v1/owner/invoices","owner",{method:"POST",siteId,body:JSON.stringify({months})});setInvoices(current=>[invoice,...(current||[])]);}catch(reason){setError(reason instanceof Error?reason.message:"Hisob yaratilmadi");}finally{setBusy(false);}};
-  return <><PageHeader title="Tarif va to‘lov" subtitle="Amaldagi obuna va server hisoblagan haqiqiy hisob-fakturalar."/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>{dashboard.site.plan?.name || "Amaldagi tarif"}</h2><p>To‘lov operator tasdig‘idan keyin obunaga qo‘shiladi</p></div><Pill state={dashboard.subscription?.status}>{dashboard.subscription?.status || "—"}</Pill></div><div className="card-body"><div className="metric-value">{formatMoney(dashboard.subscription?.monthly_price_uzs)}</div><p className="metric-note">oyiga · {dashboard.subscription?.days_left==null?"muddat olinmadi":`${dashboard.subscription.days_left} kun qoldi`}</p><div className="invoice-create"><select className="select" value={months} onChange={event=>setMonths(Number(event.target.value))} aria-label="Hisob muddati"><option value={1}>1 oy</option><option value={3}>3 oy</option><option value={6}>6 oy</option><option value={12}>12 oy</option></select><button className="btn btn-primary" disabled={busy} onClick={()=>void create()}>{busy?"Yaratilmoqda…":"Hisob-faktura yaratish"}</button></div></div></Card><Card><div className="card-head"><div><h2>To‘lov tartibi</h2><p>Provayder ulanmaguncha qo‘lda tasdiqlash</p></div></div><div className="card-body"><p className="metric-note">Hisobni yarating, rekvizitlar bo‘yicha to‘lang. Operator tushumni tasdiqlagandan keyin obuna avtomatik uzayadi.</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>Hisob bilan muammo:</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>Hisob-fakturalar</h2><p>Summalar tarif va muddat bo‘yicha serverda hisoblangan</p></div></div>{invoices===null?<div className="card-body"><Skeleton height={140}/></div>:invoices.length?<div className="table-wrap"><table><thead><tr><th>Raqam</th><th>Muddat</th><th>Summa</th><th>Holat</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{invoices.map(invoice=><tr key={invoice.id}><td><div className="table-title">#{invoice.id}</div></td><td>{invoice.months} oy</td><td>{formatMoney(invoice.amount_uzs)}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?"To‘langan":invoice.state==="pending"?"Kutilmoqda":"Bekor qilingan"}</Pill></td><td>{invoice.created_at?new Date(invoice.created_at).toLocaleDateString("uz-UZ"):"—"}</td><td>{invoice.state==="pending"&&invoice.pay_url?<a className="btn" href={invoice.pay_url} target="_blank" rel="noreferrer">Ochish</a>:"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title="Hisob-faktura yo‘q" detail="Kerakli muddatni tanlab birinchi hisob-fakturani yarating."/>}</Card></>;
+  return <><PageHeader title="Tarif va to‘lov" subtitle="Amaldagi obuna va server hisoblagan haqiqiy hisob-fakturalar."/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>{dashboard.site.plan?.name || "Amaldagi tarif"}</h2><p>To‘lov operator tasdig‘idan keyin obunaga qo‘shiladi</p></div><Pill state={dashboard.subscription?.status}>{dashboard.subscription?.status || "—"}</Pill></div><div className="card-body"><div className="metric-value">{formatMoney(dashboard.subscription?.monthly_price_uzs)}</div><p className="metric-note">oyiga · {dashboard.subscription?.days_left==null?"muddat olinmadi":`${dashboard.subscription.days_left} kun qoldi`}</p><div className="invoice-create"><select className="select" value={months} onChange={event=>setMonths(Number(event.target.value))} aria-label="Hisob muddati"><option value={1}>1 oy</option><option value={3}>3 oy</option><option value={6}>6 oy</option><option value={12}>12 oy</option></select><button className="btn btn-primary" disabled={busy} onClick={()=>void create()}>{busy?"Yaratilmoqda…":"Hisob-faktura yaratish"}</button></div></div></Card><Card><div className="card-head"><div><h2>To‘lov tartibi</h2><p>Provayder ulanmaguncha qo‘lda tasdiqlash</p></div></div><div className="card-body"><p className="metric-note">Hisobni yarating, rekvizitlar bo‘yicha to‘lang. Operator tushumni tasdiqlagandan keyin obuna avtomatik uzayadi.</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>Hisob bilan muammo:</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>Hisob-fakturalar</h2><p>Summalar tarif va muddat bo‘yicha serverda hisoblangan</p></div></div>{invoices===null?<div className="card-body"><Skeleton height={140}/></div>:invoices.length?<div className="table-wrap"><table><thead><tr><th>Raqam</th><th>Muddat</th><th>Summa</th><th>Holat</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{invoices.map(invoice=><tr key={invoice.id}><td><div className="table-title">#{invoice.id}</div></td><td>{invoice.months} oy</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?"To‘langan":invoice.state==="pending"?"Kutilmoqda":"Bekor qilingan"}</Pill></td><td>{formatDateShort(invoice.created_at)}</td><td>{invoice.state==="pending"&&invoice.pay_url?<a className="btn" href={invoice.pay_url} target="_blank" rel="noreferrer">Ochish</a>:"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title="Hisob-faktura yo‘q" detail="Kerakli muddatni tanlab birinchi hisob-fakturani yarating."/>}</Card></>;
 }
 
 function TelegramPage({siteId}:{siteId:string}) {
@@ -246,22 +243,72 @@ function downloadTrafficCsv(dashboard:Dashboard) {
 
 function GenericPage({ id, dashboard, sites, siteId }: { id:string; dashboard:Dashboard; sites:Site[]; siteId:string }) {
   if (id === "cameras") return <><PageHeader title="Kameralar" subtitle="Jonli kadr, ulanish holati va AI tahlil qatlami."/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>;
-  if (id === "traffic") return <><PageHeader title="Mijozlar oqimi" subtitle="Kunlar va vaqt bo‘yicha anonim tashriflar tahlili."/><Card><div className="card-head"><div><h2>Oqim dinamikasi</h2><p>Shaxsni saqlamasdan, faqat anonim sanash</p></div></div><TrendChart points={dashboard.trend}/></Card></>;
+  if (id === "traffic") return <TrafficPage dashboard={dashboard}/>;
   if (id === "heatmap") return <HeatmapPage dashboard={dashboard} siteId={siteId}/>;
   if (id === "branches") return <><PageHeader title="Filiallar" subtitle="Barcha savdo nuqtalaringizning aloqa va kamera holati."/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? "Aloqada" : "Aloqani tekshiring")} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
   if (id === "alerts") return <><PageHeader title="Ogohlantirishlar" subtitle="Faqat e’tibor talab qiladigan AI va tizim holatlari."/><Card>{dashboard.events.length ? <div className="event-list">{dashboard.events.map((item,index) => <div className="event-row" key={item.id || index}><div className="event-name"><Icon name="bell"/><div><b>{item.label || item.event_type}</b><small>{item.camera_id || "Tizim"}</small></div></div><span>{item.occurred_at || item.created_at || "—"}</span></div>)}</div> : <EmptyState icon="shield" title="Ogohlantirish yo‘q" detail="Hozircha e’tibor talab qiladigan yangi holat qayd etilmadi."/>}</Card></>;
   if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>CSV yuklash</button>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card></>;
   if (id === "billing") return <BillingPage dashboard={dashboard} siteId={siteId}/>;
   if (id === "telegram") return <TelegramPage siteId={siteId}/>;
-  const info:Record<string,[string,string,string]> = { settings:["Sozlamalar","Profil, bildirishnoma va xavfsizlik.","Tizim sozlamalari o‘rnatuvchi tomonidan boshqariladi; biznes egasi bildirishnoma vaqtini va panel ko‘rinishini belgilaydi."] };
-  const item = info[id] || ["Bo‘lim","Bu bo‘lim V2 panel tarkibida.","Kerakli ma’lumotlar yig‘ilgach mazmun avtomatik ko‘rinadi."];
-  return <><PageHeader title={item[0]} subtitle={item[1]}/><Card><EmptyState icon={id === "heatmap" ? "heat" : "settings"} title="Soddalashtirilgan ish maydoni" detail={item[2]}/></Card></>;
+  if (id === "settings") return <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId}/>;
+  return <><PageHeader title="Bo‘lim" subtitle="Bu bo‘lim panel tarkibida."/><Card><EmptyState icon="settings" title="Soddalashtirilgan ish maydoni" detail="Kerakli ma’lumotlar yig‘ilgach mazmun avtomatik ko‘rinadi."/></Card></>;
+}
+
+/** Oqim sahifasi: bugungi soatlik egri va 14 kunlik dinamika. */
+function TrafficPage({ dashboard }: { dashboard: Dashboard }) {
+  const traffic = ((dashboard.today as Record<string, unknown>).traffic || {}) as Record<string, unknown>;
+  const hourly = Array.isArray(traffic.hourly) ? (traffic.hourly as { hour:number; entered:number; exited:number }[]) : [];
+  const hourPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2,"0")}:00`, value: Number(item.entered) || 0 }));
+  const exitPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2,"0")}:00`, value: Number(item.exited) || 0 }));
+  return <>
+    <PageHeader title="Mijozlar oqimi" subtitle="Kunlar va vaqt bo‘yicha anonim tashriflar tahlili."/>
+    <Card>
+      <div className="card-head"><div><h2>Bugun, soat bo‘yicha</h2><p>Kirgan va chiqqanlar — shaxsni saqlamasdan</p></div></div>
+      {hourPoints.some(point => point.value > 0)
+        ? <LineChart series={[{ name: "Kirdi", points: hourPoints }, { name: "Chiqdi", points: exitPoints }]}/>
+        : <EmptyState icon="chart" title="Bugun hali tashrif yo‘q" detail="Kamera birinchi kirishni qayd qilgach grafik shu yerda to‘ladi."/>}
+    </Card>
+    <Card className="section-gap">
+      <div className="card-head"><div><h2>Oxirgi 14 kun</h2><p>Kunlik dinamika</p></div></div>
+      <TrendChart points={dashboard.trend}/>
+    </Card>
+  </>;
+}
+
+/** Sozlamalar: hozircha faqat HAQIQATAN mavjud bo'lgan ma'lumot.
+ *  Ilgari bu sahifa bo'sh "ish olib borilmoqda" yozuvi edi. */
+function SettingsPage({ dashboard, sites, siteId }: { dashboard: Dashboard; sites: Site[]; siteId: string }) {
+  const site = sites.find(item => item.id === siteId);
+  return <>
+    <PageHeader title="Sozlamalar" subtitle="Do‘kon ma’lumotlari va bildirishnoma kanallari."/>
+    <div className="dashboard-grid">
+      <Card>
+        <div className="card-head"><div><h2>Do‘kon</h2><p>O‘rnatuvchi kiritgan ma’lumot</p></div></div>
+        <div className="card-body">
+          <div className="simple-row"><span>Nomi</span><b>{site?.name || dashboard.site.name}</b></div>
+          <div className="simple-row"><span>Manzil</span><b>{site?.address || dashboard.site.address || "—"}</b></div>
+          <div className="simple-row"><span>Tarif</span><b>{dashboard.site.plan?.name || "—"}</b></div>
+          <div className="simple-row"><span>Kameralar</span><b>{formatNumber(dashboard.site.cameras_expected)} tagacha</b></div>
+          <p className="metric-note">Bu maydonlarni o‘zgartirish uchun o‘rnatuvchi yoki qo‘llab-quvvatlash xizmatiga murojaat qiling.</p>
+        </div>
+      </Card>
+      <Card>
+        <div className="card-head"><div><h2>Bildirishnomalar</h2><p>Telegram orqali yuboriladi</p></div></div>
+        <div className="card-body">
+          <p className="metric-note">Muhim kamera va tizim holatlari hamda kunlik xulosa botga boradi. Kim olishini «Telegram» bo‘limida boshqarasiz.</p>
+          <a className="btn btn-wide" href="/owner/telegram">Telegram a’zolari</a>
+        </div>
+      </Card>
+    </div>
+  </>;
 }
 
 function OwnerApp() {
   const [authenticated,setAuthenticated] = useState(() => Boolean(tokenFor("owner")));
+  const [checkingLink,setCheckingLink] = useState(() => new URLSearchParams(window.location.search).has("key"));
   const [sites,setSites] = useState<Site[]>([]); const [siteId,setSiteId] = useState("");
-  const [active,setActive] = useState("home"); const [drawer,setDrawer] = useState(false);
+  const [active,navigateTo] = usePanelRoute("/owner", ROUTE_IDS, "home");
+  const [drawer,setDrawer] = useState(false);
   const [loginError,setLoginError] = useState(""); const [busy,setBusy] = useState(false);
   const {data,error,loading,refresh} = useAdaptiveDashboard(siteId,authenticated);
 
@@ -269,27 +316,78 @@ function OwnerApp() {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/owner-sw.js").catch(() => undefined);
   }, []);
 
+  /* Parolsiz kirishning ikki yo'li.  Ikkalasi ham bitta effektda:
+     ular ketma-ket sinaladi va faqat ikkalasi ham ishlamaganda login
+     formasi ko'rsatiladi.
+       1) Botdagi bir martalik havola — `/owner?key=...`
+       2) Telegram Mini App — `initData` */
+  useEffect(() => {
+    if (authenticated) { setCheckingLink(false); return; }
+    let stopped = false;
+    (async () => {
+      try {
+        if (await loginWithLinkKey()) { if (!stopped) setAuthenticated(true); return; }
+        if (await loginWithTelegram()) { if (!stopped) setAuthenticated(true); return; }
+      } catch (reason) {
+        if (!stopped) setLoginError(reason instanceof Error ? reason.message : "Havola bo‘yicha kirish amalga oshmadi");
+      } finally {
+        if (!stopped) setCheckingLink(false);
+      }
+    })();
+    return () => { stopped = true; };
+  }, [authenticated]);
+
   const loadSites = useCallback(async () => {
     const result = await api<{sites:Site[]}>("/api/v1/owner/sites", "owner");
     setSites(result.sites || []); setSiteId(current => current || result.sites?.[0]?.id || "");
   }, []);
-  useEffect(() => { if (authenticated) loadSites().catch(reason => { if (reason.status === 401) { clearToken("owner"); setAuthenticated(false); } else setLoginError(reason.message); }); }, [authenticated,loadSites]);
   useEffect(() => {
-    const telegram = (window as Window & {Telegram?: {WebApp?: {initData?: string; ready?:()=>void; expand?:()=>void}}}).Telegram?.WebApp;
-    if (authenticated || !telegram?.initData) return;
-    telegram.ready?.(); telegram.expand?.();
-    api<{access_token:string}>("/api/v1/owner/auth/telegram-webapp", "owner", {method:"POST",body:JSON.stringify({init_data:telegram.initData})}).then(result => { saveToken("owner",result.access_token);setAuthenticated(true); }).catch(reason => setLoginError(reason.message));
-  }, [authenticated]);
+    if (!authenticated) return;
+    loadSites().catch((reason: unknown) => {
+      // `reason` — `unknown`: rad etilgan va'da Error bo'lmasligi ham
+      // mumkin, avvalgi `reason.status` esa bunday holatda ishlov
+      // beruvchining o'zini yiqitardi.
+      const status = (reason as { status?: number } | null)?.status;
+      if (status === 401) { clearToken("owner"); setAuthenticated(false); }
+      else setLoginError(reason instanceof Error ? reason.message : "Filiallar olinmadi");
+    });
+  }, [authenticated,loadSites]);
 
   const submit = async (username:string,password:string) => { setBusy(true);setLoginError("");try { await login(username,password,"owner");setAuthenticated(true); } catch(reason) { setLoginError(reason instanceof Error ? reason.message : "Kirish amalga oshmadi"); } finally { setBusy(false); } };
   const logout = () => { clearToken("owner");setAuthenticated(false);setSites([]);setSiteId(""); };
-  const navigate = (id:string) => { if (id === "more") setDrawer(true); else { setActive(id); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"}); } };
-  if (!authenticated) return <LoginScreen kind="owner" onSubmit={submit} busy={busy} error={loginError}/>;
-  if (loading || !data) return <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">BIZNES PANELI</span><h1>Ko‘rsatkichlar tayyorlanmoqda.</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={54}/><div style={{height:14}}/><Skeleton height={150}/></div></section></div>;
+  const navigate = (id:string) => { if (id === "more") setDrawer(true); else { navigateTo(id); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"}); } };
+
+  const splash = (title:string) => <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">BIZNES PANELI</span><h1>{title}</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={54}/><div style={{height:14}}/><Skeleton height={150}/></div></section></div>;
+  if (checkingLink) return splash("Havola tekshirilmoqda.");
+  if (!authenticated) return <LoginScreen kind="owner" onSubmit={submit} busy={busy} error={loginError} botUrl={telegramBotUrl()}/>;
+  if (loading || !data) return splash("Ko‘rsatkichlar tayyorlanmoqda.");
+
   const selected = sites.find(site => site.id === siteId);
-  return <AppShell kind="owner" nav={NAV} active={active} onNavigate={navigate} title={selected?.name || data.site.name} subtitle={`Yangilandi: ${new Date(data.updated_at).toLocaleTimeString("uz-UZ",{hour:"2-digit",minute:"2-digit"})}`} onLogout={logout} headerActions={<><select className="select" value={siteId} onChange={event => setSiteId(event.target.value)} aria-label="Filialni tanlash">{sites.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select><button className="btn btn-icon" onClick={() => refresh()} aria-label="Yangilash"><Icon name="pulse"/></button></>}>
+  const today = formatDateUz();
+  const alertCount = data.events.length;
+  return <AppShell
+    nav={NAV}
+    mobileNav={MOBILE_NAV}
+    active={active}
+    onNavigate={navigate}
+    title={selected?.name || data.site.name}
+    subtitle={`Yangilandi: ${new Date(data.updated_at).toLocaleTimeString("uz-UZ",{hour:"2-digit",minute:"2-digit"})}`}
+    onLogout={logout}
+    sidebarFooter={<div className="sidebar-user"><Icon name="store"/><div><b>{selected?.name || data.site.name}</b><small>{selected?.address || data.site.address || "Manzil kiritilmagan"}</small></div></div>}
+    headerActions={<>
+      {sites.length > 1 ? <select className="select" value={siteId} onChange={event => setSiteId(event.target.value)} aria-label="Filialni tanlash">{sites.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : null}
+      <span className="topbar-date"><Icon name="calendar" size={16}/>{today}</span>
+      <button className="btn btn-icon topbar-bell" onClick={() => navigate("alerts")} aria-label={`Ogohlantirishlar: ${alertCount}`}><Icon name="bell"/>{alertCount ? <i className="bell-badge">{alertCount > 9 ? "9+" : alertCount}</i> : null}</button>
+      <button className="btn btn-icon" onClick={() => refresh()} aria-label="Yangilash"><Icon name="pulse"/></button>
+    </>}>
     {error ? <div className="alert-strip"><Icon name="bell"/><div><strong>Yangilashda muammo:</strong> {error}. Oxirgi olingan ma’lumot ko‘rsatilmoqda.</div></div> : null}
-    {active === "home" ? <Overview dashboard={data} siteId={siteId} onNavigate={navigate}/> : active === "employees" ? <EmployeesPage siteId={siteId}/> : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId}/>} 
+    {active === "home"
+      ? <>
+          <PageHeader title="Bugungi nazorat" subtitle={today} />
+          <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
+        </>
+      : active === "employees" ? <EmployeesPage siteId={siteId}/>
+      : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label="Yopish"><Icon name="close"/></button></div><nav>{NAV.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>Chiqish</button></nav></aside></div> : null}
   </AppShell>;
 }

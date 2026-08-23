@@ -7,9 +7,17 @@
     <title>Chaqimchi — biznes paneli</title>
     <link rel="icon" href="/assets/favicon.png" type="image/png" />
     <link rel="manifest" href="/assets/v2/manifest.webmanifest" />
+    <!-- Telegram Mini App SDK.  Usiz `window.Telegram` hech qachon
+         paydo bo'lmaydi va bot ichidan ochilgan panel parol so'rab
+         qolardi — hisobda esa parolsiz kirish kutilardi. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Bot manzilini server `_render_owner()` da almashtiradi (bot
+         sozlanmagan bo'lsa joy bo'sh qoladi va login ekranida
+         "botdan havola oling" taklifi ko'rsatilmaydi). -->
+    <script>window.__CHAQIMCHI_BOT_URL__ = "__TELEGRAM_BOT_URL__";</script>
     <script type="module" src="/src/owner.tsx"></script>
   </body>
 </html>

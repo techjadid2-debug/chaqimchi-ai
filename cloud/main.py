@@ -433,6 +433,13 @@ class EdgeHeartbeatBody(BaseModel):
     #: Klip yozish hisoblagichlari — hodisa bor-u klip yo'q holatini
     #: cloudda ko'rish uchun.
     clips: Dict[str, int] = Field(default_factory=dict)
+    #: Karnaydan ovoz berish natijasi: `played_file`, `played_tts`, `failed`.
+    #:
+    #: Model maydonisiz Pydantic uni JIMGINA tashlab yuboradi
+    #: (`body.model_dump()` faqat e'lon qilingan maydonlarni beradi) —
+    #: qurilma yuborsa ham bulut ko'rmasdi.  Ovozni biz eshitmaymiz,
+    #: shuning uchun bu yagona qaytish aloqasi.
+    speak: Dict[str, int] = Field(default_factory=dict)
     #: Zanjir necha marta o'zi yiqilib ko'tarilgan (72 soat mezoni).
     chain_restarts: int = Field(default=0, ge=0)
     #: Jimgina ishlamay qolishni aniqlash uchun (`plan_device_health_alerts`).

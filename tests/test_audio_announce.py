@@ -136,3 +136,18 @@ def test_an_answer_without_speak_is_harmless(monkeypatch) -> None:
     """Eski bulut bu maydonni yubormaydi — qurilma yiqilmasin."""
     cloud_config.apply_speak_requests({})
     cloud_config.apply_speak_requests({"speak_requested": None})
+
+
+def test_the_cloud_model_keeps_the_speak_counters() -> None:
+    """Pydantic e'lon qilinmagan maydonni JIMGINA tashlab yuboradi.
+
+    Jonli qurilmada ushlandi: 0.6.13 `speak` hisoblagichini yuborardi,
+    bulutda esa u `None` bo'lib turardi — chunki `EdgeHeartbeatBody` da
+    bunday maydon yo'q edi va `body.model_dump()` uni tushirib qoldirardi.
+    """
+    from cloud.main import EdgeHeartbeatBody
+
+    body = EdgeHeartbeatBody(speak={"played_file": 2, "played_tts": 1, "failed": 3})
+    assert body.model_dump()["speak"] == {"played_file": 2, "played_tts": 1, "failed": 3}
+    # Eski qurilma yubormaydi — bo'sh lug'at, xato emas.
+    assert EdgeHeartbeatBody().model_dump()["speak"] == {}

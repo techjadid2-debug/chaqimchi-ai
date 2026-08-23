@@ -72,7 +72,8 @@ cd "/Users/abdulvosit/Desktop/Chaqimchi AI"
 rsync -az --delete \
   --exclude '.git' --exclude '.venv' --exclude 'build' --exclude 'releases' \
   --exclude '.deploy_keys' --exclude 'data' \
-  --exclude '.env' --exclude '.env.production' \
+  --exclude '.env' --exclude '.env.production' --exclude '.env.production.bak-*' \
+  --exclude 'node_modules' --exclude 'Yangi dizayn-2' \
   --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.ruff_cache' \
   --exclude '.DS_Store' \
   -e "ssh -i .deploy_keys/chaqimchi_prod" \
@@ -88,6 +89,9 @@ va `deploy` foydalanuvchisi ularga yoza olmaydi.
 |---|---|
 | `.deploy_keys` | **Serverning o'z maxfiy SSH kaliti** — u serverga tushmasligi kerak |
 | `.env`, `.env.production` | Serverdagi nusxa `deploy` egaligida va boshqacha |
+| `.env.production.bak-*` | **Env zaxiralari.** `--exclude '.env.production'` ularning nomiga mos kelmaydi va `--delete` ularni o'chirib yuboradi — flagni orqaga qaytarish uchun yagona nusxa yo'qoladi (2026-08-24 quruq mashqda ushlandi) |
+| `node_modules` | Panel bog'liqliklari; image ichida `npm ci` bilan qayta o'rnatiladi |
+| `Yangi dizayn-2` | Dizayn namunalari, ~12 MB rasm — serverda kerak emas |
 | `releases` | 619 MB, bind mount; o'chsa yuklab olish 404 beradi |
 | `data` | Lokal ishlab chiqish ma'lumoti; production `cloud_state` volumeda |
 

@@ -48,12 +48,22 @@
 	}
 	header @versioned Cache-Control "public, max-age=31536000, immutable"
 
+	# Panel bundlelari (Vite).  Fayl nomining o'zida mazmun xeshi bor
+	# (`owner-BR8PvW1U.js`), ya'ni mazmun o'zgarsa NOM o'zgaradi va eski
+	# nusxa hech qachon noto'g'ri javob bermaydi.  `?v=` qidiruvi yo'q,
+	# shuning uchun ular yuqoridagi `@versioned` ga tushmasdi va bir
+	# yilga emas, 5 daqiqaga keshlanardi — har ochilishda 250 KB qayta
+	# yuklanardi.
+	@v2_bundle path /assets/v2/assets/*
+	header @v2_bundle Cache-Control "public, max-age=31536000, immutable"
+
 	@images path /assets/*.webp /assets/*.jpg /assets/*.png /assets/*.svg
 	header @images Cache-Control "public, max-age=2592000"
 
 	@other_assets {
 		path /assets/*
 		not query v=*
+		not path /assets/v2/assets/*
 		not path /assets/*.webp /assets/*.jpg /assets/*.png /assets/*.svg
 	}
 	header @other_assets Cache-Control "public, max-age=300"

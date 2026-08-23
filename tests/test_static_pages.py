@@ -890,7 +890,11 @@ def test_the_landing_shows_the_real_panel_not_a_drawing() -> None:
     test bilan tekshiriladi.
     """
     site = (STATIC / "site.html").read_text(encoding="utf-8")
-    for image in ("panel-bugun-v2.webp", "panel-xarita-v3.webp"):
+    # Versiya raqami fayl nomida: rasm qayta olinganda nom ham
+    # o'zgarishi SHART, aks holda qaytgan mijoz brauzer keshidan eski
+    # panel suratini oladi va sayt endi mavjud bo'lmagan interfeysni
+    # reklama qiladi.  v3/v4 — 2026-08-24, yangi dizayndagi panel.
+    for image in ("panel-bugun-v3.webp", "panel-xarita-v4.webp"):
         assert image in site, image
         assert (STATIC / image).is_file(), image
     # Ekrandan pastda — birinchi ochilishni sekinlashtirmasin.

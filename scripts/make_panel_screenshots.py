@@ -3,13 +3,11 @@
 
 Nima uchun: sotuv sahifasida chizilgan illyustratsiya emas, **haqiqiy
 interfeys** turishi kerak — do'kon egasi nima sotib olayotganini ko'rsin.
-Bozor tadqiqotlari ham shuni aytadi: haqiqiy panel ekrani 3D grafikadan
-ko'ra ko'proq mijoz keltiradi.
 
 Nima "haqiqiy" va nima "demo":
 
-- **Interfeys haqiqiy** — `cloud/static/owner.html` ning o'zi, o'z CSS va
-  JS'i bilan, brauzerda chizilgan;
+- **Interfeys haqiqiy** — `cloud/static/v2/owner.html` ning o'zi, o'z CSS
+  va JS'i bilan, brauzerda chizilgan;
 - **Raqamlar demo** — bu yerdagi `DEMO` javoblari.  Haqiqiy mijozning
   ismi, telefoni yoki do'kon nomi ISHLATILMAYDI.
 
@@ -21,6 +19,10 @@ takrorlanadigan — bir xil raqamlar, bir xil rasm.
 
 Chiqadi: `cloud/static/panel-*.webp` (har biri 200 KB dan kichik —
 `tests/test_static_pages.py` shuni talab qiladi).
+
+2026-08-24: eski panel (`owner.html`) o'rniga v2 panel suratga olinadi.
+Ilgari sayt eski yashil-krem interfeysni reklama qilardi, mijoz esa
+ochganda butunlay boshqa ko'k panelni ko'rardi.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ import json
 import subprocess
 import sys
 import threading
+from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
 
@@ -38,11 +41,13 @@ STATIC = ROOT / "cloud" / "static"
 
 #: Rasm o'lchami.  Tor ataylab: keng oynada kartalar cho'zilib, o'ng
 #: tomonda katta bo'sh joy qoladi va rasm saytda mayda ko'rinadi.
-#: 820 px — issiqlik xaritasi kanvasi (640 px) kartani deyarli to'ldiradi.
-VIEWPORT = {"width": 820, "height": 900}
+VIEWPORT = {"width": 980, "height": 900}
 
 #: 48×27 to'r — `EventStore.HEATMAP_COLS/ROWS` bilan bir xil.
 HEAT_COLS, HEAT_ROWS = 48, 27
+
+NOW = datetime(2026, 8, 24, 18, 40)
+TODAY = NOW.date().isoformat()
 
 
 def _heat_grid() -> list:
@@ -62,129 +67,117 @@ def _heat_grid() -> list:
     return grid
 
 
-#: Javob shakllari HAQIQIY: `EventStore.retail_report` / `traffic_trend`
-#: / `heatmap` nima qaytarsa — shu.  Bir marta taxmin bilan yozilgan edi
-#: va panel `traffic.entered` ni topa olmay yiqilgan, ekranda esa login
-#: oynasi qolgan edi.
+#: Soatlik oqim: ertalab sekin, tushda va kechqurun ikkita cho'qqi.
+_HOURLY = [0, 0, 0, 0, 0, 0, 2, 9, 21, 34, 47, 58, 63, 55, 44, 51, 62, 71, 66, 52, 33, 18, 6, 1]
+
+#: Javob shakllari HAQIQIY: `EventStore.retail_report` va
+#: `owner_dashboard` nima qaytarsa — shu.  Bir marta taxmin bilan
+#: yozilgan edi va panel `traffic.entered` ni topa olmay yiqilgan,
+#: ekranda esa login oynasi qolgan edi.
 DEMO = {
-    "/api/v1/owner/health": {
-        "devices": [
+    "/api/v1/owner/sites": {
+        "sites": [
             {
-                "device_id": "dev-1",
-                "received_at": "2026-08-20T18:04:00+00:00",
-                "health": {"cpu_percent": 41, "temperature_c": 58, "cameras_ok": 4},
-            }
-        ],
-        "cameras_expected": 4,
-        "cameras_active": 4,
-        "connection": "online",
-        "site_name": "Namuna do'kon",
-        "minutes_since_seen": 1,
-        "plan": {
-            "code": "biznes",
-            "name": "Biznes",
-            "max_cameras": 4,
-            "max_employees": 10,
-            "panel_features": [
-                "bugun", "hisobot", "telegram", "navbat",
-                "xavfsizlik", "xarita", "demografiya",
-            ],
-        },
-    },
-    "/api/v1/owner/cameras": {
-        "cameras": [
-            {"camera_id": "camera-01", "label": "Kirish eshigi", "enabled": True,
-             "probe_status": "ok"},
-            {"camera_id": "camera-02", "label": "Kassa", "enabled": True, "probe_status": "ok"},
-            {"camera_id": "camera-03", "label": "Savdo zali", "enabled": True,
-             "probe_status": "ok"},
-            {"camera_id": "camera-04", "label": "Ombor", "enabled": True, "probe_status": "ok"},
+                "id": "demo-1",
+                "name": "Namuna do‘kon — Markaziy",
+                "address": "Toshkent sh., Chilonzor",
+                "connection": "online",
+                "cameras_active": 4,
+                "cameras_expected": 4,
+            },
+            {
+                "id": "demo-2",
+                "name": "Namuna do‘kon — Yunusobod",
+                "address": "Toshkent sh., Yunusobod",
+                "connection": "online",
+                "cameras_active": 3,
+                "cameras_expected": 3,
+            },
         ]
     },
-    "/api/v1/owner/report": {
-        "date": "2026-08-20",
-        "traffic": {
-            "entered": 268,
-            "exited": 261,
-            "inside_estimate": 7,
-            "entered_yesterday": 246,
-            "change_percent": 8.9,
-            "busiest_hour": {"hour": 18, "entered": 31, "exited": 29},
-            "hourly": [
-                {"hour": hour, "entered": entered, "exited": max(0, entered - 2)}
-                for hour, entered in enumerate(
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     9, 14, 19, 23, 21, 17, 22, 26, 31, 27, 20, 12, 7, 0, 0]
-                )
-            ],
-            "xodim_chiqarilgan": 34,
+    "/api/v1/owner/dashboard": {
+        "site": {
+            "id": "demo-1",
+            "name": "Namuna do‘kon — Markaziy",
+            "address": "Toshkent sh., Chilonzor",
+            "connection": "online",
+            "minutes_since_seen": 1,
+            "cameras_active": 4,
+            "cameras_expected": 4,
+            "plan": {"name": "Biznes"},
         },
-        "queue": {"alerts": 3, "longest": 6, "longest_at": "18:20", "average": 2.4},
-        "dwell": [
-            {"zone": "Kassa", "count": 41, "average_sec": 96.4, "longest_sec": 312.0},
-            {"zone": "Sut mahsulotlari", "count": 63, "average_sec": 48.2, "longest_sec": 187.0},
-            {"zone": "Non javoni", "count": 55, "average_sec": 31.7, "longest_sec": 122.0},
-        ],
-        "security": {
-            "camera_tampered": 0,
-            "after_hours_presence": 0,
-            "restricted_zone": 0,
-            "loitering": 2,
-        },
-        "demografiya": {
-            "hisoblangan": 214,
-            "jins": {"ayol": 58, "erkak": 42},
-            "yosh": {"<18": 11, "18-30": 78, "31-45": 62, "46-60": 43, "60+": 20},
-        },
-    },
-    "/api/v1/owner/trend": {
-        "from": "2026-08-14",
-        "to": "2026-08-20",
-        "days": 7,
-        "daily": [
-            {"date": "2026-08-14", "weekday": "Juma", "entered": 231},
-            {"date": "2026-08-15", "weekday": "Shanba", "entered": 342},
-            {"date": "2026-08-16", "weekday": "Yakshanba", "entered": 298},
-            {"date": "2026-08-17", "weekday": "Dushanba", "entered": 214},
-            {"date": "2026-08-18", "weekday": "Seshanba", "entered": 226},
-            {"date": "2026-08-19", "weekday": "Chorshanba", "entered": 246},
-            {"date": "2026-08-20", "weekday": "Payshanba", "entered": 268},
-        ],
-        "total": 1825,
-        "average": 260.7,
-        "busiest_day": "2026-08-15",
-        "quietest_day": "2026-08-17",
-        "previous_total": 1712,
-        "change_percent": 6.6,
-    },
-    "/api/v1/owner/events": {"events": [], "total": 0},
-    "/api/v1/owner/config": {
-        "revision": 7,
-        "config": {
-            "camera_labels": {
-                "camera-01": "Kirish eshigi",
-                "camera-02": "Kassa",
-                "camera-03": "Savdo zali",
-                "camera-04": "Ombor",
+        "today": {
+            "date": TODAY,
+            "traffic": {
+                "entered": 268,
+                "exited": 261,
+                "inside_estimate": 7,
+                "entered_yesterday": 246,
+                "change_percent": 8.9,
+                "busiest_hour": {"hour": 17, "entered": 71},
+                "hourly": [
+                    {"hour": hour, "entered": entered, "exited": max(0, entered - 2)}
+                    for hour, entered in enumerate(_HOURLY)
+                ],
+                "xodim_chiqarilgan": 34,
             },
-            "occupancy_limit": 20,
-            "queue_limit": 5,
-            "loitering_sec": 300,
-            "open_from": "09:00",
-            "open_to": "21:00",
-            "attendance_camera_ids": [],
-            "attendance_camera_roles": {},
-            "zones": [],
-            "lines": [],
+            "queue": {"alerts": 3, "longest": 6, "longest_at": "18:20", "average": 2.4},
+            "dwell": [
+                {"zone": "Kassa", "count": 41, "average_sec": 96.4, "longest_sec": 312.0},
+                {"zone": "Sut mahsulotlari", "count": 63, "average_sec": 48.2, "longest_sec": 187.0},
+                {"zone": "Non javoni", "count": 55, "average_sec": 31.7, "longest_sec": 122.0},
+                {"zone": "Kirish eshigi", "count": 22, "average_sec": 18.5, "longest_sec": 64.0},
+            ],
+            "security": {
+                "camera_tampered": 0,
+                "after_hours_presence": 0,
+                "restricted_zone": 0,
+                "loitering": 2,
+            },
         },
+        "cameras": [
+            {"camera_id": "camera-01", "label": "Kirish eshigi", "enabled": True},
+            {"camera_id": "camera-02", "label": "Kassa zonasi", "enabled": True},
+            {"camera_id": "camera-03", "label": "Savdo zali", "enabled": True},
+            {"camera_id": "camera-04", "label": "Ombor", "enabled": True},
+        ],
+        "camera_states": [
+            {"camera_id": "camera-01", "state": "online", "reason": "Kadr 2 soniya oldin"},
+            {"camera_id": "camera-02", "state": "online", "reason": "Kadr 1 soniya oldin"},
+            {"camera_id": "camera-03", "state": "online", "reason": "Kadr 3 soniya oldin"},
+            {"camera_id": "camera-04", "state": "online", "reason": "Kadr 2 soniya oldin"},
+        ],
+        "events": [
+            {"id": "e1", "event_type": "queue_threshold_exceeded", "label": "Kassada navbat ortdi",
+             "camera_id": "Kassa zonasi", "occurred_at": f"{TODAY}T18:20:00"},
+            {"id": "e2", "event_type": "loitering", "label": "Zonada uzoq turish",
+             "camera_id": "Sut mahsulotlari", "occurred_at": f"{TODAY}T17:48:00"},
+            {"id": "e3", "event_type": "line_crossed", "label": "Kirish cho‘qqisi qayd etildi",
+             "camera_id": "Kirish eshigi", "occurred_at": f"{TODAY}T17:05:00"},
+            {"id": "e4", "event_type": "queue_threshold_exceeded", "label": "Kassada navbat ortdi",
+             "camera_id": "Kassa zonasi", "occurred_at": f"{TODAY}T13:12:00"},
+            {"id": "e5", "event_type": "loitering", "label": "Zonada uzoq turish",
+             "camera_id": "Non javoni", "occurred_at": f"{TODAY}T11:34:00"},
+        ],
+        "trend": [
+            {"date": (NOW - timedelta(days=offset)).date().isoformat(), "entered": entered}
+            for offset, entered in zip(range(13, -1, -1),
+                                       [214, 226, 246, 231, 342, 298, 221, 238, 259, 244, 271, 233, 246, 268])
+        ],
+        "subscription": {
+            "status": "active",
+            "days_left": 24,
+            "monthly_price_uzs": 299_000,
+            "subscription_until": (NOW + timedelta(days=24)).isoformat(),
+        },
+        "updated_at": NOW.isoformat(),
     },
+    # Davomat va Telegram — bo'sh: sotuv sahifasida yopiq pilot
+    # funksiyalari va'da qilinmasin.
     "/api/v1/owner/members": {"members": []},
-    "/api/v1/owner/invoices": {"invoices": []},
-    "/api/v1/owner/features": {"features": [], "requested": []},
-    "/api/v1/owner/faces": {"employees": [], "max_employees": 10, "mode": "commercial"},
     "/api/v1/owner/heatmap": {
         "camera_id": "camera-03",
-        "date": "2026-08-20",
+        "date": TODAY,
         "hour": None,
         "cols": HEAT_COLS,
         "rows": HEAT_ROWS,
@@ -194,25 +187,45 @@ DEMO = {
     },
 }
 
+#: Kamera plitkalari uchun haqiqiy kadr o'rniga do'kon fotosuratlari.
+#: Bo'sh plitka ("Kadr kelmadi") sotuv sahifasida tizim ishlamayotgandek
+#: ko'rinardi.
+CAMERA_FRAMES = ["design2-retail.webp", "design2-aisle.webp", "design2-warehouse.webp"]
 
-#: Qaysi bo'lim qaysi faylga tushadi.  `selector` — kartani aniq kesib
-#: olish uchun: butun sahifa surati mayda va o'qib bo'lmaydigan chiqadi.
+#: Qaysi bo'lim qaysi faylga tushadi.  Sahifa yuklangach `hide` dagi
+#: elementlar olib tashlanadi va `selector` kesib olinadi: butun sahifa
+#: surati mayda va o'qib bo'lmaydigan chiqadi.
 SHOTS = (
     {
         "name": "panel-bugun",
-        "hash": "#/bugun",
-        "selector": "#paneBugun",
-        "caption": "Kunlik hisobot: kirdi, chiqdi, gavjum soat",
+        "version": "v3",
+        "route": "#/home",
+        "selector": ".content",
+        # Saytda rasm ~570 px kenglikda ko'rinadi: uzun ustun mayda va
+        # o'qib bo'lmaydigan bo'lib qoladi.  Shuning uchun o'ng ustun
+        # (hodisalar, tarif, Telegram), faol zonalar va filiallar
+        # jadvali kesiladi — ular ikkinchi rasmda va panelning o'zida
+        # baribir ko'rinadi.
+        "hide": [
+            ".sidebar", ".topbar", ".bottom-nav",
+            ".home-grid > .stack:last-child",
+            ".split-grid > .card:last-child",
+            ".home-grid > .stack > .card:last-child",
+        ],
+        # To'rtta kamera kadri rasmning katta qismini tashkil qiladi va
+        # 82 sifatda fayl 200 KB chegarasidan oshib ketadi.  Fotoda
+        # 68 sifat ko'z bilan sezilmaydi, matn esa baribir tiniq
+        # qoladi — u alohida qatlam emas, bir xil siqiladi.
+        "quality": 68,
+        "caption": "Kunlik hisobot: kirdi, gavjum soat, jonli kameralar",
     },
     {
         "name": "panel-xarita",
-        # Rang oralig'i o'zgargach fayl nomi ham o'zgarishi SHART:
-        # nom bir xil qolsa qaytgan mijoz brauzer keshidan eski qizil
-        # xaritani oladi va sayt panelda yo'q rangni reklama qiladi.
-        "version": "v2",
-        "hash": "#/tahlil",
-        "selector": "#heatCard",
-        "caption": "Do'kon xaritasi: mijozlar eng ko'p yurgan joylar",
+        "version": "v4",
+        "route": "#/heatmap",
+        "selector": ".content",
+        "hide": [".sidebar", ".topbar", ".bottom-nav"],
+        "caption": "Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar",
     },
 )
 
@@ -221,7 +234,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     """`/assets/...` ni ham `static/` dan beradi.
 
     Panel CSS va ikonkalarni MUTLAQ yo'l bilan chaqiradi
-    (`/assets/owner.css`) — cloud'da `StaticFiles` shu manzilga
+    (`/assets/v2/assets/...`) — cloud'da `StaticFiles` shu manzilga
     ulangan.  Buni takrorlamasak sahifa uslubsiz chiqadi.
     """
 
@@ -262,22 +275,24 @@ def main() -> int:
 
     base, server = serve(STATIC)
     out_dir = STATIC
+    frames = [(STATIC / name).read_bytes() for name in CAMERA_FRAMES]
+
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
+        with sync_playwright() as play:
+            browser = play.chromium.launch()
             # Token sahifa YUKLANISHIDAN OLDIN turishi shart: panel uni
             # skript boshida bir marta o'qiydi va bo'sh bo'lsa login
-            # oynasini ko'rsatadi.  Avval `goto` qilib, keyin
-            # `localStorage` ga yozish kech edi.
-            context = browser.new_context(viewport=VIEWPORT, device_scale_factor=2)
+            # oynasini ko'rsatadi.
+            # 1.5× — retinada ham tiniq, lekin 2× dagi kamera kadrlari
+            # rasmni 200 KB chegarasidan chiqarib yuborardi.
+            context = browser.new_context(viewport=VIEWPORT, device_scale_factor=1.5)
             context.add_init_script(
-                "localStorage.setItem('chaqimchi_owner_token', 'demo-token')"
+                "localStorage.setItem('chaqimchi_owner_token_v2', 'demo-token')"
             )
             page = context.new_page()
 
             def route_api(route):
-                path = route.request.url.split("?", 1)[0]
-                path = path[len(base):] if path.startswith(base) else path
+                path = route.request.url.split(base)[-1].split("?")[0]
                 body = DEMO.get(path)
                 if body is None:
                     route.fulfill(status=404, body='{"detail":"demo yo\'q"}',
@@ -288,44 +303,56 @@ def main() -> int:
                     body=json.dumps(body, ensure_ascii=False),
                 )
 
-            # Kamera oldindan ko'rish rasmi yo'q — xaritada oddiy kulrang
-            # fon qoladi (kadr hali kelmagan do'kon holati).  Bu marshrut
-            # BIRINCHI: Playwright'da keyingi qoida ustun turadi va
-            # `cameras/**` `cameras` ro'yxatini ham ushlab qolardi.
-            page.route(
-                "**/api/v1/owner/cameras/*/preview",
-                lambda r: r.fulfill(status=404, body=""),
-            )
+            # Umumiy qoida BIRINCHI, aniq yo'llar KEYIN: Playwright'da
+            # oxirgi mos qoida ustun turadi.  Teskarisi bo'lsa
+            # `cameras/**` kamera ro'yxatini ham ushlab qolardi.
             page.route("**/api/v1/owner/**", route_api)
 
-            messages = []
+            counter = {"index": 0}
+
+            def route_frame(route):
+                frame = frames[counter["index"] % len(frames)]
+                counter["index"] += 1
+                route.fulfill(status=200, content_type="image/webp", body=frame)
+
+            page.route("**/api/v1/owner/cameras/*/preview*", route_frame)
+            page.route("**/api/v1/owner/cameras/*/live-frame*", route_frame)
+
+            messages: list[str] = []
             page.on("console", lambda msg: messages.append(f"{msg.type}: {msg.text}"))
-            page.on(
-                "requestfailed",
-                lambda req: messages.append(f"failed: {req.url}"),
-            )
+            page.on("requestfailed", lambda req: messages.append(f"failed: {req.url}"))
 
             for shot in SHOTS:
-                page.goto(f"{base}/owner.html{shot['hash']}")
-                page.wait_for_timeout(3000)
+                page.goto(f"{base}/v2/owner.html{shot['route']}")
+                page.wait_for_timeout(3500)
                 for line in messages[:12]:
                     print(f"  konsol: {line}")
                 messages.clear()
-                # Yopishqoq sarlavha va pastdagi bo'lim paneli kartaning
-                # chetlarini yopib qo'yadi — suratga olish paytida ularni
-                # vaqtincha olib turamiz.
+
+                # Yopishqoq sarlavha, yon menyu va pastdagi bo'lim
+                # paneli kartaning chetlarini yopib qo'yadi.
                 page.evaluate(
-                    "document.querySelectorAll('header,.topbar,.app-head,.tabbar')"
-                    ".forEach((el) => (el.style.display = 'none'))"
+                    "(selectors) => selectors.forEach((selector) => {"
+                    "  document.querySelectorAll(selector).forEach((el) => el.remove());"
+                    "})",
+                    shot["hide"],
                 )
+                page.evaluate(
+                    "() => { const main = document.querySelector('.main-shell');"
+                    "  if (main) main.style.paddingLeft = '0';"
+                    "  const content = document.querySelector('.content');"
+                    "  if (content) content.style.padding = '20px'; }"
+                )
+                page.wait_for_timeout(400)
+
                 node = page.query_selector(shot["selector"])
                 if node is None:
                     print(f"OGOHLANTIRISH: {shot['selector']} topilmadi — o'tkazib yuborildi")
                     continue
                 png = out_dir / f"{shot['name']}.png"
                 node.screenshot(path=str(png))
-                webp = out_dir / f"{shot['name']}-{shot.get('version', 'v1')}.webp"
-                to_webp(png, webp)
+                webp = out_dir / f"{shot['name']}-{shot['version']}.webp"
+                to_webp(png, webp, quality=shot.get("quality", 82))
                 png.unlink(missing_ok=True)
                 size_kb = webp.stat().st_size // 1024
                 print(f"OK: {webp.name} ({size_kb} KB) — {shot['caption']}")

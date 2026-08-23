@@ -199,7 +199,16 @@ h1 em { margin-top: 6px; color: var(--blue); font-style: normal; }
 /* ── Mahsulot ekranlari: chizma emas, panelning o'zi ──────────────── */
 .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 .proof-grid figure { margin: 0; }
-.proof-grid img { width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
+/* Ikki skrinshot balandligi juda farq qiladi (biri butun bosh sahifa,
+   ikkinchisi bitta karta).  `max-height` + yuqoridan kesish ularni
+   tenglashtiradi: aks holda qisqasining ostida katta bo'sh maydon
+   qolib, bo'lim sinib ko'rinadi. */
+/* `height: auto` — rasm o'z nisbatida chiziladi.  `max-height` faqat
+   undan balandini (bosh sahifa surati) pastdan kesadi; xarita surati
+   past bo'lgani uchun unga tegmaydi.  `height: auto` bo'lmasa
+   `height="2271"` atributi kuchga kirib, ikkala rasm ham kattalashib
+   ketardi. */
+.proof-grid img { width: 100%; height: auto; max-height: 640px; object-fit: cover; object-position: top; display: block; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
 .proof-grid figcaption { margin-top: 10px; color: var(--muted); font-size: 14px; font-weight: 650; }
 
 /* ── Mavjud kameralaringiz / omborxona bloki ─────────────────────── */

@@ -1,4 +1,14 @@
-const CACHE = "chaqimchi-ui-v2-static-1";
+/* Kesh nomi — RELIZ QOIDASI.
+ *
+ * Panel fayllari o'zgarganda bu raqamni oshiring: `activate` da nomi
+ * boshqa bo'lgan barcha keshlar o'chiriladi, ya'ni qurilmalarda eski
+ * nusxa qolib ketmaydi.  Bundle nomlarida mazmun xeshi bo'lgani uchun
+ * odatda bu shart emas, lekin manifest yoki ikonka kabi xeshsiz
+ * fayllar o'zgarganda aynan shu yagona yo'l.
+ *
+ *   -static-1 → 2026-08-24: yangi dizayn, PWA ikonkalari
+ */
+const CACHE = "chaqimchi-ui-v2-static-2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {

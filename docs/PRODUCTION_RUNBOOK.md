@@ -228,3 +228,40 @@ AI funksiyalari katalogda “tez orada” bo‘lib qoladi:
 
 Payme/Click credentiallari bo‘lmasa onlayn checkout ochilmaydi; pilotda admin
 qo‘lda invoice’ni to‘langan deb belgilashi mumkin.
+
+## 5. Yangi panelni yoqish (`CHAQIMCHI_UI_V2`)
+
+Mijoz va admin panellarining ikkita nusxasi bor: eski (`cloud/static/owner.html`,
+`admin.html`) va yangi React panel (`cloud/static/v2/`). Qaysi biri berilishini
+`CHAQIMCHI_UI_V2` belgilaydi. **Koddagi standart qiymat — `0`**; uni shunday
+qoldiring, aks holda testlar eski panelni tekshirolmay qoladi.
+
+### Yoqish tartibi
+
+1. Image yig'ing — `Dockerfile.cloud` panelni har build'da qaytadan quradi,
+   ya'ni repodagi `cloud/static/v2/` eskirgan bo'lsa ham prodga yangisi boradi.
+2. `deploy/Caddyfile.chaqimchi` ni yangilang va Caddy'ni qayta yuklang:
+   `/assets/v2/assets/*` uchun `immutable` qoidasi kerak. Usiz panel bundlelari
+   5 daqiqada eskirib, har ochilishda ~250 KB qayta yuklanadi.
+3. `.env.production` da `CHAQIMCHI_UI_V2=1` qo'ying va cloud'ni restart qiling.
+4. Quyidagi beshta tekshiruvni bajaring.
+
+### Yoqishdan oldingi tekshiruv
+
+| Nima | Qanday | Kutilgan natija |
+|---|---|---|
+| Bot havolasi bilan kirish | Botdan olingan `/owner?key=…` havolasini oching | Panel ochiladi, manzil qatorida `key` qolmaydi |
+| Telegram Mini App | Botdagi «📊 Panelda ochish» tugmasi | Parolsiz kiradi |
+| To'g'ridan-to'g'ri manzil | `/owner/cameras` ni brauzerga yozing | Kameralar bo'limi ochiladi (bosh sahifa emas) |
+| Bundle keshi | `curl -I https://app…/assets/v2/assets/<xesh>.js` | `Cache-Control: …immutable` |
+| PWA | Telefonda «Bosh ekranga qo'shish» | Ikonka qirqilmagan, nomi «Chaqimchi» |
+
+### Orqaga qaytarish
+
+`CHAQIMCHI_UI_V2=0` qo'yib restart qiling — eski panel darhol qaytadi. Unda
+`?key=` va Mini App orqali kirish ham ishlaydi, ya'ni mijoz kirishdan
+mahrum bo'lmaydi.
+
+Eslatma: `/owner-sw.js` flag holatidan qat'i nazar v2 service worker'ini
+beradi. U faqat `/assets/v2/*` ni keshlaydi va sahifa qobig'iga tegmaydi,
+shuning uchun flag o'chirilganda eski panel keshdan eskisini olmaydi.

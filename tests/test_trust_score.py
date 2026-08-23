@@ -214,3 +214,31 @@ def test_staff_with_a_schedule_is_scored() -> None:
     staff = next(item for item in _score(shifts=shifts)["parts"] if item["code"] == "staff")
     assert staff["measured"] is True
     assert staff["points"] == 20
+
+
+def test_queue_events_prove_measurement_even_if_the_cloud_config_is_empty() -> None:
+    """Hodisa bor bo'lsa o'lchov ham bor — bulut sozlamasi nima deyishidan qat'i nazar.
+
+    Zona qurilmaning O'Z sozlamasida chizilgan bo'lishi mumkin va u
+    bulutga yetib bormagan bo'ladi.  Jonli pilotda aynan shunday chiqdi:
+    bulutda zona yo'q, lekin bir kunda 14 ta navbat hodisasi kelgan —
+    ball esa "o'lchanmayapti" deb turardi.
+    """
+    report = {**GOOD_REPORT, "queue": {"alerts": 14, "longest": 9}}
+    queue = next(
+        item
+        for item in _score(report=report, queue_configured=False)["parts"]
+        if item["code"] == "queue"
+    )
+    assert queue["measured"] is True
+    assert queue["points"] == 2, "14 ta uzun navbat — kassa yetishmayapti"
+
+
+def test_no_events_and_no_zone_still_means_unmeasured() -> None:
+    report = {**GOOD_REPORT, "queue": {"alerts": 0}}
+    queue = next(
+        item
+        for item in _score(report=report, queue_configured=False)["parts"]
+        if item["code"] == "queue"
+    )
+    assert queue["measured"] is False

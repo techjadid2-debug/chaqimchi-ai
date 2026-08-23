@@ -94,10 +94,15 @@ def _queue_part(queue: Dict[str, Any], *, configured: bool) -> Dict[str, Any]:
     `configured=False` bo'lsa qism ballga UMUMAN kirmaydi: zonasiz navbat
     o'lchanmaydi va nol signal "mukammal" degani emas.
     """
-    if not configured:
+    alerts = int(queue.get("alerts") or 0)
+    # Hodisa BOR bo'lsa o'lchov ham bor — bulut sozlamasi nima deyishidan
+    # qat'i nazar.  Zona qurilmaning O'Z sozlamasida (lokal sehrgarda)
+    # chizilgan bo'lishi mumkin va u bulutga yetib bormagan bo'ladi.
+    # Jonli pilotda aynan shunday chiqdi: bulutda zona yo'q, lekin bir
+    # kunda 14 ta navbat hodisasi kelgan.
+    if not configured and not alerts:
         return _part("queue", "Navbat", None, "Navbat zonasi chizilmagan — o'lchanmayapti")
 
-    alerts = int(queue.get("alerts") or 0)
     longest = int(queue.get("longest") or 0)
     if alerts == 0:
         return _part("queue", "Navbat", 20, "Navbat chegaradan oshmadi")

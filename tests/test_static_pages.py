@@ -298,7 +298,16 @@ def test_link_token_is_scrubbed_from_the_address_bar() -> None:
 def test_stored_session_wins_over_the_link() -> None:
     """Kirgan odam har safar qayta kirmasin."""
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
-    assert "if (token) { showApp(); } else { loginFromLink(); }" in html
+    assert "if (token)" in html and "showApp();" in html
+    assert "loginFromTelegramWebApp" in html
+    assert "if (!opened) loginFromLink();" in html
+
+
+def test_owner_panel_supports_authenticated_telegram_mini_app() -> None:
+    html = (STATIC / "owner.html").read_text(encoding="utf-8")
+    assert "telegram-web-app.js" in html
+    assert "/api/v1/owner/auth/telegram-webapp" in html
+    assert "telegramWebApp?.initData" in html
 
 
 # ── Yangi mijoz paneli qoidalari ─────────────────────────────────────────
@@ -694,7 +703,7 @@ def test_the_owner_panel_shows_help_after_login_not_only_before() -> None:
     assert PHONE_HREF in body, "yordam bloki panel ichida bo'lsin"
 
 
-# ── Mijoz paneli: 4 bo'lim ───────────────────────────────────────────────
+# ── Mijoz paneli: bitta operativ ekran ───────────────────────────────────
 #
 # Panel bitta uzun ustun edi: telefonda 13 400px — o'n olti ekran, va
 # uning taxminan 60% i 101 qatorli xom hodisa jadvali edi.  Do'kon egasi
@@ -704,16 +713,15 @@ def test_the_owner_panel_shows_help_after_login_not_only_before() -> None:
 # matn-tekshiruvlar (masalan `class="card hidden" id="attendanceCard"`)
 # ishlamay qolardi.
 
-OWNER_TABS = ("bugun", "tahlil", "xavfsizlik", "dokon")
-
-
-def test_owner_panel_has_four_tabs_and_hash_routing() -> None:
+def test_owner_panel_has_one_operational_screen_without_tabs() -> None:
     html = (STATIC / "owner.html").read_text(encoding="utf-8")
-    assert 'class="tabbar"' in html
-    assert "hashchange" in html, "Orqaga tugmasi ishlashi kerak"
-    for tab in OWNER_TABS:
-        assert f'id: "{tab}"' in html, f"«{tab}» bo'limi yo'q"
-        assert f'id="pane{tab.capitalize()}"' in html, f"«{tab}» uchun bo'lim markupi yo'q"
+    assert 'id="operationalDashboard"' in html
+    assert 'id="cameraOverview"' in html
+    assert 'id="operationalHeatCanvas"' in html
+    assert 'id="operationalSecurity"' in html
+    assert 'class="tabbar"' not in html
+    assert "renderOperational" in html
+    assert 'data-heatmode="plan"' not in html
 
 
 def test_owner_tabs_fail_independently() -> None:
@@ -803,7 +811,7 @@ def test_owner_never_asks_the_shopkeeper_for_a_telegram_id() -> None:
     assert 'inputmode="numeric" placeholder="Masalan: 123456789"' not in html
     assert "/api/v1/owner/telegram-invite" in html
     # Yangi oyna ochilmaydi: telefonda u bo'sh varaq bo'lib qolardi.
-    connect = html[html.index("async function connectMyTelegram") : html.index("async function inviteStaff")]
+    connect = html[html.index("async function connectMyTelegram") : html.index("async function toggleDigest")]
     assert "location.href = data.url" in connect
 
 
@@ -873,7 +881,7 @@ def test_the_landing_shows_the_real_panel_not_a_drawing() -> None:
     test bilan tekshiriladi.
     """
     site = (STATIC / "site.html").read_text(encoding="utf-8")
-    for image in ("panel-bugun-v1.webp", "panel-xarita-v2.webp"):
+    for image in ("panel-bugun-v2.webp", "panel-xarita-v3.webp"):
         assert image in site, image
         assert (STATIC / image).is_file(), image
     # Ekrandan pastda — birinchi ochilishni sekinlashtirmasin.

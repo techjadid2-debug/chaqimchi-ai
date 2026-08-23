@@ -1,0 +1,13 @@
+{
+  "name": "Chaqimchi AI biznes paneli",
+  "short_name": "Chaqimchi",
+  "description": "Filial, kamera va biznes ko‘rsatkichlari",
+  "start_url": "/owner",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f9fc",
+  "theme_color": "#0b5cff",
+  "icons": [
+    { "src": "/assets/favicon.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

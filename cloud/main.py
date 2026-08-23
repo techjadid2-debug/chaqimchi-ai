@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import hashlib
+import hmac
 import html
 import io
 import json
@@ -21,10 +22,10 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date as date_type
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import parse_qsl
 from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Request
@@ -386,6 +387,12 @@ class LinkLoginBody(BaseModel):
     key: str = Field(min_length=20, max_length=128)
 
 
+class TelegramWebAppAuthBody(BaseModel):
+    """Telegram Mini App ochilganda beradigan imzolangan query satri."""
+
+    init_data: str = Field(min_length=20, max_length=8192)
+
+
 class EdgeCameraHealth(BaseModel):
     """Bitta kameraning holati — panel yolg'on chiroq ko'rsatmasin.
 
@@ -421,6 +428,15 @@ class EdgeHeartbeatBody(BaseModel):
     cameras: List[EdgeCameraHealth] = Field(default_factory=list, max_length=16)
     temperature_c: Optional[float] = Field(default=None, ge=-40, le=150)
     disk_free_bytes: int = Field(default=0, ge=0)
+    cpu_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    ram_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    disk_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    fps: Optional[float] = Field(default=None, ge=0, le=1000)
+    inference_latency_ms: Optional[float] = Field(default=None, ge=0, le=600_000)
+    uptime_sec: Optional[float] = Field(default=None, ge=0)
+    # Faqat qurilma haqiqiy NPU o'lchovini bersa to'ladi; aks holda admin
+    # panel «— / yig'ilmoqda» ko'rsatadi va marketing raqam yasamaydi.
+    npu_percent: Optional[float] = Field(default=None, ge=0, le=100)
     outbox_pending: int = Field(default=0, ge=0)
     outbox_bytes: int = Field(default=0, ge=0)
     outbox_critical_pending: int = Field(default=0, ge=0)
@@ -455,6 +471,10 @@ class EdgeHeartbeatBody(BaseModel):
     hardware_revision: Optional[str] = Field(default=None, max_length=32)
     serial_number: Optional[str] = Field(default=None, max_length=120)
     config_revision: int = Field(default=0, ge=0)
+
+
+class LiveRequestBody(BaseModel):
+    overlay: bool = False
 
 
 class ConfigAckBody(BaseModel):
@@ -534,10 +554,9 @@ class FeatureDraftBody(BaseModel):
 
 
 class PublicLeadBody(BaseModel):
-    #: Ism SO'RALMAYDI: saytdagi formada endi faqat telefon bor.  Har bir
-    #: qo'shimcha maydon formani tashlab ketadiganlar sonini oshiradi, ism
-    #: esa baribir qo'ng'iroq paytida aniqlanadi.  Eski forma va bot yo'li
-    #: ism yuborsa — saqlanadi.
+    #: Landing CTA ism va telefonni so'raydi; bu bog'lanishda to'g'ri
+    #: murojaat qilish uchun yetarli. Eski forma va bot yo'li ismsiz
+    #: arizani yuborsa ham moslik uchun qabul qilinadi.
     full_name: Optional[str] = Field(default=None, max_length=120)
     phone: str = Field(min_length=5, max_length=32)
     company: Optional[str] = Field(default=None, max_length=160)
@@ -576,22 +595,38 @@ def require_device(
 
 def require_active_owner(
     owner: OwnerPrincipal = Depends(require_owner),
+    x_owner_site_id: Optional[str] = Header(None, alias="X-Owner-Site-Id"),
 ) -> OwnerPrincipal:
+    selected_site = (x_owner_site_id or owner.site_id).strip()
     if owner.auth_kind == "password":
         account = get_store().account_by_id(owner.member_id)
         if (
             not account
             or account["role"] != "customer"
             or account["status"] != "active"
-            or account.get("site_id") != owner.site_id
             or int(account["auth_version"]) != owner.auth_version
         ):
             raise HTTPException(401, "Mijoz sessioni bekor qilingan")
-        return owner
-    member = get_event_store().member_for_site(owner.site_id, owner.telegram_id)
-    if not member or str(member["id"]) != owner.member_id or member["role"] != owner.role:
+        allowed = {str(item["id"]): item for item in get_store().customer_sites(owner.member_id)}
+        site = allowed.get(selected_site)
+        if not site:
+            raise HTTPException(403, "Bu filialga kirish ruxsati yo'q")
+        return owner.model_copy(
+            update={"site_id": selected_site, "role": str(site.get("access_role") or "owner")}
+        )
+    member = get_event_store().member_for_site(selected_site, owner.telegram_id)
+    if not member:
         raise HTTPException(401, "Owner session bekor qilingan")
-    return owner
+    # Token boshqa filialdagi a'zolikdan ochilgan bo'lishi mumkin. Tanlangan
+    # filialda aynan shu Telegram foydalanuvchisining faol a'zoligi bo'lsa,
+    # server principalni o'sha a'zolikka almashtiradi.
+    return owner.model_copy(
+        update={
+            "member_id": str(member["id"]),
+            "site_id": selected_site,
+            "role": str(member["role"]),
+        }
+    )
 
 
 def _owner_secret() -> str:
@@ -642,6 +677,55 @@ def _owner_session(member: Dict[str, Any]) -> Dict[str, Any]:
         "site_id": member["site_id"],
         "role": member["role"],
     }
+
+
+TELEGRAM_WEBAPP_AUTH_MAX_AGE_SEC = 5 * 60
+
+
+def _telegram_owner_token() -> str:
+    return (
+        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+    )
+
+
+def _telegram_webapp_user_id(init_data: str) -> str:
+    """Telegram Mini App `initData` imzosini tekshirib, user ID qaytaradi.
+
+    Frontenddagi `initDataUnsafe` hech qachon ishonchli emas: uni brauzerda
+    istalgan odam o'zgartira oladi. Faqat Bot API ko'rsatgan HMAC tekshiruvi
+    va qisqa `auth_date` oynasi owner session yaratishiga ruxsat beradi.
+    """
+    token = _telegram_owner_token()
+    if not token:
+        raise HTTPException(503, "Telegram Mini App hali sozlanmagan")
+    try:
+        values = dict(parse_qsl(init_data, keep_blank_values=True, strict_parsing=True))
+    except ValueError as exc:
+        raise HTTPException(401, "Telegram ma'lumoti noto'g'ri") from exc
+    received_hash = values.pop("hash", "")
+    user_json = values.get("user", "")
+    try:
+        auth_date = int(values.get("auth_date", "0"))
+    except ValueError as exc:
+        raise HTTPException(401, "Telegram ma'lumoti noto'g'ri") from exc
+    if not received_hash or not user_json or auth_date <= 0:
+        raise HTTPException(401, "Telegram ma'lumoti to'liq emas")
+    if abs(time.time() - auth_date) > TELEGRAM_WEBAPP_AUTH_MAX_AGE_SEC:
+        raise HTTPException(401, "Telegram sessiyasi eskirgan — botdan qayta oching")
+    data_check_string = "\n".join(f"{key}={values[key]}" for key in sorted(values))
+    secret_key = hmac.new(b"WebAppData", token.encode("utf-8"), hashlib.sha256).digest()
+    expected_hash = hmac.new(
+        secret_key, data_check_string.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(received_hash, expected_hash):
+        raise HTTPException(401, "Telegram imzosi noto'g'ri")
+    try:
+        user = json.loads(user_json)
+        telegram_id = str(int(user["id"]))
+    except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        raise HTTPException(401, "Telegram foydalanuvchisi noto'g'ri") from exc
+    return telegram_id
 
 
 def _attendance_enabled() -> bool:
@@ -812,8 +896,27 @@ async def _setup_bot_commands() -> None:
                 f"https://api.telegram.org/bot{token}/setMyCommands",
                 json={"commands": BOT_COMMANDS},
             )
+            app_url = urls.app_url().rstrip("/")
+            menu_response = None
+            if app_url:
+                menu_response = await client.post(
+                    f"https://api.telegram.org/bot{token}/setChatMenuButton",
+                    json={
+                        "menu_button": {
+                            "type": "web_app",
+                            "text": "Panel",
+                            "web_app": {"url": f"{app_url}/owner"},
+                        }
+                    },
+                )
         if response.status_code >= 400:
             logger.warning("setMyCommands xatosi: %s %s", response.status_code, response.text[:200])
+        if menu_response is not None and menu_response.status_code >= 400:
+            logger.warning(
+                "setChatMenuButton xatosi: %s %s",
+                menu_response.status_code,
+                menu_response.text[:200],
+            )
     except Exception:
         logger.warning("Bot buyruqlar menyusi o'rnatilmadi", exc_info=True)
 
@@ -1417,7 +1520,7 @@ async def public_site(request: Request) -> Any:
     if section == "partner":
         return _static_page("installer.html")
     if section == "admin":
-        return _static_page("admin.html")
+        return _static_page("v2/admin.html" if _ui_v2_enabled() else "admin.html")
     if section == "dl":
         return _static_page("dl.html")
     if section == "docs":
@@ -1622,10 +1725,22 @@ async def public_platform_urls(request: Request) -> Dict[str, str]:
 async def favicon() -> FileResponse:
     """Brauzer sahifada `<link rel="icon">` bo'lsa ham ba'zan ildizdan
     so'raydi.  Ilgari bu har safar 404 berardi (olti soatda 44 marta)."""
-    icon = STATIC_DIR / "favicon.svg"
+    icon = STATIC_DIR / "favicon.ico"
     if not icon.is_file():
         raise HTTPException(404, "Favicon topilmadi")
-    return FileResponse(icon, media_type="image/svg+xml")
+    return FileResponse(icon, media_type="image/x-icon")
+
+
+@app.get("/owner-sw.js", include_in_schema=False)
+async def owner_service_worker() -> FileResponse:
+    worker = STATIC_DIR / "v2/owner-sw.js"
+    if not worker.is_file():
+        raise HTTPException(404, "Service worker topilmadi")
+    return FileResponse(
+        worker,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
 
 
 @app.get("/robots.txt", include_in_schema=False)
@@ -1717,14 +1832,18 @@ async def admin_panel(request: Request) -> Any:
     redirect = _apex_redirect(request, "CHAQIMCHI_ADMIN_URL")
     if redirect is not None:
         return redirect
-    page = STATIC_DIR / "admin.html"
+    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_enabled() else "admin.html")
     if not page.is_file():
         raise HTTPException(404, "Admin paneli topilmadi")
     return FileResponse(page)
 
 
+def _ui_v2_enabled() -> bool:
+    return os.environ.get("CHAQIMCHI_UI_V2", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _render_owner() -> HTMLResponse:
-    page = STATIC_DIR / "owner.html"
+    page = STATIC_DIR / ("v2/owner.html" if _ui_v2_enabled() else "owner.html")
     if not page.is_file():
         raise HTTPException(404, "Owner panel topilmadi")
     # Kirish ekranidagi "Telegram botdan havola oling" tugmasi uchun bot
@@ -1757,6 +1876,28 @@ async def owner_panel(request: Request) -> Any:
     if redirect is not None:
         return redirect
     return _render_owner()
+
+
+@app.get("/owner/{panel_path:path}", include_in_schema=False)
+async def owner_panel_route(panel_path: str, request: Request) -> Any:
+    """Owner SPA clean route'lari; legacy flagda eski panelga qaytadi."""
+    redirect = _apex_redirect(request, "CHAQIMCHI_APP_URL", f"/{panel_path}" if panel_path else "/")
+    if redirect is not None:
+        return redirect
+    return _render_owner()
+
+
+@app.get("/admin/{panel_path:path}", include_in_schema=False)
+async def admin_panel_route(panel_path: str, request: Request) -> Any:
+    redirect = _apex_redirect(
+        request, "CHAQIMCHI_ADMIN_URL", f"/{panel_path}" if panel_path else "/"
+    )
+    if redirect is not None:
+        return redirect
+    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_enabled() else "admin.html")
+    if not page.is_file():
+        raise HTTPException(404, "Admin paneli topilmadi")
+    return FileResponse(page)
 
 
 @app.get("/api/v1/plans")
@@ -2139,8 +2280,9 @@ class QuickTrialBody(BaseModel):
 #: cheklangan: nosozlik chiqsa u o'nta do'kondan nariga tarqalmaydi.
 SELF_SERVICE_LIMIT_DEFAULT = 10
 
-#: Birinchi mijozlar to'lovsiz ishlatadi — obuna shu muddatga ochiladi.
-SELF_SERVICE_MONTHS_DEFAULT = 3
+#: Bepul sinov o'rnatish va ma'lumot yig'ishga yetishi, ammo pullik
+# mahsulotni uch oyga bepul almashtirib yubormasligi kerak.
+SELF_SERVICE_TRIAL_DAYS_DEFAULT = 14
 
 
 def _self_service_limit() -> int:
@@ -2152,12 +2294,12 @@ def _self_service_limit() -> int:
         return SELF_SERVICE_LIMIT_DEFAULT
 
 
-def _self_service_months() -> int:
-    raw = os.environ.get("CHAQIMCHI_SELF_SERVICE_MONTHS", "").strip()
+def _self_service_trial_days() -> int:
+    raw = os.environ.get("CHAQIMCHI_SELF_SERVICE_TRIAL_DAYS", "").strip()
     try:
-        return max(1, int(raw)) if raw else SELF_SERVICE_MONTHS_DEFAULT
+        return max(1, int(raw)) if raw else SELF_SERVICE_TRIAL_DAYS_DEFAULT
     except ValueError:
-        return SELF_SERVICE_MONTHS_DEFAULT
+        return SELF_SERVICE_TRIAL_DAYS_DEFAULT
 
 
 @app.post("/api/v1/public/quick-trial")
@@ -2219,9 +2361,7 @@ async def public_quick_trial(
         # forma) mijozni cheklangan tarifga tushirib qo'ymasin.
         plan=body.plan,
         contact_phone=phone,
-        # Birinchi mijozlar to'lovsiz ishlatadi.  Bir oy kam: sinov davri
-        # o'rtasida obuna tugab, mijoz "ishlamay qoldi" deb o'ylardi.
-        subscription_months=_self_service_months(),
+        subscription_days_override=_self_service_trial_days(),
     )
 
     site_id = site["site_id"]
@@ -2276,7 +2416,7 @@ async def public_quick_trial(
         # hash saqlanadi.
         "username": username,
         "login_error": login_error,
-        "months": _self_service_months(),
+        "trial_days": _self_service_trial_days(),
         "message": "Do'koningiz ochildi — endi dasturni yuklab oling.",
     }
 
@@ -2771,6 +2911,70 @@ async def admin_stats(_: None = Depends(require_admin)) -> Dict[str, Any]:
     }
 
 
+@app.get("/api/v1/admin/dashboard")
+async def admin_dashboard(
+    range: Literal["7d", "30d"] = "7d",
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Admin V2 uchun umumiy, faqat real ma'lumotli snapshot."""
+    store = get_store()
+    sites = store.list_sites()
+    site_names = {str(site["id"]): str(site["name"]) for site in sites}
+    device_names: Dict[str, str] = {}
+    for site in sites:
+        detail = store.site_detail(str(site["id"]))
+        for device in detail.get("devices") or []:
+            device_names[str(device["id"])] = str(device.get("label") or device["id"])
+    telemetry = []
+    for metric in get_event_store().latest_device_metrics():
+        telemetry.append(
+            {
+                **metric,
+                "site_name": site_names.get(str(metric.get("site_id"))),
+                "label": device_names.get(str(metric.get("device_id"))),
+            }
+        )
+    invoice_stats = get_payments().invoice_stats()
+    return {
+        "range": range,
+        "stats": {**store.stats(), **invoice_stats},
+        "sites": sites,
+        "telemetry": telemetry,
+        "invoices": invoice_stats,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/v1/admin/events")
+async def admin_events(
+    limit: int = 100,
+    event_type: Optional[str] = None,
+    site_id: Optional[str] = None,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Admin V2 uchun filiallar bo'yicha so'nggi haqiqiy AI hodisalari."""
+    store = get_store()
+    sites = store.list_sites()
+    selected = [site for site in sites if not site_id or str(site["id"]) == site_id]
+    if site_id and not selected:
+        raise HTTPException(404, "Filial topilmadi")
+    bounded = max(1, min(limit, 500))
+    events: List[Dict[str, Any]] = []
+    for site in selected:
+        for item in get_event_store().list_events(
+            str(site["id"]), limit=bounded, event_type=event_type
+        ):
+            events.append(
+                {
+                    **item,
+                    "site_name": site.get("name"),
+                    "label": event_label(str(item.get("event_type", ""))),
+                }
+            )
+    events.sort(key=lambda item: str(item.get("occurred_at") or ""), reverse=True)
+    return {"events": events[:bounded]}
+
+
 @app.get("/api/v1/admin/leads")
 async def admin_list_leads(
     status: Optional[str] = None,
@@ -2879,7 +3083,7 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
         {"key": "database", "label": "Mijoz va obuna bazasi", "ok": True, "required": True},
         {
             "key": "n100_acceptance",
-            "label": "N100 4 kamera benchmark + 72 soat soak",
+            "label": "Windows 4 kamera benchmark + 72 soat soak",
             "ok": bool(n100_acceptance["ok"]),
             "required": True,
             "reasons": n100_acceptance["reasons"],
@@ -3125,7 +3329,10 @@ async def admin_camera_live_frame(
 
 @app.post("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/live")
 async def admin_request_live(
-    site_id: str, camera_id: str, _: None = Depends(require_admin)
+    site_id: str,
+    camera_id: str,
+    body: Optional[LiveRequestBody] = None,
+    _: None = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Jonli ko'rish — mijoz panelidagi bilan bir xil mexanizm.
 
@@ -3133,7 +3340,7 @@ async def admin_request_live(
     Chiziqni to'g'ri joyga qo'yish uchun kadrni ko'rish shart.
     """
     try:
-        until = get_store().request_live(site_id, camera_id)
+        until = get_store().request_live(site_id, camera_id, overlay=bool(body and body.overlay))
         _wake_live_watchers(site_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -3503,6 +3710,7 @@ async def owner_camera_live_frame(
 @app.post("/api/v1/owner/cameras/{camera_id}/live")
 async def owner_request_live(
     camera_id: str,
+    body: Optional[LiveRequestBody] = None,
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     """Jonli ko'rishni yoqadi (90 s; panel ochiq ekan qayta chaqiradi).
@@ -3513,13 +3721,20 @@ async def owner_request_live(
     uchun xotirada turadi, faqat siqib yuboriladi.
     """
     try:
-        until = get_store().request_live(owner.site_id, camera_id)
+        until = get_store().request_live(
+            owner.site_id, camera_id, overlay=bool(body and body.overlay)
+        )
         _wake_live_watchers(owner.site_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     # Birinchi kadrgacha kutish: qurilma so'rovni keyingi heartbeat'da
     # ko'radi (20 soniyagacha).
-    return {"ok": True, "until": until, "first_frame_wait_sec": 25}
+    return {
+        "ok": True,
+        "until": until,
+        "overlay": bool(body and body.overlay),
+        "first_frame_wait_sec": 25,
+    }
 
 
 @app.delete("/api/v1/installer/sites/{site_id}/cameras/{camera_id}")
@@ -4382,6 +4597,12 @@ async def edge_site_config(
         site = get_store().get_site(device["site_id"])
         plan_key = str((site or {}).get("plan") or "")
         allowed = set(plan_feature_codes(plan_key))
+        # Tarif funksiyani belgilaydi, ammo production'da qabul sinovidan
+        # o'tmagan funksiyani qurilmaga yubora olmaydi. Oldin bu fallback
+        # `available_feature_codes()` gate'ini chetlab o'tib, sayt
+        # "available: false" degan funksiyalarni ham yashirin yoqardi.
+        if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production":
+            allowed &= set(available_feature_codes())
         if allowed:
             limits = get_plan(plan_key)
             config["cloud_features"] = [
@@ -4672,6 +4893,127 @@ async def owner_login_with_link(body: LinkLoginBody, request: Request) -> Dict[s
     return {"ok": True, **_owner_session(member)}
 
 
+@app.post("/api/v1/owner/auth/telegram-webapp")
+async def owner_login_with_telegram_webapp(
+    body: TelegramWebAppAuthBody, request: Request
+) -> Dict[str, Any]:
+    """Mini App ichidan parolsiz owner session.
+
+    Rate limit faqat Telegram imzosi tasdiqlangandan keyin qo'yiladi: aks
+    holda hujumchi soxta user ID bilan haqiqiy egani bloklab qo'ya olardi.
+    """
+    telegram_id = _telegram_webapp_user_id(body.init_data)
+    ratelimit.check(
+        "owner-webapp",
+        telegram_id,
+        limit=20,
+        window_sec=600,
+        message="Juda ko'p urinish. Botni qayta ochib urinib ko'ring.",
+    )
+    members = get_event_store().members_for_telegram(telegram_id)
+    owner_members = [item for item in members if str(item.get("role")) == "owner"]
+    member = owner_members[0] if owner_members else None
+    if member is None:
+        raise HTTPException(403, "Mini App faqat do'kon egasi uchun ochilgan")
+    if str(member.get("role")) != "owner":
+        raise HTTPException(403, "Mini App faqat do'kon egasi uchun ochilgan")
+    return {"ok": True, **_owner_session(member)}
+
+
+@app.get("/api/v1/owner/sites")
+async def owner_sites(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    """Joriy akkaunt ko'ra oladigan filiallar.
+
+    Password va Telegram kirishi bitta shape qaytaradi. Filial tanlash
+    `X-Owner-Site-Id` bilan bo'ladi va har keyingi endpoint uni qaytadan
+    server tomonda tekshiradi.
+    """
+    if owner.auth_kind == "password":
+        rows = get_store().customer_sites(owner.member_id)
+        sites = []
+        for row in rows:
+            detail = get_store().site_detail(str(row["id"]))
+            sites.append(
+                {
+                    "id": detail["id"],
+                    "name": detail["name"],
+                    "address": detail.get("address"),
+                    "connection": detail.get("connection"),
+                    "cameras_active": detail.get("cameras_active"),
+                    "cameras_expected": detail.get("cameras_expected") or None,
+                    "role": row.get("access_role") or "owner",
+                }
+            )
+    else:
+        members = get_event_store().members_for_telegram(owner.telegram_id)
+        sites = []
+        for member in members:
+            detail = get_store().site_detail(str(member["site_id"]))
+            sites.append(
+                {
+                    "id": detail["id"],
+                    "name": detail["name"],
+                    "address": detail.get("address"),
+                    "connection": detail.get("connection"),
+                    "cameras_active": detail.get("cameras_active"),
+                    "cameras_expected": detail.get("cameras_expected") or None,
+                    "role": member.get("role"),
+                }
+            )
+    return {"sites": sites, "selected_site_id": owner.site_id}
+
+
+@app.get("/api/v1/owner/dashboard")
+async def owner_dashboard(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """V2 bosh sahifasi uchun bitta izchil snapshot.
+
+    Oldingi panel bir ekran uchun 8–12 ta so'rov yuborardi; ular turli
+    vaqtda tugab, kamera holati bir kartada yashil, boshqasida oflayn
+    ko'rinishi mumkin edi. Bu endpoint hammasini bitta tanlangan tenant
+    ichida yig'adi va frontend faqat shu snapshotni yangilaydi.
+    """
+    store = get_store()
+    events_store = get_event_store()
+    detail = store.site_detail(owner.site_id)
+    health = await owner_health(owner)
+    report = events_store.retail_report(owner.site_id)
+    if not _panel_feature_open(owner.site_id, "demografiya"):
+        report.pop("demografiya", None)
+    event_rows = events_store.list_events(owner.site_id, limit=12)
+    for item in event_rows:
+        item["label"] = event_label(str(item.get("event_type", "")))
+    subscription = await owner_subscription(owner)
+    updated_at = datetime.now(timezone.utc).isoformat()
+    return {
+        "site": {
+            "id": detail["id"],
+            "name": detail["name"],
+            "address": detail.get("address"),
+            "connection": detail.get("connection") or "offline",
+            "minutes_since_seen": detail.get("minutes_since_seen"),
+            "cameras_active": detail.get("cameras_active"),
+            "cameras_expected": health.get("cameras_expected"),
+            "plan": {
+                "code": detail.get("plan"),
+                "name": plan_display_name(str(detail.get("plan") or "")),
+            },
+        },
+        "today": report,
+        "cameras": store.list_cameras(owner.site_id, include_source=False),
+        "camera_states": health.get("camera_states") or [],
+        "events": event_rows,
+        "trend": events_store.traffic_trend(owner.site_id, days=14).get("daily", []),
+        "subscription": {
+            **subscription,
+            "monthly_price_uzs": subscription.get("monthly_uzs"),
+        },
+        "updated_at": updated_at,
+        "revision": f"{owner.site_id}:{updated_at}",
+    }
+
+
 @app.get("/api/v1/owner/events")
 async def owner_events(
     limit: int = 100,
@@ -4792,11 +5134,52 @@ async def owner_health(owner: OwnerPrincipal = Depends(require_active_owner)) ->
     # ro'yxatdan o'tgan do'konda u BO'SH qoladi — natijada panel "4 dan 2
     # tasi" o'rniga quruq "Qurilma ulangan" deb turardi.  Ro'yxatdagi
     # kamera soni yaxshiroq zaxira: uni qurilmaning o'zi bildiradi.
-    registered = len(get_store().list_cameras(owner.site_id))
+    cameras = get_store().list_cameras(owner.site_id)
+    registered = len(cameras)
+    # Kamera heartbeat'i oxirgi qurilma xabari bilan birga saqlanadi.  Uni
+    # alohida "yashil" holat deb qaytarish xato: qurilma 4 soat oldin
+    # uzilgan bo'lsa, o'sha eski `connected=true` qiymati kamerani hozir ham
+    # ishlayotgandek ko'rsatardi. Owner panel faqat shu normallashtirilgan
+    # ro'yxatdan foydalanadi.
+    heartbeat_records = get_event_store().health(owner.site_id)
+    reported: Dict[str, Dict[str, Any]] = {}
+    for record in heartbeat_records:
+        for camera in (record.get("health") or {}).get("cameras") or []:
+            camera_id = str(camera.get("camera_id") or "")
+            if camera_id and camera_id not in reported:
+                reported[camera_id] = {**camera, "reported_at": record.get("received_at")}
+
+    connection = str(detail.get("connection") or "offline")
+    camera_states = []
+    for camera in cameras:
+        camera_id = str(camera.get("camera_id") or "")
+        item = reported.get(camera_id)
+        if connection != "online":
+            state = "offline"
+            reason = "Qurilma aloqada emas" if connection == "offline" else "Qurilma aloqasi eskirgan"
+        elif item is None:
+            state = "unknown"
+            reason = "Kamera holati hali kelmagan"
+        elif bool(item.get("connected")) and not bool(item.get("offline")):
+            state = "online"
+            reason = "Ishlayapti"
+        else:
+            state = "offline"
+            reason = "Kamera javob bermayapti"
+        camera_states.append(
+            {
+                "camera_id": camera_id,
+                "state": state,
+                "reason": reason,
+                "reported_at": item.get("reported_at") if item else None,
+                "reconnects": int(item.get("reconnects") or 0) if item else 0,
+            }
+        )
     return {
-        "devices": get_event_store().health(owner.site_id),
+        "devices": heartbeat_records,
+        "camera_states": camera_states,
         "cameras_expected": detail["cameras_expected"] or registered or None,
-        "connection": detail["connection"],
+        "connection": connection,
         # Panel sarlavhasi uchun: do'kon nomi va oxirgi aloqadan beri
         # o'tgan vaqt — "Qurilma 2 soatdan beri aloqada emas" kabi oddiy
         # tildagi holat shulardan yasaladi.
@@ -6046,16 +6429,10 @@ async def owner_telegram_webhook(
     elif command == "/panel":
         if not ratelimit.limiter().hit("tg-start", telegram_id, limit=5, window_sec=600):
             return {"ok": True}
-        url, is_personal = _bot_panel_url(base, telegram_id, members)
-        note = (
-            "\n\nEslatma: oldingi kirish havolangiz endi ishlamaydi — doim eng yangisini ishlating."
-            if is_personal
-            else ""
-        )
         await _send_owner_telegram(
             telegram_id,
-            "📊 <b>Mijoz paneli</b> — quyidagi tugma orqali kiring." + note,
-            reply_markup={"inline_keyboard": [[{"text": "📊 Panelni ochish", "url": url}]]},
+            "📊 <b>Mijoz paneli</b> — quyidagi tugma orqali kiring.",
+            reply_markup=botfmt.panel_button(urls.app_url() or base),
         )
     elif command == "/kamera":
         # Har bosishda kamera boshiga bitta rasm ketadi — spam bo'lmasin.
@@ -6082,33 +6459,19 @@ BOT_COMMAND_ALIASES = {
 
 
 def _bot_panel_url(base: str, telegram_id: str, members: List[Dict[str, Any]]) -> Tuple[str, bool]:
-    """Panelga kirish havolasi.
+    """Eski callerlar uchun owner panelining Mini App URL'i.
 
-    A'zoga shaxsiy token — bot orqali yetkaziladi, ya'ni faqat o'sha
-    Telegram akkaunt egasi ko'radi.  Bu eski "kodsiz kirish ro'yxati"ning
-    xavfsiz o'rnini bosadi: havola uzun tasodifiy token, Telegram ID emas.
+    Telegram WebApp imzolangan `initData` yuboradi; URL ichidagi login token
+    kerak emas va chat tarixida credential qolmaydi.
     """
-    url = f"{urls.app_url() or base}/owner"
-    if not members:
-        return url, False
-    try:
-        token = get_event_store().create_login_link(
-            str(members[0]["site_id"]),
-            telegram_id,
-            secret=_owner_secret(),
-            ttl_days=LOGIN_LINK_TTL_DAYS,
-        )
-        return f"{url}?key={quote(token, safe='')}", True
-    except HTTPException:
-        # Owner JWT secret sozlanmagan (dev muhit) — oddiy havola.
-        return f"{url}?site={quote(str(members[0]['site_id']), safe='')}", False
+    del telegram_id, members
+    return f"{urls.app_url() or base}/owner", False
 
 
 def _bot_welcome(
     base: str, telegram_id: str, members: List[Dict[str, Any]]
 ) -> Tuple[str, Dict[str, Any]]:
     if members:
-        url, _ = _bot_panel_url(base, telegram_id, members)
         text = (
             "👋 <b>Chaqimchi AI</b> — do'koningiz nazorati.\n\n"
             "Panelga quyidagi tugma orqali kiring.\n\n"
@@ -6117,7 +6480,7 @@ def _bot_welcome(
             "/kamera — kameralardan jonli rasm\n"
             "/yordam — to'liq ro'yxat"
         )
-        markup = {"inline_keyboard": [[{"text": "📊 Panelni ochish", "url": url}]]}
+        markup = botfmt.panel_button(urls.app_url() or base)
         return text, markup
     text = (
         "👋 <b>Chaqimchi AI</b> — do'kon uchun aqlli kamera-nazorat.\n\n"
@@ -6129,7 +6492,7 @@ def _bot_welcome(
     )
     markup = {
         "inline_keyboard": [
-            [{"text": "🏪 Mijoz paneli", "url": f"{urls.app_url() or base}/owner"}],
+            [{"text": "🏪 Mijoz paneli", "web_app": {"url": f"{urls.app_url() or base}/owner"}}],
             [{"text": "🛠 O'rnatuvchi bo'limi", "url": f"{urls.partner_url() or base}/installer"}],
             [{"text": "💰 Tarif va narx", "url": f"{urls.public_url() or base}/#narx"}],
         ]

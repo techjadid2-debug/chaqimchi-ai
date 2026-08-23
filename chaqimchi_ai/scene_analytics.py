@@ -236,6 +236,10 @@ class SceneAnalyzer:
         self._track_zones: Dict[int, set[str]] = {}
         self._emitted: Dict[Tuple[str, str], float] = {}
         self._occupancy_alerted = False
+        # Faqat xotirada turadigan oxirgi AI ramkalari. Jonli overlay uchun
+        # ishlatiladi; DBga, event metadata'ga yoki cloudga koordinata
+        # sifatida saqlanmaydi.
+        self.last_detections: List[Dict[str, Any]] = []
 
     def _checkout_events(
         self,
@@ -435,6 +439,15 @@ class SceneAnalyzer:
         # Filtr aynan shu yerda: kuzatuvchiga tushsa, u track ochadi va
         # keyingi hamma hisob-kitob (navbat, bandlik, xarita) buziladi.
         detections = self.tracker.update(self._big_enough(self.detector.detect(frame), height))
+        self.last_detections = [
+            {
+                "bbox": [float(value) for value in item.get("bbox", [])[:4]],
+                "score": float(item.get("score", 0.0)),
+                "track_id": int(item.get("track_id", 0)),
+            }
+            for item in detections
+            if len(item.get("bbox", [])) >= 4
+        ]
         events: List[EdgeEvent] = []
         active_ids: set[int] = set()
         #: Shu kadrda har zonada nechta odam bor.  Navbat aynan shundan

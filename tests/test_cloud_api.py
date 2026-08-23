@@ -398,7 +398,7 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
     assert webhook.status_code == 200
     assert sent[0][0] == "5476913898"
     buttons = sent[0][2]["inline_keyboard"]
-    assert buttons[0][0]["url"] == "https://chaqimchi.example/owner"
+    assert buttons[0][0]["web_app"]["url"] == "https://chaqimchi.example/owner"
     assert buttons[1][0]["url"] == "https://chaqimchi.example/installer"
     assert buttons[2][0]["url"] == "https://chaqimchi.example/#narx"
     # Ichki kod nomi mijozga ko'rinmasin.
@@ -513,12 +513,12 @@ def test_the_trial_seats_are_limited(cloud_client, monkeypatch) -> None:
     assert "raqamingizni qoldiring" in second.json()["detail"], "berk ko'cha bo'lmasin"
 
 
-def test_the_trial_runs_long_enough_not_to_expire_mid_pilot(cloud_client) -> None:
-    """Bir oy kam: sinov o'rtasida obuna tugab, mijoz "ishlamay qoldi"
-    deb o'ylardi."""
+def test_self_service_trial_is_fourteen_days(cloud_client) -> None:
+    """Sinov qiymatni ko'rishga yetadi, ammo pullik mahsulotni uch oy
+    bepul qilib qo'ymaydi."""
     data = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).json()
 
-    assert data["months"] >= 3
+    assert data["trial_days"] == 14
 
 
 def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch) -> None:
@@ -695,41 +695,33 @@ def test_a_phone_number_alone_is_enough_to_apply(cloud_client) -> None:
     assert not lead["full_name"], "yo'q ismni o'ylab topmaymiz"
 
 
-def test_the_site_form_asks_only_what_self_service_needs(cloud_client) -> None:
-    """Forma maydonlari kodda ham, sahifada ham bir xil bo'lsin.
-
-    Ilgari faqat telefon so'ralardi — chunki qolgan hammasini admin qo'lda
-    qilardi: do'kon ochish, parol yaratish, uni Telegramda yuborish.  Endi
-    mijoz login va parolni O'ZI tanlaydi, ya'ni operatorni kutmaydi.
-    Ko'proq maydon qo'shilmasin: ism ham, do'kon nomi ham baribir keyin
-    aniqlanadi.
-    """
+def test_the_site_form_asks_only_for_name_and_phone(cloud_client) -> None:
+    """CTA faqat bog'lanish uchun zarur ism va telefonni ko'rsatadi."""
     page = cloud_client.get("/").text
     form = page[page.index('id="leadForm"') : page.index("</form>", page.index('id="leadForm"'))]
 
-    visible = [line for line in form.splitlines() if "<input" in line and 'type="hidden"' not in line]
-    assert len(visible) == 5, visible  # telefon, login, parol, honeypot, rozilik
-    assert 'name="full_name"' not in form
-    assert 'name="username"' in form and 'name="password"' in form
-    assert 'type="password"' in form, "parol ekranda ochiq turmasin"
+    visible = [
+        line for line in form.splitlines()
+        if "<input" in line and 'type="hidden"' not in line and 'name="website"' not in line
+    ]
+    assert len(visible) == 2, visible  # ism va telefon
+    assert 'name="full_name"' in form and 'name="phone"' in form
+    assert 'name="username"' not in form and 'name="password"' not in form
 
 
-def test_the_form_sends_the_customer_to_self_service(cloud_client) -> None:
-    """Tugma ariza emas, haqiqiy ro'yxatdan o'tishni ishga tushirsin."""
+def test_the_form_sends_a_lead_request(cloud_client) -> None:
+    """CTA self-service emas, oddiy lead endpointiga ariza yuboradi."""
     js = cloud_client.get("/assets/site.js").text
 
-    assert "/api/v1/public/quick-trial" in js
-    assert "trialDownload" in js, "yuklab olish havolasi ko'rsatilsin"
+    assert 'fetch("/api/v1/public/leads"' in js
 
 
-def test_a_full_trial_queue_still_takes_the_phone_number(cloud_client) -> None:
-    """Chegara to'lganda forma "yo'q" demasin: berk ko'cha eng yomon
-    variant — mijoz ketadi va qaytmaydi."""
+def test_the_lead_cta_has_no_self_service_trial_flow(cloud_client) -> None:
+    """Minimal CTA o'zidan login/parol yoki trial yaratishni talab qilmaydi."""
     js = cloud_client.get("/assets/site.js").text
-    block = js[js.index("startTrial") :]
 
-    assert "response.status === 503" in block
-    assert "submitLead(" in block, "o'sha raqam bilan odatdagi ariza yuborilsin"
+    assert "/api/v1/public/quick-trial" not in js
+    assert "startTrial" not in js
 
 
 def test_approving_an_application_hands_over_a_working_login(

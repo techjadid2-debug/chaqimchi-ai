@@ -199,6 +199,14 @@ class FaceService:
         self.root = root or model_root()
         self.threads = threads
         self._lock = threading.Lock()
+        # CompiledModel ning `__call__` yo'li bitta InferRequest'ni qayta
+        # ishlatadi. API endpointlari esa `asyncio.to_thread()` orqali bir
+        # vaqtning o'zida kelishi mumkin; shunda OpenVINO "Infer Request is
+        # busy" deb, ayrim davomat kadrlarini tashlab yuborardi. Modellarni
+        # yuklash locki bunga yetmaydi — butun inferens zanjiri ketma-ket
+        # bo'lishi shart. Davomat kamerasi o'zi cooldown bilan ishlaydi,
+        # shuning uchun bitta CPU worker V1 uchun yetarli va ishonchli.
+        self._inference_lock = threading.Lock()
         self._core: Optional[Any] = None
         self._detector: Optional[Any] = None
         self._landmarks: Optional[Any] = None
@@ -313,20 +321,21 @@ class FaceService:
         image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
         if image is None:
             return None
-        found = self._detect(image)
-        if found is None:
-            return None
-        box, score = found
-        keypoints = self._keypoints(image, box)
-        if keypoints is None:
-            return None
+        with self._inference_lock:
+            found = self._detect(image)
+            if found is None:
+                return None
+            box, score = found
+            keypoints = self._keypoints(image, box)
+            if keypoints is None:
+                return None
 
-        destination = np.asarray(_REFERENCE_LANDMARKS, dtype=np.float32) * _ALIGNED_SIZE
-        transform, _ = cv2.estimateAffinePartial2D(keypoints, destination)
-        if transform is None:
-            return None
-        aligned = cv2.warpAffine(image, transform, (_ALIGNED_SIZE, _ALIGNED_SIZE))
-        return FaceEmbedding(vector=self._embed_aligned(aligned), det_score=score)
+            destination = np.asarray(_REFERENCE_LANDMARKS, dtype=np.float32) * _ALIGNED_SIZE
+            transform, _ = cv2.estimateAffinePartial2D(keypoints, destination)
+            if transform is None:
+                return None
+            aligned = cv2.warpAffine(image, transform, (_ALIGNED_SIZE, _ALIGNED_SIZE))
+            return FaceEmbedding(vector=self._embed_aligned(aligned), det_score=score)
 
     @staticmethod
     def match(

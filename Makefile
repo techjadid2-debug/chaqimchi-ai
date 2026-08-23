@@ -1,12 +1,14 @@
 # Chaqimchi AI
 PY ?= python3
 
-.PHONY: install-dev test lint fmt run-sotqin run-cloud run-local run-retail provision docker-build cloud-config cloud-deploy benchmark windows-installer windows-release windows-publish
+.PHONY: install-dev test lint fmt ui-install ui-build ui-check run-sotqin run-cloud run-local run-retail provision docker-build cloud-config cloud-deploy benchmark windows-installer windows-release windows-publish
 
 install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
 
-test:
+# Python testlaridan oldin TS typecheck ham yuradi — v2 panel buzilgan
+# holda "test o'tdi" degan yolg'on ishonch bo'lmasin.
+test: ui-check
 	$(PY) -m pytest -q
 
 lint:
@@ -14,6 +16,17 @@ lint:
 
 fmt:
 	$(PY) -m ruff format chaqimchi_ai cloud tests scripts
+
+ui-install:
+	cd frontend && npm install
+
+ui-check:
+	@test -d frontend/node_modules || \
+		(echo "frontend/node_modules yo'q — avval: make ui-install" && exit 1)
+	cd frontend && npm run typecheck
+
+ui-build:
+	cd frontend && npm run build
 
 run-sotqin:
 	$(PY) -m uvicorn chaqimchi_ai.sotqin_agent:app --host 127.0.0.1 --port 8742

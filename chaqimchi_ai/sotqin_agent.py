@@ -25,6 +25,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from chaqimchi_ai import __version__
+from chaqimchi_ai.retail.pressure import read_load_ratio, read_memory_ratio
 from chaqimchi_ai.sotqin_media import SotqinMediaRuntime
 from chaqimchi_ai.sotqin_profile import (
     BUFFER_MAX_BYTES,
@@ -152,10 +153,24 @@ class SotqinAgent:
             data_root = Path.cwd()
         disk = shutil.disk_usage(data_root)
         queue = self._outbox_health()
+        retail = self.retail_status() or {}
+        try:
+            uptime_sec = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+        except (OSError, ValueError, IndexError):
+            # Probe rejalashtiruvchisining almashtiriladigan soatidan alohida:
+            # test yoki scheduler soatini o'zgartirish qurilma uptime'iga
+            # qo'shimcha chaqiruv qo'shmasin. Monotonic OS boot soatiga yaqin.
+            uptime_sec = time.monotonic()
         return {
             "cameras_active": self._cameras_active(),
             "temperature_c": temperature,
             "disk_free_bytes": disk.free,
+            "cpu_percent": round(min(1.0, max(0.0, read_load_ratio())) * 100, 1),
+            "ram_percent": round(min(1.0, max(0.0, read_memory_ratio())) * 100, 1),
+            "disk_percent": round(disk.used / disk.total * 100, 1) if disk.total else None,
+            "fps": retail.get("fps"),
+            "inference_latency_ms": retail.get("inference_latency_ms"),
+            "uptime_sec": round(uptime_sec, 1),
             "outbox_pending": queue["pending"],
             "outbox_bytes": queue["bytes"],
             "outbox_critical_pending": queue["critical_pending"],

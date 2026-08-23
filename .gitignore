@@ -45,6 +45,12 @@ secrets/
 config/secrets.yaml
 config/secrets.yml
 
+# Frontend (React v2 panel) — bog'liqliklar npm ci bilan tiklanadi
+frontend/node_modules/
+
+# Dizayn namunalari (rasm mockuplari) — repoga kirmaydi
+Yangi dizayn-2/
+
 # IDE / OS
 .idea/
 .vscode/

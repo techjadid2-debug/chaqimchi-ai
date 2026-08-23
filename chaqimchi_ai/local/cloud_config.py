@@ -468,6 +468,7 @@ def apply_media_requests(answer: Dict[str, Any]) -> None:
             requests[str(item["camera_id"])] = {
                 "until": str(item.get("until") or ""),
                 "preview": False,
+                "overlay": bool(item.get("overlay")),
             }
     # Bir martalik preview — qisqa "jonli" deb qaraladi: bitta mexanizm.
     one_shot_until = (datetime.now(timezone.utc) + timedelta(seconds=8)).isoformat()

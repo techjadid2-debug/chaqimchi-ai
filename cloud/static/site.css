@@ -1,17 +1,17 @@
 :root {
-  --ink: #13231d;
+  --ink: #101828;
   /* Krem fonda (#f3f0e8) kontrast ≈ 5.6:1 — WCAG AA dan o'tadi.
      Oldingi #5e6e66 ≈ 4.4:1 edi: 12–13px matnda 40+ yoshdagi do'kon egasi
      uchun o'qish qiyin, ba'zi ekranlarda esa umuman xira ko'rinardi. */
-  --muted: #4d5c55;
-  --paper: #f3f0e8;
-  --paper-2: #e7e4da;
-  --lime: #d9f55f;
-  --green: #173d2d;
-  --orange: #f26a3d;
-  --line: rgba(19, 35, 29, 0.16);
-  --radius: 24px;
-  --shadow: 0 24px 80px rgba(19, 35, 29, 0.12);
+  --muted: #667085;
+  --paper: #ffffff;
+  --paper-2: #f7f9fc;
+  --lime: #4285f4;
+  --green: #1a73e8;
+  --orange: #ea4335;
+  --line: #e4e9f2;
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(16,24,40,.04), 0 18px 55px rgba(16,24,40,.09);
 }
 
 * { box-sizing: border-box; }
@@ -50,6 +50,8 @@ button, input, textarea { font: inherit; }
 .nav-links a, .text-link { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; }
 .nav-links a:hover, .text-link:hover { color: var(--ink); }
 .nav-actions { display: flex; align-items: center; gap: 18px; }
+.nav-cta { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; padding: 0 18px; background: var(--lime); color: #fff; font-size: 13px; font-weight: 700; text-decoration: none; }
+.nav-cta:hover { background: #1a73e8; }
 
 /* Ikonkalar — `/assets/icons.svg` spritedan.
  *
@@ -89,10 +91,12 @@ h1 { max-width: 660px; margin-bottom: 24px; font-size: clamp(52px, 5.4vw, 78px);
 h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange); font-family: Georgia, serif; font-weight: 400; }
 .hero-text { max-width: 650px; margin: 0 0 30px; color: var(--muted); font-size: 19px; line-height: 1.7; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.cta-icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.button-ghost .cta-icon { color: var(--lime); }
 .hero-trust { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }.hero-trust span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; font-weight: 650; }
 /* Narx ilgagi qolgan belgilardan ajralib turishi kerak — mijoz aynan shuni
    qidiradi. */
-.hero-trust #heroPrice { border-color: var(--ink); background: var(--ink); color: var(--lime); font-weight: 800; }
+.hero-trust #heroPrice { border-color: #4285f4; background: #4285f4; color: #fff; font-weight: 800; }
 .model-note { max-width: 590px; margin: 24px 0 0; padding-left: 16px; border-left: 3px solid var(--lime); color: var(--muted); font-size: 13px; }
 
 /* Izometrik sahna.  Rasm o'rniga SVG: 64 KB fotosurat o'rniga ~8 KB
@@ -116,6 +120,7 @@ h1 span, h1 em { display: block; } h1 em { margin-top: 4px; color: var(--orange)
 .how-steps b { font-size: 17px; }
 .how-steps span { color: #acbeb5; font-size: 14px; line-height: 1.6; }
 .how-steps .icon { width: 30px; height: 30px; color: var(--lime); }
+.how-steps .step-icon { width: 30px; height: 30px; color: var(--lime); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 /* Sahna keng ekranda butun bo'limni egallab ketmasin: u tushuntirish
    vositasi, sahifaning o'zi emas. */
 .how .scene { max-width: 760px; margin: 0 auto; }
@@ -398,4 +403,60 @@ footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid
      ustundagi `}` gacha kesadi. */
   #scene-pulse, #scene-phone { opacity: 1; transform: none; }
   #scene-beam { opacity: .26; transform: none; }
+}
+
+/* ── Chaqimchi Design V2 ───────────────────────────────────────────────
+   Ko'k — brend va harakat; yashil/sariq/qizil faqat holat ma'nosi uchun.
+   Eski komponentlarning ishlaydigan form/JS kontrakti saqlanadi, tashqi
+   ko'rinish esa owner va admin V2 bilan bitta dizayn tizimiga o'tadi. */
+.nav-shell { background: rgba(255,255,255,.92); }
+.brand b { color: var(--lime); }
+.brand-mark { background: transparent; border-radius: 8px; }
+.icon { color: var(--lime); }
+:focus-visible { outline-color: rgba(66,133,244,.32); }
+.button { min-height: 48px; border-color: var(--line); border-radius: 10px; }
+.button-ghost { background: #fff; color: var(--ink); }
+.button-light { border-color: var(--lime); background: var(--lime); color: #fff; }
+.button-light:hover { background: #1a73e8; border-color: #1a73e8; box-shadow: 0 12px 26px rgba(66,133,244,.2); }
+.hero { gap: 64px; }
+.hero h1 { max-width: 690px; font-size: clamp(48px,5.1vw,72px); font-weight: 800; }
+.hero h1 em { margin-top: 8px; color: var(--lime); font-family: inherit; font-style: normal; font-weight: 800; }
+.hero-photo { border-radius: 20px; transform: none; }
+.hero-photo-badge { right: 18px; bottom: 18px; border-radius: 9px; background: rgba(26,115,232,.92); }
+.hero-photo-badge span { background: #34a853; }
+.facts { max-width: 1180px; border: 1px solid var(--line); border-radius: 16px; background: #fff; overflow: hidden; box-shadow: var(--shadow); }
+.facts strong { color: var(--lime); }
+.how { margin-top: 56px; background: var(--paper-2); color: var(--ink); }
+.how .section-intro h2, .how .eyebrow { color: var(--ink); }
+.how .section-intro p, .how-steps span { color: var(--muted); }
+.how-steps li { border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.how .scene { display: none; }
+.sales-photo, .sales-photo img, .store-proof img { border-radius: 16px; }
+.store-proof { background: #1a73e8; }
+.store-proof p:not(.eyebrow), .store-proof .eyebrow { color: #e8f0fe; }
+.configurator { background: var(--paper-2); }
+.preset, .lead-form, .faq details { background: #fff; }
+.preset-featured { border-color: var(--lime); box-shadow: 0 18px 55px rgba(66,133,244,.12); }
+.preset-badge { background: var(--lime); }
+.preset-items li::before { color: #34a853; }
+.pilot { background: #eef4ff; }
+.lead-form input { background: #fff; }
+.quick-download-form input { background: #fff !important; }
+.faq details { border-radius: 13px; }
+/* Eski krem/yashil bloklar o'rniga Design V2 oq–ko'k sathlari. */
+.features-section, .price-card, .utility-card { background: var(--paper-2); }
+.control-card, .order-summary, .feature-pilot, .dark-feature, .connection { background: #1a73e8 !important; }
+.control-grid article { background: #1967d2; }
+.control-head, .device-row small, .control-grid small, .control-grid span,
+.activity, .activity time, .summary-features, .summary-line,
+.summary-total span, .summary-total small { color: #e8f0fe; }
+.device-icon { background: var(--lime); }.device-icon span { background: #fff; }
+.status-pill { background: rgba(255,255,255,.14); color: #fff; }
+.feature-pilot p, .dark-feature p, .light-intro p, .steps p { color: #e8f0fe; }
+
+@media (max-width: 620px) {
+  .nav-actions .button { display: inline-flex; min-height: 40px; padding: 0 12px; font-size: 11px; }
+  .hero h1 { font-size: clamp(42px,12vw,58px); }
+  .facts { margin: 0 18px; }
+  .mobile-lead-cta, .sticky-price { background: var(--lime); color: #fff; }
 }

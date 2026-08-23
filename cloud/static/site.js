@@ -12,8 +12,8 @@
     status.textContent = "So‘rov yuborilmoqda…";
     const data = new FormData(form);
     const payload = {
-      // Asosiy formada ism maydoni yo'q; yuklab olish formasi uni hali
-      // yashirin maydonda yuboradi.
+      // Asosiy CTA faqat ism va telefonni so'raydi; qolgan tafsilotlar
+      // jamoa qo'ng'irog'ida aniqlanadi.
       full_name: String(data.get("full_name") || "").trim() || null,
       phone: String(data.get("phone") || "").trim(),
       company: String(data.get("company") || "").trim() || null,
@@ -38,93 +38,17 @@
     } finally { button.disabled = false; }
   }
 
-  // ── Ro'yxatdan o'tish: do'kon o'zi ochiladi ───────────────────────────
-  //
-  // Ilgari bu forma faqat telefon raqamini yuborardi va qolgan hammasi
-  // qo'lda edi: admin do'kon ochib, parol yaratib, uni Telegramda
-  // yuborardi.  Endi mijoz login/parolni o'zi tanlaydi va javobda darhol
-  // ULANISH KODI bilan yuklab olish havolasini oladi — dastur cloudga
-  // o'zi ulanadi.
+  // ── Asosiy CTA: ikki maydonli ariza ───────────────────────────────────
   const leadForm = document.getElementById("leadForm");
   const leadMessage = document.getElementById("leadMessage");
-  const trialResult = document.getElementById("trialResult");
-
-  function showTrial(data) {
-    const link = document.getElementById("trialDownload");
-    const hint = document.getElementById("trialHint");
-    if (link) link.href = data.download_windows_url || "/api/v1/public/download-installer";
-    if (hint) {
-      const login = data.login_error
-        ? "Panel logini tayyor emas — biz bog‘lanamiz."
-        : `Panel: <b>${esc(data.owner_url || "")}</b> · login: <b>${esc(data.username || "")}</b>`;
-      hint.innerHTML =
-        `Fayl nomida ulanish kodi bor — o‘rnatgach dastur cloudga <b>o‘zi</b> ulanadi. ` +
-        `${login}. Parolni faqat siz bilasiz: yo‘qotsangiz biz tiklaymiz. ` +
-        `<b>${Number(data.months) || 3} oy bepul</b>, karta kerak emas.`;
-    }
-    if (leadForm) leadForm.hidden = true;
-    if (trialResult) trialResult.hidden = false;
-  }
-
-  /** Matnni HTML'ga xavfsiz qo'yish (login mijozdan keladi). */
-  function esc(value) {
-    return String(value).replace(/[&<>"']/g, (char) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
-    );
-  }
-
-  async function startTrial(form, status, button) {
-    if (!form.reportValidity()) return;
-    button.disabled = true;
-    status.className = "form-status";
-    status.textContent = "Do‘kon ochilmoqda…";
-    const data = new FormData(form);
-    const payload = {
-      phone: String(data.get("phone") || "").trim(),
-      username: String(data.get("username") || "").trim().toLowerCase(),
-      password: String(data.get("password") || ""),
-      company: String(data.get("company") || "").trim() || null,
-      consent: data.get("consent") === "on",
-      website: String(data.get("website") || ""),
-    };
-    try {
-      const response = await fetch("/api/v1/public/quick-trial", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
-      });
-      const body = await response.json();
-      if (response.status === 503) {
-        // Sinov o'rinlari to'ldi — berk ko'cha bo'lmasin: o'sha raqam
-        // bilan odatdagi ariza yuboriladi.
-        status.className = "form-status";
-        status.textContent = body.detail || "O‘rinlar to‘ldi — so‘rovingiz yuborilmoqda…";
-        button.disabled = false;
-        submitLead(form, status, button, "Sinov o'rinlari to'lgan paytdagi so'rov",
-          "So‘rovingiz qabul qilindi. Joy ochilishi bilan bog‘lanamiz.");
-        return;
-      }
-      if (!response.ok) throw new Error(body.detail || "Ro‘yxatdan o‘tib bo‘lmadi");
-      status.className = "form-status ok";
-      status.textContent = body.message || "Do‘koningiz ochildi.";
-      showTrial(body);
-    } catch (error) {
-      status.className = "form-status error";
-      status.textContent = error.message || "Xatolik yuz berdi. Qayta urinib ko‘ring.";
-    } finally { button.disabled = false; }
-  }
 
   if (leadForm) {
     leadForm.addEventListener("submit", (event) => {
       event.preventDefault();
       const status = document.getElementById("formStatus");
       const button = leadForm.querySelector("button[type=submit]");
-      // Login maydoni bo'lmasa (eski keshdagi sahifa) — eski yo'l bilan
-      // ariza yuboriladi, tugma baribir ishlaydi.
-      if (leadForm.querySelector("#username")) {
-        startTrial(leadForm, status, button);
-      } else {
-        submitLead(leadForm, status, button, leadMessage ? leadMessage.value : null,
-          "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.");
-      }
+      submitLead(leadForm, status, button, leadMessage ? leadMessage.value : null,
+        "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.");
     });
   }
 
@@ -140,7 +64,7 @@
   const turnkeyLink = document.getElementById("turnkeyLink");
   if (turnkeyLink) {
     turnkeyLink.addEventListener("click", () => {
-      goToForm("Kompyuterim yo'q — usta va qurilma bo'yicha maslahat kerak");
+      goToForm("Chaqimchi AI biznes paneli bo'yicha demo so'rayman");
     });
   }
 
@@ -206,6 +130,13 @@
 
   const groups = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const money = (uzs) => `${groups(uzs)} so‘m`;
+  // Serverdan kelgan nom, izoh va tariflar HTML sifatida talqin qilinmasin.
+  // Bu funksiya CTA oqimidan ajratilgan: narx kartalari ham unga tayanadi.
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
+    );
+  }
 
   function planCard(plan) {
     const featured = plan.highlight ? " preset-featured" : "";
@@ -267,11 +198,8 @@
     const plans = pricing.plans || [];
     grid.innerHTML = plans.map(planCard).join("");
 
-    // Uchala tugma ham BITTA formaga olib boradi — sahifada bir nechta
-    // raqobatlashuvchi harakat bo'lmasin.  Tanlangan tarif yashirin
-    // maydonga yoziladi, ya'ni Boshlang'ichni bosgan mijoz Biznes
-    // obyektini olib qolmaydi.
-    const planInput = document.getElementById("plan");
+    // Uchala tugma ham bitta qisqa formaga olib boradi. Tanlangan tarif
+    // faqat operator uchun xabardagi izohga yoziladi.
     grid.querySelectorAll("[data-plan-cta]").forEach((button) => {
       button.addEventListener("click", () => {
         const code = button.getAttribute("data-plan-cta");
@@ -282,7 +210,6 @@
           goToForm(`Tarif: ${plan.name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman`);
           return;
         }
-        if (planInput) planInput.value = code;
         goToForm(`Tarif: ${plan.name} | Oyiga ${money(plan.monthly_uzs)}`);
       });
     });

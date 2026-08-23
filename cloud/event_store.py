@@ -212,6 +212,16 @@ class EventStore:
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS device_metrics (
+                device_id TEXT NOT NULL,
+                site_id TEXT NOT NULL,
+                bucket_at TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                PRIMARY KEY(device_id, bucket_at)
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS site_configs (
                 site_id TEXT PRIMARY KEY,
                 revision INTEGER NOT NULL,
@@ -1341,6 +1351,10 @@ class EventStore:
         return moment.astimezone(zone)
 
     def record_health(self, site_id: str, device_id: str, payload: Dict[str, Any]) -> None:
+        now = _now()
+        received_at = now.isoformat()
+        bucket_at = now.replace(second=0, microsecond=0).isoformat()
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         with self._connect() as conn:
             conn.execute(
                 self._sql(
@@ -1352,9 +1366,27 @@ class EventStore:
                 (
                     device_id,
                     site_id,
-                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                    _now().isoformat(),
+                    encoded,
+                    received_at,
                 ),
+            )
+            # Bir daqiqada bitta bucket: 60 s heartbeat uchun yetarli,
+            # retry yoki long-poll uyg'onishi tarixni shishirmaydi.
+            conn.execute(
+                self._sql(
+                    "INSERT INTO device_metrics(device_id,site_id,bucket_at,payload_json,received_at) "
+                    "VALUES(?,?,?,?,?) ON CONFLICT(device_id,bucket_at) DO UPDATE SET "
+                    "site_id=excluded.site_id,payload_json=excluded.payload_json,"
+                    "received_at=excluded.received_at"
+                ),
+                (device_id, site_id, bucket_at, encoded, received_at),
+            )
+            # 30 kunlik retention. Har yozuvda arzon indeksli delete;
+            # alohida cron yiqilsa ham telemetriya cheksiz o'smaydi.
+            cutoff = (now - timedelta(days=30)).isoformat()
+            conn.execute(
+                self._sql("DELETE FROM device_metrics WHERE bucket_at<?"),
+                (cutoff,),
             )
 
     def health(self, site_id: str) -> List[Dict[str, Any]]:
@@ -1367,6 +1399,41 @@ class EventStore:
         for row in rows:
             item = self._dict(row)
             item["health"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
+
+    def latest_device_metrics(self) -> List[Dict[str, Any]]:
+        """Har qurilmaning eng yangi telemetriya bucketi."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT m.* FROM device_metrics m
+                JOIN (
+                    SELECT device_id, MAX(bucket_at) AS bucket_at
+                    FROM device_metrics GROUP BY device_id
+                ) latest ON latest.device_id=m.device_id AND latest.bucket_at=m.bucket_at
+                ORDER BY m.received_at DESC
+                """
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = self._dict(row)
+            payload = json.loads(item.pop("payload_json"))
+            item.update(
+                {
+                    key: payload.get(key)
+                    for key in (
+                        "cpu_percent",
+                        "ram_percent",
+                        "disk_percent",
+                        "fps",
+                        "inference_latency_ms",
+                        "uptime_sec",
+                        "npu_percent",
+                        "temperature_c",
+                    )
+                }
+            )
             result.append(item)
         return result
 

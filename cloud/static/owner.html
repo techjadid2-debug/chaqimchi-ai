@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Chaqimchi AI — Do‘kon paneli</title>
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
   <link rel="stylesheet" href="/assets/owner.css">
 </head>
 <body>
   <!-- ── KIRISH ── -->
   <section id="login" class="login-wrap">
     <a class="brand" href="/">
-      <img src="/assets/chaqimchi-logo-v2.webp" alt="">
+      <img src="/assets/chaqimchi-logo-new.png" alt="">
       <span>Chaqimchi <b>AI</b></span>
     </a>
 
@@ -47,19 +47,15 @@
   <main id="app" class="hidden">
     <header class="topbar">
       <a class="brand" href="/owner">
-        <img src="/assets/chaqimchi-logo-v2.webp" alt="">
+        <img src="/assets/chaqimchi-logo-new.png" alt="">
         <span>Chaqimchi <b>AI</b></span>
       </a>
       <div class="topbar-actions">
         <span id="siteName"></span>
+        <button class="button ghost small" id="settingsBtn" type="button">•••</button>
         <button class="button ghost small" id="logoutBtn" type="button">Chiqish</button>
       </div>
     </header>
-
-    <!-- Bo'limlar.  Har biri o'z ma'lumotini o'zi yuklaydi: ilgari kirish
-         paytida 7 ta so'rov birdan ketardi va bittasi yiqilsa to'rtta
-         karta bo'shab qolardi. -->
-    <nav class="tabbar" id="tabbar" aria-label="Bo'limlar"></nav>
 
     <div class="shell">
       <!-- Holat: oddiy tilda, bitta qarashda.  Ichki kod nomlari va
@@ -68,8 +64,43 @@
            bo'lsa istalgan bo'limdagi raqam yolg'on bo'ladi. -->
       <div id="statusBanner" class="status-banner warn"><div>Yuklanmoqda…</div></div>
 
+      <!-- Egasi uchun bitta operativ ekran: avval do'konning o'zi, so'ng
+           bugungi raqamlar va xavfsizlik. Eski bo'limlar bu oqimni
+           parchalab, telefon ekranida keraksiz navigatsiya yaratardi. -->
+      <section id="operationalDashboard" aria-label="Do‘kon holati">
+        <div class="card wide operational-cameras">
+          <div class="card-head"><div><h2>Hozir do‘konda</h2><p class="hint" id="cameraOverviewHint">Kameralar va oxirgi kadrlar</p></div></div>
+          <div id="cameraOverview" class="camera-grid"></div>
+        </div>
+
+        <div class="card wide" id="operationalHeatCard">
+          <div class="card-head">
+            <div><h2>Faol zonalar</h2><p class="hint">Do‘kon rejasida mijozlar ko‘p to‘plangan joylar. Rang qizargan sari oqim ko‘proq.</p></div>
+            <div class="chip-row" id="operationalHeatControls">
+              <select id="operationalHeatCamera" aria-label="Kamera"></select>
+              <button class="chip" type="button" data-operational-days="1">Bugun</button>
+              <button class="chip active" type="button" data-operational-days="7">7 kun</button>
+              <button class="chip" type="button" data-operational-days="30">30 kun</button>
+            </div>
+          </div>
+          <div class="operational-heat-wrap plan-surface"><canvas id="operationalHeatCanvas" width="960" height="540" aria-label="Do‘kon rejasidagi faol zonalar"></canvas></div>
+          <p class="hint" id="operationalHeatSummary">Ma’lumot yuklanmoqda…</p>
+        </div>
+
+        <div class="operational-grid">
+          <div class="card">
+            <div class="card-head"><h2>Bugun</h2></div>
+            <div class="stats" id="operationalStats"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Xavfsizlik</h2><span class="hint" id="operationalSecuritySummary"></span></div>
+            <div id="operationalSecurity"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ── BUGUN ────────────────────────────────────────────────── -->
-      <div class="pane" id="paneBugun">
+      <div class="pane legacy-pane" id="paneBugun">
 
       <!-- ── ISHONCH BALLI ────────────────────────────────────────────
            Eng tepada va ataylab katta: pastdagi kartalar kunning
@@ -139,7 +170,7 @@
       </div><!-- /paneBugun -->
 
       <!-- ── TAHLIL: naqshlar → xodim jadvali ─────────────────────── -->
-      <div class="pane" id="paneTahlil" hidden>
+      <div class="pane legacy-pane" id="paneTahlil" hidden>
 
       <!-- Do'kon xaritasi: odamlar ko'p yuradigan joylar kamera rasmi
            ustida och-to'q qizil bilan.  Rasm emas, sonlar keladi. -->
@@ -148,7 +179,6 @@
           <h2>Do‘kon xaritasi</h2>
           <div class="chip-row" id="heatControls">
             <button class="chip active" type="button" data-heatmode="camera">Kamera</button>
-            <button class="chip" type="button" data-heatmode="plan">Plan (tepadan)</button>
             <select id="heatCamera" style="width:auto"></select>
             <input type="date" id="heatDate" style="width:auto">
             <select id="heatHour" style="width:auto"><option value="">Kun bo‘yi</option></select>
@@ -208,7 +238,7 @@
       </div><!-- /paneTahlil -->
 
       <!-- ── XAVFSIZLIK ───────────────────────────────────────────── -->
-      <div class="pane" id="paneXavfsizlik" hidden>
+      <div class="pane legacy-pane" id="paneXavfsizlik" hidden>
 
       <div class="card wide">
         <div class="card-head">
@@ -265,7 +295,7 @@
       </div><!-- /paneXavfsizlik -->
 
       <!-- ── DO'KON ───────────────────────────────────────────────── -->
-      <div class="pane" id="paneDokon" hidden>
+      <div class="pane legacy-pane settings-pane" id="paneDokon" hidden>
 
       <div class="card wide">
         <h2>Do‘kon sozlamalari</h2>
@@ -347,19 +377,6 @@
              havola beradi, odam uni bosadi, bot o'zi qo'shadi. -->
         <div class="actions" style="margin:0">
           <button class="button" id="connectTelegramBtn" type="button">Telegramimni ulash</button>
-          <button class="button ghost" id="inviteStaffBtn" type="button">Xodim taklif qilish</button>
-        </div>
-        <div id="inviteBox" class="hidden" style="margin-top:12px">
-          <p class="hint" style="margin-top:0">Bu havolani xodimingizga yuboring. U havolani bossa,
-            kunlik hisobot va ogohlantirishlar unga ham boradi. Havola <b>30 daqiqa</b> yashaydi
-            va faqat bir marta ishlaydi.</p>
-          <label class="field" for="inviteLink">Taklif havolasi
-            <input id="inviteLink" type="text" readonly onclick="this.select()">
-          </label>
-          <div class="actions" style="margin:0">
-            <button class="button small" id="inviteCopyBtn" type="button">Nusxa olish</button>
-            <a class="button ghost small" id="inviteShareBtn" href="#" target="_blank" rel="noopener noreferrer">Telegramda yuborish</a>
-          </div>
         </div>
         <div id="memberStatus"></div>
       </div>
@@ -382,7 +399,7 @@
       <!-- ── XODIMLAR ────────────────────────────────────────────────────
            Yuz tanish yoqilmagan saytda butun bo'lim ko'rinmaydi: JS
            `/owner/faces` 403 bersa tab ham chizilmaydi. -->
-      <div class="pane" id="paneXodimlar" hidden>
+      <div class="pane legacy-pane" id="paneXodimlar" hidden>
 
         <div class="card wide">
           <div class="card-head">
@@ -506,6 +523,7 @@
     </div>
   </div>
 
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 (() => {
   "use strict";
@@ -516,6 +534,7 @@
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   let token = localStorage.getItem("chaqimchi_owner_token") || "";
+  const telegramWebApp = window.Telegram?.WebApp || null;
   let reportDay = "";           // "" = bugun
   let trendDays = 7;
   let cameraList = [];
@@ -596,7 +615,7 @@
 
   async function reload(...keys) {
     invalidate(...keys);
-    await renderCurrent();
+    await renderOperational();
   }
 
   /** Bitta karta o'z xatosini o'zi ko'rsatadi va qayta urinish beradi. */
@@ -748,6 +767,36 @@
     location.reload();
   }
 
+  async function loginFromTelegramWebApp() {
+    const initData = String(telegramWebApp?.initData || "").trim();
+    if (!initData) return false;
+    try {
+      document.documentElement.classList.add("telegram-webapp");
+      telegramWebApp.ready();
+      telegramWebApp.expand();
+      telegramWebApp.setHeaderColor?.("bg_color");
+      telegramWebApp.setBackgroundColor?.("bg_color");
+      $("loginMsg").textContent = "Telegram orqali kirmoqda…";
+      const response = await fetch("/api/v1/owner/auth/telegram-webapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ init_data: initData }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.access_token) {
+        throw new Error(data.detail || "Telegram akkauntingiz do‘konga ulanmagan.");
+      }
+      token = data.access_token;
+      localStorage.setItem("chaqimchi_owner_token", token);
+      $("loginMsg").textContent = "";
+      showApp();
+      return true;
+    } catch (err) {
+      $("loginMsg").textContent = err.message || "Telegram orqali kirib bo‘lmadi.";
+      return false;
+    }
+  }
+
   /* ── Holat banneri ──────────────────────────────────────────────────── */
 
   //: Kamera boshiga holat — heartbeat'dan (`devices[].health.cameras`).
@@ -757,13 +806,28 @@
 
   function readCameraHealth(health) {
     const state = {};
+    // Server umumiy qurilma holatini hisobga olib beradi. Shu ro'yxat
+    // mavjud bo'lsa, eski heartbeat ichidagi `connected=true`ga ishonmaymiz.
+    (health.camera_states || []).forEach((camera) => {
+      if (!camera || !camera.camera_id) return;
+      state[camera.camera_id] = {
+        state: camera.state || "unknown",
+        online: camera.state === "online",
+        reconnects: Number(camera.reconnects || 0),
+        reportedAt: camera.reported_at || "",
+        reason: camera.reason || "Holat kelmadi",
+      };
+    });
+    if (Object.keys(state).length) return state;
     (health.devices || []).forEach((device) => {
       ((device.health || {}).cameras || []).forEach((camera) => {
         if (!camera || !camera.camera_id) return;
         state[camera.camera_id] = {
+          state: Boolean(camera.connected) && !camera.offline ? "online" : "offline",
           online: Boolean(camera.connected) && !camera.offline,
           reconnects: Number(camera.reconnects || 0),
           codec: camera.codec || "",
+          reason: Boolean(camera.connected) && !camera.offline ? "Ishlayapti" : "Kamera javob bermayapti",
         };
       });
     });
@@ -833,17 +897,17 @@
 
   function cameraState(cameraId) {
     const item = cameraHealth[cameraId];
-    if (!item) return "";          // qurilma hali aytmadi — kulrang
-    return item.online ? "on" : "off";
+    if (!item) return "unknown";
+    return item.state === "online" ? "on" : item.state === "unknown" ? "unknown" : "off";
   }
 
   function cameraStateLabel(cameraId) {
     const item = cameraHealth[cameraId];
     if (!item) return "holat kelmadi";
-    if (!item.online) return "javob bermayapti";
+    if (!item.online) return item.reason || "javob bermayapti";
     // Uzilib-ulanib turgan kamera "ishlayapti" deb ko'rsatilsa, hisobot
     // nega kam chiqqani tushunarsiz bo'lardi.
-    return item.reconnects > 5 ? "uzilib turibdi" : "ishlayapti";
+    return item.reconnects > 5 ? "uzilib turibdi" : (item.reason || "ishlayapti");
   }
 
   async function drawCameras() {
@@ -879,6 +943,177 @@
     for (const camera of cameraList) {
       loadPreview(camera.camera_id);
     }
+  }
+
+  /* ── Bitta operativ ekran ──────────────────────────────────────────── */
+
+  let operationalHeatDays = 7;
+
+  function reportedAtLabel(cameraId) {
+    const value = cameraHealth[cameraId]?.reportedAt;
+    if (!value) return "Holat vaqti kelmagan";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Holat vaqti noma’lum" :
+      `Oxirgi signal: ${date.toLocaleString("uz-UZ")}`;
+  }
+
+  function drawOperationalCameras() {
+    const grid = $("cameraOverview");
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls = [];
+    if (!cameraList.length) {
+      grid.innerHTML = '<p class="hint">Kamera hali ulanmagan.</p>';
+      return;
+    }
+    grid.innerHTML = cameraList.map((camera) => {
+      const online = cameraState(camera.camera_id) === "on";
+      const action = online
+        ? `<button class="button ghost small" type="button" data-operational-refresh="${esc(camera.camera_id)}">Rasmni yangilash</button>`
+        : '<span class="hint">Qurilma ulangach rasm yangilanadi.</span>';
+      return `<div class="camera-slot">
+        <button class="camera-card" type="button" data-camera="${esc(camera.camera_id)}"${online ? "" : " disabled"}>
+          <div class="shot empty" data-shot="${esc(camera.camera_id)}">rasm yuklanmoqda…</div>
+          <div class="meta"><span class="dot ${cameraState(camera.camera_id)}" data-dot="${esc(camera.camera_id)}"></span><b>${esc(camera.label || camera.camera_id)}</b><span class="sub">${esc(cameraStateLabel(camera.camera_id))}</span></div>
+          <div class="camera-time">${esc(reportedAtLabel(camera.camera_id))}</div>
+        </button>${action}</div>`;
+    }).join("");
+    grid.querySelectorAll(".camera-card").forEach((button) =>
+      button.addEventListener("click", () => openCameraModal(button.dataset.camera)));
+    grid.querySelectorAll("[data-operational-refresh]").forEach((button) =>
+      button.addEventListener("click", () => requestFrame(button.dataset.operationalRefresh, button)));
+    cameraList.filter((camera) => cameraState(camera.camera_id) === "on")
+      .forEach((camera) => loadPreview(camera.camera_id));
+  }
+
+  function drawOperationalStats(report) {
+    const box = $("operationalStats");
+    if (!report) {
+      box.innerHTML = '<p class="hint">Bugungi ma’lumot kelmadi.</p>';
+      return;
+    }
+    const traffic = report.traffic || {};
+    const queue = report.queue || {};
+    const busiest = traffic.busiest_hour;
+    box.innerHTML = `
+      <div class="stat"><small>Kirdi</small><strong>${Number(traffic.entered || 0)}</strong><span>bugun</span></div>
+      <div class="stat"><small>Gavjum vaqt</small><strong>${busiest ? `${String(busiest.hour).padStart(2, "0")}:00` : "—"}</strong><span>${busiest ? `${busiest.entered} kishi` : "ma’lumot yo‘q"}</span></div>
+      <div class="stat"><small>Eng uzun navbat</small><strong>${queue.longest ? `${queue.longest}` : "—"}</strong><span>${queue.longest ? "kishi" : "chegaradan oshmadi"}</span></div>`;
+  }
+
+  function drawOperationalSecurity(events, report) {
+    const box = $("operationalSecurity");
+    const list = (events || []).filter((event) => SECURITY_TYPES.has(event.event_type)).slice(0, 3);
+    const total = Object.values((report || {}).security || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+    $("operationalSecuritySummary").textContent = total ? `${total} ta signal` : "Tinch";
+    box.innerHTML = list.length ? list.map((event) => eventCard(event)).join("") :
+      '<p class="hint">Muhim yangi hodisa yo‘q.</p>';
+    bindMediaButtons(box);
+  }
+
+  function fillOperationalHeatControls() {
+    const select = $("operationalHeatCamera");
+    const selected = select.value;
+    select.innerHTML = cameraList.map((camera) =>
+      `<option value="${esc(camera.camera_id)}">${esc(camera.label || camera.camera_id)}</option>`).join("");
+    if (selected && cameraList.some((camera) => camera.camera_id === selected)) select.value = selected;
+    $("operationalHeatCard").hidden = cameraList.length === 0;
+  }
+
+  // Bu fon haqiqiy kamera kadri emas.  Kamera burchagi biznes egasiga
+  // yo'nalishni tushuntirmaydi, shuning uchun xaritada oddiy, xolis
+  // do'kon rejasini chizamiz.  O'rnatuvchi keyin aniq pol rejasini
+  // biriktirsa shu qatlam o'sha rasm bilan almashtiriladi.
+  function drawPlanBackdrop(ctx, width, height) {
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(0, 0, width, height);
+    const padX = width * 0.055, padY = height * 0.10;
+    const planW = width - padX * 2, planH = height - padY * 2;
+    ctx.save();
+    ctx.strokeStyle = "#64748b";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(padX, padY, planW, planH);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#cbd5e1";
+    // Javonlar va kassalar faqat neytral yo'nalish beradi; ular rangli
+    // heatmap bilan aralashmaydi hamda aniq o'lchov sifatida talqin qilinmaydi.
+    const shelves = [
+      [0.11, 0.18, 0.22, 0.13], [0.39, 0.18, 0.18, 0.13], [0.66, 0.18, 0.20, 0.13],
+      [0.13, 0.55, 0.23, 0.13], [0.43, 0.55, 0.19, 0.13], [0.72, 0.55, 0.15, 0.13],
+    ];
+    shelves.forEach(([x, y, w, h]) => ctx.strokeRect(padX + planW * x, padY + planH * y, planW * w, planH * h));
+    ctx.strokeStyle = "#94a3b8";
+    ctx.beginPath();
+    ctx.moveTo(padX + planW * .41, padY + planH);
+    ctx.lineTo(padX + planW * .59, padY + planH);
+    ctx.stroke();
+    ctx.fillStyle = "#64748b";
+    ctx.font = "600 16px system-ui, sans-serif";
+    ctx.fillText("Kirish", padX + planW * .44, padY + planH + 28);
+    ctx.restore();
+    return { x: padX, y: padY, width: planW, height: planH };
+  }
+
+  function drawHeatSpots(ctx, data, bounds) {
+    const peak = Math.max(1, ...data.grid.map((row) => Math.max(...row)));
+    const cellW = bounds.width / data.cols;
+    const cellH = bounds.height / data.rows;
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    data.grid.forEach((row, rowIndex) => row.forEach((value, colIndex) => {
+      const t = Number(value || 0) / peak;
+      if (t < .12) return;
+      const x = bounds.x + (colIndex + .5) * cellW;
+      const y = bounds.y + (rowIndex + .5) * cellH;
+      const radius = Math.max(cellW * 3.2, 28) + t * Math.max(cellW * 5.5, 58);
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      glow.addColorStop(0, heatColor(t, .78));
+      glow.addColorStop(.42, heatColor(Math.max(.35, t - .16), .42));
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }));
+    ctx.restore();
+  }
+
+  async function loadOperationalHeatmap() {
+    const canvas = $("operationalHeatCanvas");
+    const summary = $("operationalHeatSummary");
+    const cameraId = $("operationalHeatCamera").value;
+    if (!cameraId) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const bounds = drawPlanBackdrop(ctx, canvas.width, canvas.height);
+    if (cameraState(cameraId) !== "on") {
+      summary.textContent = "Kamera aloqada emas — harakat xaritasi yangi ma’lumot yig‘ganda ko‘rinadi.";
+      return;
+    }
+    let data;
+    try {
+      data = await api(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=${operationalHeatDays}`);
+    } catch (error) {
+      summary.textContent = error.message || "Xarita yuklanmadi.";
+      return;
+    }
+    drawHeatSpots(ctx, data, bounds);
+    summary.textContent = data.points
+      ? `Oxirgi ${operationalHeatDays} kunda ${data.points} ta anonim harakat nuqtasi yig‘ildi.`
+      : "Bu davr uchun harakat ma’lumoti hali yig‘ilmagan.";
+  }
+
+  async function renderOperational() {
+    await needSettled(["health", "cameras", "report", "events"]);
+    if (S.health.ok) drawStatus(S.health.data);
+    else {
+      const banner = $("statusBanner");
+      banner.className = "status-banner warn";
+      banner.innerHTML = `<div><span>Holat aniqlanmadi</span><span class="sub">${esc(S.health.error)}</span></div>`;
+    }
+    if (S.cameras.ok) cameraList = S.cameras.data.cameras || [];
+    drawOperationalCameras();
+    drawOperationalStats(S.report?.ok ? S.report.data : null);
+    drawOperationalSecurity(S.events?.ok ? S.events.data.events : [], S.report?.ok ? S.report.data : null);
+    fillOperationalHeatControls();
+    await loadOperationalHeatmap();
   }
 
   async function loadPreview(cameraId) {
@@ -1204,56 +1439,17 @@
     const canvas = $("heatCanvas");
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#f3f4f6";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const bounds = drawPlanBackdrop(ctx, canvas.width, canvas.height);
     if (!cameraList.length) return;
-    const cols = cameraList.length > 1 ? 2 : 1;
-    const rows = Math.ceil(cameraList.length / cols);
-    const tileW = canvas.width / cols, tileH = canvas.height / rows;
-    const CELLS = 24;
     let totalPoints = 0;
-    for (let index = 0; index < cameraList.length; index += 1) {
-      const camera = cameraList[index];
-      let data;
-      try {
-        data = await api(
-          `/api/v1/owner/heatmap?camera_id=${encodeURIComponent(camera.camera_id)}&days=7`,
-        );
-      } catch (_) { continue; }
-      totalPoints += data.points;
-      const quad = floorQuad(camera.camera_id);
-      const ox = (index % cols) * tileW, oy = Math.floor(index / cols) * tileH;
-      const peak = Math.max(1, ...data.grid.map((row) => Math.max(...row)));
-      const enoughData = data.frames > 500; // ~bir necha soat tahlil
-      for (let r = 0; r < CELLS; r += 1) {
-        for (let c = 0; c < CELLS; c += 1) {
-          const [px, py] = quadPoint(quad, (c + 0.5) / CELLS, (r + 0.5) / CELLS);
-          const value = data.grid[Math.min(data.rows - 1, Math.floor(py * data.rows))][
-            Math.min(data.cols - 1, Math.floor(px * data.cols))];
-          const cw = tileW / CELLS, ch = tileH / CELLS;
-          if (value) {
-            const t = value / peak;
-            ctx.fillStyle = heatColor(t, 0.55 + 0.30 * t);
-          } else if (enoughData) {
-            // Hafta davomida hech kim bosmagan joy — jihoz/o'tib bo'lmas.
-            // Kulrang ataylab TO'YINMAGAN: ko'k to'xtash bilan
-            // adashtirmasin.  Ko'k — "kam odam", kulrang — "umuman
-            // odam yo'q"; bular boshqa gap.
-            ctx.fillStyle = "rgba(31, 41, 55, 0.62)";
-          } else {
-            continue;
-          }
-          ctx.fillRect(ox + c * cw, oy + r * ch, Math.ceil(cw), Math.ceil(ch));
-        }
-      }
-      ctx.strokeStyle = "#9ca3af";
-      ctx.strokeRect(ox + 1, oy + 1, tileW - 2, tileH - 2);
-      ctx.fillStyle = "#111827";
-      ctx.font = "13px system-ui";
-      ctx.fillText(camera.label || camera.camera_id, ox + 8, oy + 18);
-    }
+    const camera = cameraList.find((item) => item.camera_id === $("heatCamera").value) || cameraList[0];
+    try {
+      const data = await api(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(camera.camera_id)}&days=7`);
+      totalPoints = data.points || 0;
+      drawHeatSpots(ctx, data, bounds);
+    } catch (_) { /* Xatoni umumiy xulosa ostida ko'rsatamiz. */ }
     $("heatSummary").textContent = totalPoints
-      ? "Oxirgi 7 kun · kulrang joylar — odam yurmagan (jihozlar, taxminiy)"
+      ? `Oxirgi 7 kun · ${camera.label || camera.camera_id} bo‘yicha faol zonalar`
       : "Plan uchun hali ma’lumot yetarli emas — bir necha kun yig‘ilsin.";
   }
 
@@ -1262,7 +1458,7 @@
     document.querySelectorAll("[data-heatmode]").forEach((chip) =>
       chip.classList.toggle("active", chip.dataset.heatmode === mode));
     const cameraMode = mode === "camera";
-    $("heatCamera").style.display = cameraMode ? "" : "none";
+    $("heatCamera").style.display = "";
     $("heatDate").style.display = cameraMode ? "" : "none";
     $("heatHour").style.display = cameraMode ? "" : "none";
     // Plan rejimi doim 7 kunlik yig'indi bilan chiziladi.
@@ -2168,32 +2364,6 @@
     }
   }
 
-  async function inviteStaff() {
-    const button = $("inviteStaffBtn");
-    button.disabled = true;
-    try {
-      const data = await inviteLink("manager");
-      $("inviteLink").value = data.url;
-      $("inviteShareBtn").href = `https://t.me/share/url?url=${encodeURIComponent(data.url)}`;
-      $("inviteBox").classList.remove("hidden");
-      note("memberStatus", "ok", "");
-    } catch (err) { note("memberStatus", "err", err.message); }
-    button.disabled = false;
-  }
-
-  async function copyInvite() {
-    const field = $("inviteLink");
-    try {
-      await navigator.clipboard.writeText(field.value);
-      note("memberStatus", "ok", "Havola nusxalandi.");
-    } catch (err) {
-      // Eski brauzer yoki ruxsat berilmagan — hech bo'lmasa belgilaymiz,
-      // mijoz qo'lda nusxa oladi.
-      field.select();
-      note("memberStatus", "ok", "Havolani belgilab oldik — nusxa oling.");
-    }
-  }
-
   async function toggleDigest() {
     try {
       await api("/api/v1/owner/digest", { method: "PUT", body: JSON.stringify({ muted: !$("digestToggle").checked }) });
@@ -2392,19 +2562,34 @@
   // uchun 403, ya'ni pilotsiz do'konda abadiy rad javob.
   async function refresh() {
     if (document.visibilityState !== "visible") return;
-    const tab = currentTab();
-    if (tab.id !== "bugun") return;
-    invalidate("health", "cameras", "report");
-    await renderCurrent();
+    invalidate("health", "cameras", "report", "events");
+    await renderOperational();
   }
 
   async function showApp() {
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
-    if (!location.hash) history.replaceState(null, "", `${location.pathname}#/bugun`);
-    await renderCurrent();
+    await renderOperational();
     // Avto-yangilanish: mijoz sahifani ochib qo'ysa ham raqamlar eskirmaydi.
     setInterval(refresh, 60000);
+  }
+
+  async function toggleSettings() {
+    const pane = $("paneDokon");
+    const opening = !pane.classList.contains("settings-open");
+    pane.classList.toggle("settings-open", opening);
+    pane.hidden = !opening;
+    if (!opening) return;
+    await needSettled(["config", "billing", "features", "subscription", "revenue"]);
+    if (S.config.ok) drawConfig(S.config.data.config);
+    else note("configStatus", "err", S.config.error);
+    drawRevenue(S.revenue);
+    if (S.billing.ok) {
+      const quote = S.features.ok ? S.features.data?.summary?.active_quote : null;
+      drawBilling(S.billing.data, quote ? quote.monthly_uzs : 0,
+        S.subscription?.ok ? S.subscription.data : null);
+    }
+    pane.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /* ── Ulanishlar ─────────────────────────────────────────────────────── */
@@ -2415,6 +2600,16 @@
     passwordLogin();
   });
   $("logoutBtn").addEventListener("click", logout);
+  $("settingsBtn").addEventListener("click", toggleSettings);
+  $("operationalHeatCamera").addEventListener("change", loadOperationalHeatmap);
+  document.querySelectorAll("[data-operational-days]").forEach((button) => {
+    button.addEventListener("click", () => {
+      operationalHeatDays = Number(button.dataset.operationalDays || 7);
+      document.querySelectorAll("[data-operational-days]").forEach((item) =>
+        item.classList.toggle("active", item === button));
+      loadOperationalHeatmap();
+    });
+  });
   $("refreshBtn").addEventListener("click", () => reload("events", "report"));
   $("eventMoreBtn").addEventListener("click", () => { eventLimit += 25; reload("events"); });
   document.querySelectorAll("[data-hourmode]").forEach((chip) => {
@@ -2427,7 +2622,7 @@
   });
 
   // Bo'lim almashishi va "Qayta urinish" tugmalari.
-  window.addEventListener("hashchange", () => { window.scrollTo(0, 0); renderCurrent(); });
+  window.addEventListener("hashchange", () => { window.scrollTo(0, 0); renderOperational(); });
   document.addEventListener("click", (event) => {
     const retry = event.target.closest("[data-retry]");
     if (retry) reload(...retry.dataset.retry.split(","));
@@ -2535,8 +2730,6 @@
   });
   $("saveConfigBtn").addEventListener("click", saveConfig);
   $("connectTelegramBtn").addEventListener("click", connectMyTelegram);
-  $("inviteStaffBtn").addEventListener("click", inviteStaff);
-  $("inviteCopyBtn").addEventListener("click", copyInvite);
   $("digestToggle").addEventListener("change", toggleDigest);
   $("invoiceBtn").addEventListener("click", () => createInvoice(1));
   $("annualBtn").addEventListener("click", () => createInvoice(12));
@@ -2547,7 +2740,9 @@
   // Gradient CSSda emas, `HEAT_STOPS` dan yasaladi — rang ikki joyda
   // yozilsa kanvas bilan izoh bir-biridan uzoqlashib ketardi.
   $("heatLegendBar").style.backgroundImage = heatLegendGradient();
-  $("heatCamera").addEventListener("change", loadHeatmap);
+  $("heatCamera").addEventListener("change", () => {
+    if (heatMode === "plan") loadPlanView(); else loadHeatmap();
+  });
   $("heatDate").addEventListener("change", loadHeatmap);
   $("heatHour").addEventListener("change", loadHeatmap);
   // Vaqt oralig'i — "Kunlar bo'yicha" trend chiplari bilan bir xil naqsh.
@@ -2613,7 +2808,13 @@
   // Bot manzili sozlanmagan bo'lsa tugma ma'nosiz — yashiramiz.
   if (!$("botLink").getAttribute("href")) $("botLink").classList.add("hidden");
 
-  if (token) { showApp(); } else { loginFromLink(); }
+  if (token) {
+    showApp();
+  } else {
+    loginFromTelegramWebApp().then((opened) => {
+      if (!opened) loginFromLink();
+    });
+  }
 })();
 </script>
 </body>

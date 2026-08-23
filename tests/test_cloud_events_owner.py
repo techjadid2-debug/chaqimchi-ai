@@ -1,5 +1,9 @@
+import hashlib
+import hmac
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
 import pytest
 from fastapi.testclient import TestClient
@@ -483,6 +487,51 @@ def _key_of(response) -> str:
     return url.split("key=", 1)[1]
 
 
+def _webapp_init_data(token: str, telegram_id: str, *, auth_date: int | None = None) -> str:
+    values = {
+        "auth_date": str(auth_date or int(datetime.now(timezone.utc).timestamp())),
+        "query_id": "AAH-test-query",
+        "user": json.dumps({"id": int(telegram_id), "first_name": "Ali"}, separators=(",", ":")),
+    }
+    check = "\n".join(f"{key}={values[key]}" for key in sorted(values))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    values["hash"] = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    return urlencode(values)
+
+
+def test_telegram_webapp_auth_issues_owner_session(production_client, monkeypatch) -> None:
+    client, _messages = production_client
+    token = "123456:telegram-webapp-test-token-abcdefghijklmnopqrstuvwxyz"
+    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", token)
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000099", role="owner")
+
+    response = client.post(
+        "/api/v1/owner/auth/telegram-webapp",
+        json={"init_data": _webapp_init_data(token, "5476000099")},
+    )
+
+    assert response.status_code == 200
+    session = response.json()
+    assert session["site_id"] == site["site_id"]
+    assert session["access_token"]
+
+
+def test_telegram_webapp_rejects_tampered_or_expired_data(production_client, monkeypatch) -> None:
+    client, _messages = production_client
+    token = "123456:telegram-webapp-test-token-abcdefghijklmnopqrstuvwxyz"
+    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", token)
+    site, _device, _headers = _provision(client)
+    _member(client, site["site_id"], "5476000100", role="owner")
+
+    valid = _webapp_init_data(token, "5476000100")
+    tampered = valid.replace("5476000100", "5476000101")
+    assert client.post("/api/v1/owner/auth/telegram-webapp", json={"init_data": tampered}).status_code == 401
+
+    expired = _webapp_init_data(token, "5476000100", auth_date=1)
+    assert client.post("/api/v1/owner/auth/telegram-webapp", json={"init_data": expired}).status_code == 401
+
+
 def test_link_opens_the_panel(production_client) -> None:
     """Havola bosilishi bilan panel ochiladi — kod so'ralmaydi."""
     client, messages = production_client
@@ -920,12 +969,13 @@ def test_yordam_lists_the_commands(bot_member_client) -> None:
     assert "/kamera" in messages[0][1]
 
 
-def test_panel_command_gives_a_fresh_login_link(bot_member_client) -> None:
+def test_panel_command_opens_the_mini_app_without_a_login_link(bot_member_client) -> None:
     client, messages, _site, _headers = bot_member_client
 
     _webhook(client, "/panel")
 
-    assert "oldingi kirish havolangiz endi ishlamaydi" in messages[0][1]
+    assert "Mijoz paneli" in messages[0][1]
+    assert "oldingi kirish havolangiz" not in messages[0][1]
 
 
 def test_unknown_text_gets_a_short_hint(bot_member_client) -> None:
@@ -1310,6 +1360,21 @@ def test_biznes_device_gets_queue_and_security(production_client) -> None:
     assert codes == {"person_count", "queue_length", "store_security"}
 
 
+def test_production_plan_features_stay_closed_until_acceptance(production_client, monkeypatch) -> None:
+    """Tarif fallback'i public acceptance gate'ini chetlab o'tmasin."""
+    from cryptography.fernet import Fernet
+
+    client, _messages = production_client
+    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
+    monkeypatch.setenv("CHAQIMCHI_CAMERA_SECRET_KEY", Fernet.generate_key().decode())
+    monkeypatch.delenv("CHAQIMCHI_AVAILABLE_FEATURES", raising=False)
+    _site, headers = _site_on(client, "biznes")
+
+    config = client.get("/api/v1/sotqin/config", headers=headers).json()
+
+    assert config["cloud_features"] == []
+
+
 def test_edge_config_camera_limit_follows_the_plan(production_client) -> None:
     """Qurilma tarifdagi kamera sonini bilishi kerak.
 
@@ -1660,10 +1725,21 @@ def test_camera_count_falls_back_to_the_registered_list(production_client) -> No
 
 
 def test_camera_health_is_stored_per_camera(production_client) -> None:
-    """Panelda yashil chiroq preview RASMIDAN emas, qurilmadan kelsin."""
+    """Panel faqat normalizatsiyalangan kamera holatini ishlatsin."""
     client, _messages = production_client
     site, _device, headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="7003")
+
+    client.post(
+        "/api/v1/edge/cameras",
+        headers=headers,
+        json={
+            "cameras": [
+                {"camera_id": "camera-01", "label": "Kirish"},
+                {"camera_id": "camera-02", "label": "Kassa"},
+            ]
+        },
+    )
 
     client.post(
         "/api/v1/edge/heartbeat",
@@ -1682,6 +1758,9 @@ def test_camera_health_is_stored_per_camera(production_client) -> None:
     by_id = {item["camera_id"]: item for item in reported}
     assert by_id["camera-01"]["codec"] == "H265"
     assert by_id["camera-02"]["offline"] is True
+    states = {item["camera_id"]: item for item in health["camera_states"]}
+    assert states["camera-01"]["state"] == "online"
+    assert states["camera-02"]["state"] == "offline"
 
 
 def test_heatmap_can_be_asked_for_a_range_of_days(production_client) -> None:

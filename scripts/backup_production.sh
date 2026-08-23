@@ -168,9 +168,13 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   offsite=1
 fi
 
+# Telegram hujjatlari chatni tez to'ldiradi. Xato ogohlantirishi alohida
+# `chaqimchi-backup-failed.service` orqali ishlaydi, shuning uchun muvaffaqiyatli
+# arxiv yuborishni o'chirish uni o'chirmaydi.
+telegram_send_document="${CHAQIMCHI_BACKUP_TELEGRAM_SEND_DOCUMENT:-1}"
 telegram_token="${CHAQIMCHI_BACKUP_TELEGRAM_TOKEN:-}"
 telegram_chat="${CHAQIMCHI_BACKUP_TELEGRAM_CHAT_ID:-}"
-if [[ -n "$telegram_token" && -n "$telegram_chat" && "$with_media" != "1" ]]; then
+if [[ "$with_media" != "1" && "$telegram_send_document" == "1" && -n "$telegram_token" && -n "$telegram_chat" ]]; then
   bytes="$(wc -c < "$archive" | tr -d ' ')"
   if (( bytes > 45 * 1024 * 1024 )); then
     echo "OGOHLANTIRISH: arxiv $((bytes / 1024 / 1024)) MB — Telegram chegarasidan" >&2

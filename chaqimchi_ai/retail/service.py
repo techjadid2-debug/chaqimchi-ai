@@ -570,6 +570,12 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # hodisa butunlay yo'qoldi degani, uni keyin tiklab bo'lmaydi.
         "action_errors": stats.get("action_errors", 0),
         "pressure": stats.get("pressure") or {},
+        # Agent heartbeat admin panelga aynan o'lchangan pipeline
+        # tezligini olib chiqadi. Bu qiymatlar bo'lmasa UI «—» ko'rsatadi.
+        "fps": (stats.get("broker") or {}).get("budget", {}).get("target_fps"),
+        "inference_latency_ms": (stats.get("broker") or {})
+        .get("budget", {})
+        .get("p95_latency_ms"),
     }
     temporary = path.with_name(f".{path.name}.tmp")
     try:
@@ -703,6 +709,27 @@ def _live_frame_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threadin
             frame = pipeline.latest_frame(str(camera_id))
             if frame is None:
                 continue
+            # Annotatsiya faqat owner aynan so'raganda nusxaga chiziladi.
+            # Pipeline'dagi original kadr o'zgarmaydi va bbox saqlanmaydi.
+            if bool((item or {}).get("overlay")):
+                frame = frame.copy()
+                for detection in pipeline.latest_detections(str(camera_id)):
+                    bbox = detection.get("bbox") or []
+                    if len(bbox) != 4:
+                        continue
+                    x1, y1, x2, y2 = (int(float(value)) for value in bbox)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (11, 92, 255), 2)
+                    score = float(detection.get("score") or 0.0)
+                    cv2.putText(
+                        frame,
+                        f"Odam {score:.0%}",
+                        (x1, max(18, y1 - 7)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.48,
+                        (11, 92, 255),
+                        1,
+                        cv2.LINE_AA,
+                    )
             height, width = frame.shape[:2]
             if width > LIVE_FRAME_WIDTH:
                 scale = LIVE_FRAME_WIDTH / width

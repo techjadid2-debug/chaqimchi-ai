@@ -39,6 +39,12 @@
       <stop offset="1" stop-color="#13231d" stop-opacity="0"/>
     </radialGradient>
   </defs>
+  <!-- Design V2: eski 3D yashil bo'yoqlarni foydalanilayotgan sahifalarda
+       bir xil, ko'k konturga aylantiramiz. `currentColor` CSS bilan keladi. -->
+  <style>
+    symbol ellipse { display: none; }
+    symbol path, symbol rect, symbol circle, symbol g { fill: none !important; stroke: currentColor !important; stroke-width: 2.6px !important; stroke-linecap: round; stroke-linejoin: round; opacity: 1 !important; }
+  </style>
 
   <!-- Kuzatuv kamerasi -->
   <symbol id="kamera" viewBox="0 0 48 48">

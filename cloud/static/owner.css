@@ -7,16 +7,16 @@
  */
 
 :root {
-  --ink: #13231d;
-  --muted: #5e6e66;
-  --paper: #f3f0e8;
-  --paper-2: #e7e4da;
-  --lime: #d9f55f;
-  --green: #173d2d;
-  --orange: #f26a3d;
-  --danger: #c0392b;
-  --line: rgba(19, 35, 29, 0.16);
-  --radius: 20px;
+  --ink: #202124;
+  --muted: #5f6368;
+  --paper: #ffffff;
+  --paper-2: #f8f9fa;
+  --lime: #4285f4;
+  --green: #1a73e8;
+  --orange: #ea4335;
+  --danger: #ea4335;
+  --line: #dadce0;
+  --radius: 16px;
 }
 
 * { box-sizing: border-box; }
@@ -27,6 +27,12 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.55;
 }
+/* Telegram ichidagi WebApp ekran chetlariga va qurilma kesigiga tegib
+ * qolmasin. Oddiy brauzerda env() qiymatlari nol bo'lib qoladi. */
+html.telegram-webapp body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
 a { color: inherit; }
 button, input, select { font: inherit; }
 
@@ -36,7 +42,7 @@ button, input, select { font: inherit; }
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 12px 16px;
-  background: rgba(243, 240, 232, .92); border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, .92); border-bottom: 1px solid var(--line);
   backdrop-filter: blur(12px);
 }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.02em; text-decoration: none; }
@@ -51,7 +57,7 @@ p.lead { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
 
 .card {
   padding: 20px; margin-bottom: 16px;
-  border: 1px solid var(--line); border-radius: var(--radius); background: #fffdf8;
+  border: 1px solid var(--line); border-radius: var(--radius); background: #fff;
 }
 .card.quiet { background: var(--paper-2); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -65,9 +71,9 @@ p.lead { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
   font-weight: 700; font-size: 16px;
 }
 .status-banner .sub { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
-.status-banner.ok { background: #e8f7e4; border-color: #9bd48a; }
-.status-banner.warn { background: #fff4d9; border-color: #e9c46a; }
-.status-banner.err { background: #fdecea; border-color: #e79a92; }
+.status-banner.ok { background: #e6f4ea; border-color: #34a853; }
+.status-banner.warn { background: #fef7e0; border-color: #fbbc05; }
+.status-banner.err { background: #fce8e6; border-color: #ea4335; }
 .status-banner .icon { width: 26px; height: 26px; flex: none; }
 
 .button {
@@ -99,9 +105,9 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; }
 
 .note { padding: 13px 15px; margin: 12px 0; border-radius: 12px; font-size: 14px; }
-.note.ok { background: #e8f7e4; border: 1px solid #9bd48a; }
-.note.warn { background: #fff4d9; border: 1px solid #e9c46a; }
-.note.err { background: #fdecea; border: 1px solid #e79a92; }
+.note.ok { background: #e6f4ea; border: 1px solid #34a853; }
+.note.warn { background: #fef7e0; border: 1px solid #fbbc05; }
+.note.err { background: #fce8e6; border: 1px solid #ea4335; }
 .note b { display: block; margin-bottom: 3px; }
 .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 
@@ -115,6 +121,7 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
   border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff;
   cursor: pointer; padding: 0; text-align: left;
 }
+.camera-card:disabled { cursor: not-allowed; opacity: .72; }
 .camera-card .shot { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #0d1117; }
 .camera-card .shot.empty { display: flex; align-items: center; justify-content: center; color: #8a978f; font-size: 12px; }
 .camera-card .meta { display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 13px; }
@@ -124,9 +131,11 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 /* Kamera nimaga sozlangan — chiziq/zonadan hisoblanadi. */
 .camera-card .setup { padding: 0 12px 9px; font-size: 12px; color: var(--muted);
   text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.camera-card .camera-time { padding: 0 12px 10px; color: var(--muted); font-size: 12px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #b9c4be; flex: none; }
-.dot.on { background: #2ac976; }
+.dot.on { background: #34a853; }
 .dot.off { background: var(--danger); }
+.dot.unknown { background: #fbbc05; }
 
 /* ── Statistika va grafiklar ─────────────────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -134,7 +143,7 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .stat small { display: block; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .stat strong { display: block; margin-top: 4px; font-size: 30px; letter-spacing: -.04em; }
 .stat span { color: var(--muted); font-size: 12px; }
-.up { color: #1d8348; } .down { color: var(--danger); }
+.up { color: #34a853; } .down { color: var(--danger); }
 
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 10px; }
 .bars > div, .bars > button {
@@ -198,7 +207,7 @@ table.events th { color: var(--muted); font-size: 11px; text-transform: uppercas
   content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
   border-radius: 50%; background: #fff; transition: transform .15s ease;
 }
-.switch input:checked + .track { background: #2ac976; }
+.switch input:checked + .track { background: #34a853; }
 .switch input:checked + .track::after { transform: translateX(18px); }
 .switch input:focus-visible + .track { outline: 3px solid var(--orange); outline-offset: 2px; }
 
@@ -217,6 +226,7 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
   .filters select, .filters input { flex-basis: 100%; }
   .stat strong { font-size: 26px; }
   .camera-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .operational-grid { grid-template-columns: 1fr; gap: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -264,6 +274,17 @@ details.alt-login summary { cursor: pointer; color: var(--muted); font-size: 14p
 .heat-legend { display: flex; align-items: center; gap: 10px; max-width: 640px; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
 .heat-legend i { flex: 1; height: 10px; border-radius: 999px; background: rgba(127,127,127,.2); }
 .heat-wrap canvas { width: 100%; height: auto; border-radius: 12px; background: rgba(127, 127, 127, .1); display: block; }
+
+/* ── Bitta operativ ekran ─────────────────────────────────────────────── */
+#operationalDashboard { display: grid; gap: 0; }
+.operational-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.operational-heat-wrap { overflow: hidden; border-radius: 16px; background: #17201d; }
+.operational-heat-wrap.plan-surface { border: 1px solid #dbe5f3; background: #f8fafc; }
+.operational-heat-wrap canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+.legacy-pane { display: none !important; }
+.legacy-pane.settings-open { display: grid !important; }
+.settings-pane { margin-top: 8px; }
+.tabbar { display: none !important; }
 
 /* ── Bo'limlar: pastdagi 4 ta tugma ──────────────────────────────────────
  *
@@ -316,7 +337,7 @@ table.events { min-width: 560px; }
 .event-card .what b { display: block; }
 .event-card .what small { display: block; color: var(--muted); }
 .event-card .actions { margin: 0; flex: none; }
-.event-card.warn { border-left: 4px solid #e9c46a; }
+.event-card.warn { border-left: 4px solid #fbbc05; }
 .event-card.err { border-left: 4px solid var(--danger); }
 
 /* Bo'sh holat — "ma'lumot yo'q" va "xato" bir xil ko'rinmasin. */
@@ -363,30 +384,30 @@ table.events { min-width: 560px; }
    yaxshi yoki yomonligini rangsiz aytib bo'lmaydi.  Lekin rang YAGONA
    belgi emas: yonida so'z ham turadi ("A'lo kun") — rang ko'rmaydigan
    mijoz uchun. */
-.score-card { background: var(--green); color: #f7fbf4; border-color: var(--green); }
+.score-card { background: var(--green); color: #fff; border-color: var(--green); }
 .score-main { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .score-number {
   font-size: 64px; line-height: 1; font-weight: 700; letter-spacing: -0.03em;
   min-width: 96px;
 }
 .score-card[data-tone="good"] .score-number { color: var(--lime); }
-.score-card[data-tone="warn"] .score-number { color: #ffd166; }
-.score-card[data-tone="bad"] .score-number { color: #ff9b85; }
-.score-card[data-tone="none"] .score-number { color: #f7fbf4; font-size: 40px; }
+.score-card[data-tone="warn"] .score-number { color: #fbbc05; }
+.score-card[data-tone="bad"] .score-number { color: #ea4335; }
+.score-card[data-tone="none"] .score-number { color: #fff; font-size: 40px; }
 .score-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 140px; }
 .score-text strong { font-size: 18px; }
-.score-card .hint { color: rgba(247, 251, 244, 0.72); }
+.score-card .hint { color: rgba(255, 255, 255, 0.78); }
 .score-card .button.ghost {
-  border-color: rgba(247, 251, 244, 0.4); color: #f7fbf4; background: transparent;
+  border-color: rgba(255, 255, 255, 0.4); color: #fff; background: transparent;
 }
-.score-card .button.ghost:hover { background: rgba(247, 251, 244, 0.12); }
+.score-card .button.ghost:hover { background: rgba(255, 255, 255, 0.12); }
 
 .score-parts { margin-top: 16px; display: grid; gap: 8px; }
 .score-part {
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 10px 12px; border-radius: 12px; background: rgba(247, 251, 244, 0.08);
+  padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.08);
 }
-.score-part small { color: rgba(247, 251, 244, 0.72); display: block; }
+.score-part small { color: rgba(255, 255, 255, 0.78); display: block; }
 .score-part b { white-space: nowrap; }
 /* O'lchanmagan qism — u ballga KIRMAYDI va buni ko'rsatib turish kerak,
    aks holda mijoz "nega 20 emas?" deb o'ylaydi. */

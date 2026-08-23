@@ -495,6 +495,13 @@ class RetailPipeline:
         camera = self._cameras.get(camera_id)
         return camera.last_frame if camera is not None else None
 
+    def latest_detections(self, camera_id: str) -> List[Dict[str, Any]]:
+        """Jonli overlay uchun xotiradagi oxirgi odam ramkalari."""
+        camera = self._cameras.get(camera_id)
+        if camera is None:
+            return []
+        return list(getattr(camera.analyzer, "last_detections", []))
+
     def _attach_face_crop(self, event: EdgeEvent, *, camera_id: str) -> None:
         """`face_captured` uchun odam ramkasining yuqori qismini kesib oladi.
 

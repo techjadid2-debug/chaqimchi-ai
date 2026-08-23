@@ -169,3 +169,10 @@ def test_statik_fayllarda_kesh_muddati_bor() -> None:
             f"{path.name} ({name}): `?v=<hash>` li fayllar uchun `immutable` "
             "yo'q — mazmun bo'yicha nomlangan fayl bekorga qayta so'raladi"
         )
+
+
+def test_owner_pwa_worker_app_subdomainida_ochiq() -> None:
+    """V2 panel worker'ni ro'yxatdan o'tkazadi; Caddy uni 404 qilmasin."""
+    text = CADDYFILES["chaqimchi"].read_text(encoding="utf-8")
+    app_block = text.split("app.chaqimchi.uz {", 1)[1].split("partner.chaqimchi.uz {", 1)[0]
+    assert "/owner-sw.js" in app_block

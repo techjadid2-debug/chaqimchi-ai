@@ -289,6 +289,7 @@ class CloudStore:
                 -- almashib ketardi.
                 live_key TEXT,
                 live_at TEXT,
+                live_overlay INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (site_id, camera_id),
                 FOREIGN KEY (site_id) REFERENCES sites(id)
@@ -444,6 +445,18 @@ class CloudStore:
             );
             CREATE INDEX IF NOT EXISTS idx_portal_accounts_role_status
                 ON portal_accounts(role, status, created_at DESC);
+            CREATE TABLE IF NOT EXISTS customer_site_access (
+                account_id TEXT NOT NULL,
+                site_id TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'owner'
+                    CHECK(role IN ('owner', 'manager')),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(account_id, site_id),
+                FOREIGN KEY(account_id) REFERENCES portal_accounts(id),
+                FOREIGN KEY(site_id) REFERENCES sites(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_customer_site_access_site
+                ON customer_site_access(site_id, account_id);
             CREATE TABLE IF NOT EXISTS installer_assignments (
                 installer_id TEXT NOT NULL,
                 site_id TEXT NOT NULL,
@@ -746,7 +759,9 @@ class CloudStore:
         conn.close()
         return [str(row[0]) for row in rows]
 
-    def request_live(self, site_id: str, camera_id: str, *, ttl_sec: int = 90) -> str:
+    def request_live(
+        self, site_id: str, camera_id: str, *, ttl_sec: int = 90, overlay: bool = False
+    ) -> str:
         """Jonli ko'rishni yoqadi/uzaytiradi; muddat (ISO) qaytaradi.
 
         Bir martalik preview'dan farqi — muddat: panel ochiq turganda
@@ -756,9 +771,9 @@ class CloudStore:
         until = _iso(_utc_now() + timedelta(seconds=max(10, ttl_sec)))
         conn = self._connect()
         cursor = conn.execute(
-            "UPDATE site_cameras SET live_until=?,updated_at=? "
+            "UPDATE site_cameras SET live_until=?,live_overlay=?,updated_at=? "
             "WHERE site_id=? AND camera_id=? AND enabled=1",
-            (until, _iso(_utc_now()), site_id, camera_id),
+            (until, int(overlay), _iso(_utc_now()), site_id, camera_id),
         )
         conn.commit()
         conn.close()
@@ -771,13 +786,16 @@ class CloudStore:
         now = _iso(_utc_now())
         conn = self._connect()
         rows = conn.execute(
-            "SELECT camera_id,live_until FROM site_cameras "
+            "SELECT camera_id,live_until,live_overlay FROM site_cameras "
             "WHERE site_id=? AND enabled=1 AND live_until IS NOT NULL AND live_until>? "
             "ORDER BY camera_id",
             (site_id, now),
         ).fetchall()
         conn.close()
-        return [{"camera_id": str(row[0]), "until": str(row[1])} for row in rows]
+        return [
+            {"camera_id": str(row[0]), "until": str(row[1]), "overlay": bool(row[2])}
+            for row in rows
+        ]
 
     def live_active(self, site_id: str, camera_id: str) -> bool:
         conn = self._connect()
@@ -1232,6 +1250,7 @@ class CloudStore:
             # bo'lib qoladi (xarita foni va zona muharriri o'shani oladi).
             "live_key": "TEXT",
             "live_at": "TEXT",
+            "live_overlay": "INTEGER NOT NULL DEFAULT 0",
         }
         for name, definition in camera_additions.items():
             if name not in camera_columns:
@@ -1298,6 +1317,15 @@ class CloudStore:
                 """
             )
 
+        # Eski customer loginlar bitta `portal_accounts.site_id` bilan
+        # ishlagan. V2 ko'p filialni alohida access jadvalida saqlaydi;
+        # bu migratsiya mavjud loginlarni uzmasdan o'sha huquqni ko'chiradi.
+        conn.execute(
+            "INSERT OR IGNORE INTO customer_site_access(account_id,site_id,role,created_at) "
+            "SELECT id,site_id,'owner',created_at FROM portal_accounts "
+            "WHERE role='customer' AND site_id IS NOT NULL"
+        )
+
     # ── Portal loginlari va o'rnatuvchi biriktirish ─────────────────────
 
     @staticmethod
@@ -1357,6 +1385,12 @@ class CloudStore:
                         now,
                     ),
                 )
+                if role == "customer" and site_id:
+                    conn.execute(
+                        "INSERT INTO customer_site_access(account_id,site_id,role,created_at) "
+                        "VALUES(?,?,'owner',?)",
+                        (account_id, site_id, now),
+                    )
         except sqlite3.IntegrityError as exc:
             if "username" in str(exc).lower() or "unique" in str(exc).lower():
                 raise ValueError("Bu login band") from exc
@@ -1436,6 +1470,39 @@ class CloudStore:
                 (site_id,),
             ).fetchone()
         return self._public_account(row) if row else None
+
+    def customer_sites(self, account_id: str) -> List[Dict[str, Any]]:
+        """Customer akkaunti ko'ra oladigan filiallar.
+
+        Tenant tanlovi faqat shu server-side ro'yxat orqali tasdiqlanadi;
+        brauzerdan kelgan `X-Owner-Site-Id` o'zi huquq bermaydi.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT s.*,a.role AS access_role FROM customer_site_access a "
+                "JOIN sites s ON s.id=a.site_id WHERE a.account_id=? "
+                "ORDER BY s.created_at",
+                (account_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def grant_customer_site(
+        self, account_id: str, site_id: str, *, role: str = "owner"
+    ) -> Dict[str, Any]:
+        if role not in {"owner", "manager"}:
+            raise ValueError("Ruxsat turi owner yoki manager bo'lishi kerak")
+        account = self.account_by_id(account_id)
+        if not account or account.get("role") != "customer":
+            raise ValueError("Mijoz akkaunti topilmadi")
+        if not self.get_site(site_id):
+            raise ValueError("Sayt topilmadi")
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO customer_site_access(account_id,site_id,role,created_at) "
+                "VALUES(?,?,?,?) ON CONFLICT(account_id,site_id) DO UPDATE SET role=excluded.role",
+                (account_id, site_id, role, _iso(_utc_now())),
+            )
+        return {"account_id": account_id, "site_id": site_id, "role": role}
 
     def ensure_bootstrap_admin(self, username: str, password: str) -> Dict[str, Any]:
         """Birinchi adminni faqat adminlar hali yo'q bo'lsa yaratadi."""
@@ -1840,13 +1907,21 @@ class CloudStore:
         plan: PlanTier,
         *,
         subscription_months: int = 1,
+        subscription_days_override: Optional[int] = None,
         contact_phone: Optional[str] = None,
         address: Optional[str] = None,
         billable_persons: int = 0,
     ) -> Dict[str, Any]:
         limits = get_plan(plan)
         site_id = str(uuid.uuid4())[:12]
-        until = _utc_now() + timedelta(days=subscription_days(subscription_months))
+        duration_days = (
+            int(subscription_days_override)
+            if subscription_days_override is not None
+            else subscription_days(subscription_months)
+        )
+        if duration_days < 1:
+            raise ValueError("Obuna muddati kamida bir kun bo'lishi kerak")
+        until = _utc_now() + timedelta(days=duration_days)
         now = _iso(_utc_now())
         persons = max(0, int(billable_persons))
 

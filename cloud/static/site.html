@@ -9,13 +9,13 @@
   <meta property="og:type" content="website">
   <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-v2.jpg">
   <title>Chaqimchi AI — Do‘koningiz nazorati va sun’iy intellekt tahlili</title>
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
   <!-- `?v=` — fayl mazmunining SHA-256 boshi.  Ilgari bu qo'lda
        qo'yiladigan sana edi va uni yangilash unutilardi: kod o'zgarsa
        ham qaytgan mijoz brauzer keshidan **eskisini** olardi va tuzatish
        unga yetib bormasdi.  Endi qiymat mazmundan kelib chiqadi va
        `test_static_pages.py` mos kelishini tekshiradi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=1b5bc05b9e">
+  <link rel="stylesheet" href="/assets/site.css?v=0fac4fecbf">
 </head>
 <body>
   <!-- Sahifa ataylab qisqa: hero (bitta asosiy tugma) → mahsulot
@@ -30,7 +30,7 @@
   <header class="nav-shell">
     <nav class="nav" aria-label="Asosiy navigatsiya">
       <a class="brand" href="/">
-        <span class="brand-mark"><img src="/assets/chaqimchi-logo-v2.webp" alt="Chaqimchi AI"></span>
+        <span class="brand-mark"><img src="/assets/chaqimchi-logo-new.png" alt=""></span>
         <span>Chaqimchi <b>AI</b></span>
       </a>
       <div class="nav-links">
@@ -44,6 +44,7 @@
            edi.  Telegram havolasi aloqa bo'limida turadi. -->
       <div class="nav-actions">
         <a class="text-link" href="__APP_URL__/owner">Mijoz kirishi</a>
+        <a class="nav-cta" href="#aloqa">14 kun bepul</a>
       </div>
     </nav>
   </header>
@@ -52,18 +53,18 @@
     <!-- ── HERO: bitta asosiy harakat ── -->
     <section class="hero section-pad">
       <div class="hero-copy">
-        <p class="eyebrow"><span></span> Do‘kon uchun sun’iy intellekt</p>
+        <p class="eyebrow"><span></span> Savdo nuqtalari uchun AI tahlil</p>
         <!-- Sarlavha MAHSULOTNI emas, NATIJANI aytadi.
              Ilgari bu yerda "Mavjud kameralaringizni aqlli tahlilga
              aylantiring" turardi — bu kategoriya nomi, va'da emas.
              Do‘kon egasi tahlil sotib olmaydi: u do‘konda bo‘lmasa ham
              hammasi joyida ekanini bilishni sotib oladi. -->
-        <h1><span>Do‘koningiz siz</span><em>yo‘qligingizda ham ishlaydi.</em></h1>
+        <h1><span>Do‘koningizda nima bo‘layotganini</span><em>raqamlar orqali biling.</em></h1>
         <p class="hero-text">
-          Mavjud kameralaringiz mijozlarni sanaydi, kassa navbatini kuzatadi va
-          birov noto‘g‘ri ish qilsa <b>darhol telefoningizga</b> yozadi.
-          Har kuni kechqurun do‘koningiz qanday ishlagani haqida bitta xabar
-          keladi. Video kompyuteringiz va NVR’da qoladi.
+          Mavjud kameralaringiz anonim mijozlar oqimini sanaydi, kassa navbatini
+          kuzatadi va muhim holatlarni <b>Telegram orqali</b> yetkazadi.
+          Biznes panelida filial, kamera va kunlik ko‘rsatkichlar bitta joyda.
+          To‘liq video kompyuteringiz va NVR’da qoladi.
         </p>
 
         <div class="hero-actions">
@@ -74,8 +75,8 @@
                Endi u ikkinchi darajali havola, ro'yxatdan o'tgach esa
                kodli havola o'zi chiqadi. -->
           <a class="button button-light" href="#aloqa" id="startCta">
-            <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#dokon"></use></svg>
-            Bepul boshlash
+            <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M8 12l2.5 2.5L16 9"></path></svg>
+            14 kun bepul boshlash
           </a>
 
           <!-- Dastur nashr qilingan bo'lsa havola, aks holda pastdagi
@@ -84,7 +85,7 @@
                yozilmaydi. -->
           <div id="downloadReady" class="download-action" hidden>
             <a class="button button-ghost" id="downloadBtn" href="/api/v1/public/download-installer">
-              <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#yuklash"></use></svg>
+              <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
               Windows uchun yuklab olish
             </a>
             <!-- Versiya ko‘rinib turishi shart: usiz mijoz (va biz) yangi
@@ -94,7 +95,7 @@
               O‘rnatish: Keyingi → Keyingi → Tayyor. <a href="/install">Qadam-baqadam yo‘riqnoma</a>
             </p>
           </div>
-          <a class="text-cta" href="#aloqa" id="turnkeyLink">Kompyuterim yo‘q yoki usta kerak →</a>
+          <a class="button button-ghost" href="#aloqa" id="turnkeyLink">Demo so‘rash</a>
         </div>
 
         <!-- Inline `display` YO'Q: u `hidden` atributini yengib, forma
@@ -131,10 +132,17 @@
            jarayonni tushuntiradi va u endi pastda, "Qanday ishlaydi"
            bo'limida turadi. -->
       <figure class="hero-photo" aria-label="Do‘kon kameralarining sun’iy intellekt tahlili">
-        <img src="/assets/dokon-hero-v1.webp" alt="Savdo do‘konida mijozlar va kameralar tahlili"
+        <img src="/assets/design2-retail.webp" alt="Savdo do‘konida odam oqimini AI orqali tahlil qilish namunasi"
              width="1672" height="941" fetchpriority="high">
-        <figcaption class="hero-photo-badge"><span></span> Jonli tahlil · Telegram xabari</figcaption>
+        <figcaption class="hero-photo-badge"><span></span> AI tahlil ko‘rinishi · namuna</figcaption>
       </figure>
+    </section>
+
+    <section class="facts" aria-label="Asosiy imkoniyatlar">
+      <div><strong>14 kun</strong><span>Kartasiz bepul sinov</span></div>
+      <div><strong>4 kamera</strong><span>Qabuldan o‘tadigan asosiy profil</span></div>
+      <div><strong>2–3 soniya</strong><span>So‘ralganda jonli kadr oralig‘i</span></div>
+      <div><strong>Video lokal</strong><span>To‘liq arxiv NVR’da qoladi</span></div>
     </section>
 
     <!-- ── QANDAY ISHLAYDI: uch qadam + izometrik sahna ── -->
@@ -165,17 +173,17 @@
 
       <ol class="how-steps">
         <li>
-          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kompyuter"></use></svg>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8m-4-4v4"></path></svg>
           <b>Dasturni o&#8216;rnatasiz</b>
           <span>Do&#8216;kondagi Windows kompyuterga. Keyingi &#8594; Keyingi &#8594; Tayyor.</span>
         </li>
         <li>
-          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kamera"></use></svg>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="10" rx="2"></rect><path d="m16 10 5-3v10l-5-3z"></path><circle cx="9.5" cy="12" r="2.5"></circle></svg>
           <b>Kamerani ulaysiz</b>
           <span>Brauzerda NVR&#8217;ni tanlaysiz &#8212; kanallar o&#8216;zi topiladi.</span>
         </li>
         <li>
-          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="m9 11 6-3-2 6-2-2-2 1zM11 18h2"></path></svg>
           <b>Telefoningizda kuzatasiz</b>
           <span>Kundalik hisobot panelda, muhim hodisa Telegramda.</span>
         </li>
@@ -255,7 +263,7 @@
     -->
     <section id="kameralar" class="sales-visual section-pad">
       <div class="sales-photo">
-        <img src="/assets/dokon-nvr-v1.webp"
+        <img src="/assets/design2-aisle.webp"
              alt="Do&#8216;kondagi NVR va xavfsizlik kameralari"
              width="1672" height="941" loading="lazy" decoding="async">
       </div>
@@ -274,7 +282,7 @@
 
     <!-- ── KAMERADAN TELEFONGACHA ── -->
     <section id="xabar" class="store-proof section-pad">
-      <img src="/assets/dokon-bulut-v1.webp"
+      <img src="/assets/design2-warehouse.webp"
            alt="Kameralardan bulutga, bulutdan telefonga xabar"
            width="1717" height="916" loading="lazy" decoding="async">
       <div>
@@ -307,12 +315,12 @@
       </div>
       <div class="proof-grid">
         <figure>
-          <img src="/assets/panel-bugun-v1.webp" alt="Kunlik hisobot: kirdi, chiqdi va gavjum soat"
+          <img src="/assets/panel-bugun-v2.webp" alt="Kunlik hisobot: kirdi, chiqdi va gavjum soat"
                width="820" height="900" loading="lazy" decoding="async">
           <figcaption>Kunlik hisobot: kirdi, chiqdi, gavjum soat</figcaption>
         </figure>
         <figure>
-          <img src="/assets/panel-xarita-v2.webp" alt="Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar"
+          <img src="/assets/panel-xarita-v3.webp" alt="Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar"
                width="820" height="480" loading="lazy" decoding="async">
           <figcaption>Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar</figcaption>
         </figure>
@@ -358,11 +366,11 @@
     <section id="aloqa" class="pilot section-pad">
       <div class="pilot-copy">
         <p class="eyebrow"><span></span> Bepul boshlash</p>
-        <h2>O‘zingiz ulanasiz</h2>
+        <h2>Biz siz bilan bog‘lanamiz</h2>
         <p>
-          Raqamingizni yozib, o‘zingizga login va parol tanlaysiz — shu
-          zahoti dasturni yuklab olasiz. Karta ham, to‘lov ham kerak emas:
-          <b>birinchi mijozlar 3 oy bepul</b> ishlatadi.
+          Ism va telefon raqamingizni qoldiring. Jamoamiz qurilmangizni
+          baholab, o‘rnatish va <b>14 kunlik bepul sinov</b> bo‘yicha
+          siz bilan bog‘lanadi.
         </p>
         <div class="contact-points">
           <span><b>Telegram:</b> <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> · Abdulvosit Zokirjonov</span>
@@ -371,52 +379,29 @@
         </div>
       </div>
 
-      <!-- Uchta maydon: telefon, login, parol.  Ilgari faqat telefon
-           so'ralardi va qolgan hammasi qo'lda edi — admin do'kon ochib,
-           parol yaratib, uni Telegramda yuborardi.  Ya'ni har bir mijoz
-           operatorning ish vaqtini kutardi.  Login va parolni mijozning
-           o'zi tanlashi shu kutishni butunlay yo'q qiladi.
-
-           Chegara to'lganda forma "yo'q" demaydi: o'sha telefon raqami
-           bilan odatdagi ariza yuboriladi (site.js, `fallbackToLead`). -->
+      <!-- CTA ataylab ikki maydonli: ism va telefon. Qolgan texnik
+           ma'lumotlarni jamoa qo'ng'iroqda aniqlaydi. -->
       <form id="leadForm" class="lead-form" novalidate>
-        <div class="field">
+        <div class="field field-half">
+          <label for="full_name">Ismingiz</label>
+          <input id="full_name" name="full_name" autocomplete="name" required maxlength="120" placeholder="Ismingiz">
+        </div>
+        <div class="field field-half">
           <label for="phone">Telefon raqamingiz</label>
           <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="+998 90 000 00 00">
         </div>
-        <div class="field field-half">
-          <label for="username">Login <small>o‘zingiz tanlaysiz</small></label>
-          <input id="username" name="username" autocomplete="username" required minlength="3" maxlength="64" placeholder="dokonim" spellcheck="false">
-        </div>
-        <div class="field field-half">
-          <label for="password">Parol <small>kamida 10 belgi, harf va raqam</small></label>
-          <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128" placeholder="••••••••••">
-        </div>
         <input id="cameras" name="cameras" type="hidden" value="4">
-        <!-- Qaysi tarif kartasi bosilgan.  Usiz Boshlang'ichni tanlagan
-             mijoz Biznes obyektini olib qolardi va keyin "nega 4 kamera
-             ulanmayapti" deb so'ramasdi — ulanib ketaverardi. -->
-        <input id="plan" name="plan" type="hidden" value="biznes">
         <input id="leadMessage" name="message" type="hidden" value="Saytdan so'rov">
+        <input id="consent" name="consent" type="hidden" value="on">
         <div class="field honey" aria-hidden="true">
           <label for="website">Website</label>
           <input id="website" name="website" tabindex="-1" autocomplete="off">
         </div>
-        <label class="consent">
-          <input id="consent" name="consent" type="checkbox" required>
-          <span>Ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
-        </label>
-        <button class="button form-button button-light" type="submit">Bepul boshlash</button>
+        <p class="consent">Tugmani bosib, <a href="/privacy">maxfiylik shartlari</a>ga rozilik bildirasiz.</p>
+        <button class="button form-button button-light" type="submit">Qo‘ng‘iroq so‘rash</button>
         <p id="formStatus" class="form-status" role="status" aria-live="polite"></p>
       </form>
 
-      <!-- Ro'yxatdan o'tgandan keyin: yuklab olish havolasi fayl nomiga
-           ulanish kodini qo'shadi, ya'ni dastur cloudga o'zi ulanadi. -->
-      <div id="trialResult" class="trial-result" hidden>
-        <p class="trial-title">Do‘koningiz ochildi</p>
-        <a class="button button-light" id="trialDownload" href="#" rel="nofollow">Dasturni yuklab olish</a>
-        <p class="trial-hint" id="trialHint"></p>
-      </div>
     </section>
 
     <!-- ── FAQ: 5 ta eng ko'p so'raladigan savol ── -->
@@ -452,7 +437,7 @@
         </details>
         <details>
           <summary>Qanday to‘layman? Keyin bekor qilsam-chi?</summary>
-          <p><b>Payme</b> yoki <b>Click</b> orqali kartadan, naqd yoki bank o‘tkazmasi bilan. Majburiy uzoq muddatli shartnoma yo‘q — oylik to‘lovni to‘xtatsangiz kifoya. Obuna tugagach tizim yana <b>14 kun</b> ishlaydi, shu vaqtda hisobotlaringizni yuklab olasiz.</p>
+          <p>Hozir hisob-faktura olinadi va to‘lov operator tomonidan tasdiqlanadi. Naqd yoki bank o‘tkazmasi mumkin. Majburiy uzoq muddatli shartnoma yo‘q. Onlayn provayderlar sozlangach panelda faqat ishlaydigan to‘lov usuli ko‘rsatiladi.</p>
         </details>
       </div>
     </section>
@@ -460,7 +445,7 @@
 
   <footer>
     <a class="brand" href="/">
-      <span class="brand-mark"><img src="/assets/chaqimchi-logo-v2.webp" alt="Chaqimchi AI"></span>
+      <span class="brand-mark"><img src="/assets/chaqimchi-logo-new.png" alt=""></span>
       <span>Chaqimchi <b>AI</b></span>
     </a>
     <p>
@@ -479,6 +464,6 @@
     </div>
   </footer>
 
-  <script src="/assets/site.js?v=d7a305c0bf" defer></script>
+  <script src="/assets/site.js?v=18e025bb91" defer></script>
 </body>
 </html>

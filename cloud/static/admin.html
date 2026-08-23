@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
   <title>Chaqimchi Cloud — Admin</title>
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
   <!-- Dizayn tili mijoz paneli bilan bitta: ranglar va asosiy elementlar
        owner.css dan, yon menyu va admin qismlari panel.css dan keladi.
        Eski qorong'u uslub bu yerda ATAYLAB yo'q — u o'rnatuvchi paneli va
@@ -16,7 +16,7 @@
 <body>
   <!-- ── Kirish ekrani ──────────────────────────────────────────────── -->
   <section id="login" class="login-wrap">
-    <a class="brand" href="/"><img src="/assets/chaqimchi-logo-v2.webp" alt="" />Chaqimchi <b>Cloud</b></a>
+    <a class="brand" href="/"><img src="/assets/chaqimchi-logo-new.png" alt="" />Chaqimchi <b>Cloud</b></a>
     <div class="card">
       <h2>Admin paneli</h2>
       <p class="hint" style="margin: 0 0 14px">Login va parolingizni kiriting.</p>
@@ -44,7 +44,7 @@
     </header>
 
     <aside id="sidenav" class="sidenav">
-      <a class="brand" href="#/boshqaruv"><img src="/assets/chaqimchi-logo-v2.webp" alt="" />Chaqimchi <b>Cloud</b></a>
+      <a class="brand" href="#/boshqaruv"><img src="/assets/chaqimchi-logo-new.png" alt="" />Chaqimchi <b>Cloud</b></a>
       <nav id="navList" aria-label="Bo'limlar"></nav>
       <div class="nav-foot">
         <button class="button ghost small" type="button" data-act="refresh" style="margin-bottom: 6px">Yangilash</button>
@@ -339,13 +339,37 @@
       updates: () => api("/api/v1/admin/updates-paused"),
     };
 
+    const EMPTY_DATA = {
+      stats: {}, sites: [], leads: [], invoices: [], providers: {}, alerts: { enabled: false },
+      readiness: { ready: false, items: [] }, catalog: { features: [], price_book: {} },
+      templates: [], accounts: [], assignments: [], updates: { paused: false },
+    };
+    const loadErrors = {};
+
     async function need(keys) {
       const missing = keys.filter((k) => S[k] === null);
       if (!missing.length) return;
-      const values = await Promise.all(missing.map((k) => LOADERS[k]()));
-      missing.forEach((k, i) => (S[k] = values[i]));
+      const results = await Promise.allSettled(missing.map((k) => LOADERS[k]()));
+      missing.forEach((k, i) => {
+        const result = results[i];
+        if (result.status === "fulfilled") {
+          S[k] = result.value;
+          delete loadErrors[k];
+        } else {
+          // Bitta ikkilamchi endpoint (masalan, to'lov provayderi) yiqilsa
+          // admin butun boshqaruv sahifasini yo'qotmasin. Karta bo'sh
+          // zaxira ma'lumot bilan chiziladi, xato esa yuqorida ko'rinadi.
+          S[k] = EMPTY_DATA[k] ?? null;
+          loadErrors[k] = result.reason?.message || "Ma'lumot kelmadi";
+        }
+      });
     }
-    function invalidate(...keys) { keys.forEach((k) => (S[k] = null)); }
+    function invalidate(...keys) {
+      keys.forEach((k) => {
+        S[k] = null;
+        delete loadErrors[k];
+      });
+    }
     async function reload(...keys) { invalidate(...keys); await renderCurrent(); }
 
     const siteById = (id) => (S.sites || []).find((s) => s.id === id);
@@ -396,6 +420,13 @@
         await need(section.deps);
         if (token !== renderToken) return;
         await section.render(el, param);
+        const failed = section.deps.filter((key) => loadErrors[key]);
+        if (failed.length) {
+          el.insertAdjacentHTML(
+            "afterbegin",
+            `<div class="note warn"><b>Ayrim ma’lumotlar kelmadi</b>${esc(failed.map((key) => loadErrors[key]).join(" · "))}<br><button class="button ghost small" type="button" data-act="refresh">Qayta urinish</button></div>`,
+          );
+        }
         renderNav();
       } catch (err) {
         if (token !== renderToken) return;

@@ -130,17 +130,16 @@ def alert_buttons(base_url: str, *, speak_phrase: str = "") -> Dict[str, Any]:
         rows.append([{"text": item.button, "callback_data": f"speak:{item.code}"}])
     rows.append([{"text": "✅ Ko'rdim", "callback_data": "ack"}])
     if base_url:
-        rows.append([{"text": "📊 Panelda ochish", "url": f"{base_url.rstrip('/')}/owner"}])
+        rows.append(
+            [{"text": "📊 Panelda ochish", "web_app": {"url": f"{base_url.rstrip('/')}/owner"}}]
+        )
     return {"inline_keyboard": rows}
 
 
 def panel_button(base_url: str) -> Dict[str, Any]:
-    """ "Panelda ochish" tugmasi.
-
-    Oddiy `/owner` URL ataylab: brauzerda sessiya saqlanadi, yangi
-    login-havola yasash esa mijoz saqlab qo'ygan eskisini bekor qilib
-    yuborardi.
-    """
+    """Telegram ichida haqiqiy Mini App sifatida owner panelini ochadi."""
     return {
-        "inline_keyboard": [[{"text": "📊 Panelda ochish", "url": f"{base_url.rstrip('/')}/owner"}]]
+        "inline_keyboard": [
+            [{"text": "📊 Panelda ochish", "web_app": {"url": f"{base_url.rstrip('/')}/owner"}}]
+        ]
     }

@@ -115,10 +115,16 @@ def test_every_plan_cta_leads_to_the_same_form() -> None:
     html = SITE_HTML.read_text(encoding="utf-8")
     assert "data-plan-cta" in js
     assert js.count("goToForm(") >= 2
-    # Tanlangan tarif yashirin maydonga yoziladi — Boshlang'ichni bosgan
-    # mijoz Biznes obyektini olib qolmasin.
-    assert 'id="plan"' in html
-    assert 'getElementById("plan")' in js
+    # Tarif faqat operator uchun xabarga yoziladi; CTA maydonlari ko'paymaydi.
+    assert 'id="plan"' not in html
+    assert 'getElementById("plan")' not in js
+
+
+def test_pricing_renderer_keeps_its_html_escaping_helper() -> None:
+    """Tarif endpointi sog'lom bo'lsa ham `esc` yo'qolsa kartalar bo'sh qoladi."""
+    source = SITE_JS.read_text(encoding="utf-8")
+    assert "function esc(value)" in source
+    assert "esc(plan.name)" in source
 
 
 def test_buy_button_does_not_promise_a_checkout() -> None:

@@ -958,6 +958,25 @@
     window.location.href = "/panel";
   });
 
+  /* ── Bulutdan sozlash haqida eslatma ────────────────────────────────── */
+
+  function showCloudSetupBanner(state) {
+    const banner = $("cloudSetupBanner");
+    const link = $("cloudSetupLink");
+    if (!banner || !link) return;
+    // Ulangan bo'lsa — to'g'ridan-to'g'ri panelga; ulanmagan bo'lsa
+    // ulash havolasiga.  Ikkalasi ham bo'lmasa banner ko'rsatilmaydi:
+    // ishlamaydigan tugma yo'qligidan yomonroq.
+    const href = state.connected ? state.panel_url : state.connect_url;
+    if (!href) return;
+    link.href = href;
+    const code = $("cloudSetupCode");
+    if (code && !state.connected && state.verify_code) {
+      code.textContent = "Tasdiqlash kodi: " + state.verify_code;
+    }
+    banner.hidden = false;
+  }
+
   /* ── Boshlash ───────────────────────────────────────────────────────── */
 
   (async function boot() {
@@ -969,6 +988,7 @@
         .then((state) => {
           const badge = $("appVersion");
           if (badge && state.app_version) badge.textContent = "v" + state.app_version;
+          showCloudSetupBanner(state);
         })
         .catch(() => {});
       const summary = await api("/api/setup/summary");

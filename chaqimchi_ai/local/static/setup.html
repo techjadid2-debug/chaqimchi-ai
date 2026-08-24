@@ -30,6 +30,18 @@
       <h1>Kamerangizni ulaymiz</h1>
       <p class="lead">Do‘koningizdagi NVR yoki IP kamera shu kompyuter bilan bitta tarmoqda bo‘lishi kerak. Avval tarmoqni tekshiramiz.</p>
 
+      <!-- Bulutdan sozlash — asosiy yo‘l.  Sehrgar zaxira bo‘lib
+           qoladi, lekin mijoz endi shu kompyuter oldida turishi shart
+           emasligini bilishi kerak. -->
+      <div class="card quiet" id="cloudSetupBanner" hidden>
+        <h2>Endi telefondan ham sozlash mumkin</h2>
+        <p class="lead">Kamerani <b>app.chaqimchi.uz</b> saytidagi panelingizdan turib ham ulasangiz bo‘ladi — bu kompyuter oldida o‘tirish shart emas.</p>
+        <div class="actions">
+          <a id="cloudSetupLink" class="button primary" href="#" target="_blank" rel="noopener">Panelni ochish</a>
+        </div>
+        <p class="hint" id="cloudSetupCode"></p>
+      </div>
+
       <!-- Kompyuter quvvati kamera qo‘shishdan OLDIN aytiladi: zaif
            mashinaga to‘rtta kamera qo‘shilsa hisobot jimgina to‘liqsiz
            bo‘lardi va buni hech kim sezmasdi. -->

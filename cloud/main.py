@@ -4905,6 +4905,11 @@ async def edge_site_config(
             get_event_store().edge_employees(device["site_id"]) if _attendance_enabled() else []
         ),
     }
+    # Bulut panelining manzili.  Qurilma buni birinchi ishga tushganda
+    # brauzerni ochish uchun ishlatadi — build vaqtida yozilgan
+    # konstanta emas, chunki domen o'zgarsa dala'dagi dastur uni
+    # yangilashsiz ham bilishi kerak.
+    config["panel_url"] = f"{urls.app_url()}/owner"
     return config
 
 

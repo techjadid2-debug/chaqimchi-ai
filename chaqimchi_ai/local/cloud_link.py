@@ -22,8 +22,9 @@ import logging
 import os
 import platform
 import re
+import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
@@ -107,6 +108,273 @@ def hardware_id() -> str:
     `device_token` orqali bo'ladi.
     """
     return (platform.node() or "windows-pc")[:120]
+
+
+#: Ulanish holati shu faylda: `connect_token` diskda saqlanishi SHART,
+#: chunki qurilma tasdiqni daqiqalab kutadi va shu orada qayta ishga
+#: tushishi mumkin.  Fayl `config.yaml` bilan bir papkada — o'rnatuvchi
+#: uni ACL bilan yopgan.
+CONNECT_STATE = "connect.json"
+
+#: Yangi ulanish havolasi shuncha soniyada bir marta so'raladi.
+HELLO_RETRY_SEC = 300.0
+
+#: Oxirgi urinish vaqti (monotonik).  Nolinchi qiymat — hali
+#: urinilmagan, ya'ni birinchi chaqiruv darhol so'rov yuboradi.
+_hello_attempt: Dict[str, float] = {"at": -HELLO_RETRY_SEC}
+
+
+def _connect_path():
+    from chaqimchi_ai.local import paths
+
+    return paths.data_dir() / CONNECT_STATE
+
+
+def fingerprint() -> str:
+    """Qurilmaning barqaror izi.
+
+    Bulut buni ikki narsa uchun ishlatadi: bir xil kompyuter qayta
+    ulanganda yangi qator yaratmaslik, va ulanish tokeni sizib ketsa
+    uni BOSHQA mashinada ishlatib bo'lmasligi uchun.
+
+    Manbalar ataylab bir nechta: kompyuter nomi o'zgarishi mumkin,
+    lekin protsessor va mashina identifikatori bilan birga olinganda
+    natija amalda barqaror bo'ladi.
+    """
+    parts = [platform.node() or "", platform.machine() or "", platform.processor() or ""]
+    if os.name == "nt":
+        # Windows'da MachineGuid — qayta o'rnatishgacha o'zgarmaydi.
+        try:
+            import winreg  # type: ignore[import-not-found]
+
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as key:
+                parts.append(str(winreg.QueryValueEx(key, "MachineGuid")[0]))
+        except Exception:  # noqa: BLE001 - reyestr yopiq bo'lsa nom yetadi
+            logger.debug("MachineGuid o'qilmadi — nom bo'yicha iz ishlatiladi")
+    import hashlib
+
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def _read_connect_state() -> Dict[str, Any]:
+    path = _connect_path()
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_connect_state(state: Dict[str, Any]) -> None:
+    try:
+        _connect_path().write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Ulanish holati saqlanmadi: %s", exc)
+
+
+def hello(cloud_url: str) -> Optional[Dict[str, Any]]:
+    """Qurilma o'zini bulutga tanishtiradi va ulanish havolasini oladi.
+
+    `None` qaytsa — bulut bu oqimni bilmaydi (eski versiya yoki bayroq
+    o'chirilgan).  Bunday holda chaqiruvchi ESKI yo'lga (sehrgar +
+    pairing kodi) tushadi; shu tufayli yangi dasturni eski bulut bilan
+    ham chiqarish mumkin.
+    """
+    base = normalise_url(cloud_url)
+    body = {
+        "fingerprint": fingerprint(),
+        "label": device_label(),
+        "product_name": "Chaqimchi Windows",
+        "app_version": __version__,
+        "os_name": f"{platform.system()} {platform.release()}".strip(),
+        "local_ip": _local_ip(),
+    }
+    try:
+        with httpx.Client(timeout=TIMEOUT_SEC) as client:
+            response = client.post(f"{base}/api/v1/public/device-hello", json=body)
+    except httpx.HTTPError as exc:
+        logger.info("device-hello yuborilmadi: %s", exc)
+        return None
+    if response.status_code == 404:
+        return None
+    if response.status_code >= 400:
+        logger.info("device-hello rad etildi: %s", response.status_code)
+        return None
+    payload = response.json()
+    lifetime = int(payload.get("expires_in_sec") or 0)
+    state = {
+        "cloud_url": base,
+        "connect_token": payload.get("connect_token", ""),
+        "connect_url": payload.get("connect_url", ""),
+        "panel_url": payload.get("panel_url", ""),
+        "verify_code": payload.get("verify_code", ""),
+        # Muddat MUTLAQ vaqtda saqlanadi.  Qolgan soniyalar yozilsa
+        # kompyuter bir kecha o'chib turgach fayl hamon "tirik"
+        # ko'rinardi va egaga o'lik havola ko'rsatilardi.
+        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=lifetime)).isoformat(),
+        "fingerprint": body["fingerprint"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _write_connect_state(state)
+    return state
+
+
+def _local_ip() -> str:
+    """Do'kon tarmog'idagi manzil — egasi qaysi kompyuter ekanini tanisin.
+
+    Tashqi manzilga UDP soket ochiladi, lekin hech narsa yuborilmaydi:
+    bu marshrutlash jadvalidan "qaysi interfeys" degan javobni olishning
+    eng ishonchli yo'li.
+    """
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.settimeout(0.4)
+            probe.connect(("8.8.8.8", 80))
+            return str(probe.getsockname()[0])
+    except OSError:
+        return ""
+
+
+def handover() -> Optional[PairedSite]:
+    """Tasdiqni tekshiradi va hisob ma'lumotlarini oladi.
+
+    `None` — hali tasdiqlanmagan yoki havola eskirgan (bunda holat
+    fayli tozalanadi va chaqiruvchi yangi `hello` qiladi).
+    """
+    state = _read_connect_state()
+    token = state.get("connect_token")
+    if not token:
+        return None
+    base = normalise_url(str(state.get("cloud_url") or default_cloud_url()))
+    try:
+        with httpx.Client(timeout=TIMEOUT_SEC) as client:
+            response = client.post(
+                f"{base}/api/v1/public/device-handover",
+                json={"connect_token": token, "fingerprint": state.get("fingerprint", "")},
+            )
+    except httpx.HTTPError as exc:
+        logger.debug("device-handover yuborilmadi: %s", exc)
+        return None
+    if response.status_code >= 400:
+        # 404 — havola topilmadi; qayta `hello` qilish kerak.
+        _connect_path().unlink(missing_ok=True)
+        return None
+    payload = response.json()
+    status_value = payload.get("status")
+    if status_value == "pending":
+        return None
+    if status_value in {"expired", "already_used"}:
+        _connect_path().unlink(missing_ok=True)
+        return None
+
+    # `PairedSite` da token YO'Q va bo'lmasligi ham kerak: uni panel
+    # ham, log ham ko'rmasin — u faqat configga yoziladi.
+    site = PairedSite(
+        site_id=str(payload["site_id"]),
+        device_id=str(payload["device_id"]),
+        cloud_url=str(payload.get("cloud_url") or base),
+    )
+    config_store.update(
+        "cloud_sync",
+        {
+            "enabled": True,
+            "url": site.cloud_url,
+            "site_id": site.site_id,
+            "device_id": site.device_id,
+            "device_token": str(payload["device_token"]),
+            "panel_url": payload.get("panel_url", ""),
+        },
+    )
+    _connect_path().unlink(missing_ok=True)
+    clear_auto_pair_error()
+    logger.info("Bulutga ulandi: sayt %s", site.site_id)
+    return site
+
+
+def connect_state() -> Dict[str, Any]:
+    """Lokal holat sahifasi uchun: havola va tekshiruv kodi."""
+    state = _read_connect_state()
+    return {
+        "connect_url": state.get("connect_url", ""),
+        "verify_code": state.get("verify_code", ""),
+        "panel_url": state.get("panel_url", ""),
+    }
+
+
+def panel_url() -> str:
+    """Bulut panelining manzili.
+
+    Ulangan bo'lsa — bulut aytgan manzil (u `/edge/config` orqali ham
+    yangilanadi); aks holda build vaqtida yozilgan manzildan tuziladi.
+    """
+    raw = config_store.read_raw().get("cloud_sync") or {}
+    stored = str(raw.get("panel_url") or "")
+    if stored.startswith("http"):
+        return stored
+    base = str(raw.get("url") or default_cloud_url())
+    return f"{base.rstrip('/')}/owner" if base else ""
+
+
+def _connect_is_live(state: Dict[str, Any]) -> bool:
+    if not state.get("connect_url"):
+        return False
+    raw = str(state.get("expires_at") or "")
+    if not raw:
+        return False
+    try:
+        expires = datetime.fromisoformat(raw)
+    except ValueError:
+        return False
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    # Bir daqiqalik zaxira: egaga havola berilib, u ochguncha muddati
+    # tugab qolmasin.
+    return expires - timedelta(seconds=60) > datetime.now(timezone.utc)
+
+
+def is_connected() -> bool:
+    raw = config_store.read_raw().get("cloud_sync") or {}
+    return bool(raw.get("enabled") and raw.get("device_token"))
+
+
+def ensure_connect_state(cloud_url: str = "") -> Dict[str, Any]:
+    """Tirik ulanish havolasini qaytaradi, kerak bo'lsa yangisini oladi."""
+    if is_connected():
+        return {}
+    state = _read_connect_state()
+    if _connect_is_live(state):
+        return connect_state()
+    fresh = hello(cloud_url or default_cloud_url())
+    return connect_state() if fresh else {}
+
+
+def poll_connection() -> Optional[PairedSite]:
+    """Ulanish oqimini bir qadam oldinga suradi.
+
+    Fon siklidan har 20 soniyada chaqiriladi.  Uchta holat bor:
+    ulangan (hech nima qilinmaydi), havola tirik (tasdiq so'raladi),
+    havola yo'q yoki eskirgan (yangisi olinadi).
+
+    Egasi tasdiqlagan payt shu yerda "ulandi" ga o'tiladi — mijoz
+    do'kon kompyuteriga qaytib borishi shart emas.
+    """
+    if is_connected():
+        return None
+    state = _read_connect_state()
+    if _connect_is_live(state):
+        return handover()
+    # Yangi havola so'rash siyrak: bulut bu oqimni bilmasa (bayroq
+    # o'chirilgan yoki eski versiya) har 20 soniyada 404 olib turishning
+    # ma'nosi yo'q — dastur baribir sehrgar bilan ishlayveradi.
+    now = time.monotonic()
+    if now - _hello_attempt["at"] < HELLO_RETRY_SEC:
+        return None
+    _hello_attempt["at"] = now
+    hello(default_cloud_url())
+    return None
 
 
 def claim(code: str, cloud_url: str) -> PairedSite:

@@ -220,6 +220,15 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
         config_store.save_store_hours(site["open_from"], site["open_to"])
         changed["hours"] = was != (site["open_from"], site["open_to"])
 
+    # Bulut panelining manzili — dastur birinchi ishga tushganda brauzer
+    # aynan shuni ochadi.  Bulut aytgan qiymat build konstantasidan
+    # ustun: domen o'zgarsa dala'dagi dastur uni yangilashsiz biladi.
+    panel = str(payload.get("panel_url") or "")
+    if panel.startswith("http"):
+        raw = config_store.read_raw().get("cloud_sync") or {}
+        if raw.get("panel_url") != panel:
+            config_store.update("cloud_sync", {"panel_url": panel})
+
     return changed
 
 
@@ -337,6 +346,12 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
     if isinstance(answer, dict):
         apply_media_requests(answer)
         apply_speak_requests(answer)
+        # Tarmoqni skanerlash kabi topshiriqlar.  Ular ALOHIDA oqimda
+        # bajariladi: skaner 90 soniyagacha cho'zilishi mumkin, bu
+        # halqa esa har 20 soniyada aylanishi kerak.
+        from chaqimchi_ai.local import cloud_jobs
+
+        cloud_jobs.apply_job_requests(answer)
     return True
 
 

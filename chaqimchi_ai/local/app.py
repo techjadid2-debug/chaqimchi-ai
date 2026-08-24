@@ -40,6 +40,7 @@ from chaqimchi_ai.local import (
     autostart,
     camera_probe,
     cloud_config,
+    cloud_jobs,
     cloud_link,
     config_store,
     counters,
@@ -956,6 +957,10 @@ async def cloud_status() -> Dict[str, Any]:
     return {
         **cloud_link.status(),
         **cloud_config.status(),
+        # Ulash havolasi va tekshiruv kodi — holat sahifasi ularni
+        # ko'rsatadi, mijoz esa kodni bulutdagi kod bilan solishtiradi.
+        **cloud_link.connect_state(),
+        "panel_url": cloud_link.panel_url(),
         "pending_events": cloud_link.pending_events(),
         # Umidsiz deb tashlangan hodisalar — panel ularni KO'RSATISHI
         # kerak: haqiqiy do'konda 2730 ta yozuv shu holatga tushgan-u,
@@ -1342,6 +1347,26 @@ def _auto_pair_if_handed_off() -> None:
         logger.exception("Avtomatik ulanishda kutilmagan xato")
 
 
+def _first_run_url(local_url: str) -> str:
+    """Dastur ko'tarilgach brauzer qaysi manzilni ochadi.
+
+    Uch pog'onali: ulangan bo'lsa bulut paneli, ulanmagan bo'lsa
+    bulutdagi ulash sahifasi, ikkalasi ham bo'lmasa (internet yo'q yoki
+    bulut bu oqimni bilmaydi) — lokal sehrgar.
+
+    Oxirgi pog'ona ataylab saqlangan: internetsiz o'rnatilgan do'konda
+    mijoz baribir kamerani ulay olishi kerak.
+    """
+    try:
+        if cloud_link.is_connected():
+            return cloud_link.panel_url() or local_url
+        state = cloud_link.ensure_connect_state()
+        return str(state.get("connect_url") or "") or local_url
+    except Exception:  # noqa: BLE001 — brauzer manzili dasturni to'xtatmasin
+        logger.warning("Ulanish havolasi olinmadi — lokal sahifa ochiladi", exc_info=True)
+        return local_url
+
+
 def _write_alive(phase: str) -> None:
     """Updater rollback qarori uchun tiriklik izi.
 
@@ -1379,7 +1404,12 @@ def _start_config_sync() -> None:
         while True:
             _write_alive("running")
             try:
-                # Heartbeat birinchi: cloud qurilma tirikligini va qaysi
+                # Ulanmagan bo'lsa: egasi bulutda tasdiqlaganini
+                # kuzatamiz.  Tasdiqlangach hisob ma'lumotlari o'zi
+                # tushadi — mijoz do'kon kompyuteriga qaytmaydi.
+                if cloud_link.poll_connection() is not None:
+                    _autostart_if_ready()
+                # Heartbeat: cloud qurilma tirikligini va qaysi
                 # versiyada ekanini bilishi kerak, hatto zanjir
                 # to'xtagan bo'lsa ham.
                 cloud_config.send_heartbeat(supervisor.status())
@@ -1420,6 +1450,10 @@ def _start_config_sync() -> None:
 
     threading.Thread(target=_loop, name="cloud-config-sync", daemon=True).start()
     threading.Thread(target=_media_loop, name="live-frame-upload", daemon=True).start()
+    # Skanerlash topshiriqlari uchun UCHINCHI oqim.  Ular yuqoridagi
+    # halqada bajarilsa, 90 soniyalik skaner heartbeat'ni to'xtatib
+    # qo'yardi va bulut qurilmani "oflayn" deb belgilardi.
+    cloud_jobs.start()
 
 
 def _autostart_if_ready() -> None:
@@ -1506,13 +1540,17 @@ def main() -> None:
     # ni aynan shu son bilan tekshiramiz.
     counters.bump("panel_boots")
 
+    _auto_pair_if_handed_off()
+    browser_url = _first_run_url(url)
+
     print("=" * 62)
     print("  Chaqimchi AI — do'kon nazorati")
-    print(f"  Boshqaruv paneli: {url}")
+    print(f"  Boshqaruv paneli: {browser_url}")
+    if browser_url != url:
+        print(f"  Qurilma sahifasi: {url}")
     print(f"  Sozlamalar: {paths.data_dir()}")
     print("=" * 62)
 
-    _auto_pair_if_handed_off()
     # Cloudda sozlangan bo'lsa, zanjir ishga tushishidan **oldin** olib
     # tushamiz — aks holda birinchi daqiqada kamerasiz ishga tushib,
     # keyin qayta start bo'lardi.
@@ -1524,7 +1562,7 @@ def main() -> None:
     _autostart_if_ready()
     _start_config_sync()
     if _browser_enabled():
-        _open_browser(url)
+        _open_browser(browser_url)
 
     try:
         # Oldindan band qilingan soket bilan: uvicorn qaytadan bind

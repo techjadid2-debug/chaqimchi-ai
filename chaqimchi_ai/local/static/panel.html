@@ -3,29 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Chaqimchi AI — do‘kon paneli</title>
+  <title>Chaqimchi AI — qurilma holati</title>
   <link rel="stylesheet" href="/assets/local.css">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/">Chaqimchi <b>AI</b></a>
+    <a class="brand" href="/">
+      <!-- Logotip ichkariga yozilgan: Windows payload `cloud/` ni
+           ko'chirmaydi, ya'ni tashqi fayl bo'lsa u yerda ochilmasdi. -->
+      <svg class="brand-mark" viewBox="0 0 42 42" fill="none" aria-hidden="true">
+        <path d="M21 5v4M17 4h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        <rect x="7" y="10" width="28" height="24" rx="8" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M13 35v3M29 35v3M5 20H2M40 20h-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="15" cy="21" r="4" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="27" cy="21" r="4" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M19 21h4M15 29c3.8 2.7 8.2 2.7 12 0" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      Chaqimchi <b>AI</b>
+    </a>
     <div class="topbar-actions">
       <span id="serviceDot" class="dot"></span>
       <span id="serviceText" class="hint" style="margin:0">Tekshirilmoqda…</span>
       <!-- Versiya ko'rinib turishi kerak: mijoz yangi versiyani
            o'rnatganini shu yerdan tekshiradi. -->
       <span id="appVersion" class="hint" style="margin:0"></span>
-      <a class="button ghost small" href="/setup">Sozlamalar</a>
     </div>
   </header>
 
   <main class="shell">
-    <!-- Cloud ulanish holati: mijoz "nega telefonimda ko'rinmayapti?"
-         degan savolga javobni shu yerdan topishi kerak. -->
-    <div id="cloudBar" class="note" style="background:var(--paper-2);border:1px solid var(--line)"></div>
+    <!-- ── Ulanish kartasi ──────────────────────────────────────────────
+         Sahifadagi ENG BIRINCHI narsa.  Mijoz bu sahifaga faqat bitta
+         savol bilan keladi: "boshqaruv panelim qayerda?"  Javob
+         aylantirmasdan ko'rinishi kerak. -->
+    <section class="connect-card" id="connectCard" hidden>
+      <div class="connect-body">
+        <span class="eyebrow" id="connectEyebrow">Bulut</span>
+        <h1 id="connectTitle">Tekshirilmoqda…</h1>
+        <p class="lead" id="connectText"></p>
+        <div class="verify-block" id="verifyBlock" hidden>
+          <small>Tasdiqlash kodi</small>
+          <b id="verifyCode">——————</b>
+        </div>
+        <div class="actions" id="connectActions"></div>
+      </div>
+    </section>
+
+    <!-- Diagnostika: yuborilmagan navbat, yo'qolgan hodisa, masofaviy
+         sozlama.  Aytadigan gap bo'lmasa umuman ko'rinmaydi. -->
+    <div id="cloudBar" class="note" hidden></div>
     <div id="alertArea"></div>
 
-    <h1>Bugungi holat</h1>
+    <h2>Bugungi holat</h2>
     <p class="lead" id="reportDate">—</p>
 
     <div class="stats">
@@ -92,6 +120,10 @@
       </div>
       <pre class="log hidden" id="logBox"></pre>
     </div>
+
+    <!-- Sehrgar endi asosiy yo'l emas, lekin YO'QOLMAYDI: internetsiz
+         do'konda va usta uchun u yagona kafolatlangan zaxira. -->
+    <p class="expert-link"><a href="/setup">Usta rejimi — shu kompyuterdan sozlash</a></p>
   </main>
 
   <script src="/assets/panel.js" defer></script>

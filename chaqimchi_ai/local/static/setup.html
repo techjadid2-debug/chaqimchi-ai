@@ -9,10 +9,22 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/">Chaqimchi <b>AI</b></a>
+    <a class="brand" href="/">
+      <!-- Logotip ichkariga yozilgan: Windows payload `cloud/` ni
+           ko'chirmaydi, ya'ni tashqi fayl bo'lsa u yerda ochilmasdi. -->
+      <svg class="brand-mark" viewBox="0 0 42 42" fill="none" aria-hidden="true">
+        <path d="M21 5v4M17 4h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        <rect x="7" y="10" width="28" height="24" rx="8" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M13 35v3M29 35v3M5 20H2M40 20h-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="15" cy="21" r="4" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="27" cy="21" r="4" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M19 21h4M15 29c3.8 2.7 8.2 2.7 12 0" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      Chaqimchi <b>AI</b>
+    </a>
     <div class="topbar-actions">
       <span id="appVersion" class="hint" style="margin:0"></span>
-      <a class="button ghost small" href="/panel">Panelga o‘tish</a>
+      <a class="button ghost small" href="/panel">Qurilma holati</a>
     </div>
   </header>
 

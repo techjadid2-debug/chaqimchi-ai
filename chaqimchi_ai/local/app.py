@@ -139,12 +139,15 @@ def _page(name: str) -> FileResponse:
 
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
-    """Sozlash tugallangan bo'lsa panel, aks holda sehrgar.
+    """Doim holat sahifasi.
 
-    Mijoz yorliqni bosganda "qayerga borishim kerak?" degan savol
-    bo'lmasligi kerak — dastur o'zi to'g'ri joyni ochadi.
+    Ilgari sozlanmagan qurilma sehrgarni ochardi.  Endi sozlash bulut
+    panelida bo'ladi, ya'ni bu sahifa bitta savolga javob beradi:
+    "boshqaruv panelim qayerda?"  Sehrgar `/setup` da qoladi — u
+    internetsiz do'kon va usta uchun yagona kafolatlangan zaxira,
+    lekin brauzer uni endi o'zi ochmaydi.
     """
-    return _page("panel.html" if config_store.is_ready() else "setup.html")
+    return _page("panel.html")
 
 
 @app.get("/setup", include_in_schema=False)

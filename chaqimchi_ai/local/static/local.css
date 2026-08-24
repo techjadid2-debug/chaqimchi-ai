@@ -1,30 +1,37 @@
-/* Lokal dastur uslubi — rasmiy sayt bilan bir xil tilda.
+/* Lokal dastur uslubi — rasmiy sayt va bulut paneli bilan bir xil tilda.
  *
- * Nega muhim: mijoz saytda yorug', zamonaviy sahifani ko'radi, keyin dasturni
- * o'rnatadi va qora, dasturchi uslubidagi panelga tushardi.  Bu "boshqa
- * mahsulot" hissini beradi va ishonchni tushiradi.  Shuning uchun rang
- * o'zgaruvchilari `cloud/static/site.css` bilan bir xil.
+ * Nega muhim: mijoz saytda yorug', ko'k sahifani ko'radi, keyin dasturni
+ * o'rnatadi va butunlay boshqa rangdagi panelga tushardi.  Bu "boshqa
+ * mahsulot" hissini beradi va ishonchni tushiradi.
+ *
+ * Rang o'zgaruvchilari nomi `cloud/static/site.css` va
+ * `frontend/src/styles.css` bilan AYNAN bir xil — uch joydan biriga
+ * yozilgan qoidani ikkinchisiga ko'chirganda rang almashib ketmaydi.
  */
 
 :root {
-  --ink: #13231d;
-  --muted: #5e6e66;
-  --paper: #f3f0e8;
-  --paper-2: #e7e4da;
-  --lime: #d9f55f;
-  --green: #173d2d;
-  --orange: #f26a3d;
-  --danger: #c0392b;
-  --line: rgba(19, 35, 29, 0.16);
-  --radius: 20px;
-  --shadow: 0 18px 50px rgba(19, 35, 29, 0.12);
+  --blue: #4285f4;
+  --blue-dark: #1a73e8;
+  --blue-soft: #e8f0fe;
+  /* Holat ranglari FAQAT ma'no uchun.  Brend va harakat — doim ko'k. */
+  --green: #34a853;
+  --yellow: #fbbc05;
+  --red: #ea4335;
+
+  --text: #101828;
+  --muted: #667085;
+  --paper: #ffffff;
+  --paper-2: #f7f9fc;
+  --border: #e4e9f2;
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(16,24,40,.04), 0 18px 55px rgba(16,24,40,.09);
 }
 
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--paper-2);
+  color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.55;
 }
@@ -37,11 +44,12 @@ button, input, select, textarea { font: inherit; }
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 14px 20px; margin-bottom: 8px;
-  background: rgba(243, 240, 232, .92); border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, .92); border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
 }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.02em; text-decoration: none; }
-.brand b { color: var(--orange); }
+.brand b { color: var(--blue); }
+.brand-mark { width: 26px; height: 26px; color: var(--blue); flex: none; }
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
 
 h1 { margin: 0 0 8px; font-size: clamp(28px, 4.5vw, 40px); letter-spacing: -.03em; line-height: 1.1; }
@@ -57,16 +65,16 @@ p.lead { margin: 0 0 22px; color: var(--muted); font-size: 16px; }
  * bilmasdi. */
 .steps { display: flex; gap: 8px; margin-bottom: 26px; flex-wrap: wrap; }
 .step-chip {
-  flex: 1 1 150px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px;
+  flex: 1 1 150px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 999px;
   background: var(--paper-2); color: var(--muted); font-size: 13px; font-weight: 650;
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.step-chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
-.step-chip.done { background: var(--lime); border-color: var(--lime); color: var(--ink); }
+.step-chip.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.step-chip.done { background: var(--blue-soft); border-color: var(--blue-soft); color: var(--blue-dark); }
 
 .card {
   padding: 26px; margin-bottom: 18px;
-  border: 1px solid var(--line); border-radius: var(--radius); background: #fffdf8;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper);
 }
 .card.quiet { background: var(--paper-2); }
 
@@ -76,25 +84,27 @@ p.lead { margin: 0 0 22px; color: var(--muted); font-size: 16px; }
 .button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 46px; padding: 0 20px;
-  border: 1px solid var(--ink); border-radius: 999px;
-  background: var(--ink); color: #fff; font-weight: 700; text-decoration: none; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--paper); color: var(--text); font-weight: 700; text-decoration: none; cursor: pointer;
   transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
 }
-.button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(19,35,29,.16); }
+.button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(16,24,40,.12); }
 .button:disabled { opacity: .5; cursor: not-allowed; }
-.button.primary { background: var(--lime); border-color: var(--lime); color: var(--ink); }
-.button.ghost { background: transparent; color: var(--ink); }
-.button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.button.primary:hover:not(:disabled) { background: var(--blue-dark); border-color: var(--blue-dark); }
+.button.ghost { background: transparent; color: var(--text); }
+.button.ghost:hover:not(:disabled) { background: var(--paper-2); }
+.button.danger { background: transparent; border-color: var(--red); color: var(--red); }
 .button.small { min-height: 36px; padding: 0 14px; font-size: 13px; }
 
 label.field { display: grid; gap: 6px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
 label.field small { font-weight: 500; color: var(--muted); }
 input[type=text], input[type=password], input[type=number], input[type=time], select {
-  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
-  background: #fff; color: var(--ink);
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px;
+  background: #fff; color: var(--text);
 }
 input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
-  outline: 3px solid var(--orange); outline-offset: 2px;
+  outline: 3px solid var(--blue); outline-offset: 2px;
 }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 14px; }
@@ -103,34 +113,34 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
  * `alert()` o'rniga.  Brauzer oynasi mijozni to'xtatadi va ko'chirib
  * bo'lmaydi; bu esa sahifada qoladi va matnini o'qish mumkin. */
 .note { padding: 14px 16px; margin: 14px 0; border-radius: 12px; font-size: 14px; }
-.note.ok { background: #e8f7e4; border: 1px solid #9bd48a; }
-.note.warn { background: #fff4d9; border: 1px solid #e9c46a; }
-.note.err { background: #fdecea; border: 1px solid #e79a92; }
+.note.ok { background: #e6f4ea; border: 1px solid #a8dab5; }
+.note.warn { background: #fef7e0; border: 1px solid #fbd977; }
+.note.err { background: #fce8e6; border: 1px solid #f5b5b0; }
 .note b { display: block; margin-bottom: 3px; }
 
 .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 
 .cloud-benefits { display: grid; gap: 10px; margin: 0 0 22px; padding: 0; list-style: none; font-size: 14px; }
-.cloud-benefits li::before { content: "✓ "; margin-right: 8px; color: var(--orange); font-weight: 900; }
+.cloud-benefits li::before { content: "✓ "; margin-right: 8px; color: var(--blue); font-weight: 900; }
 #pairCode::placeholder { letter-spacing: normal; font-size: 15px; font-weight: 500; }
 
 /* ── Kamera ro'yxati ─────────────────────────────────────────────────── */
 .camera-row {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   padding: 14px 16px; margin-bottom: 10px;
-  border: 1px solid var(--line); border-radius: 14px; background: #fff;
+  border: 1px solid var(--border); border-radius: 14px; background: #fff;
 }
 .camera-row .meta { flex: 1 1 220px; min-width: 0; }
 .camera-row .meta b { display: block; }
 .camera-row .meta code { color: var(--muted); font-size: 12px; word-break: break-all; }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: #b9c4be; flex: none; }
-.dot.on { background: #2ac976; }
-.dot.off { background: var(--danger); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #c3cad6; flex: none; }
+.dot.on { background: var(--green); }
+.dot.off { background: var(--red); }
 
 .found-list { display: grid; gap: 8px; margin: 14px 0; }
 .found {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: #fff;
 }
 
 /* ── Kadr va muharrir ────────────────────────────────────────────────── */
@@ -140,32 +150,68 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .shape-list { display: grid; gap: 8px; margin: 14px 0; }
 .shape {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: 13px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; font-size: 13px;
 }
 .shape label { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
 .shape input[type=number] { width: 88px; }
 
+/* ── Ulanish kartasi ──────────────────────────────────────────────────
+ * Holat sahifasidagi eng birinchi blok.  Ataylab boshqa kartalardan
+ * yirikroq: mijoz bu sahifaga bitta savol bilan keladi va javob
+ * aylantirmasdan ko'rinishi kerak. */
+.connect-card {
+  padding: 30px; margin-bottom: 22px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--paper); box-shadow: var(--shadow);
+}
+.connect-card.linked { border-color: var(--blue); background: linear-gradient(180deg, var(--blue-soft), var(--paper) 60%); }
+.connect-card.offline { border-color: var(--yellow); }
+.connect-card .eyebrow {
+  display: inline-block; margin-bottom: 10px;
+  color: var(--blue-dark); font-size: 12px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.connect-card h1 { font-size: clamp(24px, 3.6vw, 32px); }
+.connect-card .lead { margin-bottom: 0; }
+.connect-card .actions { margin-top: 20px; }
+
+/* Tekshiruv kodi — mijoz uni bulut ekranidagi kod bilan SOLISHTIRADI.
+   Shuning uchun u yirik, monoshriftda va tanaffusli: xato o'qish
+   begona kompyuterni tasdiqlashga olib kelardi. */
+.verify-block { margin-top: 18px; }
+.verify-block small { display: block; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.verify-block b {
+  display: inline-block; margin-top: 6px; padding: 8px 16px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--paper-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 30px; letter-spacing: .22em;
+}
+
+.expert-link { margin: 26px 0 0; text-align: center; font-size: 13px; }
+.expert-link a { color: var(--muted); }
+
 /* ── Panel ────────────────────────────────────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
-.stat { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: #fffdf8; }
+.stat { padding: 18px 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--paper); }
 .stat small { display: block; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .stat strong { display: block; margin-top: 6px; font-size: 34px; letter-spacing: -.04em; }
 .stat span { color: var(--muted); font-size: 13px; }
 
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 130px; margin-top: 10px; }
 .bars > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
-.bars i { display: block; background: var(--green); border-radius: 3px 3px 0 0; min-height: 2px; }
-.bars .peak i { background: var(--orange); }
+.bars i { display: block; background: var(--blue); border-radius: 3px 3px 0 0; min-height: 2px; }
+/* Gavjum soat quyuqroq: mijoz grafikka bir qarab uni topishi kerak. */
+.bars .peak i { background: var(--blue-dark); }
 .bars b { font-weight: 400; font-size: 10px; color: var(--muted); text-align: center; padding-top: 4px; }
 
 table.events { width: 100%; border-collapse: collapse; font-size: 14px; }
-table.events th, table.events td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+table.events th, table.events td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
 table.events th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
 .scroll-x { overflow-x: auto; }
 
 pre.log {
   max-height: 320px; overflow: auto; padding: 14px; border-radius: 12px;
-  background: #0d1117; color: #d6e2dc; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  background: #101828; color: #e4e9f2; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
 }
 
 .hidden { display: none !important; }

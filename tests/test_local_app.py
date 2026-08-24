@@ -77,9 +77,56 @@ def test_panel_cannot_be_framed(client: TestClient) -> None:
 # ── Sozlash oqimi ────────────────────────────────────────────────────────
 
 
-def test_first_run_opens_the_wizard_not_the_panel(client: TestClient) -> None:
-    """Sozlanmagan dastur panelni ko'rsatsa, mijoz bo'sh raqamlarni ko'radi."""
+def test_first_run_opens_the_status_page(client: TestClient) -> None:
+    """Sozlash endi bulut panelida bo'ladi.
+
+    Bu sahifa bitta savolga javob beradi — "boshqaruv panelim
+    qayerda?".  Sehrgarni ochish esa mijozni shu kompyuter oldiga
+    bog'lab qo'yardi, holbuki u kamerani telefonidan ham ulay oladi.
+    """
     response = client.get("/")
+    assert response.status_code == 200
+    assert "Bugungi holat" in response.text
+    assert "Kamerangizni ulaymiz" not in response.text
+
+
+def test_the_local_pages_use_the_same_palette_as_the_cloud(client: TestClient) -> None:
+    """Mijoz saytda ko'k sahifani ko'radi, dasturni o'rnatadi va shu
+    yerda ham AYNAN o'sha rangni ko'rishi kerak.
+
+    Eski krem/to'q-yashil palitra qaytib kelmasin: u bitta faylda
+    yashaydi va bitta `git revert` bilan tiklanib qolishi mumkin edi.
+    """
+    css = (Path(__file__).resolve().parents[1] / "chaqimchi_ai/local/static/local.css").read_text(
+        encoding="utf-8"
+    )
+
+    for old in ("#f3f0e8", "#173d2d", "#d9f55f", "#f26a3d", "#13231d", "#e7e4da"):
+        assert old not in css, f"eski rang qaytib kelgan: {old}"
+    # Nomlar bulut paneli bilan bir xil — ko'chirilgan qoida noto'g'ri
+    # rangga tushib qolmasin.
+    for token in ("--blue:", "--blue-dark:", "--text:", "--border:", "--paper-2:"):
+        assert token in css, token
+
+
+def test_the_status_page_answers_where_my_panel_is(client: TestClient) -> None:
+    """Mijoz bu sahifaga bitta savol bilan keladi.  Javob — ulanish
+    kartasi, va u aylantirmasdan ko'rinishi kerak."""
+    body = client.get("/").text
+
+    assert 'id="connectCard"' in body
+    assert 'id="verifyCode"' in body
+    # Sehrgar havolasi YO'QOLMAYDI — usta va internetsiz do'kon uchun.
+    assert 'href="/setup"' in body
+    # Ulanish kartasi statistikadan OLDIN turishi kerak.
+    assert body.index('id="connectCard"') < body.index("Bugungi holat")
+
+
+def test_expert_mode_still_serves_the_wizard(client: TestClient) -> None:
+    """Internetsiz o'rnatilgan do'konda va usta uchun sehrgar yagona
+    kafolatlangan yo'l — u O'CHIRILMAYDI, faqat brauzer uni o'zi
+    ochmaydi."""
+    response = client.get("/setup")
     assert response.status_code == 200
     assert "Kamerangizni ulaymiz" in response.text
 

@@ -44,6 +44,11 @@
 
   /* ── Holat ───────────────────────────────────────────────────────────── */
 
+  //: Bulut paneli manzili — `drawCloud` to'ldiradi, `drawStatus` o'qiydi.
+  //  Ikkalasi bitta `refresh()` da chaqiriladi, ya'ni qiymat doim shu
+  //  aylanishga tegishli.
+  const cloudPanel = { url: "" };
+
   function drawStatus(status) {
     const dot = $("serviceDot");
     const text = $("serviceText");
@@ -51,9 +56,12 @@
     if (!status.ready) {
       dot.className = "dot off";
       text.textContent = "Sozlanmagan";
+      // Ulangan bo'lsa mijozni BULUT paneliga yuboramiz: kamera ham,
+      // chiziq ham endi o'sha yerda sozlanadi va u shu kompyuter
+      // oldida o'tirishi shart emas.
       banner("warn", "Sozlash tugallanmagan.", "Kamera qo‘shing va kirish chizig‘ini chizing.", {
-        href: "/setup",
-        text: "Sozlashni davom ettirish →",
+        href: cloudPanel.url || "/setup",
+        text: cloudPanel.url ? "Panelda sozlash →" : "Sozlashni davom ettirish →",
       });
     } else if (!status.running) {
       dot.className = "dot off";
@@ -228,47 +236,106 @@
 
   /* ── Boshqaruv ───────────────────────────────────────────────────────── */
 
+  /* Ulanish kartasi — sahifadagi asosiy javob.
+   *
+   * Uch holat, uchtasi ham aniq: ulangan (panelga o'ting), ulanmagan
+   * (havola va tekshiruv kodi), internet yo'q (nazorat DAVOM ETADI).
+   * Oxirgisi ataylab alohida: mijoz internet uzilganda kamera ham
+   * o'chgan deb o'ylardi va zanjirni qo'lda to'xtatib qo'yardi.
+   */
+  function drawConnect(cloud) {
+    const card = $("connectCard");
+    if (!card) return;
+    const title = $("connectTitle");
+    const text = $("connectText");
+    const actions = $("connectActions");
+    const eyebrow = $("connectEyebrow");
+    const verify = $("verifyBlock");
+
+    card.classList.remove("linked", "offline");
+    verify.hidden = true;
+    actions.innerHTML = "";
+
+    if (cloud.connected) {
+      const panel = cloud.panel_url || cloud.owner_url || "";
+      card.classList.add("linked");
+      eyebrow.textContent = "Bulutga ulangan";
+      title.textContent = "Boshqaruv panelingiz tayyor";
+      text.textContent =
+        "To‘liq hisobot, kamera sozlamalari va Telegram xabarlari — hammasi " +
+        "panelda. Uni telefondan ham ochsangiz bo‘ladi.";
+      if (panel) {
+        actions.innerHTML =
+          `<a class="button primary" href="${esc(panel)}" target="_blank" rel="noopener noreferrer">` +
+          "Boshqaruv panelini ochish</a>";
+      }
+    } else if (cloud.connect_url) {
+      eyebrow.textContent = "Bir qadam qoldi";
+      title.textContent = "Bu kompyuterni hisobingizga ulang";
+      text.textContent =
+        "Ulash sahifasini oching va quyidagi kod ekrandagi kod bilan bir xil " +
+        "ekaniga ishonch hosil qiling.";
+      $("verifyCode").textContent = cloud.verify_code || "——————";
+      verify.hidden = !cloud.verify_code;
+      actions.innerHTML =
+        `<a class="button primary" href="${esc(cloud.connect_url)}" target="_blank" rel="noopener noreferrer">` +
+        "Ulash sahifasini ochish</a>";
+    } else {
+      // Havola yo'q — demak bulut bilan aloqa yo'q.  Eng muhim gap
+      // birinchi jumlada: nazorat ishlayapti.
+      card.classList.add("offline");
+      eyebrow.textContent = "Internet yo‘q";
+      title.textContent = "Nazorat ishlashda davom etmoqda";
+      text.textContent =
+        "Kameralar kuzatilmoqda va hodisalar shu kompyuterda saqlanmoqda. " +
+        "Internet tiklangach ular o‘zi bulutga jo‘naydi.";
+      actions.innerHTML =
+        '<a class="button ghost" href="/setup">Usta rejimi — qo‘lda ulash</a>';
+    }
+  }
+
   function drawCloud(cloud) {
     const version = $("appVersion");
     if (version && cloud.app_version) version.textContent = "v" + cloud.app_version;
+    cloudPanel.url = cloud.connected ? cloud.panel_url || cloud.owner_url || "" : "";
+    drawConnect(cloud);
+    $("connectCard").hidden = false;
+    drawCloudWarnings(cloud);
+  }
+
+  /* Diagnostika — faqat AYTADIGAN gap bo'lganda ko'rinadi.
+   *
+   * Ilgari bu yerda "Cloudga ulangan" degan doimiy yozuv turardi va
+   * ogohlantirish uning dumiga yopishtirilardi — ya'ni "2730 hodisa
+   * yo'qoldi" yashil yozuv ichida ko'rinmay ketardi. */
+  function drawCloudWarnings(cloud) {
     const bar = $("cloudBar");
-    if (!cloud.connected) {
-      bar.innerHTML =
-        "<b>Faqat shu kompyuterda</b>Hisobot va hodisalar shu yerda saqlanadi. " +
-        'Mijoz o‘z telefonidan ko‘rishi va Telegram xabarlari uchun ' +
-        '<a href="/setup">cloudga ulang</a>.';
-      return;
-    }
+    if (!bar) return;
+    const parts = [];
+
     // Navbat o'sib borsa "ulangan" yozuvi yolg'on bo'lib qoladi — aloqa
     // uzilgan bo'lsa hodisalar to'planaveradi.
-    const pending = cloud.pending_events;
-    const queue =
-      pending > 20
-        ? ` · <b>${pending} hodisa yuborilmagan</b> — internetni tekshiring`
-        : "";
+    const pending = Number(cloud.pending_events || 0);
+    if (cloud.connected && pending > 20) {
+      parts.push(`${pending} hodisa yuborilmagan — internetni tekshiring`);
+    }
     // Tashlangan hodisa — YO'QOLGAN hodisa.  Soni ham, sababi ham
     // ko'rinsin: sababsiz raqamni tuzatib bo'lmaydi.
     const poisoned = Number(cloud.poisoned_events || 0);
-    const dropped = poisoned
-      ? ` · <b>${poisoned} hodisa yo‘qoldi</b>` +
-        ((cloud.poisoned_reasons || []).length
-          ? ` (${esc(cloud.poisoned_reasons[0])})`
-          : "")
-      : "";
+    if (poisoned) {
+      const why = (cloud.poisoned_reasons || [])[0];
+      parts.push(`${poisoned} hodisa yo‘qoldi${why ? ` (${esc(why)})` : ""}`);
+    }
     // Sozlama masofadan kelgan bo'lsa buni aytish kerak: mijoz kamerani
     // shu yerdan o'zgartirmoqchi bo'lsa, o'zgarishi keyingi sinxronda
     // qaytib ketishini bilishi lozim.
-    const source = cloud.remote_config
-      ? " · <b>Kameralar cloud’dan boshqariladi</b>"
-      : "";
-    // Muhim izoh: ulangach hodisalar cloudga jo'naydi va lokal navbatdan
-    // o'chadi — shu sababli bu yerdagi "Bugungi holat" kichik yoki bo'sh
-    // ko'rinishi normal.  Izohsiz bu "dastur buzildi" degan taassurot
-    // berardi.
-    bar.innerHTML =
-      `<b>Cloudga ulangan</b>To‘liq kunlik hisobot endi mijoz panelida: ` +
-      `<a href="${esc(cloud.owner_url)}" target="_blank" rel="noopener noreferrer">${esc(cloud.owner_url)}</a>` +
-      `${queue}${dropped}${source}`;
+    if (cloud.remote_config) {
+      parts.push("Kameralar bulutdan boshqariladi — bu yerdagi o‘zgarish qaytib ketadi");
+    }
+
+    bar.hidden = parts.length === 0;
+    bar.className = poisoned || pending > 20 ? "note warn" : "note";
+    bar.innerHTML = parts.map((line) => `<span>${line}</span>`).join("<br>");
   }
 
   async function refresh() {
@@ -280,12 +347,15 @@
         api("/api/setup/cameras"),
         api("/api/setup/cloud-status"),
       ]);
+      // Bulut BIRINCHI: `drawStatus` dagi "sozlashni davom ettirish"
+      // havolasi ulangan bo'lsa bulut paneliga ketishi kerak, ya'ni u
+      // `cloudPanel.url` to'lgan bo'lishini kutadi.
+      drawCloud(cloud);
       // `cameras_list` endi `/api/status` ning o'zida bor; `/api/setup/cameras`
       // esa qo'shimcha (manzil, format) beradi — nomlar ikkalasida bir xil.
       drawStatus({ ...status, cameras_list: cameraList.cameras || status.cameras_list });
       drawReport(report);
       drawEvents(events.events);
-      drawCloud(cloud);
     } catch (error) {
       banner("err", "Dastur bilan aloqa yo‘q.", error.message);
     }

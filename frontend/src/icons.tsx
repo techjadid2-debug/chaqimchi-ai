@@ -26,6 +26,7 @@ const paths: Record<string, ReactNode> = {
   telegram: <><path d="M21 4 3 11l5 2 2 6 3-4 5 4 3-15Z"/><path d="m8 13 9-6-6 8"/></>,
   download: <><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"/></>,
   cpu: <><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></>,
+  shapes: <><path d="M3 17 9 5l6 12z"/><circle cx="18" cy="17" r="3.4"/></>,
 };
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {

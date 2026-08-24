@@ -4,6 +4,7 @@ import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumb
 import { AppShell, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
+import { GeometryEditor } from "./GeometryEditor";
 import { OwnerHome } from "./OwnerHome";
 import { SetupCameras } from "./SetupCameras";
 import { usePanelRoute } from "./router";
@@ -14,6 +15,7 @@ import "./styles.css";
 const NAV: NavItem[] = [
   { id: "home", label: "Bosh sahifa", icon: "home" },
   { id: "setup", label: "Kamerani ulash", icon: "search" },
+  { id: "zones", label: "Chiziq va zonalar", icon: "shapes" },
   { id: "cameras", label: "Kameralar", icon: "camera" },
   { id: "traffic", label: "Mijozlar oqimi", icon: "chart" },
   { id: "employees", label: "Xodimlar", icon: "users" },
@@ -415,7 +417,8 @@ function OwnerApp() {
           <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
         </>
       : active === "employees" ? <EmployeesPage siteId={siteId}/>
-      : active === "setup" ? <SetupCameras siteId={siteId} onDone={() => { void refresh(); navigate("cameras"); }}/>
+      : active === "setup" ? <SetupCameras siteId={siteId} onDone={() => { void refresh(); navigate("zones"); }}/>
+      : active === "zones" ? <GeometryEditor siteId={siteId} cameras={data.cameras}/>
       : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label="Yopish"><Icon name="close"/></button></div><nav>{NAV.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>Chiqish</button></nav></aside></div> : null}
   </AppShell>;

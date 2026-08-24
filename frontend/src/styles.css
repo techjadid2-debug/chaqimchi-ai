@@ -310,6 +310,12 @@ h1,h2,h3,p { margin-top: 0; }
 .scan-frame { display: block; width: 100%; max-width: 640px; margin-bottom: 14px; border-radius: 12px; background: #0d1420; }
 .preset-names { flex-wrap: wrap; margin-bottom: 14px; }
 
+/* ── Chiziq va zona muharriri ─────────────────────────────────────── */
+/* `touch-action: none` SHART: usiz telefonda barmoq bilan nuqta
+   sudrash sahifani aylantirib yuboradi va chizib bo'lmaydi. */
+.geometry-canvas { display: block; width: 100%; max-width: 720px; border: 1px solid var(--border); border-radius: 12px; background: #0d1420; cursor: crosshair; touch-action: none; }
+.shape-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0; }
+
 .health-list, .event-list, .simple-list { display: grid; gap: 0; padding: 8px 20px 13px; }
 .health-row, .event-row, .simple-row { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #edf0f5; font-size: 12px; }
 .health-row:last-child, .event-row:last-child, .simple-row:last-child { border-bottom: 0; }

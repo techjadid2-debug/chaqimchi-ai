@@ -70,6 +70,50 @@ def test_the_camera_wizard_drives_the_device_from_the_cloud() -> None:
     assert "/frame" in setup
 
 
+def test_the_geometry_editor_is_loaded_at_runtime_not_bundled() -> None:
+    """Muharrir manbasi qurilmadagi bilan BITTA bo'lib qolishi kerak.
+
+    Windows payload `cloud/` ni ko'chirmaydi, shuning uchun bundle
+    qilingan nusxa bir kun qurilmadagidan ajralib ketardi.
+    """
+    editor = read("GeometryEditor.tsx")
+
+    assert "/vendor/zone-editor.js" in editor
+    assert "document.createElement" in editor
+    # `import type` — Vite uni o'chiradi, ya'ni bundle'ga tushmaydi.
+    # Qiymat sifatida import qilinsa esa muharrir nusxasi bundle'ga
+    # tortilardi.
+    for line in editor.splitlines():
+        if './zone-editor"' in line:
+            assert line.strip().startswith("import type"), line
+
+
+def test_the_owner_is_never_shown_an_empty_canvas() -> None:
+    """Chiziqsiz hech narsa sanalmaydi — bu eng ko'p tashlab
+    ketiladigan qadam edi, shuning uchun tayyor chiziq o'zi qo'yiladi."""
+    editor = read("GeometryEditor.tsx")
+
+    assert 'addPreset("entrance"' in editor
+    assert "visibleLines().length" in editor
+
+
+def test_saving_geometry_keeps_the_rest_of_the_config() -> None:
+    """Usiz ish vaqti, odam chegarasi va davomat sozlamalari standart
+    qiymatga qaytardi — validator to'liq hujjatni kutadi."""
+    editor = read("GeometryEditor.tsx")
+
+    assert "...config" in editor
+    assert "/api/v1/owner/config" in editor
+
+
+def test_the_frame_is_fetched_with_the_token_not_an_img_tag() -> None:
+    """`<img src>` sarlavha yubora olmaydi va 401 oladi."""
+    editor = read("GeometryEditor.tsx")
+
+    assert "createObjectURL" in editor
+    assert "Authorization" in editor
+
+
 def test_the_browser_never_handles_the_nvr_password() -> None:
     """Sinash va saqlash INDEKS bilan ishlaydi.
 

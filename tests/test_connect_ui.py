@@ -129,3 +129,78 @@ def test_the_browser_never_handles_the_nvr_password() -> None:
     # Skaner natijasidan olingan manzil o'zgaruvchiga solinmasin.
     assert "rtsp_url: item" not in setup
     assert "item.uri" not in setup
+
+
+# ── Mijoz portreti va tarif qulfi ────────────────────────────────────
+
+
+def test_a_locked_section_shows_an_offer_not_an_error() -> None:
+    """Boshlang'ich tarifda karta YO'QOLMAYDI.
+
+    Yo'q bo'lgan karta «buzilibdi» degan taassurot beradi, qulf esa
+    «ko'tarish mumkin» degani — bu tarif ko'tarishning eng tabiiy
+    joyi.
+    """
+    demo = read("Demography.tsx")
+
+    assert 'hasFeature(dashboard, "demografiya")' in demo
+    assert "PlanLock" in demo
+    assert 'onNavigate("billing")' in demo
+
+
+def test_a_missing_feature_list_never_locks_a_paying_customer() -> None:
+    """Ro'yxat kelmagan bo'lsa bo'lim OCHIQ.
+
+    Teskarisi yomonroq: sekin internetda to'lagan mijoz o'z kartasini
+    bir zumga «tarifda yo'q» holida ko'rardi.
+    """
+    assert "!Array.isArray(list)" in read("api.ts")
+
+
+def test_the_plan_lock_reads_the_same_snapshot_as_the_rest_of_the_panel() -> None:
+    """Alohida so'rov bo'lsa ikki javob turli vaqtda kelib, karta bir
+    zumga qulfsiz, keyin qulfli bo'lib chaqnab ketardi."""
+    assert "panel_features" in read("types.ts")
+    assert "/api/v1/owner/health" not in read("Demography.tsx")
+
+
+def test_the_age_bands_keep_a_fixed_order() -> None:
+    """Songa qarab saralansa ustunlar har kuni joyini almashtirardi
+    va o'q o'z ma'nosini yo'qotardi."""
+    demo = read("Demography.tsx")
+
+    assert '["<18", "18-30", "31-45", "46-60", "60+"]' in demo
+
+
+def test_the_youngest_band_is_explained_in_words() -> None:
+    """«<18» do'kon egasiga hech narsa aytmaydi.
+
+    0-12 va 13-17 ga ATAYLAB bo'linmagan: model yoshni ~7 yil xato
+    bilan baholaydi, ya'ni bunday bo'linish aniqdek ko'rinib,
+    ishonchsiz bo'lardi.
+    """
+    demo = read("Demography.tsx")
+
+    assert "Bolalar va o‘smirlar" in demo
+    assert '"0-12"' not in demo
+
+
+def test_the_card_promises_anonymity_where_the_owner_reads_it() -> None:
+    """Do'kon egasi mijozga tushuntira olishi kerak.
+
+    Va'da faqat maxfiylik sahifasida turgan bo'lsa, u savol
+    berilganda uni topa olmasdi.
+    """
+    demo = read("Demography.tsx")
+
+    assert "Rasm saqlanmaydi" in demo
+    assert "Xodimlar hisobga kirmaydi" in demo
+
+
+def test_a_locked_heatmap_looks_like_an_offer_not_a_breakage() -> None:
+    """Bungacha Boshlang'ich egasi serverning 403 matnini «Xarita
+    hozir ochilmadi» ko'rinishida olardi — ya'ni nosozlikdek."""
+    owner = read("owner.tsx")
+
+    assert 'hasFeature(dashboard,"xarita")' in owner
+    assert "Issiqlik xaritasi Biznes tarifida" in owner

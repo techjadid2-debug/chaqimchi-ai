@@ -1,3 +1,5 @@
+import type { Dashboard } from "./types";
+
 export type ApiOptions = RequestInit & { siteId?: string };
 
 const OWNER_TOKEN = "chaqimchi_owner_token_v2";
@@ -317,4 +319,16 @@ export function relativeMinutes(value: number | null | undefined) {
   if (value < 60) return `${value} daqiqa oldin`;
   if (value < 1440) return `${Math.floor(value / 60)} soat oldin`;
   return `${Math.floor(value / 1440)} kun oldin`;
+}
+
+
+/** Tarifda panel bo'limi ochiqmi.
+ *
+ * Ro'yxat kelmagan bo'lsa (eski bulut yoki javob hali yo'q) bo'lim
+ * OCHIQ deb hisoblanadi.  Teskarisi yomonroq: to'lagan mijoz sekin
+ * internetda o'z kartasini bir zumga «tarifda yo'q» holida ko'rardi.
+ */
+export function hasFeature(dashboard: Dashboard, name: string): boolean {
+  const list = dashboard.site.plan?.panel_features;
+  return !Array.isArray(list) || list.includes(name);
 }

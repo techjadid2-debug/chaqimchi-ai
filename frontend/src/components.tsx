@@ -59,6 +59,19 @@ export function EmptyState({ icon = "report", title, detail }: { icon?: string; 
   return <div className="empty-state"><span><Icon name={icon} size={26} /></span><b>{title}</b><p>{detail}</p></div>;
 }
 
+/** Tarifda yopiq bo'lim.
+ *
+ * Bo'lim YO'QOLMAYDI — mijoz nimani ololishini ko'rsin.  Yo'q bo'lib
+ * qolgan karta «buzilibdi» degan taassurot beradi, qulf esa
+ * «ko'tarish mumkin» degani.
+ */
+export function PlanLock({ title, detail, onUpgrade }: { title: string; detail: string; onUpgrade: () => void }) {
+  return <>
+    <EmptyState icon="card" title={title} detail={detail} />
+    <div className="card-body"><button className="btn btn-wide" onClick={onUpgrade}>Tarifni ko‘rish</button></div>
+  </>;
+}
+
 export function Skeleton({ height = 80 }: { height?: number }) {
   return <div className="skeleton" style={{ height }} aria-label="Yuklanmoqda" />;
 }

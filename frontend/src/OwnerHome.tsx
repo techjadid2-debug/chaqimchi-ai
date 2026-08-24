@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, formatDateShort, formatMoney, formatNumber, relativeMinutes, telegramBotUrl } from "./api";
 import { Avatar, Card, EmptyState, Pill, StatCard, StatusDot } from "./components";
 import { LineChart, type Point } from "./charts";
+import { Demography } from "./Demography";
 import { Icon } from "./icons";
 import type { Dashboard, Site } from "./types";
 
@@ -95,7 +96,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
   onNavigate: (id: string) => void;
   cameras: React.ReactNode;
 }) {
-  const today = dashboard.today as Record<string, unknown>;
+  const today = dashboard.today;
   const traffic = (today.traffic || {}) as Record<string, unknown>;
   const hourly = Array.isArray(traffic.hourly) ? (traffic.hourly as { hour: number; entered: number }[]) : [];
   const device = dashboard.device;
@@ -234,6 +235,8 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
             <button className="btn btn-wide" onClick={() => onNavigate("alerts")}>Barchasini ko‘rish</button>
           </> : <EmptyState icon="shield" title="Yangi hodisa yo‘q" detail="Bu yaxshi belgi. Tizim yangi muhim holatni shu yerda ko‘rsatadi." />}
         </Card>
+
+        <Demography dashboard={dashboard} onNavigate={onNavigate} />
 
         {attendance.available && attendance.rows?.length ? <Card>
           <div className="card-head"><div><h2>Xodimlar ish rejimi</h2><p>Bugungi davomat</p></div><button className="btn btn-icon" aria-label="Xodimlar" onClick={() => onNavigate("employees")}><Icon name="users" /></button></div>

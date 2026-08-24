@@ -1504,6 +1504,15 @@ def test_heatmap_and_demography_follow_the_plan(production_client) -> None:
 
     assert "demografiya" not in client.get("/api/v1/owner/report", headers=owner).json()
 
+    # Panel qulfi dashboard javobida ham bo'lsin: yangi panel aynan
+    # shundan o'qiydi.  Alohida `/health` so'rovi bilan olinsa karta
+    # bir zumga qulfsiz, keyin qulfli bo'lib chaqnab ketardi — ikki
+    # javob turli vaqtda keladi.
+    dashboard = client.get("/api/v1/owner/dashboard", headers=owner).json()
+    assert dashboard["site"]["plan"]["panel_features"] == health["plan"]["panel_features"]
+    assert "demografiya" not in dashboard["site"]["plan"]["panel_features"]
+    assert "demografiya" not in dashboard["today"]
+
     # Qurilma to'rni yuborishda XATO olmaydi — aks holda outbox uni
     # "keyin qayta yuboraman" deb saqlab, do'kon kompyuterining diskini
     # to'ldirardi.

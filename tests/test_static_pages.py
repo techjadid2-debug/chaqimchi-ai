@@ -1097,3 +1097,52 @@ def test_the_icons_take_their_colour_from_the_page() -> None:
 
     for attr in re.findall(r'(?:fill|stroke)="([^"]+)"', text):
         assert attr in {"none", "currentColor"}, f"qattiq rang: {attr}"
+
+
+# ── Mijoz demografiyasi haqidagi va'da ──────────────────────────────────
+
+
+def test_a_the_privacy_page_covers_customer_demographics() -> None:
+    """Jins/yosh statistikasi ishlab turibdi, maxfiylik sahifasi esa
+    faqat XODIM biometrikasi haqida gapirardi.
+
+    Ya'ni mijoz o'zi haqida yig'ilayotgan yagona ma'lumotni rasmiy
+    sahifadan topa olmasdi.
+    """
+    html = (STATIC / "privacy.html").read_text(encoding="utf-8")
+
+    assert "demografiya" in html.lower()
+    assert "embedding" in html.lower(), "yuz namunasi OLINMASLIGI aytilsin"
+
+
+def test_a_the_youngest_age_band_is_not_swallowed_as_a_tag() -> None:
+    """`<18` deb yozilsa brauzer uni teg deb biladi va undan keyingi
+    matnni yutib yuboradi.  Bu shu bo'limdagi eng ehtimolli jimgina
+    xato."""
+    html = (STATIC / "privacy.html").read_text(encoding="utf-8")
+
+    assert "&lt;18" in html
+    assert "(<18" not in html
+
+
+def test_a_the_anonymity_promise_is_the_same_on_every_page() -> None:
+    """Uch sahifa bitta va'dani beradi.  Biri o'zgarsa boshqalari
+    jimgina yolg'onga aylanardi."""
+    for name in ("privacy.html", "docs/xavfsizlik.html", "kuzatuv-eslatmasi.html"):
+        text = (STATIC / name).read_text(encoding="utf-8").lower()
+
+        assert "tanilmaydi" in text or "tanimaydi" in text, name
+        assert "saqlanmaydi" in text, name
+
+
+def test_a_the_shop_gets_a_printable_notice_for_its_door() -> None:
+    """Do'kon egasi mijozga tushuntira olishi kerak, biz esa unga
+    tayyor matn beramiz — aks holda u o'zi yozadi yoki umuman
+    osmaydi."""
+    html = (STATIC / "kuzatuv-eslatmasi.html").read_text(encoding="utf-8")
+
+    assert "window.print()" in html
+    assert "@media print" in html
+    assert "class=\"blank\"" in html, "do'kon o'z nomini to'ldirsin"
+    # Maxfiylik sahifasidan unga yo'l bo'lsin.
+    assert "/kuzatuv-eslatmasi" in (STATIC / "privacy.html").read_text(encoding="utf-8")

@@ -1782,7 +1782,10 @@ async def sitemap_xml(request: Request) -> Response:
     if _host_section(request) != "apex":
         raise HTTPException(404, "Topilmadi")
     base = urls.public_url() or str(request.base_url).rstrip("/")
-    pages = ["/", "/edu", "/install", "/maxfiylik", "/hamkorlik", "/aloqa", "/rozilik-shabloni"]
+    pages = [
+        "/", "/edu", "/install", "/maxfiylik", "/hamkorlik", "/aloqa",
+        "/rozilik-shabloni", "/kuzatuv-eslatmasi",
+    ]
     body = "".join(f"<url><loc>{base}{page}</loc></url>" for page in pages)
     return Response(
         '<?xml version="1.0" encoding="UTF-8"?>'
@@ -1839,6 +1842,18 @@ async def partnership_page(request: Request) -> HTMLResponse:
 @app.get("/aloqa", include_in_schema=False)
 async def contact_page(request: Request) -> HTMLResponse:
     return _render_public("aloqa.html", request)
+
+
+@app.get("/kuzatuv-eslatmasi", include_in_schema=False)
+async def surveillance_notice_page() -> FileResponse:
+    """Do'kon eshigiga osiladigan eslatma.
+
+    `rozilik-shabloni.html` ga qo'shilmadi: u IMZOLANADIGAN xodim
+    biometrikasi hujjati.  Mijoz demografiyasi esa anonim va rozilik
+    talab qilmaydi — uni o'sha hujjatga kiritish mijozdan imzo talab
+    qilinadi degan noto'g'ri ma'no berardi.
+    """
+    return _static_page("kuzatuv-eslatmasi.html")
 
 
 @app.get("/edu", include_in_schema=False)
@@ -5312,6 +5327,13 @@ async def owner_dashboard(
             "plan": {
                 "code": detail.get("plan"),
                 "name": plan_display_name(str(detail.get("plan") or "")),
+                # Panel qulfi shu ro'yxatdan yasaladi.  `health` baribir
+                # yuqorida chaqirilgan, ya'ni qo'shimcha so'rov yo'q.
+                #
+                # Alohida `/owner/health` so'rovi bilan olinsa karta bir
+                # zumga qulfsiz, keyin qulfli bo'lib chaqnab ketardi —
+                # ikki javob turli vaqtda keladi.
+                "panel_features": (health.get("plan") or {}).get("panel_features") or [],
             },
         },
         "today": report,

@@ -26,6 +26,18 @@ export type EventItem = {
 };
 export type TrendPoint = { date?: string; day?: string; entries?: number; entered?: number; count?: number };
 
+/** Kirgan mijozlarning anonim jins/yosh yig'indisi.
+ *
+ * Kalit BUTUNLAY yo'q bo'lishi mumkin va bu ikki xil ma'no beradi:
+ * tarifda yopiq (server uni hisobotdan olib tashlaydi) yoki bugun
+ * hali hech kim kirmagan.  Ikkalasini `hasFeature()` ajratadi —
+ * shuning uchun karta avval tarifni tekshiradi. */
+export type Demografiya = {
+  hisoblangan: number;
+  jins?: { ayol?: number; erkak?: number };
+  yosh?: Record<string, number>;
+};
+
 export type Dashboard = {
   site: {
     id: string;
@@ -35,9 +47,18 @@ export type Dashboard = {
     minutes_since_seen?: number | null;
     cameras_active?: number;
     cameras_expected?: number;
-    plan?: { name?: string };
+    plan?: {
+      name?: string;
+      code?: string;
+      /** Tarifda ochiq panel bo'limlari — qulf shu ro'yxatdan yasaladi. */
+      panel_features?: string[];
+    };
   };
-  today: Record<string, unknown>;
+  /* `today` ataylab to'liq tiplashtirilmagan: `OwnerHome.num()` va
+     `owner.tsx` dagi `value()` uni `Record<string, unknown>` sifatida
+     aylanib chiqadi.  Kesishma bilan faqat kerakli tarmoq
+     torlashtiriladi — qolgani o'sha-o'shaligicha qoladi. */
+  today: Record<string, unknown> & { demografiya?: Demografiya };
   /** Do'kon kompyuterining holati.  Hali heartbeat kelmagan bo'lsa
    *  `null`; o'lchanmagan ko'rsatkich esa kalit sifatida ham kelmaydi. */
   device?: {

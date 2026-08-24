@@ -547,3 +547,72 @@ def test_a_zone_without_the_shelf_flag_is_never_measured() -> None:
         ] == []
         now += 60.0
     assert analyzer.shelves.states == {}
+
+
+# ── Maxfiylik kafolati ──────────────────────────────────────────────────
+#
+# Demografiya ishlashi uchun qurilma odamning boshini kesib olib
+# modelga beradi.  Ya'ni kadr modul ICHIDA bo'ladi — va u yerdan
+# chiqmasligi mahsulotning asosiy va'dasi.
+#
+# Bu kafolat shu paytgacha kodning SHAKLIDA edi (funksiya ikkita son
+# qaytaradi, kadr hech qayerga yozilmaydi), lekin hech qayerda
+# tasdiqlanmagandi.  Quyidagi uch test uni qulflaydi: birov keyinchalik
+# "tekshirish uchun" rasm qo'shib qo'ysa, test darhol qulaydi.
+
+
+def test_a_demography_result_carries_only_two_numbers() -> None:
+    """Modelning YAGONA chiqish nuqtasi shu funksiya.
+
+    U faqat ikkita kalit qaytarsa, hodisaga rasm yoki yuz namunasi
+    qo'shib yuborishning yo'li qolmaydi.
+    """
+    from chaqimchi_ai.retail.demography import parse_age_gender
+
+    # Chiqish nomlari proshivkaga qarab farq qiladi — modul ularni
+    # SHAKL bo'yicha ajratadi: ikkita son — jins, bitta son — yosh.
+    result = parse_age_gender({"age": np.array([[[[0.27]]]]), "gender": np.array([[0.8, 0.2]])})
+
+    assert set(result) == {"jins", "yosh"}
+    assert result["jins"] in ("ayol", "erkak")
+    assert isinstance(result["yosh"], int)
+
+
+def test_a_demography_crossing_puts_no_image_on_the_wire() -> None:
+    """Qurilmadan chiqadigan yagona shakl — `cloud_payload()`.
+
+    Hajm tekshiruvi ataylab: eng siqilgan JPEG ham bu o'lchamga
+    sig'maydi, ya'ni rasm jimgina qo'shilib qolgan bo'lsa test
+    darhol sezadi.
+    """
+    import json
+
+    from chaqimchi_ai.event_models import EdgeEvent
+
+    event = EdgeEvent(
+        event_type="line_crossed",
+        camera_id="camera-01",
+        direction="in",
+        metadata={"bbox": [1, 2, 3, 4], "demografiya": {"jins": "ayol", "yosh": 27}},
+    )
+
+    payload = event.cloud_payload()
+
+    assert set(payload["metadata"]["demografiya"]) == {"jins", "yosh"}
+    assert len(json.dumps(payload)) < 900
+
+
+def test_a_demography_module_never_writes_or_uploads_a_frame() -> None:
+    """Kafolat kodning shaklida: modul kadrni faqat modelga beradi.
+
+    Ro'yxatdagi har bir nom — kadrni fayl, satr yoki so'rovga
+    aylantirishning yo'li.  Birortasi paydo bo'lsa, va'da buziladi.
+    """
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "retail" / "demography.py"
+    ).read_text(encoding="utf-8")
+
+    for forbidden in ("imwrite", "imencode", "b64encode", "tobytes", "requests", "httpx"):
+        assert forbidden not in source, f"kadr moduldan chiqmasin — {forbidden}"

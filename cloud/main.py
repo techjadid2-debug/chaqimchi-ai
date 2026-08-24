@@ -5622,6 +5622,120 @@ def _validate_site_config(body: SiteConfigBody) -> None:
             )
 
 
+class CameraFromScanBody(BaseModel):
+    job_id: str = Field(min_length=6, max_length=40)
+    stream_ref: int = Field(ge=0, le=200)
+    camera_id: str = Field(default="", max_length=40)
+    label: str = Field(min_length=1, max_length=120)
+
+
+def _owner_camera_saved(site_id: str, camera_id: str, *, label: str, rtsp_url: str, actor: str):
+    """Kamerani saqlaydi va qurilmaga xabar beradigan revizyani ko'taradi.
+
+    Tarif chegarasi va Fernet shifrlash `upsert_camera()` ichida —
+    bu yerda takrorlanmaydi.  Konfiguratsiyani o'zgarishsiz qayta
+    yozish ataylab: uning yagona vazifasi `revision` ni oshirish,
+    shundagina qurilma keyingi heartbeat'da o'zgarishni sezadi.
+    """
+    camera = get_store().upsert_camera(
+        site_id, camera_id, label=label, rtsp_url=rtsp_url, enabled=True
+    )
+    current = get_event_store().get_site_config(site_id)
+    updated = get_event_store().update_site_config(site_id, current["config"])
+    get_store().audit_portal_action(
+        "owner.camera.saved",
+        actor_id=actor,
+        target_type="camera",
+        target_id=f"{site_id}:{camera_id}",
+        detail={"label": label},
+    )
+    return {"camera": camera, "config_revision": updated["revision"]}
+
+
+def _next_camera_slot(site_id: str) -> str:
+    taken = {item["camera_id"] for item in get_store().list_cameras(site_id)}
+    for index in range(1, GUARANTEED_CAMERAS + 1):
+        candidate = f"camera-{index:02d}"
+        if candidate not in taken:
+            return candidate
+    raise HTTPException(422, "Barcha kamera o'rinlari band — avval keraksizini o'chiring")
+
+
+@app.put("/api/v1/owner/cameras/{camera_id}")
+async def owner_upsert_camera(
+    camera_id: str,
+    body: CameraConfigBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Egasi kamerani o'zi qo'shadi (skaner topmagan holat uchun)."""
+    require_owner_role(owner, "owner", "service_admin")
+    try:
+        return _owner_camera_saved(
+            owner.site_id,
+            camera_id,
+            label=body.label,
+            rtsp_url=body.rtsp_url,
+            actor=owner.member_id,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/v1/owner/cameras/from-scan")
+async def owner_camera_from_scan(
+    body: CameraFromScanBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Skaner topgan oqimni kamera sifatida saqlaydi.
+
+    Panel faqat INDEKS yuboradi; to'liq manzil shifrlangan natijadan
+    shu yerda, server tomonda olinadi.  Ya'ni NVR paroli brauzerga
+    umuman tushmaydi.
+    """
+    require_owner_role(owner, "owner", "service_admin")
+    job = get_store().get_job(owner.site_id, body.job_id, with_result=True)
+    if not job:
+        raise HTTPException(404, "Qidiruv natijasi topilmadi")
+    result = job.get("result") or {}
+    streams = result.get("streams") or result.get("cameras") or []
+    if body.stream_ref >= len(streams):
+        raise HTTPException(422, "Bunday oqim topilmadi — qidiruvni qaytadan bajaring")
+    chosen = streams[body.stream_ref]
+    rtsp_url = str(chosen.get("uri") or chosen.get("rtsp_url") or "")
+    if not rtsp_url:
+        raise HTTPException(422, "Bu oqimda manzil yo'q")
+    camera_id = body.camera_id or _next_camera_slot(owner.site_id)
+    try:
+        return _owner_camera_saved(
+            owner.site_id,
+            camera_id,
+            label=body.label,
+            rtsp_url=rtsp_url,
+            actor=owner.member_id,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.delete("/api/v1/owner/cameras/{camera_id}")
+async def owner_delete_camera(
+    camera_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_owner_role(owner, "owner", "service_admin")
+    if not get_store().delete_camera(owner.site_id, camera_id):
+        raise HTTPException(404, "Kamera topilmadi")
+    current = get_event_store().get_site_config(owner.site_id)
+    updated = get_event_store().update_site_config(owner.site_id, current["config"])
+    get_store().audit_portal_action(
+        "owner.camera.deleted",
+        actor_id=owner.member_id,
+        target_type="camera",
+        target_id=f"{owner.site_id}:{camera_id}",
+    )
+    return {"ok": True, "config_revision": updated["revision"]}
+
+
 class ScanRequestBody(BaseModel):
     kind: Literal["lan_scan", "onvif", "channels", "probe"]
     host: str = Field(default="", max_length=120)

@@ -236,7 +236,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
           </> : <EmptyState icon="shield" title="Yangi hodisa yo‘q" detail="Bu yaxshi belgi. Tizim yangi muhim holatni shu yerda ko‘rsatadi." />}
         </Card>
 
-        <Demography dashboard={dashboard} onNavigate={onNavigate} />
+        <Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate} />
 
         {attendance.available && attendance.rows?.length ? <Card>
           <div className="card-head"><div><h2>Xodimlar ish rejimi</h2><p>Bugungi davomat</p></div><button className="btn btn-icon" aria-label="Xodimlar" onClick={() => onNavigate("employees")}><Icon name="users" /></button></div>

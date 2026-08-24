@@ -1211,6 +1211,14 @@ def _purge_expired_events() -> int:
         except ValueError:
             retention = 30
         site_id = str(site["id"])
+        # Kunlik demografiya yig'indisi hodisalar O'CHIRILISHIDAN OLDIN
+        # yozilishi SHART.  Tartib almashsa yig'indi bo'sh chiqardi va
+        # o'sha kun butunlay yo'qolardi — uni keyin tiklab bo'lmaydi.
+        try:
+            get_event_store().rollup_pending_demography(site_id)
+            get_event_store().purge_demography(site_id)
+        except Exception:  # noqa: BLE001 — bitta sayt qolganini to'xtatmasin
+            logger.exception("Demografiya yig'indisi yozilmadi: %s", site_id)
         for key in get_event_store().purge_site(site_id, retention_days=retention):
             get_snapshot_store().delete(key)
             removed += 1
@@ -5395,6 +5403,43 @@ async def owner_report(
     if not _panel_feature_open(owner.site_id, "demografiya"):
         report.pop("demografiya", None)
     return report
+
+
+#: «Mijoz portreti» davri → nechta kun orqaga.
+#:
+#: Yil 365 kun deb olinadi (kabisa yiliga bir kun farq) — bu
+#: solishtirish uchun yetarli aniqlik va oy chegaralarini hisoblash
+#: murakkabligidan xoli.
+DEMOGRAPHY_PERIODS = {"week": 7, "month": 30, "year": 365}
+
+
+@app.get("/api/v1/owner/demography")
+async def owner_demography(
+    period: Literal["week", "month", "year"] = "week",
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Haftalik, oylik va yillik mijoz portreti.
+
+    Xom hodisalar tarif muddatida o'chiriladi, shuning uchun bu javob
+    KUNLIK YIG'INDI jadvalidan o'qiladi (`demography_daily`).  U
+    hodisalar o'chirilishidan oldin yoziladi va uch yil saqlanadi —
+    aynan shu tufayli «o'tgan yilning shu oyi» bilan solishtirish
+    mumkin.
+
+    Bugungi kun bu yerga KIRMAYDI: u hali tugamagan va panel uni
+    hisobotdan jonli oladi.  Aks holda bir xil kun ikki manbadan ikki
+    xil ko'rinardi.
+    """
+    if not _panel_feature_open(owner.site_id, "demografiya"):
+        raise HTTPException(403, "Mijoz portreti Biznes tarifida ochiladi")
+
+    today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    days = DEMOGRAPHY_PERIODS[period]
+    end = today - timedelta(days=1)
+    data = get_event_store().demography_range(
+        owner.site_id, start=end - timedelta(days=days - 1), end=end
+    )
+    return {"period": period, **data}
 
 
 def _trust_score_for(site_id: str, day: Optional[date_type] = None) -> Dict[str, Any]:

@@ -1513,6 +1513,13 @@ def test_heatmap_and_demography_follow_the_plan(production_client) -> None:
     assert "demografiya" not in dashboard["site"]["plan"]["panel_features"]
     assert "demografiya" not in dashboard["today"]
 
+    # Haftalik/oylik/yillik yig'indi ham tarifga bo'ysunadi.  Aks holda
+    # Boshlang'ich egasi kunlik ko'rinishda qulf ko'rib turib, davr
+    # tugmasini bosgach hammasini olardi.
+    period = client.get("/api/v1/owner/demography?period=year", headers=owner)
+    assert period.status_code == 403
+    assert "Biznes" in period.json()["detail"]
+
     # Qurilma to'rni yuborishda XATO olmaydi — aks holda outbox uni
     # "keyin qayta yuboraman" deb saqlab, do'kon kompyuterining diskini
     # to'ldirardi.

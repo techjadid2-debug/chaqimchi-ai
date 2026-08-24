@@ -292,6 +292,37 @@ class EventStore:
             """,
             "CREATE INDEX IF NOT EXISTS idx_employee_faces_site "
             "ON employee_faces(site_id,employee_id)",
+            # Kunlik demografiya yig'indisi.
+            #
+            # Nega alohida jadval: xom hodisalar tarif muddati bo'yicha
+            # o'chiriladi (`purge_site`, odatda 30 kun).  Ya'ni haftalik
+            # dinamika chegarada, oylik esa qisman, yillik esa UMUMAN
+            # mumkin emas edi — hisobot har safar o'chib ketadigan
+            # hodisalardan qaytadan hisoblanardi.
+            #
+            # Bu jadval kichik: bitta sayt uchun yiliga 365 qator.
+            # Shuning uchun u hodisalar bilan birga o'chirilmaydi —
+            # aynan shu tufayli «o'tgan yilning shu oyi bilan
+            # solishtirish» mumkin bo'ladi.
+            """
+            CREATE TABLE IF NOT EXISTS demography_daily (
+                site_id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                counted INTEGER NOT NULL DEFAULT 0,
+                ayol INTEGER NOT NULL DEFAULT 0,
+                erkak INTEGER NOT NULL DEFAULT 0,
+                age_under18 INTEGER NOT NULL DEFAULT 0,
+                age_18_30 INTEGER NOT NULL DEFAULT 0,
+                age_31_45 INTEGER NOT NULL DEFAULT 0,
+                age_46_60 INTEGER NOT NULL DEFAULT 0,
+                age_60_plus INTEGER NOT NULL DEFAULT 0,
+                entered INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, day)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_demography_daily_site "
+            "ON demography_daily(site_id,day)",
             """
             CREATE TABLE IF NOT EXISTS heatmap_hourly (
                 site_id TEXT NOT NULL,
@@ -1102,6 +1133,194 @@ class EventStore:
         with self._connect() as conn:
             cursor = conn.execute(
                 self._sql("DELETE FROM heatmap_hourly WHERE site_id=? AND bucket_hour<?"),
+                (site_id, cutoff),
+            )
+            return int(cursor.rowcount or 0)
+
+    # ── Kunlik demografiya yig'indisi ───────────────────────────────
+    #
+    # Hisobot (`retail_report`) demografiyani har safar xom
+    # hodisalardan qaytadan hisoblaydi.  Bu bugungi kun uchun to'g'ri,
+    # lekin hodisalar tarif muddatida o'chiriladi — ya'ni o'tgan oy
+    # yoki o'tgan yil bilan solishtirish MUMKIN EMAS edi.
+    #
+    # Shu sabab tugagan har bir kun bir marta yig'ilib, alohida
+    # jadvalga yoziladi va u yerda qoladi.
+
+    #: Yig'ish qancha kun orqaga qarab tekshiriladi.
+    #:
+    #: Bir kun yetmaydi: bulut bir necha soat o'chib turgan bo'lsa yoki
+    #: qurilma hodisalarni kechikib yuborsa, o'sha kun tashlab
+    #: ketilardi.  O'n kun — tarif muddati (30 kun) ichida bemalol
+    #: sig'adigan, lekin har safar butun bazani skanerlamaydigan oyna.
+    ROLLUP_LOOKBACK_DAYS = 10
+
+    #: Kunlik yig'indi shuncha kun saqlanadi.
+    #:
+    #: Uch yil — «o'tgan yilning shu oyi bilan solishtirish» uchun
+    #: kamida ikki yil kerak, ustiga bir yil zaxira.  Qator kichik
+    #: (sayt uchun yiliga 365 ta), ya'ni bu deyarli hech narsa
+    #: turmaydi.
+    DEMOGRAPHY_RETENTION_DAYS = 1095
+
+    #: Jadval ustunlari ↔ yosh guruhi nomlari.
+    _AGE_COLUMNS = (
+        ("age_under18", "<18"),
+        ("age_18_30", "18-30"),
+        ("age_31_45", "31-45"),
+        ("age_46_60", "46-60"),
+        ("age_60_plus", "60+"),
+    )
+
+    def rollup_demography(self, site_id: str, day: date) -> Dict[str, Any]:
+        """Bitta kunni yig'ib jadvalga yozadi (qayta chaqirsa yangilaydi).
+
+        Hisob `retail_report` bilan AYNAN bir xil mantiqda: faqat
+        `line_crossed` + `direction="in"`, xodimlar chetlatilgan.  Ikki
+        joyda ikki xil son chiqsa, mijoz qaysi biriga ishonishni
+        bilmasdi.
+        """
+        report = self.retail_report(site_id, day=day)
+        demo = report.get("demografiya") or {}
+        gender = demo.get("jins") or {}
+        ages = demo.get("yosh") or {}
+        counted = int(demo.get("hisoblangan") or 0)
+        entered = int(((report.get("traffic") or {}).get("entered")) or 0)
+
+        # Foizdan songa qaytarish YO'Q: `jins` foizda keladi va uni
+        # songa aylantirish yaxlitlash xatosini kiritardi.  Shuning
+        # uchun sonlar to'g'ridan-to'g'ri yosh guruhlaridan olinadi va
+        # jins ulushi `counted` ga nisbatan qayta hisoblanadi.
+        ayol = round(counted * float(gender.get("ayol") or 0) / 100)
+        erkak = max(0, counted - ayol)
+
+        values = {column: int(ages.get(label) or 0) for column, label in self._AGE_COLUMNS}
+        row = {
+            "counted": counted,
+            "ayol": ayol,
+            "erkak": erkak,
+            "entered": entered,
+            **values,
+        }
+
+        columns = ["site_id", "day", *row.keys(), "updated_at"]
+        placeholders = ",".join("?" for _ in columns)
+        updates = ",".join(f"{name}=?" for name in [*row.keys(), "updated_at"])
+        stamp = _now().isoformat()
+        with self._connect() as conn:
+            existing = conn.execute(
+                self._sql("SELECT day FROM demography_daily WHERE site_id=? AND day=?"),
+                (site_id, day.isoformat()),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    self._sql(
+                        f"UPDATE demography_daily SET {updates} WHERE site_id=? AND day=?"
+                    ),
+                    (*row.values(), stamp, site_id, day.isoformat()),
+                )
+            else:
+                conn.execute(
+                    self._sql(
+                        f"INSERT INTO demography_daily ({','.join(columns)}) "
+                        f"VALUES ({placeholders})"
+                    ),
+                    (site_id, day.isoformat(), *row.values(), stamp),
+                )
+        return {"day": day.isoformat(), **row}
+
+    def rollup_pending_demography(self, site_id: str) -> int:
+        """Yozilmagan TUGAGAN kunlarni yig'adi.  Nechta kun yozilgani.
+
+        Bugungi kun ataylab tegilmaydi — u hali tugamagan va hisobot
+        uni baribir xom hodisalardan jonli hisoblaydi.
+        """
+        # Hisobot ham shu vaqt zonasida ishlaydi — kun chegarasi
+        # ikki joyda boshqacha bo'lsa yig'indi hisobotdan farq qilardi.
+        today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql("SELECT day FROM demography_daily WHERE site_id=? AND day>=?"),
+                (site_id, (today - timedelta(days=self.ROLLUP_LOOKBACK_DAYS)).isoformat()),
+            ).fetchall()
+        known = {str(self._dict(row)["day"]) for row in rows}
+
+        written = 0
+        for back in range(1, self.ROLLUP_LOOKBACK_DAYS + 1):
+            day = today - timedelta(days=back)
+            if day.isoformat() in known:
+                continue
+            self.rollup_demography(site_id, day)
+            written += 1
+        return written
+
+    def demography_range(
+        self, site_id: str, *, start: date, end: date
+    ) -> Dict[str, Any]:
+        """Davr bo'yicha yig'indi: `start` dan `end` gacha (ikkalasi ham kiradi).
+
+        Foiz SONLARDAN qayta hisoblanadi — kunlik foizlarning o'rtachasi
+        noto'g'ri bo'lardi: 2 mijozli kun 500 mijozli kun bilan teng
+        og'irlikka ega bo'lib qolardi.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT * FROM demography_daily "
+                    "WHERE site_id=? AND day>=? AND day<=? ORDER BY day"
+                ),
+                (site_id, start.isoformat(), end.isoformat()),
+            ).fetchall()
+
+        daily: List[Dict[str, Any]] = []
+        counted = ayol = erkak = entered = 0
+        ages = {label: 0 for _column, label in self._AGE_COLUMNS}
+        for raw in rows:
+            item = self._dict(raw)
+            counted += int(item["counted"] or 0)
+            ayol += int(item["ayol"] or 0)
+            erkak += int(item["erkak"] or 0)
+            entered += int(item["entered"] or 0)
+            for column, label in self._AGE_COLUMNS:
+                ages[label] += int(item[column] or 0)
+            daily.append(
+                {
+                    "day": str(item["day"]),
+                    "hisoblangan": int(item["counted"] or 0),
+                    "kirgan": int(item["entered"] or 0),
+                    "ayol": int(item["ayol"] or 0),
+                    "erkak": int(item["erkak"] or 0),
+                }
+            )
+
+        return {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            # `kunlar` — yig'indi YOZILGAN kunlar (bo'sh kun ham
+            # yoziladi: "hech kim kirmagan" ham ma'lumot).
+            # `mijozli_kunlar` — mijoz haqiqatan qayd etilgan kunlar.
+            #
+            # Ikkalasi keskin farq qilsa bu do'kon egasi bilishi kerak
+            # bo'lgan narsa: 30 kundan faqat 5 tasida ma'lumot bo'lsa,
+            # qurilma o'sha kunlari ishlamagan.  Bitta son bilan bu
+            # jimgina yashirinardi.
+            "kunlar": len(daily),
+            "mijozli_kunlar": sum(1 for item in daily if item["hisoblangan"] > 0),
+            "hisoblangan": counted,
+            "kirgan": entered,
+            "jins": {
+                "ayol": round(ayol / counted * 100) if counted else 0,
+                "erkak": round(erkak / counted * 100) if counted else 0,
+            },
+            "yosh": ages,
+            "kunlik": daily,
+        }
+
+    def purge_demography(self, site_id: str) -> int:
+        cutoff = (_now() - timedelta(days=self.DEMOGRAPHY_RETENTION_DAYS)).date().isoformat()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("DELETE FROM demography_daily WHERE site_id=? AND day<?"),
                 (site_id, cutoff),
             )
             return int(cursor.rowcount or 0)

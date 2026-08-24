@@ -1,6 +1,7 @@
-import { formatNumber, hasFeature } from "./api";
+import { useEffect, useState } from "react";
+import { api, formatNumber, hasFeature } from "./api";
 import { Card, EmptyState, PlanLock } from "./components";
-import type { Dashboard } from "./types";
+import type { Dashboard, Demografiya } from "./types";
 
 /* "Mijoz portreti" — do'konga kirganlarning anonim jins va yosh
  * yig'indisi.
@@ -11,10 +12,16 @@ import type { Dashboard } from "./types";
  * yuz namunasi ham saqlanmaydi va yuborilmaydi — mijoz tanilmaydi
  * va uning ikkinchi tashrifi birinchisi bilan bog'lanmaydi.
  *
- * Nega alohida sahifa emas, karta: bu sakkizta raqam va faqat
- * BUGUNGI kun uchun (haftalik dinamika hali yig'ilmaydi).  Alohida
- * sahifa asosan bo'sh joy bo'lardi, yon menyu esa yana bir bandga
- * cho'zilardi. */
+ * IKKI MANBA, bitta karta:
+ *
+ * * **Bugun** — `dashboard.today.demografiya`, xom hodisalardan
+ *   jonli hisoblanadi (kun hali tugamagan);
+ * * **hafta / oy / yil** — `/api/v1/owner/demography`, kunlik
+ *   yig'indi jadvalidan.  Xom hodisalar tarif muddatida o'chiriladi,
+ *   ya'ni o'tgan oy yoki yil ular bilan umuman hisoblanmasdi.
+ *
+ * Bugungi kun yig'indi jadvaliga KIRMAYDI — aks holda bir xil kun
+ * ikki manbadan ikki xil ko'rinardi. */
 
 /** Guruh tartibi YOSH bo'yicha qotirilgan.
  *
@@ -36,13 +43,36 @@ const AGE_LABEL: Record<string, string> = {
   "60+": "60 dan katta",
 };
 
-export function Demography({ dashboard, onNavigate }: {
+const PERIODS: { id: string; label: string; note: string }[] = [
+  { id: "today", label: "Bugun", note: "bugun kirgan mijozlar" },
+  { id: "week", label: "Hafta", note: "oxirgi 7 kun" },
+  { id: "month", label: "Oy", note: "oxirgi 30 kun" },
+  { id: "year", label: "Yil", note: "oxirgi 365 kun" },
+];
+
+type RangeAnswer = Demografiya & { kunlar?: number; mijozli_kunlar?: number; kirgan?: number };
+
+export function Demography({ dashboard, siteId, onNavigate }: {
   dashboard: Dashboard;
+  siteId: string;
   onNavigate: (id: string) => void;
 }) {
-  const head = <div className="card-head">
-    <div><h2>Mijoz portreti</h2><p>Bugun kirgan mijozlarning anonim tavsifi</p></div>
-  </div>;
+  const open = hasFeature(dashboard, "demografiya");
+  const [period, setPeriod] = useState("today");
+  const [range, setRange] = useState<RangeAnswer | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open || period === "today") { setRange(null); setError(""); return; }
+    let stopped = false;
+    setLoading(true);
+    api<RangeAnswer>(`/api/v1/owner/demography?period=${period}`, "owner", { siteId })
+      .then(answer => { if (!stopped) { setRange(answer); setError(""); } })
+      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : "Olinmadi"); })
+      .then(() => { if (!stopped) setLoading(false); });
+    return () => { stopped = true; };
+  }, [open, period, siteId]);
 
   /* Tarif TEKSHIRUVI birinchi.
    *
@@ -50,9 +80,11 @@ export function Demography({ dashboard, onNavigate }: {
    * «tarifda yopiq» ham, «bugun hali hech kim kirmagan» ham bir xil
    * ko'rinadi (`demografiya === undefined`).  Ularni faqat shu
    * tekshiruv ajratadi. */
-  if (!hasFeature(dashboard, "demografiya")) {
+  if (!open) {
     return <Card>
-      {head}
+      <div className="card-head">
+        <div><h2>Mijoz portreti</h2><p>Bugun kirgan mijozlarning anonim tavsifi</p></div>
+      </div>
       <PlanLock
         title="Mijoz portreti Biznes tarifida"
         detail="Do‘koningizga kim ko‘proq kelishini ko‘rasiz: yosh guruhi va jins. Baho anonim — rasm saqlanmaydi, yuz tanilmaydi."
@@ -61,31 +93,53 @@ export function Demography({ dashboard, onNavigate }: {
     </Card>;
   }
 
-  const demo = dashboard.today.demografiya;
-  const counted = Number(demo?.hisoblangan || 0);
-  if (!demo || counted <= 0) {
+  const active = PERIODS.find(item => item.id === period) || PERIODS[0];
+  const data: Demografiya | undefined = period === "today" ? dashboard.today.demografiya : range || undefined;
+  const counted = Number(data?.hisoblangan || 0);
+
+  const tabs = <div className="segmented">
+    {PERIODS.map(item => (
+      <button key={item.id} className={item.id === period ? "active" : ""} onClick={() => setPeriod(item.id)}>
+        {item.label}
+      </button>
+    ))}
+  </div>;
+
+  const head = <div className="card-head">
+    <div>
+      <h2>Mijoz portreti</h2>
+      <p>{counted ? `${formatNumber(counted)} mijoz · ${active.note}` : active.note}</p>
+    </div>
+    {tabs}
+  </div>;
+
+  if (error) {
+    return <Card>{head}<EmptyState icon="users" title="Ma’lumot olinmadi" detail={error} /></Card>;
+  }
+  if (loading && !data) {
+    return <Card>{head}<EmptyState icon="users" title="Yig‘ilmoqda…" detail="Tanlangan davr uchun raqamlar tayyorlanmoqda." /></Card>;
+  }
+  if (!data || counted <= 0) {
     return <Card>
       {head}
       <EmptyState
         icon="users"
-        title="Bugun hali portret yig‘ilmadi"
+        title={period === "today" ? "Bugun hali portret yig‘ilmadi" : "Bu davrda ma’lumot yo‘q"}
         detail="Mijoz eshikdan kirganda uning taxminiy yoshi va jinsi anonim qayd etiladi. Birinchi tashrifdan keyin shu yerda ko‘rinadi."
       />
     </Card>;
   }
 
-  const ages = demo.yosh || {};
+  const ages = data.yosh || {};
   // Nolga bo'linish bo'lmasin: hamma guruh bo'sh bo'lishi mumkin.
   const peak = Math.max(...AGE_ORDER.map(key => Number(ages[key] || 0)), 1);
 
   return <Card>
-    <div className="card-head">
-      <div><h2>Mijoz portreti</h2><p>Bugun {formatNumber(counted)} mijoz · anonim baho</p></div>
-    </div>
+    {head}
 
     <div className="mini-metrics">
-      <div><span>Ayollar</span><b>{Math.round(Number(demo.jins?.ayol || 0))}%</b></div>
-      <div><span>Erkaklar</span><b>{Math.round(Number(demo.jins?.erkak || 0))}%</b></div>
+      <div><span>Ayollar</span><b>{Math.round(Number(data.jins?.ayol || 0))}%</b></div>
+      <div><span>Erkaklar</span><b>{Math.round(Number(data.jins?.erkak || 0))}%</b></div>
     </div>
 
     <div className="zone-list">
@@ -103,6 +157,12 @@ export function Demography({ dashboard, onNavigate }: {
     <div className="card-body">
       <p className="metric-note">
         Yosh — taxminiy baho. Xodimlar hisobga kirmaydi. Rasm saqlanmaydi va yuborilmaydi.
+        {/* Ikki son ataylab: 30 kundan faqat 5 tasida mijoz
+            qayd etilgan bo'lsa, qurilma o'sha kunlari ishlamagan —
+            va buni do'kon egasi bilishi kerak. */}
+        {range?.kunlar
+          ? ` ${range.kunlar} kundan ${range.mijozli_kunlar ?? 0} tasida mijoz qayd etilgan.`
+          : ""}
       </p>
     </div>
   </Card>;

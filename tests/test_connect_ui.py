@@ -204,3 +204,21 @@ def test_a_locked_heatmap_looks_like_an_offer_not_a_breakage() -> None:
 
     assert 'hasFeature(dashboard,"xarita")' in owner
     assert "Issiqlik xaritasi Biznes tarifida" in owner
+
+
+def test_the_owner_can_switch_between_day_week_month_and_year() -> None:
+    """Xom hodisalar tarif muddatida o'chiriladi — ya'ni o'tgan oy va
+    yil FAQAT kunlik yig'indi jadvalidan kelishi mumkin."""
+    demo = read("Demography.tsx")
+
+    assert "/api/v1/owner/demography?period=" in demo
+    for period in ("week", "month", "year"):
+        assert f'id: "{period}"' in demo
+
+
+def test_today_comes_from_the_live_report_not_the_rollup() -> None:
+    """Bugun hali tugamagan.  Yig'indidan olinsa panel kun davomida
+    eskirgan raqamni ko'rsatardi va hisobot bilan farq qilardi."""
+    demo = read("Demography.tsx")
+
+    assert 'period === "today" ? dashboard.today.demografiya' in demo

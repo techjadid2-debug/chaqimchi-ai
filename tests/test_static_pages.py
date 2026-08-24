@@ -1037,3 +1037,63 @@ def test_the_heatmap_explains_its_colours() -> None:
     locks = owner[owner.index("function applyPlanLocks") :]
     locks = locks[: locks.index("\n  }")]
     assert "heatLegend" in locks
+
+
+# ── Ikonka sprayti ──────────────────────────────────────────────────────
+
+
+def test_the_icon_sprite_parses_as_xml() -> None:
+    """SVG XML sifatida o'qiladi — bitta xato butun sprayti o'ldiradi.
+
+    2026-08-24 da izoh ichiga CSS o'zgaruvchisi nomi yozilgan edi
+    (ketma-ket ikkita tire).  XML uni izohning tugashi deb bildi, fayl
+    yaroqsiz bo'ldi va SAYTDAGI HAMMA IKONKA g'oyib bo'ldi.  Brauzer
+    konsolda hech narsa demaydi — xato faqat ko'z bilan ko'rinadi.
+    """
+    import xml.etree.ElementTree as ET
+
+    ET.parse(STATIC / "icons.svg")
+
+
+def test_every_icon_the_pages_ask_for_actually_exists() -> None:
+    """Yo'q `id` ga murojaat jimgina bo'sh joy qoldiradi.
+
+    Sprayt va uni ishlatuvchilar boshqa-boshqa fayllarda: ikonkani
+    qayta nomlash oson, hamma murojaatni yangilashni unutish ham.
+    """
+    import re
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(STATIC / "icons.svg")
+    have = {
+        symbol.get("id")
+        for symbol in tree.getroot().iter("{http://www.w3.org/2000/svg}symbol")
+    }
+    assert have, "sprayt bo'sh"
+
+    wanted: set = set()
+    for path in list(STATIC.rglob("*.html")) + list(STATIC.rglob("*.js")):
+        wanted |= set(re.findall(r"icons\.svg#([a-z-]+)", path.read_text(encoding="utf-8")))
+    # Tarif punktlari ikonka nomini serverdan oladi.
+    plans = STATIC.parents[1] / "chaqimchi_ai" / "licensing" / "plans.py"
+    wanted |= set(re.findall(r'icon="([a-z-]+)"', plans.read_text(encoding="utf-8")))
+
+    missing = sorted(wanted - have)
+    assert not missing, f"sprayda yo'q ikonkalar: {missing}"
+
+
+def test_the_icons_take_their_colour_from_the_page() -> None:
+    """Yassi dizayn: rang CSS dan keladi, sprayda qattiq rang yo'q.
+
+    Eski "3D" ikonkalarda gradient va soya qotirilgan edi — ular ko'k
+    dizaynga o'tgandan keyin ham eski ko'rinishda qolib ketgandi.
+    """
+    text = (STATIC / "icons.svg").read_text(encoding="utf-8")
+
+    assert "currentColor" in text
+    assert "linearGradient" not in text, "gradient — eski 3D uslub qoldig'i"
+    # Izohdagi misollar hisobga olinmasin: faqat haqiqiy atributlar.
+    import re
+
+    for attr in re.findall(r'(?:fill|stroke)="([^"]+)"', text):
+        assert attr in {"none", "currentColor"}, f"qattiq rang: {attr}"

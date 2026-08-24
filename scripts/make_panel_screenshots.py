@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import math
 import subprocess
 import sys
 import threading
@@ -50,20 +51,44 @@ NOW = datetime(2026, 8, 24, 18, 40)
 TODAY = NOW.date().isoformat()
 
 
+#: Do'kondagi to'planish joylari: (ustun, qator, kuch) — nisbiy
+#: koordinatalarda.  Haqiqiy do'konda odam bir tekis yurmaydi: u
+#: javon oldida to'xtaydi, kassada navbatda turadi va yo'lakdan
+#: shunchaki o'tib ketadi.
+HEAT_SPOTS = (
+    (0.14, 0.22, 1.00),  # kirish eshigi
+    (0.34, 0.20, 0.72),  # birinchi javon
+    (0.58, 0.18, 0.90),  # aksiya javoni
+    (0.80, 0.24, 0.66),
+    (0.20, 0.62, 0.78),  # muzlatgich
+    (0.46, 0.58, 0.55),
+    (0.74, 0.66, 0.95),  # kassa navbati
+    (0.90, 0.48, 0.40),
+)
+
+
 def _heat_grid() -> list:
-    """Kirish eshigidan kassagacha yo'lak — ishonarli issiqlik naqshi."""
-    grid = [[0] * HEAT_COLS for _ in range(HEAT_ROWS)]
-    for col in range(HEAT_COLS):
-        # Diagonal yo'lak: chap yuqoridan o'ng pastga.
-        row = int(4 + (HEAT_ROWS - 9) * (col / max(1, HEAT_COLS - 1)))
-        for offset in range(-3, 4):
-            target = row + offset
-            if 0 <= target < HEAT_ROWS:
-                grid[target][col] += max(0, 90 - abs(offset) * 22)
-    # Kassa oldida to'planish.
-    for row in range(HEAT_ROWS - 10, HEAT_ROWS - 3):
-        for col in range(HEAT_COLS - 12, HEAT_COLS - 4):
-            grid[row][col] += 70
+    """Javon oldidagi to'planishlar — ishonarli issiqlik naqshi.
+
+    Bungacha bu bitta diagonal yo'lak edi va rasmda uzun yashil chiziq
+    bo'lib chiqardi: do'kon xaritasiga o'xshamasdi.  Endi bir nechta
+    alohida issiq nuqta — mijoz rasmga qarab "javon oldida to'xtashadi"
+    degan xulosani o'zi chiqaradi.
+    """
+    grid = [[0.0] * HEAT_COLS for _ in range(HEAT_ROWS)]
+    for row in range(HEAT_ROWS):
+        for col in range(HEAT_COLS):
+            x = col / max(1, HEAT_COLS - 1)
+            y = row / max(1, HEAT_ROWS - 1)
+            total = 0.0
+            for spot_x, spot_y, strength in HEAT_SPOTS:
+                # Gauss: markazda kuchli, chekkasida tez so'nadi.
+                dx, dy = (x - spot_x) / 0.055, (y - spot_y) / 0.085
+                total += strength * math.exp(-(dx * dx + dy * dy) / 2)
+            # Yo'laklardagi yengil o'tish oqimi — to'liq bo'sh joy
+            # bo'lmasin, aks holda xarita "o'lik" ko'rinadi.
+            total += 0.07 * math.exp(-(((y - 0.42) / 0.18) ** 2) / 2)
+            grid[row][col] = round(total * 100, 1)
     return grid
 
 

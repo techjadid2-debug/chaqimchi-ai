@@ -218,18 +218,68 @@ function heatRgb(t:number) {
 
 function HeatmapPage({dashboard,siteId}:{dashboard:Dashboard;siteId:string}) {
   const [cameraId,setCameraId]=useState(()=>dashboard.cameras[0]?.camera_id||"");const[days,setDays]=useState(7);const[data,setData]=useState<{grid:number[][];rows:number;cols:number;points?:number}|null>(null);const[error,setError]=useState("");const canvas=useRef<HTMLCanvasElement>(null);
-  useEffect(()=>{if(!cameraId)return;let stopped=false;api<{grid:number[][];rows:number;cols:number;points?:number}>(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=${days}`,"owner",{siteId}).then(heat=>{if(stopped)return;setData(heat);setError("");const target=canvas.current;const ctx=target?.getContext("2d");if(!target||!ctx)return;const width=target.width,height=target.height,padX=width*.055,padY=height*.10,planW=width-padX*2,planH=height-padY*2;ctx.fillStyle="#f8fafc";ctx.fillRect(0,0,width,height);ctx.strokeStyle="#64748b";ctx.lineWidth=3;ctx.strokeRect(padX,padY,planW,planH);ctx.strokeStyle="#cbd5e1";ctx.lineWidth=2;[[.11,.18,.22,.13],[.39,.18,.18,.13],[.66,.18,.20,.13],[.13,.55,.23,.13],[.43,.55,.19,.13],[.72,.55,.15,.13]].forEach(([x,y,w,h])=>ctx.strokeRect(padX+planW*x,padY+planH*y,planW*w,planH*h));ctx.strokeStyle="#94a3b8";ctx.beginPath();ctx.moveTo(padX+planW*.41,padY+planH);ctx.lineTo(padX+planW*.59,padY+planH);ctx.stroke();ctx.fillStyle="#64748b";ctx.font="600 16px system-ui";ctx.fillText("Kirish",padX+planW*.44,padY+planH+28);const peak=Math.max(1,...heat.grid.flat());/* Nuqtalar ustma-ust tushganda `multiply` ranglarni ko'paytiradi va
-   gavjum yo'lakda butun soha QORAYIB ketardi — issiqlik xaritasi
-   o'rniga qora dog'.  Endi oddiy `source-over`: har nuqta o'z rangini
-   qo'yadi, chekkasi shaffof bo'lgani uchun qo'shnisi bilan silliq
-   qo'shiladi va eng issiq joy ramkadagi eng issiq rangda qoladi.
-   Nuqtalar zichdan siyrakka qarab chiziladi, shunda kuchsiz nuqta
-   kuchlisining ustini yopib ketmaydi. */
-const cells:{x:number;y:number;t:number}[]=[];
-heat.grid.forEach((row,rowIndex)=>row.forEach((value,colIndex)=>{const t=Number(value||0)/peak;if(t<.12)return;cells.push({x:padX+(colIndex+.5)*(planW/heat.cols),y:padY+(rowIndex+.5)*(planH/heat.rows),t});}));
-cells.sort((a,b)=>a.t-b.t);
-ctx.save();
-cells.forEach(({x,y,t})=>{const radius=Math.max(planW/heat.cols*3.2,28)+t*Math.max(planW/heat.cols*5.5,58),rgb=heatRgb(t),glow=ctx.createRadialGradient(x,y,0,x,y,radius);glow.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},.62)`);glow.addColorStop(.45,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},.28)`);glow.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=glow;ctx.fillRect(x-radius,y-radius,radius*2,radius*2);});
+  useEffect(()=>{if(!cameraId)return;let stopped=false;api<{grid:number[][];rows:number;cols:number;points?:number}>(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=${days}`,"owner",{siteId}).then(heat=>{if(stopped)return;setData(heat);setError("");const target=canvas.current;const ctx=target?.getContext("2d");if(!target||!ctx)return;const width=target.width,height=target.height,padX=width*.055,padY=height*.10,planW=width-padX*2,planH=height-padY*2;ctx.fillStyle="#f8fafc";ctx.fillRect(0,0,width,height);ctx.strokeStyle="#64748b";ctx.lineWidth=3;ctx.strokeRect(padX,padY,planW,planH);ctx.strokeStyle="#cbd5e1";ctx.lineWidth=2;[[.11,.18,.22,.13],[.39,.18,.18,.13],[.66,.18,.20,.13],[.13,.55,.23,.13],[.43,.55,.19,.13],[.72,.55,.15,.13]].forEach(([x,y,w,h])=>ctx.strokeRect(padX+planW*x,padY+planH*y,planW*w,planH*h));ctx.strokeStyle="#94a3b8";ctx.beginPath();ctx.moveTo(padX+planW*.41,padY+planH);ctx.lineTo(padX+planW*.59,padY+planH);ctx.stroke();ctx.fillStyle="#64748b";ctx.font="600 16px system-ui";ctx.fillText("Kirish",padX+planW*.44,padY+planH+28);const peak=Math.max(1,...heat.grid.flat());/* Issiqlik xaritasi IKKI QADAMDA chiziladi.
+
+   Bungacha har katak o'z rangida alohida dog' bo'lib chizilardi va
+   radius katak o'lchamidan ~3-8 barobar katta edi (48 ustunli to'rda
+   bitta dog' sohaning yarmini qoplardi).  Natijada 336 ta katak bitta
+   ulkan yashil chiziqqa qo'shilib ketardi — saytdagi rasmda ham aynan
+   shu ko'rinardi.
+
+   To'g'ri usul (heatmap.js ham shunday qiladi): avval hamma nuqta
+   KULRANG holda, alfa qo'shilib boradigan qilib chiziladi — ya'ni
+   zichlik piksel darajasida to'planadi.  So'ng har pikselning alfasi
+   rang shkalasiga (ko'k -> zangori -> yashil -> sariq -> qizil)
+   o'giriladi.  Shunda gradient silliq chiqadi va issiq nuqtalar
+   bir-biridan ajralib turadi. */
+const cell=Math.max(planW/heat.cols,planH/heat.rows);
+const blob=document.createElement("canvas");blob.width=width;blob.height=height;
+const bctx=blob.getContext("2d");
+if(bctx){
+  // 1-qadam: zichlikni kulrangda to'playmiz.
+  //
+  // Ikkala son ham kichik ataylab.  `radius` katta bo'lsa qo'shnilar
+  // qo'shilib ketadi, har nuqtaning alfasi katta bo'lsa esa to'planish
+  // 255 ga tez urilib, butun reja bir xil qizil bo'lib qoladi — ikkala
+  // xato ham xaritani "bitta dog'"ga aylantiradi.
+  const radius=cell*2.4;
+  // Reja tashqarisiga chiqmasin: chiziqdan tashqaridagi dog' xaritani
+  // devordan chiqib ketgandek ko'rsatardi.
+  bctx.save();bctx.beginPath();bctx.rect(padX,padY,planW,planH);bctx.clip();
+  heat.grid.forEach((row,rowIndex)=>row.forEach((value,colIndex)=>{
+    const t=Number(value||0)/peak;
+    if(t<.06)return;
+    const x=padX+(colIndex+.5)*(planW/heat.cols),y=padY+(rowIndex+.5)*(planH/heat.rows);
+    const glow=bctx.createRadialGradient(x,y,0,x,y,radius);
+    glow.addColorStop(0,"rgba(0,0,0,"+(t*.14).toFixed(3)+")");
+    glow.addColorStop(1,"rgba(0,0,0,0)");
+    bctx.fillStyle=glow;bctx.beginPath();bctx.arc(x,y,radius,0,Math.PI*2);bctx.fill();
+  }));
+  bctx.restore();
+  // 2-qadam: alfani rangga o'giramiz.
+  const image=bctx.getImageData(padX,padY,planW,planH);
+  const px=image.data;
+  // To'plangan eng katta zichlikka NISBATAN ranglaymiz.  Mutlaq
+  // qiymatga bog'lansa, kam odam yuradigan do'konning xaritasi butunlay
+  // ko'k, gavjum do'konniki esa butunlay qizil chiqardi — ikkalasida
+  // ham hech qanday ma'lumot ko'rinmasdi.
+  let top=0;
+  for(let i=3;i<px.length;i+=4)if(px[i]>top)top=px[i];
+  if(top>0)for(let i=0;i<px.length;i+=4){
+    // Gamma: o'rta qiymatlarni pastga tortadi, shunda faqat haqiqiy
+    // to'planish joyi issiq rangga chiqadi.
+    const t=Math.pow(px[i+3]/top,1.5);
+    // Yumshoq so'nish: qattiq kesilsa xaritaning chekkasi tishli
+    // bo'lib qolardi — zichlik chegara atrofida sekin o'zgaradi.
+    const fade=Math.max(0,Math.min(1,(t-.03)/.08));
+    if(fade<=0){px[i+3]=0;continue;}
+    const rgb=heatRgb(t);
+    px[i]=rgb[0];px[i+1]=rgb[1];px[i+2]=rgb[2];
+    px[i+3]=Math.round(fade*Math.min(225,40+t*195));
+  }
+  bctx.putImageData(image,padX,padY);
+  ctx.drawImage(blob,0,0);
+}
 ctx.restore();}).catch(reason=>{if(!stopped)setError(reason instanceof Error?reason.message:"Xarita olinmadi");});return()=>{stopped=true;};},[cameraId,days,siteId]);
   return <><PageHeader title="Faol zonalar" subtitle="Do‘kon rejasida mijozlar ko‘p to‘plangan joylar. Kataklar emas, silliq anonim harakat oqimi." actions={<select className="select" value={cameraId} onChange={event=>setCameraId(event.target.value)}>{dashboard.cameras.map(camera=><option value={camera.camera_id} key={camera.camera_id}>{camera.label||camera.camera_id}</option>)}</select>}/><Card><div className="card-head"><div><h2>Do‘kon rejasi</h2><p>{data?.points?`${formatNumber(data.points)} ta anonim harakat nuqtasi`:"Qurilma har 10 daqiqada yangi nuqtalarni yuboradi"}</p></div><div className="segmented">{[1,7,30].map(value=><button key={value} className={days===value?"active":""} onClick={()=>setDays(value)}>{value===1?"Bugun":`${value} kun`}</button>)}</div></div>{error?<EmptyState icon="heat" title="Xarita hozir ochilmadi" detail={error}/>:cameraId?<div className="heatmap-wrap plan-heatmap"><canvas ref={canvas} width="960" height="540" aria-label="Do‘kon rejasidagi faol zonalar"/><div className="heat-legend"><span>past</span><i/><span>yuqori</span></div></div>:<EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera qo‘shilgach faol zonalar shu yerda ko‘rinadi."/>}</Card></>;
 }

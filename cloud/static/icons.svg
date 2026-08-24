@@ -3,195 +3,119 @@
     Chaqimchi AI ikonkalari — bitta sprite.
     Ishlatish:  <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kamera"/></svg>
 
-    Nega emoji emas: 🪟 Windows'da rangsiz kvadrat, Android'da butunlay boshqa
-    shakl, iPhone'da uchinchi xil.  Brend ranglarini ham bera olmaydi.
+    Uslub v2 panel (`frontend/src/icons.tsx`) bilan AYNAN bir xil:
+    24×24 koordinata, `fill="none"`, `stroke="currentColor"`, qalinlik
+    1.8, uchlari va burchaklari yumaloq.
 
-    Nega SVG, render qilingan 3D rasm emas: bu yerdagi 10 ikonka ~9 KB.
-    Xuddi shu ko'rinishdagi PNG to'plami ~600 KB bo'lardi va retina ekranda
-    xiralashardi.
+    2026-08-24: eski "3D" ikonkalar (gradient, yaltiroq qirra, ellips
+    soya) olib tashlandi.  Ular ko'k qilingandan keyin ham dizayndan
+    ajralib turardi: sahifadagi qolgan hamma narsa yassi va yupqa
+    chiziqli, ikonkalar esa og'ir, yaltiroq predmetlar edi — narx
+    kartasida bu ayniqsa ko'zga tashlanardi.
 
-    "3D" effekti uchta qatlamdan yig'iladi:
-      1. gradient — yorug'lik yuqori chapdan tushadi;
-      2. yuqori qirrada och chiziq (highlight);
-      3. pastda yumshoq ellips soya — predmet "turadi", yopishmaydi.
+    Rang CSS dan keladi: `.icon` uchun `color` belgilanadi, ikonka esa
+    `currentColor` bilan chiziladi.  Shu sabab bu yerda birorta qattiq
+    rang YO'Q va ikonka joylashgan kontekstga o'zi moslashadi.
 
-    Barcha ikonka 48×48 koordinatada chizilgan.
+    DIQQAT: bu fayl XML sifatida o'qiladi.  Izoh ichida ikkita ketma-ket
+    tire ishlatib bo'lmaydi (masalan CSS o'zgaruvchisi nomini yozib) —
+    XML uni izohning tugashi deb biladi va BUTUN sprite yaroqsiz bo'lib
+    qoladi.  Xato jimgina o'tadi: brauzer hech qanday xabar bermaydi,
+    sahifadagi hamma ikonka shunchaki g'oyib bo'ladi.
+
+    Nega emoji emas: 🪟 Windows'da rangsiz kvadrat, Android'da butunlay
+    boshqa shakl, iPhone'da uchinchi xil.  Brend rangini ham bera
+    olmaydi.
   -->
-  <defs>
-    <linearGradient id="ic-blue" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4285f4"/>
-      <stop offset="1" stop-color="#1557b0"/>
-    </linearGradient>
-    <linearGradient id="ic-blue-light" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#d2e3fc"/>
-      <stop offset="1" stop-color="#8ab4f8"/>
-    </linearGradient>
-    <linearGradient id="ic-blue-mid" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8ab4f8"/>
-      <stop offset="1" stop-color="#1a73e8"/>
-    </linearGradient>
-    <linearGradient id="ic-paper" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#dbe4f0"/>
-    </linearGradient>
-    <radialGradient id="ic-shadow">
-      <stop offset="0" stop-color="#101828" stop-opacity=".26"/>
-      <stop offset="1" stop-color="#101828" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <!-- Design V2: eski 3D yashil bo'yoqlarni foydalanilayotgan sahifalarda
-       bir xil, ko'k konturga aylantiramiz. `currentColor` CSS bilan keladi. -->
-  <style>
-    symbol ellipse { display: none; }
-    symbol path, symbol rect, symbol circle, symbol g { fill: none !important; stroke: currentColor !important; stroke-width: 2.6px !important; stroke-linecap: round; stroke-linejoin: round; opacity: 1 !important; }
-  </style>
 
-  <!-- Kuzatuv kamerasi -->
-  <symbol id="kamera" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43" rx="15" ry="3.5" fill="url(#ic-shadow)"/>
-    <path d="M6 17.5 34 10a3 3 0 0 1 3.7 2.1l2 7.4a3 3 0 0 1-2.1 3.7L9.5 30.7a3 3 0 0 1-3.7-2.1l-2-7.4A3 3 0 0 1 6 17.5Z" fill="url(#ic-blue)"/>
-    <path d="M6 17.5 34 10a3 3 0 0 1 3.7 2.1l.4 1.4L6.6 22.4l-.7-2.5A3 3 0 0 1 6 17.5Z" fill="#ffffff" opacity=".16"/>
-    <circle cx="14" cy="21" r="4.6" fill="url(#ic-blue-light)"/>
-    <circle cx="12.6" cy="19.6" r="1.5" fill="#ffffff" opacity=".75"/>
-    <path d="M38.4 20.6 45 17.8v10.6l-6.4-3.2z" fill="url(#ic-blue)"/>
-    <path d="M20 31.5 22.5 41h-5z" fill="#1557b0"/>
-    <rect x="14" y="40" width="12" height="2.6" rx="1.3" fill="#1557b0"/>
+  <!-- Kamera — do'konga o'rnatiladigan kuzatuv kamerasi. -->
+  <symbol id="kamera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 9.4 17.6 5l1.4 4.8L4.4 14.2Z"/>
+    <circle cx="15.4" cy="8.3" r="1.4"/>
+    <path d="M6.4 13.4 4.6 20M2 20h6"/>
   </symbol>
 
-  <!-- Do'kon -->
-  <symbol id="dokon" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="17" ry="3" fill="url(#ic-shadow)"/>
-    <path d="M9 18h30v23a1.5 1.5 0 0 1-1.5 1.5h-27A1.5 1.5 0 0 1 9 41z" fill="url(#ic-paper)"/>
-    <path d="M7 10h34l3.5 8.5a1.5 1.5 0 0 1-1.4 2H4.9a1.5 1.5 0 0 1-1.4-2z" fill="url(#ic-blue)"/>
-    <path d="M7 10h34l1.2 3H5.8z" fill="#ffffff" opacity=".18"/>
-    <rect x="19" y="27" width="10" height="15.5" rx="1" fill="url(#ic-blue)"/>
-    <circle cx="26.6" cy="35" r="1" fill="url(#ic-blue-light)"/>
-    <rect x="12" y="26" width="4.5" height="4.5" rx="1" fill="#dbe4f0"/>
-    <rect x="31.5" y="26" width="4.5" height="4.5" rx="1" fill="#dbe4f0"/>
+  <!-- Do'kon — soyabon va eshik. -->
+  <symbol id="dokon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 10v10h16V10"/>
+    <path d="M3 4h18l-1 6H4L3 4Z"/>
+    <path d="M9.5 20v-5.5h5V20"/>
   </symbol>
 
-  <!-- Navbat / kutish -->
-  <symbol id="navbat" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="17" ry="3" fill="url(#ic-shadow)"/>
-    <g fill="url(#ic-blue)">
-      <circle cx="10" cy="16" r="4.4"/>
-      <path d="M4 41v-9a6 6 0 0 1 12 0v9z" />
-    </g>
-    <g fill="#4285f4">
-      <circle cx="24" cy="14.5" r="4.8"/>
-      <path d="M17.4 41v-9.5a6.6 6.6 0 0 1 13.2 0V41z"/>
-    </g>
-    <g fill="url(#ic-blue-mid)">
-      <circle cx="38.5" cy="16" r="4.4"/>
-      <path d="M32.5 41v-9a6 6 0 0 1 12 0v9z"/>
-    </g>
-    <circle cx="8.6" cy="14.6" r="1.3" fill="#ffffff" opacity=".4"/>
-    <circle cx="22.4" cy="12.9" r="1.4" fill="#ffffff" opacity=".4"/>
+  <!-- Kassa navbati — piket oldida turgan odamlar. -->
+  <symbol id="navbat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="7" cy="6.2" r="2.2"/>
+    <path d="M3.6 13.2v-.9C3.6 10.5 5.1 9.4 7 9.4s3.4 1.1 3.4 2.9v.9"/>
+    <circle cx="15.2" cy="6.8" r="1.8"/>
+    <path d="M12.4 13.2v-.7c0-1.6 1.3-2.5 2.8-2.5s2.8.9 2.8 2.5v.7"/>
+    <path d="M2.5 16h19v4.2h-19z"/>
   </symbol>
 
-  <!-- Xavfsizlik qalqoni -->
-  <symbol id="qalqon" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="44" rx="13" ry="2.8" fill="url(#ic-shadow)"/>
-    <path d="M24 4 41 10v14c0 10-7.3 16.4-17 19-9.7-2.6-17-9-17-19V10z" fill="url(#ic-blue)"/>
-    <path d="M24 4 41 10v3L24 7.5 7 13v-3z" fill="#ffffff" opacity=".18"/>
-    <path d="M16 24.5l5.4 5.4L33 18.4" fill="none" stroke="url(#ic-blue-light)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Qalqon — kamera va xavfsizlik nazorati. -->
+  <symbol id="qalqon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3 4 6v5c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-3Z"/>
+    <path d="m9 12 2 2 4-5"/>
   </symbol>
 
-  <!-- Kompyuter / Windows -->
-  <symbol id="kompyuter" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="16" ry="2.8" fill="url(#ic-shadow)"/>
-    <rect x="5" y="8" width="38" height="26" rx="3" fill="url(#ic-blue)"/>
-    <rect x="8" y="11" width="32" height="19" rx="1.5" fill="url(#ic-paper)"/>
-    <path d="M8 11h32v4H8z" fill="#dbe4f0"/>
-    <rect x="11" y="17" width="12" height="2.4" rx="1.2" fill="#4285f4"/>
-    <rect x="11" y="21.5" width="18" height="2.4" rx="1.2" fill="#b8c9e0"/>
-    <rect x="11" y="26" width="8" height="2.4" rx="1.2" fill="#b8c9e0"/>
-    <path d="M18 34h12l1.6 5H16.4z" fill="#4285f4"/>
-    <rect x="13" y="38.6" width="22" height="2.8" rx="1.4" fill="url(#ic-blue)"/>
+  <!-- Do'kon kompyuteri. -->
+  <symbol id="kompyuter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.5" y="4" width="19" height="12.5" rx="2.5"/>
+    <path d="M12 16.5V20M8.5 20h7"/>
   </symbol>
 
-  <!-- Mini-PC quti -->
-  <symbol id="quti" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="16" ry="3" fill="url(#ic-shadow)"/>
-    <path d="M6 18 24 9l18 9-18 9z" fill="url(#ic-blue-light)"/>
-    <path d="M6 18v13l18 9V27z" fill="url(#ic-blue)"/>
-    <path d="M42 18v13l-18 9V27z" fill="#4285f4"/>
-    <path d="M6 18 24 9l18 9-4 2-14-7-14 7z" fill="#ffffff" opacity=".25"/>
-    <circle cx="12.5" cy="24.5" r="1.5" fill="url(#ic-blue-light)" opacity=".9"/>
-    <circle cx="17.5" cy="27" r="1.5" fill="#ffffff" opacity=".45"/>
+  <!-- Arxiv — saqlanadigan hodisalar qutisi. -->
+  <symbol id="quti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7.6 12 3.2l9 4.4-9 4.4-9-4.4Z"/>
+    <path d="M3 7.6v8.8L12 20.8l9-4.4V7.6"/>
+    <path d="M12 12v8.8"/>
   </symbol>
 
-  <!-- Telegram -->
-  <symbol id="telegram" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="14" ry="2.8" fill="url(#ic-shadow)"/>
-    <circle cx="24" cy="22" r="18" fill="url(#ic-blue)"/>
-    <path d="M24 4a18 18 0 0 1 15.6 9A18 18 0 0 0 8.4 13 18 18 0 0 1 24 4Z" fill="#ffffff" opacity=".16"/>
-    <path d="m13 22.4 20-7.7c1-.4 1.9.3 1.6 1.4l-3.4 15.4c-.3 1-1.1 1.3-1.9.8l-5-3.7-2.4 2.3c-.4.4-.8.3-1-.3l-1.5-5.1-4.5-1.4c-1-.3-1-1.3.1-1.7z" fill="url(#ic-blue-light)"/>
-    <path d="m20.4 25.5 9.7-6.6-8.3 7.6z" fill="#669df6"/>
+  <!-- Telegram — xabar shu yerga keladi. -->
+  <symbol id="telegram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 4 3 11l5 2 2 6 3-4 5 4 3-15Z"/>
+    <path d="m8 13 9-6-6 8"/>
   </symbol>
 
-  <!-- Yuklab olish -->
-  <symbol id="yuklash" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="14" ry="2.8" fill="url(#ic-shadow)"/>
-    <circle cx="24" cy="22" r="18" fill="url(#ic-blue-light)"/>
-    <path d="M24 4a18 18 0 0 1 15.6 9A18 18 0 0 0 8.4 13 18 18 0 0 1 24 4Z" fill="#ffffff" opacity=".45"/>
-    <path d="M24 12v14" stroke="#1557b0" stroke-width="4" stroke-linecap="round"/>
-    <path d="m16.5 20.5 7.5 7.5 7.5-7.5" fill="none" stroke="#1557b0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="14" y="31" width="20" height="3.6" rx="1.8" fill="#1557b0"/>
+  <!-- Avtomatik yangilanish — dastur o'zi yuklab oladi. -->
+  <symbol id="yuklash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v11"/>
+    <path d="m8 10 4 4 4-4"/>
+    <path d="M5 20h14"/>
   </symbol>
 
-  <!-- Soat / 24 soat nazorat -->
-  <symbol id="soat" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="14" ry="2.8" fill="url(#ic-shadow)"/>
-    <circle cx="24" cy="22" r="18" fill="url(#ic-blue)"/>
-    <circle cx="24" cy="22" r="14" fill="url(#ic-paper)"/>
-    <path d="M24 4a18 18 0 0 1 15.6 9A18 18 0 0 0 8.4 13 18 18 0 0 1 24 4Z" fill="#ffffff" opacity=".16"/>
-    <path d="M24 13v9.5l6.5 4" fill="none" stroke="#1557b0" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="24" cy="22" r="1.8" fill="url(#ic-blue-mid)"/>
+  <!-- Soat — kunlik hisobot va soat bo'yicha tahlil. -->
+  <symbol id="soat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/>
+    <path d="M12 7v5.5l3.5 2"/>
   </symbol>
 
-  <!-- Odamlar oqimi -->
-  <symbol id="odamlar" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43.5" rx="16" ry="3" fill="url(#ic-shadow)"/>
-    <g fill="#4285f4" opacity=".55">
-      <circle cx="11" cy="17" r="4"/>
-      <path d="M5.5 41v-9.5a5.5 5.5 0 0 1 11 0V41z"/>
-    </g>
-    <g fill="#4285f4" opacity=".55">
-      <circle cx="37" cy="17" r="4"/>
-      <path d="M31.5 41v-9.5a5.5 5.5 0 0 1 11 0V41z"/>
-    </g>
-    <g fill="url(#ic-blue)">
-      <circle cx="24" cy="13.5" r="5.4"/>
-      <path d="M16.5 41V30a7.5 7.5 0 0 1 15 0v11z"/>
-    </g>
-    <circle cx="22.2" cy="11.7" r="1.6" fill="#ffffff" opacity=".4"/>
-    <path d="M20 41v-9" stroke="url(#ic-blue-light)" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- Odamlar — kirish-chiqish sanog'i va mijozlar oqimi. -->
+  <symbol id="odamlar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="9" cy="8" r="3"/>
+    <path d="M3 20v-2c0-3 2.5-5 6-5s6 2 6 5v2"/>
+    <path d="M16 5.5a3 3 0 0 1 0 5.8M17 14c2.5.3 4 1.8 4 4v2"/>
   </symbol>
-  <!-- Issiqlik xaritasi: izometrik to'r, o'rtasi "issiq". -->
-  <symbol id="xarita" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43" rx="15" ry="3.5" fill="url(#ic-shadow)"/>
-    <path d="M24 9 44 21 24 33 4 21Z" fill="url(#ic-blue)"/>
-    <path d="M24 9 44 21 24 33 4 21Z" fill="#ffffff" opacity=".1"/>
-    <path d="M24 15.5 33.5 21 24 26.5 14.5 21Z" fill="url(#ic-blue-light)"/>
-    <path d="M24 18.4 29 21 24 23.6 19 21Z" fill="#1a73e8"/>
-    <path d="M4 21v5l20 12 20-12v-5L24 33Z" fill="#1557b0"/>
+
+  <!-- Issiqlik xaritasi — gavjum zona do'kon rejasida. -->
+  <symbol id="xarita" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.5" y="4" width="19" height="16" rx="2.5"/>
+    <path d="M9 4v4.5M9 15.5V20M2.5 12h4"/>
+    <circle cx="15.4" cy="12" r="1.5"/>
+    <circle cx="15.4" cy="12" r="4.2"/>
   </symbol>
-  <!-- Mijoz portreti: ikki figura, biri ajratilgan. -->
-  <symbol id="portret" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43" rx="15" ry="3.5" fill="url(#ic-shadow)"/>
-    <circle cx="17" cy="16" r="6.2" fill="url(#ic-blue)"/>
-    <path d="M6.5 38a10.5 10.5 0 0 1 21 0Z" fill="url(#ic-blue)"/>
-    <circle cx="33" cy="18.5" r="5" fill="url(#ic-blue-light)"/>
-    <path d="M25 38a8 8 0 0 1 16 0Z" fill="url(#ic-blue-light)"/>
-    <circle cx="15.4" cy="14.4" r="1.9" fill="#ffffff" opacity=".55"/>
+
+  <!-- Mijoz portreti — takroriy mijoz kartasi. -->
+  <symbol id="portret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.5" y="4" width="19" height="16" rx="3"/>
+    <circle cx="9" cy="10" r="2.2"/>
+    <path d="M5.6 16.4c0-1.9 1.5-3.1 3.4-3.1s3.4 1.2 3.4 3.1"/>
+    <path d="M15.5 9.5h3.2M15.5 13h3.2"/>
   </symbol>
-  <!-- Xodim davomati: yuz aniqlash ramkasi. -->
-  <symbol id="yuz" viewBox="0 0 48 48">
-    <ellipse cx="24" cy="43" rx="15" ry="3.5" fill="url(#ic-shadow)"/>
-    <circle cx="24" cy="18" r="7.4" fill="url(#ic-blue)"/>
-    <path d="M11 37a13 13 0 0 1 26 0Z" fill="url(#ic-blue)"/>
-    <circle cx="21.6" cy="15.6" r="2.1" fill="#ffffff" opacity=".5"/>
-    <path d="M7 15V9.6A2.6 2.6 0 0 1 9.6 7H15M33 7h5.4A2.6 2.6 0 0 1 41 9.6V15M41 33v5.4a2.6 2.6 0 0 1-2.6 2.6H33M15 41H9.6A2.6 2.6 0 0 1 7 38.4V33" fill="none" stroke="url(#ic-blue-light)" stroke-width="2.6" stroke-linecap="round"/>
+
+  <!-- Xodim davomati — yuz bo'yicha tanish. -->
+  <symbol id="yuz" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 8.5v-2A2.5 2.5 0 0 1 6.5 4h2M15.5 4h2A2.5 2.5 0 0 1 20 6.5v2M20 15.5v2a2.5 2.5 0 0 1-2.5 2.5h-2M8.5 20h-2A2.5 2.5 0 0 1 4 17.5v-2"/>
+    <path d="M9.6 10.6h.01M14.4 10.6h.01"/>
+    <path d="M9.6 14.6c1.6 1.3 3.2 1.3 4.8 0"/>
   </symbol>
 </svg>

@@ -218,7 +218,13 @@ h1 em { margin-top: 6px; color: var(--blue); font-style: normal; }
 .sales-copy h2, .store-proof h2 { margin-bottom: 16px; font-size: clamp(34px, 4vw, 52px); font-weight: 800; letter-spacing: -.035em; }
 .sales-copy > p:not(.eyebrow), .store-proof p:not(.eyebrow) { color: var(--muted); font-size: 17px; }
 .store-proof { display: grid; grid-template-columns: 1.08fr .92fr; gap: 64px; align-items: center; background: var(--blue-dark); color: #fff; }
-.store-proof img { width: 100%; min-height: 360px; object-fit: cover; border-radius: 16px; display: block; }
+/* Balandlik CSS da QAT'IY belgilanadi.
+   Bungacha faqat `width: 100%` turardi va balandlikni HTML dagi
+   `height` atributi belgilardi — u esa noto'g'ri edi (916, aslida
+   620).  Natijada landshaft fotosurat 603×916 portret qutiga
+   qirqilib, ekranning yarmini egallardi.  `aspect-ratio` bilan bunday
+   xato qaytarilmaydi: atribut nima desa ham nisbat shu yerdan keladi. */
+.store-proof img { width: 100%; aspect-ratio: 16 / 10; max-height: 440px; object-fit: cover; border-radius: 16px; display: block; }
 .store-proof p:not(.eyebrow), .store-proof .eyebrow { color: var(--blue-soft); }
 
 /* ── Tarif kartalari (JS `renderPlans` chizadi) ───────────────────── */

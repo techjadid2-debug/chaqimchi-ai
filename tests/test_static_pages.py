@@ -617,7 +617,7 @@ def test_no_page_links_to_an_anchor_that_does_not_exist() -> None:
 def test_the_internal_codename_stays_off_customer_pages() -> None:
     """«Sotqin» o'zbekchada *xoin* degani.  U ichki kod nomi va mijoz
     ko'radigan sahifada turmasligi kerak."""
-    for name in ("connect.html", "pay.html", "install.html", "site.html", "aloqa.html"):
+    for name in ("connect.html", "pay.html", "install.html", "site.html", "aloqa.html", "edu.html"):
         html = (STATIC / name).read_text(encoding="utf-8")
         assert "Sotqin" not in html, f"{name}: ichki nom mijozga ko'rinyapti"
 
@@ -696,7 +696,7 @@ def test_the_customer_can_reach_a_human_from_every_dead_end() -> None:
     KIRISH ekranida edi — u kirgandan keyin butunlay yashiriladi.  Ya'ni
     "yozing" deb aytilardi-yu, qayerga yozishni ko'rsatilmasdi.
     """
-    for name in ("aloqa.html", "pay.html", "site.html", "owner.html"):
+    for name in ("aloqa.html", "pay.html", "site.html", "owner.html", "edu.html"):
         html = (STATIC / name).read_text(encoding="utf-8")
         assert PHONE_HREF in html, f"{name}: telefon havolasi yo'q"
 

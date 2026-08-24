@@ -1782,7 +1782,7 @@ async def sitemap_xml(request: Request) -> Response:
     if _host_section(request) != "apex":
         raise HTTPException(404, "Topilmadi")
     base = urls.public_url() or str(request.base_url).rstrip("/")
-    pages = ["/", "/install", "/maxfiylik", "/hamkorlik", "/aloqa", "/rozilik-shabloni"]
+    pages = ["/", "/edu", "/install", "/maxfiylik", "/hamkorlik", "/aloqa", "/rozilik-shabloni"]
     body = "".join(f"<url><loc>{base}{page}</loc></url>" for page in pages)
     return Response(
         '<?xml version="1.0" encoding="UTF-8"?>'
@@ -1839,6 +1839,18 @@ async def partnership_page(request: Request) -> HTMLResponse:
 @app.get("/aloqa", include_in_schema=False)
 async def contact_page(request: Request) -> HTMLResponse:
     return _render_public("aloqa.html", request)
+
+
+@app.get("/edu", include_in_schema=False)
+async def edu_page(request: Request) -> HTMLResponse:
+    """Chaqimchi Edu — ta'lim muassasalari uchun alohida sahifa.
+
+    Bosh sahifa do'kon tilida gapiradi ("mijozlar oqimi", "kassa
+    navbati") va maktab direktoriga u begona.  Shuning uchun alohida
+    sahifa: umumiy kirish, ta'limga xos funksiyalar va o'z
+    kalkulyatori.
+    """
+    return _render_public("edu.html", request)
 
 
 @app.get("/status", include_in_schema=False)
@@ -2061,6 +2073,24 @@ def _public_plan_card(code: str) -> Dict[str, Any]:
         "note": None,
         "cta": f"{limits.display_name or code}ni tanlash",
     }
+
+
+@app.get("/api/v1/public/edu-pricing")
+async def public_edu_pricing() -> Dict[str, Any]:
+    """Chaqimchi Edu kalkulyatori uchun konstantalar.
+
+    Sahifa hisobni O'ZI qiladi — har bosishda so'rov yuborish
+    kalkulyatorni sekin va cheklovlarga bog'liq qilardi.  Lekin
+    RAQAMLAR faqat shu yerdan keladi (`chaqimchi_ai/licensing/edu.py`):
+    ular ikki joyda saqlansa biri o'zgarib, ikkinchisi eskirib
+    qolardi va sayt yolg'on narx ko'rsatardi.
+
+    Tannarx yoki marja bu yerda umuman yo'q — Edu modeli faqat
+    sotuv narxlaridan iborat.
+    """
+    from chaqimchi_ai.licensing import edu
+
+    return edu.catalog()
 
 
 @app.get("/api/v1/public/pricing")

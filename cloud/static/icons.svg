@@ -112,6 +112,19 @@
     <path d="M15.5 9.5h3.2M15.5 13h3.2"/>
   </symbol>
 
+  <!-- Maktab — ta'lim muassasasi (Chaqimchi Edu). -->
+  <symbol id="maktab" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3 3 7.5 12 12l9-4.5L12 3Z"/>
+    <path d="M6.5 9.8V15c0 1.9 2.5 3.4 5.5 3.4s5.5-1.5 5.5-3.4V9.8"/>
+    <path d="M21 7.5v5.5"/>
+  </symbol>
+
+  <!-- Dars — jadval va sinf monitoringi. -->
+  <symbol id="kitob" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 4.5h5.5A2.5 2.5 0 0 1 12 7v12a2 2 0 0 0-2-2H4V4.5Z"/>
+    <path d="M20 4.5h-5.5A2.5 2.5 0 0 0 12 7v12a2 2 0 0 1 2-2h6V4.5Z"/>
+  </symbol>
+
   <!-- Xodim davomati — yuz bo'yicha tanish. -->
   <symbol id="yuz" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M4 8.5v-2A2.5 2.5 0 0 1 6.5 4h2M15.5 4h2A2.5 2.5 0 0 1 20 6.5v2M20 15.5v2a2.5 2.5 0 0 1-2.5 2.5h-2M8.5 20h-2A2.5 2.5 0 0 1 4 17.5v-2"/>

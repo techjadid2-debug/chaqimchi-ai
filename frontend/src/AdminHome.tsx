@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, formatMoney, formatNumber } from "./api";
 import { Avatar, Card, EmptyState, Pill, StatCard, StatusDot } from "./components";
+import { Percent } from "./admin";
 import { Bars, Donut, LineChart, type Point, type Segment } from "./charts";
 import { Icon } from "./icons";
 
@@ -59,6 +60,7 @@ export function AdminHome({ data, onNavigate }: {
     stats: { total_sites: number; active: number; total_devices: number; monthly_revenue_uzs: number; offline: number; not_paired: number; expiring_soon: number; by_connection?: Record<string, number> };
     sites: { id: string; name: string; cameras_active?: number; cameras_expected?: number }[];
     telemetry: { cpu_percent?: number | null; npu_percent?: number | null; inference_latency_ms?: number | null; uptime_sec?: number | null }[];
+    server?: { cpu_percent?: number; ram_percent?: number; disk_percent?: number; free_disk_gb?: number; load_1m?: number; cores?: number; temperature_c?: number };
   };
   onNavigate: (id: string) => void;
 }) {
@@ -81,6 +83,7 @@ export function AdminHome({ data, onNavigate }: {
   }, []);
 
   const stats = data.stats;
+  const server = data.server;
   const cameras = data.sites.reduce(
     (sum, site) => ({ active: sum.active + (site.cameras_active || 0), expected: sum.expected + (site.cameras_expected || 0) }),
     { active: 0, expected: 0 },
@@ -227,6 +230,24 @@ export function AdminHome({ data, onNavigate }: {
             <div className="simple-row"><span>Muddati yaqin</span><b>{stats.expiring_soon || 0}</b></div>
           </div>
         </Card>
+
+        {/* Serverning O'ZI.  Mijoz qurilmalari yashil bo'lib turib,
+            VPS xotirasi tugab qolishi mumkin — o'shanda panel
+            sekinlashadi va hodisalar kechikadi.  Har qator FAQAT
+            o'lchov bo'lsa chiziladi: "0%" yozish yolg'on bo'lardi. */}
+        {server && Object.keys(server).length ? <Card>
+          <div className="card-head"><div><h2>Server holati</h2><p>Chaqimchi buluti ishlab turgan kompyuter</p></div></div>
+          <div className="telemetry-grid">
+            {typeof server.cpu_percent === "number" ? <div className="telemetry"><span>Protsessor</span><Percent value={server.cpu_percent} /></div> : null}
+            {typeof server.ram_percent === "number" ? <div className="telemetry"><span>Xotira</span><Percent value={server.ram_percent} /></div> : null}
+            {typeof server.disk_percent === "number" ? <div className="telemetry"><span>Disk</span><Percent value={server.disk_percent} /></div> : null}
+          </div>
+          <div className="simple-list">
+            {typeof server.load_1m === "number" ? <div className="simple-row"><span>Yuklama</span><b>{server.load_1m.toFixed(2)}{server.cores ? ` / ${server.cores} yadro` : ""}</b></div> : null}
+            {typeof server.free_disk_gb === "number" ? <div className="simple-row"><span>Bo‘sh joy</span><b>{server.free_disk_gb.toFixed(1)} GB</b></div> : null}
+            {typeof server.temperature_c === "number" ? <div className="simple-row"><span>Harorat</span><b className={server.temperature_c >= 80 ? "is-hot" : undefined}>{server.temperature_c.toFixed(0)}°C</b></div> : null}
+          </div>
+        </Card> : null}
 
         {team.length ? <Card>
           <div className="card-head"><div><h2>Jamoa</h2><p>Platforma akkauntlari</p></div><button className="btn btn-icon" aria-label="Rollar" onClick={() => onNavigate("roles")}><Icon name="shield" /></button></div>

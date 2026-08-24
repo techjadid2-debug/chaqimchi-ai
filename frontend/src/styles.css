@@ -349,6 +349,8 @@ tr:last-child td { border-bottom: 0; }
 .heat-legend i { height: 7px; border-radius: 999px; background: linear-gradient(90deg,#2563eb,#22d3ee,#22c55e,#facc15,#dc2626); }
 .telemetry-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; padding: 17px 20px 20px; }
 .telemetry { padding: 14px; border: 1px solid var(--border); border-radius: 11px; }
+/* Qizib ketgan qurilma raqami qizil: ro'yxatda ko'z unga birinchi tushsin. */
+.is-hot { color: var(--red); }
 .telemetry-head { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px; color: var(--muted); font-size: 11px; }
 .telemetry-head b { color: var(--text); }
 

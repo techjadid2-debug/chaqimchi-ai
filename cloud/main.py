@@ -59,7 +59,7 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import botfmt, faces, ratelimit, rtsp, trust_score, urls
+from cloud import botfmt, faces, ratelimit, rtsp, server_health, trust_score, urls
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
@@ -2966,6 +2966,11 @@ async def admin_dashboard(
         "stats": {**store.stats(), **invoice_stats},
         "sites": sites,
         "telemetry": telemetry,
+        # Serverning O'ZI: mijoz qurilmalari yashil bo'lib turib, VPS
+        # xotirasi tugab qolishi mumkin.  Alohida endpoint qilinmadi —
+        # panel shu javobni har 15 soniyada so'raydi va CPU foizi aynan
+        # shu oraliqdan hisoblanadi (`cloud/server_health.py`).
+        "server": server_health.snapshot(),
         "invoices": invoice_stats,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }

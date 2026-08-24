@@ -8,7 +8,7 @@ import { Icon, Logo } from "./icons";
 import "./styles.css";
 
 type Site = { id:string; name:string; address?:string; contact_phone?:string; plan?:string; license_status?:string; connection?:string; devices?:number; cameras_active?:number; cameras_expected?:number; days_left?:number; monthly_price_uzs?:number; last_seen?:string };
-type DeviceMetric = { device_id:string; site_id:string; site_name?:string; label?:string; received_at?:string; cpu_percent?:number|null; ram_percent?:number|null; disk_percent?:number|null; fps?:number|null; inference_latency_ms?:number|null; uptime_sec?:number|null; npu_percent?:number|null };
+type DeviceMetric = { device_id:string; site_id:string; site_name?:string; label?:string; received_at?:string; cpu_percent?:number|null; ram_percent?:number|null; disk_percent?:number|null; fps?:number|null; inference_latency_ms?:number|null; uptime_sec?:number|null; npu_percent?:number|null; temperature_c?:number|null };
 type CreatedCustomer = {site_id:string;name:string;pairing_code:string;pairing_expires_at?:string;username:string;password:string};
 type AdminInvoice = {id:string;site_name?:string;site_id:string;months:number;amount_uzs:number;state:string;provider?:string;created_at?:string;paid_at?:string};
 type Feature = {code:string;name:string;category:string;monthly_usd_cents:number;cost_usd_cents:number;active?:boolean};
@@ -20,6 +20,9 @@ type AdminDashboard = {
   stats:{ total_sites:number; active:number; total_devices:number; monthly_revenue_uzs:number; offline:number; not_paired:number; expiring_soon:number; by_connection?:Record<string,number> };
   sites:Site[];
   telemetry:DeviceMetric[];
+  /** Serverning O'ZI.  O'lchanmagan ko'rsatkich kalit sifatida ham
+   *  kelmaydi — shuning uchun hammasi ixtiyoriy. */
+  server?:{ cpu_percent?:number; ram_percent?:number; disk_percent?:number; free_disk_gb?:number; load_1m?:number; cores?:number; temperature_c?:number };
   invoices?:{total?:number; pending?:number; paid?:number};
   readiness?:Record<string,unknown>;
   updated_at:string;
@@ -49,7 +52,7 @@ function useAdminDashboard(authenticated:boolean, range:string) {
   return {data,loading,error,refresh};
 }
 
-function Percent({value}:{value:number|null|undefined}) { const safe=typeof value==="number"?Math.max(0,Math.min(value,100)):0;return <><div className="telemetry-head"><span>{typeof value==="number"?`${value.toFixed(1)}%`:"Yig‘ilmoqda"}</span></div><div className="progress"><span style={{width:`${safe}%`}}/></div></>; }
+export function Percent({value}:{value:number|null|undefined}) { const safe=typeof value==="number"?Math.max(0,Math.min(value,100)):0;return <><div className="telemetry-head"><span>{typeof value==="number"?`${value.toFixed(1)}%`:"Yig‘ilmoqda"}</span></div><div className="progress"><span style={{width:`${safe}%`}}/></div></>; }
 
 /** CSV eksport — brauzerda, serverga so'rovsiz.  Ro'yxat allaqachon
  *  yuklangan, `﻿` esa Excel'ni UTF-8 ga majbur qiladi (usiz

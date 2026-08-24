@@ -520,6 +520,104 @@ def plan_disk_alert(
     return [], []
 
 
+# ── Serverning protsessori, xotirasi va harorati ────────────────────────
+#
+# Diskdan farqli: bular vaqtincha ko'tarilib tushishi normal.  Shuning
+# uchun har bir chegara **juftlik** bilan keladi — yonish chegarasi va
+# undan pastroq o'chish chegarasi (histerezis).  Bittasi bilan qilinsa,
+# 91,9 va 92,1 orasida tebranib turgan xotira har 15 daqiqada bir
+# "muammo/tuzaldi" juftligini yuborardi va chat ishonchini yo'qotardi.
+
+#: Xotira: 92% — bu yerda OOM-killer konteynerni o'ldirishi mumkin.
+SERVER_RAM_ALERT_PERCENT = 92.0
+SERVER_RAM_OK_PERCENT = 85.0
+
+#: Protsessor: 95%.  Yuqori chegara ataylab — tekshiruv 15 daqiqada bir
+#: marta yuradi, ya'ni bu allaqachon "bir zumlik cho'qqi emas" degani.
+SERVER_CPU_ALERT_PERCENT = 95.0
+SERVER_CPU_OK_PERCENT = 80.0
+
+#: Harakat: virtual serverda odatda o'lchanmaydi (termal zona yo'q),
+#: lekin o'z temiriga ko'chsak tayyor tursin.
+SERVER_TEMP_ALERT_C = 80.0
+SERVER_TEMP_OK_C = 70.0
+
+
+def _server_problem(snapshot: Dict[str, Any], previous: Optional[str]) -> Optional[Tuple[str, str]]:
+    """Serverdagi eng og'ir muammo — `(holat, tavsif)`.
+
+    Bitta xabar — bitta muammo, `_device_problem` bilan bir xil qoida.
+    Histerezis shu yerda: agar shu muammo allaqachon aytilgan bo'lsa, u
+    pastki chegaraga tushmaguncha "hali ham shu" deb qaytariladi.
+    """
+    temp = snapshot.get("temperature_c")
+    if isinstance(temp, (int, float)):
+        ceiling = SERVER_TEMP_OK_C if previous == "temp" else SERVER_TEMP_ALERT_C
+        if temp >= ceiling:
+            return "temp", f"server qizib ketdi ({temp:.0f}°C)"
+
+    ram = snapshot.get("ram_percent")
+    if isinstance(ram, (int, float)):
+        ceiling = SERVER_RAM_OK_PERCENT if previous == "ram" else SERVER_RAM_ALERT_PERCENT
+        if ram >= ceiling:
+            return "ram", f"xotira tugayapti ({ram:.0f}% band)"
+
+    cpu = snapshot.get("cpu_percent")
+    if isinstance(cpu, (int, float)):
+        ceiling = SERVER_CPU_OK_PERCENT if previous == "cpu" else SERVER_CPU_ALERT_PERCENT
+        if cpu >= ceiling:
+            return "cpu", f"protsessor to'lib ishlayapti ({cpu:.0f}%)"
+
+    return None
+
+
+def _server_health_text(detail: str) -> str:
+    return (
+        f"🖥 <b>Cloud server</b> — {detail}\n"
+        f"Panel sekinlashishi va hodisalar kechikishi mumkin.\n"
+        f"Serverni tekshiring: `docker stats` va `docker compose logs cloud`."
+    )
+
+
+def plan_server_health_alert(
+    snapshot: Dict[str, Any], previous: Dict[str, str]
+) -> Tuple[List[Alert], List[str]]:
+    """Server resurslari uchun ogohlantirish (sof funksiya).
+
+    O'lchanmagan ko'rsatkich (masalan virtual serverda harorat)
+    `snapshot` ga umuman kirmaydi va shu sabab hech qachon yolg'on
+    ogohlantirish bermaydi.
+    """
+    prev = previous.get(SERVER_SITE_ID)
+    problem = _server_problem(snapshot, prev)
+
+    if problem is not None:
+        state, detail = problem
+        if prev == state:
+            return [], []
+        return [
+            Alert(
+                SERVER_SITE_ID,
+                state,
+                _server_health_text(detail),
+                remember=state,
+                kind="server",
+            )
+        ], []
+
+    if prev is not None:
+        return [
+            Alert(
+                SERVER_SITE_ID,
+                "ok",
+                "✅ <b>Cloud server</b> — resurslar me'yorga qaytdi.",
+                remember=None,
+                kind="server",
+            )
+        ], []
+    return [], []
+
+
 # ── Do'kon kompyuterining sog'ligi ──────────────────────────────────────
 #
 # Eng xavfli buzilish — tizim yashil ko'rinib, hodisa yozmay qo'yishi.
@@ -777,6 +875,18 @@ async def run_check(
     disk_alerts, _ = plan_disk_alert(
         disk_usage_percent(disk_watch_path()), store.alert_states("disk")
     )
+    # Serverning protsessori va xotirasi.  `/proc` o'qilmasa (Linux
+    # bo'lmagan muhit) bo'sh lug'at qaytadi va hech qanday ogohlantirish
+    # chiqmaydi — qolgan tekshiruvlar esa ishlayveradi.
+    server_alerts: List[Alert] = []
+    try:
+        from cloud import server_health
+
+        server_alerts, _ = plan_server_health_alert(
+            server_health.snapshot(), store.alert_states("server")
+        )
+    except Exception:  # noqa: BLE001 — server o'lchovi qolganini to'xtatmasin
+        logger.exception("Server resurslari tekshirilmadi")
     # Qurilma sog'ligi hodisa bazasida — u yerdan bitta so'rov bilan
     # olinadi.  Bazaga yetib bo'lmasa qolgan ogohlantirishlar baribir
     # ketishi kerak.
@@ -819,7 +929,9 @@ async def run_check(
 
     sites_by_id = {site["id"]: site for site in sites}
 
-    for alert in conn_alerts + cam_alerts + device_alerts + update_alerts + disk_alerts:
+    for alert in (
+        conn_alerts + cam_alerts + device_alerts + update_alerts + disk_alerts + server_alerts
+    ):
         if await sender.send(alert.text):
             run.sent += 1
             run.messages.append(alert.text)
@@ -936,6 +1048,9 @@ __all__ = [
     "AlertRun",
     "AlertService",
     "DISK_ALERT_PERCENT",
+    "SERVER_CPU_ALERT_PERCENT",
+    "SERVER_RAM_ALERT_PERCENT",
+    "SERVER_TEMP_ALERT_C",
     "PAIRING_GRACE_HOURS",
     "SILENT_ALERT_HOURS",
     "UPDATE_STUCK_DAYS",
@@ -945,6 +1060,7 @@ __all__ = [
     "plan_alerts",
     "plan_camera_alerts",
     "plan_disk_alert",
+    "plan_server_health_alert",
     "plan_update_stuck_alerts",
     "run_check",
     "test_message",

@@ -309,6 +309,10 @@ def test_v2_admin_dashboard_reports_real_telemetry(portal_client: TestClient) ->
     assert metric["cpu_percent"] == 32.5
     assert metric["fps"] == 9.4
     assert metric["npu_percent"] is None
+    # Serverning o'z holati ham shu javobda: mijoz qurilmalari yashil
+    # bo'lib turib VPS xotirasi tugab qolishi mumkin.  Alohida endpoint
+    # qilinmadi — panel shu javobni har 15 soniyada so'raydi.
+    assert isinstance(body["server"], dict)
 
 
 def test_v2_admin_events_are_labelled_and_filterable(portal_client: TestClient) -> None:

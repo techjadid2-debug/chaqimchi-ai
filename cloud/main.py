@@ -332,6 +332,26 @@ class ClaimDeviceBody(BaseModel):
     serial_number: Optional[str] = Field(default=None, max_length=120)
 
 
+class DeviceHelloBody(BaseModel):
+    """Qurilma o'zini tanishtiradi (hali hech qanday tokeni yo'q)."""
+
+    fingerprint: str = Field(min_length=16, max_length=128, pattern=r"^[0-9a-f]+$")
+    label: str = Field(default="", max_length=64)
+    product_name: str = Field(default="Chaqimchi Windows", max_length=64)
+    app_version: str = Field(default="", max_length=32)
+    os_name: str = Field(default="", max_length=64)
+    local_ip: str = Field(default="", max_length=45)
+
+
+class DeviceClaimBody(BaseModel):
+    connect_token: str = Field(min_length=20, max_length=128)
+
+
+class DeviceHandoverBody(BaseModel):
+    connect_token: str = Field(min_length=20, max_length=128)
+    fingerprint: str = Field(min_length=16, max_length=128, pattern=r"^[0-9a-f]+$")
+
+
 class HeartbeatBody(BaseModel):
     active_cameras: int = 0
     app_version: str = __version__
@@ -3885,6 +3905,174 @@ async def admin_new_pairing_code(
         return get_store().new_pairing_code(site_id)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+
+
+#: Bir vaqtda ulanishni kutayotgan qurilmalar chegarasi.  Cheklovsiz
+#: soxta `fingerprint` bilan bazani to'ldirish mumkin edi.
+PENDING_DEVICE_LIMIT_DEFAULT = 200
+
+
+def _pending_device_limit() -> int:
+    raw = os.environ.get("CHAQIMCHI_PENDING_DEVICE_LIMIT", "").strip()
+    try:
+        return max(1, int(raw)) if raw else PENDING_DEVICE_LIMIT_DEFAULT
+    except ValueError:
+        logger.warning("CHAQIMCHI_PENDING_DEVICE_LIMIT son emas — standart qiymat")
+        return PENDING_DEVICE_LIMIT_DEFAULT
+
+
+def _device_hello_enabled() -> bool:
+    """Yangi ulanish oqimini bir zumda o'chirish uchun bayroq.
+
+    Qurilmadagi dastur bu endpoint 404 qaytarsa ESKI yo'lga (sehrgar +
+    pairing kodi) tushadi.  Ya'ni yangi reliz tarqab bo'lgach ham
+    nosozlik chiqsa, bayroqni o'chirish butun parkni eski, sinalgan
+    xatti-harakatga qaytaradi — OTA kutish shart emas.
+    """
+    raw = os.environ.get("CHAQIMCHI_DEVICE_HELLO", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+@app.post("/api/v1/public/device-hello")
+async def public_device_hello(body: DeviceHelloBody, request: Request) -> Dict[str, Any]:
+    """Qurilma o'zini tanishtiradi va ulanish havolasini oladi.
+
+    Pairing kodidan farqi yo'nalishda: kodni admin yoki usta yaratib
+    egaga berardi, bu yerda esa qurilmaning o'zi boshlaydi va egasi uni
+    panelidan ko'rib tasdiqlaydi.  Shu bilan "dasturni o'rnatdim, endi
+    kimdan kod so'rayman?" degan tugun yo'qoladi.
+    """
+    if not _device_hello_enabled():
+        raise HTTPException(404, "Topilmadi")
+    client_host = request.client.host if request.client else "unknown"
+    # Ikki o'lchov: bitta IP ortida do'kon tarmog'i bo'lishi mumkin
+    # (bir necha kompyuter), lekin bitta kompyuter soatiga o'nlab
+    # marta qayta ulanmaydi.
+    ratelimit.check(
+        "device-hello",
+        client_host,
+        limit=12,
+        window_sec=3_600,
+        message="Juda ko'p urinish. Bir soatdan keyin qayta urinib ko'ring.",
+    )
+    ratelimit.check(
+        "device-hello-fp",
+        body.fingerprint,
+        limit=30,
+        window_sec=3_600,
+        message="Juda ko'p urinish. Bir soatdan keyin qayta urinib ko'ring.",
+    )
+    if get_store().count_pending_devices() >= _pending_device_limit():
+        raise HTTPException(503, "Hozir yangi ulanishlar qabul qilinmayapti — birozdan keyin urining")
+
+    result = get_store().device_hello(
+        fingerprint=body.fingerprint,
+        label=body.label.strip(),
+        product_name=body.product_name,
+        app_version=body.app_version,
+        os_name=body.os_name,
+        local_ip=body.local_ip,
+    )
+    panel = f"{urls.app_url()}/owner"
+    return {
+        "ok": True,
+        "pending_id": result["pending_id"],
+        "status": "pending",
+        "connect_token": result["connect_token"],
+        "connect_url": f"{panel}?connect={result['connect_token']}",
+        "panel_url": panel,
+        "verify_code": result["verify_code"],
+        "expires_in_sec": CloudStore.CONNECT_TOKEN_TTL_SEC,
+        "poll_after_sec": 5,
+    }
+
+
+@app.get("/api/v1/public/device-connect")
+async def public_device_connect(token: str, request: Request) -> Dict[str, Any]:
+    """Tasdiqdan oldin qurilmani tasvirlaydi.
+
+    Autentifikatsiyasiz, shuning uchun bu yerdan faqat ko'z bilan
+    solishtirish uchun kerak bo'lgan narsa chiqadi: kompyuter nomi va
+    tekshiruv kodi.  Noma'lum, eskirgan va allaqachon ulangan token —
+    hammasi BIR XIL 404: aks holda bu endpoint "bu token haqiqiymi?"
+    degan savolga javob beradigan orakulga aylanardi.
+    """
+    if not _device_hello_enabled():
+        raise HTTPException(404, "Topilmadi")
+    ratelimit.check(
+        "device-connect-peek",
+        request.client.host if request.client else "unknown",
+        limit=60,
+        window_sec=3_600,
+        message="Juda ko'p so'rov. Birozdan keyin urinib ko'ring.",
+    )
+    found = get_store().peek_pending_device(token)
+    if not found:
+        raise HTTPException(404, "Ulanish havolasi topilmadi yoki eskirgan")
+    return {"ok": True, **found}
+
+
+@app.post("/api/v1/owner/devices/claim")
+async def owner_claim_device(
+    body: DeviceClaimBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Egasi kutayotgan kompyuterni o'z filialiga biriktiradi.
+
+    Sayt SESSIYADAN olinadi (`owner.site_id`), so'rovdan emas — shu
+    sabab o'g'irlangan token bilan ham begona do'konga qurilma
+    biriktirib bo'lmaydi.
+    """
+    require_owner_role(owner, "owner", "service_admin")
+    ratelimit.check(
+        "owner-device-claim",
+        owner.member_id,
+        limit=10,
+        window_sec=3_600,
+        message="Juda ko'p urinish. Bir soatdan keyin qayta urinib ko'ring.",
+    )
+    try:
+        result = get_store().approve_pending_device(
+            body.connect_token, site_id=owner.site_id, account_id=owner.member_id
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    get_store().audit_portal_action(
+        "owner.device.claimed",
+        actor_id=owner.member_id,
+        target_type="pending_device",
+        target_id=result["pending_id"],
+        detail={"site_id": owner.site_id, "label": result["label"]},
+    )
+    return {"ok": True, **result}
+
+
+@app.post("/api/v1/public/device-handover")
+async def public_device_handover(body: DeviceHandoverBody, request: Request) -> Dict[str, Any]:
+    """Qurilma tasdiqni kutadi va hisob ma'lumotlarini oladi.
+
+    Qurilma buni sekundlab so'raydi, shuning uchun cheklov keng.
+    `fingerprint` qatordagisiga mos kelmasa — 404: token sizib ketgan
+    bo'lsa ham uni boshqa mashinada ishlatib bo'lmaydi.
+    """
+    if not _device_hello_enabled():
+        raise HTTPException(404, "Topilmadi")
+    ratelimit.check(
+        "device-handover",
+        body.fingerprint,
+        limit=400,
+        window_sec=3_600,
+        message="Juda ko'p so'rov.",
+    )
+    try:
+        result = get_store().handover_pending_device(body.connect_token, body.fingerprint)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    if result.get("status") == "claimed":
+        result = {**result, "cloud_url": urls.api_url(), "panel_url": f"{urls.app_url()}/owner"}
+    else:
+        result = {**result, "poll_after_sec": 5}
+    return {"ok": True, **result}
 
 
 @app.post("/api/v1/devices/claim")

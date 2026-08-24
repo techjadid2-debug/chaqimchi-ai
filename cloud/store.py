@@ -253,6 +253,51 @@ class CloudStore:
                 used INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (site_id) REFERENCES sites(id)
             );
+            -- Ulanishni KUTAYOTGAN qurilmalar.
+            --
+            -- Pairing kodi teskari yo'nalishda ishlaydi: uni admin yoki
+            -- usta yaratadi va do'kon egasiga beradi.  Egasi dasturni
+            -- o'zi o'rnatib, keyin ro'yxatdan o'tsa, hali hech qanday
+            -- kod yo'q — u kimdan so'rashini ham bilmaydi.
+            --
+            -- Bu jadval oqimni teskari qiladi: qurilma o'zini
+            -- tanishtiradi, egasi esa uni panelidan ko'rib biriktiradi.
+            --
+            -- `device_token` bu yerda SAQLANMAYDI (shifrlangan holda
+            -- ham).  Egasi tasdiqlaganda faqat `status='approved'` va
+            -- `site_id` yoziladi; haqiqiy qurilma yozuvi va tokeni
+            -- qurilma o'zi kelib so'raganda yaratiladi.  Shu sabab
+            -- bazada hech qachon "egasiz sir" yotmaydi.
+            CREATE TABLE IF NOT EXISTS pending_devices (
+                id TEXT PRIMARY KEY,
+                -- sha256(connect_token).  Tokenning o'zi faqat qurilma
+                -- xotirasida va HTTPS javobida bo'ladi.
+                connect_hash TEXT UNIQUE,
+                -- Egasi ekrandagi kod bilan solishtiradi: shu bilan
+                -- "qo'shni kompyuterni tasdiqlab yubordim" xatosi
+                -- yopiladi.
+                verify_code TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                product_name TEXT NOT NULL DEFAULT 'Chaqimchi Windows',
+                app_version TEXT,
+                os_name TEXT,
+                local_ip TEXT,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending','approved','claimed','expired')),
+                site_id TEXT,
+                device_id TEXT,
+                claimed_by TEXT,
+                claimed_at TEXT,
+                handed_over_at TEXT,
+                handover_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (site_id) REFERENCES sites(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_pending_devices_fp
+                ON pending_devices(fingerprint, status);
             CREATE TABLE IF NOT EXISTS speak_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 site_id TEXT NOT NULL,
@@ -2665,6 +2710,292 @@ class CloudStore:
         conn.close()
 
         return {"site_id": site_id, "device_id": device_id, "device_token": device_token}
+
+    # ── Qurilmani egasi ulashi ────────────────────────────────────────
+    #
+    # Uch qadam: qurilma o'zini tanishtiradi (`device_hello`), egasi
+    # panelidan tasdiqlaydi (`approve_pending_device`), qurilma kelib
+    # hisob ma'lumotlarini oladi (`handover_pending_device`).
+
+    #: Ulanish tokeni muddati.  Bir soat — ro'yxatdan o'tishga yetadi,
+    #: token biror joyda qolib ketsa esa tez o'ladi.
+    CONNECT_TOKEN_TTL_SEC = 3600
+    #: Ishlatilgan qatorlar shuncha kundan keyin butunlay o'chadi.
+    PENDING_ROW_TTL_DAYS = 7
+    #: Javob yo'lda yo'qolgan bo'lsa qurilma shu oyna ichida qayta
+    #: so'ray oladi — lekin faqat hali bir marta ham aloqaga
+    #: chiqmagan qurilma uchun.
+    HANDOVER_RETRY_SEC = 600
+    HANDOVER_MAX = 3
+
+    def device_hello(
+        self,
+        *,
+        fingerprint: str,
+        label: str = "",
+        product_name: str = "Chaqimchi Windows",
+        app_version: str = "",
+        os_name: str = "",
+        local_ip: str = "",
+    ) -> Dict[str, Any]:
+        """Qurilma o'zini tanishtiradi va ulanish tokeni oladi.
+
+        Bir xil `fingerprint` uchun tirik qator QAYTA ISHLATILADI —
+        tokeni yo'qolgan yoki qayta ishga tushgan qurilma har safar
+        yangi qator yaratsa, egasining panelida bir xil kompyuter
+        o'nlab marta ko'rinardi.
+        """
+        now = _utc_now()
+        token = secrets.token_urlsafe(32)
+        verify_code = secrets.token_hex(3).upper()
+        expires_at = _iso(now + timedelta(seconds=self.CONNECT_TOKEN_TTL_SEC))
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, verify_code FROM pending_devices "
+                "WHERE fingerprint = ? AND status IN ('pending','approved') "
+                "ORDER BY created_at DESC LIMIT 1",
+                (fingerprint,),
+            ).fetchone()
+            if row:
+                pending_id = row["id"]
+                # `verify_code` SAQLANADI: egasi uni lokal ekranda
+                # ko'rgan bo'lishi mumkin, token yangilangani uchun
+                # kodni ham almashtirsak u yolg'on chiqardi.
+                verify_code = row["verify_code"]
+                # Bo'sh qiymat eskisini O'CHIRMAYDI: qurilma qayta
+                # ishga tushganda ba'zi maydonlarni (masalan lokal IP)
+                # hali bilmasligi mumkin, egasining panelida esa ular
+                # bor edi.
+                conn.execute(
+                    "UPDATE pending_devices SET connect_hash=?, "
+                    "label=COALESCE(NULLIF(?,''), label), "
+                    "product_name=COALESCE(NULLIF(?,''), product_name), "
+                    "app_version=COALESCE(NULLIF(?,''), app_version), "
+                    "os_name=COALESCE(NULLIF(?,''), os_name), "
+                    "local_ip=COALESCE(NULLIF(?,''), local_ip), "
+                    "updated_at=?, expires_at=? WHERE id=?",
+                    (
+                        self._hash_token(token),
+                        label,
+                        product_name,
+                        app_version,
+                        os_name,
+                        local_ip,
+                        _iso(now),
+                        expires_at,
+                        pending_id,
+                    ),
+                )
+            else:
+                pending_id = str(uuid.uuid4())[:12]
+                conn.execute(
+                    "INSERT INTO pending_devices (id, connect_hash, verify_code, fingerprint, "
+                    "label, product_name, app_version, os_name, local_ip, status, "
+                    "created_at, updated_at, expires_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?,?)",
+                    (
+                        pending_id,
+                        self._hash_token(token),
+                        verify_code,
+                        fingerprint,
+                        label,
+                        product_name,
+                        app_version,
+                        os_name,
+                        local_ip,
+                        _iso(now),
+                        _iso(now),
+                        expires_at,
+                    ),
+                )
+        return {
+            "pending_id": pending_id,
+            "connect_token": token,
+            "verify_code": verify_code,
+            "expires_at": expires_at,
+        }
+
+    def _pending_by_token(self, conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
+        return conn.execute(
+            "SELECT * FROM pending_devices WHERE connect_hash = ?",
+            (self._hash_token(token),),
+        ).fetchone()
+
+    def peek_pending_device(self, token: str) -> Optional[Dict[str, Any]]:
+        """Tasdiqdan oldin qurilmani tasvirlaydi — sirsiz.
+
+        Egasi "qaysi kompyuterni ulayapman?" degan savolga javob
+        olishi kerak, lekin bu endpoint autentifikatsiyasiz, shuning
+        uchun undan faqat ko'z bilan solishtirish uchun kerak
+        bo'lgan narsa chiqadi.
+        """
+        with self._connect() as conn:
+            row = self._pending_by_token(conn, token)
+            if not row:
+                return None
+            if row["status"] != "pending" or _iso(_utc_now()) > row["expires_at"]:
+                return None
+            local_ip = row["local_ip"] or ""
+            # Oxirgi oktet yashiriladi: IP do'kon tarmog'ini
+            # tasvirlaydi va uni to'liq ko'rsatishning hojati yo'q.
+            masked = ".".join(local_ip.split(".")[:3] + ["xxx"]) if local_ip.count(".") == 3 else ""
+            return {
+                "pending_id": row["id"],
+                "verify_code": row["verify_code"],
+                "label": row["label"],
+                "product_name": row["product_name"],
+                "app_version": row["app_version"] or "",
+                "os_name": row["os_name"] or "",
+                "local_ip_masked": masked,
+                "created_at": row["created_at"],
+                "status": row["status"],
+            }
+
+    def approve_pending_device(
+        self, token: str, *, site_id: str, account_id: str
+    ) -> Dict[str, Any]:
+        """Egasi kutayotgan qurilmani o'z saytiga biriktiradi."""
+        now = _iso(_utc_now())
+        with self._connect() as conn:
+            row = self._pending_by_token(conn, token)
+            if not row:
+                raise ValueError("Ulanish havolasi topilmadi yoki eskirgan")
+            if row["status"] == "claimed":
+                raise ValueError("Bu kompyuter allaqachon ulangan")
+            if row["status"] != "pending" or now > row["expires_at"]:
+                raise ValueError("Ulanish havolasi eskirgan — dasturni qayta ishga tushiring")
+            conn.execute(
+                "UPDATE pending_devices SET status='approved', site_id=?, claimed_by=?, "
+                "claimed_at=?, updated_at=? WHERE id=?",
+                (site_id, account_id, now, now, row["id"]),
+            )
+        return {
+            "pending_id": row["id"],
+            "site_id": site_id,
+            "label": row["label"],
+            "verify_code": row["verify_code"],
+        }
+
+    def handover_pending_device(self, token: str, fingerprint: str) -> Dict[str, Any]:
+        """Qurilma tokenni hisob ma'lumotlariga almashtiradi.
+
+        Javob yo'lda yo'qolishi mumkin (do'kondagi internet), shuning
+        uchun `HANDOVER_RETRY_SEC` ichida va qurilma hali bir marta ham
+        aloqaga chiqmagan bo'lsa token qayta beriladi — aks holda
+        o'rnatish "muvaffaqiyatli" bo'lib ko'rinib, qurilma esa abadiy
+        ulanmay qolardi.
+        """
+        now = _utc_now()
+        now_iso = _iso(now)
+        with self._connect() as conn:
+            row = self._pending_by_token(conn, token)
+            if not row or row["fingerprint"] != fingerprint:
+                raise ValueError("Ulanish havolasi topilmadi")
+            if row["status"] == "pending":
+                if now_iso > row["expires_at"]:
+                    return {"status": "expired"}
+                return {"status": "pending"}
+            if row["status"] == "expired":
+                return {"status": "expired"}
+
+            if row["status"] == "claimed":
+                device_row = conn.execute(
+                    "SELECT last_seen FROM devices WHERE id = ?", (row["device_id"],)
+                ).fetchone()
+                already_online = bool(device_row and device_row["last_seen"])
+                # `_iso` naiv "YYYY-MM-DD HH:MM:SS" yozadi — UTC deb o'qiladi.
+                try:
+                    handed = (
+                        datetime.fromisoformat(str(row["handed_over_at"])).replace(
+                            tzinfo=timezone.utc
+                        )
+                        if row["handed_over_at"]
+                        else None
+                    )
+                except ValueError:
+                    handed = None
+                within_retry = bool(
+                    handed and (now - handed).total_seconds() <= self.HANDOVER_RETRY_SEC
+                )
+                if already_online or not within_retry or row["handover_count"] >= self.HANDOVER_MAX:
+                    return {"status": "already_used"}
+                # Qayta berish: eski tokenni bekor qilib, yangisini
+                # beramiz — o'sha qurilma, lekin sir aylanadi.
+                device_token = secrets.token_urlsafe(32)
+                conn.execute(
+                    "UPDATE devices SET token_hash=? WHERE id=?",
+                    (self._hash_token(device_token), row["device_id"]),
+                )
+                conn.execute(
+                    "UPDATE pending_devices SET handover_count=handover_count+1, "
+                    "handed_over_at=?, updated_at=? WHERE id=?",
+                    (now_iso, now_iso, row["id"]),
+                )
+                return {
+                    "status": "claimed",
+                    "site_id": row["site_id"],
+                    "device_id": row["device_id"],
+                    "device_token": device_token,
+                }
+
+            # status == 'approved' — qurilma birinchi marta kelyapti.
+            device_token = secrets.token_urlsafe(32)
+            device_id = str(uuid.uuid4())[:12]
+            conn.execute(
+                "INSERT INTO devices (id, site_id, label, token_hash, hardware_id, "
+                "product_name, hardware_revision, last_seen, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    device_id,
+                    row["site_id"],
+                    row["label"] or "do'kon kompyuteri",
+                    self._hash_token(device_token),
+                    fingerprint,
+                    row["product_name"],
+                    "W1",
+                    None,
+                    now_iso,
+                ),
+            )
+            # `connect_hash` ATAYLAB saqlanadi.  Uni shu yerda
+            # o'chirsak, javob yo'lda yo'qolganda qurilma qatorni
+            # umuman topa olmasdi va o'rnatish "muvaffaqiyatli"
+            # ko'rinib, qurilma abadiy ulanmay qolardi.  Token
+            # baribir foydasiz: `status='claimed'` bo'lgach faqat
+            # qayta berish oynasi ichida ishlaydi.
+            conn.execute(
+                "UPDATE pending_devices SET status='claimed', device_id=?, handed_over_at=?, "
+                "handover_count=1, updated_at=? WHERE id=?",
+                (device_id, now_iso, now_iso, row["id"]),
+            )
+        return {
+            "status": "claimed",
+            "site_id": row["site_id"],
+            "device_id": device_id,
+            "device_token": device_token,
+        }
+
+    def count_pending_devices(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS total FROM pending_devices WHERE status='pending'"
+            ).fetchone()
+        return int(row["total"] if row else 0)
+
+    def expire_pending_devices(self) -> int:
+        """Muddati o'tganini belgilaydi, eskisini butunlay o'chiradi."""
+        now = _utc_now()
+        with self._connect() as conn:
+            marked = conn.execute(
+                "UPDATE pending_devices SET status='expired', connect_hash=NULL, updated_at=? "
+                "WHERE status='pending' AND expires_at < ?",
+                (_iso(now), _iso(now)),
+            ).rowcount
+            conn.execute(
+                "DELETE FROM pending_devices WHERE created_at < ?",
+                (_iso(now - timedelta(days=self.PENDING_ROW_TTL_DAYS)),),
+            )
+        return int(marked or 0)
 
     def record_config_ack(
         self,

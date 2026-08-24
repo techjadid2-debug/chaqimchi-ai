@@ -59,7 +59,7 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import botfmt, faces, ratelimit, trust_score, urls
+from cloud import botfmt, faces, ratelimit, rtsp, trust_score, urls
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
@@ -4378,7 +4378,8 @@ async def edge_health_heartbeat(
     # bo'lsa u ham tushadi.
     live = get_store().live_cameras(device["site_id"])
     previews = get_store().pending_preview_cameras(device["site_id"])
-    if body.wait_sec and not live and not previews:
+    jobs = get_store().take_pending_jobs(device["site_id"])
+    if body.wait_sec and not live and not previews and not jobs:
         wakeup = _live_wakeup(device["site_id"])
         wakeup.clear()
         try:
@@ -4388,6 +4389,7 @@ async def edge_health_heartbeat(
         else:
             live = get_store().live_cameras(device["site_id"])
             previews = get_store().pending_preview_cameras(device["site_id"])
+            jobs = get_store().take_pending_jobs(device["site_id"])
 
     # Ovoz navbati HAR heartbeat'da o'qiladi (uzoq kutishdan tashqarida
     # ham): eski qurilma `wait_sec` yubormaydi va u ham ovozni olishi kerak.
@@ -4409,6 +4411,12 @@ async def edge_health_heartbeat(
         # deb belgilanadi — ikkita heartbeat ketma-ket kelsa bir xil
         # ibora ikki marta yangramaydi.
         "speak_requested": speak,
+        # Tarmoqni skanerlash kabi topshiriqlar.  Ular do'kon
+        # tarmog'idan bajarilishi SHART (multicast, xususiy IP), lekin
+        # boshlanishi bulutdagi tugmadan.  O'qish bilan "olindi" deb
+        # belgilanadi — ketma-ket kelgan ikki heartbeat bir xil
+        # skanerni ikki marta ishga tushirmasin.
+        "job_requested": jobs,
         "received": body.model_dump(),
     }
 
@@ -4487,6 +4495,78 @@ async def upload_camera_preview(
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return {"ok": True, "camera_id": camera_id}
+
+
+class JobProgressBody(BaseModel):
+    percent: int = Field(default=0, ge=0, le=100)
+    note: str = Field(default="", max_length=200)
+
+
+class JobResultBody(BaseModel):
+    ok: bool = True
+    error: str = Field(default="", max_length=300)
+    result: Dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/v1/edge/jobs/{job_id}/progress")
+async def edge_job_progress(
+    job_id: str, body: JobProgressBody, device: Dict[str, str] = Depends(require_device)
+) -> Dict[str, Any]:
+    """Skaner o'z holatini xabar qiladi.
+
+    Bu heartbeat halqasidan ALOHIDA keladi: skanerlash 90 soniyagacha
+    cho'zilishi mumkin, heartbeat esa 25 soniyada javob berishi kerak.
+    Ular bir halqada bo'lsa sayt "oflayn" bo'lib ko'rinardi.
+    """
+    ratelimit.check(
+        "edge-job-progress",
+        device["site_id"],
+        limit=240,
+        window_sec=3_600,
+        message="Juda ko'p progress xabari",
+    )
+    if not get_store().job_progress(device["site_id"], job_id, percent=body.percent, note=body.note):
+        raise HTTPException(404, "Topshiriq topilmadi yoki tugagan")
+    return {"ok": True}
+
+
+@app.put("/api/v1/edge/jobs/{job_id}/result")
+async def edge_job_result(
+    job_id: str, body: JobResultBody, device: Dict[str, str] = Depends(require_device)
+) -> Dict[str, Any]:
+    payload = json.dumps(body.result, ensure_ascii=False).encode("utf-8")
+    if len(payload) > CloudStore.JOB_RESULT_MAX_BYTES:
+        raise HTTPException(413, "Natija juda katta")
+    if not get_store().job_result(
+        device["site_id"], job_id, ok=body.ok, result=body.result, error=body.error
+    ):
+        raise HTTPException(404, "Topshiriq topilmadi yoki allaqachon yopilgan")
+    return {"ok": True}
+
+
+@app.put("/api/v1/edge/jobs/{job_id}/frame")
+async def edge_job_frame(
+    job_id: str, request: Request, device: Dict[str, str] = Depends(require_device)
+) -> Dict[str, Any]:
+    """Sinov kadri — hali saqlanmagan kamera uchun.
+
+    `set_camera_preview` mavjud `site_cameras` qatorini talab qiladi;
+    kamerani saqlashdan OLDIN tekshirish uchun bazaga chala qator
+    yozish kerak bo'lardi.  Shuning uchun kadr topshiriq kalitiga
+    yoziladi va kamera saqlangach oddiy preview oqimi davom etadi.
+    """
+    if request.headers.get("content-type", "").split(";", 1)[0] != "image/jpeg":
+        raise HTTPException(415, "Faqat image/jpeg qabul qilinadi")
+    content = await request.body()
+    if not content:
+        raise HTTPException(400, "Rasm bo'sh")
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(413, "Rasm 2 MB dan katta")
+    key = f"{device['site_id']}/scan/{job_id}.jpg"
+    await media_put(key, content, content_type="image/jpeg")
+    if not get_store().job_frame_saved(device["site_id"], job_id, key):
+        raise HTTPException(404, "Topshiriq topilmadi")
+    return {"ok": True}
 
 
 class HeatmapItem(BaseModel):
@@ -5540,6 +5620,119 @@ def _validate_site_config(body: SiteConfigBody) -> None:
             raise HTTPException(
                 422, f"{camera_id} pol to'rtburchagi 4 ta [x,y] (0..1) nuqta bo'lsin"
             )
+
+
+class ScanRequestBody(BaseModel):
+    kind: Literal["lan_scan", "onvif", "channels", "probe"]
+    host: str = Field(default="", max_length=120)
+    port: int = Field(default=0, ge=0, le=65_535)
+    username: str = Field(default="", max_length=64)
+    password: str = Field(default="", max_length=128)
+    xaddr: str = Field(default="", max_length=300)
+    channel: int = Field(default=1, ge=1, le=64)
+    rtsp_url: str = Field(default="", max_length=500)
+
+
+@app.post("/api/v1/owner/scan")
+async def owner_start_scan(
+    body: ScanRequestBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Do'kon kompyuteridan tarmoqni skanerlashni so'raydi.
+
+    Kamera qidirish do'kon tarmog'idan bajarilishi SHART — bulut
+    sahifasi u yerga kira olmaydi.  Shuning uchun bu yerda faqat
+    topshiriq yoziladi; qurilma uni heartbeat javobida ko'radi.
+    """
+    require_owner_role(owner, "owner", "service_admin")
+    ratelimit.check(
+        "owner-scan",
+        owner.site_id,
+        limit=20,
+        window_sec=3_600,
+        message="Juda ko'p qidiruv. Bir soatdan keyin qayta urinib ko'ring.",
+    )
+    detail = get_store().site_detail(owner.site_id)
+    if str(detail.get("connection") or "offline") == "offline":
+        # Aks holda foydalanuvchi 2 daqiqa spinnerga qarab, oxirida
+        # "javob kelmadi" degan quruq xatoni ko'rardi.
+        raise HTTPException(
+            409, "Do'kon kompyuteri hozir aloqada emas — uni yoqing va internetni tekshiring."
+        )
+    params = body.model_dump(exclude={"kind"})
+    job = get_store().create_job(
+        owner.site_id, kind=body.kind, params=params, requested_by=owner.member_id
+    )
+    _wake_live_watchers(owner.site_id)
+    return {"job": job, "poll_after_sec": 2}
+
+
+def _scan_view(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Topshiriq natijasini brauzerga REDAKSIYALANGAN holda beradi.
+
+    Natijada NVR paroli bilan to'liq RTSP manzillari bo'ladi.  Panelga
+    ular o'rniga `safe_url` va `stream_ref` ketadi; kamerani saqlashda
+    server manzilni shifrlangan natijadan o'zi oladi.
+    """
+    view = {key: value for key, value in job.items() if key not in {"result", "frame_key"}}
+    result = job.get("result") or {}
+    if result:
+        cleaned = dict(result)
+        if isinstance(result.get("streams"), list):
+            cleaned["streams"] = rtsp.safe_streams(result["streams"])
+        if isinstance(result.get("cameras"), list):
+            cleaned["cameras"] = rtsp.safe_streams(result["cameras"])
+        view["result"] = cleaned
+    return view
+
+
+@app.get("/api/v1/owner/scan/{job_id}")
+async def owner_scan_status(
+    job_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    require_owner_role(owner, "owner", "service_admin")
+    job = get_store().get_job(owner.site_id, job_id, with_result=True)
+    if not job:
+        raise HTTPException(404, "Topshiriq topilmadi")
+    return {"ok": True, "job": _scan_view(job)}
+
+
+@app.get("/api/v1/owner/scan")
+async def owner_scan_latest(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Oxirgi topshiriq — sahifa yangilangach qayta ulanish uchun."""
+    require_owner_role(owner, "owner", "service_admin")
+    job = get_store().latest_job(owner.site_id)
+    if not job:
+        return {"ok": True, "job": None}
+    full = get_store().get_job(owner.site_id, job["job_id"], with_result=True)
+    return {"ok": True, "job": _scan_view(full or job)}
+
+
+@app.get("/api/v1/owner/scan/{job_id}/frame")
+async def owner_scan_frame(
+    job_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Response:
+    require_owner_role(owner, "owner", "service_admin")
+    job = get_store().get_job(owner.site_id, job_id, with_result=True)
+    if not job or not job.get("frame_key"):
+        raise HTTPException(404, "Kadr hali kelmadi")
+    try:
+        content = await media_get(str(job["frame_key"]))
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Kadr hali kelmadi") from exc
+    return Response(content, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+@app.delete("/api/v1/owner/scan/{job_id}")
+async def owner_cancel_scan(
+    job_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    require_owner_role(owner, "owner", "service_admin")
+    if not get_store().cancel_job(owner.site_id, job_id):
+        raise HTTPException(404, "Topshiriq topilmadi yoki tugagan")
+    return {"ok": True}
 
 
 @app.put("/api/v1/owner/config")

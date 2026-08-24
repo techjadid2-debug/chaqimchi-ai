@@ -298,6 +298,44 @@ class CloudStore:
             );
             CREATE INDEX IF NOT EXISTS idx_pending_devices_fp
                 ON pending_devices(fingerprint, status);
+            -- Qurilmaga beriladigan topshiriqlar.
+            --
+            -- Kamera qidirish do'kon tarmog'idan bajariladi: WS-Discovery
+            -- multicast, /24 sweep va xususiy IP ga SOAP.  Bulut sahifasi
+            -- u yerga kira olmaydi (va kirmasligi ham kerak — lokal API
+            -- ataylab faqat 127.0.0.1 ni qabul qiladi).
+            --
+            -- Shuning uchun bulutdagi tugma BUYRUQ yozadi, qurilma esa
+            -- uni heartbeat javobida ko'rib bajaradi.  Bu `live_requested`
+            -- va `preview_requested` naqshining aynan takrori, faqat
+            -- javob rasm emas, JSON.
+            --
+            -- `params` va `result` SHIFRLANADI: birinchisida NVR paroli,
+            -- ikkinchisida to'liq RTSP manzillari (ular ham parol bilan)
+            -- bo'ladi.  `site_cameras.rtsp_ciphertext` bilan bir xil
+            -- himoya, o'sha kalit.
+            CREATE TABLE IF NOT EXISTS device_jobs (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                kind TEXT NOT NULL
+                    CHECK(kind IN ('lan_scan','onvif','channels','probe')),
+                params_enc TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'queued'
+                    CHECK(status IN ('queued','running','done','failed','expired')),
+                progress INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT '',
+                result_enc TEXT,
+                error TEXT,
+                frame_key TEXT,
+                requested_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                taken_at TEXT,
+                updated_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (site_id) REFERENCES sites(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_device_jobs_site
+                ON device_jobs(site_id, status, created_at DESC);
             CREATE TABLE IF NOT EXISTS speak_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 site_id TEXT NOT NULL,
@@ -2994,6 +3032,202 @@ class CloudStore:
             conn.execute(
                 "DELETE FROM pending_devices WHERE created_at < ?",
                 (_iso(now - timedelta(days=self.PENDING_ROW_TTL_DAYS)),),
+            )
+        return int(marked or 0)
+
+    # ── Qurilmaga topshiriq berish ────────────────────────────────────
+
+    #: Har topshiriq turi uchun muddat.  Qurilma javob bermasa job shu
+    #: vaqtdan keyin `failed` bo'ladi va panel "javob kelmadi" deb
+    #: yozadi — foydalanuvchi cheksiz aylanuvchi spinnerga qaramaydi.
+    JOB_DEADLINE_SEC = {"lan_scan": 120, "onvif": 60, "channels": 150, "probe": 45}
+    #: Natija hajmi chegarasi: 64 kanalli NVR ro'yxati ham bemalol
+    #: sig'adi, buzuq qurilma esa bazani to'ldira olmaydi.
+    JOB_RESULT_MAX_BYTES = 64 * 1024
+
+    def create_job(
+        self, site_id: str, *, kind: str, params: Dict[str, Any], requested_by: str = ""
+    ) -> Dict[str, Any]:
+        """Topshiriq yaratadi; saytda tirik topshiriq bo'lsa o'shani qaytaradi.
+
+        Bir vaqtda bitta: skanerlar bir-birining ustiga chiqsa NVR ni
+        so'rovlar bilan ko'mib tashlaydi va natijalar aralashib ketadi.
+        """
+        now = _utc_now()
+        deadline = self.JOB_DEADLINE_SEC.get(kind, 60)
+        with self._connect() as conn:
+            live = conn.execute(
+                "SELECT * FROM device_jobs WHERE site_id=? AND status IN ('queued','running') "
+                "AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
+                (site_id, _iso(now)),
+            ).fetchone()
+            if live:
+                return {**self._job_row(live), "reused": True}
+            job_id = str(uuid.uuid4())[:12]
+            conn.execute(
+                "INSERT INTO device_jobs (id, site_id, kind, params_enc, requested_by, "
+                "created_at, updated_at, expires_at) VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    job_id,
+                    site_id,
+                    kind,
+                    self._encrypt_json(params),
+                    requested_by,
+                    _iso(now),
+                    _iso(now),
+                    _iso(now + timedelta(seconds=deadline)),
+                ),
+            )
+            row = conn.execute("SELECT * FROM device_jobs WHERE id=?", (job_id,)).fetchone()
+        return {**self._job_row(row), "reused": False}
+
+    def _encrypt_json(self, payload: Dict[str, Any]) -> str:
+        if not payload:
+            return ""
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        return self._camera_cipher().encrypt(raw).decode("ascii")
+
+    def _decrypt_json(self, blob: Optional[str]) -> Dict[str, Any]:
+        if not blob:
+            return {}
+        try:
+            return json.loads(self._camera_cipher().decrypt(blob.encode("ascii")).decode("utf-8"))
+        except (InvalidToken, ValueError):
+            # Kalit almashgan bo'lsa eski natija o'qilmaydi — bu xato
+            # emas, shunchaki "natija yo'q".
+            return {}
+
+    @staticmethod
+    def _job_row(row: sqlite3.Row) -> Dict[str, Any]:
+        """Panelga chiqadigan maydonlar — shifrlangan qismlarsiz."""
+        return {
+            "job_id": row["id"],
+            "kind": row["kind"],
+            "status": row["status"],
+            "progress": int(row["progress"] or 0),
+            "note": row["note"] or "",
+            "error": row["error"] or "",
+            "has_frame": bool(row["frame_key"]),
+            "created_at": row["created_at"],
+            "expires_at": row["expires_at"],
+        }
+
+    def take_pending_jobs(self, site_id: str) -> List[Dict[str, Any]]:
+        """Kutayotgan topshiriqlarni beradi va DARHOL olingan deb belgilaydi.
+
+        Belgilash o'qish bilan bir tranzaksiyada: aks holda ketma-ket
+        kelgan ikki heartbeat bir xil skanerni ikki marta ishga
+        tushirardi.
+        """
+        now = _utc_now()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM device_jobs WHERE site_id=? AND status='queued' AND expires_at>? "
+                "ORDER BY created_at",
+                (site_id, _iso(now)),
+            ).fetchall()
+            if rows:
+                conn.executemany(
+                    "UPDATE device_jobs SET status='running', taken_at=?, updated_at=? WHERE id=?",
+                    [(_iso(now), _iso(now), row["id"]) for row in rows],
+                )
+        jobs = []
+        for row in rows:
+            deadline = self.JOB_DEADLINE_SEC.get(row["kind"], 60)
+            jobs.append(
+                {
+                    "job_id": row["id"],
+                    "kind": row["kind"],
+                    "deadline_sec": deadline,
+                    "params": self._decrypt_json(row["params_enc"]),
+                }
+            )
+        return jobs
+
+    def job_progress(self, site_id: str, job_id: str, *, percent: int, note: str = "") -> bool:
+        with self._connect() as conn:
+            changed = conn.execute(
+                "UPDATE device_jobs SET progress=?, note=?, updated_at=? "
+                "WHERE id=? AND site_id=? AND status='running'",
+                (max(0, min(100, percent)), note[:200], _iso(_utc_now()), job_id, site_id),
+            ).rowcount
+        return bool(changed)
+
+    def job_result(
+        self,
+        site_id: str,
+        job_id: str,
+        *,
+        ok: bool,
+        result: Optional[Dict[str, Any]] = None,
+        error: str = "",
+    ) -> bool:
+        now = _iso(_utc_now())
+        with self._connect() as conn:
+            changed = conn.execute(
+                "UPDATE device_jobs SET status=?, result_enc=?, error=?, progress=100, "
+                "updated_at=? WHERE id=? AND site_id=? AND status IN ('queued','running')",
+                (
+                    "done" if ok else "failed",
+                    self._encrypt_json(result or {}),
+                    error[:300],
+                    now,
+                    job_id,
+                    site_id,
+                ),
+            ).rowcount
+        return bool(changed)
+
+    def job_frame_saved(self, site_id: str, job_id: str, frame_key: str) -> bool:
+        with self._connect() as conn:
+            changed = conn.execute(
+                "UPDATE device_jobs SET frame_key=?, updated_at=? WHERE id=? AND site_id=?",
+                (frame_key, _iso(_utc_now()), job_id, site_id),
+            ).rowcount
+        return bool(changed)
+
+    def get_job(self, site_id: str, job_id: str, *, with_result: bool = False) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM device_jobs WHERE id=? AND site_id=?", (job_id, site_id)
+            ).fetchone()
+        if not row:
+            return None
+        payload = self._job_row(row)
+        if with_result:
+            payload["result"] = self._decrypt_json(row["result_enc"])
+            payload["frame_key"] = row["frame_key"]
+        return payload
+
+    def latest_job(self, site_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM device_jobs WHERE site_id=? ORDER BY created_at DESC LIMIT 1",
+                (site_id,),
+            ).fetchone()
+        return self._job_row(row) if row else None
+
+    def cancel_job(self, site_id: str, job_id: str) -> bool:
+        with self._connect() as conn:
+            changed = conn.execute(
+                "UPDATE device_jobs SET status='failed', error='bekor qilindi', updated_at=? "
+                "WHERE id=? AND site_id=? AND status IN ('queued','running')",
+                (_iso(_utc_now()), job_id, site_id),
+            ).rowcount
+        return bool(changed)
+
+    def expire_jobs(self) -> int:
+        """Javob kelmagan topshiriqlarni yopadi va eskisini o'chiradi."""
+        now = _utc_now()
+        with self._connect() as conn:
+            marked = conn.execute(
+                "UPDATE device_jobs SET status='failed', error='qurilma javob bermadi', "
+                "updated_at=? WHERE status IN ('queued','running') AND expires_at < ?",
+                (_iso(now), _iso(now)),
+            ).rowcount
+            conn.execute(
+                "DELETE FROM device_jobs WHERE created_at < ?",
+                (_iso(now - timedelta(days=2)),),
             )
         return int(marked or 0)
 

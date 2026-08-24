@@ -384,6 +384,14 @@ class RetailSupervisor:
             # qolgan.  Mijoz uchun bu "ishlamayapti" bilan bir xil, shuning
             # uchun panel buni alohida ko'rsatishi kerak.
             "status_stale": bool(status_file.get("stale", True)) if running else False,
+            # Zanjir o'lchagan ish ko'rsatkichlari.  Bular ham holat
+            # faylida bor edi-yu shu yerdan o'tmasdi: `send_heartbeat`
+            # ularni `status` dan o'qishga urinardi va doim bo'sh
+            # topardi, ya'ni admin paneldagi FPS va kechikish ustunlari
+            # Windows yo'lida HECH QACHON to'lmagan.
+            "fps": status_file.get("fps"),
+            "inference_latency_ms": status_file.get("inference_latency_ms"),
+            "pressure": status_file.get("pressure") or {},
             "log_path": str(self._log_path),
         }
 

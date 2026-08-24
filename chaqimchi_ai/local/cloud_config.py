@@ -326,6 +326,11 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # shu yerdan ko'rinadi (fayl bilanmi, tizim ovozi bilanmi,
         # yoki umuman chiqmadimi).
         "speak": _audio_counters(),
+        # Apparat holati.  Bulut bu maydonlarni ANCHADAN BERI qabul
+        # qiladi va Linux qutilari yuboradi — Windows yubormasdi.
+        # Natijada do'kon kompyuteri qizib ketsa yoki xotirasi tugasa,
+        # buni na mijoz, na biz bilardik.
+        **_system_metrics(status),
     }
     try:
         response = httpx.post(
@@ -445,6 +450,44 @@ def live_request_path() -> Path:
 
 def live_frames_dir() -> Path:
     return paths.data_dir() / "live"
+
+
+def _system_metrics(status: Dict[str, Any]) -> Dict[str, Any]:
+    """Heartbeat'ga qo'shiladigan apparat ko'rsatkichlari.
+
+    **O'lchanmagan qiymat kalit sifatida ham qo'shilmaydi.**  Masalan
+    Windows'da harorat administrator huquqisiz o'qilmaydi — o'shanda
+    `temperature_c` umuman yuborilmaydi va panelda o'sha qator
+    chizilmaydi.  `null` yuborish ham mumkin edi, lekin bo'sh kalit
+    "o'lchandi va nol chiqdi" bilan chalkashardi.
+
+    FPS va kechikish zanjirdan keladi (`retail/service.py` holat
+    fayliga yozadi) — zanjir to'xtagan bo'lsa ular yo'q.
+    """
+    from chaqimchi_ai.local import system_metrics
+
+    data: Dict[str, Any] = {}
+    readings = {
+        "cpu_percent": system_metrics.cpu_percent,
+        "ram_percent": system_metrics.ram_percent,
+        "disk_percent": system_metrics.disk_percent,
+        "temperature_c": system_metrics.temperature_c,
+        "uptime_sec": system_metrics.uptime_sec,
+    }
+    for key, reader in readings.items():
+        try:
+            value = reader()
+        except Exception:  # noqa: BLE001 — o'lchov heartbeat'ni to'xtatmasin
+            logger.debug("%s o'lchanmadi", key, exc_info=True)
+            continue
+        if isinstance(value, (int, float)):
+            data[key] = round(float(value), 1)
+
+    for key in ("fps", "inference_latency_ms"):
+        value = status.get(key)
+        if isinstance(value, (int, float)):
+            data[key] = round(float(value), 1)
+    return data
 
 
 def _audio_counters() -> Dict[str, Any]:

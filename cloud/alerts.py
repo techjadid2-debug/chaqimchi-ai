@@ -159,6 +159,12 @@ class Alert:
     remember: Optional[str]
     #: Ogohlantirish turi — har biri mustaqil kuzatiladi.
     kind: str = "connection"
+    #: To'ldirilgan bo'lsa do'kon EGASIGA ham shu matn yuboriladi.
+    #:
+    #: Ichki chatdagi xabar texnik ("temperature_c 91"), egaga esa u
+    #: hech narsa aytmaydi.  Shuning uchun ikkinchi, sodda matn —
+    #: va faqat egasi O'ZI hal qila oladigan muammolar uchun.
+    owner_text: Optional[str] = None
 
 
 @dataclass
@@ -633,8 +639,21 @@ ANALYSIS_ERROR_RATIO = 0.5
 #: Bundan kam kadr — bu hali statistika emas (dastur endi ko'tarildi).
 ANALYSIS_MIN_SAMPLE = 200
 
+#: Do'kon kompyuteri shu haroratdan oshsa — apparat xavf ostida.
+#:
+#: 85°C `chaqimchi_ai/retail/pressure.py:TEMP_CEILING_C` bilan bir xil:
+#: N100 va shunga o'xshash protsessorlar ~90°C da tezlikni o'zi
+#: pasaytiradi, ya'ni 85 allaqachon chegara.  Chang bosgan korpus yoki
+#: to'xtagan ventilyator aynan shunday ko'rinadi va uni do'kon egasi
+#: hech qachon o'zi sezmaydi.
+DEVICE_TEMP_ALERT_C = 85.0
+#: Sovigan deb hisoblash chegarasi (histerezis).
+DEVICE_TEMP_OK_C = 75.0
 
-def _device_problem(health: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+
+def _device_problem(
+    health: Dict[str, Any], previous: Optional[str] = None
+) -> Optional[Tuple[str, str]]:
     """Eng og'ir muammoni qaytaradi: `(holat, tavsif)`.
 
     Bitta xabar — bitta muammo.  Uchalasi bir vaqtda bo'lsa (disk to'ldi →
@@ -645,6 +664,18 @@ def _device_problem(health: Dict[str, Any]) -> Optional[Tuple[str, str]]:
         # Eng og'iri: hodisa diskka ham yozilmadi, ya'ni butunlay yo'qoldi.
         # Uni keyin tiklab bo'lmaydi.
         return "queue", "hodisalar saqlanmayapti va yo'qolyapti"
+
+    # Haroratning o'rni ataylab ikkinchi: navbat yiqilsa hodisa ALLAQACHON
+    # yo'qolyapti, qizish esa temirni hali buzayotgan bo'ladi — lekin
+    # ikkalasi ham tahlil xatosi va disk to'lishidan og'irroq.
+    temperature = health.get("temperature_c")
+    if isinstance(temperature, (int, float)):
+        # Histerezis: bir marta aytilgan bo'lsa, 75°C ga tushmaguncha
+        # "hali ham qizigan" deb hisoblanadi.  Usiz 84,9/85,1 atrofida
+        # tebranish har 15 daqiqada xabar/tiklandi juftini yuborardi.
+        ceiling = DEVICE_TEMP_OK_C if previous == "temp" else DEVICE_TEMP_ALERT_C
+        if temperature >= ceiling:
+            return "temp", f"kompyuter qizib ketdi ({temperature:.0f}°C)"
 
     analyzed = int(health.get("analyzed") or 0)
     errors = int(health.get("analysis_errors") or 0)
@@ -669,6 +700,23 @@ def _device_recovery_text(site: Dict[str, Any]) -> str:
     return (
         f"✅ <b>{site.get('name', '?')}</b> — do'kon kompyuteri tuzaldi, hisobot yana to'planyapti."
     )
+
+
+#: Egaga yuboriladigan matn — texnik atamasiz.
+#:
+#: "temperature_c 91" degan xabar do'kon egasiga hech narsa aytmaydi.
+#: Bu yerda esa u aynan nima qilishi kerakligi yozilgan.
+_OWNER_TEMP_ALERT = (
+    "🌡 <b>Kompyuter qizib ketyapti</b>\n"
+    "Nazorat hozircha ishlayapti, lekin kompyuter o'zini himoya qilib "
+    "sekinlashishi yoki o'chib qolishi mumkin.\n\n"
+    "Nima qilish kerak:\n"
+    "• kompyuter yonidagi havo yo'lini bo'shating;\n"
+    "• changini tozalang (ayniqsa ventilyatorni);\n"
+    "• quyosh tushmaydigan, salqinroq joyga qo'ying."
+)
+
+_OWNER_TEMP_OK = "✅ Kompyuter sovidi — harorat me'yorga qaytdi."
 
 
 def plan_device_health_alerts(
@@ -700,18 +748,35 @@ def plan_device_health_alerts(
                 forget.append(site_id)
             continue
 
-        problem = _device_problem(health)
+        problem = _device_problem(health, prev)
         if problem is None:
             if prev is not None:
                 alerts.append(
-                    Alert(site_id, "ok", _device_recovery_text(site), remember=None, kind="device")
+                    Alert(
+                        site_id,
+                        "ok",
+                        _device_recovery_text(site),
+                        remember=None,
+                        kind="device",
+                        # Egaga faqat u xabar olgan muammo bo'yicha
+                        # tiklanish aytiladi.
+                        owner_text=_OWNER_TEMP_OK if prev == "temp" else None,
+                    )
                 )
             continue
         state, description = problem
         if prev != state:
             alerts.append(
                 Alert(
-                    site_id, state, _device_text(site, description), remember=state, kind="device"
+                    site_id,
+                    state,
+                    _device_text(site, description),
+                    remember=state,
+                    kind="device",
+                    # Qizish — egasi O'ZI hal qila oladigan yagona
+                    # muammo: chang tozalash, shamollatish, quyoshdan
+                    # olib qo'yish.  Qolganlari biz uchun texnik signal.
+                    owner_text=_OWNER_TEMP_ALERT if state == "temp" else None,
                 )
             )
 
@@ -937,6 +1002,14 @@ async def run_check(
             run.messages.append(alert.text)
             if owner_notify is not None and alert.kind == "connection":
                 await _notify_owner(owner_notify, alert, sites_by_id.get(alert.site_id))
+            elif owner_notify is not None and alert.owner_text:
+                # Egaga tayyor, sodda matn.  Aloqa xabari o'z shablonini
+                # ishlatadi (`_notify_owner`), bu esa muammoning o'ziga
+                # yozilgan matn — masalan qizish bo'yicha maslahat.
+                try:
+                    await owner_notify(alert.site_id, alert.owner_text)
+                except Exception:  # noqa: BLE001 — ichki xabar allaqachon ketdi
+                    logger.warning("Egaga xabar yuborilmadi: %s", alert.site_id, exc_info=True)
             # Holat faqat xabar **yetib borgandan keyin** yoziladi: aks holda
             # tarmoq uzilganda muammo "xabar berilgan" deb belgilanib,
             # ogohlantirish butunlay yo'qolardi.
@@ -1047,6 +1120,7 @@ __all__ = [
     "AlertConfig",
     "AlertRun",
     "AlertService",
+    "DEVICE_TEMP_ALERT_C",
     "DISK_ALERT_PERCENT",
     "SERVER_CPU_ALERT_PERCENT",
     "SERVER_RAM_ALERT_PERCENT",

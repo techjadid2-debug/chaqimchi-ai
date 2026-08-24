@@ -38,6 +38,19 @@ export type Dashboard = {
     plan?: { name?: string };
   };
   today: Record<string, unknown>;
+  /** Do'kon kompyuterining holati.  Hali heartbeat kelmagan bo'lsa
+   *  `null`; o'lchanmagan ko'rsatkich esa kalit sifatida ham kelmaydi. */
+  device?: {
+    received_at?: string;
+    cpu_percent?: number;
+    ram_percent?: number;
+    disk_percent?: number;
+    temperature_c?: number;
+    free_disk_gb?: number;
+    uptime_sec?: number;
+    app_version?: string;
+    hot?: boolean;
+  } | null;
   cameras: Camera[];
   camera_states: CameraState[];
   events: EventItem[];

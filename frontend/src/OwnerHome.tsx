@@ -98,6 +98,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
   const today = dashboard.today as Record<string, unknown>;
   const traffic = (today.traffic || {}) as Record<string, unknown>;
   const hourly = Array.isArray(traffic.hourly) ? (traffic.hourly as { hour: number; entered: number }[]) : [];
+  const device = dashboard.device;
   const attendance = useAttendance(siteId);
   const members = useTelegramMembers(siteId);
 
@@ -260,6 +261,28 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
             <button className="btn btn-wide" onClick={() => onNavigate("billing")}>Tarifni boshqarish</button>
           </div>
         </Card>
+
+        {/* Do'kon kompyuterining holati.
+            Egasi uchun bitta savolga javob: "kompyuter yaxshi
+            ishlayaptimi?".  Qizigan yoki diski to'lgan kompyuterni u
+            O'ZI hal qila oladi (chang tozalash, joyini almashtirish) —
+            biz aytmasak esa hech qachon bilmaydi.
+            Har qator faqat o'lchov bo'lsa chiziladi. */}
+        {device ? <Card>
+          <div className="card-head">
+            <div><h2>Qurilma holati</h2><p>Do‘kondagi kompyuter</p></div>
+            {device.hot ? <Pill state="offline">Qizib ketdi</Pill> : null}
+          </div>
+          <div className="card-body">
+            {device.hot ? <div className="alert-strip">Kompyuter qizib ketyapti. Havo yo‘lini bo‘shating va changini tozalang — aks holda u o‘zini himoya qilib sekinlashadi.</div> : null}
+            {typeof device.cpu_percent === "number" ? <div className="simple-row"><span>Protsessor</span><b>{device.cpu_percent.toFixed(0)}%</b></div> : null}
+            {typeof device.ram_percent === "number" ? <div className="simple-row"><span>Xotira</span><b>{device.ram_percent.toFixed(0)}%</b></div> : null}
+            {typeof device.disk_percent === "number" ? <div className="simple-row"><span>Disk</span><b>{device.disk_percent.toFixed(0)}%</b></div> : null}
+            {typeof device.free_disk_gb === "number" ? <div className="simple-row"><span>Bo‘sh joy</span><b>{device.free_disk_gb.toFixed(1)} GB</b></div> : null}
+            {typeof device.temperature_c === "number" ? <div className="simple-row"><span>Harorat</span><b className={device.hot ? "is-hot" : undefined}>{device.temperature_c.toFixed(0)}°C</b></div> : null}
+            {device.app_version ? <div className="simple-row"><span>Versiya</span><b>v{device.app_version}</b></div> : null}
+          </div>
+        </Card> : null}
 
         <Card>
           <div className="card-head">

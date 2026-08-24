@@ -5285,6 +5285,11 @@ async def owner_dashboard(
             },
         },
         "today": report,
+        # Do'kon kompyuterining holati.  Egasi uchun bu bitta savolga
+        # javob: "kompyuter yaxshi ishlayaptimi?"  Qizigan yoki diski
+        # to'lgan kompyuterni u o'zi hal qila oladi — biz aytmasak esa
+        # hech qachon bilmaydi.
+        "device": _owner_device_health(health),
         "cameras": store.list_cameras(owner.site_id, include_source=False),
         "camera_states": health.get("camera_states") or [],
         "events": event_rows,
@@ -5409,6 +5414,54 @@ async def owner_trend(
 @app.get("/api/v1/owner/stats")
 async def owner_stats(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
     return get_event_store().stats(owner.site_id)
+
+
+#: Do'kon kompyuteri shu haroratdan oshsa panel ogohlantiradi.
+#: `cloud/alerts.py:DEVICE_TEMP_ALERT_C` bilan bir xil — panel va
+#: Telegram bir xil chegarada gapirishi kerak, aks holda mijoz
+#: "panelda yashil-ku" deb Telegram xabariga ishonmay qo'yadi.
+OWNER_DEVICE_HOT_C = 85.0
+
+
+def _owner_device_health(health: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Eng so'nggi heartbeat'dan egaga ko'rsatiladigan qisqacha holat.
+
+    Faqat O'LCHANGAN ko'rsatkichlar qaytadi.  Windows qurilmalar hozircha
+    haroratni umuman yubormaydi (uni administrator huquqisiz o'qib
+    bo'lmaydi) — o'shanda kalit ham bo'lmaydi va panel o'sha qatorni
+    chizmaydi.  "0°C" yozish yolg'on bo'lardi.
+
+    `None` — hali birorta heartbeat kelmagan; panel kartani umuman
+    ko'rsatmaydi.
+    """
+    records = health.get("devices") or []
+    if not records:
+        return None
+    # `health()` yangidan eskiga qarab qaytaradi — birinchisi eng
+    # so'nggisi.  Bir nechta qurilma bo'lsa ham egaga bittasi
+    # ko'rsatiladi: uning do'konida odatda bitta kompyuter bo'ladi.
+    newest = records[0]
+    payload = newest.get("health") or {}
+
+    data: Dict[str, Any] = {"received_at": newest.get("received_at")}
+    for key in ("cpu_percent", "ram_percent", "disk_percent", "temperature_c"):
+        value = payload.get(key)
+        if isinstance(value, (int, float)):
+            data[key] = round(float(value), 1)
+    uptime = payload.get("uptime_sec")
+    if isinstance(uptime, (int, float)):
+        data["uptime_sec"] = int(uptime)
+    version = payload.get("app_version")
+    if version:
+        data["app_version"] = str(version)
+
+    free = payload.get("disk_free_bytes")
+    if isinstance(free, (int, float)) and free > 0:
+        data["free_disk_gb"] = round(float(free) / 1024**3, 1)
+
+    temperature = data.get("temperature_c")
+    data["hot"] = isinstance(temperature, float) and temperature >= OWNER_DEVICE_HOT_C
+    return data
 
 
 @app.get("/api/v1/owner/health")

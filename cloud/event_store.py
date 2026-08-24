@@ -1475,6 +1475,23 @@ class EventStore:
             ]
             if free_values:
                 current["disk_free_bytes"] = min(free_values)
+            # Apparat ko'rsatkichlari ham eng yomoni bo'yicha olinadi.
+            #
+            # Bungacha ular umuman qo'shilmasdi: birinchi qatordagi
+            # qiymat qolib ketardi.  Ya'ni ikki qurilmali do'konda
+            # sovuq kompyuter qizib ketganini YASHIRARDI va qizish
+            # ogohlantirishi hech qachon chiqmasdi.
+            #
+            # `None` qiymat "o'lchanmagan" degani — u hech qachon
+            # o'lchangan qiymatning o'rnini bosmasligi kerak.
+            for key in ("temperature_c", "cpu_percent", "ram_percent", "disk_percent"):
+                values = [
+                    float(value)
+                    for value in (current.get(key), payload.get(key))
+                    if isinstance(value, (int, float))
+                ]
+                if values:
+                    current[key] = max(values)
         return result
 
     def get_site_config(self, site_id: str) -> Dict[str, Any]:

@@ -2210,3 +2210,67 @@ def test_an_unknown_button_does_not_crash_the_bot(production_client, monkeypatch
     monkeypatch.setattr(main, "_answer_callback", _capture_answers(answered))
     assert _callback(client, "932", "eskirgan-tugma").status_code == 200
     assert answered
+
+
+# ── Do'kon kompyuterining holati egaga ko'rinadi ─────────────────────────
+#
+# Egasi uchun bu bitta savolga javob: "kompyuter yaxshi ishlayaptimi?".
+# Qizigan yoki diski to'lgan kompyuterni u O'ZI hal qila oladi (chang
+# tozalash, joyini almashtirish) — biz ko'rsatmasak esa hech qachon
+# bilmaydi va kompyuter o'chib qolganda "dastur buzildi" deb o'ylaydi.
+
+
+def test_a_shop_without_a_heartbeat_shows_no_device_card() -> None:
+    """Karta umuman chizilmaydi.  Bo'sh qiymatli karta "kompyuter
+    yomon" degan noto'g'ri taassurot berardi."""
+    assert main._owner_device_health({"devices": []}) is None
+
+
+def test_only_measured_values_reach_the_owner() -> None:
+    """Windows kompyuterlari haroratni yubormaydi (uni administrator
+    huquqisiz o'qib bo'lmaydi) — panel o'sha qatorni chizmaydi.
+    "0°C" yozish yolg'on bo'lardi."""
+    device = main._owner_device_health(
+        {
+            "devices": [
+                {
+                    "received_at": "2026-08-24T10:00:00",
+                    "health": {"cpu_percent": 41.5, "ram_percent": 62.0, "app_version": "0.6.14"},
+                }
+            ]
+        }
+    )
+
+    assert device["cpu_percent"] == 41.5
+    assert device["app_version"] == "0.6.14"
+    assert "temperature_c" not in device
+    assert "disk_percent" not in device
+
+
+def test_an_overheating_computer_is_flagged_for_the_owner() -> None:
+    device = main._owner_device_health({"devices": [{"health": {"temperature_c": 91.0}}]})
+
+    assert device["hot"] is True
+
+
+def test_a_normal_temperature_is_not_flagged() -> None:
+    device = main._owner_device_health({"devices": [{"health": {"temperature_c": 62.0}}]})
+
+    assert device["hot"] is False
+
+
+def test_the_panel_and_telegram_agree_on_what_hot_means() -> None:
+    """Chegara ikki joyda boshqacha bo'lsa, mijoz "panelda yashil-ku"
+    deb Telegram xabariga ishonmay qo'yardi."""
+    from cloud.alerts import DEVICE_TEMP_ALERT_C
+
+    assert main.OWNER_DEVICE_HOT_C == DEVICE_TEMP_ALERT_C
+
+
+def test_free_disk_space_is_shown_in_gigabytes() -> None:
+    """Baytdagi raqamni do'kon egasi o'qiy olmaydi."""
+    device = main._owner_device_health(
+        {"devices": [{"health": {"disk_free_bytes": 12 * 1024**3}}]}
+    )
+
+    assert device["free_disk_gb"] == 12.0

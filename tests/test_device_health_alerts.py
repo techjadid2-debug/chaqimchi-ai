@@ -39,6 +39,8 @@ def _health(**kwargs) -> dict:
         "analysis_errors": kwargs.get("analysis_errors", 0),
         "queue_errors": kwargs.get("queue_errors", 0),
         "disk_free_bytes": kwargs.get("disk_free_bytes", 40 * GB),
+        # Harorat ixtiyoriy: Windows qurilmalar uni yubormaydi.
+        **({"temperature_c": kwargs["temperature_c"]} if "temperature_c" in kwargs else {}),
     }
 
 
@@ -230,3 +232,130 @@ def test_a_broken_shop_pc_reaches_telegram(tmp_path, monkeypatch) -> None:
     run = asyncio.run(run_check(store, sender))
     assert run.sent == 1
     assert "tuzaldi" in sender.sent[-1].lower()
+
+
+# ── Kompyuter qizib ketishi ─────────────────────────────────────────────
+#
+# Chang bosgan korpus yoki to'xtagan ventilyator — do'konda eng ko'p
+# uchraydigan apparat nosozligi.  Uni egasining O'ZI hal qila oladi
+# (tozalash, joyini almashtirish), lekin biz aytmasak hech qachon
+# bilmaydi: kompyuter sekinlashadi, keyin o'chib qoladi va buni
+# "dastur buzildi" deb tushunadi.
+
+
+def test_an_overheating_shop_computer_is_reported() -> None:
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health(temperature_c=91.0)}, {})
+
+    assert len(alerts) == 1
+    assert alerts[0].state == "temp"
+    assert "91" in alerts[0].text
+
+
+def test_a_warm_but_healthy_computer_stays_quiet() -> None:
+    """84°C — issiq, lekin hali chegara emas.  Yozda deyarli har
+    kompyuter shu darajada isiydi va har biriga xabar yuborish
+    ogohlantirishlarni ma'nosiz qilardi."""
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health(temperature_c=84.0)}, {})
+
+    assert alerts == []
+
+
+def test_the_temperature_stays_reported_until_it_really_drops() -> None:
+    """Histerezis: 84,9/85,1 atrofida tebranish har 15 daqiqada
+    "qizidi/sovidi" juftini yubormasin."""
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(temperature_c=80.0)}, {"s1": "temp"}
+    )
+
+    # Hali sovimagan (75 dan yuqori) — holat o'zgarmadi, xabar ham yo'q.
+    assert alerts == []
+
+
+def test_cooling_down_is_announced_once() -> None:
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(temperature_c=60.0)}, {"s1": "temp"}
+    )
+
+    assert len(alerts) == 1
+    assert alerts[0].remember is None
+
+
+def test_a_lost_event_outranks_a_hot_computer() -> None:
+    """Navbat yiqilsa hodisa ALLAQACHON yo'qolyapti — uni keyin
+    tiklab bo'lmaydi.  Qizish esa hali zarar yetkazmagan."""
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(temperature_c=95.0, queue_errors=3)}, {}
+    )
+
+    assert alerts[0].state == "queue"
+
+
+def test_a_hot_computer_outranks_a_filling_disk() -> None:
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(temperature_c=95.0, disk_free_bytes=1 * GB)}, {}
+    )
+
+    assert alerts[0].state == "temp"
+
+
+def test_a_device_that_cannot_measure_temperature_never_overheats() -> None:
+    """Windows kompyuterlari haroratni umuman yubormaydi (uni
+    administrator huquqisiz o'qib bo'lmaydi).  Yo'q ko'rsatkich
+    hech qachon ogohlantirish bermasligi kerak."""
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health()}, {})
+
+    assert alerts == []
+
+
+def test_the_owner_is_told_about_heat_in_plain_words() -> None:
+    """Ichki chatdagi matn texnik; egaga esa u hech narsa aytmaydi.
+
+    Egaga aynan NIMA QILISH kerakligi yoziladi — bu u o'zi hal qila
+    oladigan yagona muammo turi.
+    """
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health(temperature_c=90.0)}, {})
+
+    owner_text = alerts[0].owner_text
+    assert owner_text
+    assert "chang" in owner_text.lower()
+
+
+def test_technical_problems_stay_out_of_the_owners_chat() -> None:
+    """«tahlil ishlamayapti» — bizning ishimiz, egasi uni tuzata
+    olmaydi.  Uni mijozga yuborish faqat tashvish qo'shardi."""
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(analyzed=4_000, analysis_errors=3_900)}, {}
+    )
+
+    assert alerts[0].owner_text is None
+
+
+def test_a_cool_computer_never_hides_a_hot_one(tmp_path) -> None:
+    """Bir do'konda ikki qurilma bo'lsa eng yomon ko'rsatkich olinadi.
+
+    Bungacha apparat ko'rsatkichlari umuman qo'shilmasdi — birinchi
+    qatordagi qiymat qolib ketardi.  Ya'ni sovuq kompyuter qizib
+    ketganini YASHIRARDI va ogohlantirish hech qachon chiqmasdi.
+    """
+    from cloud.event_store import EventStore
+
+    events = EventStore(sqlite_path=tmp_path / "events.db")
+    events.record_health("s1", "dev-cool", {"temperature_c": 45.0, "cpu_percent": 10.0})
+    events.record_health("s1", "dev-hot", {"temperature_c": 92.0, "cpu_percent": 97.0})
+
+    merged = events.latest_health_by_site()["s1"]
+
+    assert merged["temperature_c"] == 92.0
+    assert merged["cpu_percent"] == 97.0
+
+
+def test_an_unmeasured_value_never_replaces_a_measured_one(tmp_path) -> None:
+    """`None` — "o'lchanmagan" degani.  U o'lchangan qiymatning
+    o'rnini bosib, muammoni yashirib qo'ymasligi kerak."""
+    from cloud.event_store import EventStore
+
+    events = EventStore(sqlite_path=tmp_path / "events.db")
+    events.record_health("s1", "dev-hot", {"temperature_c": 90.0})
+    events.record_health("s1", "dev-windows", {"temperature_c": None})
+
+    assert events.latest_health_by_site()["s1"]["temperature_c"] == 90.0

@@ -176,3 +176,28 @@ def test_owner_pwa_worker_app_subdomainida_ochiq() -> None:
     text = CADDYFILES["chaqimchi"].read_text(encoding="utf-8")
     app_block = text.split("app.chaqimchi.uz {", 1)[1].split("partner.chaqimchi.uz {", 1)[0]
     assert "/owner-sw.js" in app_block
+
+
+def test_ulash_ekrani_uchun_zarur_yollar_app_subdomainida_ochiq() -> None:
+    """Ega qurilmani ulayotganda hali HISOBSIZ bo'lishi mumkin.
+
+    `device-connect` (qurilmani ko'rsatish) va `quick-trial` (ro'yxatdan
+    o'tish) `/api/v1/owner/*` ostiga tushmaydi, ya'ni ular alohida
+    ruxsat etilishi kerak.  Ro'yxatda bo'lmasa panel «Havola eskirgan»
+    deb ko'rsatadi va sabab hech qayerda ko'rinmaydi: Caddy jimgina 404
+    qaytaradi, bulut log'ida esa hech narsa yo'q.
+
+    2026-08-24 da deploy'dan keyin aynan shu bo'ldi.
+    """
+    text = CADDYFILES["chaqimchi"].read_text(encoding="utf-8")
+    app_block = text.split("app.chaqimchi.uz {", 1)[1].split("partner.chaqimchi.uz {", 1)[0]
+
+    for path in ("/api/v1/public/device-connect", "/api/v1/public/quick-trial"):
+        assert path in app_block, (
+            f"{path} app.chaqimchi.uz ruxsat ro'yxatida yo'q — "
+            "qurilmani ulash ekrani ishlamaydi"
+        )
+    # Tasdiqlash va kirish allaqachon qamrab olingan — ular ham
+    # yo'qolmasin.
+    assert "/api/v1/owner/*" in app_block
+    assert "/api/v1/auth/*" in app_block

@@ -307,15 +307,37 @@ def connect_state() -> Dict[str, Any]:
 def panel_url() -> str:
     """Bulut panelining manzili.
 
-    Ulangan bo'lsa — bulut aytgan manzil (u `/edge/config` orqali ham
-    yangilanadi); aks holda build vaqtida yozilgan manzildan tuziladi.
+    Ulangan bo'lsa — bulut aytgan manzil (u `hello` va `/edge/config`
+    orqali keladi); aks holda build vaqtidagi API manzilidan tuziladi.
     """
     raw = config_store.read_raw().get("cloud_sync") or {}
     stored = str(raw.get("panel_url") or "")
     if stored.startswith("http"):
         return stored
+    # Bulut hali aytmagan bo'lsa API manzilidan chiqaramiz.  Bu holat
+    # haqiqiy: pairing kod bilan o'rnatilgan qurilma birinchi
+    # `/edge/config` gacha ulangan, lekin panel manzilini bilmaydi.
     base = str(raw.get("url") or default_cloud_url())
-    return f"{base.rstrip('/')}/owner" if base else ""
+    return f"{_panel_host(base)}/owner" if base else ""
+
+
+def _panel_host(api_base: str) -> str:
+    """`https://api.chaqimchi.uz` → `https://app.chaqimchi.uz`.
+
+    Panel API bilan BOSHQA xostda: `api.` faqat `/api/*` ni o'tkazadi va
+    `/owner` uchun 404 beradi (`deploy/Caddyfile.chaqimchi`).  Almashuvsiz
+    mijozga o'lik havola ko'rsatilardi.
+
+    Tanib bo'lmaydigan manzil (masalan `http://127.0.0.1:8750` — ishlab
+    chiqish) o'zgarishsiz qoladi: u yerda panel ham shu xostda.
+    """
+    base = api_base.rstrip("/")
+    parts = urlparse(base)
+    host = parts.hostname or ""
+    if not host.startswith("api."):
+        return base
+    port = f":{parts.port}" if parts.port else ""
+    return f"{parts.scheme}://app.{host[4:]}{port}"
 
 
 def _connect_is_live(state: Dict[str, Any]) -> bool:

@@ -55,9 +55,10 @@ Asosiy xizmatlar:
 ## Windows lokal o‘rnatish (asosiy yo‘l)
 
 Do‘kon egasi mavjud Windows kompyuteriga o‘zi o‘rnatadi: `Chaqimchi_AI_Setup.exe`
-→ Keyingi → Keyingi → Tayyor → brauzerda sozlash ustasi ochiladi. Python va AI
-modeli o‘rnatuvchi ichida, internet talab qilinmaydi. Kamera ro‘yxati lokal
-konfigda turadi, ya’ni cloud ulanmasa ham tahlil ishlaydi.
+→ Keyingi → Keyingi → Tayyor → brauzerda **bulut paneli** ochiladi: ega o‘sha
+yerda ro‘yxatdan o‘tadi, qurilmani tasdiqlaydi va kamerani sozlaydi. Python va
+AI modeli o‘rnatuvchi ichida, o‘rnatish uchun internet talab qilinmaydi. Kamera
+ro‘yxati lokal konfigda ham turadi, ya’ni cloud uzilsa tahlil to‘xtamaydi.
 
 ```bash
 python scripts/build_windows_payload.py     # → build/payload
@@ -66,6 +67,8 @@ makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.ex
 
 Mijozga beriladigan qadam-baqadam yo‘riqnoma saytda: `/install`.
 Texnik tafsilot: [docs/INSTALLER.md](docs/INSTALLER.md) 0-bo‘lim.
+Ulanish va bulutdan skanerlash oqimi:
+[docs/BULUTDAN_SOZLASH.md](docs/BULUTDAN_SOZLASH.md).
 Reliz imzolash va masofadan yangilash (15 daqiqalik tekshiruv, avto-rollback):
 [docs/RELIZ_VA_OTA.md](docs/RELIZ_VA_OTA.md).
 
@@ -95,6 +98,7 @@ uchun sotuvda ehtiyotkor va’da beriladi (batafsil:
 - [Sotqin R1 / Box](docs/SOTQIN.md)
 - [Retail pipeline](chaqimchi_ai/retail/README.md)
 - [Installer](docs/INSTALLER.md)
+- [Bulutdan sozlash](docs/BULUTDAN_SOZLASH.md)
 - [Reliz chiqarish va OTA](docs/RELIZ_VA_OTA.md)
 - [Production runbook](docs/PRODUCTION_RUNBOOK.md)
 - [To‘lov](docs/TOLOV.md)

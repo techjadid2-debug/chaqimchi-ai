@@ -1544,6 +1544,17 @@ def main() -> None:
     counters.bump("panel_boots")
 
     _auto_pair_if_handed_off()
+    # Cloudda sozlangan bo'lsa, zanjir ishga tushishidan **oldin** olib
+    # tushamiz — aks holda birinchi daqiqada kamerasiz ishga tushib,
+    # keyin qayta start bo'lardi.
+    try:
+        cloud_config.sync_once()
+        cloud_config.send_heartbeat(supervisor.status())
+    except Exception:  # noqa: BLE001
+        logger.exception("Boshlang'ich cloud sozlamasi olinmadi")
+    # Brauzer manzili sinxrondan KEYIN: `/edge/config` panel manzilini
+    # olib keladi.  Oldin hisoblansa, pairing kod bilan o'rnatilgan
+    # qurilma birinchi ochilishda taxminiy manzilga borardi.
     browser_url = _first_run_url(url)
 
     print("=" * 62)
@@ -1554,14 +1565,6 @@ def main() -> None:
     print(f"  Sozlamalar: {paths.data_dir()}")
     print("=" * 62)
 
-    # Cloudda sozlangan bo'lsa, zanjir ishga tushishidan **oldin** olib
-    # tushamiz — aks holda birinchi daqiqada kamerasiz ishga tushib,
-    # keyin qayta start bo'lardi.
-    try:
-        cloud_config.sync_once()
-        cloud_config.send_heartbeat(supervisor.status())
-    except Exception:  # noqa: BLE001
-        logger.exception("Boshlang'ich cloud sozlamasi olinmadi")
     _autostart_if_ready()
     _start_config_sync()
     if _browser_enabled():

@@ -298,6 +298,37 @@ def test_without_internet_the_wizard_is_still_offered(monkeypatch) -> None:
     assert local_app._first_run_url("http://127.0.0.1:8760") == "http://127.0.0.1:8760"
 
 
+def test_the_panel_lives_on_a_different_host_than_the_api(monkeypatch) -> None:
+    """`api.` xosti faqat `/api/*` ni o'tkazadi va `/owner` uchun 404
+    beradi (`deploy/Caddyfile.chaqimchi`).
+
+    Bu holat haqiqiy: pairing kod bilan o'rnatilgan qurilma birinchi
+    `/edge/config` gacha ulangan, lekin panel manzilini bilmaydi —
+    almashuvsiz mijozga o'lik havola ko'rsatilardi.
+    """
+    assert cloud_link._panel_host("https://api.chaqimchi.uz") == "https://app.chaqimchi.uz"
+    assert cloud_link._panel_host("https://api.chaqimchi.uz/") == "https://app.chaqimchi.uz"
+    # Ishlab chiqish manzili o'zgarmaydi — u yerda panel ham shu xostda.
+    assert cloud_link._panel_host("http://127.0.0.1:8750") == "http://127.0.0.1:8750"
+    assert cloud_link._panel_host("https://chaqimchi.uz") == "https://chaqimchi.uz"
+
+
+def test_the_cloud_wins_over_the_guessed_panel_address(tmp_path, monkeypatch) -> None:
+    from chaqimchi_ai.local import config_store
+
+    config_store.update(
+        "cloud_sync",
+        {
+            "enabled": True,
+            "url": "https://api.chaqimchi.uz",
+            "device_token": "t",
+            "panel_url": "https://panel.example.uz/owner",
+        },
+    )
+
+    assert cloud_link.panel_url() == "https://panel.example.uz/owner"
+
+
 def test_a_broken_cloud_never_blocks_the_first_run(monkeypatch) -> None:
     from chaqimchi_ai.local import app as local_app
 

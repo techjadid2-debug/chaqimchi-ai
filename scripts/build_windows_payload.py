@@ -313,7 +313,8 @@ if not exist "python\\python.exe" (
 
 echo.
 echo   Chaqimchi AI ishga tushmoqda...
-echo   Boshqaruv paneli brauzerda ochiladi: http://localhost:8760
+echo   Boshqaruv panelingiz brauzerda ochiladi.
+echo   (Qurilma holati: http://localhost:8760)
 echo.
 echo   Bu oynani yopmang - nazorat shu oynada ishlayapti.
 echo   (Kompyuter yonganda avtomatik ishga tushirish yoqilgan bo'lsa,
@@ -354,19 +355,33 @@ READ_ME = """Chaqimchi AI - do'kon nazorati
 Ishga tushirish
 ---------------
 Ish stolidagi "Chaqimchi AI" yorlig'ini bosing.
-Brauzerda sozlash oynasi ochiladi: http://localhost:8760
+Brauzerda boshqaruv panelingiz ochiladi.
 
 Nazorat kompyuter yonganda o'zi ishga tushadi (o'rnatishda "Kompyuter
 yonganda avtomatik ishga tushsin" belgilangan bo'lsa).  Tizimga kirish
 ham shart emas.  Yorliqni bosganingizda dastur allaqachon ishlayotgan
-bo'lsa, ikkinchi nusxa ochilmaydi - shunchaki panel ko'rinadi.
+bo'lsa, ikkinchi nusxa ochilmaydi.
 
 Birinchi marta nima qilish kerak
 --------------------------------
-1. Kamerangiz yoki NVR manzilini kiriting (dastur o'zi ham qidiradi).
-2. Tasvir kelganiga ishonch hosil qiling.
-3. Kirish eshigi ustidan chiziq torting - shundan keyin odam sanaladi.
-4. "Saqlash va ishga tushirish" tugmasini bosing.
+1. Ochilgan panelda ro'yxatdan o'ting: telefon raqami, o'zingiz
+   tanlagan login va parol.
+2. "Bu kompyuterni ulaymizmi?" degan savolga ha deb javob bering.
+   Ekrandagi kod dastur oynasidagi kod bilan bir xil bo'lishi kerak.
+3. "Kamerani ulash" bo'limida "Qidirish" ni bosing - dastur do'kon
+   tarmog'idagi kameralarni o'zi topadi.
+4. "Chiziq va zonalar" bo'limida kirish eshigi ustidagi chiziqni
+   joyiga surib qo'ying.
+
+Hammasini telefondan ham qilsangiz bo'ladi - bu kompyuter oldida
+o'tirish shart emas.
+
+Qurilma holati
+--------------
+http://localhost:8760 - shu kompyuterdagi sahifa.  Nazorat
+ishlayaptimi, kameralar ulanganmi, internet bormi - shu yerda
+ko'rinadi.  Internet uzilsa nazorat TO'XTAMAYDI: hodisalar shu
+kompyuterda saqlanadi va aloqa tiklangach o'zi jo'naydi.
 
 Sozlamalar va jurnal qayerda
 ----------------------------
@@ -447,15 +462,28 @@ def step_version() -> None:
     parts = (version.split("+")[0].split("-")[0].split(".") + ["0", "0", "0"])[:4]
     numeric = ".".join(part if part.isdigit() else "0" for part in parts)
 
+    # Panel manzili o'rnatuvchiga ham kerak: Start-menyu yorlig'i va
+    # yakuniy sahifa matni endi localhost emas, bulut paneliga
+    # yo'naltiradi.  Manba bitta — `cloud_link._panel_host`, aks holda
+    # `api.`→`app.` qoidasi ikki joyda ajralib ketardi.
+    panel = ""
+    if DEFAULT_CLOUD_URL:
+        from chaqimchi_ai.local.cloud_link import _panel_host
+
+        panel = f"{_panel_host(DEFAULT_CLOUD_URL)}/owner"
+
     target = BUILD / "version.nsh"
     target.write_text(
         "; Avtomatik yaratilgan — qo'lda tahrirlamang.\n"
         "; Manba: chaqimchi_ai/__init__.py (`build_windows_payload.py` yozadi).\n"
         f'!define APP_VERSION "{version}"\n'
-        f'!define APP_VERSION_NUMERIC "{numeric}"\n',
+        f'!define APP_VERSION_NUMERIC "{numeric}"\n'
+        + (f'!define APP_PANEL_URL "{panel}"\n' if panel else ""),
         encoding="utf-8",
     )
     log.info("     ✓ versiya: %s", version)
+    if panel:
+        log.info("     ✓ panel: %s", panel)
 
 
 def directory_size(path: Path) -> int:

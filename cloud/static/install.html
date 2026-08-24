@@ -27,13 +27,13 @@
     <h1>Windows kompyuteringizga o‘rnatamiz</h1>
     <p class="hero-text">
       Boshidan oxirigacha <b>10 daqiqa</b>. Dasturchi bo‘lish shart emas —
-      quyidagi 8 qadamni ketma-ket bajarasiz, xolos.
+      quyidagi 6 qadamni ketma-ket bajarasiz, xolos.
     </p>
 
     <!-- ── Yuklab olish ────────────────────────────────────────────── -->
     <section class="utility-card" id="downloadCard">
       <h2>Dasturni yuklab olish</h2>
-      <p>Python, sun’iy intellekt modeli va barcha kutubxonalar o‘rnatuvchi ichida. Internet faqat yuklab olish uchun kerak.</p>
+      <p>Python, sun’iy intellekt modeli va barcha kutubxonalar o‘rnatuvchi ichida — o‘rnatishning o‘zi uchun internet kerak emas. Panelga ulanish va hisobotlar uchun esa do‘konda internet bo‘lishi kerak.</p>
 
       <div id="guideDownloadReady" hidden>
         <a class="button button-light" id="guideDownloadBtn" href="/api/v1/public/download-installer">
@@ -120,63 +120,51 @@
       </li>
 
       <li class="guide-step">
-        <h3>Sozlash oynasi ochiladi</h3>
+        <h3>Panelingiz ochiladi — ro‘yxatdan o‘ting</h3>
         <p>
-          O‘rnatish tugagach brauzer o‘zi ochiladi va sozlash ustasi
-          ko‘rinadi.
+          O‘rnatish tugagach brauzer o‘zi ochiladi. U yerda telefon
+          raqamingizni, o‘zingiz tanlagan login va parolni kiritasiz.
         </p>
         <p class="do">
-          Ochilmasa brauzerni qo‘lda oching va manzilga yozing:
-          <code>http://localhost:8760</code>
-        </p>
-      </li>
-
-      <li class="guide-step">
-        <h3>Kamerani ulang</h3>
-        <p>
-          Dastur avval tarmoqni o‘zi qidiradi. Topilmasa qo‘lda kiritasiz:
-          NVR yoki kamera IP manzili, foydalanuvchi nomi va parol.
-        </p>
-        <p class="do">
-          <b>“Tasvirni tekshirish”</b> tugmasini bosing — kameradan haqiqiy
-          rasm kelishi kerak. Rasm kelmasa saqlamang, avval quyidagi
-          “Nima ishlamayapti?” bo‘limini o‘qing.
+          So‘ng <b>“Bu kompyuterni ulaymizmi?”</b> degan savolga <b>Ha</b>
+          deb javob bering. Ekrandagi kod dastur oynasidagi kod bilan bir
+          xil bo‘lishi kerak.
         </p>
         <p class="why">
-          NVR’da Chaqimchi uchun <b>alohida foydalanuvchi</b> yarating va unga
-          faqat ko‘rish huquqini bering. Parol shu kompyuterdan chiqmaydi.
+          Kod ikkala ekranda ko‘rsatiladi — shu tufayli boshqa birovning
+          kompyuterini xato tasdiqlab yubormaysiz.
         </p>
       </li>
 
       <li class="guide-step">
-        <h3>Kirish chizig‘ini chizing</h3>
+        <h3>Kamerani va kirish chizig‘ini panelda sozlang</h3>
         <p>
-          Kamera tasviri ustida eshik oldidan o‘tuvchi chiziq tortasiz —
-          ikki nuqtani bosasiz.
+          Panelda <b>“Kamerani ulash”</b> → <b>“Qidirish”</b>. Dastur
+          do‘kon tarmog‘idagi kameralarni o‘zi topadi va sinov rasmini
+          ko‘rsatadi. Topilmasa NVR manzilini qo‘lda kiritasiz.
         </p>
         <p class="do">
-          Yashil o‘q do‘kon <b>ichkarisini</b> ko‘rsatishi kerak. Teskari
-          bo‘lsa “Yo‘nalishni almashtirish” tugmasini bosing.
+          So‘ng <b>“Chiziq va zonalar”</b> bo‘limida kirish chizig‘ini
+          eshik oldiga surib qo‘ying. Chiziq tayyor holda qo‘yiladi —
+          uni faqat joyiga surasiz.
         </p>
         <p class="why">
-          <b>Chiziqsiz hech narsa sanalmaydi.</b> Tizim aynan shu chiziqni
-          kesib o‘tgan odamlarni hisoblaydi.
-        </p>
-      </li>
-
-      <li class="guide-step">
-        <h3>Ishga tushiring</h3>
-        <p>
-          Ish vaqtini va istasangiz Telegram botni kiritasiz, so‘ng
-          <b>“Saqlash va ishga tushirish”</b>.
-        </p>
-        <p class="do">
-          Panelda birinchi raqamlar <b>10–20 daqiqada</b> paydo bo‘ladi —
-          birinchi mijoz eshikdan kirganda.
+          <b>Chiziqsiz hech narsa sanalmaydi.</b> Buni telefondan ham
+          qilsangiz bo‘ladi — do‘kon kompyuteri oldida o‘tirish shart
+          emas. Birinchi raqamlar 10–20 daqiqada paydo bo‘ladi.
         </p>
       </li>
 
     </ol>
+
+    <section class="utility-card">
+      <h3>NVR paroli haqida</h3>
+      <p>
+        NVR’da Chaqimchi uchun <b>alohida foydalanuvchi</b> yarating va
+        unga faqat ko‘rish huquqini bering. Parol shifrlangan holda
+        saqlanadi va panel sahifasida hech qachon ko‘rsatilmaydi.
+      </p>
+    </section>
 
     <!-- ── Muammolar ───────────────────────────────────────────────── -->
     <section class="utility-card">
@@ -185,10 +173,15 @@
       <details class="guide-fix">
         <summary>Brauzer o‘zi ochilmadi</summary>
         <p>
-          Brauzerni qo‘lda oching va manzil qatoriga
-          <code>http://localhost:8760</code> deb yozing. Sahifa ochilmasa,
-          ish stolidagi <b>Chaqimchi AI</b> yorlig‘ini bosing va qora oyna
-          ochilib turganiga ishonch hosil qiling — u yopilsa dastur to‘xtaydi.
+          Start menyusidan <b>Chaqimchi AI → Boshqaruv paneli</b> ni
+          oching. Ish stolidagi <b>Chaqimchi AI</b> yorlig‘ini bosib,
+          qora oyna ochilib turganiga ham ishonch hosil qiling — u
+          yopilsa dastur to‘xtaydi.
+        </p>
+        <p>
+          Dastur ishlayaptimi-yo‘qmi tekshirish uchun shu kompyuterda
+          <code>http://localhost:8760</code> ni oching — u yerda qurilma
+          holati ko‘rinadi.
         </p>
       </details>
 

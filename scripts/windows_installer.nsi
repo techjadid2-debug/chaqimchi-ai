@@ -48,6 +48,14 @@ Unicode True
 !define APP_PUBLISHER "Chaqimchi AI"
 !define APP_PORT     "8760"
 !define APP_URL      "http://localhost:${APP_PORT}"
+
+; Bulut paneli — mijozning ASOSIY yo'li.  `build_windows_payload.py` uni
+; `version.nsh` ga yozadi (`CHAQIMCHI_DEFAULT_CLOUD_URL` dan).  Cloudsiz
+; sinov paketida yo'q, o'shanda lokal sahifa qoladi.
+!ifndef APP_PANEL_URL
+  !define APP_PANEL_URL "${APP_URL}"
+!endif
+
 !define REG_UNINSTALL "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChaqimchiAI"
 !define REG_RUN      "Software\Microsoft\Windows\CurrentVersion\Run"
 
@@ -93,7 +101,7 @@ VIAddVersionKey "LegalCopyright" "© ${APP_PUBLISHER}"
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\O'QING.txt"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Qisqacha yo'riqnomani o'qish"
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
-!define MUI_FINISHPAGE_TEXT "${APP_NAME} o'rnatildi.$\r$\n$\r$\nIshga tushirgach brauzerda sozlash oynasi ochiladi: ${APP_URL}$\r$\n$\r$\nU yerda kamerangizni ulaysiz va kirish chizig'ini chizasiz."
+!define MUI_FINISHPAGE_TEXT "${APP_NAME} o'rnatildi.$\r$\n$\r$\nIshga tushirgach brauzerda boshqaruv panelingiz ochiladi. Ro'yxatdan o'ting yoki hisobingizga kiring — kamerani o'sha yerdan ulaysiz.$\r$\n$\r$\nBu kompyuter oldida o'tirish shart emas: panelni telefondan ham ochsangiz bo'ladi."
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -126,7 +134,11 @@ Section "!${APP_NAME} (majburiy)" SecMain
 
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\Chaqimchi_AI.bat" "" "$INSTDIR\app.ico" 0
-  CreateShortcut "$SMPROGRAMS\${APP_NAME}\Boshqaruv paneli.lnk" "${APP_URL}" "" "$INSTDIR\app.ico" 0
+  ; Ikki yorliq, ikki xil savol uchun.  Ilgari bittasi bor edi va u
+  ; localhost'ga ketardi — mijoz "hisobotim qayerda?" degan savol bilan
+  ; qurilma sahifasiga tushib qolardi.
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\Boshqaruv paneli.lnk" "${APP_PANEL_URL}" "" "$INSTDIR\app.ico" 0
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\Qurilma holati.lnk" "${APP_URL}" "" "$INSTDIR\app.ico" 0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME} ni o'chirish.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
 
   ; ── Pairing kodni fayl nomidan olish ────────────────────────────────
@@ -502,6 +514,7 @@ Section "Uninstall"
   Delete "$DESKTOP\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Boshqaruv paneli.lnk"
+  Delete "$SMPROGRAMS\${APP_NAME}\Qurilma holati.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME} ni o'chirish.lnk"
   RMDir "$SMPROGRAMS\${APP_NAME}"
 

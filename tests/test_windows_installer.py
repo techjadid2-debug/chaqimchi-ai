@@ -636,3 +636,66 @@ def test_eski_nusxa_o_lganini_tekshirmasdan_davom_etilmaydi() -> None:
         "o'ldirishdan keyin jarayonlar ro'yxati bo'shagani tekshirilmayapti"
     )
     assert "for ($$i = 0; $$i -lt 20" in text, "qayta tekshirish sikli yo'q"
+
+
+# ── Mijoz bulut paneliga boradi, localhost'ga emas ──────────────────────
+#
+# O'rnatishdan keyingi sozlash bulutga ko'chdi.  O'rnatuvchi matnlari va
+# yorliqlari ham shunga qarashi kerak — aks holda mijoz "hisobotim
+# qayerda?" degan savol bilan qurilma sahifasiga tushib qolardi.
+
+
+def test_the_installer_creates_two_shortcuts_for_two_questions() -> None:
+    """«Hisobotim qayerda?» va «Dastur ishlayaptimi?» — ikki xil savol.
+
+    Ilgari bitta yorliq bor edi va u localhost'ga ketardi.
+    """
+    source = _nsis_code()
+
+    assert 'Boshqaruv paneli.lnk" "${APP_PANEL_URL}"' in source
+    assert 'Qurilma holati.lnk" "${APP_URL}"' in source
+    # O'chirishda ikkalasi ham tozalansin — qolgan yorliq keyingi
+    # o'rnatishda ishlamaydigan havolaga aylanardi.
+    assert 'Delete "$SMPROGRAMS\\${APP_NAME}\\Qurilma holati.lnk"' in source
+
+
+def test_the_panel_address_comes_from_the_build_not_from_a_guess() -> None:
+    """`version.nsh` uni `CHAQIMCHI_DEFAULT_CLOUD_URL` dan oladi.
+
+    Cloudsiz sinov paketida esa lokal sahifaga tushadi — ishlamaydigan
+    yorliq chiqmasin.
+    """
+    source = _nsis_code()
+    builder = BUILDER.read_text(encoding="utf-8")
+
+    assert "!ifndef APP_PANEL_URL" in source
+    assert '!define APP_PANEL_URL "${APP_URL}"' in source
+    assert "APP_PANEL_URL" in builder
+    # Manba BITTA: `api.`→`app.` qoidasi ikki joyda ajralib ketmasin.
+    assert "_panel_host" in builder
+
+
+def test_the_finish_page_no_longer_promises_a_localhost_wizard() -> None:
+    source = _nsis_code()
+    finish = source[source.index("MUI_FINISHPAGE_TEXT") :].split("\n", 1)[0]
+
+    assert "localhost" not in finish
+    assert "panel" in finish.lower()
+
+
+def test_the_readme_explains_the_cloud_flow_first() -> None:
+    """`O'QING.txt` — mijoz o'qiydigan yagona hujjat.
+
+    Unda birinchi bo'lib ro'yxatdan o'tish turishi kerak, lokal sehrgar
+    emas: sehrgar endi zaxira yo'l.
+    """
+    source = BUILDER.read_text(encoding="utf-8")
+    start = source.index("READ_ME = ")
+    readme = source[start : source.index('"""', source.index('"""', start) + 3)]
+
+    assert "ro'yxatdan o'ting" in readme.lower()
+    # Internet uzilganda nazorat davom etishi AYTILISHI kerak — mijoz
+    # aks holda kamera ham o'chgan deb o'ylaydi.
+    assert "TO'XTAMAYDI" in readme
+    # Qurilma sahifasi ham qoladi, lekin ikkinchi o'rinda.
+    assert readme.index("ro'yxatdan o'ting") < readme.index("localhost")

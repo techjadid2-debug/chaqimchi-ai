@@ -4,7 +4,7 @@ Ikkita yo‘l bor va ular bir-biridan mustaqil:
 
 | Yo‘l | Kim uchun | Qurilma | Cloud kerakmi |
 |---|---|---|---|
-| **Windows lokal** (0-bo‘lim) | do‘kon egasi o‘zi o‘rnatadi | mavjud Windows 10/11 | yo‘q |
+| **Windows lokal** (0-bo‘lim) | do‘kon egasi o‘zi o‘rnatadi | mavjud Windows 10/11 | ha (internetsiz — usta oqimi) |
 | **Sotqin R1** (1–3-bo‘limlar) | o‘rnatuvchi mutaxassis | Intel N100 mini-PC | ha |
 
 ---
@@ -12,12 +12,34 @@ Ikkita yo‘l bor va ular bir-biridan mustaqil:
 ## 0. Windows lokal o‘rnatish (mijoz o‘zi)
 
 Mijoz `Chaqimchi_AI_Setup.exe` ni saytdan yuklab oladi. Ichida Python, AI
-modeli va barcha kutubxonalar bor — **internet ham, `pip` ham kerak emas**.
+modeli va barcha kutubxonalar bor — o‘rnatish uchun **`pip` kerak emas**.
+
+Ikki oqim bor. **Ega oqimi asosiy**, usta oqimi esa murakkab holatlar
+uchun qoladi.
+
+### Ega oqimi (standart)
 
 1. Faylni ishga tushiradi → Windows ruxsat so‘raydi (UAC) → “Ha”.
 2. Keyingi → Keyingi → O‘rnatish → Tayyor.
-3. Brauzerda sozlash ustasi ochiladi: `http://localhost:8760`.
-4. Kamera qo‘shadi → kadr ko‘rinadi → kirish chizig‘ini chizadi → ishga tushiradi.
+3. Brauzerda **bulut paneli** ochiladi (`app.chaqimchi.uz/owner?connect=…`).
+4. Ro‘yxatdan o‘tadi (telefon + o‘zi tanlagan login/parol) yoki kiradi.
+5. «Bu kompyuterni ulaymizmi?» → tasdiqlash kodini solishtiradi → **Ha**.
+6. Panelda kamerani qidiradi va kirish chizig‘ini joyiga suradi.
+
+Qurilma bu yerda hech qanday kod so‘ramaydi: u o‘zini bulutga
+tanishtiradi (`device-hello`) va egasi tasdiqlagach hisob ma’lumotlarini
+o‘zi oladi. Batafsil: **`docs/BULUTDAN_SOZLASH.md`**.
+
+### Usta oqimi (zaxira)
+
+Admin yoki usta pairing kod yaratadi, mijoz `?code=A1B2C3` havolasi bilan
+yuklab oladi. Kod fayl nomiga singdiriladi va dastur birinchi ishga
+tushganda o‘zi ulanadi. Sozlash lokal sehrgarda: `http://localhost:8760/setup`.
+
+Bu yo‘l ikki holatda kerak:
+
+* **internetsiz o‘rnatish** — do‘konda hali aloqa yo‘q;
+* **murakkab NVR** — bulutdan skanerlash natija bermagan.
 
 Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
 **“Qo‘shimcha ma’lumot” → “Baribir ishga tushirish”**.
@@ -32,7 +54,9 @@ Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
 |---|---|
 | Dastur | `C:\Program Files\Chaqimchi AI` (faqat o‘qish) |
 | Sozlama, log, hodisalar | `C:\ProgramData\Chaqimchi` |
-| Panel | `http://localhost:8760` (faqat shu kompyuterda) |
+| Boshqaruv paneli | `https://app.chaqimchi.uz/owner` (telefondan ham) |
+| Qurilma holati | `http://localhost:8760` (faqat shu kompyuterda) |
+| Usta sehrgari | `http://localhost:8760/setup` |
 | Avtostart | Rejalashtirilgan vazifa `Chaqimchi AI` (SYSTEM, `ONSTART`) |
 
 ### Avtomatik ishga tushish qanday ishlaydi

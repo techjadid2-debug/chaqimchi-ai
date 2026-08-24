@@ -98,6 +98,150 @@ export async function loginWithLinkKey(): Promise<boolean> {
   }
 }
 
+/* ── Do'kon kompyuterini ulash ─────────────────────────────────────
+ *
+ * Qurilma o'zini bulutga tanishtiradi va brauzerni
+ * `/owner?connect=<token>` da ochadi.  Ega shu sahifada ro'yxatdan
+ * o'tadi (yoki kiradi) va kompyuterni o'z do'koniga biriktiradi. */
+
+export type PendingDevice = {
+  pending_id: string;
+  verify_code: string;
+  label: string;
+  product_name: string;
+  app_version: string;
+  os_name: string;
+  local_ip_masked: string;
+};
+
+/** Manzildan `connect` tokenini oladi va uni DARHOL olib tashlaydi.
+ *
+ * Token tarixda, ulashilgan skrinshotda yoki `Referer` sarlavhasida
+ * qolib ketmasligi kerak — `loginWithLinkKey()` dagi bilan bir xil
+ * mulohaza. */
+export function takeConnectToken(): string {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("connect");
+  if (!token) return "";
+  params.delete("connect");
+  const query = params.toString();
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+  );
+  return token;
+}
+
+/** Tasdiqdan oldin: qaysi kompyuter ulanmoqchi?
+ *
+ * Autentifikatsiyasiz endpoint, shuning uchun undan faqat ko'z bilan
+ * solishtirish uchun kerak bo'lgan narsa keladi. */
+export async function peekConnect(token: string): Promise<PendingDevice | null> {
+  try {
+    return await api<PendingDevice>(
+      `/api/v1/public/device-connect?token=${encodeURIComponent(token)}`,
+      "owner",
+    );
+  } catch {
+    return null;
+  }
+}
+
+export type TrialBody = {
+  phone: string;
+  full_name: string;
+  company: string;
+  username: string;
+  password: string;
+  consent: boolean;
+  plan?: string;
+};
+
+/** Yangi do'kon ochadi — mijoz login va parolni O'ZI tanlaydi. */
+export async function registerTrial(body: TrialBody) {
+  return api<{ site_id: string; username: string; trial_days: number }>(
+    "/api/v1/public/quick-trial",
+    "owner",
+    { method: "POST", body: JSON.stringify({ ...body, website: "" }) },
+  );
+}
+
+export async function claimDevice(connectToken: string) {
+  return api<{ site_id: string; label: string; verify_code: string }>(
+    "/api/v1/owner/devices/claim",
+    "owner",
+    { method: "POST", body: JSON.stringify({ connect_token: connectToken }) },
+  );
+}
+
+/* ── Kamera qidirish ──────────────────────────────────────────────── */
+
+export type ScanKind = "lan_scan" | "onvif" | "channels" | "probe";
+
+export type ScanStream = {
+  stream_ref: number;
+  safe_url: string;
+  name?: string;
+  encoding?: string;
+  width?: number;
+  height?: number;
+  works?: boolean;
+  warning?: string;
+  ip?: string;
+  vendor_hint?: string;
+  has_onvif?: boolean;
+  has_rtsp?: boolean;
+};
+
+export type ScanJob = {
+  job_id: string;
+  kind: ScanKind;
+  status: "queued" | "running" | "done" | "failed" | "expired";
+  progress: number;
+  note: string;
+  error: string;
+  has_frame: boolean;
+  result?: { streams?: ScanStream[]; cameras?: ScanStream[] };
+};
+
+export async function startScan(siteId: string, params: Record<string, unknown>) {
+  const result = await api<{ job: ScanJob }>("/api/v1/owner/scan", "owner", {
+    method: "POST",
+    siteId,
+    body: JSON.stringify(params),
+  });
+  return result.job;
+}
+
+export async function pollScan(siteId: string, jobId: string) {
+  const result = await api<{ job: ScanJob }>(`/api/v1/owner/scan/${encodeURIComponent(jobId)}`, "owner", { siteId });
+  return result.job;
+}
+
+export async function saveCameraFromScan(
+  siteId: string,
+  body: { job_id: string; stream_ref: number; label: string; camera_id?: string },
+) {
+  return api<{ camera: { camera_id: string }; config_revision: number }>(
+    "/api/v1/owner/cameras/from-scan",
+    "owner",
+    { method: "POST", siteId, body: JSON.stringify(body) },
+  );
+}
+
+export async function saveCameraManually(
+  siteId: string,
+  cameraId: string,
+  body: { label: string; rtsp_url: string },
+) {
+  return api<{ camera: { camera_id: string } }>(
+    `/api/v1/owner/cameras/${encodeURIComponent(cameraId)}`,
+    "owner",
+    { method: "PUT", siteId, body: JSON.stringify({ ...body, enabled: true }) },
+  );
+}
+
 /** Telegram Mini App ichida parolsiz kirish. */
 export async function loginWithTelegram(): Promise<boolean> {
   const telegram = (window as Window & {

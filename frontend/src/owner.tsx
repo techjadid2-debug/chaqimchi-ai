@@ -1,9 +1,11 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, login, loginWithLinkKey, loginWithTelegram, relativeMinutes, telegramBotUrl, tokenFor } from "./api";
+import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, login, loginWithLinkKey, loginWithTelegram, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
 import { AppShell, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
+import { Connect } from "./Connect";
 import { OwnerHome } from "./OwnerHome";
+import { SetupCameras } from "./SetupCameras";
 import { usePanelRoute } from "./router";
 import type { Camera, Dashboard, Employee, Invoice, Site, TelegramMember, TrendPoint } from "./types";
 import { Icon, Logo } from "./icons";
@@ -11,6 +13,7 @@ import "./styles.css";
 
 const NAV: NavItem[] = [
   { id: "home", label: "Bosh sahifa", icon: "home" },
+  { id: "setup", label: "Kamerani ulash", icon: "search" },
   { id: "cameras", label: "Kameralar", icon: "camera" },
   { id: "traffic", label: "Mijozlar oqimi", icon: "chart" },
   { id: "employees", label: "Xodimlar", icon: "users" },
@@ -317,6 +320,9 @@ function SettingsPage({ dashboard, sites, siteId }: { dashboard: Dashboard; site
 
 function OwnerApp() {
   const [authenticated,setAuthenticated] = useState(() => Boolean(tokenFor("owner")));
+  // Tokenni DARHOL manzildan olib tashlaymiz (bir marta, render'dan
+  // oldin): u tarixda va `Referer` sarlavhasida qolib ketmasin.
+  const [connectToken,setConnectToken] = useState(() => takeConnectToken());
   const [checkingLink,setCheckingLink] = useState(() => new URLSearchParams(window.location.search).has("key"));
   const [sites,setSites] = useState<Site[]>([]); const [siteId,setSiteId] = useState("");
   const [active,navigateTo] = usePanelRoute("/owner", ROUTE_IDS, "home");
@@ -371,6 +377,16 @@ function OwnerApp() {
 
   const splash = (title:string) => <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">BIZNES PANELI</span><h1>{title}</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={54}/><div style={{height:14}}/><Skeleton height={150}/></div></section></div>;
   if (checkingLink) return splash("Havola tekshirilmoqda.");
+  // Kompyuterni ulash oqimi login ekranidan OLDIN: dastur o'rnatilgach
+  // brauzer aynan shu havolani ochadi va odam hali hisobga ega
+  // bo'lmasligi mumkin.
+  if (connectToken) {
+    return <Connect
+      token={connectToken}
+      authenticated={authenticated}
+      onConnected={() => { setConnectToken(""); setAuthenticated(true); navigateTo("setup"); }}
+    />;
+  }
   if (!authenticated) return <LoginScreen kind="owner" onSubmit={submit} busy={busy} error={loginError} botUrl={telegramBotUrl()}/>;
   if (loading || !data) return splash("Ko‘rsatkichlar tayyorlanmoqda.");
 
@@ -399,6 +415,7 @@ function OwnerApp() {
           <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
         </>
       : active === "employees" ? <EmployeesPage siteId={siteId}/>
+      : active === "setup" ? <SetupCameras siteId={siteId} onDone={() => { void refresh(); navigate("cameras"); }}/>
       : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label="Yopish"><Icon name="close"/></button></div><nav>{NAV.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>Chiqish</button></nav></aside></div> : null}
   </AppShell>;

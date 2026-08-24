@@ -2374,8 +2374,14 @@ async def public_quick_trial(
             "joy ochilishi bilan o'zimiz bog'lanamiz.",
         )
 
+    # Nom oxiriga telefonning oxirgi to'rt RAQAMI qo'shiladi: bir xil
+    # nomli do'konlarni operator ajrata olsin.  Ilgari bu `phone[-4:]`
+    # edi va formatlangan raqamda ("+998 90 123 45 67") probel bilan
+    # "5 67" bo'lib chiqardi — nom egasining panelida ham shunday
+    # ko'rinardi.
+    digits = "".join(char for char in phone if char.isdigit())
     site = get_store().create_site(
-        name=f"{name} ({phone[-4:] if len(phone) >= 4 else phone})",
+        name=f"{name} ({digits[-4:]})" if len(digits) >= 4 else name,
         # Mijoz saytda qaysi kartani bosgan bo'lsa — o'sha.  Standart
         # "biznes": tarif tanlanmagan yo'l (masalan to'g'ridan-to'g'ri
         # forma) mijozni cheklangan tarifga tushirib qo'ymasin.
@@ -5744,7 +5750,11 @@ class ScanRequestBody(BaseModel):
     password: str = Field(default="", max_length=128)
     xaddr: str = Field(default="", max_length=300)
     channel: int = Field(default=1, ge=1, le=64)
-    rtsp_url: str = Field(default="", max_length=500)
+    #: Oldingi qidiruv topgan oqimni sinash uchun: panelda manzil YO'Q
+    #: (u parol bilan keladi), faqat indeks bor.  Server manzilni
+    #: shifrlangan natijadan o'zi oladi.
+    from_job: str = Field(default="", max_length=40)
+    stream_ref: int = Field(default=-1, ge=-1, le=200)
 
 
 @app.post("/api/v1/owner/scan")
@@ -5773,7 +5783,26 @@ async def owner_start_scan(
         raise HTTPException(
             409, "Do'kon kompyuteri hozir aloqada emas — uni yoqing va internetni tekshiring."
         )
-    params = body.model_dump(exclude={"kind"})
+    params = body.model_dump(exclude={"kind", "from_job", "stream_ref"})
+    if body.kind == "probe" and not body.from_job:
+        # Xom RTSP manzilini brauzerdan qabul qilmaymiz: unda parol
+        # bo'ladi va u sahifadan serverga borishi kerak emas.  Sinash
+        # doim oldingi qidiruv natijasiga havola qiladi.
+        raise HTTPException(422, "Sinash uchun qidiruv natijasi ko'rsatilishi kerak")
+    if body.from_job:
+        # Sinaladigan manzil brauzerdan emas, oldingi qidiruv
+        # natijasidan olinadi — NVR paroli panelga tushmasligi kerak.
+        previous = get_store().get_job(owner.site_id, body.from_job, with_result=True)
+        if not previous:
+            raise HTTPException(404, "Qidiruv natijasi topilmadi")
+        result = previous.get("result") or {}
+        streams = result.get("streams") or result.get("cameras") or []
+        if not 0 <= body.stream_ref < len(streams):
+            raise HTTPException(422, "Bunday oqim topilmadi — qidiruvni qaytadan bajaring")
+        chosen = streams[body.stream_ref]
+        params["rtsp_url"] = str(chosen.get("uri") or chosen.get("rtsp_url") or "")
+        if not params["rtsp_url"]:
+            raise HTTPException(422, "Bu oqimda manzil yo'q")
     job = get_store().create_job(
         owner.site_id, kind=body.kind, params=params, requested_by=owner.member_id
     )

@@ -269,6 +269,47 @@ h1,h2,h3,p { margin-top: 0; }
 .login-alt { margin: 14px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
 .login-alt a { color: var(--blue-dark); }
 
+/* ── Kompyuterni ulash ────────────────────────────────────────────── */
+.connect-form { width: min(430px, 100%); display: grid; gap: 4px; }
+.connect-form h2 { margin: 10px 0 4px; font-size: 24px; letter-spacing: -.03em; }
+.connect-form > form > p, .connect-form > p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.connect-tabs { margin: 16px 0 18px; }
+.verify-card { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 13px; background: var(--card); }
+.verify-head { display: flex; align-items: center; gap: 11px; color: var(--blue); }
+.verify-head b { display: block; color: var(--text); font-size: 14px; }
+.verify-head small { display: block; color: var(--muted); font-size: 12px; }
+/* Kod yirik va monoshrift: ega uni ekrandagi bilan HARF-BAHARF
+   solishtiradi, shuning uchun 6 va G, 0 va O ajralib turishi kerak. */
+.verify-code { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 10px; background: var(--blue-soft); }
+.verify-code span { color: var(--blue-dark); font-size: 12px; font-weight: 650; }
+.verify-code b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 22px; font-weight: 800; letter-spacing: .12em; color: var(--blue-dark); }
+.verify-hint { margin: 0; color: var(--muted); font-size: 12px; }
+/* Maydon ostidagi izoh — yorliq qalinligini MEROS QILMASIN, aks holda
+   u talab kabi emas, sarlavha kabi o'qiladi. */
+.connect-form label small { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.connect-done { width: min(430px, 100%); display: grid; justify-items: center; gap: 10px; text-align: center; }
+.connect-done h2 { margin: 0; font-size: 24px; }
+.connect-done p { margin: 0; color: var(--muted); font-size: 14px; }
+.connect-tick { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 50%; background: var(--green-soft); color: var(--green); }
+
+/* ── Kamera sozlash sehrgari ──────────────────────────────────────── */
+.setup-steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 0 0 18px; padding: 0; list-style: none; }
+.setup-steps li { display: flex; align-items: center; gap: 9px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 11px; background: var(--card); color: var(--muted); font-size: 13px; font-weight: 650; }
+.setup-steps b { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: 50%; background: #eef1f6; color: var(--muted); font-size: 12px; }
+.setup-steps li.active { border-color: var(--blue); color: var(--text); }
+.setup-steps li.active b { background: var(--blue); color: #fff; }
+.setup-steps li.done b { background: var(--green-soft); color: var(--green); }
+
+.scan-progress { display: grid; gap: 8px; margin: 4px 0 12px; }
+.scan-list { display: grid; gap: 9px; margin-top: 14px; }
+.scan-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 13px 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); text-align: left; }
+.scan-row:hover { border-color: var(--blue); background: #fafcff; }
+.scan-name { display: flex; align-items: center; gap: 11px; color: var(--blue); }
+.scan-name b { display: block; color: var(--text); font-size: 14px; }
+.scan-name small { display: block; color: var(--muted); font-size: 12px; }
+.scan-frame { display: block; width: 100%; max-width: 640px; margin-bottom: 14px; border-radius: 12px; background: #0d1420; }
+.preset-names { flex-wrap: wrap; margin-bottom: 14px; }
+
 .health-list, .event-list, .simple-list { display: grid; gap: 0; padding: 8px 20px 13px; }
 .health-row, .event-row, .simple-row { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #edf0f5; font-size: 12px; }
 .health-row:last-child, .event-row:last-child, .simple-row:last-child { border-bottom: 0; }
@@ -402,6 +443,10 @@ tr:last-child td { border-bottom: 0; }
   .topbar-actions { flex: 1; justify-content: flex-end; min-width: 0; }
   .topbar-actions .select { min-width: 0; flex: 1; max-width: 260px; }
   .summary-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  /* Sehrgar qadamlari telefonda ikki qatorda — to'rttasi bir qatorda
+     sig'sa har biriga 80px qoladi va matn bo'g'inlab sinadi. */
+  .setup-steps { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .scan-row { flex-wrap: wrap; }
   .donut-wrap { grid-template-columns: 1fr; justify-items: center; }
   .zone-row { grid-template-columns: minmax(0,1fr) 60px 38px; }
   .table-filters { padding: 14px 15px 0; }

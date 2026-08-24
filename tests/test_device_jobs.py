@@ -178,15 +178,40 @@ def test_an_offline_shop_gets_a_useful_answer_not_a_spinner(
 # ── Sinov kadri ─────────────────────────────────────────────────────
 
 
+def test_a_probe_refers_to_an_earlier_scan_never_a_raw_address(
+    client: TestClient, shop: dict
+) -> None:
+    """Xom RTSP manzilini brauzerdan qabul qilmaymiz — unda parol bor."""
+    refused = client.post(
+        "/api/v1/owner/scan", headers=shop["owner"], json={"kind": "probe"}
+    )
+
+    assert refused.status_code == 422
+    assert "qidiruv natijasi" in refused.json()["detail"]
+
+
 def test_a_test_frame_needs_no_saved_camera(client: TestClient, shop: dict) -> None:
     """Kamerani saqlashdan OLDIN tekshirish kerak, aks holda bazaga
     chala qator yozib, keyin tozalash kerak bo'lardi."""
-    client.post(
+    # Avval qidiruv: sinaladigan manzil o'sha natijadan olinadi.
+    client.post("/api/v1/owner/scan", headers=shop["owner"], json={"kind": "onvif"})
+    scan_id = beat(client, shop)["job_requested"][0]["job_id"]
+    client.put(
+        f"/api/v1/edge/jobs/{scan_id}/result",
+        headers=shop["device"],
+        json={"ok": True, "result": {"streams": [{"uri": RTSP_WITH_PASSWORD}]}},
+    )
+
+    started = client.post(
         "/api/v1/owner/scan",
         headers=shop["owner"],
-        json={"kind": "probe", "rtsp_url": RTSP_WITH_PASSWORD},
+        json={"kind": "probe", "from_job": scan_id, "stream_ref": 0},
     )
-    job_id = beat(client, shop)["job_requested"][0]["job_id"]
+    assert started.status_code == 200, started.text
+    told = beat(client, shop)["job_requested"][0]
+    # Qurilma to'liq manzilni oladi — u RTSP ni ochishi kerak.
+    assert told["params"]["rtsp_url"] == RTSP_WITH_PASSWORD
+    job_id = told["job_id"]
 
     sent = client.put(
         f"/api/v1/edge/jobs/{job_id}/frame",

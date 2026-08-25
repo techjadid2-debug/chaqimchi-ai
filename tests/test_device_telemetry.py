@@ -431,3 +431,26 @@ def test_a_rejected_camera_list_is_not_retried_forever(
     config_store.delete_camera("camera-01")
     assert local.publish_cameras() is False
     assert len(calls) == 2
+
+
+def test_heartbeat_carries_the_device_own_clock(
+    local, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Qurilma o'z soatini yuborsin — cloud farqni shundan biladi.
+
+    Ish vaqti qoidalari qurilmaning LOKAL soatiga ishonadi
+    (`chaqimchi_ai/retail/pipeline.py`), cloud esa faqat `occurred_at`
+    ni tuzata oladi.  Ya'ni adashgan soat tungi ogohlantirishlarni
+    jimgina buzadi va buni boshqa hech qanday hisoblagich ko'rsatmaydi.
+    """
+    from datetime import datetime
+
+    sent = _capture_heartbeat(local, monkeypatch)
+
+    assert local.send_heartbeat({"cameras_active": 2}) is True
+
+    stamp = sent.get("device_clock")
+    assert stamp, "soat yuborilmasa cloud farqni o'lchay olmaydi"
+    # O'qib bo'ladigan ISO bo'lsin — cloud uni aynan shunday ochadi.
+    parsed = datetime.fromisoformat(str(stamp))
+    assert parsed.tzinfo is not None, "vaqt mintaqasi bo'lmasa farq ma'nosiz"

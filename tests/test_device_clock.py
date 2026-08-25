@@ -151,3 +151,54 @@ def _stored_time(store: EventStore) -> dict:
     events = store.list_events("site-1", limit=10)
     rows = events["events"] if isinstance(events, dict) else events
     return rows[0]
+
+
+# ── Qurilma soati bilan server soati farqi ───────────────────────────────
+#
+# `_normalise_occurred_at` hodisaning YOZILGAN vaqtini tuzatadi, lekin
+# qurilmaning QARORINI tuzata olmaydi: ish vaqti qoidalari lokal soatga
+# qarab ishlaydi.  Farqni o'lchash — buni ko'rishning yagona yo'li.
+
+
+def test_a_device_that_sends_no_clock_gives_no_number() -> None:
+    """«Bilmayman» ni nol deb yozib qo'ysak, adashgan soatni hech qachon
+    ko'rmaymiz: nol — «farq yo'q» degani."""
+    from cloud.main import _clock_skew_seconds
+
+    assert _clock_skew_seconds(None) is None
+    assert _clock_skew_seconds("") is None
+    assert _clock_skew_seconds("kecha soat uchda") is None
+
+
+def test_the_sign_says_which_way_the_clock_is_wrong() -> None:
+    """Orqada qolgan soat — o'lgan CMOS batareyasi, oldinga ketgani —
+    odatda noto'g'ri timezone.  Ustaga qaysi biri ekani kerak."""
+    from datetime import datetime, timedelta, timezone
+
+    from cloud.main import _clock_skew_seconds
+
+    orqada = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
+    oldinda = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+
+    assert _clock_skew_seconds(orqada) < -21_000
+    assert _clock_skew_seconds(oldinda) > 7_000
+
+
+def test_a_naive_timestamp_is_read_as_utc() -> None:
+    """Eski qurilma mintaqasiz vaqt yuborishi mumkin.  Uni serverning
+    mahalliy vaqti deb o'qish besh soatlik soxta farq yasardi."""
+    from datetime import datetime, timezone
+
+    from cloud.main import _clock_skew_seconds
+
+    naive = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+    assert abs(_clock_skew_seconds(naive)) < 60
+
+
+def test_a_correct_clock_reports_almost_zero() -> None:
+    from datetime import datetime, timezone
+
+    from cloud.main import _clock_skew_seconds
+
+    assert abs(_clock_skew_seconds(datetime.now(timezone.utc).isoformat())) < 5

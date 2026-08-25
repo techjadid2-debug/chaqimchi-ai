@@ -41,6 +41,9 @@ def _health(**kwargs) -> dict:
         "disk_free_bytes": kwargs.get("disk_free_bytes", 40 * GB),
         # Harorat ixtiyoriy: Windows qurilmalar uni yubormaydi.
         **({"temperature_c": kwargs["temperature_c"]} if "temperature_c" in kwargs else {}),
+        # Soat farqi ham ixtiyoriy: eski qurilma uni yubormaydi va
+        # "yubormadi" bilan "farq yo'q" bir narsa emas.
+        **({"clock_skew_sec": kwargs["clock_skew_sec"]} if "clock_skew_sec" in kwargs else {}),
     }
 
 
@@ -359,3 +362,69 @@ def test_an_unmeasured_value_never_replaces_a_measured_one(tmp_path) -> None:
     events.record_health("s1", "dev-windows", {"temperature_c": None})
 
     assert events.latest_health_by_site()["s1"]["temperature_c"] == 90.0
+
+
+# ── Kompyuter soati adashgan ─────────────────────────────────────────────
+#
+# Bu ham "yashil ko'rinadigan" buzilish, lekin eng ayyori: hech qanday
+# hisoblagich o'smaydi.  Qurilma sog'lom, kameralar ulangan, hodisalar
+# yozilyapti — faqat ular NOTO'G'RI VAQTDA baholanadi.  Ish vaqti
+# qoidalari qurilmaning lokal soatiga ishonadi
+# (`chaqimchi_ai/retail/pipeline.py`), cloud esa faqat `occurred_at` ni
+# tuzata oladi, qurilmaning QARORINI emas.
+
+
+def test_a_drifted_clock_is_reported_because_night_watch_depends_on_it() -> None:
+    """Soat olti soatga qochsa tungi nazorat kunduzi ishlaydi."""
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(clock_skew_sec=-6 * 3600)}, {}
+    )
+
+    assert len(alerts) == 1
+    assert alerts[0].remember == "clock"
+    assert "soati" in alerts[0].text.lower()
+    # Egaga texnik atama emas, aniq harakat aytiladi.
+    assert alerts[0].owner_text is not None
+    assert "batareyka" in alerts[0].owner_text.lower()
+
+
+def test_the_message_says_which_way_the_clock_is_wrong() -> None:
+    """Orqada qolgan soat — o'lgan batareyka, oldinga ketgani — odatda
+    noto'g'ri timezone.  Ustaga qaysi biri ekanini aytish kerak."""
+    orqada, _ = plan_device_health_alerts([_site()], {"s1": _health(clock_skew_sec=-3600)}, {})
+    oldinda, _ = plan_device_health_alerts([_site()], {"s1": _health(clock_skew_sec=3600)}, {})
+
+    assert "orqada" in orqada[0].text
+    assert "oldinda" in oldinda[0].text
+
+
+def test_a_small_drift_stays_quiet() -> None:
+    """NTP'siz mashina kuniga bir necha soniya qochadi — bu normal.
+    Har soniyaga xabar yuborilsa chat shovqinga to'ladi."""
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health(clock_skew_sec=90)}, {})
+    assert alerts == []
+
+
+def test_an_old_device_that_sends_no_clock_is_not_accused() -> None:
+    """Maydonni yubormagan qurilma "soati noto'g'ri" degan xabar
+    olmasin — biz uning soatini BILMAYMIZ."""
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health()}, {})
+    assert alerts == []
+
+
+def test_losing_events_outranks_a_wrong_clock() -> None:
+    """Bitta xabar — bitta muammo.  Hodisa yo'qolayotgan bo'lsa, soat
+    haqida yozish eng muhimini ko'mib yuborardi."""
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(queue_errors=3, clock_skew_sec=-6 * 3600)}, {}
+    )
+
+    assert alerts[0].remember == "queue"
+
+
+def test_the_owner_hears_when_the_clock_is_fixed() -> None:
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health()}, {"s1": "clock"})
+
+    assert len(alerts) == 1
+    assert alerts[0].state == "ok"
+    assert "soati" in (alerts[0].owner_text or "").lower()

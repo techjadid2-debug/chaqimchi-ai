@@ -228,6 +228,38 @@ Section "Kameralarni avtomatik topish (tarmoq ruxsati)" SecFirewall
   ${EndIf}
 SectionEnd
 
+Section "Kompyuter soatini to'g'rilash" SecClock
+  ; Ish vaqti qoidalari kompyuterning LOKAL soatiga ishonadi
+  ; (`chaqimchi_ai/retail/pipeline.py` — `datetime.now().time()`).
+  ; Soat adashsa "ish vaqtidan tashqari odam" ogohlantirishi kunduzi
+  ; ishlaydi yoki tunda umuman jim qoladi — va buni hech qanday
+  ; hisoblagich ko'rsatmaydi, tizim "sog'lom" bo'lib turaveradi.
+  ;
+  ; Do'kon kompyuterlari ko'pincha 2014-yilgi va CMOS batareyasi
+  ; o'lgan bo'ladi: har o'chirib-yoqishda soat qochadi.  Windows vaqt
+  ; xizmati yoqilgan bo'lsa u har safar o'zini to'g'rilaydi.
+  ;
+  ; Muvaffaqiyatsizlik BLOKLAMAYDI: domenga ulangan kompyuterda vaqt
+  ; siyosati administrator tomonidan boshqariladi va biz uni buzmasligimiz
+  ; kerak.  Bunday holatda cloud farqni baribir o'lchaydi va egasiga
+  ; aytadi (`cloud/alerts.py` — "clock").
+  DetailPrint "Kompyuter soatini vaqt serveriga ulash..."
+  nsExec::ExecToLog 'sc.exe config w32time start= auto'
+  Pop $0
+  nsExec::ExecToLog 'sc.exe start w32time'
+  Pop $0
+  nsExec::ExecToLog 'w32tm /config /syncfromflags:manual \
+    /manualpeerlist:"pool.ntp.org time.windows.com" /update'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Ogohlantirish: vaqt xizmati sozlanmadi (kod $0)."
+    DetailPrint "Soat noto'g'ri bo'lsa panelda ogohlantirish chiqadi."
+  ${Else}
+    nsExec::ExecToLog 'w32tm /resync /force'
+    Pop $0
+  ${EndIf}
+SectionEnd
+
 Section "Ish stoliga yorliq" SecDesktop
   SetShellVarContext all
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\Chaqimchi_AI.bat" "" "$INSTDIR\app.ico" 0
@@ -316,17 +348,20 @@ SectionEnd
 LangString DESC_SecMain ${LANG_UZBEK} "Dastur, Python muhiti va AI modeli. Internet talab qilinmaydi."
 LangString DESC_SecFirewall ${LANG_UZBEK} "Kameralarni tarmoqdan avtomatik topish uchun ruxsat. Faqat lokal tarmoq, internetdan kirish yo'q."
 LangString DESC_SecFirewall ${LANG_ENGLISH} "Allows automatic camera discovery on the local network. Local subnet only; no access from the internet."
+LangString DESC_SecClock ${LANG_UZBEK} "Kompyuter soatini vaqt serveriga ulaydi. Soat noto'g'ri bo'lsa tungi nazorat noto'g'ri vaqtda ishlaydi."
 LangString DESC_SecDesktop ${LANG_UZBEK} "Ish stolida ${APP_NAME} yorlig'i bo'ladi."
 LangString DESC_SecAutostart ${LANG_UZBEK} "Kompyuter yoqilganda nazorat o'zi ishga tushadi. Tavsiya etiladi."
 LangString DESC_SecUpdater ${LANG_UZBEK} "Yangi versiyalar o'zi yuklanadi va o'rnatiladi. Faqat imzosi tekshirilgan paketlar qabul qilinadi."
 LangString DESC_SecUpdater ${LANG_ENGLISH} "Downloads and installs new versions automatically. Only signature-verified packages are accepted."
 LangString DESC_SecMain ${LANG_ENGLISH} "Application, Python runtime and AI model. No internet required."
+LangString DESC_SecClock ${LANG_ENGLISH} "Keeps the computer clock synced. A wrong clock makes after-hours alerts fire at the wrong time."
 LangString DESC_SecDesktop ${LANG_ENGLISH} "Adds a ${APP_NAME} shortcut to the desktop."
 LangString DESC_SecAutostart ${LANG_ENGLISH} "Starts monitoring automatically when the computer boots."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} $(DESC_SecMain)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecFirewall} $(DESC_SecFirewall)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecClock} $(DESC_SecClock)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} $(DESC_SecDesktop)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} $(DESC_SecAutostart)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecUpdater} $(DESC_SecUpdater)

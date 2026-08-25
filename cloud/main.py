@@ -222,6 +222,21 @@ def require_admin(
     return _require_portal_principal(authorization, roles={"admin"})
 
 
+def _audit_actor(admin: Optional[PortalPrincipal]) -> str:
+    """Audit jurnalida kim turishi.
+
+    `require_admin` master kalit (`X-Cloud-Admin-Key`) bilan `None`
+    qaytaradi.  Uni shundayligicha yozib qo'yish jurnalni ma'nosiz
+    qilardi: eng kuchli kalit bilan qilingan amal `actor_id=NULL` bo'lib
+    boshqa har qanday bo'sh yozuvdan farq qilmasdi.
+
+    Endi hech bo'lmasa USULI ko'rinadi — "bu master kalit bilan
+    qilingan", ya'ni akkauntdan emas.  Bu kimligini aytmaydi, lekin
+    "qidirish kerak bo'lgan joy" ni aytadi.
+    """
+    return admin.account_id if admin else "cloud-admin-key"
+
+
 def _require_portal_principal(
     authorization: Optional[str],
     *,
@@ -489,6 +504,14 @@ class EdgeHeartbeatBody(BaseModel):
     fps: Optional[float] = Field(default=None, ge=0, le=1000)
     inference_latency_ms: Optional[float] = Field(default=None, ge=0, le=600_000)
     uptime_sec: Optional[float] = Field(default=None, ge=0)
+    #: Qurilmaning o'z soati (ISO-8601, UTC).  Eski qurilma yubormaydi —
+    #: `None` "farq noma'lum" degani, "farq yo'q" degani EMAS.
+    #:
+    #: Ish vaqti qoidalari qurilmaning lokal soatiga ishonadi
+    #: (`retail/pipeline.py`), cloud esa faqat `occurred_at` ni tuzata
+    #: oladi.  Ya'ni adashgan soat tungi ogohlantirishlarni jimgina
+    #: buzadi va buni faqat shu maydon ko'rsatadi.
+    device_clock: Optional[str] = Field(default=None, max_length=64)
     # Faqat qurilma haqiqiy NPU o'lchovini bersa to'ladi; aks holda admin
     # panel «— / yig'ilmoqda» ko'rsatadi va marketing raqam yasamaydi.
     npu_percent: Optional[float] = Field(default=None, ge=0, le=100)
@@ -3714,7 +3737,7 @@ class PlanBody(BaseModel):
 async def admin_set_plan(
     site_id: str,
     body: PlanBody,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Obyekt tarifini almashtirish.
 
@@ -3729,6 +3752,15 @@ async def admin_set_plan(
     # Qurilma yangi funksiya to'plamini va kamera chegarasini keyingi
     # config poll'ida (20 soniya) olishi uchun revizya suriladi.
     get_event_store().touch_site_config(site_id)
+    # Tarif — pul va funksiya to'plami.  O'zgarishi mijozga sezilarli,
+    # ya'ni "men buni so'ramagandim" bahsi mumkin.
+    get_store().audit_portal_action(
+        "site.plan.changed",
+        actor_id=_audit_actor(admin),
+        target_type="site",
+        target_id=site_id,
+        detail={"plan": body.plan},
+    )
     return detail
 
 
@@ -4412,12 +4444,22 @@ async def admin_site_onboarding(
 async def admin_extend_subscription(
     site_id: str,
     body: ExtendBody,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     try:
-        return get_store().extend_subscription(site_id, body.months)
+        result = get_store().extend_subscription(site_id, body.months)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+    # Pul bilan bog'liq amal: mijoz "men to'lamaganman" desa, kim va
+    # qachon muddat qo'shganini ko'rsata olishimiz kerak.
+    get_store().audit_portal_action(
+        "site.subscription.extended",
+        actor_id=_audit_actor(admin),
+        target_type="site",
+        target_id=site_id,
+        detail={"months": body.months, "until": result.get("until")},
+    )
+    return result
 
 
 @app.post("/api/v1/admin/sites/{site_id}/status")
@@ -4911,13 +4953,46 @@ async def upload_event_clip(
     return {"ok": True, "event_id": event_id}
 
 
+#: Qurilma soati serverdan shuncha soniyadan ko'p farq qilsa — muammo.
+#:
+#: 300 s (5 daqiqa) ataylab: ONVIF autentifikatsiyasi ham shu atrofda
+#: buziladi (`local/onvif_client.py`), ya'ni bu chegaradan oshgan
+#: qurilmada kamera ulanishi ham ishonchsiz bo'ladi.
+CLOCK_SKEW_WARN_SEC = 300
+
+
+def _clock_skew_seconds(device_clock: Optional[str]) -> Optional[float]:
+    """Qurilma soati serverdan necha soniya farq qiladi.
+
+    `None` — qurilma soatini yubormagan (eski versiya).  Buni nol deb
+    hisoblash xato bo'lardi: "farq yo'q" bilan "bilmaymiz" bir narsa
+    emas va ikkinchisiga ogohlantirish chiqarib bo'lmaydi.
+
+    Ishora saqlanadi: musbat — qurilma OLDINDA, manfiy — ORQADA.
+    Sabab boshqa-boshqa (kelajakdagi soat odatda noto'g'ri timezone,
+    orqadagi soat esa o'lgan CMOS batareyasi), shuning uchun ustaga
+    qaysi tomonga adashganini aytish kerak.
+    """
+    if not device_clock:
+        return None
+    try:
+        stamp = datetime.fromisoformat(device_clock.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return round((stamp - datetime.now(timezone.utc)).total_seconds(), 1)
+
+
 @app.post("/api/v1/edge/heartbeat")
 @app.post("/api/v1/sotqin/heartbeat")
 async def edge_health_heartbeat(
     body: EdgeHeartbeatBody,
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
-    get_event_store().record_health(device["site_id"], device["device_id"], body.model_dump())
+    health = body.model_dump()
+    health["clock_skew_sec"] = _clock_skew_seconds(body.device_clock)
+    get_event_store().record_health(device["site_id"], device["device_id"], health)
     # Legacy connection monitoring ham yangi heartbeat bilan yangilanadi.
     get_store().heartbeat(
         device["site_id"],
@@ -5653,16 +5728,27 @@ async def admin_windows_releases(_: None = Depends(require_admin)) -> Dict[str, 
 async def admin_add_member(
     site_id: str,
     body: MemberBody,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     if not get_store().get_site(site_id):
         raise HTTPException(404, "Sayt topilmadi")
-    return get_event_store().add_member(
+    member = get_event_store().add_member(
         site_id,
         body.telegram_id,
         role=body.role,
         display_name=body.display_name,
     )
+    # A'zolik — do'kon ma'lumotiga kirish huquqi.  Kim kimni qo'shgani
+    # yozilmasa, keyin "bu odam qayerdan paydo bo'ldi?" degan savolga
+    # javob yo'q.
+    get_store().audit_portal_action(
+        "site.member.added",
+        actor_id=_audit_actor(admin),
+        target_type="site",
+        target_id=site_id,
+        detail={"telegram_id": body.telegram_id, "role": body.role},
+    )
+    return member
 
 
 @app.post("/api/v1/admin/sites/{site_id}/members/{telegram_id}/login-link")
@@ -5670,7 +5756,7 @@ async def admin_create_owner_login_link(
     site_id: str,
     telegram_id: str,
     request: Request,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     """A'zo uchun kirish havolasi.
 
@@ -5688,6 +5774,16 @@ async def admin_create_owner_login_link(
         ttl_days=LOGIN_LINK_TTL_DAYS,
     )
     base = urls.app_url().rstrip("/") or str(request.base_url).rstrip("/")
+    # Havolaning O'ZI parol.  Uni kim va kimga yaratganini yozmasak,
+    # begona odam panelga kirib qolgan holatda izlanadigan iz qolmaydi.
+    # Tokenning o'zi ATAYLAB yozilmaydi — jurnal credential saqlamasin.
+    get_store().audit_portal_action(
+        "owner.login_link.created",
+        actor_id=_audit_actor(admin),
+        target_type="site",
+        target_id=site_id,
+        detail={"telegram_id": telegram_id, "ttl_days": LOGIN_LINK_TTL_DAYS},
+    )
     return {
         "ok": True,
         "url": f"{base}/owner?key={token}",
@@ -5699,9 +5795,16 @@ async def admin_create_owner_login_link(
 async def admin_revoke_owner_login_link(
     site_id: str,
     telegram_id: str,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     revoked = get_event_store().revoke_login_links(site_id, telegram_id)
+    get_store().audit_portal_action(
+        "owner.login_link.revoked",
+        actor_id=_audit_actor(admin),
+        target_type="site",
+        target_id=site_id,
+        detail={"telegram_id": telegram_id, "revoked": revoked},
+    )
     return {"ok": True, "revoked": revoked}
 
 
@@ -7272,13 +7375,23 @@ async def admin_add_employee_face(
 async def admin_delete_employee_face(
     site_id: str,
     face_id: str,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     require_attendance()
     photo_key = get_event_store().delete_employee_face(site_id, face_id)
     if photo_key is None:
         raise HTTPException(404, "Rasm topilmadi")
     await media_delete(photo_key)
+    # Xodimga imzolatilgan rozilik shabloni namunani o'chirishni va'da
+    # qiladi — ya'ni o'chirilgani ISBOTLANISHI kerak.  Jurnalsiz "biz
+    # o'chirdik" degan gapdan boshqa dalil yo'q.
+    get_store().audit_portal_action(
+        "biometrics.photo.deleted",
+        actor_id=_audit_actor(admin),
+        target_type="site",
+        target_id=site_id,
+        detail={"face_id": face_id},
+    )
     return {"ok": True, "id": face_id}
 
 
@@ -7519,6 +7632,13 @@ async def owner_delete_employee_face(
         raise HTTPException(404, "Rasm topilmadi")
     await media_delete(photo_key)
     get_event_store().touch_site_config(owner.site_id)
+    get_store().audit_portal_action(
+        "biometrics.photo.deleted",
+        actor_id=f"owner:{owner.member_id}",
+        target_type="site",
+        target_id=owner.site_id,
+        detail={"face_id": face_id},
+    )
     return {"ok": True, "id": face_id}
 
 
@@ -7728,6 +7848,13 @@ async def owner_delete_member(
         raise HTTPException(409, "O'zingizni o'chira olmaysiz")
     if not get_event_store().disable_member(owner.site_id, member_id):
         raise HTTPException(404, "Member topilmadi")
+    get_store().audit_portal_action(
+        "site.member.removed",
+        actor_id=f"owner:{owner.member_id}",
+        target_type="site",
+        target_id=owner.site_id,
+        detail={"member_id": member_id},
+    )
     return {"ok": True}
 
 
@@ -8382,13 +8509,31 @@ async def admin_list_invoices(
 async def admin_mark_paid(
     invoice_id: str,
     body: ManualPaymentBody,
-    _: None = Depends(require_admin),
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Naqd/bank to'lovi — obuna avtomatik uzayadi."""
     try:
-        return get_payments().mark_paid(invoice_id, body.provider, provider_txn_id=body.reference)
+        invoice = get_payments().mark_paid(
+            invoice_id, body.provider, provider_txn_id=body.reference
+        )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+    # Eng "bahsli" amal: naqd to'lovni odam qo'lda tasdiqlaydi va tashqi
+    # provayderdan hech qanday iz qolmaydi.  Kim tasdiqlagani yozilmasa,
+    # "to'ladim / to'lamadingiz" bahsida hech kimda dalil yo'q.
+    get_store().audit_portal_action(
+        "invoice.marked_paid",
+        actor_id=_audit_actor(admin),
+        target_type="invoice",
+        target_id=invoice_id,
+        detail={
+            "provider": body.provider,
+            "reference": body.reference,
+            "amount_uzs": invoice.get("amount_uzs"),
+            "site_id": invoice.get("site_id"),
+        },
+    )
+    return invoice
 
 
 @app.post("/api/v1/admin/invoices/{invoice_id}/cancel")

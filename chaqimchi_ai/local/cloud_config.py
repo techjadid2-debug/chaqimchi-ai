@@ -338,6 +338,19 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         "queue_errors": int(status.get("action_errors") or 0),
         "app_version": __version__,
         "product_name": "Chaqimchi Windows",
+        # Qurilmaning O'Z soati.  Ataylab `now()` — u xato bo'lsa ham
+        # shundayligicha yuboriladi, chunki o'lchanadigan narsa aynan
+        # xatoning o'zi.
+        #
+        # Nega kerak: ish vaqti qoidalari qurilmaning lokal soatiga
+        # ishonadi (`retail/pipeline.py` — `datetime.now().time()`).
+        # Do'kon kompyuteri ko'pincha 2014-yilgi va CMOS batareyasi
+        # o'lgan bo'ladi; soat olti soatga adashsa "ish vaqtidan
+        # tashqari odam" ogohlantirishi KUNDUZI ishlaydi yoki tunda
+        # umuman jim qoladi.  Cloud `occurred_at` ni tuzatadi, lekin
+        # qurilmaning QARORINI tuzata olmaydi — shuning uchun farqni
+        # o'lchab, egasiga aytish kerak.
+        "device_clock": datetime.now(timezone.utc).isoformat(),
         # Server jonli ko'rish so'ralishini shuncha soniya kutib tursin.
         #
         # Bungacha panel "Jonli" tugmasini bosgach birinchi kadr 14-27

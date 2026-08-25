@@ -61,9 +61,9 @@ joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
 | Y-4 | ~~O'rnatish vaqti 4 xil aytilgan~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-5 | ~~Hero "4 kamera", arzon tarifda 2 kamera~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-6 | AI aniqligi hech qachon o'lchanmagan | Yuqori | C bosqichi |
-| Y-7 | NTP yo'q — soat adashsa tungi alertlar buziladi | Yuqori | 1 kun |
+| Y-7 | ~~NTP yo'q — soat adashsa tungi alertlar buziladi~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-8 | Video/AI yo'lida birorta haqiqiy sinov yo'q | Yuqori | L |
-| Y-9 | Audit jurnali eng muhim amallarni yozmaydi | Yuqori | 1 kun |
+| Y-9 | ~~Audit jurnali eng muhim amallarni yozmaydi~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-10 | To'lov va parollar production'da hali SQLite'da | Yuqori | L |
 | Y-11 | Klip saqlash testi beqaror (mahsulot mantiqi to'g'ri, sabab noma'lum) | Yuqori | S–M |
 | Y-12 | ~~Saytda klip 30 kun, kodda 7 kun~~ | Yuqori | ✅ **TUZATILDI** |
@@ -73,7 +73,7 @@ joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
 | O-3 | Faqat o'zbek tili — rus tili yo'q | O'rta | L |
 | O-4 | Analitika yo'q — konversiya o'lchanmaydi | O'rta | S |
 
-Qolganlari: O-5 (narx dollarga bog'langan), O-6 (Telegram takror xabar),
+Qolganlari: O-5 (narx dollarga bog'langan),
 O-7 (JWT kaliti — serverda tekshirilsin), O-8 (token bekor qilib
 bo'lmaydi), O-9 (rate limit xotirada).
 
@@ -648,6 +648,33 @@ faqat ichki tarmoqqa ochish. `/health` (sodda `ok`) ochiq qolaversin.
 
 ### YUQORI-9 · Audit jurnali eng muhim amallarni yozmaydi
 
+> ## ✅ TUZATILDI — 2026-08-25
+>
+> Yetti turdagi amal endi `portal_audit_log` ga yoziladi:
+>
+> | Amal | Nega muhim |
+> |---|---|
+> | `owner.login_link.created` / `.revoked` | Havolaning o'zi parol |
+> | `invoice.marked_paid` | Naqd to'lovni odam qo'lda tasdiqlaydi — tashqi provayderdan iz qolmaydi |
+> | `site.subscription.extended` | Pul bilan bog'liq |
+> | `site.plan.changed` | Narx va funksiya to'plami o'zgaradi |
+> | `site.member.added` / `.removed` | Do'kon ma'lumotiga kirish huquqi |
+> | `biometrics.photo.deleted` | Xodimga o'chirish VA'DA qilingan — isbot kerak |
+>
+> **Master kalit endi anonim emas.** `X-Cloud-Admin-Key` bilan qilingan
+> amal ilgari `actor_id=NULL` yozardi va boshqa har qanday bo'sh
+> yozuvdan farq qilmasdi. Endi `"cloud-admin-key"` — kimligini
+> aytmaydi, lekin **usulini** aytadi, ya'ni qidiruv qayerdan
+> boshlanishini.
+>
+> **Token jurnalga tushmaydi.** Kirish havolasi yozuvida faqat
+> `telegram_id` va muddat bor; tokenning o'zi ataylab yozilmaydi —
+> aks holda jurnalni o'qiy oladigan har kim mijoz paneliga kira
+> olardi. Buni alohida test qulflaydi
+> (`test_the_login_link_token_never_reaches_the_log`).
+>
+> Uchta yangi test.
+
 `portal_audit_log` jadvali bor (`cloud/store.py:564-575`) va 18 ta amal
 yoziladi. Lekin **eng xavflilari yozilmaydi**:
 
@@ -797,6 +824,41 @@ o'lchansin — pastdagi jadval bo'yicha.
 ---
 
 ### YUQORI-7 · Soat noto'g'ri bo'lsa tungi ogohlantirishlar buziladi
+
+> ## ✅ TUZATILDI — 2026-08-25
+>
+> Uch qatlam, chunki bittasi yetmaydi:
+>
+> 1. **Oldini olish** — o'rnatuvchida yangi «Kompyuter soatini
+>    to'g'rilash» bo'limi: `w32time` avtomatik ishga tushiriladi va
+>    `pool.ntp.org` ga ulanadi. Muvaffaqiyatsizlik o'rnatishni
+>    **to'xtatmaydi** — domenga ulangan kompyuterda vaqt siyosatini
+>    administrator boshqaradi va uni buzmaslik kerak.
+> 2. **O'lchash** — qurilma har heartbeat'da o'z soatini yuboradi
+>    (`device_clock`), cloud farqni hisoblaydi (`_clock_skew_seconds`).
+>    Ishora saqlanadi: **orqada** — o'lgan CMOS batareyasi, **oldinda** —
+>    odatda noto'g'ri timezone. Ustaga qaysi biri ekani kerak.
+>    Maydonni yubormagan eski qurilma `None` beradi — «bilmayman»
+>    nolga aylantirilmaydi, aks holda adashgan soat hech qachon
+>    ko'rinmasdi.
+> 3. **Aytish** — 5 daqiqadan oshsa egaga Telegram xabari. Matn
+>    texnik atamasiz: nima buzilishini tushuntiradi («kunduzi bekorga
+>    xabar kelishi yoki kechasi umuman kelmasligi mumkin») va uchta
+>    aniq qadam beradi, oxirgisi — «batareyka o'lgan, ustaga
+>    ko'rsating».
+>
+> Ustuvorlik ham to'g'rilandi: soat tekshiruvi tahlil xatosidan
+> **oldin** turadi, chunki adashgan soat hech qanday hisoblagichni
+> o'stirmaydi — qurilma «sog'lom» bo'lib turaveradi. Lekin hodisa
+> yo'qolayotgan bo'lsa (`queue`) u baribir birinchi qoladi: bitta
+> xabar — bitta muammo.
+>
+> Yo'l-yo'lakay: egaga xabar berish `if state == "temp"` shartlari
+> bilan ikki joyda yozilgan ekan; lug'atga (`_OWNER_ALERT_TEXT`)
+> ko'chirildi, aks holda har yangi holat uchun ikkala joyni tuzatish
+> kerak bo'lardi.
+>
+> 11 ta yangi test.
 
 **Dalil:** NTP hech qayerda sozlanmaydi — `w32tm`, `timedatectl`,
 `chrony` butun kodda chaqirilmaydi. Muammo jamoa tomonidan tan olingan:
@@ -964,13 +1026,27 @@ qaysi joyda qilgani ko'rinib tursin.
 
 ---
 
-### O'RTA-6 · Telegram takror xabar yuborishi mumkin
+### O'RTA-6 · ❌ NOTO'G'RI TOPILMA — bekor qilindi (2026-08-25)
 
-`cloud/notify.py:15-16, 28` — throttle (600 s) **xotirada** turadi.
-Cloud qayta ishga tushsa hisoblagich nolga qaytadi va o'sha ogohlantirish
-ikkinchi marta ketadi. Deploy paytida mijoz bir xil xabarni ikki marta
-oladi. **Tuzatish:** throttle DB'ga ko'chirilsin (vision ratelimit
-allaqachon shunday qilingan). **Egasi:** Backend · **Hajmi:** S
+**Audit yana xato qilgan.** Tuzatishga kirishganda ma'lum bo'ldiki
+chidamli tormoz **allaqachon bor**:
+
+- `cloud/store.py:2648` — `alert_throttle_allow()`, `alert_state`
+  jadvalida saqlanadi;
+- `cloud/main.py:1095` — `_DurableAlertThrottle` uni o'raydi;
+- `cloud/main.py:4725` — production yo'li aynan shuni uzatadi
+  (`select_alert_events(..., throttle_service=_durable_throttle)`);
+- `tests/test_cloud_events_owner.py:726` —
+  `test_alert_throttle_survives_a_restart` buni allaqachon isbotlaydi.
+
+`cloud/notify.py` dagi xotiradagi `AlertThrottle` — faqat **standart
+qiymat** (test va mustaqil ishlatish uchun). Audit uni o'qib,
+production nima uzatishini tekshirmagan.
+
+**Saboq:** "modul ichida shunday yozilgan" — bu "production shunday
+ishlaydi" degani emas. Chaqiruv joyini ham ko'rish kerak.
+
+**Hech narsa o'zgartirilmadi.**
 
 ---
 
@@ -1119,8 +1195,12 @@ Audit davomida tasdiqlangan kuchli tomonlar — bularni saqlash kerak:
 
 Audit `docs/AUDIT_TAHLIL.md` fayliga yozildi.
 
-**A bosqichi holati:** A0–A8 bajarildi. Yopilgan topilmalar:
-K-1, K-2, K-4 (kritiklardan uchtasi), Y-0, Y-3, Y-4, Y-5.
+**Holat (2026-08-25):** A0–A8 va B1, B3, B5, B6, B7 bajarildi.
+
+Yopilgan topilmalar: **K-1, K-2, K-4** (kritiklardan uchtasi),
+**Y-0, Y-1, Y-3, Y-4, Y-5, Y-7, Y-9, Y-12**.
+Bekor qilinganlar (audit xatosi): **O-0, O-6**.
+**K-3** yozildi, lekin yurist ko'rigi va rekvizit kutilmoqda.
 
 Qolgan yagona A ishi — **A9**: serverda
 `grep CHAQIMCHI_JWT_SECRET .env.production`. Buni faqat server
@@ -1179,9 +1259,9 @@ javobidagi har bir modul kod bilan asoslangan.
 | ~~B3~~ | ✅ **BAJARILDI** — `_attendance_enabled()` da `or` → `and`; Biznes kartasidan bullet olindi | Product + Backend | — |
 | B4 | 0.6.15 build + imzo + `dl.` ga chiqarish, bosqichli tarqatish | DevOps | 1 kun |
 | ~~B5~~ | ✅ **BAJARILDI** — izoh yangilandi: sabab litsenziya emas, hosting hududi va o'lchanmagan aniqlik | Backend | — |
-| B6 | Audit jurnaliga 7 turdagi amalni qo'shish (YUQORI-9) | Backend | 1 kun |
-| B7 | NTP: o'rnatuvchida vaqt xizmatini yoqish + heartbeat'da soat farqi (YUQORI-7) | Backend + Installer | 1 kun |
-| B8 | Telegram throttle'ni DB'ga ko'chirish (O'RTA-6) | Backend | 3 soat |
+| ~~B6~~ | ✅ **BAJARILDI** — 7 turdagi amal yoziladi, master kalit endi anonim emas | Backend | — |
+| ~~B7~~ | ✅ **BAJARILDI** — o'rnatuvchida `w32time`, heartbeat'da soat farqi, egaga tushunarli ogohlantirish | Backend + Installer | — |
+| ~~B8~~ | ❌ **BEKOR** — O'RTA-6 noto'g'ri topilma, chidamli tormoz allaqachon bor | — | — |
 | ~~B9~~ | ❌ **BEKOR** — O'RTA-0 noto'g'ri topilma bo'lib chiqdi, o'zgartirish kerak emas | — | — |
 
 **B2 uchun yuristga beriladigan aniq savol** (umumiy "tekshirib bering"

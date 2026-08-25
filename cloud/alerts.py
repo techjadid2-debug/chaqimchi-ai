@@ -650,6 +650,14 @@ DEVICE_TEMP_ALERT_C = 85.0
 #: Sovigan deb hisoblash chegarasi (histerezis).
 DEVICE_TEMP_OK_C = 75.0
 
+#: Qurilma soati serverdan shuncha soniyadan ko'p farq qilsa — xabar.
+#:
+#: 5 daqiqa ataylab: shu chegarada ONVIF autentifikatsiyasi ham buziladi
+#: (`local/onvif_client.py:663`), ya'ni undan oshgan qurilmada kamera
+#: ulanishi ham ishonchsiz.  Kichikroq chegara esa oddiy drift'da
+#: shovqin bo'lardi — NTP'siz mashina kuniga bir necha soniya qochadi.
+DEVICE_CLOCK_SKEW_SEC = 300.0
+
 
 def _device_problem(
     health: Dict[str, Any], previous: Optional[str] = None
@@ -676,6 +684,17 @@ def _device_problem(
         ceiling = DEVICE_TEMP_OK_C if previous == "temp" else DEVICE_TEMP_ALERT_C
         if temperature >= ceiling:
             return "temp", f"kompyuter qizib ketdi ({temperature:.0f}°C)"
+
+    # Soat: tahlil xatosidan OLDIN, chunki adashgan soat tahlilni
+    # buzmaydi — u qarorni buzadi va buni hech qanday hisoblagich
+    # ko'rsatmaydi.  Qurilma "sog'lom" bo'lib turadi-yu, tungi
+    # ogohlantirish kunduzi keladi yoki tunda umuman kelmaydi.
+    skew = health.get("clock_skew_sec")
+    if isinstance(skew, (int, float)) and abs(skew) >= DEVICE_CLOCK_SKEW_SEC:
+        minutes = abs(skew) / 60
+        yonalish = "oldinda" if skew > 0 else "orqada"
+        olcham = f"{minutes:.0f} daqiqa" if minutes < 120 else f"{minutes / 60:.1f} soat"
+        return "clock", f"kompyuter soati {olcham} {yonalish} — tungi nazorat noto'g'ri ishlaydi"
 
     analyzed = int(health.get("analyzed") or 0)
     errors = int(health.get("analysis_errors") or 0)
@@ -717,6 +736,43 @@ _OWNER_TEMP_ALERT = (
 )
 
 _OWNER_TEMP_OK = "✅ Kompyuter sovidi — harorat me'yorga qaytdi."
+
+#: Soat — haroratdan keyingi ikkinchi "egasi o'zi hal qiladigan" muammo,
+#: lekin oqibati ko'rinmas: hech narsa buzilmaydi, shunchaki tungi
+#: nazorat noto'g'ri vaqtda ishlaydi.  Shuning uchun xabar nima
+#: bo'layotganini AVVAL tushuntiradi, keyin yechim beradi.
+_OWNER_CLOCK_ALERT = (
+    "🕐 <b>Kompyuter soati noto'g'ri</b>\n"
+    "Do'kon kompyuteringizdagi vaqt haqiqiy vaqtdan ancha farq qilyapti.\n\n"
+    "Bu nimaga ta'sir qiladi: «ish vaqtidan tashqari odam» ogohlantirishi "
+    "noto'g'ri soatda ishlaydi — kunduzi bekorga xabar kelishi yoki "
+    "kechasi umuman kelmasligi mumkin.\n\n"
+    "Nima qilish kerak:\n"
+    "• soat va sanani to'g'rilang (Windows: soat ustiga o'ng tugma → "
+    "«Sana va vaqtni sozlash»);\n"
+    "• «Vaqtni avtomatik o'rnatish» yoqilgan bo'lsin;\n"
+    "• vaqt yana adashaverса — kompyuterdagi batareyka o'lgan, "
+    "ustaga ko'rsating (arzon detal)."
+)
+
+_OWNER_CLOCK_OK = "✅ Kompyuter soati to'g'rilandi — tungi nazorat yana joyida."
+
+#: Holat → egaga ko'rinadigan matn.  Ro'yxatda yo'q holat (navbat,
+#: tahlil, disk) egaga UMUMAN bormaydi: u bunga ta'sir qila olmaydi va
+#: xabar faqat qo'rquv uyg'otardi.
+#:
+#: Lug'at sifatida ataylab: ilgari bu `if state == "temp"` shartlari
+#: bilan ikki joyda yozilgan edi va uchinchi holat (soat) qo'shilganda
+#: ikkalasini ham tuzatish kerak bo'ldi.
+_OWNER_ALERT_TEXT = {
+    "temp": _OWNER_TEMP_ALERT,
+    "clock": _OWNER_CLOCK_ALERT,
+}
+
+_OWNER_RECOVERY_TEXT = {
+    "temp": _OWNER_TEMP_OK,
+    "clock": _OWNER_CLOCK_OK,
+}
 
 
 def plan_device_health_alerts(
@@ -760,7 +816,7 @@ def plan_device_health_alerts(
                         kind="device",
                         # Egaga faqat u xabar olgan muammo bo'yicha
                         # tiklanish aytiladi.
-                        owner_text=_OWNER_TEMP_OK if prev == "temp" else None,
+                        owner_text=_OWNER_RECOVERY_TEXT.get(prev or ""),
                     )
                 )
             continue
@@ -773,10 +829,11 @@ def plan_device_health_alerts(
                     _device_text(site, description),
                     remember=state,
                     kind="device",
-                    # Qizish — egasi O'ZI hal qila oladigan yagona
-                    # muammo: chang tozalash, shamollatish, quyoshdan
-                    # olib qo'yish.  Qolganlari biz uchun texnik signal.
-                    owner_text=_OWNER_TEMP_ALERT if state == "temp" else None,
+                    # Egaga faqat O'ZI hal qila oladigan muammo aytiladi:
+                    # qizish (chang, shamollatish) va soat (sozlash yoki
+                    # batareyka).  Qolganlari — navbat, tahlil, disk —
+                    # biz uchun texnik signal va egaga shovqin bo'lardi.
+                    owner_text=_OWNER_ALERT_TEXT.get(state),
                 )
             )
 

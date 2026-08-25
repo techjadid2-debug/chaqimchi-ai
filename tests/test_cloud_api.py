@@ -935,3 +935,87 @@ def test_deep_health_warns_before_the_disk_is_full(cloud_client, monkeypatch) ->
     disk = next(item for item in response.json()["checks"] if item["name"] == "disk")
     assert disk["ok"] is False
     assert "GB qoldi" in disk["error"]
+
+
+# ── Audit jurnali ────────────────────────────────────────────────────────
+#
+# 2026-08-25 auditi (YUQORI-9): jurnal bor edi, lekin eng xavfli
+# amallarni yozmasdi — kirish havolasi yaratish (bu credential), naqd
+# to'lovni tasdiqlash, obunani uzaytirish, tarifni almashtirish, a'zo
+# qo'shish/o'chirish va biometrik rasmni o'chirish.  Ya'ni pul yoki
+# kirish huquqi bilan bog'liq bahsda ko'rsatadigan dalil yo'q edi.
+
+
+def _audit_actions(client) -> dict:
+    rows = client.get("/api/v1/admin/portal-audit", headers=ADMIN).json()
+    entries = rows["events"]
+    return {str(row["action"]): row for row in entries}
+
+
+def test_money_and_access_changes_leave_a_trace(cloud_client, monkeypatch) -> None:
+    """Pul va kirish huquqiga tegadigan har bir amal yozilsin."""
+    # Kirish havolasi owner tokenini imzolaydi — kalitsiz 503 qaytaradi.
+    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-chars")
+    site = _make_site(cloud_client, "Audit", "biznes")
+    site_id = site["site_id"]
+
+    cloud_client.post(
+        f"/api/v1/admin/sites/{site_id}/members",
+        headers=ADMIN,
+        json={"telegram_id": "777", "role": "owner"},
+    )
+    cloud_client.post(
+        f"/api/v1/admin/sites/{site_id}/members/777/login-link", headers=ADMIN
+    )
+    cloud_client.post(
+        f"/api/v1/admin/sites/{site_id}/extend", headers=ADMIN, json={"months": 3}
+    )
+    cloud_client.post(
+        f"/api/v1/admin/sites/{site_id}/plan", headers=ADMIN, json={"plan": "boshlangich"}
+    )
+
+    actions = _audit_actions(cloud_client)
+    for expected in (
+        "site.member.added",
+        "owner.login_link.created",
+        "site.subscription.extended",
+        "site.plan.changed",
+    ):
+        assert expected in actions, f"{expected} jurnalga tushmadi"
+
+
+def test_the_login_link_token_never_reaches_the_log(cloud_client, monkeypatch) -> None:
+    """Havolaning o'zi parol.  Jurnal uni saqlab qolsa, jurnalni o'qiy
+    oladigan har kim mijoz paneliga kira olardi."""
+    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-chars")
+    site = _make_site(cloud_client, "Audit token", "biznes")
+    site_id = site["site_id"]
+    cloud_client.post(
+        f"/api/v1/admin/sites/{site_id}/members",
+        headers=ADMIN,
+        json={"telegram_id": "778", "role": "owner"},
+    )
+    created = cloud_client.post(
+        f"/api/v1/admin/sites/{site_id}/members/778/login-link", headers=ADMIN
+    ).json()
+    token = created["url"].split("key=")[1]
+
+    rows = cloud_client.get("/api/v1/admin/portal-audit", headers=ADMIN).text
+
+    assert token not in rows, "token jurnalga oqib ketdi"
+
+
+def test_the_master_key_is_not_an_anonymous_actor(cloud_client) -> None:
+    """`X-Cloud-Admin-Key` bilan qilingan amal `actor_id=NULL` bo'lib
+    qolsa, u boshqa har qanday bo'sh yozuvdan farq qilmasdi.  Kimligini
+    aytmasa ham, USULI ko'rinishi kerak."""
+    site = _make_site(cloud_client, "Audit master", "biznes")
+    cloud_client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/plan",
+        headers=ADMIN,
+        json={"plan": "boshlangich"},
+    )
+
+    entry = _audit_actions(cloud_client)["site.plan.changed"]
+
+    assert entry["actor_id"] == "cloud-admin-key"

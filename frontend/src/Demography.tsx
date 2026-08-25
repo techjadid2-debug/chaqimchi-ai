@@ -120,13 +120,21 @@ export function Demography({ dashboard, siteId, onNavigate }: {
     return <Card>{head}<EmptyState icon="users" title="Yig‘ilmoqda…" detail="Tanlangan davr uchun raqamlar tayyorlanmoqda." /></Card>;
   }
   if (!data || counted <= 0) {
+    /* Uch xil "bo'sh"ning uch xil sababi bor va ular egaga TURLICHA
+       aytiladi: chiziq chizilmagan (tuzatsa bo'ladi), qurilma oflayn
+       (tekshirsin) yoki chindan hali mijoz kirmagan (kutish to'g'ri).
+       Avval hammasi "birinchi tashrifni kuting" edi — birinchi ikkisida
+       bu hech qachon bajarilmaydigan va'da bo'lardi. */
+    const geometry = dashboard.capabilities?.geometry;
+    const offline = dashboard.site.connection !== "online";
+    const empty = geometry && !geometry.lines_drawn
+      ? { title: "Portret uchun kirish chizig‘i kerak", detail: "Kirish chizig‘i chizilmagani uchun mijozlar (va ularning yosh-jinsi) sanalmayapti. «Chiziq va zonalar» bo‘limida eshik ustiga chiziq qo‘ying." }
+      : offline
+        ? { title: "Do‘kon kompyuteri bilan aloqa yo‘q", detail: "Portret do‘kondagi kompyuterda hisoblanadi. Kompyuter yoqilib bulutga ulanganida raqamlar shu yerda paydo bo‘ladi." }
+        : { title: period === "today" ? "Bugun hali portret yig‘ilmadi" : "Bu davrda ma’lumot yo‘q", detail: "Mijoz eshikdan kirganda uning taxminiy yoshi va jinsi anonim qayd etiladi. Birinchi tashrifdan keyin shu yerda ko‘rinadi." };
     return <Card>
       {head}
-      <EmptyState
-        icon="users"
-        title={period === "today" ? "Bugun hali portret yig‘ilmadi" : "Bu davrda ma’lumot yo‘q"}
-        detail="Mijoz eshikdan kirganda uning taxminiy yoshi va jinsi anonim qayd etiladi. Birinchi tashrifdan keyin shu yerda ko‘rinadi."
-      />
+      <EmptyState icon="users" title={empty.title} detail={empty.detail} />
     </Card>;
   }
 

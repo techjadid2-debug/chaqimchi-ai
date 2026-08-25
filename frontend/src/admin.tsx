@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { api, clearToken, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
 import { ActionMenu, AppShell, Avatar, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, SearchPalette, Skeleton, type NavItem } from "./components";
 import { AdminHome } from "./AdminHome";
+import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
 import { Icon, Logo } from "./icons";
 import "./styles.css";
@@ -12,7 +13,6 @@ type DeviceMetric = { device_id:string; site_id:string; site_name?:string; label
 type CreatedCustomer = {site_id:string;name:string;pairing_code:string;pairing_expires_at?:string;username:string;password:string};
 type AdminInvoice = {id:string;site_name?:string;site_id:string;months:number;amount_uzs:number;state:string;provider?:string;created_at?:string;paid_at?:string};
 type Feature = {code:string;name:string;category:string;monthly_usd_cents:number;cost_usd_cents:number;active?:boolean};
-type AdminEvent = {event_id?:string;id?:string;event_type:string;label?:string;site_name?:string;camera_id?:string;occurred_at?:string};
 type Account = {id:string;username:string;full_name?:string;role:string;status:string;company?:string;site_id?:string};
 type ReadinessItem = {key:string;label:string;ok:boolean;required:boolean;reasons?:string[]};
 type AdminDashboard = {
@@ -37,6 +37,7 @@ const NAV:NavItem[] = [
   {id:"plans",label:"Tariflar",icon:"card"},
   {id:"payments",label:"To‘lovlar",icon:"invoice"},
   {id:"events",label:"AI hodisalar",icon:"pulse"},
+  {id:"agent",label:"Vision Agent",icon:"pulse"},
   {id:"monitoring",label:"Monitoring",icon:"chart"},
   {id:"roles",label:"Rollar",icon:"shield"},
   {id:"settings",label:"Sozlamalar",icon:"settings"},
@@ -139,12 +140,6 @@ function PlansPage() {
   return <><PageHeader title="Tariflar" subtitle="Versiyalangan narx katalogi; qo‘lda yozilgan soxta qiymat ko‘rsatilmaydi."/>{error?<div className="alert-strip"><Icon name="bell"/>{error}</div>:null}{data?<><div className="metric-grid"><MetricCard label="Faol katalog" value={data.price_book?.label||"—"} note="Serverdagi nashr" icon="card"/><MetricCard label="AI funksiyalar" value={formatNumber(data.features.length)} note="Katalogdagi imkoniyatlar" icon="pulse"/><MetricCard label="USD kursi" value={formatMoney(data.price_book?.usd_rate_uzs)} note="Hisoblash manbasi" icon="chart"/><MetricCard label="Platforma bazasi" value={data.price_book?.base_fee_usd_cents==null?"—":`$${(data.price_book.base_fee_usd_cents/100).toFixed(0)}`} note="Oylik bazaviy haq" icon="server"/></div><Card><div className="card-head"><div><h2>Funksiyalar katalogi</h2><p>Bir kamera uchun oylik qiymat</p></div></div><div className="table-wrap"><table><thead><tr><th>Funksiya</th><th>Tur</th><th>Mijoz narxi</th><th>Ichki qiymat</th></tr></thead><tbody>{data.features.map(feature=><tr key={feature.code}><td><div className="table-title">{feature.name}</div><div className="table-sub">{feature.code}</div></td><td>{feature.category}</td><td>${(feature.monthly_usd_cents/100).toFixed(2)}</td><td>${(feature.cost_usd_cents/100).toFixed(2)}</td></tr>)}</tbody></table></div></Card></>:<Card><div className="card-body"><Skeleton height={190}/></div></Card>}</>;
 }
 
-function EventsPage({sites}:{sites:Site[]}) {
-  const[events,setEvents]=useState<AdminEvent[]|null>(null);const[siteId,setSiteId]=useState("");const[error,setError]=useState("");
-  useEffect(()=>{const query=siteId?`?site_id=${encodeURIComponent(siteId)}`:"";api<{events:AdminEvent[]}>(`/api/v1/admin/events${query}`,"admin").then(data=>{setEvents(data.events);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:"Hodisalar olinmadi"));},[siteId]);
-  return <><PageHeader title="AI hodisalar" subtitle="Filiallar bo‘yicha anonim oqim va xavfsizlik voqealari." actions={<select className="select" value={siteId} onChange={event=>setSiteId(event.target.value)}><option value="">Barcha filiallar</option>{sites.map(site=><option key={site.id} value={site.id}>{site.name}</option>)}</select>}/>{error?<div className="alert-strip"><Icon name="bell"/>{error}</div>:null}<Card>{events===null?<div className="card-body"><Skeleton height={190}/></div>:events.length?<div className="event-list">{events.map((item,index)=><div className="event-row" key={item.event_id||item.id||index}><div className="event-name"><div className="metric-icon tone-blue" style={{position:"static",width:34,height:34}}><Icon name="pulse" size={17}/></div><div><b>{item.label||item.event_type}</b><small>{item.site_name||"—"} · {item.camera_id||"Tizim"}</small></div></div><span className="list-value">{item.occurred_at?new Date(item.occurred_at).toLocaleString("uz-UZ"):"—"}</span></div>)}</div>:<EmptyState icon="pulse" title="Hodisa yo‘q" detail="Qurilmalar AI hodisa yuborgach real voqealar shu yerda ko‘rinadi."/>}</Card></>;
-}
-
 function RolesPage() {
   const[accounts,setAccounts]=useState<Account[]|null>(null);const[error,setError]=useState("");
   useEffect(()=>{api<{accounts:Account[]}>("/api/v1/admin/accounts","admin").then(data=>setAccounts(data.accounts)).catch(reason=>setError(reason instanceof Error?reason.message:"Akkauntlar olinmadi"));},[]);
@@ -158,6 +153,18 @@ function SettingsPage() {
   return <><PageHeader title="Sozlamalar" subtitle="Ishlab chiqarish integratsiyalari va xavfsizlik tayyorligi."/>{error?<div className="alert-strip"><Icon name="bell"/>{error}</div>:null}<Card><div className="card-head"><div><h2>Production readiness</h2><p>Yashirilmagan real muhit tekshiruvlari</p></div></div>{data?<div className="health-list">{items.map(item=><div className="health-row" key={item.key}><div className="health-name"><span className={`status-dot status-${item.ok?"online":item.required?"offline":"stale"}`}/><div><b>{item.label}</b><small>{item.reasons?.join(" · ")|| (item.required?"Majburiy tekshiruv":"Ixtiyoriy tekshiruv")}</small></div></div><Pill state={item.ok?"active":item.required?"failed":"pending"}>{item.ok?"Tayyor":item.required?"Tayyor emas":"Ixtiyoriy"}</Pill></div>)}</div>:<div className="card-body"><Skeleton height={190}/></div>}</Card></>;
 }
 
+function VisionAgentPage({sites}:{sites:Site[]}) {
+  const [siteId,setSiteId]=useState(""); const [question,setQuestion]=useState(""); const [settings,setSettings]=useState<{consented:boolean;provider_configured:boolean}|null>(null); const [settingsError,setSettingsError]=useState(""); const [result,setResult]=useState<{status:string;result?:{answer?:string;sources?:Array<{event_id:string;label?:string;occurred_at?:string}>};error?:string}|null>(null); const timer=useRef(0);
+  useEffect(()=>{setSiteId(current=>current||sites[0]?.id||"");},[sites]);
+  /* Sozlama xatosi ham KO'RSATILADI — avval `.catch(()=>setSettings(null))`
+     jim yutar va admin sababsiz o'chirilgan tugma qarshisida qolardi. */
+  useEffect(()=>{if(!siteId)return;setSettings(null);setSettingsError("");api<{consented:boolean;provider_configured:boolean}>(`/api/v1/admin/sites/${encodeURIComponent(siteId)}/agent/settings`,"admin").then(next=>{setSettings(next);setSettingsError("");}).catch(reason=>{setSettings(null);setSettingsError(reason instanceof Error?reason.message:"Sozlama olinmadi");});},[siteId]);
+  useEffect(()=>()=>window.clearTimeout(timer.current),[]);
+  const poll=useCallback(async(id:string,ticks=0,fails=0)=>{try{const job=await api<{status:string;result?:{answer?:string;sources?:Array<{event_id:string;label?:string;occurred_at?:string}>};error?:string}>(`/api/v1/admin/sites/${encodeURIComponent(siteId)}/agent/jobs/${encodeURIComponent(id)}`,"admin");if(job.status==="queued"||job.status==="running"){if(ticks>=130){setResult({status:"failed",error:"Javob cho‘zilib ketdi — worker holatini tekshiring."});return;}setResult(job);timer.current=window.setTimeout(()=>void poll(id,ticks+1,0),1800);return;}setResult(job);}catch(reason){if(fails>=4){setResult({status:"failed",error:reason instanceof Error?reason.message:"Javob olinmadi"});return;}timer.current=window.setTimeout(()=>void poll(id,ticks+1,fails+1),3000);}},[siteId]);
+  const ask=async()=>{if(!question.trim()||!siteId)return;setResult({status:"queued"});try{const job=await api<{job_id:string}>(`/api/v1/admin/sites/${encodeURIComponent(siteId)}/agent/queries`,"admin",{method:"POST",body:JSON.stringify({message:question.trim()})});void poll(job.job_id);}catch(reason){setResult({status:"failed",error:reason instanceof Error?reason.message:"Savol yuborilmadi"});}};
+  return <><PageHeader title="Vision Agent" subtitle="Tanlangan filialning eventlari bo‘yicha dalilli Uzbek javob."/><Card><div className="card-body agent-composer"><select className="select" value={siteId} onChange={event=>setSiteId(event.target.value)} aria-label="Filial">{sites.map(site=><option key={site.id} value={site.id}>{site.name}</option>)}</select>{settingsError?<div className="alert-strip"><Icon name="bell"/>Sozlama olinmadi: {settingsError}</div>:null}{settings&&!settings.provider_configured?<div className="alert-strip alert-warning"><Icon name="bell"/>Gemini provideri sozlanmagan (CHAQIMCHI_GEMINI_API_KEY / CHAQIMCHI_GEMINI_VISION_MODEL) — savollar ishlamaydi.</div>:null}{settings&&!settings.consented?<div className="alert-strip alert-info"><Icon name="shield"/>Bu filial egasi hali Agent roziligini bermagan.</div>:null}<textarea className="input" rows={4} value={question} onChange={event=>setQuestion(event.target.value)} placeholder="Masalan: kecha kassa yonida navbat bo‘ldimi?"/><button className="btn btn-primary" disabled={!settings?.consented||!settings?.provider_configured||result?.status==="queued"||result?.status==="running"} onClick={()=>void ask()}>{result?.status==="queued"||result?.status==="running"?"Tekshirilmoqda…":"Savol berish"}</button></div></Card>{result?.status==="completed"?<Card className="section-gap"><div className="card-body"><p className="agent-answer">{result.result?.answer}</p>{result.result?.sources?.map(source=><div className="simple-row" key={source.event_id}><b>{source.label||"Hodisa"}</b><span>{source.occurred_at||"—"}</span></div>)}</div></Card>:null}{result?.status==="failed"?<Card className="section-gap"><EmptyState icon="bell" title="Agent xatosi" detail={result.error||"Qayta urinib ko‘ring."}/></Card>:null}</>;
+}
+
 function GenericAdmin({id,data,onRefresh}:{id:string;data:AdminDashboard;onRefresh:()=>Promise<void>}) {
   if(id==="customers") return <CustomersPage sites={data.sites} onRefresh={onRefresh}/>;
   if(id==="branches") return <><PageHeader title="Filiallar" subtitle="Obuna va tizim holatini bitta ro‘yxatdan boshqaring."/><SiteTable sites={data.sites} searchable/></>;
@@ -165,7 +172,8 @@ function GenericAdmin({id,data,onRefresh}:{id:string;data:AdminDashboard;onRefre
   if(id==="cameras") return <><PageHeader title="Kameralar" subtitle="Filiallar bo‘yicha ishlayotgan va e’tibor talab qiladigan kameralar."/><div className="metric-grid">{data.sites.map(site=><MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.connection||"—"} icon="camera" tone={(site.cameras_active||0)>=(site.cameras_expected||1)?"green":"red"}/>)}</div></>;
   if(id==="plans") return <PlansPage/>;
   if(id==="payments") return <PaymentsPage/>;
-  if(id==="events") return <EventsPage sites={data.sites}/>;
+  if(id==="events") return <EventEvidence kind="admin" sites={data.sites}/>;
+  if(id==="agent") return <VisionAgentPage sites={data.sites}/>;
   if(id==="roles") return <RolesPage/>;
   if(id==="settings") return <SettingsPage/>;
   return <><PageHeader title="Bo‘lim" subtitle="Operatsion boshqaruv."/><Card><EmptyState icon="settings" title="Ma’lumot yo‘q" detail="Haqiqiy ma’lumot kelgach shu yerda ko‘rinadi."/></Card></>;
@@ -197,7 +205,10 @@ function AdminApp() {
   ],[data?.sites]);
 
   if(!authenticated) return <LoginScreen kind="admin" onSubmit={submit} busy={busy} error={loginError}/>;
-  if(loading||!data) return <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">ADMIN PANEL</span><h1>Platforma holati olinmoqda.</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={60}/><div style={{height:14}}/><Skeleton height={180}/></div></section></div>;
+  if(loading&&!data) return <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">ADMIN PANEL</span><h1>Platforma holati olinmoqda.</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={60}/><div style={{height:14}}/><Skeleton height={180}/></div></section></div>;
+  /* Server javob bermasa — sabab va qayta urinish.  Avval bu holat ham
+     "olinmoqda" skeletida abadiy qolardi. */
+  if(!data) return <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">ADMIN PANEL</span><h1>Ma’lumot ochilmadi</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><p className="metric-note">{error||"Server bilan aloqa bo‘lmadi."}</p><div className="page-actions" style={{marginTop:14}}><button className="btn btn-primary" onClick={()=>void refresh()}>Qayta urinish</button><button className="btn" onClick={logout}>Chiqish</button></div></div></section></div>;
 
   const today = formatDateUz();
   return <AppShell

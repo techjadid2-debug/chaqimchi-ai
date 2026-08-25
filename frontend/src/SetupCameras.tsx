@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   pollScan,
+  mediaObjectUrl,
   saveCameraFromScan,
   saveCameraManually,
   startScan,
@@ -105,6 +106,25 @@ function Progress({ job, slow }: { job: ScanJob | null; slow: boolean }) {
       </p>
     </div>
   );
+}
+
+function ScanFrame({ siteId, jobId }: { siteId: string; jobId: string }) {
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let current = "";
+    let stopped = false;
+    void mediaObjectUrl(`/api/v1/owner/scan/${encodeURIComponent(jobId)}/frame`, "owner", siteId)
+      .then(next => {
+        // Komponent yopilgach kelgan javob darhol bo'shatiladi — aks
+        // holda blob URL brauzer xotirasida osilib qolardi.
+        if (stopped) { URL.revokeObjectURL(next); return; }
+        current = next; setUrl(next);
+      })
+      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : "Kadr ochilmadi"); });
+    return () => { stopped = true; if (current) URL.revokeObjectURL(current); };
+  }, [jobId, siteId]);
+  return url ? <img className="scan-frame" src={url} alt="Kameradan olingan kadr" /> : <EmptyState icon="camera" title="Kadr ochilmadi" detail={error || "Kadr yuklanmoqda…"} />;
 }
 
 export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () => void }) {
@@ -349,11 +369,7 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
               {scan.running ? <Progress job={scan.job} slow={scan.slow} /> : null}
               {scan.job?.has_frame ? (
                 <>
-                  <img
-                    className="scan-frame"
-                    src={`/api/v1/owner/scan/${encodeURIComponent(scan.job.job_id)}/frame`}
-                    alt="Kameradan olingan kadr"
-                  />
+                  <ScanFrame siteId={siteId} jobId={scan.job.job_id} />
                   <div className="page-actions">
                     <button className="btn btn-primary" onClick={() => setStep(4)}>Tasvir to‘g‘ri</button>
                     <button className="btn" onClick={() => back(2)}>Boshqa oqim</button>

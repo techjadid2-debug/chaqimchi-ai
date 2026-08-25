@@ -317,6 +317,11 @@ h1,h2,h3,p { margin-top: 0; }
 .shape-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0; }
 
 .health-list, .event-list, .simple-list { display: grid; gap: 0; padding: 8px 20px 13px; }
+.evidence-list { display: grid; gap: 0; padding: 8px 20px 18px; }
+.evidence-card { border-bottom: 1px solid #edf0f5; padding: 8px 0 14px; }
+.evidence-card:last-child { border-bottom: 0; }
+.event-media { display: block; width: min(100%, 680px); max-height: 480px; margin: 4px 0 0 44px; border: 1px solid var(--border); border-radius: 10px; background: #101828; object-fit: contain; }
+.media-error { margin: 0 0 8px 44px; color: #bd262c; font-size: 12px; }
 .health-row, .event-row, .simple-row { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #edf0f5; font-size: 12px; }
 .health-row:last-child, .event-row:last-child, .simple-row:last-child { border-bottom: 0; }
 .health-name, .event-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -328,6 +333,12 @@ h1,h2,h3,p { margin-top: 0; }
 .alert-strip strong { color: #5d3a00; }
 .alert-strip.alert-info { border-color: #aecbfa; background: var(--blue-soft); color: #185abc; }
 .alert-strip.alert-info strong { color: #174ea6; }
+/* Ogohlantirish (aloqa uzilgan, chiziq chizilmagan) — qizil ohang.
+   Klass komponentlarda ishlatilar, lekin CSS'da YO'Q edi: banner sariq
+   default ko'rinishda qolib ketardi. */
+.alert-strip.alert-warning { border-color: #f4b9b3; background: var(--red-soft, #fdeceb); color: #a50e0e; }
+.alert-strip.alert-warning strong { color: #8c0d0d; }
+.alert-strip .btn { margin-left: auto; flex-shrink: 0; }
 
 .table-wrap { overflow-x: auto; padding: 8px 20px 20px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -384,6 +395,11 @@ tr:last-child td { border-bottom: 0; }
 .form-error { margin: 0 0 14px; padding: 11px 12px; border-radius: 9px; background: var(--red-soft); color: #b42328; font-size: 12px; }
 .employee-form { margin-bottom: 14px; }
 .section-gap { margin-top: 18px; }
+.agent-composer { display: grid; gap: 13px; }
+.agent-composer label { display: grid; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.agent-composer textarea { width: 100%; min-height: 102px; padding: 12px; resize: vertical; line-height: 1.5; }
+.agent-composer .btn { justify-self: start; }
+.agent-answer { margin: 0 0 18px; color: var(--text); line-height: 1.65; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
 .form-grid label { display: grid; gap: 7px; color: #475467; font-size: 11px; font-weight: 700; }
 .consent-row { display: flex; align-items: flex-start; gap: 9px; margin: 5px 0 16px; color: var(--muted); font-size: 11px; line-height: 1.5; }

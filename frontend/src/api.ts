@@ -60,6 +60,22 @@ export async function api<T>(path: string, kind: "owner" | "admin", options: Api
   return body as T;
 }
 
+/** Himoyalangan rasm/video endpointini brauzerga xavfsiz Blob URL qilib beradi.
+ * `<img src>` Authorization header yubora olmaydi; shu sabab kamera scan va
+ * hodisa dalillari ilgari 401 bilan jim bo'sh ko'rinardi. */
+export async function mediaObjectUrl(path: string, kind: "owner" | "admin", siteId?: string): Promise<string> {
+  const headers = new Headers();
+  const token = tokenFor(kind);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (siteId) headers.set("X-Owner-Site-Id", siteId);
+  const response = await fetch(path, { headers });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || "Media ochilmadi");
+  }
+  return URL.createObjectURL(await response.blob());
+}
+
 export async function login(username: string, password: string, kind: "owner" | "admin") {
   const result = await api<{ access_token: string; account: { role: string; full_name?: string } }>(
     "/api/v1/auth/login",

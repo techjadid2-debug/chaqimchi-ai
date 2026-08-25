@@ -77,6 +77,14 @@ export type Dashboard = {
   events: EventItem[];
   trend: TrendPoint[];
   subscription?: { status?: string; days_left?: number; monthly_price_uzs?: number; subscription_until?: string };
+  capabilities?: {
+    cameras?: { ready?: boolean; active?: number; expected?: number; reason?: string };
+    edge_config?: { ready?: boolean; revision?: number; reason?: string };
+    features?: { panel?: string[]; edge?: string[] };
+    /** Chiziq/zona chizilganmi — "nega 0?" savolining eng keng javobi. */
+    geometry?: { ready?: boolean; lines_drawn?: boolean; zones_drawn?: boolean; reason?: string };
+  };
+  diagnostics?: { created_at?: string; payload?: { outbox?: { pending?: number; poisoned?: number }; cloud?: { dns_ok?: boolean } } } | null;
   updated_at: string;
   revision?: string;
 };

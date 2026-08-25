@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, hasFeature, login, loginWithLinkKey, loginWithTelegram, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
+import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, hasFeature, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { AppShell, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, PlanLock, Skeleton, StatusDot, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
@@ -8,6 +8,8 @@ import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
 import { OwnerHome } from "./OwnerHome";
 import { SetupCameras } from "./SetupCameras";
+import { VisionAgent } from "./VisionAgent";
+import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
 import type { Camera, Dashboard, Employee, Invoice, Site, TelegramMember, TrendPoint } from "./types";
 import { Icon, Logo } from "./icons";
@@ -23,16 +25,17 @@ const NAV: NavItem[] = [
   { id: "heatmap", label: "Issiqlik xaritasi", icon: "heat" },
   { id: "branches", label: "Filiallar", icon: "branch" },
   { id: "reports", label: "Hisobotlar", icon: "report" },
+  { id: "alerts", label: "Hodisalar", icon: "shield" },
+  { id: "agent", label: "AI yordamchi", icon: "pulse" },
   { id: "billing", label: "Tarif va to‘lov", icon: "card" },
   { id: "telegram", label: "Telegram", icon: "telegram" },
   { id: "settings", label: "Sozlamalar", icon: "settings" },
 ];
 
-/* Ogohlantirishlar menyuda alohida bo'lim emas: ular bosh sahifadagi
-   lentada turadi.  Ammo "Barchasini ko'rish" havolasi va bot xabari
-   `/owner/alerts` ga olib boradi, shuning uchun yo'nalish yashab
-   qoladi. */
-const ROUTE_IDS = [...NAV.map(item => item.id), "alerts"];
+/* "Hodisalar" endi menyuda ham bor: rasm/klip galereyasi faqat
+   qo'ng'iroq belgisi orqali topiladigan yashirin sahifa bo'lib qolgan
+   edi — mijoz uni umuman ko'rmasdi. */
+const ROUTE_IDS = NAV.map(item => item.id);
 const MOBILE_NAV = ["home", "cameras", "traffic", "employees"];
 
 function value(report: Record<string, unknown>, ...keys: string[]) {
@@ -56,7 +59,11 @@ function useAdaptiveDashboard(siteId: string, authenticated: boolean) {
   const failures = useRef(0);
 
   const refresh = useCallback(async () => {
-    if (!authenticated || !siteId) return;
+    // Sayt tanlanmagan (masalan, egaga hali filial biriktirilmagan) —
+    // yuklanish tugagan hisoblanadi.  Avval bu yerda shunchaki `return`
+    // edi va `loading` abadiy `true` qolib, ekranda cheksiz skelet
+    // ko'rinardi.
+    if (!authenticated || !siteId) { setLoading(false); return; }
     try {
       const next = await api<Dashboard>("/api/v1/owner/dashboard", "owner", { siteId });
       setData(next);
@@ -192,8 +199,16 @@ function EmployeesPage({ siteId }: { siteId: string }) {
       const data = await api<{employees:Employee[]}>("/api/v1/owner/faces", "owner", {siteId});
       setItems(data.employees || []); setError("");
     } catch {
-      const data = await api<{employees:Employee[]}>("/api/v1/owner/employees", "owner", {siteId});
-      setItems(data.employees || []); setError("");
+      // Zaxira endpoint ham yiqilsa ro'yxat BO'SH holatga tushadi va
+      // sabab ko'rinadi — avval bu istisno hech qayerda ushlanmay,
+      // sahifa abadiy skeletda qolardi.
+      try {
+        const data = await api<{employees:Employee[]}>("/api/v1/owner/employees", "owner", {siteId});
+        setItems(data.employees || []); setError("");
+      } catch (reason) {
+        setItems([]);
+        setError(reason instanceof Error ? reason.message : "Xodimlar ro‘yxati olinmadi");
+      }
     }
   },[siteId]);
   useEffect(() => { void load(); }, [load]);
@@ -217,72 +232,42 @@ function heatRgb(t:number) {
   return stops[i].map((value,index)=>Math.round(value+(stops[i+1][index]-value)*f));
 }
 
-function HeatmapPage({dashboard,siteId,onNavigate}:{dashboard:Dashboard;siteId:string;onNavigate:(id:string)=>void}) {
-  const [cameraId,setCameraId]=useState(()=>dashboard.cameras[0]?.camera_id||"");const[days,setDays]=useState(7);const[data,setData]=useState<{grid:number[][];rows:number;cols:number;points?:number}|null>(null);const[error,setError]=useState("");const canvas=useRef<HTMLCanvasElement>(null);
-  useEffect(()=>{if(!cameraId)return;let stopped=false;api<{grid:number[][];rows:number;cols:number;points?:number}>(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=${days}`,"owner",{siteId}).then(heat=>{if(stopped)return;setData(heat);setError("");const target=canvas.current;const ctx=target?.getContext("2d");if(!target||!ctx)return;const width=target.width,height=target.height,padX=width*.055,padY=height*.10,planW=width-padX*2,planH=height-padY*2;ctx.fillStyle="#f8fafc";ctx.fillRect(0,0,width,height);ctx.strokeStyle="#64748b";ctx.lineWidth=3;ctx.strokeRect(padX,padY,planW,planH);ctx.strokeStyle="#cbd5e1";ctx.lineWidth=2;[[.11,.18,.22,.13],[.39,.18,.18,.13],[.66,.18,.20,.13],[.13,.55,.23,.13],[.43,.55,.19,.13],[.72,.55,.15,.13]].forEach(([x,y,w,h])=>ctx.strokeRect(padX+planW*x,padY+planH*y,planW*w,planH*h));ctx.strokeStyle="#94a3b8";ctx.beginPath();ctx.moveTo(padX+planW*.41,padY+planH);ctx.lineTo(padX+planW*.59,padY+planH);ctx.stroke();ctx.fillStyle="#64748b";ctx.font="600 16px system-ui";ctx.fillText("Kirish",padX+planW*.44,padY+planH+28);const peak=Math.max(1,...heat.grid.flat());/* Issiqlik xaritasi IKKI QADAMDA chiziladi.
-
-   Bungacha har katak o'z rangida alohida dog' bo'lib chizilardi va
-   radius katak o'lchamidan ~3-8 barobar katta edi (48 ustunli to'rda
-   bitta dog' sohaning yarmini qoplardi).  Natijada 336 ta katak bitta
-   ulkan yashil chiziqqa qo'shilib ketardi — saytdagi rasmda ham aynan
-   shu ko'rinardi.
-
-   To'g'ri usul (heatmap.js ham shunday qiladi): avval hamma nuqta
-   KULRANG holda, alfa qo'shilib boradigan qilib chiziladi — ya'ni
-   zichlik piksel darajasida to'planadi.  So'ng har pikselning alfasi
-   rang shkalasiga (ko'k -> zangori -> yashil -> sariq -> qizil)
-   o'giriladi.  Shunda gradient silliq chiqadi va issiq nuqtalar
-   bir-biridan ajralib turadi. */
-const cell=Math.max(planW/heat.cols,planH/heat.rows);
-const blob=document.createElement("canvas");blob.width=width;blob.height=height;
-const bctx=blob.getContext("2d");
-if(bctx){
-  // 1-qadam: zichlikni kulrangda to'playmiz.
-  //
-  // Ikkala son ham kichik ataylab.  `radius` katta bo'lsa qo'shnilar
-  // qo'shilib ketadi, har nuqtaning alfasi katta bo'lsa esa to'planish
-  // 255 ga tez urilib, butun reja bir xil qizil bo'lib qoladi — ikkala
-  // xato ham xaritani "bitta dog'"ga aylantiradi.
-  const radius=cell*2.4;
-  // Reja tashqarisiga chiqmasin: chiziqdan tashqaridagi dog' xaritani
-  // devordan chiqib ketgandek ko'rsatardi.
-  bctx.save();bctx.beginPath();bctx.rect(padX,padY,planW,planH);bctx.clip();
-  heat.grid.forEach((row,rowIndex)=>row.forEach((value,colIndex)=>{
-    const t=Number(value||0)/peak;
-    if(t<.06)return;
-    const x=padX+(colIndex+.5)*(planW/heat.cols),y=padY+(rowIndex+.5)*(planH/heat.rows);
-    const glow=bctx.createRadialGradient(x,y,0,x,y,radius);
-    glow.addColorStop(0,"rgba(0,0,0,"+(t*.14).toFixed(3)+")");
-    glow.addColorStop(1,"rgba(0,0,0,0)");
-    bctx.fillStyle=glow;bctx.beginPath();bctx.arc(x,y,radius,0,Math.PI*2);bctx.fill();
-  }));
-  bctx.restore();
-  // 2-qadam: alfani rangga o'giramiz.
-  const image=bctx.getImageData(padX,padY,planW,planH);
-  const px=image.data;
-  // To'plangan eng katta zichlikka NISBATAN ranglaymiz.  Mutlaq
-  // qiymatga bog'lansa, kam odam yuradigan do'konning xaritasi butunlay
-  // ko'k, gavjum do'konniki esa butunlay qizil chiqardi — ikkalasida
-  // ham hech qanday ma'lumot ko'rinmasdi.
-  let top=0;
-  for(let i=3;i<px.length;i+=4)if(px[i]>top)top=px[i];
-  if(top>0)for(let i=0;i<px.length;i+=4){
-    // Gamma: o'rta qiymatlarni pastga tortadi, shunda faqat haqiqiy
-    // to'planish joyi issiq rangga chiqadi.
-    const t=Math.pow(px[i+3]/top,1.5);
-    // Yumshoq so'nish: qattiq kesilsa xaritaning chekkasi tishli
-    // bo'lib qolardi — zichlik chegara atrofida sekin o'zgaradi.
-    const fade=Math.max(0,Math.min(1,(t-.03)/.08));
-    if(fade<=0){px[i+3]=0;continue;}
-    const rgb=heatRgb(t);
-    px[i]=rgb[0];px[i+1]=rgb[1];px[i+2]=rgb[2];
-    px[i+3]=Math.round(fade*Math.min(225,40+t*195));
-  }
-  bctx.putImageData(image,padX,padY);
-  ctx.drawImage(blob,0,0);
-}
-ctx.restore();}).catch(reason=>{if(!stopped)setError(reason instanceof Error?reason.message:"Xarita olinmadi");});return()=>{stopped=true;};},[cameraId,days,siteId]);
-  return <><PageHeader title="Faol zonalar" subtitle="Do‘kon rejasida mijozlar ko‘p to‘plangan joylar. Kataklar emas, silliq anonim harakat oqimi." actions={<select className="select" value={cameraId} onChange={event=>setCameraId(event.target.value)}>{dashboard.cameras.map(camera=><option value={camera.camera_id} key={camera.camera_id}>{camera.label||camera.camera_id}</option>)}</select>}/><Card><div className="card-head"><div><h2>Do‘kon rejasi</h2><p>{data?.points?`${formatNumber(data.points)} ta anonim harakat nuqtasi`:"Qurilma har 10 daqiqada yangi nuqtalarni yuboradi"}</p></div><div className="segmented">{[1,7,30].map(value=><button key={value} className={days===value?"active":""} onClick={()=>setDays(value)}>{value===1?"Bugun":`${value} kun`}</button>)}</div></div>{!hasFeature(dashboard,"xarita")?<PlanLock title="Issiqlik xaritasi Biznes tarifida" detail="Mijozlar do‘konning qaysi burchagida ko‘p to‘xtashini ko‘rasiz — javonlarni shunga qarab joylashtirasiz." onUpgrade={()=>onNavigate("billing")}/>:error?<EmptyState icon="heat" title="Xarita hozir ochilmadi" detail={error}/>:cameraId?<div className="heatmap-wrap plan-heatmap"><canvas ref={canvas} width="960" height="540" aria-label="Do‘kon rejasidagi faol zonalar"/><div className="heat-legend"><span>past</span><i/><span>yuqori</span></div></div>:<EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera qo‘shilgach faol zonalar shu yerda ko‘rinadi."/>}</Card></>;
+function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; siteId: string; onNavigate: (id: string) => void }) {
+  const [cameraId, setCameraId] = useState(() => dashboard.cameras[0]?.camera_id || "");
+  const [days, setDays] = useState(7); const [points, setPoints] = useState<number | null>(null); const [error, setError] = useState("");
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!cameraId) return; let stopped = false; let previewUrl = "";
+    /* Preview ALOHIDA so'raladi va xatosi yutiladi: kamera kadri hali
+       yuborilmagan bo'lsa (404) xarita baribir chiziladi — qoraroq fon
+       ustida.  Avval `Promise.all` edi va preview 404 butun sahifani
+       "Xarita olinmadi"ga tushirardi. */
+    void (async () => {
+      try {
+        const heat = await api<{grid:number[][]; rows:number; cols:number; points?:number}>(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=${days}`, "owner", { siteId });
+        const url = await mediaObjectUrl(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, "owner", siteId).catch(() => "");
+        if (stopped) { if (url) URL.revokeObjectURL(url); return; }
+        previewUrl = url;
+        const target = canvas.current; const ctx = target?.getContext("2d"); if (!target || !ctx) return;
+        const width = target.width, height = target.height; ctx.clearRect(0, 0, width, height);
+        if (url) {
+          const image = new Image(); image.src = url; await image.decode(); if (stopped) return;
+          ctx.drawImage(image, 0, 0, width, height);
+        } else {
+          ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = "#64748b"; ctx.font = "600 15px system-ui";
+          ctx.fillText("Kamera kadri hali kelmagan — xarita mavhum fonda", 20, height - 20);
+        }
+        const peak = Math.max(1, ...heat.grid.flat()); ctx.save(); ctx.globalCompositeOperation = "screen";
+        heat.grid.forEach((row, rowIndex) => row.forEach((value, colIndex) => { const strength = Number(value || 0) / peak; if (strength < .1) return; const x = (colIndex + .5) * width / heat.cols, y = (rowIndex + .5) * height / heat.rows, radius = Math.max(width / heat.cols * 2.8, 28) + strength * Math.max(width / heat.cols * 4, 64), rgb = heatRgb(strength); const glow = ctx.createRadialGradient(x, y, 0, x, y, radius); glow.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(.42 + strength * .34).toFixed(2)})`); glow.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = glow; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2); }));
+        ctx.restore(); setPoints(heat.points || 0); setError("");
+      } catch (reason) {
+        if (!stopped) setError(reason instanceof Error ? reason.message : "Xarita olinmadi");
+      }
+    })();
+    return () => { stopped = true; if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [cameraId, days, siteId]);
+  return <><PageHeader title="Faol zonalar" subtitle="Tanlangan kameraning haqiqiy ko‘rinishidagi silliq anonim harakat oqimi." actions={<select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)}>{dashboard.cameras.map(camera => <option value={camera.camera_id} key={camera.camera_id}>{camera.label || camera.camera_id}</option>)}</select>}/><Card><div className="card-head"><div><h2>Kamera ko‘rinishidagi faol zonalar</h2><p>{points == null ? "Ma’lumot yuklanmoqda…" : points ? `${formatNumber(points)} ta anonim harakat nuqtasi` : "Bu davr uchun harakat ma’lumoti yo‘q"}</p></div><div className="segmented">{[1,7,30].map(value => <button key={value} className={days === value ? "active" : ""} onClick={() => setDays(value)}>{value === 1 ? "Bugun" : `${value} kun`}</button>)}</div></div>{!hasFeature(dashboard,"xarita") ? <PlanLock title="Issiqlik xaritasi Biznes tarifida" detail="Mijozlarning qayerda ko‘p to‘xtashini aynan kamera burchagida ko‘rasiz." onUpgrade={() => onNavigate("billing")}/> : error ? <EmptyState icon="heat" title="Xarita hozir ochilmadi" detail={error}/> : cameraId ? <div className="heatmap-wrap"><canvas ref={canvas} width="960" height="540" aria-label="Kamera ko‘rinishidagi faol zonalar"/><div className="heat-legend"><span>past</span><i/><span>yuqori</span></div></div> : <EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera qo‘shilgach faol zonalar shu yerda ko‘rinadi."/>}</Card></>;
 }
 
 function BillingPage({dashboard,siteId}:{dashboard:Dashboard;siteId:string}) {
@@ -314,7 +299,7 @@ function GenericPage({ id, dashboard, sites, siteId, onNavigate }: { id:string; 
   if (id === "traffic") return <TrafficPage dashboard={dashboard}/>;
   if (id === "heatmap") return <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   if (id === "branches") return <><PageHeader title="Filiallar" subtitle="Barcha savdo nuqtalaringizning aloqa va kamera holati."/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? "Aloqada" : "Aloqani tekshiring")} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
-  if (id === "alerts") return <><PageHeader title="Ogohlantirishlar" subtitle="Faqat e’tibor talab qiladigan AI va tizim holatlari."/><Card>{dashboard.events.length ? <div className="event-list">{dashboard.events.map((item,index) => <div className="event-row" key={item.id || index}><div className="event-name"><Icon name="bell"/><div><b>{item.label || item.event_type}</b><small>{item.camera_id || "Tizim"}</small></div></div><span>{item.occurred_at || item.created_at || "—"}</span></div>)}</div> : <EmptyState icon="shield" title="Ogohlantirish yo‘q" detail="Hozircha e’tibor talab qiladigan yangi holat qayd etilmadi."/>}</Card></>;
+  if (id === "alerts") return <EventEvidence kind="owner" siteId={siteId}/>;
   if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>CSV yuklash</button>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
   if (id === "billing") return <BillingPage dashboard={dashboard} siteId={siteId}/>;
   if (id === "telegram") return <TelegramPage siteId={siteId}/>;
@@ -441,7 +426,25 @@ function OwnerApp() {
     />;
   }
   if (!authenticated) return <LoginScreen kind="owner" onSubmit={submit} busy={busy} error={loginError} botUrl={telegramBotUrl()}/>;
-  if (loading || !data) return splash("Ko‘rsatkichlar tayyorlanmoqda.");
+  if (loading && !data) return splash("Ko‘rsatkichlar tayyorlanmoqda.");
+  /* Ma'lumot kelmadi — sabab va chiqish yo'li KO'RSATILADI.  Avval bu
+     holat cheksiz skeletga tushardi: 0 ta filial ham, doimiy server
+     xatosi ham xabarsiz "yuklanmoqda" bo'lib qolar edi. */
+  if (!data) {
+    return <div className="login-page">
+      <section className="login-visual"><Logo/><div><span className="eyebrow">BIZNES PANELI</span>
+        <h1>{sites.length === 0 && !loginError ? "Sizga hali do‘kon biriktirilmagan" : "Ma’lumot ochilmadi"}</h1></div></section>
+      <section className="login-panel"><div style={{width:"min(390px,100%)"}}>
+        <p className="metric-note">{sites.length === 0 && !loginError
+          ? "Hisobingiz ishlayapti, lekin unga birorta do‘kon ulanmagan. O‘rnatuvchi yoki qo‘llab-quvvatlash xizmatiga murojaat qiling."
+          : error || loginError || "Server bilan aloqa bo‘lmadi. Internetni tekshirib, qayta urinib ko‘ring."}</p>
+        <div className="page-actions" style={{marginTop:14}}>
+          <button className="btn btn-primary" onClick={() => { void loadSites(); void refresh(); }}>Qayta urinish</button>
+          <button className="btn" onClick={logout}>Chiqish</button>
+        </div>
+      </div></section>
+    </div>;
+  }
 
   const selected = sites.find(site => site.id === siteId);
   const today = formatDateUz();
@@ -470,6 +473,7 @@ function OwnerApp() {
       : active === "employees" ? <EmployeesPage siteId={siteId}/>
       : active === "setup" ? <SetupCameras siteId={siteId} onDone={() => { void refresh(); navigate("zones"); }}/>
       : active === "zones" ? <GeometryEditor siteId={siteId} cameras={data.cameras}/>
+      : active === "agent" ? <VisionAgent siteId={siteId} onNavigate={navigate}/>
       : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label="Yopish"><Icon name="close"/></button></div><nav>{NAV.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>Chiqish</button></nav></aside></div> : null}
   </AppShell>;

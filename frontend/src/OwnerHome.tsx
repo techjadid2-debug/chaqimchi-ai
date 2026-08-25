@@ -121,12 +121,25 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
   const flowPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2, "0")}:00`, value: Number(item.entered) || 0 }));
   const connection = dashboard.site.connection;
   const botUrl = telegramBotUrl();
+  const edgeConfig = dashboard.capabilities?.edge_config;
+  const geometry = dashboard.capabilities?.geometry;
+  const poisoned = dashboard.diagnostics?.payload?.outbox?.poisoned || 0;
 
   return <>
     {connection !== "online" ? <div className={`alert-strip ${connection === "stale" ? "alert-info" : "alert-warning"}`}>
       <Icon name="bell" />
       <div><strong>Aloqa {connection === "stale" ? "yangilanmoqda" : "uzilgan"}.</strong> Oxirgi aloqa: {relativeMinutes(dashboard.site.minutes_since_seen)}. Yangi ma’lumot kelguncha oxirgi tasdiqlangan raqamlar ko‘rsatiladi.</div>
     </div> : null}
+    {/* ENG MUHIM eslatma: chiziqsiz hech narsa sanalmaydi.  Server buni
+        biladi, endi egasi ham ko'radi — avval panel shunchaki 0
+        ko'rsatib, "kutib turing" derdi va bu hech qachon o'zgarmasdi. */}
+    {geometry && !geometry.lines_drawn ? <div className="alert-strip alert-warning">
+      <Icon name="shapes" />
+      <div><strong>Kirish chizig‘i hali chizilmagan — mijozlar sanalmayapti.</strong> Eshik ustiga bitta chiziq qo‘yilsa, o‘sha zahoti sanash boshlanadi.</div>
+      <button className="btn btn-primary" onClick={() => onNavigate("zones")}>Chizish</button>
+    </div> : null}
+    {edgeConfig && !edgeConfig.ready ? <div className="alert-strip alert-info"><Icon name="pulse"/><div><strong>Sozlama qurilmaga hali tasdiqlanmagan.</strong> {edgeConfig.reason || "Do‘kon kompyuteri keyingi ulanishda sozlamani oladi."}</div></div> : null}
+    {poisoned ? <div className="alert-strip alert-info"><Icon name="bell"/><div><strong>{poisoned} ta hodisa cloudga yetib bormagan.</strong> Windows dasturidagi Diagnostika paketini yuboring — sabablar administratorga ko‘rinadi.</div></div> : null}
 
     <div className="metric-grid metric-grid-5">
       <StatCard
@@ -180,7 +193,9 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
             </div>
             {flowPoints.some(point => point.value > 0)
               ? <LineChart series={[{ name: "Tashriflar", points: flowPoints }]} />
-              : <EmptyState icon="chart" title="Bugun hali tashrif yo‘q" detail="Kamera birinchi kirishni qayd qilgach grafik shu yerda to‘ladi." />}
+              : geometry && !geometry.lines_drawn
+                ? <EmptyState icon="shapes" title="Sanash hali boshlanmagan" detail="Kirish chizig‘i chizilmagan. «Chiziq va zonalar» bo‘limida eshik ustiga chiziq qo‘ying — shundan keyin mijozlar sanaladi." />
+                : <EmptyState icon="chart" title="Bugun hali tashrif yo‘q" detail="Kamera birinchi kirishni qayd qilgach grafik shu yerda to‘ladi." />}
           </Card>
 
           <Card>

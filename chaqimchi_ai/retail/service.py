@@ -73,7 +73,15 @@ PRIORITIES: Dict[str, Priority] = {
 #: Qurilma sog'ligi haqidagi hodisalar hech qanday paketga bog'lanmaydi.
 #: Mijoz qaysi funksiyani sotib olganidan qat'i nazar, kamerasi
 #: ishlamayotganini bilishi shart.
-HEALTH_EVENTS = frozenset({"camera_offline", "camera_recovered", "stream_frozen"})
+#:
+#: `camera_tampered` ham SHU ro'yxatda: yopilgan/burilgan obyektiv —
+#: "kamerangiz ishlamayapti"ning o'zi.  Avval u `store_security`
+#: paketida edi va Boshlang'ich tarifda tashlab yuborilardi — mijoz
+#: kamerasi to'sib qo'yilganini hech qachon bilmasdi; cloud esa
+#: (`trust_score`, hisobot) bu eventni baribir kutadi.
+HEALTH_EVENTS = frozenset(
+    {"camera_offline", "camera_recovered", "stream_frozen", "camera_tampered"}
+)
 
 
 def load_rules(path: Optional[Path]) -> RuleEngine:
@@ -291,7 +299,6 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
         "zone_entered",
         "loitering",
         "after_hours_presence",
-        "camera_tampered",
     }
 
     def allowed(event: EdgeEvent) -> bool:

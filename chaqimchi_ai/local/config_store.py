@@ -62,6 +62,11 @@ def default_config() -> Dict[str, Any]:
             "enabled": True,
             "backend": "openvino",
             "model_path": str(paths.model_path()),
+            # Demografiya modellari ham ABSOLYUT yo'lda — schema'dagi nisbiy
+            # default `--base-dir` (ProgramData) dan izlanib hech qachon
+            # topilmasdi va jins/yosh Windows'da jimgina o'chiq edi.
+            "face_model_path": str(paths.face_model_path()),
+            "age_gender_model_path": str(paths.age_gender_model_path()),
             "confidence": 0.5,
             "occupancy_limit": DEFAULT_OCCUPANCY_LIMIT,
             "queue_limit": DEFAULT_QUEUE_LIMIT,
@@ -129,6 +134,21 @@ def _heal(raw: Dict[str, Any]) -> Dict[str, Any]:
         if rules.is_file():
             retail["rules_path"] = str(rules)
             changed = True
+
+    # Demografiya model yo'llari keyin absolyut bo'ldi (0.6.14): eski
+    # configlarda ular yo'q yoki nisbiy (`models/retail/...`) — nisbiy yo'l
+    # xizmatning `--base-dir`iga (ProgramData) nisbatan izlanib topilmasdi.
+    # OTA'dan keyin birinchi o'qishdayoq to'g'rilanadi.
+    scene = raw.get("scene")
+    if isinstance(scene, dict):
+        for key, resolver in (
+            ("face_model_path", paths.face_model_path),
+            ("age_gender_model_path", paths.age_gender_model_path),
+        ):
+            current = str(scene.get(key) or "")
+            if not current or not Path(current).is_absolute():
+                scene[key] = str(resolver())
+                changed = True
 
     if changed:
         _write_raw_unlocked(raw)
@@ -285,12 +305,15 @@ def is_ready() -> bool:
     Kamerasiz xizmat `RuntimeError` bilan darhol to'xtaydi; chiziqsiz esa
     ishlaydi-yu, hech narsa sanamaydi.  Ikkalasi ham sehrgarning tugash
     sharti — panelga "tayyor" deb ko'rsatilishidan oldin tekshiriladi.
+
+    Faqat KIRISh CHIZIG'I hisobga olinadi: zona-only konfiguratsiya avval
+    yashil "Ishlayapti" ko'rsatib, mijozlar sanalmayotganini yashirardi
+    (mahsulotning asosiy va'dasi — sanash).
     """
     raw = read_raw()
     has_camera = bool((raw.get("retail") or {}).get("cameras"))
     scene = raw.get("scene") or {}
-    has_shape = bool(scene.get("lines") or scene.get("zones"))
-    return has_camera and has_shape
+    return has_camera and bool(scene.get("lines"))
 
 
 def model_available() -> bool:
@@ -303,6 +326,19 @@ def model_available() -> bool:
     """
     xml = paths.model_path()
     return xml.is_file() and xml.with_suffix(".bin").is_file()
+
+
+def demography_models_available() -> bool:
+    """Jins/yosh modellari o'rnatilganmi.
+
+    `model_available()` faqat person modelini tekshirardi — demografiya
+    modellari yo'q payload'da supervisor zanjirni bemalol ishga tushirar,
+    jins/yosh esa jimgina o'chiq qolardi.  Bu holat endi panelda ko'rinadi.
+    """
+    for xml in (paths.face_model_path(), paths.age_gender_model_path()):
+        if not (xml.is_file() and xml.with_suffix(".bin").is_file()):
+            return False
+    return True
 
 
 def summary() -> Dict[str, Any]:
@@ -326,6 +362,7 @@ def summary() -> Dict[str, Any]:
         "zones": len(scene.get("zones") or []),
         "telegram_enabled": bool(telegram.get("enabled")),
         "model_available": model_available(),
+        "demography_models_available": demography_models_available(),
         "ready": is_ready(),
         "config_path": str(paths.config_path()),
         "data_dir": str(paths.data_dir()),
@@ -396,7 +433,20 @@ def feature_status() -> List[Dict[str, Any]]:
             "clips",
             "Hodisa videosi (klip)",
             clip_source,
-            "Asosiy oqim manzili topilmadi — kamera sozlamasida kiriting",
+            # Halol xabar: bunday maydonni mijoz o'zi kirita olmaydigan
+            # panelga yo'naltirish o'lik nuqta edi.
+            "Kamera asosiy oqim manzili aniqlanmadi — dastur qayta ishga "
+            "tushganda avtomatik qidiradi; chiqmasa qo'llab-quvvatlashga yozing",
+        ),
+        item(
+            "demography",
+            "Mijoz portreti (jins/yosh)",
+            demography_models_available() and bool(lines),
+            (
+                "Kirish chizig'i chizilmagan — portret kirish chizig'ida hisoblanadi"
+                if demography_models_available()
+                else "Demografiya modellari topilmadi — dasturni qayta o'rnating"
+            ),
         ),
     ]
 

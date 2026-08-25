@@ -195,12 +195,18 @@ def hello(cloud_url: str) -> Optional[Dict[str, Any]]:
             response = client.post(f"{base}/api/v1/public/device-hello", json=body)
     except httpx.HTTPError as exc:
         logger.info("device-hello yuborilmadi: %s", exc)
+        _hello_failure["reason"] = "network"
         return None
     if response.status_code == 404:
+        # Bulut bu oqimni bilmaydi (eski versiya/bayroq o'chiq) — bu
+        # "internet yo'q" EMAS.
+        _hello_failure["reason"] = "unsupported"
         return None
     if response.status_code >= 400:
         logger.info("device-hello rad etildi: %s", response.status_code)
+        _hello_failure["reason"] = "rate_limited" if response.status_code == 429 else "unavailable"
         return None
+    _hello_failure["reason"] = ""
     payload = response.json()
     lifetime = int(payload.get("expires_in_sec") or 0)
     state = {
@@ -294,6 +300,13 @@ def handover() -> Optional[PairedSite]:
     return site
 
 
+#: Oxirgi `hello` muvaffaqiyatsizligining SABABI.  Panel shu bo'yicha
+#: halol matn tanlaydi: avval har qanday 4xx/5xx (rate limit, 503, 404)
+#: "Internet yo'q" bo'lib chiqar — internet joyida bo'lgan mijozga
+#: internetni tekshirishni maslahat berardik.
+_hello_failure: Dict[str, str] = {"reason": ""}
+
+
 def connect_state() -> Dict[str, Any]:
     """Lokal holat sahifasi uchun: havola va tekshiruv kodi."""
     state = _read_connect_state()
@@ -301,6 +314,7 @@ def connect_state() -> Dict[str, Any]:
         "connect_url": state.get("connect_url", ""),
         "verify_code": state.get("verify_code", ""),
         "panel_url": state.get("panel_url", ""),
+        "hello_error": _hello_failure.get("reason", ""),
     }
 
 

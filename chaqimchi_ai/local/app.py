@@ -973,6 +973,31 @@ async def cloud_status() -> Dict[str, Any]:
     }
 
 
+@app.get("/api/setup/diagnostics")
+async def diagnostics() -> Dict[str, Any]:
+    """Support uchun maxfiy ma'lumotsiz lokal holat paketi."""
+    import anyio
+
+    return await anyio.to_thread.run_sync(cloud_config.diagnostics_report)
+
+
+@app.post("/api/setup/diagnostics/upload")
+async def upload_diagnostics() -> Dict[str, Any]:
+    """Diagnostikani cloudga yuboradi; RTSP/token lokalda qoladi."""
+    import anyio
+
+    report = await anyio.to_thread.run_sync(cloud_config.upload_diagnostics)
+    # `ok: False` — yuborilMADI.  Avval bu yerda faqat `None` tekshirilardi
+    # (u hech qachon qaytmaydi) va xato ham 200 + yashil "yuborildi"
+    # banneriga aylanardi.
+    if not report.get("ok"):
+        raise HTTPException(
+            503,
+            f"Diagnostika yuborilmadi: {report.get('error') or 'ulanishni tekshiring'}",
+        )
+    return {"ok": True, "diagnostics": report}
+
+
 @app.post("/api/setup/pair")
 async def pair(body: PairBody) -> Dict[str, Any]:
     """Pairing kod bilan cloudga ulaydi.
@@ -1466,6 +1491,11 @@ def _autostart_if_ready() -> None:
     kerak — aks holda nazorat jimgina to'xtab qolardi va buni faqat bir
     haftadan keyin, hisobot bo'sh chiqqanda sezishardi.
     """
+    # Klip oqimini START'da to'ldiramiz.  Avval bu faqat sehrgar sahifasi
+    # ochilganda ishlardi — sehrgarni hech kim qayta ochmasa, eski
+    # kameralar klipsiz qolaverar edi.  Fon thread'da: RTSP tekshiruvi
+    # (kamera boshiga ~4 s) panel startini kechiktirmasin.
+    threading.Thread(target=_backfill_record_urls, name="record-url-backfill", daemon=True).start()
     if config_store.is_ready() and config_store.model_available():
         logger.info("Sozlama tayyor — AI zanjiri avtomatik ishga tushmoqda")
         supervisor.start()

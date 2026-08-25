@@ -281,14 +281,31 @@
         `<a class="button primary" href="${esc(cloud.connect_url)}" target="_blank" rel="noopener noreferrer">` +
         "Ulash sahifasini ochish</a>";
     } else {
-      // Havola yo'q — demak bulut bilan aloqa yo'q.  Eng muhim gap
-      // birinchi jumlada: nazorat ishlayapti.
+      // Havola yo'q.  SABAB bo'yicha halol matn: avval har qanday server
+      // xatosi (rate limit, 503) ham "Internet yo'q" deb chiqar va mijoz
+      // sog'lom internetini tekshirib o'tirardi.
       card.classList.add("offline");
-      eyebrow.textContent = "Internet yo‘q";
-      title.textContent = "Nazorat ishlashda davom etmoqda";
-      text.textContent =
-        "Kameralar kuzatilmoqda va hodisalar shu kompyuterda saqlanmoqda. " +
-        "Internet tiklangach ular o‘zi bulutga jo‘naydi.";
+      const reason = cloud.hello_error || "network";
+      if (reason === "network") {
+        eyebrow.textContent = "Internet yo‘q";
+        title.textContent = "Nazorat ishlashda davom etmoqda";
+        text.textContent =
+          "Kameralar kuzatilmoqda va hodisalar shu kompyuterda saqlanmoqda. " +
+          "Internet tiklangach ular o‘zi bulutga jo‘naydi.";
+      } else if (reason === "rate_limited") {
+        eyebrow.textContent = "Server band";
+        title.textContent = "Bir necha daqiqadan so‘ng o‘zi ulanadi";
+        text.textContent =
+          "Internet joyida. Server so‘rovlarni vaqtincha chekladi — dastur " +
+          "birozdan keyin avtomatik qayta urinadi, hech narsa bosish shart emas.";
+      } else {
+        eyebrow.textContent = "Bulut javob bermadi";
+        title.textContent = "Nazorat ishlashda davom etmoqda";
+        text.textContent =
+          "Internet joyida, lekin bulut xizmati hozircha ulanishni qabul " +
+          "qilmadi. Dastur o‘zi qayta urinadi; uzoq davom etsa qo‘llab-" +
+          "quvvatlashga yozing.";
+      }
       actions.innerHTML =
         '<a class="button ghost" href="/setup">Usta rejimi — qo‘lda ulash</a>';
     }
@@ -334,6 +351,11 @@
     }
 
     bar.hidden = parts.length === 0;
+    const diagnosticActions = $("diagnosticsActions");
+    // Tugma ULANGAN har qanday holatda ko'rinadi.  Avval u faqat navbat
+    // muammosi ko'ringanda chiqardi — eng kerakli holatda (hech narsa
+    // ishlamayapti, navbat bo'sh) esa yashirin edi.
+    if (diagnosticActions) diagnosticActions.hidden = !cloud.connected;
     bar.className = poisoned || pending > 20 ? "note warn" : "note";
     bar.innerHTML = parts.map((line) => `<span>${line}</span>`).join("<br>");
   }
@@ -374,6 +396,16 @@
   }
 
   $("startBtn").addEventListener("click", (e) => control("/api/service/start", e.currentTarget));
+  $("uploadDiagnosticsBtn")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await api("/api/setup/diagnostics/upload", { method: "POST" });
+      banner("ok", "Diagnostika yuborildi.", "Administrator qurilma, DNS va navbat holatini ko‘ra oladi.");
+    } catch (error) {
+      banner("err", "Diagnostika yuborilmadi.", error.message);
+    } finally { button.disabled = false; }
+  });
   $("restartBtn").addEventListener("click", (e) => control("/api/service/restart", e.currentTarget));
   $("stopBtn").addEventListener("click", (e) => {
     if (!confirm("Nazorat to‘xtatilsinmi? Do‘konda hech narsa qayd etilmaydi.")) return;

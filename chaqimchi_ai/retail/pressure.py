@@ -51,10 +51,25 @@ def read_load_ratio() -> float:
     orasidagi farqni talab qilmaydi, ya'ni holatsiz va chaqirilish
     chastotasidan mustaqil.  Housekeeping halqasi 30 soniyada bir marta
     ishlaydi, bir daqiqalik o'rtacha esa aynan shunga mos.
+
+    Windows'da `getloadavg` YO'Q — u yerda `local/system_metrics.py`ning
+    `GetSystemTimes` o'lchovi ishlatiladi (ctypes, psutil'siz).  Avval bu
+    tarmoq shunchaki 0.0 qaytarardi va butun bosim-klapani ASOSIY
+    platformada (mijozning Windows kompyuteri!) o'lik kod edi.
     """
+    if os.name == "nt":
+        try:
+            from chaqimchi_ai.local import system_metrics
+
+            percent = system_metrics.cpu_percent()
+        except Exception:  # pragma: no cover - platformaga xos
+            return 0.0
+        # Birinchi chaqiruvda taqqoslash namunasi yo'q — 0.0 (halol emas,
+        # lekin 30 soniyadan keyin haqiqiy qiymat keladi).
+        return (percent or 0.0) / 100.0
     try:
         one_minute = os.getloadavg()[0]
-    except (OSError, AttributeError):  # pragma: no cover - Windows
+    except (OSError, AttributeError):  # pragma: no cover - boshqa platforma
         return 0.0
     cores = os.cpu_count() or 1
     return one_minute / cores
@@ -66,7 +81,17 @@ def read_memory_ratio() -> float:
     `MemAvailable` ishlatiladi, `MemFree` emas: kesh va bufer texnik jihatdan
     band, lekin kerak bo'lganda bo'shatiladi.  `MemFree` bo'yicha o'lchash
     sog'lom Linux tizimini doim "xotira tugadi" deb ko'rsatardi.
+
+    Windows'da `GlobalMemoryStatusEx` (`system_metrics.ram_percent`).
     """
+    if os.name == "nt":
+        try:
+            from chaqimchi_ai.local import system_metrics
+
+            percent = system_metrics.ram_percent()
+        except Exception:  # pragma: no cover - platformaga xos
+            return 0.0
+        return (percent or 0.0) / 100.0
     try:
         text = Path("/proc/meminfo").read_text(encoding="utf-8")
     except OSError:

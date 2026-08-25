@@ -62,7 +62,10 @@ def test_paired_device_emits_only_purchased_feature_events(tmp_path: Path) -> No
 
     assert allowed(EdgeEvent(event_type="line_crossed", camera_id="cam")) is True
     assert allowed(EdgeEvent(event_type="queue_threshold_exceeded", camera_id="cam")) is False
-    assert allowed(EdgeEvent(event_type="camera_tampered", camera_id="cam")) is False
+    # Tamper — kamera sog'ligi, paket emas: yopilgan obyektiv haqidagi
+    # xabar hech qaysi tarifda yo'qolmasligi kerak.
+    assert allowed(EdgeEvent(event_type="camera_tampered", camera_id="cam")) is True
+    assert allowed(EdgeEvent(event_type="loitering", camera_id="cam")) is False
     assert allowed(EdgeEvent(event_type="person_detected", camera_id="cam")) is False
     # Davomat yoqilmagan — yuz kadri chiqmaydi (eski cloud batchni rad etardi).
     assert allowed(EdgeEvent(event_type="face_captured", camera_id="cam")) is False

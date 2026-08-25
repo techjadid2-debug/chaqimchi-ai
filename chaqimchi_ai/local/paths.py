@@ -99,3 +99,18 @@ def model_path() -> Path:
     if override:
         return Path(override)
     return app_root() / "models" / "retail" / "person-detection-retail-0013.xml"
+
+
+def face_model_path() -> Path:
+    """Demografiya uchun yuz detektori — person modeli bilan BIR joyda.
+
+    Absolyut yo'l muhim: xizmat `--base-dir` sifatida ProgramData oladi,
+    modellar esa o'rnatish papkasida.  Nisbiy yo'l ProgramData'dan izlanib
+    hech qachon topilmasdi — demografiya Windows'da jimgina o'chiq edi.
+    """
+    return app_root() / "models" / "retail" / "face-detection-retail-0004.xml"
+
+
+def age_gender_model_path() -> Path:
+    """Yosh/jins modeli — `face_model_path` izohiga qarang."""
+    return app_root() / "models" / "retail" / "age-gender-recognition-retail-0013.xml"

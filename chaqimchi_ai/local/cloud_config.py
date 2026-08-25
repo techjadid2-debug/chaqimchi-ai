@@ -13,11 +13,11 @@ Yo'l allaqachon qurilgan, biz faqat oxirgi bo'g'inni ulaymiz:
       -> `retail.cameras_source: auto`     (bor edi)
       -> zanjir kameralarni keshdan oladi  (bor edi)
 
-**Eng muhim qoida: cloud faqat qo'shadi, hech qachon o'chirmaydi.**
-Mijoz sehrgarda kamera qo'shgan bo'lishi mumkin, cloudda esa hali hech
-narsa yo'q.  Agar biz bo'sh cloud javobini "haqiqat" deb qabul qilsak,
-uning ishlab turgan sozlamasini yo'q qilgan bo'lardik.  Shuning uchun
-bo'sh bo'lim e'tiborsiz qoldiriladi.
+Cloud odatda lokal sozlamani saqlab qoladi.  Faqat panel aniq
+`cameras_authoritative=true` deb yuborsa, cloud inventari yagona haqiqat
+bo'ladi va bo'sh ro'yxat ham kamera o'chirilganini anglatadi.  Bu bayroq
+bo'lmasa NVR yonida lokal sehrgarda qo'shilgan ishlab turgan kamera
+jimgina yo'qolmaydi.
 """
 
 from __future__ import annotations
@@ -26,9 +26,12 @@ import json
 import logging
 import os
 import shutil
+import socket
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -88,6 +91,27 @@ def fetch(cloud: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         logger.info("Cloud sozlamasi olinmadi: %s", exc)
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _ack_config(cloud: Dict[str, Any], revision: Any, *, status: str, error: str = "") -> bool:
+    """Cloudga config haqiqatan qo'llanganini bildiradi.
+
+    HTTP javobi kelmagani lokal ishlashni to'xtatmasligi kerak: keyingi
+    poll shu revisionni qaytadan yuboradi va acknowledgement tiklanadi.
+    """
+    if not isinstance(revision, int) or revision < 0:
+        return False
+    try:
+        httpx.post(
+            f"{str(cloud['url']).rstrip('/')}/api/v1/sotqin/config/ack",
+            headers=_headers(cloud),
+            json={"revision": revision, "status": status, "error": error[:500] or None},
+            timeout=TIMEOUT_SEC,
+        ).raise_for_status()
+        return True
+    except httpx.HTTPError as exc:
+        logger.info("Cloud config acknowledgement yuborilmadi: %s", exc)
+        return False
 
 
 def _write_cache(payload: Dict[str, Any]) -> None:
@@ -153,14 +177,15 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
     # chiqmasdi.  Yo'l qo'yilmagani esa yana battar edi: `retail/service.py`
     # standart **Linux** yo'lini qidiradi va Windows'da hech narsa topmaydi.
     cameras = [item for item in (payload.get("cameras") or []) if item.get("source")]
+    authoritative = bool(payload.get("cameras_authoritative"))
     to_cache = dict(payload)
-    if not cameras:
+    if not cameras and not authoritative:
         previous = _cached_cameras()
         if previous:
             to_cache["cameras"] = previous
     _write_cache(to_cache)
     config_store.update("retail", {"sotqin_config_path": str(cache_path())})
-    if cameras:
+    if cameras or authoritative:
         # Kameralar keshdan olinsin va revizya o'zgarganda zanjir o'zini
         # qayta ishga tushirsin — aks holda cloudda qo'shilgan kamera
         # keyingi qo'lda restartgacha tahlil qilinmasdi.
@@ -177,6 +202,7 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
             },
         )
         changed["cameras"] = len(cameras)
+        changed["authoritative"] = authoritative
 
     site = payload.get("config") or {}
     lines = site.get("lines") or []
@@ -701,9 +727,23 @@ def sync_once() -> Optional[Dict[str, Any]]:
 
     revision = payload.get("revision")
     if revision == _last_revision.get("value"):
+        # Qo'llash avval tugagan, acknowledgement esa tarmoq xatosi bilan
+        # qolib ketgan bo'lishi mumkin. Configni qayta yozmasdan faqat ack
+        # ni qayta yuboramiz; aks holda zanjir behuda restart bo'lardi.
+        if revision != _last_ack_revision.get("value") and _ack_config(
+            raw, revision, status="applied"
+        ):
+            _last_ack_revision["value"] = revision
         return None
 
-    changed = apply(payload)
+    try:
+        changed = apply(payload)
+    except Exception as exc:  # config xatosi tahlil zanjirini yiqitmasin
+        logger.exception("Cloud konfiguratsiyasi qo'llanmadi")
+        _ack_config(raw, revision, status="rejected", error=str(exc))
+        return None
+    if _ack_config(raw, revision, status="applied"):
+        _last_ack_revision["value"] = revision
     _last_revision["value"] = revision
     if any(changed.values()):
         logger.info(
@@ -721,6 +761,7 @@ def sync_once() -> Optional[Dict[str, Any]]:
 #: yozish zanjirni qayta ishga tushirar edi va do'kon nazorati har
 #: daqiqada bir necha soniyaga uzilardi.
 _last_revision: Dict[str, Any] = {"value": None}
+_last_ack_revision: Dict[str, Any] = {"value": None}
 
 
 def status() -> Dict[str, Any]:
@@ -731,3 +772,86 @@ def status() -> Dict[str, Any]:
         "remote_config": remote,
         "revision": _last_revision.get("value"),
     }
+
+
+def diagnostics_report() -> Dict[str, Any]:
+    """Usta uchun maxfiy ma'lumotsiz Windows support snapshot.
+
+    URL faqat host ko'rinishida, kameralar esa faqat ID/clip-ready holatida
+    ketadi. Shu sabab paketni cloud paneldan xavfsiz o'qish mumkin.
+    """
+    raw = config_store.read_raw()
+    cloud = dict(raw.get("cloud_sync") or {})
+    retail = dict(raw.get("retail") or {})
+    host = urlparse(str(cloud.get("url") or "")).hostname or ""
+    dns_ok = False
+    dns_error = ""
+    if host:
+        try:
+            socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+            dns_ok = True
+        except OSError as exc:
+            dns_error = str(exc)[:160]
+    queue = _outbox_stats()
+    cameras = [
+        {
+            "camera_id": str(item.get("id") or ""),
+            "enabled": bool(item.get("enabled", True)),
+            "priority": str(item.get("priority") or "retail"),
+            "record_url_set": bool(item.get("record_url")),
+            "codec": str(item.get("codec") or ""),
+        }
+        for item in retail.get("cameras") or []
+        if isinstance(item, dict)
+    ]
+    return {
+        "schema": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "app_version": __version__,
+        "cloud": {"connected": bool(cloud.get("enabled") and cloud.get("device_token")), "host": host, "dns_ok": dns_ok, "dns_error": dns_error},
+        "remote_config": status(),
+        "outbox": {
+            "pending": int(queue.get("pending") or 0),
+            "critical": int(queue.get("critical") or 0),
+            "poisoned": int(queue.get("poisoned") or 0),
+            "poisoned_reasons": list(queue.get("poisoned_reasons") or [])[:3],
+        },
+        "storage": {"free_bytes": _free_disk_bytes()},
+        "cameras": cameras,
+    }
+
+
+def _free_disk_bytes() -> Optional[int]:
+    try:
+        return shutil.disk_usage(paths.data_dir()).free
+    except OSError:
+        # Disk o'lchovi olinmasa diagnostika BUTUNLAY yiqilmasin — aynan
+        # muammoli qurilmada bu 500 bo'lib chiqardi.
+        return None
+
+
+def upload_diagnostics() -> Dict[str, Any]:
+    """Support snapshotini device authentication bilan cloudga yuboradi.
+
+    `ok: False` natija XATO hisoblanadi — chaqiruvchi (lokal API) uni
+    HTTP xatoga aylantiradi.  Avval bu holat 200 bilan qaytib, panel
+    "yuborildi" deb yashil banner ko'rsatardi — support esa hech narsa
+    olmasdi.
+    """
+    raw = config_store.read_raw().get("cloud_sync") or {}
+    report = diagnostics_report()
+    if not raw.get("enabled") or not raw.get("device_token"):
+        return {"ok": False, "report": report, "error": "Cloud hali ulanmagan"}
+    url = str(raw.get("url") or "").strip()
+    if not url:
+        # `raw["url"]` to'g'ridan-to'g'ri o'qilsa KeyError 500 bo'lardi.
+        return {"ok": False, "report": report, "error": "Cloud manzili sozlanmagan"}
+    try:
+        response = httpx.post(
+            f"{url.rstrip('/')}/api/v1/edge/diagnostics",
+            headers=_headers(raw), json={"payload": report}, timeout=TIMEOUT_SEC,
+        )
+        response.raise_for_status()
+        return {"ok": True, "report": report, **response.json()}
+    except (httpx.HTTPError, ValueError) as exc:
+        return {"ok": False, "report": report, "error": str(exc)[:240]}

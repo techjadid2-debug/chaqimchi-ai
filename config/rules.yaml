@@ -79,7 +79,10 @@ rules:
     event_type: loitering
     severity: warning
     cooldown_sec: 300
-    actions: [cloud_sync, save_clip]
+    # save_clip YO'Q: cloud loitering'ni medialess deb rad etadi
+    # (`MEDIALESS_EVENTS`) — klip kesib yuborish faqat kunlik 100 talik
+    # kvotani behuda yer edi.
+    actions: [cloud_sync]
 
   # Navbat — kundalik ish, AI kerak emas: raqamning o'zi yetarli.
   - name: Kassada uzun navbat

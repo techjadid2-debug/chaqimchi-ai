@@ -139,6 +139,26 @@ class DemographyEstimator:
         return result or None
 
 
+def resolve_demography_paths(scene: Any, base_dir: Path) -> Optional[tuple[Path, Path]]:
+    """Model yo'llarini hal qiladi; sozlanmagan bo'lsa None.
+
+    Nisbiy yo'l `base_dir`ga nisbatan — LEKIN bu Windows'da tuzoq:
+    xizmat `--base-dir` sifatida ProgramData oladi, modellar esa o'rnatish
+    papkasida.  Shu sabab `config_store.default_config()` va `_heal()`
+    yo'llarni ABSOLYUT yozadi; nisbiy yo'l faqat qo'lda tuzilgan dev
+    configlarda qoladi.  Ajratilgan funksiya — bu qoidani testda
+    qulflab qo'yish uchun.
+    """
+    face_path = getattr(scene, "face_model_path", None)
+    age_path = getattr(scene, "age_gender_model_path", None)
+    if not face_path or not age_path:
+        return None
+    return (
+        base_dir / face_path if not Path(face_path).is_absolute() else Path(face_path),
+        base_dir / age_path if not Path(age_path).is_absolute() else Path(age_path),
+    )
+
+
 def build_demography_estimator(settings: Any, base_dir: Path) -> Optional[DemographyEstimator]:
     """Sozlamadan estimator quradi; model yo'q bo'lsa jim None.
 
@@ -148,15 +168,19 @@ def build_demography_estimator(settings: Any, base_dir: Path) -> Optional[Demogr
     scene = settings.scene
     if not getattr(scene, "demographics_enabled", False):
         return None
-    face_path = getattr(scene, "face_model_path", None)
-    age_path = getattr(scene, "age_gender_model_path", None)
-    if not face_path or not age_path:
+    resolved = resolve_demography_paths(scene, base_dir)
+    if resolved is None:
         return None
+    face_model, age_model = resolved
     try:
-        return DemographyEstimator(
-            base_dir / face_path if not Path(face_path).is_absolute() else Path(face_path),
-            base_dir / age_path if not Path(age_path).is_absolute() else Path(age_path),
-        )
+        return DemographyEstimator(face_model, age_model)
     except (FileNotFoundError, ImportError, RuntimeError):
-        logger.warning("Demografiya modeli yuklanmadi — funksiya o'chiq", exc_info=True)
+        # Yo'llar log'da ANIQ ko'rinadi: "yuklanmadi" degan umumiy satr
+        # bilan qaysi yo'l noto'g'riligini dala sharoitida topib bo'lmasdi.
+        logger.warning(
+            "Demografiya modeli yuklanmadi — funksiya o'chiq (izlangan: %s, %s)",
+            face_model,
+            age_model,
+            exc_info=True,
+        )
         return None

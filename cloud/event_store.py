@@ -1069,6 +1069,26 @@ class EventStore:
                  input_tokens, output_tokens, _now().isoformat(), site_id, job_id),
             )
 
+    def has_recent_line_crossings(self, site_id: str, *, days: int = 7) -> bool:
+        """So'nggi kunlarda kirish-chiqish qayd etilganmi.
+
+        Sanash sozlanganining ISHONCHLI dalili: kirish chizig'i qurilmaning
+        LOKAL sehrgarida chizilgan bo'lishi mumkin va cloud config'da
+        ko'rinmaydi.  Faqat cloud config bo'shligiga qarab "chiziq
+        chizilmagan — sanalmayapti" deyish sanab turgan do'konga yolg'on
+        ogohlantirish bo'lardi.
+        """
+        cutoff = (_now() - timedelta(days=max(1, days))).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT 1 AS x FROM production_events "
+                    "WHERE site_id=? AND event_type='line_crossed' AND occurred_at>=? LIMIT 1"
+                ),
+                (site_id, cutoff),
+            ).fetchone()
+        return row is not None
+
     def vision_usage_by_site(self, start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
         """Davr bo'yicha har sayt Gemini sarfi — Moliya paneli manbasi.
 
@@ -1453,6 +1473,10 @@ class EventStore:
                     if demo_total
                     else {}
                 ),
+                # SONLAR ham beriladi: do'kon egasi "nechtasi" deb so'raydi,
+                # foizning o'zi bunga javob emas.  Foizlar orqaga moslik
+                # uchun o'z joyida qoladi.
+                "jins_soni": dict(gender_counts) if demo_total else {},
                 "yosh": age_buckets,
             },
         }
@@ -1757,6 +1781,9 @@ class EventStore:
                 "ayol": round(ayol / counted * 100) if counted else 0,
                 "erkak": round(erkak / counted * 100) if counted else 0,
             },
+            # SONLAR — "nechtasi" savoliga to'g'ridan-to'g'ri javob;
+            # foizlar orqaga moslik uchun qoladi.
+            "jins_soni": {"ayol": ayol, "erkak": erkak},
             "yosh": ages,
             "kunlik": daily,
         }

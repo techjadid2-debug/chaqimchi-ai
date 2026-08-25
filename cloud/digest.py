@@ -377,7 +377,9 @@ class DailyDigestService:
             config = self.events.get_site_config(site_id)["config"]
         except Exception:
             return None
-        if not (config.get("lines") or []):
+        # Lokal sehrgarda chizilgan chiziq cloud config'da ko'rinmaydi —
+        # yaqinda sanash bo'lgan saytga "chizilmagan" deyish yolg'on.
+        if not (config.get("lines") or []) and not self.events.has_recent_line_crossings(site_id):
             return (
                 "ℹ️ <b>Kirish-chiqish hali sanalmayapti — kirish chizig'i chizilmagan.</b>\n"
                 "Paneldagi «Chiziq va zonalar» bo'limida eshik ustiga chiziq "

@@ -255,3 +255,32 @@ def test_the_aggregate_outlives_the_events_it_came_from() -> None:
     yilning shu oyi bilan solishtirish» hech qachon mumkin
     bo'lmasdi."""
     assert EventStore.DEMOGRAPHY_RETENTION_DAYS >= 730
+
+
+# ── Sonlar (foiz yoniga) ─────────────────────────────────────────────
+
+
+def test_gender_counts_are_exposed_alongside_percentages(store: EventStore) -> None:
+    """Do'kon egasi "nechtasi" deb so'raydi — foizning o'zi javob emas.
+
+    Sonlar ham bugungi jonli hisobotda, ham davr yig'indisida bo'lishi
+    kerak; foizlar orqaga moslik uchun o'z joyida qoladi.
+    """
+    day = date.today() - timedelta(days=2)
+    _crossings(store, "s1", day)
+
+    report = store.retail_report("s1", day=day)["demografiya"]
+    assert report["jins_soni"] == {"ayol": 6, "erkak": 4}
+    assert report["jins"]["ayol"] == 60  # foiz o'z joyida
+
+    store.rollup_demography("s1", day)
+    answer = store.demography_range("s1", start=day, end=day)
+    assert answer["jins_soni"] == {"ayol": 6, "erkak": 4}
+    # Qamrov ko'rsatkichi: davrda jami kirganlar soni ham javobda.
+    assert answer["kirgan"] == 10
+
+
+def test_gender_counts_are_empty_when_nothing_was_measured(store: EventStore) -> None:
+    day = date.today() - timedelta(days=2)
+    report = store.retail_report("s1", day=day)["demografiya"]
+    assert report["jins_soni"] == {}

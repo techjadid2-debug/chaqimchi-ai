@@ -96,6 +96,13 @@ export function Demography({ dashboard, siteId, onNavigate }: {
   const active = PERIODS.find(item => item.id === period) || PERIODS[0];
   const data: Demografiya | undefined = period === "today" ? dashboard.today.demografiya : range || undefined;
   const counted = Number(data?.hisoblangan || 0);
+  /* Qamrov: portret faqat yuz kameraga ko'ringan kirishlarda yoziladi,
+     shuning uchun "kirdi" har doim "portret"dan katta yoki teng.  Ikkalasi
+     yonma-yon ko'rsatiladi — aks holda ega "nega kirganlar 128, portret 40?"
+     deb tizim buzilgan deb o'ylardi. */
+  const entered = period === "today"
+    ? Number((dashboard.today.traffic as Record<string, unknown> | undefined)?.entered || 0)
+    : Number(range?.kirgan || 0);
 
   const tabs = <div className="segmented">
     {PERIODS.map(item => (
@@ -108,7 +115,9 @@ export function Demography({ dashboard, siteId, onNavigate }: {
   const head = <div className="card-head">
     <div>
       <h2>Mijoz portreti</h2>
-      <p>{counted ? `${formatNumber(counted)} mijoz · ${active.note}` : active.note}</p>
+      <p>{counted
+        ? `Kirdi: ${formatNumber(entered)} · portret ${formatNumber(counted)} mijozda · ${active.note}`
+        : active.note}</p>
     </div>
     {tabs}
   </div>;
@@ -146,8 +155,15 @@ export function Demography({ dashboard, siteId, onNavigate }: {
     {head}
 
     <div className="mini-metrics">
-      <div><span>Ayollar</span><b>{Math.round(Number(data.jins?.ayol || 0))}%</b></div>
-      <div><span>Erkaklar</span><b>{Math.round(Number(data.jins?.erkak || 0))}%</b></div>
+      {/* SON birinchi, foiz qavsda — ega "nechtasi" deb so'raydi.
+          Eski cloud `jins_soni` bermasa foizning o'zi ko'rinadi. */}
+      <div><span>Ayollar</span><b>{data.jins_soni?.ayol != null
+        ? `${formatNumber(data.jins_soni.ayol)} ta (${Math.round(Number(data.jins?.ayol || 0))}%)`
+        : `${Math.round(Number(data.jins?.ayol || 0))}%`}</b></div>
+      <div><span>Erkaklar</span><b>{data.jins_soni?.erkak != null
+        ? `${formatNumber(data.jins_soni.erkak)} ta (${Math.round(Number(data.jins?.erkak || 0))}%)`
+        : `${Math.round(Number(data.jins?.erkak || 0))}%`}</b></div>
+      <div><span>Bolalar</span><b>{formatNumber(Number((data.yosh || {})["<18"] || 0))} ta</b></div>
     </div>
 
     <div className="zone-list">
@@ -164,7 +180,9 @@ export function Demography({ dashboard, siteId, onNavigate }: {
 
     <div className="card-body">
       <p className="metric-note">
-        Yosh — taxminiy baho. Xodimlar hisobga kirmaydi. Rasm saqlanmaydi va yuborilmaydi.
+        Yosh — taxminiy baho (bolalarda aniqlik pastroq). Xodimlar hisobga kirmaydi.
+        Rasm saqlanmaydi va yuborilmaydi. Portret faqat yuzi kameraga ko‘ringan
+        kirishlarda yoziladi — shuning uchun u kirganlar sonidan kam bo‘ladi.
         {/* Ikki son ataylab: 30 kundan faqat 5 tasida mijoz
             qayd etilgan bo'lsa, qurilma o'sha kunlari ishlamagan —
             va buni do'kon egasi bilishi kerak. */}

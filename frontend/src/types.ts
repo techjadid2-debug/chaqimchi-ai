@@ -34,7 +34,10 @@ export type TrendPoint = { date?: string; day?: string; entries?: number; entere
  * shuning uchun karta avval tarifni tekshiradi. */
 export type Demografiya = {
   hisoblangan: number;
+  /** Foizlar (eski shakl, orqaga moslik). */
   jins?: { ayol?: number; erkak?: number };
+  /** Sonlar — "nechtasi" savoliga to'g'ridan-to'g'ri javob. */
+  jins_soni?: { ayol?: number; erkak?: number };
   yosh?: Record<string, number>;
 };
 

@@ -5827,6 +5827,11 @@ async def owner_dashboard(
     except Exception:  # noqa: BLE001 — config hali yaratilmagan yangi sayt
         site_config = {}
     lines_drawn = bool(site_config.get("lines"))
+    if not lines_drawn:
+        # Chiziq qurilmaning LOKAL sehrgarida chizilgan bo'lishi mumkin —
+        # cloud config bo'sh, sanash esa ishlayapti.  Yaqin kunlarda
+        # kirish-chiqish kelgan bo'lsa "chizilmagan" ogohlantirishi yolg'on.
+        lines_drawn = events_store.has_recent_line_crossings(owner.site_id)
     capabilities["geometry"] = {
         "ready": lines_drawn,
         "lines_drawn": lines_drawn,

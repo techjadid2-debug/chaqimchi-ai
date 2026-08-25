@@ -359,18 +359,22 @@ def test_apache_models_open_attendance_in_production(pilot_client, monkeypatch) 
 # ── Mijoz paneli (faqat o'qish) ──────────────────────────────────────────
 
 
-def _owner_headers(client: TestClient, site_id: str) -> dict:
+def _member_headers(client: TestClient, site_id: str, telegram_id: str, role: str) -> dict:
     client.post(
         f"/api/v1/admin/sites/{site_id}/members",
         headers=ADMIN,
-        json={"telegram_id": "505", "role": "owner"},
+        json={"telegram_id": telegram_id, "role": role},
     )
-    client.post("/api/v1/owner/auth/request", json={"telegram_id": "505"})
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": telegram_id})
     verified = client.post(
         "/api/v1/owner/auth/verify",
-        json={"telegram_id": "505", "site_id": site_id, "code": "123456"},
+        json={"telegram_id": telegram_id, "site_id": site_id, "code": "123456"},
     )
     return {"Authorization": f"Bearer {verified.json()['access_token']}"}
+
+
+def _owner_headers(client: TestClient, site_id: str) -> dict:
+    return _member_headers(client, site_id, "505", "owner")
 
 
 def test_owner_sees_employees_gallery_and_images(pilot_client) -> None:
@@ -397,6 +401,44 @@ def test_owner_sees_employees_gallery_and_images(pilot_client) -> None:
             "/api/v1/owner/faces/events/evt-face-owner/image", headers=owner
         ).status_code
         == 200
+    )
+
+
+def test_a_manager_cannot_open_any_biometric_image(pilot_client) -> None:
+    """Menejer yuz rasmini KO'RA olmasin — hech qaysi yo'l bilan.
+
+    Xodimga imzolatilgan rozilik shabloni yuzni faqat do'kon egasi
+    ko'rishini va'da qiladi, menejer esa o'sha xodimning boshlig'i.
+
+    Ilgari `/owner/events/{id}/snapshot` himoyalangan edi, lekin
+    `/owner/faces/...` ostidagi ikkita parallel yo'l aynan o'sha rasmni
+    tekshiruvsiz berardi.  Shu sababli test bitta emas, HAMMA yo'lni
+    sanab o'tadi: yangi marshrut qo'shilsa u ham shu ro'yxatga tushsin.
+    """
+    site, headers = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    _upload_photo(pilot_client, site["site_id"], employee["id"], b"rasm-ali-1")
+    _send_face_capture(pilot_client, headers, "evt-face-manager", b"kadr-ali")
+
+    owner = _owner_headers(pilot_client, site["site_id"])
+    photo_id = pilot_client.get("/api/v1/owner/faces", headers=owner).json()["employees"][0][
+        "photos"
+    ][0]["id"]
+
+    manager = _member_headers(pilot_client, site["site_id"], "506", "manager")
+    for path in (
+        f"/api/v1/owner/faces/photos/{photo_id}/image",
+        "/api/v1/owner/faces/events/evt-face-manager/image",
+        "/api/v1/owner/events/evt-face-manager/snapshot",
+    ):
+        assert pilot_client.get(path, headers=manager).status_code == 403, path
+
+    # Yozish yo'llari ham yopiq: menejer o'z rasmini xodim sifatida
+    # kiritib, davomat yozuvini o'ziga moslab qo'ymasin.
+    assert _owner_upload(pilot_client, manager, employee["id"], b"rasm-ali-2").status_code == 403
+    assert (
+        pilot_client.delete(f"/api/v1/owner/faces/photos/{photo_id}", headers=manager).status_code
+        == 403
     )
 
 

@@ -26,8 +26,10 @@
     <p class="eyebrow"><span></span> O‘rnatish yo‘riqnomasi</p>
     <h1>Windows kompyuteringizga o‘rnatamiz</h1>
     <p class="hero-text">
-      Boshidan oxirigacha <b>10 daqiqa</b>. Dasturchi bo‘lish shart emas —
-      quyidagi 6 qadamni ketma-ket bajarasiz, xolos.
+      Boshidan oxirigacha <b>30 daqiqagacha</b> — NVR’ingiz tarmoqda
+      ishlab tursa. Dasturchi bo‘lish shart emas: quyidagi 6 qadamni
+      ketma-ket bajarasiz, xolos. NVR’ni ham sozlash kerak bo‘lsa,
+      usta bilan 45–90 daqiqa deb rejalang.
     </p>
 
     <!-- ── Yuklab olish ────────────────────────────────────────────── -->
@@ -50,8 +52,8 @@
       </div>
 
       <p class="hint" style="margin-top:14px">
-        Fayl nomi <code>Chaqimchi_AI_Setup-</code> bilan boshlanadi va versiya
-        raqami bilan tugaydi — masalan <code>Chaqimchi_AI_Setup-0.6.8.exe</code>.
+        Fayl nomi <code>chaqimchi-windows-</code> bilan boshlanadi va versiya
+        raqami bilan tugaydi — masalan <code id="guideFileName">chaqimchi-windows-0.6.13.exe</code>.
         Raqam har yangi versiyada o‘zgaradi, ya’ni yangisini olganingizni
         shundan bilasiz.
       </p>
@@ -213,7 +215,7 @@
           Siz <b>manba kodini</b> yuklab olgansiz (GitHub’dagi “Download ZIP”).
           U o‘rnatilmaydi — dasturchilar uchun. Tayyor dasturni shu sahifadagi
           <b>“Windows uchun yuklab olish”</b> tugmasidan oling: fayl nomi
-          <code>Chaqimchi_AI_Setup-</code> bilan boshlanadi va <code>.exe</code>
+          <code>chaqimchi-windows-</code> bilan boshlanadi va <code>.exe</code>
           bilan tugaydi.
         </p>
       </details>
@@ -270,6 +272,15 @@
         if (label && release.version) {
           label.textContent = `Versiya ${release.version}`;
           label.hidden = false;
+        }
+        // Fayl nomi ham RELIZDAN olinadi.  Sahifada qo'lda yozilgan nom
+        // turardi va u haqiqiy fayl bilan mos emas edi ("Chaqimchi_AI_Setup-",
+        // aslida esa "chaqimchi-windows-"): mijoz yuklamalar papkasida
+        // aytilgan faylni topolmasdi va SmartScreen ogohlantirishi ustiga
+        // bu "virus" degan shubhani kuchaytirardi.
+        const fileName = document.getElementById("guideFileName");
+        if (fileName && release.version) {
+          fileName.textContent = `chaqimchi-windows-${release.version}.exe`;
         }
         document.getElementById("guideDownloadReady").hidden = false;
         document.getElementById("guideDownloadPending").hidden = true;

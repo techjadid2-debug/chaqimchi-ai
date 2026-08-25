@@ -64,6 +64,13 @@ def test_every_page_has_a_language_and_charset() -> None:
 # Bu tekshiruvlar sotuv matnini emas, **isbotlanmagan kafolatni** ushlaydi.
 
 #: Sayt bermasligi kerak bo'lgan kafolatlar.
+#:
+#: Oxirgi to'rttasi 2026-08-25 auditidan keyin qo'shildi.  Edu sahifasi
+#: yuz namunalari "O'zbekiston hududidagi infratuzilmada qoladi;
+#: xorijdagi serverga yuborilmaydi" deb yozib turgan edi, holbuki
+#: server Contabo/Fransiyada (`whois 169.58.198.111`).  Bu shunchaki
+#: noaniq gap emas — bolalar biometrikasi haqidagi YOZMA va'da edi.
+#: Hosting hududi o'zgarmagunicha bu jumla saytga qaytib kela olmaydi.
 FORBIDDEN_CLAIMS = (
     "barcha ip kamera",
     "barcha standart ip kamera",
@@ -72,6 +79,10 @@ FORBIDDEN_CLAIMS = (
     "100% aniqlik",
     "o'g'rini aniqlaydi",
     "o‘g‘rini aniqlaydi",
+    "xorijdagi serverga yuborilmaydi",
+    "hududidagi infratuzilmada qoladi",
+    "o'zbekiston hududida saqlanadi",
+    "o‘zbekiston hududida saqlanadi",
 )
 
 

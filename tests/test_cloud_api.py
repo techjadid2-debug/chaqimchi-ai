@@ -269,7 +269,9 @@ def test_sotqin_bootstrap_is_only_served_for_a_published_hashed_release(
 def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     assert cloud_client.get("/").status_code == 200
     assert "Do‘koningiz" in cloud_client.get("/").text
-    assert "4 kamera qabul profili" in cloud_client.get("/").text
+    # "4 kameragacha", "4 kamera" EMAS: arzon tarifda ikkita kamera va
+    # hero shuni yashirmasligi kerak (`plans.py: boshlangich.max_cameras`).
+    assert "4 kameragacha qabul profili" in cloud_client.get("/").text
     assert cloud_client.get("/connect").status_code == 200
     assert cloud_client.get("/privacy").status_code == 200
     assert cloud_client.get("/status").status_code == 200
@@ -867,13 +869,36 @@ def test_liveness_stays_cheap_and_always_ok(cloud_client) -> None:
 
 def test_deep_health_actually_touches_dependencies(cloud_client) -> None:
     """Bungacha `/health` bazani ochmasdan ham 'ok' derdi."""
-    response = cloud_client.get("/health/deep")
+    response = cloud_client.get("/health/deep", headers=ADMIN)
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
     names = {item["name"] for item in body["checks"]}
     assert names == {"control_db", "event_db", "media", "disk"}
     assert all(item["ok"] for item in body["checks"])
+
+
+def test_deep_health_tells_a_stranger_nothing_about_the_business(cloud_client) -> None:
+    """Monitoring 503 ni ko'rsin, begona esa mijozlar sonini BILMASIN.
+
+    2026-08-25 auditi: bu endpoint ochiq turardi va `{"sites": 4}`
+    qaytarardi — raqobatchi bitta `curl` bilan nechta mijozimiz borligini
+    bilib olardi.  Bucket nomi, disk hajmi va versiya ham chiqardi.
+    """
+    body = cloud_client.get("/health/deep").json()
+
+    assert body["ok"] is True
+    assert {item["name"] for item in body["checks"]} == {
+        "control_db",
+        "event_db",
+        "media",
+        "disk",
+    }
+    for item in body["checks"]:
+        assert set(item) <= {"name", "ok", "ms"}, item
+    text = str(body)
+    for leak in ("sites", "bucket", "free_gb", "used_percent", "version", "postgres"):
+        assert leak not in text, leak
 
 
 def test_deep_health_reports_503_when_a_dependency_is_down(cloud_client, monkeypatch) -> None:
@@ -885,7 +910,15 @@ def test_deep_health_reports_503_when_a_dependency_is_down(cloud_client, monkeyp
 
     original = main._probe
     monkeypatch.setattr(main, "_probe", lambda name, check: original(name, broken))
-    response = cloud_client.get("/health/deep")
+
+    # Begona ham 503 ni ko'radi — monitoring shu bilan ishlaydi.
+    anonymous = cloud_client.get("/health/deep")
+    assert anonymous.status_code == 503
+    assert anonymous.json()["ok"] is False
+    assert "error" not in anonymous.json()["checks"][0], "sabab begonaga aytilmaydi"
+
+    # Sababni esa faqat admin o'qiydi.
+    response = cloud_client.get("/health/deep", headers=ADMIN)
     assert response.status_code == 503
     body = response.json()
     assert body["ok"] is False
@@ -897,7 +930,7 @@ def test_deep_health_warns_before_the_disk_is_full(cloud_client, monkeypatch) ->
     import cloud.main as main
 
     monkeypatch.setattr(main, "HEALTH_MIN_FREE_GB", 10**9)
-    response = cloud_client.get("/health/deep")
+    response = cloud_client.get("/health/deep", headers=ADMIN)
     assert response.status_code == 503
     disk = next(item for item in response.json()["checks"] if item["name"] == "disk")
     assert disk["ok"] is False

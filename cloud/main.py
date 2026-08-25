@@ -839,6 +839,22 @@ def require_attendance() -> None:
         )
 
 
+def require_biometric_access(owner: OwnerPrincipal) -> None:
+    """Yuz kadri yoki xodim shabloniga tegadigan HAR BIR marshrut shu yerdan o'tsin.
+
+    `require_active_owner` yetarli emas: `manager` ham faol owner hisoblanadi.
+    Xodimga imzolatilgan rozilik shabloni («uchinchi shaxslarga berilmaydi»)
+    bo'yicha yuzni faqat do'kon egasi va servis admini ko'ra oladi — menejer
+    o'sha xodimning boshlig'i bo'lgani uchun aynan u chetda qolishi kerak.
+
+    Alohida funksiya sifatida ataylab: yozish marshrutlari (rasm qo'shish,
+    o'chirish) `require_owner_role` ni qo'lda chaqirardi, o'qish marshrutlari
+    esa unutilgan edi va bitta himoyalangan snapshot yo'li parallel URL
+    orqali chetlab o'tilardi.  Endi qidiriladigan yagona nom bor.
+    """
+    require_owner_role(owner, "owner", "service_admin")
+
+
 class TelegramSendError(HTTPException):
     """Telegram API xatosi — javob matni bilan.
 
@@ -1645,8 +1661,38 @@ def _health_checks() -> List[Dict[str, Any]]:
     ]
 
 
+#: Anonim javobda qoladigan yagona maydonlar.
+#:
+#: Qolgani (mijozlar soni, bucket nomi, disk hajmi, versiya, xato matni)
+#: FAQAT admin kaliti bilan ko'rinadi.  2026-08-25 auditi: bu endpoint
+#: ochiq turardi va `{"sites": 4}` qaytarardi — ya'ni istalgan odam
+#: bitta `curl` bilan mijozlar sonimizni bilib olardi.  Xato matni ham
+#: sizdirardi ("MinIO bucket topilmadi: chaqimchi-snapshots").
+_PUBLIC_HEALTH_FIELDS = ("name", "ok", "ms")
+
+
+def _is_admin_request(
+    authorization: Optional[str], x_cloud_admin_key: Optional[str]
+) -> bool:
+    """`require_admin` bilan bir xil qoida, lekin XATO QAYTARMAYDI.
+
+    `/health/deep` monitoring uchun ochiq qolishi kerak (UptimeRobot 503
+    ni ko'radi), shuning uchun bu yerda "kirish rad etildi" emas,
+    "kamroq ma'lumot" javobi kerak.
+    """
+    try:
+        require_admin(authorization, x_cloud_admin_key)
+    except HTTPException:
+        return False
+    return True
+
+
 @app.get("/health/deep")
-async def health_deep(response: Response) -> Dict[str, Any]:
+async def health_deep(
+    response: Response,
+    authorization: Optional[str] = Header(None),
+    x_cloud_admin_key: Optional[str] = Header(None, alias="X-Cloud-Admin-Key"),
+) -> Dict[str, Any]:
     """Bog'liqliklar bilan birga tekshiruv — nosozlikda 503.
 
     Bungacha `/health` bazani ham, MinIO'ni ham, diskni ham tekshirmasdan
@@ -1656,16 +1702,29 @@ async def health_deep(response: Response) -> Dict[str, Any]:
     Tekshiruvlar bloklovchi (SQLite, MinIO, disk), shuning uchun ular
     alohida oqimda bajariladi — aks holda bu endpoint butun serverni
     to'xtatib turardi.
+
+    Javob **kim so'rayotganiga qarab** qisqaradi: monitoringga qaysi
+    tekshiruv yiqilgani va 503 yetadi, raqamlar esa admin kalitini
+    talab qiladi (`_PUBLIC_HEALTH_FIELDS`).
     """
     checks = await asyncio.to_thread(_health_checks)
     ok = all(item["ok"] for item in checks)
     if not ok:
         response.status_code = 503
+    if _is_admin_request(authorization, x_cloud_admin_key):
+        return {
+            "ok": ok,
+            "service": "chaqimchi-cloud",
+            "version": __version__,
+            "checks": checks,
+        }
     return {
         "ok": ok,
         "service": "chaqimchi-cloud",
-        "version": __version__,
-        "checks": checks,
+        "checks": [
+            {key: item[key] for key in _PUBLIC_HEALTH_FIELDS if key in item}
+            for item in checks
+        ],
     }
 
 
@@ -7318,7 +7377,7 @@ async def owner_add_employee_face(
     tokendan olinadi, ya'ni mijoz boshqa do'konga yozolmaydi.
     """
     require_attendance()
-    require_owner_role(owner, "owner", "service_admin")
+    require_biometric_access(owner)
     _require_face_service()
     _owner_employee_or_404(owner.site_id, employee_id)
 
@@ -7384,7 +7443,7 @@ async def owner_add_face_from_capture(
     kamera, haqiqiy yorug'lik va haqiqiy burchak.
     """
     require_attendance()
-    require_owner_role(owner, "owner", "service_admin")
+    require_biometric_access(owner)
     _require_face_service()
     _owner_employee_or_404(owner.site_id, employee_id)
 
@@ -7430,7 +7489,7 @@ async def owner_delete_employee_face(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     require_attendance()
-    require_owner_role(owner, "owner", "service_admin")
+    require_biometric_access(owner)
     photo_key = get_event_store().delete_employee_face(owner.site_id, face_id)
     if photo_key is None:
         raise HTTPException(404, "Rasm topilmadi")
@@ -7452,6 +7511,7 @@ async def owner_face_event_image(
     event_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
 ) -> Response:
     require_attendance()
+    require_biometric_access(owner)
     event = get_event_store().event(owner.site_id, event_id)
     if not event or event.get("event_type") != "face_captured" or not event.get("snapshot_key"):
         raise HTTPException(404, "Kadr topilmadi")
@@ -7463,6 +7523,7 @@ async def owner_employee_face_image(
     face_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
 ) -> Response:
     require_attendance()
+    require_biometric_access(owner)
     face = get_event_store().employee_face(owner.site_id, face_id)
     if face is None:
         raise HTTPException(404, "Rasm topilmadi")
@@ -7655,7 +7716,7 @@ async def owner_snapshot(
     if not event or not event.get("snapshot_key"):
         raise HTTPException(404, "Snapshot topilmadi")
     if event.get("event_type") in {"face_captured", "employee_seen"}:
-        require_owner_role(owner, "owner", "service_admin")
+        require_biometric_access(owner)
     try:
         content = await media_get(event["snapshot_key"])
     except FileNotFoundError as exc:
@@ -7672,7 +7733,7 @@ async def owner_clip(
     if not event or not event.get("clip_key"):
         raise HTTPException(404, "Videoklip topilmadi")
     if event.get("event_type") in {"face_captured", "employee_seen"}:
-        require_owner_role(owner, "owner", "service_admin")
+        require_biometric_access(owner)
     try:
         content = await media_get(event["clip_key"])
     except FileNotFoundError as exc:

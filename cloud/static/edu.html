@@ -36,6 +36,12 @@
     .edu-mod input { width: 18px; height: 18px; flex: none; accent-color: var(--blue); }
     .edu-mod span { flex: 1; font-weight: 650; font-size: 14px; }
     .edu-mod b { color: var(--muted); font-weight: 650; font-size: 13px; white-space: nowrap; }
+    /* Rejadagi modul: ko'rinadi, lekin tanlanmaydi va narxi yo'q.
+       Yashirilmaydi — mijoz baribir so'raydi, sotuvchi esa og'zaki
+       va'da berib qo'yadi.  Ko'zga aniq boshqacha ko'rinsin. */
+    .edu-mod-planned { cursor: default; background: transparent; border-style: dashed; }
+    .edu-mod-planned span { color: var(--muted); font-weight: 600; }
+    .edu-mod-planned b { color: var(--muted); font-weight: 600; }
     .edu-result { position: sticky; top: 90px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper-2); }
     .edu-total { margin: 6px 0 4px; font-size: clamp(30px, 4vw, 40px); font-weight: 800; letter-spacing: -.03em; }
     .edu-rows { display: grid; gap: 9px; margin: 20px 0; padding-top: 18px; border-top: 1px solid var(--border); font-size: 14px; }
@@ -273,25 +279,32 @@
         Ta’lim muassasasida yuz orqali tanish modulini shunchaki yoqib
         qo‘yish mumkin emas. O‘zbekiston qonunchiligiga ko‘ra voyaga
         yetmaganlarning shaxsiy ma’lumotlarini qayta ishlash uchun ota-ona
-        yoki qonuniy vakilning roziligi zarur, biometrik ma’lumotlar esa
-        alohida tartibda himoyalanadi va mamlakat hududida saqlanishi
-        kerak.
+        yoki qonuniy vakilning roziligi zarur, biometrik ma’lumotlarga esa
+        alohida talablar qo‘yiladi — jumladan ular qayerda saqlanishiga
+        ham.
       </p>
-      <p>Shuning uchun:</p>
+      <p>
+        <b>Shu sababli Face ID hozir yopiq pilot bosqichida</b> va uni
+        ommaga ochmaymiz: serverimiz Yevropada joylashgan, ya’ni
+        muassasangiz yuristi bilan birga har bir holatni alohida ko‘rib
+        chiqishimiz kerak. Buni yashirmaymiz —
+        <a href="/maxfiylik">maxfiylik sahifasida</a> ma’lumot qayerda
+        saqlanishi aniq yozilgan.
+      </p>
+      <p>Amalda bu quyidagini anglatadi:</p>
       <ul>
         <li>Face ID — <b>ixtiyoriy modul</b>, uni yoqmaslik ham mumkin.</li>
         <li>Maktab o‘quvchilari uchun ota-ona roziligi olinadi.</li>
         <li>Rozilik berilmasa — QR yoki RFID orqali davomat ishlatiladi.</li>
-        <li>Yuz namunalari muassasadagi qurilmada yoki O‘zbekiston hududidagi infratuzilmada qoladi; xorijdagi serverga yuborilmaydi.</li>
-        <li>Ma’lumotlarni o‘chirish, kirish huquqlari va audit jurnali mavjud.</li>
+        <li>Yuz namunasini istalgan payt o‘chirish va kim ko‘ra olishini cheklash mumkin: rasmni faqat muassasa rahbari ochadi, oddiy xodim emas.</li>
         <li>Hojatxona, kiyinish xonasi va shunga o‘xshash hududlarda tahlil ishlatilmaydi.</li>
         <li>Telegramga bolalarning biometrik ma’lumotlari yuborilmaydi.</li>
       </ul>
       <p class="hint">
         Oddiy kuzatuv kamerasida natija burchak, yorug‘lik va odam
-        oqimiga bog‘liq. Janjal tahlili “ehtimol” sifatida xabar beradi
-        va uni mas’ul xodim tasdiqlaydi. Tutun yoki alanga kuzatuvi
-        sertifikatlangan yong‘in signalizatsiyasi o‘rnini bosmaydi.
+        oqimiga bog‘liq. Tizim yong‘in, tutun yoki alangani
+        <b>aniqlamaydi</b> va sertifikatlangan yong‘in signalizatsiyasi
+        o‘rnini bosmaydi.
       </p>
     </section>
 
@@ -450,12 +463,19 @@
           (item.code === state.kind) + '">' + esc(item.name) + "</button>";
       }).join("");
 
-      $("modPick").innerHTML = data.modules.map(function (mod) {
+      var sellable = data.modules.map(function (mod) {
         var on = state.modules.indexOf(mod.code) >= 0;
         return '<label class="edu-mod"><input type="checkbox" data-mod="' + esc(mod.code) + '"' +
           (on ? " checked" : "") + '><span>' + esc(mod.name) + "</span><b>" +
           money(mod.uzs) + "/oy</b></label>";
-      }).join("");
+      });
+      // Rejadagilar narxsiz va checkbox'siz chiziladi: narx ko'rsatilgan
+      // zahoti sotuvchi ham, mijoz ham buni tayyor xizmat deb tushunadi.
+      var planned = (data.planned_modules || []).map(function (mod) {
+        return '<div class="edu-mod edu-mod-planned"><span>' + esc(mod.name) +
+          "</span><b>rejada</b></div>";
+      });
+      $("modPick").innerHTML = sellable.concat(planned).join("");
     }
 
     function draw() {

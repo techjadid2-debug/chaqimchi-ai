@@ -75,30 +75,53 @@ CAMERA_TABLE: Tuple[Tuple[Optional[int], int, int, int], ...] = (
 #: Bazaviy ikkitadan ortiq har bir faol AI kamera.
 EXTRA_CAMERA_UZS = 29_000
 
-#: AI modullari va ularning oylik narxi.
+#: SOTILADIGAN AI modullari va ularning oylik narxi.
+#:
+#: Bu yerga modul qo'shishdan oldin bitta savolga javob bering: uni
+#: bugun yetkazib bera olamizmi?  Kalkulyator narx ko'rsatgan zahoti
+#: sotuvchi ham, mijoz ham buni tayyor xizmat deb tushunadi.
+#:
+#: 2026-08-25 auditi: bu ro'yxatda `monitoring`, `deep` va `fight`
+#: oyiga 129/249/199 ming so'mga sotilib turgan edi, holbuki kodda
+#: ularning birortasi ham YO'Q — `chaqimchi_ai/event_models.py` dagi
+#: hodisa turlari orasida na dars, na janjal bor.  Ular
+#: `PLANNED_MODULES` ga ko'chirildi.
 MODULES: Dict[str, Tuple[str, int]] = {
     "faceid": ("Face ID va avtomatik davomat", 129_000),
-    "monitoring": ("AI dars monitoringi", 129_000),
-    "deep": ("Chuqurlashtirilgan dars tahlili", 249_000),
-    "fight": ("Janjal va tajovuzni aniqlash", 199_000),
     "branch": ("Qo'shimcha filial", 99_000),
+}
+
+#: Rejadagi modullar: `code → ko'rinadigan nom`.
+#:
+#: Sahifada ATAYLAB ko'rsatiladi, lekin NARXSIZ va tanlab bo'lmaydigan
+#: holatda.  Butunlay yashirish ham xato bo'lardi: mijoz baribir
+#: so'raydi, sotuvchi esa og'zaki va'da berib qo'yadi.  Yozib qo'yilgan
+#: "rejada, narxi yo'q" — sotuvchi uchun ham chegara.
+PLANNED_MODULES: Dict[str, str] = {
+    "monitoring": "AI dars monitoringi",
+    "deep": "Chuqurlashtirilgan dars tahlili",
+    "fight": "Janjal va tajovuzni aniqlash",
 }
 
 #: Chuqur tahlil oddiy monitoring O'RNIGA ishlaydi — ikkalasi
 #: birgalikda hisoblanmaydi.  Aks holda mijoz bir xil ish uchun ikki
-#: marta to'lardi.
+#: marta to'lardi.  Ikkalasi ham hozir `PLANNED_MODULES` da, ya'ni bu
+#: qoida amalda hech narsani o'zgartirmaydi; ular sotuvga chiqqanda
+#: yana kerak bo'ladi, shuning uchun olib tashlanmadi.
 DEEP_REPLACES = "monitoring"
 
 #: Har modul bitta kameraga qancha qo'shimcha hisoblash yuki beradi.
 #:
-#: Janjal tahlili eng og'ir: u bitta suratni emas, bir necha kadrdan
-#: iborat VAQT KETMA-KETLIGINI tahlil qiladi.  Face ID ham og'ir,
-#: lekin u faqat kirish nuqtalarida ishlaydi.
+#: **Bu o'lchangan emas, baholangan qiymat.**  Faqat sotiladigan modul
+#: uchun turadi: rejadagi modullarga og'irlik berish qurilma tavsiyasini
+#: mavjud bo'lmagan ish asosida qimmatlashtirardi (auditgacha janjal
+#: 2.5, chuqur tahlil 2.25 turardi va mijozga 19 490 000 so'mlik
+#: qurilmagacha tavsiya qilinardi).
+#:
+#: Face ID faqat kirish nuqtalarida ishlaydi — `module_cameras` ga
+#: qarang.
 LOAD_WEIGHTS: Dict[str, float] = {
     "faceid": 1.25,
-    "monitoring": 0.75,
-    "deep": 2.25,
-    "fight": 2.5,
 }
 
 #: Edge qurilmalari: `(shartli yuklama chegarasi, nom, tavsif, narx)`.
@@ -167,24 +190,19 @@ def module_cameras(cameras: int, code: str) -> int:
     """Modul nechta kameraga tegadi.
 
     Modul yoqilgani "hamma kamerada ishlaydi" degani EMAS va bu
-    yuklama hisobidagi eng katta farq.  Haqiqiy maktabda:
+    yuklama hisobidagi eng katta farq: Face ID faqat KIRISH
+    eshiklarida ishlaydi — sinf kamerasidagi burchak yuz tanish uchun
+    yaroqsiz va u yerda davomat olishning ma'nosi ham yo'q.
 
-    * Face ID faqat KIRISH eshiklarida — sinf kamerasida yuz tanish
-      shart emas va u yerdagi burchak buning uchun yaroqsiz ham;
-    * dars monitoringi faqat SINF xonalarida;
-    * janjal tahlili yo'lak, hovli va oshxonada — ya'ni tanaffusda
-      odam to'planadigan joylarda.
+    Nisbat odatiy maktab tarkibidan olingan: 8 kamera → 1 kirish.
 
-    Nisbatlar odatiy maktab tarkibidan olingan va `spec` dagi
-    misollarni aynan qaytaradi (8 kamera → 1 kirish, 2 sinf,
-    2 yo'lak).
+    Rejadagi modullar (`PLANNED_MODULES`) bu yerda hisoblanmaydi —
+    ular sotilmaydi, ya'ni qurilma tavsiyasini ham oshirmasligi kerak.
     """
     count = max(0, int(cameras))
     if code == "faceid":
         # Kamida bitta kirish eshigi doim bo'ladi.
         return max(1, count // 8) if count else 0
-    if code in ("monitoring", "deep", "fight"):
-        return count // 4
     return 0
 
 
@@ -316,6 +334,11 @@ def catalog() -> Dict[str, Any]:
             }
             for code, (name, price) in MODULES.items()
         ],
+        # Narxsiz va tanlab bo'lmaydigan ro'yxat.  Sahifa buni
+        # "rejada" bo'limida ko'rsatadi — tanlash tugmasi berilmasin.
+        "planned_modules": [
+            {"code": code, "name": name} for code, name in PLANNED_MODULES.items()
+        ],
         "deep_replaces": DEEP_REPLACES,
         "edge_catalog": [
             {"max_load": ceiling, "name": name, "spec": spec, "price_uzs": price}
@@ -325,6 +348,10 @@ def catalog() -> Dict[str, Any]:
         # Sahifa shu izohni ko'rsatadi: narxlar pilot mijozlar bilan
         # tekshirilmagan boshlang'ich model.
         "price_note": "mo'ljal",
+        # Qurilma tavsiyasi ham baholangan: `LOAD_WEIGHTS` haqiqiy
+        # apparatda hali o'lchanmagan (docs/DOKON_MVP.md "Kod bor,
+        # lekin hali real qurilmada qabul qilinmagan").
+        "load_note": "baholangan",
     }
 
 
@@ -334,6 +361,7 @@ __all__ = [
     "INSTITUTIONS",
     "MODULES",
     "PERSON_BANDS",
+    "PLANNED_MODULES",
     "catalog",
     "compute_load",
     "edge_for_load",

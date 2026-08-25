@@ -76,3 +76,13 @@ ham yiqiladi.
 - Javob "N ta hodisa topildi" shablonida bo'lsa — eventlarda snapshot
   yo'q (media faqat xavfsizlik hodisalarida saqlanadi) yoki Gemini
   sozlanmagan.
+
+## Moliya bilan bog'liqlik
+
+Har Gemini javobidagi `usageMetadata` (kirish/chiqish + thinking tokenlar)
+jobga yozib boriladi (`vision_jobs.gemini_input_tokens/gemini_output_tokens`).
+Admin → **Moliya** sahifasi shu haqiqiy sarfni narx tarifiga
+(`CHAQIMCHI_GEMINI_INPUT_USD_PER_M` / `CHAQIMCHI_GEMINI_OUTPUT_USD_PER_M`,
+default flash-sinf: $0.30/$2.50 1M token) ko'paytirib, har mijozning oylik
+Gemini xarajatini so'mda ko'rsatadi. Xato bilan tugagan job sarfi ham
+yoziladi — u ham pul.

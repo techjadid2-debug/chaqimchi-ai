@@ -471,6 +471,12 @@ class EventStore:
         vision_job_columns = self._existing_columns(conn, "vision_jobs")
         if "audio_mime" not in vision_job_columns:
             conn.execute("ALTER TABLE vision_jobs ADD COLUMN audio_mime TEXT")
+        # Moliya paneli uchun HAQIQIY Gemini sarfi: har jobda ishlatilgan
+        # tokenlar Google javobidagi `usageMetadata`dan yoziladi.  NULL —
+        # token yozilmagan eski job (xarajati "taxminiy" deb ko'rsatiladi).
+        for name in ("gemini_input_tokens", "gemini_output_tokens"):
+            if name not in vision_job_columns:
+                conn.execute(f"ALTER TABLE vision_jobs ADD COLUMN {name} INTEGER")
 
     @staticmethod
     def _dict(row: Any) -> Dict[str, Any]:
@@ -1047,17 +1053,52 @@ class EventStore:
         result: Optional[Dict[str, Any]] = None,
         error: Optional[str] = None,
         audio_reply_key: Optional[str] = None,
+        input_tokens: Optional[int] = None,
+        output_tokens: Optional[int] = None,
     ) -> None:
         status = "failed" if error else "completed"
         with self._connect() as conn:
             conn.execute(
                 self._sql(
-                    "UPDATE vision_jobs SET status=?,result_json=?,error_text=?,audio_reply_key=?,completed_at=? "
+                    "UPDATE vision_jobs SET status=?,result_json=?,error_text=?,audio_reply_key=?,"
+                    "gemini_input_tokens=?,gemini_output_tokens=?,completed_at=? "
                     "WHERE site_id=? AND id=?"
                 ),
                 (status, json.dumps(result, ensure_ascii=False) if result else None,
-                 error[:500] if error else None, audio_reply_key, _now().isoformat(), site_id, job_id),
+                 error[:500] if error else None, audio_reply_key,
+                 input_tokens, output_tokens, _now().isoformat(), site_id, job_id),
             )
+
+    def vision_usage_by_site(self, start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
+        """Davr bo'yicha har sayt Gemini sarfi — Moliya paneli manbasi.
+
+        Tokenlar Google `usageMetadata`sidan yozilgan HAQIQIY sonlar.
+        `untracked_jobs` — tokeni yozilmagan joblar (eski yozuvlar yoki
+        Gemini chaqirilmagan metadata-javoblar): ular uchun xarajat 0
+        emas, "kuzatilmagan" deb ko'rsatiladi.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT site_id, COUNT(*) AS jobs,"
+                    " SUM(COALESCE(gemini_input_tokens,0)) AS input_tokens,"
+                    " SUM(COALESCE(gemini_output_tokens,0)) AS output_tokens,"
+                    " SUM(CASE WHEN gemini_input_tokens IS NULL THEN 1 ELSE 0 END) AS untracked_jobs"
+                    " FROM vision_jobs WHERE created_at>=? AND created_at<?"
+                    " GROUP BY site_id"
+                ),
+                (start_iso, end_iso),
+            ).fetchall()
+        return [
+            {
+                "site_id": str(item["site_id"]),
+                "jobs": int(item["jobs"] or 0),
+                "input_tokens": int(item["input_tokens"] or 0),
+                "output_tokens": int(item["output_tokens"] or 0),
+                "untracked_jobs": int(item["untracked_jobs"] or 0),
+            }
+            for item in (self._dict(row) for row in rows)
+        ]
 
     def search_vision_events(
         self,

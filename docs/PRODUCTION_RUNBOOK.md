@@ -286,3 +286,17 @@ alohida hujjatda: `docs/VISION_AGENT.md`.  Qisqasi: `CHAQIMCHI_GEMINI_API_KEY`
 va `CHAQIMCHI_GEMINI_VISION_MODEL` IKKALASI ham `.env.production`da bo'lishi
 shart (preflight tekshiradi); worker `docker-compose.chaqimchi.yml`dagi
 `vision-worker` servisida ishlaydi va `frontend` tarmog'ida bo'lishi kerak.
+
+## 7. Moliya paneli
+
+Admin panelidagi **Moliya** bo'limi (`/api/v1/admin/finance`) platforma va
+har mijoz xarajatini ko'rsatadi:
+
+- **Server**: `.env.production` dagi `CHAQIMCHI_COST_SERVER_MONTHLY_USD`
+  (Contabo hisobidagi haqiqiy summa) × `CHAQIMCHI_USD_RATE_UZS`.
+- **Domen**: `CHAQIMCHI_COST_DOMAIN_YEARLY_UZS` (standart 27 000 so'm/yil),
+  oyiga bo'lib ko'rsatiladi.
+- **Gemini**: har savolning HAQIQIY token sarfi (Google `usageMetadata`)
+  × env'dagi narx tarifi.
+- Infra (server+domen) qurilma ulangan do'konlar orasida teng bo'linadi;
+  har mijoz qatorida: tarif daromadi, Gemini xarajati, infra ulushi, marja.

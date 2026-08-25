@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+from contextvars import ContextVar
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -64,6 +65,31 @@ def _fallback_model() -> str:
     return os.environ.get("CHAQIMCHI_GEMINI_FALLBACK_MODEL", "").strip()
 
 
+#: Joriy job davomida ishlatilgan HAQIQIY Gemini tokenlari.
+#:
+#: Moliya paneli har mijozning Gemini xarajatini shu sonlardan hisoblaydi
+#: — taxmin emas, Google javobidagi `usageMetadata`.  ContextVar: bitta
+#: worker bir nechta jobni parallel qayta ishlasa ham hisoblar aralashmaydi.
+_job_usage: ContextVar[Optional[Dict[str, int]]] = ContextVar("gemini_job_usage", default=None)
+
+
+def record_usage(data: Dict[str, Any]) -> None:
+    """Gemini javobidan token sarfini joriy job hisobiga qo'shadi.
+
+    `thoughtsTokenCount` ham chiqish tokenlariga kiradi: thinking
+    modellarda Google aynan shu yig'indini billing qiladi.
+    """
+    usage = _job_usage.get()
+    meta = data.get("usageMetadata")
+    if usage is None or not isinstance(meta, dict) or not meta:
+        return
+    usage["input"] += int(meta.get("promptTokenCount") or 0)
+    usage["output"] += int(meta.get("candidatesTokenCount") or 0) + int(
+        meta.get("thoughtsTokenCount") or 0
+    )
+    usage["calls"] += 1
+
+
 def _json_from_response(data: Dict[str, Any]) -> Dict[str, Any]:
     text = ""
     try:
@@ -102,7 +128,9 @@ async def _gemini_json(parts: List[Dict[str, Any]], schema: Dict[str, Any]) -> D
                 if response.status_code >= 500:
                     raise RuntimeError(f"Gemini vaqtincha xato: {response.status_code}")
                 response.raise_for_status()
-                return _json_from_response(response.json())
+                data = response.json()
+                record_usage(data)
+                return _json_from_response(data)
             except Exception as exc:  # fallback modeli faqat provider xatosida sinovdan o'tadi
                 last_error = exc
     raise RuntimeError("Gemini javob bermadi") from last_error
@@ -148,7 +176,9 @@ async def synthesize_audio(text: str) -> Optional[tuple[bytes, str]]:
                 params={"key": key}, json=payload,
             )
             response.raise_for_status()
-            parts = response.json()["candidates"][0]["content"]["parts"]
+            data = response.json()
+            record_usage(data)
+            parts = data["candidates"][0]["content"]["parts"]
             for part in parts:
                 inline = part.get("inlineData") or part.get("inline_data") or {}
                 if inline.get("data"):
@@ -318,6 +348,9 @@ async def process_next_job(
     if not job:
         return False
     site_id, job_id = str(job["site_id"]), str(job["id"])
+    # Shu jobning haqiqiy Gemini sarfi — Moliya paneli uchun.
+    usage: Dict[str, int] = {"input": 0, "output": 0, "calls": 0}
+    usage_token = _job_usage.set(usage)
     try:
         question = str(job.get("question") or "").strip()
         if not question and job.get("audio_key"):
@@ -350,7 +383,13 @@ async def process_next_job(
                 # sendVoice'da 400, brauzerda esa jim o'ynamaslik edi.
                 result["audio_reply_mime"] = mime
         await asyncio.to_thread(
-            store.finish_vision_job, site_id, job_id, result=result, audio_reply_key=audio_reply_key
+            store.finish_vision_job,
+            site_id,
+            job_id,
+            result=result,
+            audio_reply_key=audio_reply_key,
+            input_tokens=usage["input"],
+            output_tokens=usage["output"],
         )
         # Memory yozuvi ALOHIDA himoyada va tayyor javobdan KEYIN emas,
         # javob holatini o'zgartirmaydi: avval undagi xato butun jobni
@@ -369,10 +408,20 @@ async def process_next_job(
     except Exception as exc:  # job xatosi webhook/panelni yiqitmasligi kerak
         logger.warning("Agent jobi yiqildi: %s/%s", site_id, job_id, exc_info=True)
         try:
-            await asyncio.to_thread(store.finish_vision_job, site_id, job_id, error=str(exc))
+            # Xato bo'lsa ham SARF yoziladi: yarim bajarilgan job ham
+            # Gemini'ga pul to'lagan — Moliya buni yashirmasligi kerak.
+            await asyncio.to_thread(
+                store.finish_vision_job,
+                site_id,
+                job_id,
+                error=str(exc),
+                input_tokens=usage["input"],
+                output_tokens=usage["output"],
+            )
         except Exception:  # noqa: BLE001 — DB ham yiqilgan; requeue keyin tiklaydi
             logger.exception("Agent jobining xatosi ham yozilmadi: %s/%s", site_id, job_id)
     finally:
+        _job_usage.reset(usage_token)
         if job.get("audio_key"):
             try:
                 await media_delete(str(job["audio_key"]))

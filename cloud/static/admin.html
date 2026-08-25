@@ -324,8 +324,12 @@
       alerts: null, readiness: null, catalog: null, templates: null,
       accounts: null, assignments: null, updates: null,
     };
+    // Moliya bo'limida tanlangan oy (bo'sh — joriy oy).
+    let financeMonth = "";
+
     const LOADERS = {
       stats: () => api("/api/v1/admin/stats"),
+      finance: () => api("/api/v1/admin/finance" + (financeMonth ? `?month=${financeMonth}` : "")),
       sites: () => api("/api/v1/admin/sites"),
       leads: () => api("/api/v1/admin/leads?limit=100"),
       invoices: () => api("/api/v1/admin/invoices?limit=50"),
@@ -340,6 +344,7 @@
     };
 
     const EMPTY_DATA = {
+      finance: null,
       stats: {}, sites: [], leads: [], invoices: [], providers: {}, alerts: { enabled: false },
       readiness: { ready: false, items: [] }, catalog: { features: [], price_book: {} },
       templates: [], accounts: [], assignments: [], updates: { paused: false },
@@ -382,6 +387,7 @@
       { id: "mijozlar", label: "Mijozlar", deps: ["sites", "accounts"],
         render: (el, param) => (param ? renderCustomerDetail(el, param) : renderCustomers(el)) },
       { id: "tolovlar", label: "To'lovlar", deps: ["invoices", "providers"], render: renderPayments },
+      { id: "moliya", label: "Moliya", deps: ["finance"], render: renderFinance },
       { id: "arizalar", label: "Arizalar", deps: ["leads"], render: renderLeads,
         badge: () => (S.leads || []).filter((l) => l.status === "new").length },
       { id: "jamoa", label: "Jamoa", deps: ["accounts", "assignments", "sites"], render: renderTeam },
@@ -792,6 +798,101 @@
     // ── To'lovlar ──────────────────────────────────────────────────────
     function payLink(inv) {
       return `${(S.providers && S.providers.public_url) || PLATFORM.apex}/pay/${inv.id}`;
+    }
+
+    /* ── Moliya ─────────────────────────────────────────────────────────
+       Platforma nechchiga tushayapti va HAR MIJOZ alohida nechchiga
+       tushayapti.  Gemini xarajati haqiqiy token sarfidan (Google
+       javobidagi usageMetadata), infra esa env'dagi summalardan —
+       bu sahifada qo'lda yozilgan raqam yo'q. */
+    function financeMonthOptions() {
+      const options = [];
+      const now = new Date();
+      for (let back = 0; back < 6; back += 1) {
+        const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+        const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        options.push(value);
+      }
+      return options;
+    }
+
+    const tokens = (n) => Number(n || 0).toLocaleString("ru-RU");
+
+    async function renderFinance(el) {
+      const f = S.finance;
+      if (!f) {
+        el.innerHTML = `<h1>Moliya</h1><div class="note err"><b>Ma'lumot kelmadi</b>Qayta urinib ko'ring.</div>`;
+        return;
+      }
+      const fixed = f.fixed || {};
+      const gem = f.gemini || {};
+      const totals = f.totals || {};
+      const rows = (f.sites || []).map((s) => `
+        <tr>
+          <td><b>${esc(s.name || s.site_id)}</b><br>
+            <small>${esc(s.plan || "—")}${s.billable ? "" : " · qurilma ulanmagan"}</small></td>
+          <td>${s.billable ? uzs(s.revenue_uzs) : "—"}</td>
+          <td>${s.gemini_jobs}${s.gemini_untracked_jobs ? ` <small>(${s.gemini_untracked_jobs} kuzatilmagan)</small>` : ""}</td>
+          <td><small>${tokens(s.gemini_input_tokens)} kirish<br>${tokens(s.gemini_output_tokens)} chiqish</small></td>
+          <td>${uzs(s.gemini_cost_uzs)}</td>
+          <td>${s.billable ? uzs(s.shared_cost_uzs) : "—"}</td>
+          <td><b>${uzs(s.total_cost_uzs)}</b></td>
+          <td style="color:${s.margin_uzs >= 0 ? "#137333" : "#b3261e"}"><b>${uzs(s.margin_uzs)}</b></td>
+        </tr>`).join("");
+
+      el.innerHTML = `
+        <h1>Moliya</h1>
+        <div class="action-row" style="margin-bottom:12px">
+          <select id="financeMonth" aria-label="Oy">
+            ${financeMonthOptions().map((m) => `<option value="${m}"${m === f.month ? " selected" : ""}>${m}</option>`).join("")}
+          </select>
+          <span class="hint">Kurs: 1 $ = ${uzs(f.usd_rate_uzs)}</span>
+        </div>
+        ${fixed.server_configured ? "" : `<div class="note warn"><b>Server narxi kiritilmagan.</b>
+          Contabo oylik summasini serverdagi <code>.env.production</code> ga
+          <code>CHAQIMCHI_COST_SERVER_MONTHLY_USD</code> qilib yozing — shunda bu sahifa to'liq bo'ladi.</div>`}
+        <div class="stats">
+          <div class="stat"><small>Oylik xarajat (jami)</small><strong>${uzs(totals.cost_uzs)}</strong><span>infra + Gemini</span></div>
+          <div class="stat"><small>Oylik daromad</small><strong>${uzs(totals.revenue_uzs)}</strong><span>faol mijoz tariflari</span></div>
+          <div class="stat"><small>Marja</small><strong style="color:${(totals.margin_uzs || 0) >= 0 ? "#137333" : "#b3261e"}">${uzs(totals.margin_uzs)}</strong><span>daromad − xarajat</span></div>
+          <div class="stat"><small>Gemini (${esc(f.month)})</small><strong>${uzs(gem.cost_uzs)}</strong><span>${gem.jobs || 0} ta savol</span></div>
+        </div>
+
+        <section class="card"><div class="card-head"><h2>Doimiy xarajatlar</h2></div>
+          <dl class="kv">
+            <dt>Server (Contabo)</dt><dd>${fixed.server_configured
+              ? `$${Number(fixed.server_monthly_usd).toLocaleString("en-US")}/oy ≈ ${uzs(fixed.server_monthly_uzs)}`
+              : "kiritilmagan"}</dd>
+            <dt>Domen</dt><dd>${uzs(fixed.domain_yearly_uzs)}/yil ≈ ${uzs(fixed.domain_monthly_uzs)}/oy</dd>
+            <dt>Jami oyiga</dt><dd><b>${uzs(fixed.total_monthly_uzs)}</b></dd>
+            <dt>Bo'linish</dt><dd>${fixed.split_between} ta ulangan do'kon orasida — har biriga ${uzs(fixed.share_per_site_uzs)}</dd>
+          </dl>
+        </section>
+
+        <section class="card"><div class="card-head"><h2>Gemini (AI yordamchi)</h2></div>
+          <dl class="kv">
+            <dt>Model</dt><dd>${esc(gem.model || "sozlanmagan")}</dd>
+            <dt>Savollar</dt><dd>${gem.jobs || 0} ta${gem.untracked_jobs ? ` (${gem.untracked_jobs} tasi token yozilmagan eski yozuv)` : ""}</dd>
+            <dt>Tokenlar</dt><dd>${tokens(gem.input_tokens)} kirish · ${tokens(gem.output_tokens)} chiqish</dd>
+            <dt>Tarif</dt><dd>$${gem.input_usd_per_m}/1M kirish · $${gem.output_usd_per_m}/1M chiqish</dd>
+            <dt>Xarajat</dt><dd><b>${uzs(gem.cost_uzs)}</b></dd>
+          </dl>
+          <p class="hint">Token sarfi Google javobidagi <code>usageMetadata</code>dan yoziladi — taxmin emas.</p>
+        </section>
+
+        <section class="card"><div class="card-head"><h2>Har mijoz nechchiga tushyapti</h2></div>
+          ${rows ? `<div class="scroll-x"><table class="events">
+            <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini savollar</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Jami xarajat</th><th>Marja</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>
+          <p class="hint">Infra ulushi = (server + domen) / ulangan do'konlar soni. Gemini — har mijozning o'z sarfi.</p>`
+          : emptyState({ title: "Mijoz yo'q", hint: "Mijoz qo'shilgach xarajat taqsimoti shu yerda ko'rinadi.", actionLabel: "Mijozlar", actionHref: "#/mijozlar" })}
+        </section>`;
+
+      el.querySelector("#financeMonth")?.addEventListener("change", async (event) => {
+        financeMonth = event.target.value;
+        await reload("finance");
+      });
     }
 
     async function renderPayments(el) {

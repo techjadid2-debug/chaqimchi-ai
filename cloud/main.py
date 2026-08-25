@@ -3440,6 +3440,163 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
     }
 
 
+# ── Moliya paneli ────────────────────────────────────────────────────────
+#
+# Platforma nechchiga tushayapti va har mijoz alohida nechchiga tushayapti.
+# Gemini xarajati HAQIQIY token sarfidan (`usageMetadata`), infra xarajati
+# esa env'dagi summalardan hisoblanadi — panelda qo'lda yozilgan raqam yo'q.
+
+#: Gemini narxlari, 1 mln token uchun USD.  Standart qiymatlar flash-sinf
+#: modellari uchun; Google narxni o'zgartirsa env bilan yangilanadi.
+GEMINI_INPUT_USD_PER_M_DEFAULT = 0.30
+GEMINI_OUTPUT_USD_PER_M_DEFAULT = 2.50
+
+
+def _finance_env_float(key: str, default: float) -> float:
+    raw = os.environ.get(key, "").strip()
+    try:
+        return float(raw) if raw else default
+    except ValueError:
+        logger.warning("%s son emas — standart qiymat ishlatiladi", key)
+        return default
+
+
+@app.get("/api/v1/admin/finance")
+async def admin_finance(
+    month: Optional[str] = None,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Oylik xarajat/daromad hisobi.
+
+    `month` — `YYYY-MM` (Toshkent bo'yicha); berilmasa joriy oy.
+    Umumiy infra (server + domen) qurilma ulangan do'konlar orasida teng
+    bo'linadi: stub-saytlar haqiqiy mijoz ulushini shishirmasin.
+    """
+    tz = ZoneInfo("Asia/Tashkent")
+    if month:
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
+            raise HTTPException(422, "month YYYY-MM ko'rinishida bo'lishi kerak")
+        year, mon = int(month[:4]), int(month[5:7])
+    else:
+        today = datetime.now(tz)
+        year, mon = today.year, today.month
+        month = f"{year:04d}-{mon:02d}"
+    start_local = datetime(year, mon, 1, tzinfo=tz)
+    end_local = datetime(year + (mon == 12), (mon % 12) + 1, 1, tzinfo=tz)
+    start_iso = start_local.astimezone(timezone.utc).isoformat()
+    end_iso = end_local.astimezone(timezone.utc).isoformat()
+
+    rate = usd_rate_uzs()
+    server_monthly_usd = _finance_env_float("CHAQIMCHI_COST_SERVER_MONTHLY_USD", 0.0)
+    domain_yearly_uzs = int(_finance_env_float("CHAQIMCHI_COST_DOMAIN_YEARLY_UZS", 27_000))
+    input_usd_per_m = _finance_env_float(
+        "CHAQIMCHI_GEMINI_INPUT_USD_PER_M", GEMINI_INPUT_USD_PER_M_DEFAULT
+    )
+    output_usd_per_m = _finance_env_float(
+        "CHAQIMCHI_GEMINI_OUTPUT_USD_PER_M", GEMINI_OUTPUT_USD_PER_M_DEFAULT
+    )
+
+    server_monthly_uzs = round(server_monthly_usd * rate)
+    domain_monthly_uzs = round(domain_yearly_uzs / 12)
+    fixed_monthly_uzs = server_monthly_uzs + domain_monthly_uzs
+
+    def gemini_cost_uzs(input_tokens: int, output_tokens: int) -> int:
+        usd = (input_tokens / 1_000_000) * input_usd_per_m + (
+            output_tokens / 1_000_000
+        ) * output_usd_per_m
+        return round(usd * rate)
+
+    sites = get_store().list_sites()
+    usage_rows = {
+        item["site_id"]: item
+        for item in get_event_store().vision_usage_by_site(start_iso, end_iso)
+    }
+    # Infra ulushi faqat QURILMA ULANGAN saytlarga bo'linadi; birorta ham
+    # bo'lmasa hammasiga (bo'linmagan xarajat yashirin qolmasin).
+    billable_ids = {str(s["id"]) for s in sites if int(s.get("devices") or 0) > 0}
+    if not billable_ids:
+        billable_ids = {str(s["id"]) for s in sites}
+    share_uzs = round(fixed_monthly_uzs / len(billable_ids)) if billable_ids else 0
+
+    site_rows: List[Dict[str, Any]] = []
+    totals = {
+        "revenue_uzs": 0,
+        "gemini_cost_uzs": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "jobs": 0,
+        "untracked_jobs": 0,
+    }
+    for site in sites:
+        site_id = str(site["id"])
+        usage = usage_rows.get(site_id) or {}
+        input_tokens = int(usage.get("input_tokens") or 0)
+        output_tokens = int(usage.get("output_tokens") or 0)
+        gemini_uzs = gemini_cost_uzs(input_tokens, output_tokens)
+        shared = share_uzs if site_id in billable_ids else 0
+        revenue = int(site.get("monthly_price_uzs") or 0)
+        billable = site_id in billable_ids
+        site_rows.append(
+            {
+                "site_id": site_id,
+                "name": site.get("name"),
+                "plan": site.get("plan"),
+                "devices": int(site.get("devices") or 0),
+                "billable": billable,
+                "revenue_uzs": revenue if billable else 0,
+                "gemini_jobs": int(usage.get("jobs") or 0),
+                "gemini_untracked_jobs": int(usage.get("untracked_jobs") or 0),
+                "gemini_input_tokens": input_tokens,
+                "gemini_output_tokens": output_tokens,
+                "gemini_cost_uzs": gemini_uzs,
+                "shared_cost_uzs": shared,
+                "total_cost_uzs": gemini_uzs + shared,
+                "margin_uzs": (revenue if billable else 0) - gemini_uzs - shared,
+            }
+        )
+        if billable:
+            totals["revenue_uzs"] += revenue
+        totals["gemini_cost_uzs"] += gemini_uzs
+        totals["input_tokens"] += input_tokens
+        totals["output_tokens"] += output_tokens
+        totals["jobs"] += int(usage.get("jobs") or 0)
+        totals["untracked_jobs"] += int(usage.get("untracked_jobs") or 0)
+    # Eng qimmat mijoz tepada — panel savoli aynan "kim nechchiga tushyapti".
+    site_rows.sort(key=lambda item: item["total_cost_uzs"], reverse=True)
+
+    total_cost_uzs = fixed_monthly_uzs + totals["gemini_cost_uzs"]
+    return {
+        "month": month,
+        "usd_rate_uzs": rate,
+        "fixed": {
+            "server_monthly_usd": server_monthly_usd,
+            "server_monthly_uzs": server_monthly_uzs,
+            "server_configured": server_monthly_usd > 0,
+            "domain_yearly_uzs": domain_yearly_uzs,
+            "domain_monthly_uzs": domain_monthly_uzs,
+            "total_monthly_uzs": fixed_monthly_uzs,
+            "split_between": len(billable_ids),
+            "share_per_site_uzs": share_uzs,
+        },
+        "gemini": {
+            "jobs": totals["jobs"],
+            "untracked_jobs": totals["untracked_jobs"],
+            "input_tokens": totals["input_tokens"],
+            "output_tokens": totals["output_tokens"],
+            "cost_uzs": totals["gemini_cost_uzs"],
+            "input_usd_per_m": input_usd_per_m,
+            "output_usd_per_m": output_usd_per_m,
+            "model": vision_agent._model() if vision_agent.configured() else None,
+        },
+        "sites": site_rows,
+        "totals": {
+            "revenue_uzs": totals["revenue_uzs"],
+            "cost_uzs": total_cost_uzs,
+            "margin_uzs": totals["revenue_uzs"] - total_cost_uzs,
+        },
+    }
+
+
 class PersonsBody(BaseModel):
     persons: int = Field(ge=0, le=100_000)
 

@@ -36,6 +36,7 @@ const NAV:NavItem[] = [
   {id:"devices",label:"Qurilmalar",icon:"server"},
   {id:"plans",label:"Tariflar",icon:"card"},
   {id:"payments",label:"To‘lovlar",icon:"invoice"},
+  {id:"finance",label:"Moliya",icon:"chart"},
   {id:"events",label:"AI hodisalar",icon:"pulse"},
   {id:"agent",label:"Vision Agent",icon:"pulse"},
   {id:"monitoring",label:"Monitoring",icon:"chart"},
@@ -140,6 +141,73 @@ function PlansPage() {
   return <><PageHeader title="Tariflar" subtitle="Versiyalangan narx katalogi; qo‘lda yozilgan soxta qiymat ko‘rsatilmaydi."/>{error?<div className="alert-strip"><Icon name="bell"/>{error}</div>:null}{data?<><div className="metric-grid"><MetricCard label="Faol katalog" value={data.price_book?.label||"—"} note="Serverdagi nashr" icon="card"/><MetricCard label="AI funksiyalar" value={formatNumber(data.features.length)} note="Katalogdagi imkoniyatlar" icon="pulse"/><MetricCard label="USD kursi" value={formatMoney(data.price_book?.usd_rate_uzs)} note="Hisoblash manbasi" icon="chart"/><MetricCard label="Platforma bazasi" value={data.price_book?.base_fee_usd_cents==null?"—":`$${(data.price_book.base_fee_usd_cents/100).toFixed(0)}`} note="Oylik bazaviy haq" icon="server"/></div><Card><div className="card-head"><div><h2>Funksiyalar katalogi</h2><p>Bir kamera uchun oylik qiymat</p></div></div><div className="table-wrap"><table><thead><tr><th>Funksiya</th><th>Tur</th><th>Mijoz narxi</th><th>Ichki qiymat</th></tr></thead><tbody>{data.features.map(feature=><tr key={feature.code}><td><div className="table-title">{feature.name}</div><div className="table-sub">{feature.code}</div></td><td>{feature.category}</td><td>${(feature.monthly_usd_cents/100).toFixed(2)}</td><td>${(feature.cost_usd_cents/100).toFixed(2)}</td></tr>)}</tbody></table></div></Card></>:<Card><div className="card-body"><Skeleton height={190}/></div></Card>}</>;
 }
 
+/* Moliya: platforma va HAR MIJOZ nechchiga tushayapti.  Gemini xarajati
+   haqiqiy token sarfidan (usageMetadata), infra env'dagi summalardan —
+   sahifada qo'lda yozilgan raqam yo'q. */
+type FinanceSite = {site_id:string;name?:string;plan?:string;billable:boolean;revenue_uzs:number;gemini_jobs:number;gemini_untracked_jobs:number;gemini_input_tokens:number;gemini_output_tokens:number;gemini_cost_uzs:number;shared_cost_uzs:number;total_cost_uzs:number;margin_uzs:number};
+type Finance = {
+  month:string; usd_rate_uzs:number;
+  fixed:{server_monthly_usd:number;server_monthly_uzs:number;server_configured:boolean;domain_yearly_uzs:number;domain_monthly_uzs:number;total_monthly_uzs:number;split_between:number;share_per_site_uzs:number};
+  gemini:{jobs:number;untracked_jobs:number;input_tokens:number;output_tokens:number;cost_uzs:number;input_usd_per_m:number;output_usd_per_m:number;model?:string|null};
+  sites:FinanceSite[];
+  totals:{revenue_uzs:number;cost_uzs:number;margin_uzs:number};
+};
+
+function financeMonths():string[] {
+  const now=new Date();
+  return Array.from({length:6},(_,back)=>{const d=new Date(now.getFullYear(),now.getMonth()-back,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;});
+}
+
+function FinancePage() {
+  const [month,setMonth]=useState("");
+  const [data,setData]=useState<Finance|null>(null);
+  const [error,setError]=useState("");
+  useEffect(()=>{let stopped=false;setData(null);api<Finance>(`/api/v1/admin/finance${month?`?month=${month}`:""}`,"admin").then(next=>{if(!stopped){setData(next);setError("");}}).catch(reason=>{if(!stopped)setError(reason instanceof Error?reason.message:"Moliya olinmadi");});return()=>{stopped=true;};},[month]);
+  const t=(n:number)=>Number(n||0).toLocaleString("ru-RU");
+  if(error) return <><PageHeader title="Moliya" subtitle="Xarajat va daromad hisobi."/><Card><EmptyState icon="bell" title="Ma’lumot olinmadi" detail={error}/></Card></>;
+  if(!data) return <><PageHeader title="Moliya" subtitle="Xarajat va daromad hisobi."/><Card><div className="card-body"><Skeleton height={190}/></div></Card></>;
+  const {fixed,gemini,totals}=data;
+  return <>
+    <PageHeader title="Moliya" subtitle={`${data.month} · kurs 1 $ = ${formatMoney(data.usd_rate_uzs)}`} actions={<select className="select" value={month||data.month} onChange={event=>setMonth(event.target.value)} aria-label="Oy">{financeMonths().map(m=><option key={m} value={m}>{m}</option>)}</select>}/>
+    {!fixed.server_configured?<div className="alert-strip alert-warning"><Icon name="bell"/><div><strong>Server narxi kiritilmagan.</strong> Contabo oylik summasini serverdagi .env.production ga CHAQIMCHI_COST_SERVER_MONTHLY_USD qilib yozing.</div></div>:null}
+    <div className="metric-grid">
+      <MetricCard label="Oylik xarajat (jami)" value={formatMoney(totals.cost_uzs)} note="infra + Gemini" icon="invoice" tone="red"/>
+      <MetricCard label="Oylik daromad" value={formatMoney(totals.revenue_uzs)} note="faol mijoz tariflari" icon="card" tone="green"/>
+      <MetricCard label="Marja" value={formatMoney(totals.margin_uzs)} note="daromad − xarajat" icon="chart" tone={totals.margin_uzs>=0?"green":"red"}/>
+      <MetricCard label={`Gemini (${data.month})`} value={formatMoney(gemini.cost_uzs)} note={`${gemini.jobs} ta savol`} icon="pulse" tone="blue"/>
+    </div>
+    <div className="dashboard-grid section-gap">
+      <Card><div className="card-head"><div><h2>Doimiy xarajatlar</h2><p>Ulangan do‘konlar orasida teng bo‘linadi</p></div></div><div className="card-body">
+        <div className="simple-row"><span>Server (Contabo)</span><b>{fixed.server_configured?`$${fixed.server_monthly_usd} ≈ ${formatMoney(fixed.server_monthly_uzs)}`:"kiritilmagan"}</b></div>
+        <div className="simple-row"><span>Domen</span><b>{formatMoney(fixed.domain_yearly_uzs)}/yil ≈ {formatMoney(fixed.domain_monthly_uzs)}/oy</b></div>
+        <div className="simple-row"><span>Jami oyiga</span><b>{formatMoney(fixed.total_monthly_uzs)}</b></div>
+        <div className="simple-row"><span>Bo‘linish</span><b>{fixed.split_between} do‘kon · {formatMoney(fixed.share_per_site_uzs)} dan</b></div>
+      </div></Card>
+      <Card><div className="card-head"><div><h2>Gemini (AI yordamchi)</h2><p>Token sarfi Google javobidan — taxmin emas</p></div></div><div className="card-body">
+        <div className="simple-row"><span>Model</span><b>{gemini.model||"sozlanmagan"}</b></div>
+        <div className="simple-row"><span>Savollar</span><b>{gemini.jobs} ta{gemini.untracked_jobs?` (${gemini.untracked_jobs} kuzatilmagan)`:""}</b></div>
+        <div className="simple-row"><span>Tokenlar</span><b>{t(gemini.input_tokens)} kirish · {t(gemini.output_tokens)} chiqish</b></div>
+        <div className="simple-row"><span>Tarif</span><b>${gemini.input_usd_per_m}/1M · ${gemini.output_usd_per_m}/1M</b></div>
+      </div></Card>
+    </div>
+    <Card className="section-gap"><div className="card-head"><div><h2>Har mijoz nechchiga tushyapti</h2><p>Infra ulushi + o‘z Gemini sarfi; marja = tarif − xarajat</p></div></div>
+      {data.sites.length?<div className="table-wrap"><table>
+        <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Jami xarajat</th><th>Marja</th></tr></thead>
+        <tbody>{data.sites.map(s=><tr key={s.site_id}>
+          <td><div className="table-title">{s.name||s.site_id}</div><div className="table-sub">{s.plan||"—"}{s.billable?"":" · qurilma ulanmagan"}</div></td>
+          <td>{s.billable?formatMoney(s.revenue_uzs):"—"}</td>
+          <td>{s.gemini_jobs}{s.gemini_untracked_jobs?<small className="table-sub"> ({s.gemini_untracked_jobs})</small>:null}</td>
+          <td><small>{t(s.gemini_input_tokens)} / {t(s.gemini_output_tokens)}</small></td>
+          <td>{formatMoney(s.gemini_cost_uzs)}</td>
+          <td>{s.billable?formatMoney(s.shared_cost_uzs):"—"}</td>
+          <td><b>{formatMoney(s.total_cost_uzs)}</b></td>
+          <td><Pill state={s.margin_uzs>=0?"active":"failed"}>{formatMoney(s.margin_uzs)}</Pill></td>
+        </tr>)}</tbody>
+      </table></div>:<EmptyState icon="branch" title="Mijoz yo‘q" detail="Mijoz qo‘shilgach xarajat taqsimoti shu yerda ko‘rinadi."/>}
+    </Card>
+  </>;
+}
+
 function RolesPage() {
   const[accounts,setAccounts]=useState<Account[]|null>(null);const[error,setError]=useState("");
   useEffect(()=>{api<{accounts:Account[]}>("/api/v1/admin/accounts","admin").then(data=>setAccounts(data.accounts)).catch(reason=>setError(reason instanceof Error?reason.message:"Akkauntlar olinmadi"));},[]);
@@ -172,6 +240,7 @@ function GenericAdmin({id,data,onRefresh}:{id:string;data:AdminDashboard;onRefre
   if(id==="cameras") return <><PageHeader title="Kameralar" subtitle="Filiallar bo‘yicha ishlayotgan va e’tibor talab qiladigan kameralar."/><div className="metric-grid">{data.sites.map(site=><MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.connection||"—"} icon="camera" tone={(site.cameras_active||0)>=(site.cameras_expected||1)?"green":"red"}/>)}</div></>;
   if(id==="plans") return <PlansPage/>;
   if(id==="payments") return <PaymentsPage/>;
+  if(id==="finance") return <FinancePage/>;
   if(id==="events") return <EventEvidence kind="admin" sites={data.sites}/>;
   if(id==="agent") return <VisionAgentPage sites={data.sites}/>;
   if(id==="roles") return <RolesPage/>;

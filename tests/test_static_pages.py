@@ -1157,3 +1157,58 @@ def test_a_the_shop_gets_a_printable_notice_for_its_door() -> None:
     assert "class=\"blank\"" in html, "do'kon o'z nomini to'ldirsin"
     # Maxfiylik sahifasidan unga yo'l bo'lsin.
     assert "/kuzatuv-eslatmasi" in (STATIC / "privacy.html").read_text(encoding="utf-8")
+
+
+def test_the_public_offer_exists_and_is_reachable_from_the_footer() -> None:
+    """To'lov qabul qilinadigan saytda oferta bo'lishi SHART.
+
+    2026-08-25 auditi (KRITIK-3): sayt hisob-faktura beryapti, oferta
+    esa umuman yo'q edi.  Bahsli holatda xizmat doirasi, javobgarlik
+    chegarasi va pul qaytarish tartibini ko'rsatadigan hujjat
+    bo'lmasdi.
+    """
+    offer = (STATIC / "oferta.html").read_text(encoding="utf-8")
+
+    for band in (
+        "Javobgarlik chegarasi",
+        "Pul qaytarish",
+        "Bepul sinov",
+        "Nizolar",
+    ):
+        assert band.lower() in offer.lower(), band
+
+    # Footer'dan yo'l bo'lmasa, hujjat bor-u mijoz uni topolmaydi.
+    assert '"/oferta"' in (STATIC / "site.html").read_text(encoding="utf-8")
+
+
+def test_the_offer_promises_no_more_than_the_code_delivers() -> None:
+    """Ofertadagi raqamlar KODDAN kelishi kerak.
+
+    Hujjat bir marta yozilib qolib ketadi, kod esa o'zgaradi — shu
+    payt oferta jimgina yolg'onga aylanadi va aynan u sud uchun dalil
+    bo'ladi.  Shuning uchun bog'liqlik test bilan ushlab turiladi.
+    """
+    from chaqimchi_ai.licensing.plans import PLANS
+    from cloud.main import CLIP_RETENTION_DAYS_DEFAULT
+    from cloud.store import GRACE_DAYS
+
+    offer = (STATIC / "oferta.html").read_text(encoding="utf-8")
+
+    for plan_key in ("boshlangich", "biznes"):
+        plan = PLANS[plan_key]
+        price = f"{plan.monthly_price():,}".replace(",", " ")
+        assert price in offer, f"{plan_key} narxi ofertada boshqacha: {price}"
+        assert f"{plan.max_cameras} tagacha" in offer, plan_key
+
+    assert f"<td>{CLIP_RETENTION_DAYS_DEFAULT} kun</td>" in offer, "klip muddati"
+    assert f"<b>{GRACE_DAYS} kun</b>" in offer, "qo'shimcha muddat"
+
+
+def test_the_offer_repeats_the_limits_the_site_promises() -> None:
+    """«Nima qilmaydi» bo'limi sotuv matnining teskarisi emas,
+    davomi bo'lsin: saytda taqiqlangan va'dalar bu yerda ATAYLAB
+    inkor qilinadi."""
+    offer = (STATIC / "oferta.html").read_text(encoding="utf-8").lower()
+
+    for denial in ("o‘g‘rilikni", "yong‘in", "xaridorni", "kafolatlamaydi"):
+        assert denial in offer, denial

@@ -46,16 +46,16 @@ joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
 
 ---
 
-## Bir qarashda: 21 ta topilma
+## Bir qarashda: 22 ta topilma
 
 | # | Muammo | Og'irlik | Tuzatish |
 |---|---|---|---|
 | K-1 | ~~Edu kalkulyatori mavjud bo'lmagan 3 ta AI modulni sotmoqda~~ | Kritik | ✅ **TUZATILDI** |
 | K-2 | ~~Server Fransiyada, sayt "O'zbekistonda" deb yozgan~~ | Kritik | ✅ **TUZATILDI** |
-| K-3 | Ommaviy oferta yo'q, lekin pul olinadi | Kritik | 3–5 kun |
+| K-3 | Ommaviy oferta yo'q, lekin pul olinadi | Kritik | 🟡 **YOZILDI**, yurist ko'rigi qoldi |
 | K-4 | ~~Biometrik rasmlar `manager` roliga ochiq~~ | Kritik | ✅ **TUZATILDI** |
 | Y-0 | ~~`/health/deep` ochiq — mijozlar soni oshkor~~ | Yuqori | ✅ **TUZATILDI** |
-| Y-1 | "Xodim davomati" sotiladi, tarif bermaydi | Yuqori | 1 kun |
+| Y-1 | ~~"Xodim davomati" sotiladi, tarif bermaydi~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-2 | Mijozga beriladigan o'rnatuvchi 2 versiya orqada | Yuqori | 1 kun |
 | Y-3 | ~~Yo'riqnoma noto'g'ri fayl nomini aytadi~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-4 | ~~O'rnatish vaqti 4 xil aytilgan~~ | Yuqori | ✅ **TUZATILDI** |
@@ -66,7 +66,8 @@ joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
 | Y-9 | Audit jurnali eng muhim amallarni yozmaydi | Yuqori | 1 kun |
 | Y-10 | To'lov va parollar production'da hali SQLite'da | Yuqori | L |
 | Y-11 | Klip saqlash testi beqaror (mahsulot mantiqi to'g'ri, sabab noma'lum) | Yuqori | S–M |
-| O-0 | `config/sotqin.yaml` hali 8 kamera deydi | O'rta | 15 daqiqa |
+| Y-12 | ~~Saytda klip 30 kun, kodda 7 kun~~ | Yuqori | ✅ **TUZATILDI** |
+| ~~O-0~~ | ~~`config/sotqin.yaml` hali 8 kamera deydi~~ | — | ❌ **NOTO'G'RI TOPILMA** |
 | O-1 | `/health` haqiqatni ko'rsatmaydi | O'rta | M |
 | O-2 | CSP sarlavhasi yo'q | O'rta | M |
 | O-3 | Faqat o'zbek tili — rus tili yo'q | O'rta | L |
@@ -286,6 +287,33 @@ masalasi qayta ko'riladi, hozir emas.
 
 ### KRITIK-3 · Ommaviy oferta yo'q, lekin pul olinadi
 
+> ## 🟡 YOZILDI — 2026-08-25 (yopilmadi: yurist ko'rigi kerak)
+>
+> `cloud/static/oferta.html` yaratildi, `/oferta` marshruti, footer
+> havolasi va sitemap qo'shildi. 12 bo'lim, jumladan **javobgarlik
+> chegarasi** (oxirgi bir oylik to'lovdan oshmaydi) va **«Xizmat nima
+> QILMAYDI»** — o'g'rilik, yong'in, xaridorni tanish va uzluksiz video
+> ataylab inkor qilingan.
+>
+> **Qabul qilingan qarorlar** (2026-08-25):
+> - Pul qaytarish: birinchi to'lovdan keyingi **14 kun** ichida to'liq,
+>   keyin qaytarilmaydi.
+> - SLA: **aniq raqam berilmaydi** — 72 soatlik sinov o'tkazilmagan,
+>   ya'ni raqam va'da qilishga asos yo'q. C bosqichidan keyin qo'shiladi.
+> - Yuridik shakl hali ro'yxatdan o'tmagan → STIR va rekvizit **bo'sh
+>   joy** bo'lib qoldi.
+>
+> **Ofertadagi hamma raqam koddan olingan** va test bilan bog'landi
+> (`test_the_offer_promises_no_more_than_the_code_delivers`): tarif
+> narxlari `plans.py` dan, klip muddati `CLIP_RETENTION_DAYS_DEFAULT`
+> dan, qo'shimcha muddat `GRACE_DAYS` dan. Kod o'zgarsa test yiqiladi —
+> hujjat jimgina yolg'onga aylanmaydi.
+>
+> **Nega hali yopilmadi:** ro'yxatdan o'tmasdan rasmiy hisob-faktura
+> berib bo'lmaydi va hujjat yurist ko'rigidan o'tmagan (B2). Ya'ni
+> KRITIK-3 sotuvni hamon to'sib turadi — lekin endi to'sig'i "hujjat
+> yo'q" emas, "hujjat tayyor, imzo kerak".
+
 **Qayerda:** Butun sayt
 **Dalil:**
 - `https://chaqimchi.uz/oferta` → **404**
@@ -374,6 +402,31 @@ qaytarsin — test yozilsin.
 ---
 
 ### YUQORI-1 · "Xodim davomati" Biznes tarifida sotiladi, lekin tarif uni bermaydi
+
+> ## ✅ TUZATILDI — 2026-08-25
+>
+> `cloud/main.py: _attendance_enabled()` da `or` **`and`** ga
+> almashtirildi. Endi ikki shart boshqa-boshqa savolga javob beradi:
+>
+> | Shart | Savol | Yetarlimi |
+> |---|---|---|
+> | `MODELS_LICENSED_FOR_COMMERCIAL_USE` | Modelni tijoratda ishlatish mumkinmi? | SHART, lekin yetarli emas |
+> | `CHAQIMCHI_ATTENDANCE_PILOT` | Shu server biometrika bilan ishlashga tayyormi? | Production'da MAJBURIY |
+>
+> Ilgari litsenziya rost bo'lgani uchun ikkinchi shart hech qachon
+> tekshirilmasdi — ya'ni davomat production'da hammaga ochiq edi,
+> holbuki sayt uni "yozma rozilikli yopiq pilot" deb sotardi.
+>
+> `plans.py`: Biznes kartasidan "Xodim davomati — 10 xodimgacha, yuz
+> orqali" bulleti olib tashlandi. Eskirgan izoh ham yangilandi — sabab
+> endi `buffalo_l` litsenziyasi emas (modellar 2026-08-21 dan
+> Apache-2.0), balki ikkita ochiq band: **hosting hududi** (KRITIK-2)
+> va **o'lchanmagan yuz moslash aniqligi**.
+>
+> Ikkita yangi test: production'da pilot bayrog'isiz 403 (bayroq bilan
+> 200), va litsenziya bo'lmasa pilot bayrog'i ham ochmaydi. Sotuv
+> matni testi ham qayta yozildi — endi u litsenziyaga emas,
+> **tarif nima berishiga** bog'langan.
 
 **Dalil:**
 - Sotuv kartasi: `chaqimchi_ai/licensing/plans.py:306-311` — Biznes
@@ -802,6 +855,35 @@ yozilsin (`@pytest.mark.slow`, CI'da ixtiyoriy).
 
 ---
 
+### YUQORI-12 · Saytda klip 30 kun deb va'da qilingan, kod 7 kunda o'chiradi
+
+**Qachon topildi:** B1 (oferta) yozilayotganda — saqlash muddatlarini
+koddan tekshirayotib.
+
+**Dalil:**
+- `cloud/static/docs/xavfsizlik.html` jadvali: *"Hodisa kadrlari va
+  qisqa **kliplar** — 30 kun"*
+- `cloud/main.py:1296` — `CLIP_RETENTION_DAYS_DEFAULT = 7`
+- `cloud/event_store.py:3360` izohi buni ataylab shunday qilgan:
+  *"Klip hodisani tekshirish uchun kerak — bir haftadan keyin deyarli
+  hech kim ochmaydi"*
+
+Ya'ni mijoz 30 kun deb o'ylab, 8-kuni klipni izlasa topmaydi. Rasm
+(snapshot) rostdan 30 kun turadi — jadval ikkalasini bitta qatorga
+qo'shib yuborgani uchun qisqarog'i ko'rinmay qolgan.
+
+Qiziq tomoni: koddagi izoh *"Sayt ham aniq kun sonini va'da qilmaydi"*
+deb yozilgan — muallif shunday deb o'ylagan, lekin hujjatlar sahifasi
+aniq raqam berib turgan ekan.
+
+**✅ TUZATILDI:** jadval ikkita alohida qatorga bo'lindi — rasm 30 kun,
+klip 7 kun. Oferta ham shu raqamlar bilan yozildi va test bilan
+`CLIP_RETENTION_DAYS_DEFAULT` ga bog'landi.
+
+**Egasi:** Product · **Hajmi:** S
+
+---
+
 ### YUQORI-11 · Klip saqlash testi beqaror — jimgina o'chib ketayotgan bo'lishi mumkin
 
 **Qachon topildi:** A1 ishidan keyin to'liq to'plam ishlatilganda
@@ -859,12 +941,26 @@ sifatida tekshiriladi va yashirin flake o'sha natijani buzadi.
 
 ---
 
-### O'RTA-0 · `config/sotqin.yaml` hali 8 kamera deydi
+### O'RTA-0 · ❌ NOTO'G'RI TOPILMA — bekor qilindi (2026-08-25)
 
-`config/sotqin.yaml:14` → `max_cameras: 8`, `chaqimchi_ai/limits.py:13` →
-`SHOP_MAX_CAMERAS = 4`. Linux Box yo'li 8 kamerani qabul qilib qo'yishi
-mumkin, holbuki sayt va SLA 4 kamera. Box "keyingi bosqich" bo'lsa ham
-raqam bir xil bo'lsin. **Egasi:** Backend · **Hajmi:** S
+**Audit xato qilgan.** Tuzatishga kirishganda ma'lum bo'ldiki
+`config/sotqin.yaml` da **ikkala** qiymat bor va ular kodga aynan mos:
+
+```yaml
+guaranteed_cameras: 4    # sotiladigan SLA
+max_cameras: 8           # apparat imkoniyati
+```
+`chaqimchi_ai/sotqin_profile.py:19-20` — `GUARANTEED_CAMERAS =
+SHOP_MAX_CAMERAS` (4) va `MAX_CAMERAS = 8`. Validatsiya
+(`sotqin_agent.py:272`) apparat shiftiga qaraydi, va bu to'g'ri:
+u konfig qurilmani ko'tarolmaydigan yukka sozlab qo'yishini
+to'xtatadi, sotuv va'dasini emas.
+
+Ya'ni 4 va 8 bir-biriga zid emas — ular boshqa savolga javob beradi.
+**Hech narsa o'zgartirilmadi.**
+
+Bu yozuv ataylab o'chirilmadi: audit ham xato qilishi mumkinligi va
+qaysi joyda qilgani ko'rinib tursin.
 
 ---
 
@@ -1078,15 +1174,15 @@ javobidagi har bir modul kod bilan asoslangan.
 
 | # | Ish | Kim | Vaqt |
 |---|---|---|---|
-| B1 | `/oferta` sahifasi (xizmat doirasi, to'lov, bekor qilish, **javobgarlik chegarasi**, ma'lumot egaligi) + footer havolasi | Product + yurist | 3 kun |
+| ~~B1~~ | 🟡 **YOZILDI** — `/oferta` jonli, footer va sitemapda; STIR/rekvizit bo'sh, yurist ko'rigi kutilmoqda | Product + yurist | B2 da |
 | B2 | Yurist ko'rigi: oferta, `/maxfiylik`, `/rozilik-shabloni` **+ bitta aniq savol** (pastda) | Yurist | 2 kun |
-| B3 | **Davomatni yopiq pilotga qaytarish** (qaror qabul qilingan): `_attendance_enabled()` faqat env bayrog'i bilan; Biznes kartasidan bullet olinadi | Product + Backend | 1 kun |
+| ~~B3~~ | ✅ **BAJARILDI** — `_attendance_enabled()` da `or` → `and`; Biznes kartasidan bullet olindi | Product + Backend | — |
 | B4 | 0.6.15 build + imzo + `dl.` ga chiqarish, bosqichli tarqatish | DevOps | 1 kun |
-| B5 | `plans.py:199-202` eskirgan izohini yangilash (`buffalo_l` endi yo'q) | Backend | 30 daqiqa |
+| ~~B5~~ | ✅ **BAJARILDI** — izoh yangilandi: sabab litsenziya emas, hosting hududi va o'lchanmagan aniqlik | Backend | — |
 | B6 | Audit jurnaliga 7 turdagi amalni qo'shish (YUQORI-9) | Backend | 1 kun |
 | B7 | NTP: o'rnatuvchida vaqt xizmatini yoqish + heartbeat'da soat farqi (YUQORI-7) | Backend + Installer | 1 kun |
 | B8 | Telegram throttle'ni DB'ga ko'chirish (O'RTA-6) | Backend | 3 soat |
-| B9 | `config/sotqin.yaml:14` → `max_cameras: 4` (O'RTA-0) | Backend | 15 daqiqa |
+| ~~B9~~ | ❌ **BEKOR** — O'RTA-0 noto'g'ri topilma bo'lib chiqdi, o'zgartirish kerak emas | — | — |
 
 **B2 uchun yuristga beriladigan aniq savol** (umumiy "tekshirib bering"
 emas — shu savol yozma javob bilan qaytsin):

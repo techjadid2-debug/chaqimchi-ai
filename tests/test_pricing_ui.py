@@ -142,21 +142,27 @@ def test_pricing_section_has_a_noscript_fallback() -> None:
         assert plan in fallback, plan
 
 
-def test_attendance_is_only_advertised_with_licensed_models() -> None:
-    """Davomatni sotish faqat tijoratga ochiq model bilan.
+def test_the_card_does_not_sell_attendance_while_it_is_a_closed_pilot() -> None:
+    """Tarif kartasi tarif BERADIGAN narsanigina va'da qilsin.
 
-    Bu tekshiruv `buffalo_l` (tadqiqot litsenziyasi) sababli qurilgan
-    edi va "hech qachon eslatilmasin" degan ma'noda edi.  Modellar
-    Apache-2.0 ga o'tkazilgach taqiq o'rinsiz — lekin BOG'LIQLIK
-    qolishi kerak: litsenziya orqaga qaytsa, sotuv matni ham qaytsin.
+    Ilgari bu tekshiruv model litsenziyasiga bog'langan edi va
+    litsenziya hal bo'lgach karta davomatni sota boshlagan edi —
+    holbuki `BIZNES_EDGE_FEATURES` uni hech qachon bermagan.  Ya'ni
+    mijoz "Xodim davomati" yozuvini o'qib to'lardi, qurilma esa uni
+    olmasdi.
+
+    Davomat hozir yopiq pilot (`cloud/main.py: _attendance_enabled`),
+    shuning uchun sotuv matnida ham bo'lmasligi kerak.  Ochilganda
+    ikkalasi BIRGA o'zgaradi: `BIZNES_EDGE_FEATURES` ga `davomat`
+    qo'shiladi va shundan keyin bu test yangilanadi.
     """
-    from chaqimchi_ai.licensing.plans import PLANS
-    from cloud import faces
+    from chaqimchi_ai.licensing.plans import BIZNES_EDGE_FEATURES, PLANS
 
-    mentions = any("davomat" in item.lower() for item in PLANS["biznes"].includes)
-    assert mentions is faces.MODELS_LICENSED_FOR_COMMERCIAL_USE, (
-        "Tarif kartasidagi davomat va model litsenziyasi bir-biriga bog'liq bo'lishi kerak"
-    )
+    for plan_key in ("biznes", "lite", "boshlangich"):
+        card = " ".join(PLANS[plan_key].includes).lower()
+        assert "davomat" not in card, plan_key
+        assert "yuz orqali" not in card, plan_key
+    assert "davomat" not in BIZNES_EDGE_FEATURES
 
 
 def test_the_plan_cards_hardcode_no_feature_list() -> None:

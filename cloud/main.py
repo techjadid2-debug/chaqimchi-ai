@@ -809,25 +809,37 @@ def _telegram_webapp_user_id(init_data: str) -> str:
 
 
 def _attendance_enabled() -> bool:
-    """Davomat tijoriy modelda yoki yopiq pilotda ishlaydi.
+    """Davomat — YOPIQ PILOT: production'da faqat ataylab yoqilganda.
 
-    2026-08-21 dan boshlab modellar Apache-2.0 (OpenVINO OMZ), ya'ni
-    birinchi shart doim bajariladi.  Bungacha bu yerda
-    `CHAQIMCHI_FACE_MODEL_LICENSED` env bayrog'i turardi — uni
-    production'da qo'yib qo'yish tadqiqot litsenziyasidagi modelni
-    "tijoriy" qilib ko'rsatib qo'yardi, ya'ni huquqiy tekshiruv
-    sozlamaga bog'liq edi.  Endi u KODDAN keladi.
+    Ikki shart bor va ular boshqa-boshqa savolga javob beradi:
+
+    1. **Litsenziya** (`MODELS_LICENSED_FOR_COMMERCIAL_USE`) — modelni
+       tijoratda ishlatish mumkinmi.  Bu SHART, lekin yetarli emas.
+       Ilgari bu yerda `CHAQIMCHI_FACE_MODEL_LICENSED` env bayrog'i
+       turardi va uni noto'g'ri qo'yish tadqiqot modelini "tijoriy"
+       qilib ko'rsatardi; 2026-08-21 dan modellar Apache-2.0 va javob
+       KODDAN keladi.
+    2. **Pilot ruxsati** (`CHAQIMCHI_ATTENDANCE_PILOT`) — shu server
+       biometrika bilan ishlashga tayyormi.
+
+    2026-08-25 auditi: bu yerda `or` turardi, ya'ni litsenziya rost
+    bo'lgani uchun production'da davomat HAMMAGA ochiq edi — holbuki
+    sayt uni "yozma rozilikli yopiq pilot" deb sotardi va serverimiz
+    Yevropada (`docs/AUDIT_TAHLIL.md` KRITIK-2).  Endi `and`: kod ham
+    sayt bilan bir narsani aytadi.
+
+    Pilotdan tashqari muhitda (dev/test) ochiq qoladi — aks holda
+    har bir test env qo'yishi kerak bo'lardi.
     """
-    pilot = os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").lower() in {
+    if not faces.MODELS_LICENSED_FOR_COMMERCIAL_USE:
+        return False
+    if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() != "production":
+        return True
+    return os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").strip().lower() in {
         "1",
         "true",
         "yes",
     }
-    return (
-        faces.MODELS_LICENSED_FOR_COMMERCIAL_USE
-        or pilot
-        or os.environ.get("CHAQIMCHI_ENV", "development") != "production"
-    )
 
 
 def require_attendance() -> None:
@@ -2044,8 +2056,8 @@ async def sitemap_xml(request: Request) -> Response:
         raise HTTPException(404, "Topilmadi")
     base = urls.public_url() or str(request.base_url).rstrip("/")
     pages = [
-        "/", "/edu", "/install", "/maxfiylik", "/hamkorlik", "/aloqa",
-        "/rozilik-shabloni", "/kuzatuv-eslatmasi",
+        "/", "/edu", "/install", "/maxfiylik", "/oferta", "/hamkorlik",
+        "/aloqa", "/rozilik-shabloni", "/kuzatuv-eslatmasi",
     ]
     body = "".join(f"<url><loc>{base}{page}</loc></url>" for page in pages)
     return Response(
@@ -2093,6 +2105,18 @@ def _render_public(name: str, request: Request) -> HTMLResponse:
 async def consent_template_page() -> FileResponse:
     """Xodim biometrik roziligi shabloni — montajchi chop etib olib boradi."""
     return _static_page("rozilik-shabloni.html")
+
+
+@app.get("/oferta", include_in_schema=False)
+async def public_offer_page() -> FileResponse:
+    """Ommaviy oferta — to'lov qabul qilish uchun huquqiy asos.
+
+    2026-08-25 gacha bu sahifa umuman yo'q edi, holbuki sayt
+    hisob-faktura beryapti (`docs/AUDIT_TAHLIL.md` KRITIK-3).  Bahsli
+    holatda xizmat doirasi, javobgarlik chegarasi va pul qaytarish
+    tartibini ko'rsatadigan hujjat bo'lmasdi.
+    """
+    return _static_page("oferta.html")
 
 
 @app.get("/hamkorlik", include_in_schema=False)

@@ -341,19 +341,38 @@ def test_gate_closes_when_the_models_are_not_commercially_licensed(
     assert _send_face_capture(pilot_client, headers, "evt-face-4", b"kadr-ali").status_code == 403
 
 
-def test_apache_models_open_attendance_in_production(pilot_client, monkeypatch) -> None:
-    """Litsenziya hal bo'lgach davomat production'da ham ishlaydi.
+def test_production_keeps_attendance_shut_until_it_is_deliberately_opened(
+    pilot_client, monkeypatch
+) -> None:
+    """Litsenziya yetarli emas — production'da pilot ruxsati ham kerak.
 
-    Bungacha `CHAQIMCHI_FACE_MODEL_LICENSED` env bayrog'i kerak edi —
-    ya'ni huquqiy tekshiruv sozlamaga bog'liq edi va uni noto'g'ri
-    qo'yish tadqiqot modelini "tijoriy" qilib ko'rsatib qo'yardi.
+    2026-08-25 auditi: bu yerda `or` turardi va modellar Apache-2.0
+    bo'lgani uchun davomat production'da HAMMAGA ochilib ketgan edi,
+    holbuki sayt uni "yozma rozilikli yopiq pilot" deb sotardi va
+    biometrika Yevropadagi serverda saqlanadi.  Kod endi sayt bilan
+    bir narsani aytadi.
     """
     site, _headers = _site_with_device(pilot_client)
     monkeypatch.setenv("CHAQIMCHI_ENV", "production")
     monkeypatch.delenv("CHAQIMCHI_ATTENDANCE_PILOT", raising=False)
 
+    shut = pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN)
+    assert shut.status_code == 403
+
+    # Ataylab yoqilganda esa ochiladi — pilot obyektlari ishlashi kerak.
+    monkeypatch.setenv("CHAQIMCHI_ATTENDANCE_PILOT", "1")
+    opened = pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN)
+    assert opened.status_code == 200
+
+
+def test_an_unlicensed_model_shuts_attendance_everywhere(pilot_client, monkeypatch) -> None:
+    """Litsenziya SHART: u yo'q bo'lsa pilot bayrog'i ham ochmaydi."""
+    site, _headers = _site_with_device(pilot_client)
+    monkeypatch.setattr(faces, "MODELS_LICENSED_FOR_COMMERCIAL_USE", False)
+    monkeypatch.setenv("CHAQIMCHI_ATTENDANCE_PILOT", "1")
+
     response = pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN)
-    assert response.status_code == 200
+    assert response.status_code == 403
 
 
 # ── Mijoz paneli (faqat o'qish) ──────────────────────────────────────────

@@ -196,10 +196,21 @@ class PlanLimits:
 
 # ── Tarifga kiradigan qurilma funksiyalari ──────────────────────────────
 #
-# `davomat` bu ro'yxatlarda ATAYLAB yo'q.  U `cloud/main.py`
-# `_attendance_enabled()` bilan alohida boshqariladi, chunki yuz tanish
-# modeli (`buffalo_l`) tadqiqot litsenziyasida — uni tarif ichida sotish
-# huquqiy risk.  Model almashtirilgach shu yerga qo'shiladi.
+# `davomat` bu ro'yxatlarda ATAYLAB yo'q va tarif kartasida ham
+# ko'rinmaydi.  U `cloud/main.py` `_attendance_enabled()` bilan alohida
+# boshqariladi — faqat `CHAQIMCHI_ATTENDANCE_PILOT` qo'yilgan serverda.
+#
+# Sabab endi litsenziya EMAS (modellar 2026-08-21 dan Apache-2.0,
+# `cloud/faces.py`), balki ikkita ochiq band:
+#   1. biometrik ma'lumot Yevropadagi serverda saqlanadi va bu
+#      O'zbekiston talablariga mos kelishi yurist bilan tasdiqlanmagan;
+#   2. yuz moslash aniqligi haqiqiy do'kon kadrlarida o'lchanmagan.
+# Ikkalasi yopilgach shu yerga qo'shiladi — `docs/AUDIT_TAHLIL.md`
+# KRITIK-2 va YUQORI-1.
+#
+# Bungacha karta ham buni SOTMASLIGI kerak: 2026-08-25 gacha Biznes
+# kartasida "Xodim davomati — 10 xodimgacha, yuz orqali" bulleti
+# turardi, `BIZNES_EDGE_FEATURES` esa uni bermasdi.
 BOSHLANGICH_EDGE_FEATURES = ("person_count",)
 BIZNES_EDGE_FEATURES = ("person_count", "queue_length", "store_security")
 
@@ -302,12 +313,6 @@ BIZNES_BULLETS = (
         detail="Mijozlarning taxminiy yoshi va jinsi. Anonim baho: rasm "
                "saqlanmaydi.",
         example="Xaridorlarning 58% ayol, asosiy yosh guruhi 18-30.",
-    ),
-    PlanBullet(
-        icon="yuz",
-        label="Xodim davomati",
-        detail="10 xodimgacha, yuz orqali. Xodimning yozma roziligi bilan.",
-        example="Kim kechikdi va necha daqiqa — oylik jadval va CSV.",
     ),
     PlanBullet(
         icon="yuklash",

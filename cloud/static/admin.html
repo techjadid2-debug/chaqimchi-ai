@@ -718,6 +718,7 @@
             <button class="button ghost" type="button" data-act="pairing" data-id="${esc(d.id)}">Yangi ulanish havolasi</button>
             <button class="button ghost" type="button" data-act="update-policy" data-id="${esc(d.id)}">Yangilanish siyosati</button>
             <button class="button ghost" type="button" data-act="geometry" data-id="${esc(d.id)}">Chiziq va zona</button>
+            <button class="button ghost" type="button" data-act="diagnostics" data-id="${esc(d.id)}">Diagnostika</button>
           </div>
         </section>
 
@@ -1084,6 +1085,7 @@
       "owner-link": (el) => askOwnerLink(el.dataset.id),
       "cameras": (el) => askExpectedCameras(el.dataset.id),
       "geometry": (el) => openGeometry(el.dataset.id),
+      "diagnostics": (el) => openDiagnostics(el.dataset.id),
       "camera-add": (el) => askCamera(el.dataset.id),
       "update-policy": (el) => askUpdatePolicy(el.dataset.id),
       "features": (el) => openFeatures(el.dataset.id),
@@ -1388,6 +1390,48 @@
      * Chizish mantiqi `geometry-panel.js` da va u usta paneli bilan
      * UMUMIY — ikki nusxa bo'lsa ular albatta bir-biridan uzoqlashardi.
      */
+    /* Diagnostika — do'kon kompyuteri yuborgan support paketi.
+       Endpoint allaqachon bor edi, lekin uni O'QIYDIGAN ekran yo'q edi:
+       lokal panel «Administrator ko'ra oladi» deb va'da berardi, admin
+       esa hech narsa ko'rmasdi. */
+    async function openDiagnostics(siteId) {
+      let item = null;
+      try {
+        const data = await api(`/api/v1/admin/sites/${siteId}/diagnostics`);
+        item = data.diagnostics;
+      } catch (e) {
+        await openModal({
+          title: "Diagnostika",
+          html: `<p class="hint">Diagnostika olinmadi: ${esc(e.message || "server xatosi")}</p>`,
+        });
+        return;
+      }
+      if (!item) {
+        await openModal({
+          title: "Diagnostika",
+          html: `<p class="hint">Bu do'kondan hali diagnostika paketi kelmagan.
+            Mijozdan lokal paneldagi «Diagnostika paketini yuborish» tugmasini
+            bosishini so'rang.</p>`,
+          submitLabel: null, cancelLabel: "Yopish",
+        });
+        return;
+      }
+      const pretty = JSON.stringify(item.payload || {}, null, 2);
+      await openModal({
+        title: "Diagnostika paketi",
+        wide: true,
+        html: `
+          <dl class="kv">
+            <dt>Qurilma</dt><dd>${esc(item.device_id || "—")}</dd>
+            <dt>Kelgan vaqti</dt><dd>${esc(item.created_at || "—")}</dd>
+          </dl>
+          <pre style="max-height: 50vh; overflow: auto; background: #0f172a; color: #e2e8f0;
+                      padding: 12px; border-radius: 10px; font-size: 12px; white-space: pre-wrap"
+          >${esc(pretty)}</pre>`,
+        submitLabel: null, cancelLabel: "Yopish",
+      });
+    }
+
     async function openGeometry(siteId) {
       const base = `/api/v1/admin/sites/${siteId}`;
       await openModal({

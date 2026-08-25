@@ -19,7 +19,7 @@ Branch: `tariflar-3-ta` · Server: Contabo `169.58.198.111`
 | Yuz modeli → OpenVINO OMZ (Apache-2.0) | **Model yuklab olish + rasmlarni qayta hisoblash** |
 | Bosh sahifa qayta qurildi | Yangi rasmlar, yangi CSS/JS tokenlari |
 | Obuna tugashi majburlanadi | `expired`/`suspended` → funksiya berilmaydi |
-| Kassa va javon nazorati | **Qurilma relizi 0.6.9 kerak** |
+| Kassa va javon nazorati | Qurilma 0.6.9+ (chiqqan; joriy reliz bilan ishlaydi) |
 
 ---
 
@@ -255,7 +255,7 @@ majburiy yangilash kerak emas. Ko'rinmasa `Cmd+Shift+R`.
 
 ---
 
-## 9. Qurilma relizi 0.6.9 (alohida, keyinroq)
+## 9. Qurilma relizi 0.6.9 (2026-08-21 da chiqqan — bo'lim tarix uchun qoldi)
 
 Quyidagilar **qurilma tomonida** ishlaydi va yangi `.exe` talab qiladi:
 

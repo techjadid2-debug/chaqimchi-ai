@@ -52,11 +52,20 @@ PLAY_TIMEOUT_SEC = 20
 #: sababini topib bo'lmasdi — karnay o'chiqmi, fayl yo'qmi, TTS
 #: ishlamadimi.
 _counters = {"played_file": 0, "played_tts": 0, "failed": 0}
+#: Increment o'qish-yozish ikki qadam — parallel announce'lar hisobni
+#: yo'qotmasin (hisoblagich diagnostikaning yagona manbai).
+_counters_lock = threading.Lock()
 
 
 def counters() -> dict:
     """Heartbeat uchun ijro hisoblagichlari (nusxa)."""
-    return dict(_counters)
+    with _counters_lock:
+        return dict(_counters)
+
+
+def _count(key: str) -> None:
+    with _counters_lock:
+        _counters[key] += 1
 
 
 def custom_dir() -> Path:
@@ -148,17 +157,25 @@ def announce(code: str) -> bool:
         logger.warning("Noma'lum ibora: %s", code)
         return False
 
+    # Fon thread'i global funksiyalarni keyin o'qimasin. Testda yoki
+    # xizmat restartida ular almashsa, avvalgi announce keyingi so'rovning
+    # hisoblagichini buzib qo'yardi.
+    path = resolve_file(code)
+    play_file = _play_file
+    speak = _speak_with_tts
+    count = _count
+    text = announcements.text_for(code)
+
     def _run() -> None:
-        path = resolve_file(code)
-        if path and _play_file(path):
-            _counters["played_file"] += 1
+        if path and play_file(path):
+            count("played_file")
             logger.info("Ovoz berildi (fayl): %s", code)
             return
-        if _speak_with_tts(announcements.text_for(code)):
-            _counters["played_tts"] += 1
+        if speak(text):
+            count("played_tts")
             logger.info("Ovoz berildi (tizim ovozi): %s", code)
             return
-        _counters["failed"] += 1
+        count("failed")
         logger.warning(
             "Ovoz berilmadi: %s — na WAV fayl topildi (%s), na tizim ovozi ishladi",
             code,

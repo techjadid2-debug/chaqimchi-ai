@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Icon, Logo } from "./icons";
 import { Sparkline, Delta } from "./charts";
 
@@ -181,6 +181,25 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
   </div>;
 }
 
+/** Parol maydoni — "ko'z" (ko'rsatish/yashirish) tugmasi bilan.
+ *
+ *  Telefon klaviaturasida xato terish oson, xatoni ko'rmasdan tuzatib
+ *  bo'lmaydi.  Statik sahifalar uchun xuddi shu naqsh
+ *  `chaqimchi_ai/local/static/pw-eye.js` da. */
+export function PasswordInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false);
+  return <span className="pw-wrap">
+    <input {...rest} className={className} type={show ? "text" : "password"} />
+    <button
+      type="button"
+      className="pw-eye"
+      tabIndex={-1}
+      aria-label={show ? "Parolni yashirish" : "Parolni ko‘rsatish"}
+      onClick={() => setShow(value => !value)}
+    ><Icon name={show ? "eyeOff" : "eye"} size={18} /></button>
+  </span>;
+}
+
 export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "owner" | "admin"; onSubmit: (username: string, password: string) => void; busy: boolean; error: string; botUrl?: string }) {
   return <main className="login-page">
     <section className="login-visual">
@@ -194,7 +213,7 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
         <span className="eyebrow">{kind === "owner" ? "BIZNES PANELI" : "ADMIN PANEL"}</span>
         <h2>Xush kelibsiz</h2><p>Davom etish uchun login va parolingizni kiriting.</p>
         <label>Login<input name="username" autoComplete="username" required /></label>
-        <label>Parol<input name="password" type="password" autoComplete="current-password" required /></label>
+        <label>Parol<PasswordInput name="password" autoComplete="current-password" required /></label>
         {error ? <div className="form-error" role="alert">{error}</div> : null}
         <button className="btn btn-primary btn-wide" disabled={busy}>{busy ? "Tekshirilmoqda…" : "Kirish"}</button>
         {/* Parolsiz yo'l: bot bir martalik havola yuboradi.  Do'kon

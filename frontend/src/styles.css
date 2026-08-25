@@ -496,3 +496,12 @@ tr:last-child td { border-bottom: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Parol maydonidagi "ko'z" tugmasi (PasswordInput). Statik sahifalarda
+   xuddi shu klasslar pw-eye.js orqali in'ektsiya qilinadi. */
+.pw-wrap { position: relative; display: block; width: 100%; }
+.pw-wrap > input { width: 100%; padding-right: 40px; box-sizing: border-box; }
+.pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  padding: 0; border: 0; background: none; cursor: pointer; color: #5f6368; border-radius: 8px; }
+.pw-eye:hover { color: var(--blue, #1a73e8); background: var(--blue-soft, rgba(26,115,232,.08)); }

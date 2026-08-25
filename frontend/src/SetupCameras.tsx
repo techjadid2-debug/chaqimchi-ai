@@ -8,7 +8,7 @@ import {
   type ScanJob,
   type ScanStream,
 } from "./api";
-import { Card, EmptyState, PageHeader, Pill } from "./components";
+import { Card, EmptyState, PageHeader, PasswordInput, Pill } from "./components";
 import { Icon } from "./icons";
 
 /* Kamerani bulutdan ulash.
@@ -292,9 +292,8 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                   />
                 </label>
                 <label>Parol
-                  <input
+                  <PasswordInput
                     className="input"
-                    type="password"
                     value={credentials.password}
                     autoComplete="new-password"
                     onChange={event => setCredentials(current => ({ ...current, password: event.target.value }))}

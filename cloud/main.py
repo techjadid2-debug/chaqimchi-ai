@@ -1756,6 +1756,15 @@ async def zone_editor_script() -> FileResponse:
     return FileResponse(script, media_type="application/javascript")
 
 
+@app.get("/vendor/pw-eye.js", include_in_schema=False)
+async def password_eye_script() -> FileResponse:
+    """Parol maydonlariga "ko'z" tugmasi — manba zone-editor kabi bitta."""
+    script = ZONE_EDITOR / "pw-eye.js"
+    if not script.is_file():
+        raise HTTPException(404, "Skript topilmadi")
+    return FileResponse(script, media_type="application/javascript")
+
+
 @app.get("/connect", include_in_schema=False)
 async def connect_page() -> FileResponse:
     return _static_page("connect.html")

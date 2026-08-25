@@ -12,6 +12,7 @@
        to'lov sahifasida qoladi. -->
   <link rel="stylesheet" href="/assets/owner.css" />
   <link rel="stylesheet" href="/assets/panel.css" />
+  <script src="/vendor/pw-eye.js" defer></script>
 </head>
 <body>
   <!-- ── Kirish ekrani ──────────────────────────────────────────────── -->
@@ -172,6 +173,19 @@
         headers: { "Content-Type": "application/json", ...authHeaders(), ...(options.headers || {}) },
       });
       if (!res.ok) {
+        /* Sessiya muddati o'rtada tugasa (JWT eskirsa), har bo'lim
+           "Ma'lumot kelmadi" degan o'lik ekranga aylanardi va sabab
+           ko'rinmasdi.  Endi: token tozalanadi va sahifa login
+           ekraniga qaytadi.  /api/v1/auth/ chetlab o'tiladi — noto'g'ri
+           parol 401'i reload siklga aylanib qolmasin. */
+        if (res.status === 401 && (adminToken || adminKey) && !path.startsWith("/api/v1/auth/")) {
+          sessionStorage.removeItem(KEY_STORAGE);
+          sessionStorage.removeItem(LEGACY_KEY_STORAGE);
+          adminToken = "";
+          adminKey = "";
+          location.reload();
+          return new Promise(() => {});
+        }
         let detail = `Xato ${res.status}`;
         try {
           const body = await res.json();

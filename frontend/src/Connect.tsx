@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { claimDevice, login, peekConnect, registerTrial, type PendingDevice } from "./api";
+import { PasswordInput } from "./components";
 import { Icon, Logo } from "./icons";
 
 /* Do'kon kompyuterini hisobga ulash ekrani.
@@ -213,7 +214,7 @@ export function Connect({
                 <label>Login<input name="username" required autoComplete="username" placeholder="dokonchi" /></label>
                 <label>
                   Parol
-                  <input name="password" type="password" required minLength={10} autoComplete="new-password" />
+                  <PasswordInput name="password" required minLength={10} autoComplete="new-password" />
                   <small>Kamida 10 belgi, harf va raqam bo‘lsin</small>
                 </label>
                 {error ? <div className="form-error" role="alert">{error}</div> : null}
@@ -230,7 +231,7 @@ export function Connect({
                 <h2>Hisobingizga kiring</h2>
                 <p>Kompyuter shu do‘konga ulanadi.</p>
                 <label>Login<input name="username" required autoComplete="username" /></label>
-                <label>Parol<input name="password" type="password" required autoComplete="current-password" /></label>
+                <label>Parol<PasswordInput name="password" required autoComplete="current-password" /></label>
                 {error ? <div className="form-error" role="alert">{error}</div> : null}
                 <button className="btn btn-primary btn-wide" disabled={busy}>
                   {busy ? "Tekshirilmoqda…" : "Kirish va ulash"}

@@ -28,10 +28,21 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import parse_qsl
 from zoneinfo import ZoneInfo
 
-from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import (
+    BackgroundTasks,
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from chaqimchi_ai import __version__, announcements
 from chaqimchi_ai.event_models import EdgeEvent
@@ -59,7 +70,7 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import botfmt, faces, ratelimit, rtsp, server_health, trust_score, urls
+from cloud import botfmt, faces, ratelimit, rtsp, server_health, trust_score, urls, vision_agent
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
@@ -123,6 +134,8 @@ _event_store: Optional[EventStore] = None
 _snapshots: Optional[SnapshotStore] = None
 _event_store_key: Optional[str] = None
 _digest: Optional[DailyDigestService] = None
+_vision_worker_stop: Optional[asyncio.Event] = None
+_vision_worker_task: Optional[asyncio.Task[Any]] = None
 _digest_task: Optional[Any] = None
 _maintenance_task: Optional[Any] = None
 _lead_notification_task: Optional[Any] = None
@@ -188,6 +201,11 @@ async def media_get(key: str) -> bytes:
 
 async def media_delete(key: str) -> None:
     await asyncio.to_thread(get_snapshot_store().delete, key)
+
+
+async def vision_media_put(key: str, data: bytes, mime: str) -> None:
+    """Vision worker adapteri: worker generic callback, storage esa keyword API."""
+    await media_put(key, data, content_type=mime)
 
 
 def require_admin(
@@ -378,7 +396,12 @@ class ManualPaymentBody(BaseModel):
 
 
 class EventBatchBody(BaseModel):
-    events: List[EdgeEvent] = Field(max_length=500)
+    #: Xom dict'lar — har biri endpoint ichida ALOHIDA tekshiriladi.
+    #: `List[EdgeEvent]` bo'lsa yangi edge yuborgan bitta noma'lum event_type
+    #: butun batchni 422 bilan yiqitar, 20 urinishdan keyin hamma event
+    #: dead_letter'ga tushib yo'qolardi.  Endi buzuq event shunchaki
+    #: `accepted` ro'yxatiga kirmaydi va yolg'iz o'zi dead_letter bo'ladi.
+    events: List[Dict[str, Any]] = Field(max_length=500)
 
 
 class MemberBody(BaseModel):
@@ -411,6 +434,18 @@ class TelegramWebAppAuthBody(BaseModel):
     """Telegram Mini App ochilganda beradigan imzolangan query satri."""
 
     init_data: str = Field(min_length=20, max_length=8192)
+
+
+class VisionConsentBody(BaseModel):
+    """Tashqi multimodal providerga yuboriladigan ma'lumot uchun site roziligi."""
+
+    consented: bool
+    audio_reply_enabled: bool = False
+
+
+class VisionQueryBody(BaseModel):
+    message: str = Field(min_length=2, max_length=4000)
+    want_audio_reply: bool = False
 
 
 class EdgeCameraHealth(BaseModel):
@@ -501,6 +536,31 @@ class ConfigAckBody(BaseModel):
     revision: int = Field(ge=0)
     status: Literal["applied", "rejected"]
     error: Optional[str] = Field(default=None, max_length=500)
+
+
+class EdgeDiagnosticsBody(BaseModel):
+    """Windows support snapshot — RTSP paroli va device tokeni bo'lmaydi."""
+
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+#: Config ichida SERVER boshqaradigan bayroqlar.  Ular panel yuborgan
+#: to'liq config bilan almashtirilganda YO'QOLMASLIGI kerak: masalan
+#: `cameras_authoritative` o'chsa, qurilma "cloud hech qachon o'chirmaydi"
+#: rejimiga qaytib, o'chirilgan kamera lokal keshdan qayta tirilardi.
+_SERVER_MANAGED_CONFIG_KEYS = ("cameras_authoritative", "cloud_feature_revision")
+
+
+def _preserve_server_config_flags(site_id: str, new_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Panelning to'liq config yozuviga server bayroqlarini qaytaradi."""
+    try:
+        current = get_event_store().get_site_config(site_id)["config"]
+    except Exception:  # noqa: BLE001 — sayt endi yaratilgan bo'lishi mumkin
+        return new_config
+    for key in _SERVER_MANAGED_CONFIG_KEYS:
+        if key in current and key not in new_config:
+            new_config[key] = current[key]
+    return new_config
 
 
 class SiteConfigBody(BaseModel):
@@ -818,6 +878,36 @@ async def _send_owner_telegram(
         response = await client.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
             json=payload,
+        )
+        if response.status_code >= 400:
+            raise TelegramSendError(response.status_code, response.text[:300])
+
+
+async def _send_owner_voice(
+    chat_id: str, voice: bytes, caption: str = "", mime: str = "audio/wav"
+) -> None:
+    """Agentning ixtiyoriy native audio javobi uchun Telegram audio yuboradi.
+
+    `sendVoice` faqat OGG/OPUS qabul qiladi — Gemini esa odatda PCM/WAV
+    qaytaradi.  Mos kelmagan formatga avval baribir `sendVoice` urilib,
+    Telegram 400 berardi.  Endi format bo'yicha to'g'ri metod tanlanadi.
+    """
+    import httpx
+
+    token = (os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip() or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip())
+    if not token:
+        raise HTTPException(503, "Owner Telegram bot tokeni sozlanmagan")
+    lowered = mime.lower()
+    if "ogg" in lowered or "opus" in lowered:
+        method, field, filename = "sendVoice", "voice", "chaqimchi-agent.ogg"
+    else:
+        ext = "mp3" if "mpeg" in lowered else "m4a" if "mp4" in lowered else "wav"
+        method, field, filename = "sendAudio", "audio", f"chaqimchi-agent.{ext}"
+    async with httpx.AsyncClient(timeout=25) as client:
+        response = await client.post(
+            f"https://api.telegram.org/bot{token}/{method}",
+            data={"chat_id": chat_id, "caption": caption[:900]},
+            files={field: (filename, voice, mime)},
         )
         if response.status_code >= 400:
             raise TelegramSendError(response.status_code, response.text[:300])
@@ -1196,6 +1286,57 @@ def _site_media_quota_bytes() -> int:
         return SITE_MEDIA_MAX_BYTES_DEFAULT
 
 
+#: Yig'indisi yozilmagan saytlar — monitoring va purge himoyasi uchun.
+#: Kalit: site_id, qiymat: oxirgi xato vaqti (ISO).  Muvaffaqiyatda o'chadi.
+_demography_rollup_errors: Dict[str, str] = {}
+
+
+def _rollup_demography_for_site(site_id: str) -> bool:
+    """Bitta sayt demografiyasini yig'adi; muvaffaqiyat bayrog'i qaytadi.
+
+    Xato yutilmaydi emas — log qilinadi VA `_demography_rollup_errors` da
+    belgilanadi: purge shu bayroqqa qarab o'sha saytning xom hodisalarini
+    O'CHIRMAY turadi.  Avval xato faqat log bo'lib, keyin purge baribir
+    o'chirib yuborardi — kun qaytarib bo'lmas darajada yo'qolardi.
+    """
+    try:
+        get_event_store().rollup_pending_demography(site_id)
+        get_event_store().purge_demography(site_id)
+    except Exception:  # noqa: BLE001 — bitta sayt qolganini to'xtatmasin
+        logger.exception("Demografiya yig'indisi yozilmadi: %s", site_id)
+        _demography_rollup_errors[site_id] = datetime.now(timezone.utc).isoformat()
+        return False
+    _demography_rollup_errors.pop(site_id, None)
+    return True
+
+
+def _rollup_all_demography() -> int:
+    """Barcha saytlar uchun yig'indi — startupda va soatlik loopda."""
+    done = 0
+    for site in get_store().list_sites():
+        if _rollup_demography_for_site(str(site["id"])):
+            done += 1
+    return done
+
+
+async def _demography_rollup_loop() -> None:
+    """Yig'indi purge'dan MUSTAQIL yuradi.
+
+    Avval u faqat 6 soatlik purge loop ichida chaqirilardi: server qulab
+    qayta ko'tarilsa yoki loop kechiksa, yig'ilmagan kunlar purge'gacha
+    yetib bormasligi mumkin edi.  Soatlik alohida loop arzon (ko'pi bilan
+    sayt soni marta SELECT) va kunni his qilinarli tez yopadi.
+    """
+    while True:
+        try:
+            await asyncio.to_thread(_rollup_all_demography)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Demografiya rollup loop bajarilmadi")
+        await asyncio.sleep(3_600)
+
+
 def _purge_expired_events() -> int:
     """Har obyektni **o'z tarifi** muddati bo'yicha tozalaydi.
 
@@ -1212,13 +1353,14 @@ def _purge_expired_events() -> int:
             retention = 30
         site_id = str(site["id"])
         # Kunlik demografiya yig'indisi hodisalar O'CHIRILISHIDAN OLDIN
-        # yozilishi SHART.  Tartib almashsa yig'indi bo'sh chiqardi va
-        # o'sha kun butunlay yo'qolardi — uni keyin tiklab bo'lmaydi.
-        try:
-            get_event_store().rollup_pending_demography(site_id)
-            get_event_store().purge_demography(site_id)
-        except Exception:  # noqa: BLE001 — bitta sayt qolganini to'xtatmasin
-            logger.exception("Demografiya yig'indisi yozilmadi: %s", site_id)
+        # yozilishi SHART.  Yig'ilmagan saytning hodisalari o'chirilmaydi —
+        # keyingi siklda yig'ish yana uriniladi.
+        if not _rollup_demography_for_site(site_id):
+            logger.warning(
+                "Sayt %s: rollup xatosi — hodisalar purge qilinmadi (keyingi siklga qoladi)",
+                site_id,
+            )
+            continue
         for key in get_event_store().purge_site(site_id, retention_days=retention):
             get_snapshot_store().delete(key)
             removed += 1
@@ -1244,6 +1386,12 @@ def _purge_expired_events() -> int:
         # Issiqlik to'rlari 90 kun yashaydi — mavsumiy taqqoslashga yetadi,
         # cheksiz o'sishga yo'l qo'ymaydi.
         removed += get_event_store().purge_heatmaps(site_id, retention_days=90)
+    # Agent yozuvlari (savol, javob, kuzatuvlar, ovoz javoblari) ham
+    # muddatli: UI "suhbat tarixiga saqlanmaydi" deb va'da beradi,
+    # jadval esa avval umuman tozalanmasdi.
+    for key in get_event_store().purge_vision_data(retention_days=90):
+        get_snapshot_store().delete(key)
+        removed += 1
     return removed
 
 
@@ -1292,6 +1440,7 @@ def get_alerts() -> AlertService:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _digest, _digest_task, _maintenance_task, _lead_notification_task
+    global _vision_worker_stop, _vision_worker_task
     if os.environ.get("CHAQIMCHI_ENV", "development") == "production":
         errors = []
         if not os.environ.get("DATABASE_URL", "").startswith("postgresql"):
@@ -1321,6 +1470,16 @@ async def lifespan(app: FastAPI):
                 "CHAQIMCHI_OTP_BYPASS_IDS olib tashlangan — o'rniga "
                 "admin panel orqali kirish havolasi (login-link) ishlating"
             )
+        # Gemini kaliti bor-u model nomi yo'q — har agent jobi yiqilib
+        # kunlik kvotani yeydi.  Deploy'da darhol ushlanadi.
+        if (
+            os.environ.get("CHAQIMCHI_GEMINI_API_KEY", "").strip()
+            and not os.environ.get("CHAQIMCHI_GEMINI_VISION_MODEL", "").strip()
+        ):
+            errors.append(
+                "CHAQIMCHI_GEMINI_API_KEY berilgan, lekin "
+                "CHAQIMCHI_GEMINI_VISION_MODEL yo'q — Vision Agent ishlamaydi"
+            )
         try:
             usd_rate_uzs()
         except ValueError as exc:
@@ -1348,8 +1507,27 @@ async def lifespan(app: FastAPI):
     )
     _digest_task = asyncio.create_task(_digest.run())
     _maintenance_task = asyncio.create_task(_maintenance_loop())
+    # Startupda darhol bir marta: server qulab qayta ko'tarilganda
+    # yig'ilmagan kunlar 6 soatlik purge'ni kutmasin.
+    _demography_rollup_task = asyncio.create_task(_demography_rollup_loop())
     _lead_notification_task = asyncio.create_task(_lead_notification_loop())
     _bot_commands_task = asyncio.create_task(_setup_bot_commands())
+    # Agent joblari DB'da navbatda turadi; Gemini yoki worker qayta yonsa
+    # savol yo'qolmaydi. Birinchi relizda shu cloud process ichidagi alohida
+    # coroutine ishlaydi, keyingi horizontal worker ham ayni DB claim
+    # kontraktidan foydalana oladi.
+    if os.environ.get("CHAQIMCHI_VISION_WORKER_IN_APP", "1").lower() in {"1", "true", "yes"}:
+        _vision_worker_stop = asyncio.Event()
+        _vision_worker_task = asyncio.create_task(
+            vision_agent.worker_loop(
+                get_event_store(),
+                cameras_for_site=get_store().list_cameras,
+                media_get=media_get,
+                media_delete=media_delete,
+                media_put=vision_media_put,
+                stop=_vision_worker_stop,
+            )
+        )
     try:
         yield
     finally:
@@ -1359,9 +1537,16 @@ async def lifespan(app: FastAPI):
         if _maintenance_task is not None:
             _maintenance_task.cancel()
             _maintenance_task = None
+        _demography_rollup_task.cancel()
         if _lead_notification_task is not None:
             _lead_notification_task.cancel()
             _lead_notification_task = None
+        if _vision_worker_stop is not None:
+            _vision_worker_stop.set()
+        if _vision_worker_task is not None:
+            _vision_worker_task.cancel()
+            _vision_worker_task = None
+        _vision_worker_stop = None
         _bot_commands_task.cancel()
         _digest = None
         await alerts.stop()
@@ -1548,7 +1733,7 @@ async def public_site(request: Request) -> Any:
     if section == "partner":
         return _static_page("installer.html")
     if section == "admin":
-        return _static_page("v2/admin.html" if _ui_v2_enabled() else "admin.html")
+        return _static_page("v2/admin.html" if _ui_v2_admin_enabled() else "admin.html")
     if section == "dl":
         return _static_page("dl.html")
     if section == "docs":
@@ -1887,7 +2072,7 @@ async def admin_panel(request: Request) -> Any:
     redirect = _apex_redirect(request, "CHAQIMCHI_ADMIN_URL")
     if redirect is not None:
         return redirect
-    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_enabled() else "admin.html")
+    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_admin_enabled() else "admin.html")
     if not page.is_file():
         raise HTTPException(404, "Admin paneli topilmadi")
     return FileResponse(page)
@@ -1897,8 +2082,29 @@ def _ui_v2_enabled() -> bool:
     return os.environ.get("CHAQIMCHI_UI_V2", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _ui_v2_owner_enabled() -> bool:
+    """Egalar paneli uchun alohida flag.
+
+    Onboarding (qurilma ulash, kamera qo'shish, chiziq chizish) faqat v2'da
+    bor, support vositalari esa hozircha legacy adminda — shuning uchun ikki
+    panel alohida yoqiladi.  `CHAQIMCHI_UI_V2` eski umumiy flag sifatida
+    fallback bo'lib qoladi.
+    """
+    raw = os.environ.get("CHAQIMCHI_UI_V2_OWNER", "").strip().lower()
+    if raw:
+        return raw in {"1", "true", "yes", "on"}
+    return _ui_v2_enabled()
+
+
+def _ui_v2_admin_enabled() -> bool:
+    raw = os.environ.get("CHAQIMCHI_UI_V2_ADMIN", "").strip().lower()
+    if raw:
+        return raw in {"1", "true", "yes", "on"}
+    return _ui_v2_enabled()
+
+
 def _render_owner() -> HTMLResponse:
-    page = STATIC_DIR / ("v2/owner.html" if _ui_v2_enabled() else "owner.html")
+    page = STATIC_DIR / ("v2/owner.html" if _ui_v2_owner_enabled() else "owner.html")
     if not page.is_file():
         raise HTTPException(404, "Owner panel topilmadi")
     # Kirish ekranidagi "Telegram botdan havola oling" tugmasi uchun bot
@@ -1949,7 +2155,7 @@ async def admin_panel_route(panel_path: str, request: Request) -> Any:
     )
     if redirect is not None:
         return redirect
-    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_enabled() else "admin.html")
+    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_admin_enabled() else "admin.html")
     if not page.is_file():
         raise HTTPException(404, "Admin paneli topilmadi")
     return FileResponse(page)
@@ -2589,10 +2795,15 @@ async def public_windows_release() -> Dict[str, Any]:
     """
     if _windows_installer_url():
         size = os.environ.get(ENV_WINDOWS_INSTALLER_SIZE, "").strip()
+        # URL rejimida ham versiya RELIZDAN olinadi (pastdagi izoh bilan
+        # bir sabab): cloud image raqami tashqi o'rnatuvchi versiyasini
+        # bildirmaydi.  Tashqi URL uchun aniq raqam env bilan beriladi.
+        env_version = os.environ.get("CHAQIMCHI_WINDOWS_INSTALLER_VERSION", "").strip()
+        release = latest_windows_release()
         return {
             "available": True,
             "size_mb": int(size) if size.isdigit() else None,
-            "version": __version__,
+            "version": env_version or (release["version"] if release else __version__),
             "url": "/api/v1/public/download-installer",
         }
     installer = _windows_installer_file()
@@ -3059,6 +3270,16 @@ async def admin_events(
     return {"events": events[:bounded]}
 
 
+@app.get("/api/v1/admin/sites/{site_id}/diagnostics")
+async def admin_site_diagnostics(
+    site_id: str,
+    _: None = Depends(require_admin),
+) -> Dict[str, Any]:
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Filial topilmadi")
+    return {"diagnostics": get_event_store().latest_device_diagnostics(site_id)}
+
+
 @app.get("/api/v1/admin/leads")
 async def admin_list_leads(
     status: Optional[str] = None,
@@ -3362,7 +3583,9 @@ async def admin_update_config(
     if not get_store().get_site(site_id):
         raise HTTPException(404, "Sayt topilmadi")
     _validate_site_config(body)
-    updated = get_event_store().update_site_config(site_id, body.model_dump())
+    updated = get_event_store().update_site_config(
+        site_id, _preserve_server_config_flags(site_id, body.model_dump())
+    )
     get_store().audit_portal_action(
         "admin.config.saved",
         # `require_admin` statik kalit ishlatilganda `None` qaytaradi —
@@ -3719,7 +3942,9 @@ async def installer_update_config(
     """
     _require_installer_site(installer, site_id)
     _validate_site_config(body)
-    updated = get_event_store().update_site_config(site_id, body.model_dump())
+    updated = get_event_store().update_site_config(
+        site_id, _preserve_server_config_flags(site_id, body.model_dump())
+    )
     get_store().audit_portal_action(
         "installer.config.saved",
         actor_id=installer.account_id,
@@ -4203,20 +4428,38 @@ async def ingest_event_batch(
         message="Event yuborish chegarasi oshdi — keyinroq qayta yuboriladi",
     )
     event_store = get_event_store()
+    # Har bir event ALOHIDA tekshiriladi (`EventBatchBody` izohiga qarang):
+    # buzuqlari `accepted` ga kirmaydi va edge ularni yolg'iz dead_letter
+    # qiladi — sog'lom eventlar yo'qolmaydi.
+    valid_events: List[EdgeEvent] = []
+    rejected: List[str] = []
+    for raw in body.events:
+        try:
+            valid_events.append(EdgeEvent.model_validate(raw))
+        except ValidationError:
+            event_id = str(raw.get("event_id", "")) if isinstance(raw, dict) else ""
+            rejected.append(event_id)
+    if rejected:
+        logger.warning(
+            "Batch'da %d ta yaroqsiz event rad etildi (qurilma %s): %s",
+            len(rejected),
+            device["device_id"],
+            ", ".join(filter(None, rejected[:5])) or "id'siz",
+        )
     # Media olinmaydigan hodisada "rasm bor" bayrog'ini O'CHIRAMIZ.
     #
     # Bayroq qurilmaning DA'VOSI bilan keladi va u eski qurilmalarda
     # `true` bo'lib turaveradi.  Rasm esa saqlanmaydi (`MEDIALESS_EVENTS`).
     # Tozalanmasa panel "rasm bor" deb ko'rsatib, mijoz bosganda 404
     # olardi — ya'ni bazadagi ma'lumot yolg'on bo'lardi.
-    for event in body.events:
+    for event in valid_events:
         if event.event_type in MEDIALESS_EVENTS:
             event.has_snapshot = False
     existing = event_store.existing_event_ids(
-        device["site_id"], [event.event_id for event in body.events]
+        device["site_id"], [event.event_id for event in valid_events]
     )
-    accepted = event_store.ingest(device["site_id"], device["device_id"], body.events)
-    new_events = [event for event in body.events if event.event_id not in existing]
+    accepted = event_store.ingest(device["site_id"], device["device_id"], valid_events)
+    new_events = [event for event in valid_events if event.event_id not in existing]
     # Butun batch uchun **bitta** yig'ma xabar. Har event uchun alohida yuborish
     # 500 talik batchda botni Telegram limitiga urib, xabarni butunlay
     # yo'qotardi — batafsili `cloud/notify.py` da.  Tormoz bazada turadi:
@@ -4225,7 +4468,7 @@ async def ingest_event_batch(
     allowed = select_alert_events(device["site_id"], new_events, throttle_service=_durable_throttle)
     if allowed:
         background_tasks.add_task(_notify_alert, device["site_id"], allowed)
-    return {"ok": True, "accepted": accepted}
+    return {"ok": True, "accepted": accepted, "rejected": rejected}
 
 
 @app.put("/api/v1/edge/events/{event_id}/snapshot")
@@ -4387,6 +4630,16 @@ async def upload_event_clip(
     request: Request,
     device: Dict[str, Any] = Depends(require_device),
 ) -> Dict[str, Any]:
+    event = get_event_store().event(device["site_id"], event_id)
+    if not event or event["device_id"] != device["device_id"]:
+        raise HTTPException(404, "Event topilmadi")
+    # Snapshot yo'lidagi bilan SIMMETRIK: media olinmaydigan hodisaning
+    # klipi ham saqlanmaydi va kunlik 100 talik chegarani YEMAYDI.
+    # Avval bu guard faqat snapshotda edi — eski qurilmalar loitering
+    # klipini yuklab kvotani behuda sarflardi.  200 qaytadi (4xx emas):
+    # rad javob edge'da butun hodisani dead_letter'ga olib borardi.
+    if event["event_type"] in MEDIALESS_EVENTS:
+        return {"ok": True, "stored": False}
     ratelimit.check(
         "event-clips",
         device["site_id"],
@@ -4394,9 +4647,6 @@ async def upload_event_clip(
         window_sec=86_400,
         message="Kunlik videoklip chegarasi oshdi",
     )
-    event = get_event_store().event(device["site_id"], event_id)
-    if not event or event["device_id"] != device["device_id"]:
-        raise HTTPException(404, "Event topilmadi")
     if event["event_type"] == "employee_seen":
         raise HTTPException(403, "Davomat biometrik videolari cloudga yuklanmaydi")
     if request.headers.get("content-type", "").split(";", 1)[0] != "video/mp4":
@@ -4881,6 +5131,13 @@ async def edge_site_config(
             "full_video_storage": "nvr",
         }
     config["cameras"] = get_store().list_cameras(device["site_id"], include_source=True)
+    # Cloud kamerani o'zi boshqarayotganini faqat owner/installer shu
+    # inventarni kamida bir marta saqlaganidan keyin aytamiz.  Bu bayroq
+    # bo'lmasa lokal sehrgardagi kamera bo'sh cloud ro'yxati tufayli
+    # yo'qolib ketmaydi; bo'lsa oxirgi kamera delete'i ham edgega o'tadi.
+    config["cameras_authoritative"] = bool(
+        (config.get("config") or {}).get("cameras_authoritative")
+    )
     config["cloud_features"] = [
         {
             "code": item["feature_code"],
@@ -5008,6 +5265,49 @@ async def sotqin_config_ack(
         "revision": updated["config_revision"],
         "status": updated["config_status"],
     }
+
+
+_DIAGNOSTICS_FORBIDDEN = ("rtsp://", "device_token", "password", "authorization")
+
+
+def _redact_diagnostics(value: Any) -> Any:
+    """Maxfiy iz bor satrlarni OLIB TASHLAB paketni qabul qiladi.
+
+    Avval bunday paket butunlay 422 bilan rad etilardi — eng yomon holat:
+    dead_letter xatosida `rtsp://` bo'lgan (ya'ni aynan muammoli) qurilma
+    diagnostika yubora OLMASDI.  Endi maxfiy satr belgiga almashadi,
+    qolgan ma'lumot supportga yetib boradi.
+    """
+    if isinstance(value, dict):
+        return {key: _redact_diagnostics(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_diagnostics(item) for item in value]
+    if isinstance(value, str) and any(m in value.lower() for m in _DIAGNOSTICS_FORBIDDEN):
+        return "[maxfiy — olib tashlandi]"
+    return value
+
+
+@app.post("/api/v1/edge/diagnostics")
+async def edge_diagnostics(
+    request: Request,
+    device: Dict[str, Any] = Depends(require_device),
+) -> Dict[str, Any]:
+    """Edge yuborgan redakt qilingan support snapshotini saqlaydi."""
+    # O'lcham JSON parse'dan OLDIN tekshiriladi: api. vhost kliplar uchun
+    # 60 MB gacha ruxsat beradi va shu endpointga 60 MB JSON kelsa parse
+    # o'zi DoS bo'lardi.
+    raw = await request.body()
+    if len(raw) > 200_000:
+        raise HTTPException(413, "Diagnostika paketi 180 KB dan kichik bo'lishi kerak")
+    try:
+        body = EdgeDiagnosticsBody.model_validate_json(raw)
+    except ValidationError as exc:
+        raise HTTPException(422, "Diagnostika formati noto'g'ri") from exc
+    payload = _redact_diagnostics(body.payload)
+    item = get_event_store().save_device_diagnostics(
+        device["site_id"], device["device_id"], payload
+    )
+    return {"ok": True, "id": item["id"], "created_at": item["created_at"]}
 
 
 @app.post("/api/v1/sotqin/camera-probes")
@@ -5323,6 +5623,63 @@ async def owner_dashboard(
         item["label"] = event_label(str(item.get("event_type", "")))
     subscription = await owner_subscription(owner)
     updated_at = datetime.now(timezone.utc).isoformat()
+    config_revision = events_store.config_revision(owner.site_id)
+    devices = detail.get("devices") or []
+    expected = int(health.get("cameras_expected") or 0)
+    active = int(detail.get("cameras_active") or 0)
+    # Tasdiqni faqat JONLI qurilmalardan kutamiz.  Almashtirilgan eski
+    # kompyuter `devices` da qolib ketadi va hech qachon tasdiqlamaydi —
+    # u tufayli panel "sozlama tasdiqlanmagan" ni abadiy ko'rsatardi.
+    live_devices = [
+        item for item in devices if str(item.get("connection") or "") != "offline"
+    ] or devices
+    applied = bool(live_devices) and all(
+        item.get("config_status") == "applied"
+        and int(item.get("config_revision") or 0) >= config_revision
+        for item in live_devices
+    )
+    plan_codes = set(plan_feature_codes(str(detail.get("plan") or "")))
+    if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production":
+        plan_codes &= set(available_feature_codes())
+    capabilities = {
+        "cameras": {
+            "ready": bool(active) and (not expected or active >= expected),
+            "active": active,
+            "expected": expected or None,
+            "reason": (
+                None if not expected or active >= expected
+                else f"{expected} kameradan {active} tasi faol"
+            ),
+        },
+        "edge_config": {
+            "ready": applied,
+            "revision": config_revision,
+            "reason": None if applied else "Qurilma yangi sozlamani hali tasdiqlamagan",
+        },
+        "features": {
+            "panel": (health.get("plan") or {}).get("panel_features") or [],
+            "edge": sorted(plan_codes),
+        },
+    }
+    # Chiziq chizilmagani — "nega 0 ko'rinyapti?"ning eng keng tarqalgan
+    # javobi.  Server buni allaqachon biladi (installer onboarding'da bor
+    # edi), endi EGA ham ko'radi: panel bo'sh holat o'rniga aniq sabab va
+    # yo'l ko'rsata oladi.
+    try:
+        site_config = events_store.get_site_config(owner.site_id)["config"]
+    except Exception:  # noqa: BLE001 — config hali yaratilmagan yangi sayt
+        site_config = {}
+    lines_drawn = bool(site_config.get("lines"))
+    capabilities["geometry"] = {
+        "ready": lines_drawn,
+        "lines_drawn": lines_drawn,
+        "zones_drawn": bool(site_config.get("zones")),
+        "reason": (
+            None
+            if lines_drawn
+            else "Kirish chizig'i chizilmagan — chiziqsiz mijozlar sanalmaydi"
+        ),
+    }
     return {
         "site": {
             "id": detail["id"],
@@ -5358,9 +5715,19 @@ async def owner_dashboard(
             **subscription,
             "monthly_price_uzs": subscription.get("monthly_uzs"),
         },
+        "capabilities": capabilities,
+        "diagnostics": events_store.latest_device_diagnostics(owner.site_id),
         "updated_at": updated_at,
         "revision": f"{owner.site_id}:{updated_at}",
     }
+
+
+@app.get("/api/v1/owner/diagnostics")
+async def owner_diagnostics(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Ownerga faqat oxirgi redakt qilingan Windows support snapshotini beradi."""
+    return {"diagnostics": get_event_store().latest_device_diagnostics(owner.site_id)}
 
 
 @app.get("/api/v1/owner/events")
@@ -5381,6 +5748,197 @@ async def owner_events(
     for item in events:
         item["label"] = event_label(str(item.get("event_type", "")))
     return {"events": events}
+
+
+def _vision_ready(site_id: str) -> Dict[str, Any]:
+    settings = get_event_store().vision_settings(site_id)
+    if not settings["consented"]:
+        raise HTTPException(
+            403,
+            "Vision Agent uchun filial egasining tasvir va ovozni Gemini'ga yuborish roziligi kerak",
+        )
+    if not vision_agent.configured():
+        raise HTTPException(503, "Vision Agent provideri hali sozlanmagan")
+    return settings
+
+
+def _check_vision_daily_limit(site_id: str) -> None:
+    """Bitta filial uchun barcha UI va Telegram bo'ylab yagona pilot limit.
+
+    Hisob BAZADAN olinadi: bu limit to'g'ridan-to'g'ri pul (Gemini
+    chaqiruvi) himoyasi, xotiradagi hisoblagich esa har restart'da nolga
+    tushardi — restart sikli cheksiz sarfga aylanishi mumkin edi.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    used = get_event_store().count_vision_jobs_since(site_id, since)
+    if used >= 20:
+        raise HTTPException(
+            429, "Bu filial uchun bugungi 20 ta Vision Agent so'rov limiti tugadi"
+        )
+
+
+def _vision_job_payload(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Internal keylarni panelga bermaydigan, barcha yuzalar uchun bitta shape."""
+    result = job.get("result") or {}
+    return {
+        "job_id": job["id"],
+        "status": job["status"],
+        "created_at": job.get("created_at"),
+        "completed_at": job.get("completed_at"),
+        "error": job.get("error_text"),
+        "has_audio_reply": bool(job.get("audio_reply_key")),
+        "result": result,
+    }
+
+
+@app.get("/api/v1/owner/agent/settings")
+async def owner_vision_settings(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    return {**get_event_store().vision_settings(owner.site_id), "provider_configured": vision_agent.configured()}
+
+
+@app.put("/api/v1/owner/agent/settings")
+async def owner_update_vision_settings(
+    body: VisionConsentBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    require_owner_role(owner, "owner", "service_admin")
+    return get_event_store().set_vision_consent(
+        owner.site_id,
+        consented=body.consented,
+        actor_id=owner.member_id,
+        audio_reply_enabled=body.audio_reply_enabled,
+    )
+
+
+@app.post("/api/v1/owner/agent/queries", status_code=202)
+async def owner_vision_query(
+    body: VisionQueryBody,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    settings = _vision_ready(owner.site_id)
+    _check_vision_daily_limit(owner.site_id)
+    job = get_event_store().create_vision_job(
+        owner.site_id, requester_id=owner.member_id, requester_kind="owner",
+        question=body.message.strip(), want_audio_reply=body.want_audio_reply and settings["audio_reply_enabled"],
+    )
+    return _vision_job_payload(job)
+
+
+@app.post("/api/v1/owner/agent/audio", status_code=202)
+async def owner_vision_audio_query(
+    audio: UploadFile = File(...),
+    # `Form(...)` SHART: panel qiymatni multipart form ichida yuboradi.
+    # Oddiy `bool` FastAPI'da query-param bo'lib, checkbox jimgina
+    # e'tiborsiz qolardi — ovozli javob paneldan hech qachon so'ralmasdi.
+    want_audio_reply: bool = Form(False),
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    settings = _vision_ready(owner.site_id)
+    _check_vision_daily_limit(owner.site_id)
+    mime = str(audio.content_type or "audio/ogg").lower()
+    if mime not in {"audio/ogg", "audio/opus", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav", "video/ogg"}:
+        raise HTTPException(415, "Faqat ogg, mp3, m4a yoki wav ovoz qabul qilinadi")
+    payload = await audio.read(10 * 1024 * 1024 + 1)
+    if not payload or len(payload) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Ovozli savol 10 MB dan kichik bo'lishi kerak")
+    key = f"agent/audio/{owner.site_id}/{uuid.uuid4()}.bin"
+    await media_put(key, payload, content_type=mime)
+    job = get_event_store().create_vision_job(
+        owner.site_id, requester_id=owner.member_id, requester_kind="owner", audio_key=key,
+        audio_mime=mime, want_audio_reply=want_audio_reply and settings["audio_reply_enabled"],
+    )
+    return _vision_job_payload(job)
+
+
+@app.get("/api/v1/owner/agent/jobs/{job_id}")
+async def owner_vision_job(
+    job_id: str,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    # Job FILIAL bo'yicha ochiladi, so'ragan a'zo bo'yicha emas.
+    # Telegram'dan berilgan savol `requester_id=telegram_id` bilan
+    # yoziladi — qat'iy tenglik egasining O'Z savolini panelda 404
+    # qilardi.  `vision_job(site_id, ...)` tenant chegarasini baribir
+    # ushlab turadi.
+    job = get_event_store().vision_job(owner.site_id, job_id)
+    if not job:
+        raise HTTPException(404, "Agent so'rovi topilmadi")
+    return _vision_job_payload(job)
+
+
+@app.get("/api/v1/owner/agent/jobs/{job_id}/audio")
+async def owner_vision_job_audio(
+    job_id: str, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Response:
+    job = get_event_store().vision_job(owner.site_id, job_id)
+    if not job or not job.get("audio_reply_key"):
+        raise HTTPException(404, "Ovozli javob topilmadi")
+    try:
+        content = await media_get(str(job["audio_reply_key"]))
+    except Exception as exc:  # noqa: BLE001 — MinIO S3Error ham 404 bo'lsin, 500 emas
+        raise HTTPException(404, "Ovozli javob topilmadi") from exc
+    # Haqiqiy mime natijada saqlanadi (Gemini ko'pincha PCM qaytaradi) —
+    # "audio/wav" deb qattiq yozish brauzerda o'ynalmaslikka olib kelardi.
+    mime = str(((job.get("result") or {}).get("audio_reply_mime")) or "audio/wav")
+    return Response(content, media_type=mime, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/v1/owner/agent/memory")
+async def owner_vision_memory(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    return {"items": get_event_store().vision_memory(owner.site_id, owner.member_id)}
+
+
+@app.post("/api/v1/admin/sites/{site_id}/agent/queries", status_code=202)
+async def admin_vision_query(
+    site_id: str,
+    body: VisionQueryBody,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Filial topilmadi")
+    settings = _vision_ready(site_id)
+    _check_vision_daily_limit(site_id)
+    requester = admin.account_id if admin else "cloud-admin-key"
+    job = get_event_store().create_vision_job(
+        site_id, requester_id=requester, requester_kind="admin", question=body.message.strip(),
+        want_audio_reply=body.want_audio_reply and settings["audio_reply_enabled"],
+    )
+    return _vision_job_payload(job)
+
+
+@app.get("/api/v1/admin/sites/{site_id}/agent/settings")
+async def admin_vision_settings(
+    site_id: str, _: Optional[PortalPrincipal] = Depends(require_admin)
+) -> Dict[str, Any]:
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Filial topilmadi")
+    return {**get_event_store().vision_settings(site_id), "provider_configured": vision_agent.configured()}
+
+
+@app.put("/api/v1/admin/sites/{site_id}/agent/settings")
+async def admin_update_vision_settings(
+    site_id: str, body: VisionConsentBody, admin: Optional[PortalPrincipal] = Depends(require_admin)
+) -> Dict[str, Any]:
+    if not get_store().get_site(site_id):
+        raise HTTPException(404, "Filial topilmadi")
+    return get_event_store().set_vision_consent(
+        site_id, consented=body.consented, actor_id=admin.account_id if admin else "cloud-admin-key",
+        audio_reply_enabled=body.audio_reply_enabled,
+    )
+
+
+@app.get("/api/v1/admin/sites/{site_id}/agent/jobs/{job_id}")
+async def admin_vision_job(
+    site_id: str, job_id: str, _: Optional[PortalPrincipal] = Depends(require_admin)
+) -> Dict[str, Any]:
+    job = get_event_store().vision_job(site_id, job_id)
+    if not job:
+        raise HTTPException(404, "Agent so'rovi topilmadi")
+    return _vision_job_payload(job)
 
 
 @app.get("/api/v1/owner/report")
@@ -5807,7 +6365,9 @@ def _owner_camera_saved(site_id: str, camera_id: str, *, label: str, rtsp_url: s
         site_id, camera_id, label=label, rtsp_url=rtsp_url, enabled=True
     )
     current = get_event_store().get_site_config(site_id)
-    updated = get_event_store().update_site_config(site_id, current["config"])
+    desired = dict(current["config"])
+    desired["cameras_authoritative"] = True
+    updated = get_event_store().update_site_config(site_id, desired)
     get_store().audit_portal_action(
         "owner.camera.saved",
         actor_id=actor,
@@ -5892,7 +6452,11 @@ async def owner_delete_camera(
     if not get_store().delete_camera(owner.site_id, camera_id):
         raise HTTPException(404, "Kamera topilmadi")
     current = get_event_store().get_site_config(owner.site_id)
-    updated = get_event_store().update_site_config(owner.site_id, current["config"])
+    desired = dict(current["config"])
+    # Delete ham xuddi save kabi buyruq: bo'sh inventar "bilinmaydi"
+    # emas, "cloud tasdiqlagan holda o'chirildi" degani.
+    desired["cameras_authoritative"] = True
+    updated = get_event_store().update_site_config(owner.site_id, desired)
     get_store().audit_portal_action(
         "owner.camera.deleted",
         actor_id=owner.member_id,
@@ -6045,7 +6609,9 @@ async def owner_update_config(
 ) -> Dict[str, Any]:
     require_owner_role(owner, "owner", "service_admin")
     _validate_site_config(body)
-    return get_event_store().update_site_config(owner.site_id, body.model_dump())
+    return get_event_store().update_site_config(
+        owner.site_id, _preserve_server_config_flags(owner.site_id, body.model_dump())
+    )
 
 
 @app.get("/api/v1/owner/employees")
@@ -6917,6 +7483,8 @@ async def owner_snapshot(
     event = get_event_store().event(owner.site_id, event_id)
     if not event or not event.get("snapshot_key"):
         raise HTTPException(404, "Snapshot topilmadi")
+    if event.get("event_type") in {"face_captured", "employee_seen"}:
+        require_owner_role(owner, "owner", "service_admin")
     try:
         content = await media_get(event["snapshot_key"])
     except FileNotFoundError as exc:
@@ -6932,11 +7500,39 @@ async def owner_clip(
     event = get_event_store().event(owner.site_id, event_id)
     if not event or not event.get("clip_key"):
         raise HTTPException(404, "Videoklip topilmadi")
+    if event.get("event_type") in {"face_captured", "employee_seen"}:
+        require_owner_role(owner, "owner", "service_admin")
     try:
         content = await media_get(event["clip_key"])
     except FileNotFoundError as exc:
         raise HTTPException(404, "Videoklip topilmadi") from exc
     return Response(content=content, media_type="video/mp4")
+
+
+@app.get("/api/v1/admin/sites/{site_id}/events/{event_id}/snapshot")
+async def admin_event_snapshot(
+    site_id: str, event_id: str, _: None = Depends(require_admin)
+) -> Response:
+    event = get_event_store().event(site_id, event_id)
+    if not event or not event.get("snapshot_key"):
+        raise HTTPException(404, "Snapshot topilmadi")
+    try:
+        return Response(content=await media_get(event["snapshot_key"]), media_type="image/jpeg")
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Snapshot topilmadi") from exc
+
+
+@app.get("/api/v1/admin/sites/{site_id}/events/{event_id}/clip")
+async def admin_event_clip(
+    site_id: str, event_id: str, _: None = Depends(require_admin)
+) -> Response:
+    event = get_event_store().event(site_id, event_id)
+    if not event or not event.get("clip_key"):
+        raise HTTPException(404, "Videoklip topilmadi")
+    try:
+        return Response(content=await media_get(event["clip_key"]), media_type="video/mp4")
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Videoklip topilmadi") from exc
 
 
 #: Tugma ma'lumoti — `speak:deter` ko'rinishida.  Telegram `callback_data`
@@ -6991,6 +7587,80 @@ async def _handle_callback(callback: Dict[str, Any]) -> Dict[str, Any]:
 
     await _answer_callback(callback_id, "Bu tugma endi ishlamaydi.")
     return {"ok": True}
+
+
+#: Fon tasklariga KUCHLI havola.  `asyncio.create_task` natijasi saqlanmasa
+#: GC uni yakunlanmasidan yo'q qilishi mumkin — javob kutayotgan mijoz
+#: xabarsiz qolardi.
+_background_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_background(coro: Any) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+async def _telegram_vision_result(chat_id: str, site_id: str, job_id: str) -> None:
+    """Webhookni ushlab turmasdan Agent natijasini keyin yuboradi."""
+    for _ in range(90):
+        await asyncio.sleep(2)
+        # Sync DB chaqiruvi event loopni bloklamasin — har 2 soniyada
+        # 3 daqiqagacha davom etadi.
+        job = await asyncio.to_thread(get_event_store().vision_job, site_id, job_id)
+        if not job or job.get("status") in {"queued", "running"}:
+            continue
+        if job.get("status") == "failed":
+            await _send_owner_telegram(chat_id, "❌ Agent javob bera olmadi. Keyinroq qayta urinib ko'ring.")
+            return
+        result = job.get("result") or {}
+        await _send_owner_telegram(chat_id, f"🤖 <b>Chaqimchi yordamchisi</b>\n\n{botfmt.escape(str(result.get('answer') or 'Javob tayyor.'))}")
+        if job.get("audio_reply_key"):
+            try:
+                await _send_owner_voice(
+                    chat_id,
+                    await media_get(str(job["audio_reply_key"])),
+                    "Chaqimchi yordamchisi javobi",
+                    mime=str(result.get("audio_reply_mime") or "audio/wav"),
+                )
+            except Exception:
+                logger.warning("Agent audio javobi Telegramga yuborilmadi", exc_info=True)
+        sources = result.get("sources") or []
+        if sources:
+            event = get_event_store().event(site_id, str(sources[0].get("event_id") or ""))
+            # Yuz kadrlari Telegramga KETMAYDI: panel media endpointidagi
+            # rol-guard shu yerda ham amal qiladi, aks holda har qanday
+            # a'zo xodim yuzini chatda olardi.
+            if (
+                event
+                and event.get("snapshot_key")
+                and event.get("event_type") not in {"face_captured", "employee_seen"}
+            ):
+                try:
+                    photo = await media_get(str(event["snapshot_key"]))
+                    await _send_owner_photo(chat_id, photo, "Dalil: " + botfmt.escape(str(sources[0].get("label") or "Hodisa")))
+                except Exception:
+                    logger.warning("Agent dalil rasmi Telegramga yuborilmadi", exc_info=True)
+        return
+    await _send_owner_telegram(chat_id, "⌛ Agent javobi cho'zildi. Paneldan keyinroq natijani ko'ring.")
+
+
+async def _telegram_voice_bytes(file_id: str) -> tuple[bytes, str]:
+    """Telegram voice faylini faqat Agent jobi uchun vaqtincha oladi."""
+    import httpx
+
+    token = (os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip() or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip())
+    if not token:
+        raise RuntimeError("Owner Telegram bot tokeni sozlanmagan")
+    async with httpx.AsyncClient(timeout=25) as client:
+        metadata = await client.get(f"https://api.telegram.org/bot{token}/getFile", params={"file_id": file_id})
+        metadata.raise_for_status()
+        path = str((metadata.json().get("result") or {}).get("file_path") or "")
+        if not path:
+            raise RuntimeError("Telegram voice fayli topilmadi")
+        response = await client.get(f"https://api.telegram.org/file/bot{token}/{path}")
+        response.raise_for_status()
+        return response.content, "audio/ogg"
 
 
 @app.post("/api/v1/telegram/webhook")
@@ -7098,6 +7768,73 @@ async def owner_telegram_webhook(
     if not telegram_id or not members:
         return {"ok": True}
 
+    # Oddiy Uzbek matn yoki Telegram voice — Agentga savol. Buyruqlar esa
+    # avvalgidek o'z yo'lida qoladi, shuning uchun /hisobot va /kamera sinmaydi.
+    # FAQAT shaxsiy chat: bot qo'shilgan guruhda har matn kvota yeb yuborardi.
+    voice = message.get("voice") or {}
+    if chat.get("type") == "private" and (voice or (text and not command.startswith("/"))):
+        member = members[0]
+        site_id = str(member["site_id"])
+        settings = get_event_store().vision_settings(site_id)
+        if not settings["consented"]:
+            # Avval roziliksiz MATN savoli indamay "Buyruqlar:" ro'yxatiga
+            # tushardi — odam Uzbek tilida savol berib buyruq ro'yxati olardi.
+            # Endi ikkalasiga ham aniq yo'l ko'rsatiladi (soatiga 2 marta —
+            # har bitta matnga javob spam bo'lardi).
+            if ratelimit.limiter().hit("tg-agent-consent", telegram_id, limit=2, window_sec=3600):
+                await _send_owner_telegram(
+                    telegram_id,
+                    "Savolga kamera dalillari bilan javob beradigan <b>AI yordamchi</b> "
+                    "bu filialda hali yoqilmagan.\n"
+                    "Panel → <b>AI yordamchi</b> bo‘limida rozilik berilsa, shu yerga "
+                    "oddiy matn yoki ovozli xabar bilan savol bera olasiz.",
+                    reply_markup=botfmt.panel_button(urls.app_url() or base),
+                )
+            return {"ok": True}
+        if not vision_agent.configured():
+            await _send_owner_telegram(
+                telegram_id,
+                "AI yordamchi hali texnik sozlanmoqda — tayyor bo'lishi bilan xabar "
+                "beramiz. Hozircha /hisobot va /kamera ishlayveradi.",
+            )
+            return {"ok": True}
+        try:
+            _check_vision_daily_limit(site_id)
+            if voice:
+                if int(voice.get("file_size") or 0) > 10 * 1024 * 1024:
+                    raise HTTPException(413, "Ovoz 10 MB dan kichik bo'lishi kerak")
+                payload, mime = await _telegram_voice_bytes(str(voice.get("file_id") or ""))
+                key = f"agent/audio/{site_id}/{uuid.uuid4()}.ogg"
+                await media_put(key, payload, content_type=mime)
+                job = get_event_store().create_vision_job(
+                    site_id, requester_id=telegram_id, requester_kind="telegram", audio_key=key, audio_mime=mime,
+                    want_audio_reply=bool(settings["audio_reply_enabled"]),
+                )
+            else:
+                job = get_event_store().create_vision_job(
+                    site_id, requester_id=telegram_id, requester_kind="telegram", question=text,
+                    want_audio_reply=bool(settings["audio_reply_enabled"]),
+                )
+            # Ko'p filialli egaga QAYSI filial javob berayotgani aytiladi —
+            # savol jimgina birinchi filialga ketishi chalg'itardi.
+            branch_note = ""
+            if len({str(m["site_id"]) for m in members}) > 1:
+                site_row = get_store().get_site(site_id) or {}
+                branch_note = f" ({botfmt.escape(str(site_row.get('name') or site_id))} bo'yicha)"
+            await _send_owner_telegram(
+                telegram_id,
+                f"⏳ Savol qabul qilindi{branch_note}. Kamera dalillari tekshirilmoqda…",
+            )
+            _spawn_background(_telegram_vision_result(telegram_id, site_id, str(job["id"])))
+        except HTTPException as exc:
+            # Kvota/o'lcham xatosi mijozga TUSHUNARLI aytiladi — "keyinroq
+            # urinib ko'ring" hammasini yashirardi.
+            await _send_owner_telegram(telegram_id, str(exc.detail))
+        except Exception:
+            logger.warning("Telegram Vision Agent so'rovi qabul qilinmadi", exc_info=True)
+            await _send_owner_telegram(telegram_id, "Savol qabul qilinmadi. Keyinroq qayta urinib ko'ring.")
+        return {"ok": True}
+
     if command == "/yordam":
         await _send_owner_telegram(
             telegram_id,
@@ -7105,7 +7842,8 @@ async def owner_telegram_webhook(
             "/hisobot — bugungi hisobot: kirdi-chiqdi, navbat, gavjum soat\n"
             "/kamera — har kameradan oxirgi rasm\n"
             "/panel — mijoz paneliga kirish havolasi\n"
-            "/yordam — shu ro'yxat\n\n"
+            "/yordam — shu ro'yxat\n"
+            "Oddiy matn yoki voice xabar — Vision Agentga savol\n\n"
             "Har kuni kechqurun kunlik, dushanba ertalab haftalik hisobot "
             "avtomatik keladi. Muhim ogohlantirishlar (kamera o'chdi va h.k.) "
             "darhol yuboriladi.",

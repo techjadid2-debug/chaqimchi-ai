@@ -184,7 +184,7 @@ def _compute_status(site: Dict[str, Any], now: Optional[datetime] = None) -> Dic
 
 
 class CloudStore:
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, *, migrate: bool = True) -> None:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         # Lead, pairing tokeni va shifrlangan kamera credentiallari shu yerda.
@@ -194,7 +194,14 @@ class CloudStore:
             self.db_path.parent.chmod(0o700)
         except OSError:
             pass
-        self._init_db()
+        # `migrate=False` — vision-worker kabi FAQAT O'QIYDIGAN qo'shni
+        # jarayonlar uchun: ular API bilan bitta SQLite faylni bo'lishadi
+        # va har restart'da jadval qayta qurilishini (RENAME/DROP)
+        # takrorlasa, ishlayotgan API "database is locked" yoki yarim
+        # qurilgan jadvalga duch kelishi mumkin edi.  Migratsiyani faqat
+        # API (bitta yozuvchi) bajaradi.
+        if migrate:
+            self._init_db()
         try:
             self.db_path.chmod(0o600)
         except OSError:

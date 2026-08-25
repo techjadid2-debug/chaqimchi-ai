@@ -229,12 +229,23 @@ AI funksiyalari katalogda “tez orada” bo‘lib qoladi:
 Payme/Click credentiallari bo‘lmasa onlayn checkout ochilmaydi; pilotda admin
 qo‘lda invoice’ni to‘langan deb belgilashi mumkin.
 
-## 5. Yangi panelni yoqish (`CHAQIMCHI_UI_V2`)
+## 5. Yangi panelni yoqish (`CHAQIMCHI_UI_V2_OWNER` / `CHAQIMCHI_UI_V2_ADMIN`)
 
 Mijoz va admin panellarining ikkita nusxasi bor: eski (`cloud/static/owner.html`,
-`admin.html`) va yangi React panel (`cloud/static/v2/`). Qaysi biri berilishini
-`CHAQIMCHI_UI_V2` belgilaydi. **Koddagi standart qiymat — `0`**; uni shunday
-qoldiring, aks holda testlar eski panelni tekshirolmay qoladi.
+`admin.html`) va yangi React panel (`cloud/static/v2/`). Endi ular ALOHIDA
+yoqiladi:
+
+- **`CHAQIMCHI_UI_V2_OWNER=1` — production uchun MAJBURIY.**  O'rnatish oqimi
+  (qurilma ulash `?connect=`, kamera qo'shish, chiziq chizish, AI yordamchi,
+  rasm/klip galereyasi) FAQAT yangi owner panelida bor.  Eski owner paneli
+  `?connect=` havolasini umuman tushunmaydi — flag o'chiq holda yangi mijoz
+  o'rnatishni O'ZI yakunlay olmaydi.
+- **`CHAQIMCHI_UI_V2_ADMIN=0` — hozircha shunday qoldiring.**  Support
+  vositalari (masofadan chiziq chizish «Chiziq va zona», diagnostika,
+  pairing havolasi) hali eski admin panelida; yangi admin ularni
+  ko'chirib bo'lmaguncha o'chirilmasin.
+- Eski umumiy `CHAQIMCHI_UI_V2` fallback sifatida ishlashda davom etadi
+  (ikkalasiga birdek ta'sir qiladi).
 
 ### Yoqish tartibi
 
@@ -243,7 +254,8 @@ qoldiring, aks holda testlar eski panelni tekshirolmay qoladi.
 2. `deploy/Caddyfile.chaqimchi` ni yangilang va Caddy'ni qayta yuklang:
    `/assets/v2/assets/*` uchun `immutable` qoidasi kerak. Usiz panel bundlelari
    5 daqiqada eskirib, har ochilishda ~250 KB qayta yuklanadi.
-3. `.env.production` da `CHAQIMCHI_UI_V2=1` qo'ying va cloud'ni restart qiling.
+3. `.env.production` da `CHAQIMCHI_UI_V2_OWNER=1` qo'ying va cloud'ni restart
+   qiling (admin flagi hozircha 0 qoladi).
 4. Quyidagi beshta tekshiruvni bajaring.
 
 ### Yoqishdan oldingi tekshiruv
@@ -258,10 +270,19 @@ qoldiring, aks holda testlar eski panelni tekshirolmay qoladi.
 
 ### Orqaga qaytarish
 
-`CHAQIMCHI_UI_V2=0` qo'yib restart qiling — eski panel darhol qaytadi. Unda
-`?key=` va Mini App orqali kirish ham ishlaydi, ya'ni mijoz kirishdan
-mahrum bo'lmaydi.
+`CHAQIMCHI_UI_V2_OWNER=0` qo'yib restart qiling — eski panel darhol qaytadi.
+Unda `?key=` va Mini App orqali kirish ham ishlaydi, ya'ni mijoz kirishdan
+mahrum bo'lmaydi.  DIQQAT: eski panelda qurilma ulash oqimi yo'q — rollback
+paytida yangi mijoz o'rnatishlari to'xtab turadi.
 
 Eslatma: `/owner-sw.js` flag holatidan qat'i nazar v2 service worker'ini
 beradi. U faqat `/assets/v2/*` ni keshlaydi va sahifa qobig'iga tegmaydi,
 shuning uchun flag o'chirilganda eski panel keshdan eskisini olmaydi.
+
+## 6. Vision Agent (Gemini)
+
+AI yordamchining kalitlari, worker servisi, kvota va rotatsiya tartibi —
+alohida hujjatda: `docs/VISION_AGENT.md`.  Qisqasi: `CHAQIMCHI_GEMINI_API_KEY`
+va `CHAQIMCHI_GEMINI_VISION_MODEL` IKKALASI ham `.env.production`da bo'lishi
+shart (preflight tekshiradi); worker `docker-compose.chaqimchi.yml`dagi
+`vision-worker` servisida ishlaydi va `frontend` tarmog'ida bo'lishi kerak.

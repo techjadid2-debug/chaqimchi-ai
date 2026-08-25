@@ -55,12 +55,17 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _age_bucket(age: Any) -> str:
-    """Yosh guruhi — do'kon egasi aniq son emas, guruh bilan ishlaydi."""
+def _age_bucket(age: Any) -> Optional[str]:
+    """Yosh guruhi — do'kon egasi aniq son emas, guruh bilan ishlaydi.
+
+    Yaroqsiz/yo'q yosh `None` — hisobga KIRMAYDI.  Avval "31-45" ga
+    qo'shilardi: buzilgan model butun statistikani jimgina "o'rta yosh"
+    tomonga og'dirib yuborardi.  Jins baribir sanaladi (u alohida maydon).
+    """
     try:
         value = int(age)
     except (TypeError, ValueError):
-        return "31-45"
+        return None
     if value < 18:
         return "<18"
     if value <= 30:
@@ -334,6 +339,70 @@ class EventStore:
                 PRIMARY KEY(site_id, camera_id, bucket_hour)
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS vision_agent_site_settings (
+                site_id TEXT PRIMARY KEY,
+                consented INTEGER NOT NULL DEFAULT 0,
+                consented_at TEXT,
+                consented_by TEXT,
+                audio_reply_enabled INTEGER NOT NULL DEFAULT 0,
+                disabled_at TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS vision_jobs (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                requester_id TEXT NOT NULL,
+                requester_kind TEXT NOT NULL,
+                question TEXT,
+                audio_key TEXT,
+                audio_mime TEXT,
+                want_audio_reply INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                result_json TEXT,
+                error_text TEXT,
+                audio_reply_key TEXT,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS vision_observations (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                media_hash TEXT NOT NULL,
+                model_id TEXT NOT NULL,
+                prompt_version TEXT NOT NULL,
+                observation_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(site_id,event_id,media_hash,model_id,prompt_version)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS vision_conversation_memory (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                requester_id TEXT NOT NULL,
+                requester_kind TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                event_ids_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS device_diagnostics (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
             "CREATE INDEX IF NOT EXISTS idx_prod_events_site_time "
             "ON production_events(site_id,occurred_at)",
             "CREATE INDEX IF NOT EXISTS idx_owner_members_telegram "
@@ -345,6 +414,12 @@ class EventStore:
             "CREATE INDEX IF NOT EXISTS idx_employees_site_active ON employees(site_id,active)",
             "CREATE INDEX IF NOT EXISTS idx_attendance_site_date "
             "ON attendance_daily(site_id,work_date)",
+            "CREATE INDEX IF NOT EXISTS idx_vision_jobs_status_created "
+            "ON vision_jobs(status,created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_vision_memory_principal "
+            "ON vision_conversation_memory(site_id,requester_id,created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_device_diagnostics_site_time "
+            "ON device_diagnostics(site_id,created_at)",
         ]
         with self._connect() as conn:
             for statement in statements:
@@ -393,6 +468,9 @@ class EventStore:
                 conn.execute(
                     f"ALTER TABLE owner_members ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
                 )
+        vision_job_columns = self._existing_columns(conn, "vision_jobs")
+        if "audio_mime" not in vision_job_columns:
+            conn.execute("ALTER TABLE vision_jobs ADD COLUMN audio_mime TEXT")
 
     @staticmethod
     def _dict(row: Any) -> Dict[str, Any]:
@@ -762,9 +840,329 @@ class EventStore:
         )
         with self._connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
+        return [self._decode_event(row, public=True) for row in rows]
+
+    # ── Vision Agent ──────────────────────────────────────────────────────
+    # Agent eventlarning yangi manbasi emas: RTSP/Edge yozgan ishonchli
+    # hodisalarni qidiradi, zarur holatda esa media dalilini ko'rib qo'shimcha
+    # xulosa beradi. Shu sabab uning barcha state'i event DB ichida, tenant
+    # kaliti bilan saqlanadi.
+
+    def vision_settings(self, site_id: str) -> Dict[str, Any]:
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT * FROM vision_agent_site_settings WHERE site_id=?"),
+                (site_id,),
+            ).fetchone()
+        item = self._dict(row) if row else {}
+        return {
+            "site_id": site_id,
+            "consented": bool(item.get("consented")),
+            "consented_at": item.get("consented_at"),
+            "audio_reply_enabled": bool(item.get("audio_reply_enabled")),
+            "disabled_at": item.get("disabled_at"),
+        }
+
+    def set_vision_consent(
+        self,
+        site_id: str,
+        *,
+        consented: bool,
+        actor_id: str,
+        audio_reply_enabled: bool = False,
+    ) -> Dict[str, Any]:
+        now = _now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO vision_agent_site_settings "
+                    "(site_id,consented,consented_at,consented_by,audio_reply_enabled,disabled_at,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?) ON CONFLICT(site_id) DO UPDATE SET "
+                    "consented=excluded.consented,consented_at=excluded.consented_at,"
+                    "consented_by=excluded.consented_by,audio_reply_enabled=excluded.audio_reply_enabled,"
+                    "disabled_at=excluded.disabled_at,updated_at=excluded.updated_at"
+                ),
+                (
+                    site_id,
+                    int(consented),
+                    now if consented else None,
+                    actor_id,
+                    int(audio_reply_enabled if consented else False),
+                    None if consented else now,
+                    now,
+                ),
+            )
+        return self.vision_settings(site_id)
+
+    def create_vision_job(
+        self,
+        site_id: str,
+        *,
+        requester_id: str,
+        requester_kind: str,
+        question: Optional[str] = None,
+        audio_key: Optional[str] = None,
+        audio_mime: Optional[str] = None,
+        want_audio_reply: bool = False,
+    ) -> Dict[str, Any]:
+        job_id = str(uuid.uuid4())
+        now = _now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO vision_jobs "
+                    "(id,site_id,requester_id,requester_kind,question,audio_key,audio_mime,want_audio_reply,status,created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)"
+                ),
+                (job_id, site_id, requester_id, requester_kind, question, audio_key, audio_mime,
+                 int(want_audio_reply), "queued", now),
+            )
+        return self.vision_job(site_id, job_id) or {"id": job_id, "status": "queued"}
+
+    def set_vision_job_question(self, site_id: str, job_id: str, question: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("UPDATE vision_jobs SET question=? WHERE site_id=? AND id=?"),
+                (question[:4000], site_id, job_id),
+            )
+
+    def vision_job(self, site_id: str, job_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT * FROM vision_jobs WHERE site_id=? AND id=?"),
+                (site_id, job_id),
+            ).fetchone()
+        if not row:
+            return None
+        item = self._dict(row)
+        for key in ("want_audio_reply",):
+            item[key] = bool(item.get(key))
+        for key in ("result_json",):
+            try:
+                item["result"] = json.loads(item.pop(key) or "null")
+            except (TypeError, ValueError):
+                item["result"] = None
+        return item
+
+    def claim_vision_job(self) -> Optional[Dict[str, Any]]:
+        """Bitta queued jobni workerga beradi.
+
+        Cloud boshida bitta worker bilan ishlaydi. Status compare-and-set
+        ayni jobni ikki process qayta ishlamasligini ta'minlaydi; postgresda
+        ham, SQLite test muhitida ham bir xil kontrakt.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT id,site_id FROM vision_jobs WHERE status='queued' ORDER BY created_at LIMIT 1")
+            ).fetchone()
+            if not row:
+                return None
+            item = self._dict(row)
+            cursor = conn.execute(
+                self._sql(
+                    "UPDATE vision_jobs SET status='running',attempts=attempts+1,started_at=? "
+                    "WHERE id=? AND site_id=? AND status='queued'"
+                ),
+                (_now().isoformat(), item["id"], item["site_id"]),
+            )
+            if not cursor.rowcount:
+                return None
+        return self.vision_job(str(item["site_id"]), str(item["id"]))
+
+    def count_vision_jobs_since(self, site_id: str, since_iso: str) -> int:
+        """Sayt bo'yicha yaratilgan joblar soni — kunlik pul limiti uchun.
+
+        Limit DB'dan sanaladi: xotiradagi hisoblagich har deploy'da nolga
+        tushib, restart sikli cheksiz Gemini sarfiga aylanishi mumkin edi.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT COUNT(*) AS n FROM vision_jobs WHERE site_id=? AND created_at>=?"
+                ),
+                (site_id, since_iso),
+            ).fetchone()
+        return int(self._dict(row).get("n") or 0)
+
+    def requeue_stale_vision_jobs(self, *, older_than_sec: int, max_attempts: int) -> int:
+        """Egasiz qolgan `running` joblarni tiklaydi.
+
+        Worker job o'rtasida qulasa/qayta ishga tushsa job abadiy
+        `running` bo'lib qolar, panel esa cheksiz poll qilardi.  Yosh
+        chegarasidan o'tgan job `attempts < max_attempts` bo'lsa qayta
+        navbatga, bo'lmasa aniq xato bilan `failed` ga o'tadi —
+        `attempts` ustuni nihoyat o'z ishini qiladi.
+        """
+        cutoff = (_now() - timedelta(seconds=max(30, older_than_sec))).isoformat()
+        with self._connect() as conn:
+            requeued = conn.execute(
+                self._sql(
+                    "UPDATE vision_jobs SET status='queued',started_at=NULL "
+                    "WHERE status='running' AND started_at<? AND attempts<?"
+                ),
+                (cutoff, max_attempts),
+            ).rowcount
+            conn.execute(
+                self._sql(
+                    "UPDATE vision_jobs SET status='failed',"
+                    "error_text='Worker javobsiz qoldi — savolni qayta yuboring',completed_at=? "
+                    "WHERE status='running' AND started_at<? AND attempts>=?"
+                ),
+                (_now().isoformat(), cutoff, max_attempts),
+            )
+        return int(requeued or 0)
+
+    def purge_vision_data(self, *, retention_days: int = 90) -> List[str]:
+        """Eski agent yozuvlarini o'chiradi; qaytgan ro'yxat — obyekt kalitlari.
+
+        Savol-javob matni cheksiz saqlanmasin: UI "suhbat tarixiga
+        saqlanmaydi" deb va'da beradi, jadval esa o'sib boraverardi.
+        Audio javob obyektlari chaqiruvchida (`media_delete`) o'chiriladi.
+        """
+        cutoff = (_now() - timedelta(days=max(1, retention_days))).isoformat()
+        keys: List[str] = []
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT audio_reply_key FROM vision_jobs "
+                    "WHERE created_at<? AND audio_reply_key IS NOT NULL"
+                ),
+                (cutoff,),
+            ).fetchall()
+            keys = [str(self._dict(row)["audio_reply_key"]) for row in rows]
+            conn.execute(self._sql("DELETE FROM vision_jobs WHERE created_at<?"), (cutoff,))
+            conn.execute(
+                self._sql("DELETE FROM vision_observations WHERE created_at<?"), (cutoff,)
+            )
+            conn.execute(
+                self._sql("DELETE FROM vision_conversation_memory WHERE created_at<?"), (cutoff,)
+            )
+        return keys
+
+    def finish_vision_job(
+        self,
+        site_id: str,
+        job_id: str,
+        *,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        audio_reply_key: Optional[str] = None,
+    ) -> None:
+        status = "failed" if error else "completed"
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "UPDATE vision_jobs SET status=?,result_json=?,error_text=?,audio_reply_key=?,completed_at=? "
+                    "WHERE site_id=? AND id=?"
+                ),
+                (status, json.dumps(result, ensure_ascii=False) if result else None,
+                 error[:500] if error else None, audio_reply_key, _now().isoformat(), site_id, job_id),
+            )
+
+    def search_vision_events(
+        self,
+        site_id: str,
+        *,
+        start_at: Optional[str] = None,
+        end_at: Optional[str] = None,
+        camera_id: Optional[str] = None,
+        event_types: Optional[List[str]] = None,
+        direction: Optional[str] = None,
+        limit: int = 80,
+    ) -> List[Dict[str, Any]]:
+        where = ["site_id=?"]
+        params: List[Any] = [site_id]
+        if start_at:
+            where.append("occurred_at>=?")
+            params.append(start_at)
+        if end_at:
+            where.append("occurred_at<?")
+            params.append(end_at)
+        if camera_id:
+            where.append("camera_id=?")
+            params.append(camera_id)
+        if direction in {"in", "out"}:
+            where.append("direction=?")
+            params.append(direction)
+        if event_types:
+            clean = [str(item) for item in event_types if item]
+            if clean:
+                where.append("event_type IN (" + ",".join("?" for _ in clean) + ")")
+                params.extend(clean)
+        params.append(max(1, min(int(limit), 100)))
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql("SELECT * FROM production_events WHERE " + " AND ".join(where) + " ORDER BY occurred_at DESC LIMIT ?"),
+                tuple(params),
+            ).fetchall()
         return [self._decode_event(row) for row in rows]
 
-    def _decode_event(self, row: Any) -> Dict[str, Any]:
+    def vision_observation(
+        self, site_id: str, event_id: str, media_hash: str, model_id: str, prompt_version: str
+    ) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT observation_json FROM vision_observations WHERE site_id=? AND event_id=? "
+                    "AND media_hash=? AND model_id=? AND prompt_version=?"
+                ),
+                (site_id, event_id, media_hash, model_id, prompt_version),
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(self._dict(row)["observation_json"])
+        except (TypeError, ValueError):
+            return None
+
+    def save_vision_observation(
+        self, site_id: str, event_id: str, media_hash: str, model_id: str,
+        prompt_version: str, observation: Dict[str, Any],
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO vision_observations "
+                    "(id,site_id,event_id,media_hash,model_id,prompt_version,observation_json,created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(site_id,event_id,media_hash,model_id,prompt_version) DO NOTHING"
+                ),
+                (str(uuid.uuid4()), site_id, event_id, media_hash, model_id, prompt_version,
+                 json.dumps(observation, ensure_ascii=False), _now().isoformat()),
+            )
+
+    def add_vision_memory(
+        self, site_id: str, requester_id: str, requester_kind: str, summary: str, event_ids: List[str]
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO vision_conversation_memory "
+                    "(id,site_id,requester_id,requester_kind,summary,event_ids_json,created_at) VALUES (?,?,?,?,?,?,?)"
+                ),
+                (str(uuid.uuid4()), site_id, requester_id, requester_kind, summary[:1000],
+                 json.dumps(event_ids[:20]), _now().isoformat()),
+            )
+
+    def vision_memory(self, site_id: str, requester_id: str, *, limit: int = 20) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT summary,event_ids_json,created_at FROM vision_conversation_memory "
+                    "WHERE site_id=? AND requester_id=? ORDER BY created_at DESC LIMIT ?"
+                ),
+                (site_id, requester_id, max(1, min(limit, 100))),
+            ).fetchall()
+        output: List[Dict[str, Any]] = []
+        for row in rows:
+            item = self._dict(row)
+            try:
+                item["event_ids"] = json.loads(item.pop("event_ids_json") or "[]")
+            except (TypeError, ValueError):
+                item["event_ids"] = []
+            output.append(item)
+        return output
+
+    def _decode_event(self, row: Any, *, public: bool = False) -> Dict[str, Any]:
         item = self._dict(row)
         try:
             item["metadata"] = json.loads(item.pop("metadata_json", "{}"))
@@ -772,6 +1170,13 @@ class EventStore:
             item["metadata"] = {}
         item["has_snapshot"] = bool(item.get("has_snapshot"))
         item["has_clip"] = bool(item.get("has_clip"))
+        if public:
+            # Obyekt-saqlagich kalitlari brauzerga chiqmaydi: rasm HAR DOIM
+            # autentifikatsiyali endpoint orqali beriladi (`_camera_preview_response`
+            # dagi tamoyil).  Panel "bor/yo'q" ni `has_snapshot`/`has_clip`
+            # bayroqlaridan biladi.
+            for secret in ("snapshot_key", "clip_key", "snapshot_bytes", "clip_bytes"):
+                item.pop(secret, None)
         return item
 
     def stats(self, site_id: str, *, day: Optional[date] = None) -> Dict[str, Any]:
@@ -938,7 +1343,9 @@ class EventStore:
                     if demo.get("jins") in gender_counts:
                         demo_total += 1
                         gender_counts[str(demo["jins"])] += 1
-                        age_buckets[_age_bucket(demo.get("yosh"))] += 1
+                        bucket = _age_bucket(demo.get("yosh"))
+                        if bucket is not None:
+                            age_buckets[bucket] += 1
                 else:
                     exited += 1
                     hourly[local.hour]["exited"] += 1
@@ -1151,9 +1558,13 @@ class EventStore:
     #:
     #: Bir kun yetmaydi: bulut bir necha soat o'chib turgan bo'lsa yoki
     #: qurilma hodisalarni kechikib yuborsa, o'sha kun tashlab
-    #: ketilardi.  O'n kun — tarif muddati (30 kun) ichida bemalol
-    #: sig'adigan, lekin har safar butun bazani skanerlamaydigan oyna.
-    ROLLUP_LOOKBACK_DAYS = 10
+    #: ketilardi.  Qirq kun — panel "oy" ko'rinishi so'raydigan oynadan
+    #: kengroq: ikki haftalik uzilish ham oy statistikasini yo'qotmaydi.
+    #: (Avval 10 kun edi — o'n kundan ortiq o'chib turish yig'ilmagan
+    #: kunlarni butunlay yo'qotardi.)  Env orqali sozlanadi.
+    ROLLUP_LOOKBACK_DAYS = max(
+        1, int(os.environ.get("CHAQIMCHI_DEMOGRAPHY_LOOKBACK_DAYS", "40") or "40")
+    )
 
     #: Kunlik yig'indi shuncha kun saqlanadi.
     #:
@@ -1205,28 +1616,21 @@ class EventStore:
 
         columns = ["site_id", "day", *row.keys(), "updated_at"]
         placeholders = ",".join("?" for _ in columns)
-        updates = ",".join(f"{name}=?" for name in [*row.keys(), "updated_at"])
+        updates = ",".join(f"{name}=excluded.{name}" for name in [*row.keys(), "updated_at"])
         stamp = _now().isoformat()
         with self._connect() as conn:
-            existing = conn.execute(
-                self._sql("SELECT day FROM demography_daily WHERE site_id=? AND day=?"),
-                (site_id, day.isoformat()),
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    self._sql(
-                        f"UPDATE demography_daily SET {updates} WHERE site_id=? AND day=?"
-                    ),
-                    (*row.values(), stamp, site_id, day.isoformat()),
-                )
-            else:
-                conn.execute(
-                    self._sql(
-                        f"INSERT INTO demography_daily ({','.join(columns)}) "
-                        f"VALUES ({placeholders})"
-                    ),
-                    (site_id, day.isoformat(), *row.values(), stamp),
-                )
+            # UPSERT (check-then-insert EMAS): rollup endi ikki joydan
+            # chaqiriladi (soatlik loop + purge oldi) va parallel ishlaganda
+            # tekshiruv-so'ng-yozish UNIQUE xatosi berardi.  SQLite ham,
+            # PostgreSQL ham bu sintaksisni qo'llaydi.
+            conn.execute(
+                self._sql(
+                    f"INSERT INTO demography_daily ({','.join(columns)}) "
+                    f"VALUES ({placeholders}) "
+                    f"ON CONFLICT(site_id, day) DO UPDATE SET {updates}"
+                ),
+                (site_id, day.isoformat(), *row.values(), stamp),
+            )
         return {"day": day.isoformat(), **row}
 
     def rollup_pending_demography(self, site_id: str) -> int:
@@ -1620,6 +2024,49 @@ class EventStore:
             item["health"] = json.loads(item.pop("payload_json"))
             result.append(item)
         return result
+
+    def save_device_diagnostics(
+        self, site_id: str, device_id: str, payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Redakt qilingan Windows support snapshotini qisqa muddat saqlaydi."""
+        item = {
+            "id": uuid.uuid4().hex,
+            "site_id": site_id,
+            "device_id": device_id,
+            "payload": payload,
+            "created_at": _now().isoformat(),
+        }
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO device_diagnostics(id,site_id,device_id,payload_json,created_at) "
+                    "VALUES (?,?,?,?,?)"
+                ),
+                (
+                    item["id"], site_id, device_id,
+                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")), item["created_at"],
+                ),
+            )
+            cutoff = (_now() - timedelta(days=14)).isoformat()
+            conn.execute(self._sql("DELETE FROM device_diagnostics WHERE created_at<?"), (cutoff,))
+        return item
+
+    def latest_device_diagnostics(
+        self, site_id: str, *, device_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        query = "SELECT * FROM device_diagnostics WHERE site_id=?"
+        params: Tuple[Any, ...] = (site_id,)
+        if device_id:
+            query += " AND device_id=?"
+            params = (site_id, device_id)
+        query += " ORDER BY created_at DESC LIMIT 1"
+        with self._connect() as conn:
+            row = conn.execute(self._sql(query), params).fetchone()
+        if not row:
+            return None
+        item = self._dict(row)
+        item["payload"] = json.loads(item.pop("payload_json"))
+        return item
 
     def latest_device_metrics(self) -> List[Dict[str, Any]]:
         """Har qurilmaning eng yangi telemetriya bucketi."""

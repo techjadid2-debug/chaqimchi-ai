@@ -163,6 +163,21 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
         values.get(key, "").strip() for key in ("CHAQIMCHI_PAYME_KEY", "CHAQIMCHI_CLICK_SECRET")
     ):
         warnings.append("Payme/Click ulanmagan: faqat qo'lda to'lov ishlaydi")
+
+    # Vision Agent: kalit va model JUFT bo'lishi shart.  Faqat kalit
+    # berilsa readiness o'tadi-yu, har bir job "modeli sozlanmagan"
+    # xatosi bilan yiqilib kunlik kvotani yeb qo'yadi.
+    gemini_key = values.get("CHAQIMCHI_GEMINI_API_KEY", "").strip()
+    gemini_model = values.get("CHAQIMCHI_GEMINI_VISION_MODEL", "").strip()
+    if gemini_key and not gemini_model:
+        errors.append(
+            "CHAQIMCHI_GEMINI_API_KEY berilgan, lekin CHAQIMCHI_GEMINI_VISION_MODEL "
+            "yo'q — Vision Agent har savolda yiqiladi"
+        )
+    if gemini_model and not gemini_key:
+        errors.append("CHAQIMCHI_GEMINI_VISION_MODEL berilgan, lekin API kaliti yo'q")
+    if not gemini_key:
+        warnings.append("Vision Agent o'chiq: CHAQIMCHI_GEMINI_API_KEY berilmagan")
     return errors, warnings
 
 

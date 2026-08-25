@@ -353,6 +353,38 @@ class DailyDigestService:
                 )
         return sent
 
+    def _quiet_reason(self, site: Dict[str, Any]) -> Optional[str]:
+        """Ma'lumotsiz sayt uchun ANIQ sabab matni; sabab noma'lum — None.
+
+        Do'kon shunchaki yopiq bo'lishi ham mumkin — bunda jim qolamiz.
+        Faqat tuzatsa bo'ladigan holat aytiladi: qurilma ulanmagan/oflayn
+        yoki kirish chizig'i chizilmagan.
+        """
+        site_id = str(site["id"])
+        connection = str(site.get("connection") or "")
+        if connection == "not_paired":
+            return (
+                "ℹ️ <b>Hisobot kelmayapti — qurilma hali ulanmagan.</b>\n"
+                "Do'kon kompyuterida Chaqimchi AI o'rnatilib bulutga ulansa, "
+                "kunlik hisobot shu yerga kela boshlaydi."
+            )
+        if connection == "offline":
+            return (
+                "ℹ️ <b>Hisobot kelmayapti — do'kon kompyuteri ko'rinmayapti.</b>\n"
+                "Kompyuter yoqilganini va internet borligini tekshiring."
+            )
+        try:
+            config = self.events.get_site_config(site_id)["config"]
+        except Exception:
+            return None
+        if not (config.get("lines") or []):
+            return (
+                "ℹ️ <b>Kirish-chiqish hali sanalmayapti — kirish chizig'i chizilmagan.</b>\n"
+                "Paneldagi «Chiziq va zonalar» bo'limida eshik ustiga chiziq "
+                "qo'yilsa, o'sha kundan boshlab mijozlar sanaladi."
+            )
+        return None
+
     async def check_once(self, now: datetime | None = None) -> int:
         now = now or datetime.now(ZoneInfo("Asia/Tashkent"))
         if now.tzinfo is None:
@@ -377,8 +409,17 @@ class DailyDigestService:
             # Bo'sh kun uchun "Kirdi: 0" xabari — shovqin: qurilma hali
             # ulanmagan yoki do'kon yopiq bo'lgan kunlarda bot bekorga
             # yozib turardi.  Ma'lumot yo'q — xabar ham yo'q.
+            #
+            # LEKIN butunlay jim qolish ham xato edi: sabab ANIQ bo'lsa
+            # (chiziq chizilmagan / qurilma ko'rinmayapti) ega buni
+            # bilmasa, "mahsulot buzilgan" deb o'ylab qoladi.  Shunday
+            # saytga haftada bir marta (dushanba) sabab tushuntiriladi.
             traffic = (report.get("traffic") or {}) if isinstance(report, dict) else {}
             if not stats.get("total") and not traffic.get("entered"):
+                if now.weekday() == 0:
+                    reason = self._quiet_reason(site)
+                    if reason:
+                        sent += await self._deliver(site_id, members, reason)
                 self.events.mark_digest_sent(site_id, digest_date)
                 continue
             open_from = None

@@ -13,6 +13,14 @@ if [[ -n "$previous_container" ]]; then
   previous_image_ref="$(docker inspect -f '{{.Config.Image}}' "$previous_container")"
 fi
 
+# vision-worker cloud bilan BITTA image'dan quriladi va bitta DB sxemasini
+# bo'lishadi.  Rollback faqat cloud'ni qaytarsa, worker yangi sxema
+# kutayotgan yangi image'da qolib versiya nomuvofiqligi chiqadi — shu
+# sabab bor bo'lsa worker ham birga qaytariladi.
+has_worker() {
+  "${compose[@]}" config --services 2>/dev/null | grep -qx "vision-worker"
+}
+
 rollback_cloud() {
   if [[ -z "$previous_image" || -z "$previous_image_ref" ]]; then
     echo "XATO: oldingi cloud image topilmadi; avtomatik rollback imkonsiz" >&2
@@ -20,7 +28,11 @@ rollback_cloud() {
   fi
   echo "Cloud health tekshiruvi o'tmadi — oldingi image qayta yoqilmoqda" >&2
   docker image tag "$previous_image" "$previous_image_ref"
-  "${compose[@]}" up -d --no-deps --force-recreate cloud
+  local services=(cloud)
+  if has_worker; then
+    services+=(vision-worker)
+  fi
+  "${compose[@]}" up -d --no-deps --force-recreate "${services[@]}"
 }
 
 python3 scripts/production_preflight.py --env-file "$env_file"
@@ -37,7 +49,11 @@ if [[ -n "$previous_container" ]]; then
   fi
 fi
 
-"${compose[@]}" build cloud
+build_services=(cloud)
+if has_worker; then
+  build_services+=(vision-worker)
+fi
+"${compose[@]}" build "${build_services[@]}"
 if ! "${compose[@]}" up -d --wait --wait-timeout 180; then
   rollback_cloud
   exit 1

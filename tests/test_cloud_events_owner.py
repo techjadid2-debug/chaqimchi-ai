@@ -133,8 +133,11 @@ def test_media_quota_evicts_oldest_media_but_keeps_events(production_client, mon
     store = main.get_event_store()
     events = {e["event_id"]: e for e in store.list_events(site["site_id"], limit=10)}
     assert len(events) == 3, "hodisa yozuvlari o'chmasligi kerak"
-    assert not events["evt-quota-0"]["snapshot_key"], "eng eski media bo'shatiladi"
-    assert events["evt-quota-2"]["snapshot_key"], "eng yangi media qoladi"
+    # Ro'yxat PUBLIC: saqlagich kalitlari brauzerga chiqmaydi, bor-yo'qlik
+    # `has_snapshot` bayrog'idan o'qiladi.
+    assert "snapshot_key" not in events["evt-quota-0"], "kalit ro'yxatda oqmasligi kerak"
+    assert not events["evt-quota-0"]["has_snapshot"], "eng eski media bo'shatiladi"
+    assert events["evt-quota-2"]["has_snapshot"], "eng yangi media qoladi"
     assert store.media_usage_bytes(site["site_id"]) <= 2000
 
 
@@ -978,12 +981,18 @@ def test_panel_command_opens_the_mini_app_without_a_login_link(bot_member_client
     assert "oldingi kirish havolangiz" not in messages[0][1]
 
 
-def test_unknown_text_gets_a_short_hint(bot_member_client) -> None:
+def test_unknown_text_explains_how_to_enable_the_agent(bot_member_client) -> None:
+    """Roziliksiz oddiy matn endi "Buyruqlar:" ro'yxatiga tushmaydi.
+
+    Odam Uzbek tilida savol berdi — unga savolga javob beradigan
+    AI yordamchini QANDAY yoqish aytiladi (aylanma o'lik nuqta emas).
+    """
     client, messages, _site, _headers = bot_member_client
 
     _webhook(client, "salom")
 
-    assert messages[0][1] == "Buyruqlar: /hisobot, /kamera, /panel, /yordam"
+    assert "AI yordamchi" in messages[0][1]
+    assert "rozilik" in messages[0][1]
 
 
 def test_kamera_without_cameras_explains_itself(bot_member_client) -> None:
@@ -2290,3 +2299,96 @@ def test_free_disk_space_is_shown_in_gigabytes() -> None:
     )
 
     assert device["free_disk_gb"] == 12.0
+
+
+# ── Batch: bitta buzuq event butun partiyani yiqitmasin ──────────────────
+
+
+def test_one_bad_event_does_not_reject_the_whole_batch(production_client) -> None:
+    """Yangi edge yuborgan noma'lum event_type avval butun batchni 422
+    qilar, 20 urinishdan keyin sog'lom eventlar ham dead_letter bo'lardi."""
+    client, _messages = production_client
+    _site, device, headers = _provision(client)
+
+    response = client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-ok-1",
+                    "event_type": "line_crossed",
+                    "camera_id": "cam-1",
+                    "direction": "in",
+                },
+                {
+                    "event_id": "evt-bad-1",
+                    "event_type": "hologram_detected",  # kelajak versiya turi
+                    "camera_id": "cam-1",
+                },
+                {
+                    "event_id": "evt-ok-2",
+                    "event_type": "line_crossed",
+                    "camera_id": "cam-1",
+                    "direction": "out",
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "evt-ok-1" in data["accepted"]
+    assert "evt-ok-2" in data["accepted"]
+    assert "evt-bad-1" not in data["accepted"]
+    assert data["rejected"] == ["evt-bad-1"]
+
+    events = main.get_event_store().list_events(device["site_id"], limit=10)
+    stored = {item["event_id"] for item in events}
+    assert stored == {"evt-ok-1", "evt-ok-2"}
+
+
+# ── Diagnostika paketi ───────────────────────────────────────────────────
+
+
+def test_diagnostics_with_secret_traces_is_redacted_not_rejected(production_client) -> None:
+    """`dead_letter.last_error` ichida rtsp:// bo'lgan qurilma ham
+    diagnostika yubora olishi kerak — avval 422 bilan rad etilardi
+    (aynan muammoli qurilma jim qolar edi)."""
+    client, _messages = production_client
+    _site, device, headers = _provision(client)
+
+    response = client.post(
+        "/api/v1/edge/diagnostics",
+        headers=headers,
+        json={
+            "payload": {
+                "schema": 1,
+                "outbox": {
+                    "pending": 3,
+                    "poisoned": 1,
+                    "poisoned_reasons": [
+                        "ffmpeg xato: rtsp://admin:sir@192.168.1.10/main o'qilmadi"
+                    ],
+                },
+            }
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    saved = client.get(
+        f"/api/v1/admin/sites/{device['site_id']}/diagnostics",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+    ).json()["diagnostics"]
+    reasons = saved["payload"]["outbox"]["poisoned_reasons"]
+    assert reasons == ["[maxfiy — olib tashlandi]"]
+    assert saved["payload"]["outbox"]["pending"] == 3
+
+
+def test_oversized_diagnostics_is_rejected_before_parsing(production_client) -> None:
+    client, _messages = production_client
+    _site, _device, headers = _provision(client)
+
+    big = {"payload": {"blob": "x" * 250_000}}
+    response = client.post("/api/v1/edge/diagnostics", headers=headers, json=big)
+    assert response.status_code == 413

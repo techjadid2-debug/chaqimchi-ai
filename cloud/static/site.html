@@ -3,19 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Chaqimchi AI — do‘koningizdagi Windows kompyuter orqali kameralarga AI tahlil: mijozlar oqimi, kassa navbati va xavfsizlik. Video sizda qoladi.">
-  <meta property="og:title" content="Chaqimchi AI — Mavjud kameralaringizni aqlli tahlilga aylantiring">
-  <meta property="og:description" content="Do‘koningizdagi Windows kompyuter orqali mijozlar oqimi, kassa navbati va xavfsizlik nazorati. Video sizda qoladi.">
+  <meta name="description" content="Do‘kon uchun kamera analitikasi: mijozlar oqimini sanash, kassa navbati va tungi xavfsizlik nazorati. Mavjud NVR/IP kameralaringiz va Windows kompyuteringizda ishlaydi — video do‘konda qoladi. O‘zbekiston.">
+  <meta property="og:title" content="Do‘kon uchun kamera analitikasi — Chaqimchi AI">
+  <meta property="og:description" content="Mavjud kameralaringiz mijozlar oqimini sanaydi, navbatni o‘lchaydi va tungi harakatdan xabar beradi. Video do‘konda qoladi.">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="__PUBLIC_ORIGIN__/">
+  <meta property="og:locale" content="uz_UZ">
   <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-v3.png">
-  <title>Chaqimchi AI — Do‘koningiz nazorati va sun’iy intellekt tahlili</title>
+  <!-- Sarlavha ATAYLAB mahsulot nomi bilan boshlanmaydi.  Odam
+       "Chaqimchi AI" deb qidirmaydi — u "do'kon uchun kamera
+       analitikasi" yoki "mijozlar oqimini sanash" deb qidiradi.
+       Brend nomi oxirida turadi va tanigan odam baribir topadi. -->
+  <title>Do‘kon uchun kamera analitikasi va mijozlar oqimini sanash — Chaqimchi AI</title>
+  <!-- Bitta sahifa — bitta manzil.  `www.`, IP yoki `?utm_...` bilan
+       kirilgan nusxa alohida sahifa deb hisoblanmasin. -->
+  <link rel="canonical" href="__PUBLIC_ORIGIN__/">
   <link rel="icon" href="/assets/favicon.png" type="image/png">
   <!-- `?v=` — fayl mazmunining SHA-256 boshi.  Ilgari bu qo'lda
        qo'yiladigan sana edi va uni yangilash unutilardi: kod o'zgarsa
        ham qaytgan mijoz brauzer keshidan **eskisini** olardi va tuzatish
        unga yetib bormasdi.  Endi qiymat mazmundan kelib chiqadi va
        `test_static_pages.py` mos kelishini tekshiradi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=d4e6045b1a">
+  <link rel="stylesheet" href="/assets/site.css?v=256719bdcf">
 </head>
 <body>
   <!-- Sahifa ataylab qisqa: hero (bitta asosiy tugma) → mahsulot
@@ -204,30 +213,45 @@
         <p class="eyebrow"><span></span> Nima olasiz</p>
         <h2>Biznesingiz uchun aniq natijalar</h2>
       </div>
+      <!-- Sarlavhalar FUNKSIYA nomi emas, mijozning SAVOLI.
+           "Issiqlik xaritasi" — bu bizning atamamiz; do'kon egasi esa
+           "qaysi javon oldida odam ko'p turadi" deb o'ylaydi.  Har
+           kartada bitta o'lchanadigan raqam bor: umumiy gap ("real
+           vaqtda tahlil qiling") hech narsa va'da qilmaydi va hech
+           narsani tekshirib bo'lmaydi. -->
       <div class="results-grid">
         <article class="result-card">
           <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg>
-          <h3>Mijozlar oqimi</h3>
-          <p>Do‘kondagi mijozlar soni va harakatini real vaqtda tahlil qiling.</p>
-        </article>
-        <article class="result-card">
-          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#portret"></use></svg>
-          <!-- Halol matn: hozir faqat kelish-ketish davomati bor (pilot),
-               "samaradorlik tahlili" degan funksiya yo'q. -->
-          <h3>Xodimlar davomati</h3>
-          <p>Xodimlarning kelish-ketish vaqti yozma rozilik bilan qayd etiladi (pilot).</p>
-        </article>
-        <article class="result-card">
-          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg>
-          <h3>Jonli ogohlantirishlar</h3>
-          <p>Muhim holatlar haqida Telegram orqali darhol xabar oling.</p>
+          <h3>Bugun nechta odam kirdi</h3>
+          <p>Kirdi va chiqdi — alohida sanaladi, soat bo‘yicha bo‘linadi.
+            Kecha bilan va o‘tgan hafta bilan solishtirasiz.</p>
         </article>
         <article class="result-card">
           <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg>
-          <h3>Issiqlik xaritasi</h3>
-          <p>Mijozlar eng ko‘p harakatlanadigan zonalarni aniqlang.</p>
+          <h3>Qaysi javon oldida odam to‘planadi</h3>
+          <p>Do‘kon xaritasida issiq va sovuq joylar ko‘rinadi — tovarni
+            qayerga qo‘yish kerakligi shundan bilinadi.</p>
+        </article>
+        <article class="result-card">
+          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg>
+          <h3>Do‘kon yopiq payt kimdir kirsa</h3>
+          <p>Telefoningizga Telegram xabari — rasm bilan. Kamera yopilsa,
+            burilsa yoki o‘chsa ham xabar keladi.</p>
+        </article>
+        <article class="result-card">
+          <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#portret"></use></svg>
+          <h3>Kassada navbat uzayganda</h3>
+          <p>Necha kishi kutayotgani va o‘rtacha qancha turgani o‘lchanadi.
+            Ikkinchi kassani qachon ochish kerakligi shundan ko‘rinadi.</p>
         </article>
       </div>
+      <!-- Xodim davomati (Face ID) va mijoz portreti (jins/yosh) BU
+           YERDA ATAYLAB YO'Q.
+           2026-08-26 o'lchovi: jonli do'kondan 4 606 ta yuz kadri keldi
+           va cloud ularning BIRORTASINI ham tanimadi; demografiya
+           jadvali butunlay nol edi.  Ikkalasi ham hozir yopiq pilot
+           bo'lib qoladi va sotuv sahifasida va'da qilinmaydi —
+           ishlagani o'lchangandan keyin qaytariladi. -->
     </section>
 
     <!-- ── QANDAY ISHLAYDI: uch qadam + izometrik sahna ── -->
@@ -389,8 +413,7 @@
            esa butunlay boshqacha (odam soniga bog'langan). -->
       <p class="preset-hint">
         Maktab, o‘quv markazi yoki oliygohmi?
-        <a href="/edu">Chaqimchi Edu</a> — davomat, dars monitoringi va
-        xavfsizlik uchun alohida narxlar.
+        <a href="/edu">Chaqimchi Edu</a> — muassasa uchun alohida narxlar.
       </p>
     </section>
 
@@ -461,9 +484,12 @@
         </details>
         <details>
           <summary>Qaysi tarifni tanlay?</summary>
+          <!-- "Xodim davomati" bu ro'yxatdan OLINDI (2026-08-26):
+               u yopiq pilot va jonli o'lchovda hali ishlamayapti.
+               Tarifga kirmaydigan narsa tarif tavsifida turmaydi. -->
           <p>Bitta kassa va bitta kirish eshigi bo‘lsa <b>Boshlang‘ich</b> yetadi:
-            nechta odam kirdi va chiqdi — shuni ko‘rasiz. Navbat, xavfsizlik,
-            do‘kon xaritasi va xodim davomati kerak bo‘lsa — <b>Biznes</b>.
+            nechta odam kirdi va chiqdi — shuni ko‘rasiz. Navbat, xavfsizlik va
+            do‘kon xaritasi kerak bo‘lsa — <b>Biznes</b>.
             Ikkitadan ko‘p do‘koningiz bo‘lsa <b>Tarmoq</b> bo‘yicha bog‘laning.
             Tarifni keyin ham o‘zgartirsa bo‘ladi.</p>
         </details>
@@ -495,7 +521,90 @@
       <a href="__APP_URL__/owner">Mijoz paneli</a>
       <a href="__PARTNER_URL__/installer">O‘rnatuvchi paneli</a>
     </div>
+    <p class="footer-powered">Powered by NS camera</p>
   </footer>
+
+  <!-- Mashina o'qiydigan ma'lumot.
+       Google sahifadagi matnni o'zi tushunishga urinadi; JSON-LD esa
+       unga to'g'ridan-to'g'ri aytadi: bu kim, nima sotadi va qaysi
+       savollarga javob bor.  FAQ razmetkasi qidiruv natijasida
+       savollarni ochiladigan qilib ko'rsatadi — sahifaga kirmasdan
+       ham javob ko'rinadi.
+       Uchala blok ham sahifada BOR narsani takrorlaydi: razmetkada
+       sahifada yo'q va'da bo'lmasligi kerak. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "__PUBLIC_ORIGIN__/#tashkilot",
+        "name": "Chaqimchi AI",
+        "url": "__PUBLIC_ORIGIN__/",
+        "logo": "__PUBLIC_ORIGIN__/assets/chaqimchi-logo-new.png",
+        "areaServed": { "@type": "Country", "name": "O‘zbekiston" },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+998932225070",
+          "contactType": "sales",
+          "availableLanguage": ["uz"]
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Chaqimchi AI",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Windows 10, Windows 11",
+        "url": "__PUBLIC_ORIGIN__/",
+        "publisher": { "@id": "__PUBLIC_ORIGIN__/#tashkilot" },
+        "description": "Do‘kon uchun kamera analitikasi: mijozlar oqimini sanash, kassa navbatini o‘lchash va tungi xavfsizlik nazorati. Mavjud NVR/IP kameralarda ishlaydi.",
+        "featureList": [
+          "Mijozlar oqimini sanash — kirdi va chiqdi",
+          "Kassa navbati va zonada turish tahlili",
+          "Do‘kon xaritasi: qayerda odam ko‘p to‘planadi",
+          "Ish vaqtidan tashqari harakat va kamera buzilishi haqida Telegram xabar"
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Mavjud kompyuterimga o‘rnatsam bo‘ladimi?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Ha. Windows 10/11 ishlayotgan kompyuter bo‘lsa yetarli: dasturni yuklab olasiz, Keyingi → Keyingi → Tayyor, so‘ng brauzerda kamerani ulaysiz. NVR tarmoqda ishlab tursa, butun jarayon odatda 30 daqiqagacha oladi."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Kameralarni almashtirish shartmi?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Odatda yo‘q. Kamerangiz yoki NVR lokal tarmoqda RTSP oqim bersa, tizim shu oqim bilan ishlaydi. Sinovdan o‘tgan qurilmalar: Hikvision, HiLook, Dahua va Uniview NVR‘lari."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Video yozuvlar qayerda saqlanadi?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "To‘liq video arxiv sizning shaxsiy NVR yoki kompyuteringizda qoladi. Cloudga faqat aniqlangan hodisalar statistikasi va qisqa video parchalar shifrlangan holda yuboriladi."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Qanday to‘layman? Keyin bekor qilsam-chi?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Hisob-faktura olinadi, naqd yoki bank o‘tkazmasi mumkin. Majburiy uzoq muddatli shartnoma yo‘q. Birinchi to‘lovdan keyingi 14 kun ichida pul to‘liq qaytariladi."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 
   <script src="/assets/site.js?v=18e025bb91" defer></script>
 </body>

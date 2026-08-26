@@ -207,6 +207,15 @@ class SceneAnalyzer:
         #: Shift tufayli yuborilmagan kadrlar soni.  Nol bo'lmasa "bu
         #: kamera juda ko'p yuz ko'ryapti" degani — sozlash signali.
         self.face_emits_suppressed = 0
+        #: Demografiya: nechta urinish bo'ldi va nechtasida yuz topildi.
+        #:
+        #: Ikkalasi ALOHIDA sanaladi.  `attempts > 0, found == 0` — model
+        #: ishlayapti, lekin yuz topa olmayapti (kamera uzoq yoki
+        #: substream past sifatli).  `attempts == 0` — funksiya umuman
+        #: ishga tushmagan.  2026-08-26 gacha bu ikki holat farqlanmasdi
+        #: va `demography_daily` nol bo'lib turgani sababsiz qolgan edi.
+        self.demography_attempts = 0
+        self.demography_found = 0
         #: Demografiya (jins/yosh): faqat kirish chizig'i bor kamerada
         #: beriladi; natija anonim raqamlar, rasm saqlanmaydi.
         self.demography = demography
@@ -394,12 +403,14 @@ class SceneAnalyzer:
         if attempts >= DEMOGRAPHY_ATTEMPTS_PER_TRACK:
             return None
         self._demo_attempts[track_id] = attempts + 1
+        self.demography_attempts += 1
         try:
             result = self.demography.estimate(frame, detection["bbox"])
         except Exception:
             logger.exception("[%s] demografiya baholanmadi", self.camera_id)
             return None
         if result:
+            self.demography_found += 1
             self._track_demography[track_id] = result
         return result
 

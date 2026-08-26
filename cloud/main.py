@@ -528,6 +528,14 @@ class EdgeHeartbeatBody(BaseModel):
     #: Klip yozish hisoblagichlari — hodisa bor-u klip yo'q holatini
     #: cloudda ko'rish uchun.
     clips: Dict[str, int] = Field(default_factory=dict)
+    #: Davomat oqimining sifati: nechta yuz kadri yozildi, nechtasi juda
+    #: mayda bo'lgani uchun tashlandi, nechtasi soatlik shift tufayli.
+    #: `too_small` noldan katta bo'lsa kamera uzoq yoki substream past —
+    #: bu "davomat ishlamayapti" savolining birinchi javobi.
+    face_crops: Dict[str, int] = Field(default_factory=dict)
+    #: Mijoz portreti: urinish bo'ldimi va yuz topildimi.
+    #: `off_reason` bo'sh bo'lmasa funksiya umuman ishga tushmagan.
+    demography: Dict[str, Any] = Field(default_factory=dict)
     #: Karnaydan ovoz berish natijasi: `played_file`, `played_tts`, `failed`.
     #:
     #: Model maydonisiz Pydantic uni JIMGINA tashlab yuboradi
@@ -1881,7 +1889,12 @@ def _render_landing(request: Request) -> HTMLResponse:
     page = STATIC_DIR / "site.html"
     if not page.is_file():
         raise HTTPException(404, "Sahifa topilmadi")
-    origin = str(request.base_url).rstrip("/")
+    # Sozlangan rasmiy manzil so'rov manzilidan USTUN.  `canonical` va
+    # JSON-LD aynan shundan quriladi: saytga IP orqali yoki `www.` bilan
+    # kirilsa ham Google uchun sahifa BITTA bo'lib qolishi kerak, aks
+    # holda bir xil mazmun ikki manzilda ko'rinib, ikkalasining ham
+    # o'rni pasayadi.
+    origin = urls.public_url() or str(request.base_url).rstrip("/")
     bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
     register_url = (
         f"https://t.me/{bot_username}?start=register"
@@ -2166,11 +2179,34 @@ async def sitemap_xml(request: Request) -> Response:
     if _host_section(request) != "apex":
         raise HTTPException(404, "Topilmadi")
     base = urls.public_url() or str(request.base_url).rstrip("/")
-    pages = [
-        "/", "/edu", "/install", "/maxfiylik", "/oferta", "/hamkorlik",
-        "/aloqa", "/rozilik-shabloni", "/kuzatuv-eslatmasi",
-    ]
-    body = "".join(f"<url><loc>{base}{page}</loc></url>" for page in pages)
+    # `lastmod` — sahifa faylining O'ZGARISH sanasidan.
+    #
+    # Qo'lda yozilmaydi: qo'lda yozilgan sana bir marta to'g'ri bo'ladi,
+    # keyin esa abadiy eskiradi va Google uni e'tiborsiz qoldiradi.
+    # Fayl `mtime` si esa har deploy'da o'zi yangilanadi.
+    pages = {
+        "/": "site.html",
+        "/edu": "edu.html",
+        "/install": "install.html",
+        "/maxfiylik": "privacy.html",
+        "/oferta": "oferta.html",
+        "/hamkorlik": "hamkorlik.html",
+        "/aloqa": "aloqa.html",
+        "/rozilik-shabloni": "rozilik-shabloni.html",
+        "/kuzatuv-eslatmasi": "kuzatuv-eslatmasi.html",
+    }
+    parts = []
+    for page, filename in pages.items():
+        entry = f"<url><loc>{base}{page}</loc>"
+        source = STATIC_DIR / filename
+        try:
+            stamp = datetime.fromtimestamp(source.stat().st_mtime, timezone.utc)
+            entry += f"<lastmod>{stamp.date().isoformat()}</lastmod>"
+        except OSError:
+            # Fayl yo'q bo'lsa sahifa baribir ro'yxatda qoladi — sanasiz.
+            pass
+        parts.append(entry + "</url>")
+    body = "".join(parts)
     return Response(
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</urlset>",

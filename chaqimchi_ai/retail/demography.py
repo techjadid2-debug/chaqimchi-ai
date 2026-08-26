@@ -159,22 +159,35 @@ def resolve_demography_paths(scene: Any, base_dir: Path) -> Optional[tuple[Path,
     )
 
 
+#: Demografiya nega o'chiq — oxirgi qurilgan holatning sababi.
+#:
+#: Zanjir "jim" o'chishi ATAYLAB (modeli yo'q eski o'rnatishda butun
+#: analitika yiqilmasligi kerak), lekin JIMLIK sababni ham yashirardi.
+#: 2026-08-26 da jonli do'konda `demography_daily` butunlay nol edi va
+#: "funksiya o'chiq", "model topilmadi" hamda "yuz topilmadi" —
+#: uchalasi tashqaridan bir xil ko'rinardi: hech narsa.
+LAST_OFF_REASON: Dict[str, Optional[str]] = {"value": None}
+
+
 def build_demography_estimator(settings: Any, base_dir: Path) -> Optional[DemographyEstimator]:
     """Sozlamadan estimator quradi; model yo'q bo'lsa jim None.
 
     "Jim" ataylab: demografiya qo'shimcha qulaylik — modeli yo'q eski
-    o'rnatishda butun zanjir yiqilmasligi kerak.
+    o'rnatishda butun zanjir yiqilmasligi kerak.  Lekin SABAB
+    `LAST_OFF_REASON` ga yoziladi va heartbeat orqali panelga chiqadi.
     """
     scene = settings.scene
     if not getattr(scene, "demographics_enabled", False):
+        LAST_OFF_REASON["value"] = "sozlamada o'chirilgan"
         return None
     resolved = resolve_demography_paths(scene, base_dir)
     if resolved is None:
+        LAST_OFF_REASON["value"] = "model yo'li sozlanmagan"
         return None
     face_model, age_model = resolved
     try:
-        return DemographyEstimator(face_model, age_model)
-    except (FileNotFoundError, ImportError, RuntimeError):
+        estimator = DemographyEstimator(face_model, age_model)
+    except (FileNotFoundError, ImportError, RuntimeError) as exc:
         # Yo'llar log'da ANIQ ko'rinadi: "yuklanmadi" degan umumiy satr
         # bilan qaysi yo'l noto'g'riligini dala sharoitida topib bo'lmasdi.
         logger.warning(
@@ -183,4 +196,7 @@ def build_demography_estimator(settings: Any, base_dir: Path) -> Optional[Demogr
             age_model,
             exc_info=True,
         )
+        LAST_OFF_REASON["value"] = f"model yuklanmadi: {type(exc).__name__}"
         return None
+    LAST_OFF_REASON["value"] = None
+    return estimator

@@ -412,7 +412,7 @@
         badge: () => (S.leads || []).filter((l) => l.status === "new").length },
       { id: "jamoa", label: "Jamoa", deps: ["accounts", "assignments", "sites"], render: renderTeam },
       { id: "sozlamalar", label: "Sozlamalar",
-        deps: ["readiness", "catalog", "providers", "alerts", "updates"], render: renderSettings },
+        deps: ["readiness", "providers", "alerts", "updates"], render: renderSettings },
     ];
 
     function currentRoute() {
@@ -683,6 +683,24 @@
             (Number(clips.missing) ? `, ${Number(clips.missing)} tasi yozilmadi` : ""));
         }
         if (Number(health.chain_restarts)) parts.push(`zanjir ${Number(health.chain_restarts)} marta qayta ishga tushgan`);
+        // Davomat va mijoz portreti ishlayaptimi.
+        //
+        // 2026-08-26 da ikkalasi ham jimgina o'lik edi: cloudda 4 606 ta
+        // yuz kadri bor, tanish esa nol; demografiya butunlay nol.
+        // Tashqaridan buni bilishning yo'li yo'q edi.
+        const crops = health.face_crops || {};
+        if (Number(crops.too_small)) {
+          parts.push(`<b>yuz kadri: ${Number(crops.too_small)} tasi juda mayda</b> (kamera uzoq yoki oqim past sifatli)`);
+        } else if (Number(crops.written)) {
+          parts.push(`yuz kadri: ${Number(crops.written)} ta yaroqli`);
+        }
+        if (Number(crops.suppressed)) parts.push(`${Number(crops.suppressed)} tasi soatlik chegara bilan to'xtatilgan`);
+        const demo = health.demography || {};
+        if (demo.off_reason) {
+          parts.push(`<b>mijoz portreti o'chiq</b>: ${esc(String(demo.off_reason))}`);
+        } else if (Number(demo.attempts)) {
+          parts.push(`mijoz portreti: ${Number(demo.attempts)} urinishdan ${Number(demo.found || 0)} tasida yuz topildi`);
+        }
         (health.cameras || []).forEach((camera) => {
           const state = camera.connected && !camera.offline ? "ishlayapti" : "javob bermayapti";
           parts.push(`${esc(camera.camera_id)}: ${state}${camera.codec ? ` · ${esc(camera.codec)}` : ""}` +
@@ -1101,26 +1119,12 @@
       const ready = items.filter((i) => i.ok);
       const alerts = S.alerts || {};
       const p = S.providers || {};
-      const catalog = S.catalog || {};
       const updatesPaused = Boolean((S.updates || {}).paused);
-      const features = catalog.features || [];
-      const book = catalog.price_book || {};
-
       const missingRows = missing.length
         ? missing.map((i) => `<div class="member-row">
             <span class="who"><b>${esc(i.label)}</b><small>${i.required ? "Majburiy" : "Ixtiyoriy"}</small></span>
             ${badge("Sozlanmagan", i.required ? "err" : "warn")}</div>`).join("")
         : `<div class="note ok"><b>Hammasi sozlangan</b>Majburiy qismlar joyida.</div>`;
-
-      const priceRows = features.length
-        ? `<div class="scroll-x"><table class="events">
-            <thead><tr><th>Imkoniyat</th><th>Turi</th><th>Narx</th></tr></thead>
-            <tbody>${features.map((f) => `<tr>
-              <td><b>${esc(f.name)}</b></td>
-              <td>${f.queue_kind === "realtime" ? "Tezkor xabar" : "Kunlik tahlil"}</td>
-              <td>$${(Number(f.monthly_usd_cents) / 100).toFixed(0)} / kamera</td>
-            </tr>`).join("")}</tbody></table></div>`
-        : `<p class="hint">Narx jadvali bo'sh.</p>`;
 
       el.innerHTML = `
         <h1>Sozlamalar</h1>
@@ -1167,12 +1171,13 @@
               : badge("Sozlanmagan — havola faqat ichki tarmoqda ochiladi", "warn")}</dd>
           </dl>
         </section>
-
-        <details class="card quiet">
-          <summary><b>Narx jadvali (ichki)</b></summary>
-          <p class="hint">${esc(book.label || "Katalog")} · baza $${(Number(book.base_fee_usd_cents || 0) / 100).toFixed(0)} har do'kon uchun</p>
-          ${priceRows}
-        </details>`;
+`;
+      // Ichki narx jadvali (imkoniyat × $/kamera) 2026-08-26 da OLIB
+      // TASHLANDI.  U hech qachon sotilmagan modelni ko'rsatardi: sotuv
+      // tarif bo'yicha ketadi (Boshlang'ich/Biznes), `available_feature_codes()`
+      // esa production'da bo'sh ro'yxat qaytaradi.  Haqiqiy pul —
+      // Moliya panelida (daromad, tannarx, foyda mijoz kesimida).
+      // Backend (`price_books`, `feature_prices`) o'z joyida qoladi.
     }
 
     // ── Amallar: bitta jadval, 29 ta `if` o'rniga ──────────────────────

@@ -107,3 +107,56 @@ def test_model_available_checks_demography_models(isolated) -> None:
     else:
         assert config_store.demography_models_available() is False
     assert models == face.parent
+
+
+# ── Nega o'chiq — sabab AYTILSIN ─────────────────────────────────────────
+#
+# 2026-08-26: jonli do'konda `demography_daily` butunlay nol edi va
+# "funksiya o'chirilgan", "model topilmadi" hamda "yuz topilmadi" —
+# uchalasi tashqaridan bir xil ko'rinardi: hech narsa.  Sabab endi
+# heartbeat orqali panelga chiqadi.
+
+
+def test_off_reason_says_when_the_feature_is_disabled(tmp_path) -> None:
+    from chaqimchi_ai.retail import demography as demo
+
+    class Scene:
+        demographics_enabled = False
+
+    class Settings:
+        scene = Scene()
+
+    demo.LAST_OFF_REASON["value"] = "eski qiymat"
+    assert demo.build_demography_estimator(Settings(), tmp_path) is None
+    assert demo.LAST_OFF_REASON["value"] == "sozlamada o'chirilgan"
+
+
+def test_off_reason_says_when_paths_are_missing(tmp_path) -> None:
+    from chaqimchi_ai.retail import demography as demo
+
+    class Scene:
+        demographics_enabled = True
+        face_model_path = ""
+        age_gender_model_path = ""
+
+    class Settings:
+        scene = Scene()
+
+    assert demo.build_demography_estimator(Settings(), tmp_path) is None
+    assert demo.LAST_OFF_REASON["value"] == "model yo'li sozlanmagan"
+
+
+def test_off_reason_says_when_the_model_will_not_load(tmp_path) -> None:
+    from chaqimchi_ai.retail import demography as demo
+
+    class Scene:
+        demographics_enabled = True
+        face_model_path = str(tmp_path / "yoq-face.xml")
+        age_gender_model_path = str(tmp_path / "yoq-age.xml")
+
+    class Settings:
+        scene = Scene()
+
+    assert demo.build_demography_estimator(Settings(), tmp_path) is None
+    reason = demo.LAST_OFF_REASON["value"]
+    assert reason and "model yuklanmadi" in reason

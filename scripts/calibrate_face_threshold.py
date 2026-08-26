@@ -62,17 +62,26 @@ def main() -> int:
     store = main.get_event_store()
     target_dim = faces.current_embedding_dim()
 
+    # Embedding `face_embeddings()` dan olinadi.
+    #
+    # Ilgari bu yerda `employee_face()` chaqirilardi — u esa embeddingni
+    # UMUMAN qaytarmaydi (panel uchun mo'ljallangan: `id`, `photo_key`,
+    # `det_score`, ...).  Ya'ni skript hech qachon ishlamagan: birinchi
+    # qatordayoq `KeyError: 'embedding_b64'` bilan yiqilardi.
+    # 2026-08-26 da jonli bazada aynan shu ko'rindi.
+    sites = [args.site] if args.site else sorted(
+        {str(row["site_id"]) for row in store.all_employee_faces()}
+    )
+
     by_employee: dict = {}
     skipped = 0
-    for row in store.all_employee_faces(site_id=args.site):
-        if int(row.get("embedding_dim") or 0) != target_dim:
-            skipped += 1
-            continue
-        record = store.employee_face(row["site_id"], row["id"])
-        if not record:  # pragma: no cover - yozuv orada o'chirilgan
-            continue
-        vectors = by_employee.setdefault((row["site_id"], row["employee_id"]), [])
-        vectors.append(faces.decrypt_embedding(record["embedding_b64"]))
+    for site in sites:
+        for record in store.face_embeddings(site):
+            if int(record.get("embedding_dim") or 0) != target_dim:
+                skipped += 1
+                continue
+            vectors = by_employee.setdefault((site, record["employee_id"]), [])
+            vectors.append(faces.decrypt_embedding(record["embedding_b64"]))
 
     if skipped:
         print(

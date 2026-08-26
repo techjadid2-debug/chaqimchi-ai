@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from chaqimchi_ai.event_models import EdgeEvent
+from chaqimchi_ai.retail import demography as demography_module
 from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
@@ -72,6 +73,18 @@ MAX_PENDING_CLIPS = 200
 #: rasm ilinmay qolardi.
 #:
 #: Hodisaning o'zi saqlanaveradi — issiqlik xaritasi shunga tayanadi.
+#: Yuz kadrining eng kichik tomoni (piksel).
+#:
+#: `face-reidentification-retail-0095` 128x128 tekislangan yuz kutadi.
+#: Undan kichik kesmadan chiqadigan vektor — shovqin, va u hech qachon
+#: moslik chegarasidan o'tmaydi.
+#:
+#: Ilgari bu yerda 16 px turardi.  U "bo'sh kesma bo'lmasin" degan
+#: himoya edi va yuzning o'qilishi haqida hech narsa demasdi; jonli
+#: do'konda oqibati 4 606 ta ishlatib bo'lmaydigan kadr bo'ldi
+#: (o'rtacha 727 bayt) va davomat umuman ishlamadi.
+FACE_MIN_CROP_PX = 96
+
 SECURITY_MEDIA_EVENTS = frozenset(
     {"camera_tampered", "after_hours_presence", "zone_entered"}
 )
@@ -157,6 +170,15 @@ class _Totals:
     after_hours: int = 0
     snapshots_written: int = 0
     snapshots_missing: int = 0
+    #: Yuz kadri juda mayda bo'lgani uchun yuborilmadi.
+    #:
+    #: 2026-08-26 da bu raqam BO'LMAGANI uchun nosozlik ko'rinmadi:
+    #: qurilma 4 606 ta yuz kadri yubordi, o'rtacha hajmi 727 BAYT
+    #: (taxminan 40x40 piksel) va cloud ularning birortasini ham
+    #: tanimadi.  Tashqaridan "davomat ishlamayapti" degan yagona
+    #: belgi bor edi, sababi esa hech qayerda ko'rinmasdi.
+    face_crops_too_small: int = 0
+    face_crops_written: int = 0
 
 
 class RetailPipeline:
@@ -443,7 +465,14 @@ class RetailPipeline:
         )
 
     def _dispatch(self, decision: Decision, *, camera_id: str) -> None:
-        self._attach_face_crop(decision.event, camera_id=camera_id)
+        # Ishlatib bo'lmaydigan yuz kadri — hodisa ham chiqmaydi.
+        #
+        # `face_captured` ning yagona qiymati RASMDA: cloud uni xodim
+        # bilan solishtiradi.  Rasm mayda bo'lsa hodisa hech kimga
+        # kerak emas, lekin u baribir tarmoq, cloud byudjeti va
+        # mijozning panelidagi joyni yeydi.
+        if not self._attach_face_crop(decision.event, camera_id=camera_id):
+            return
         self._attach_security_snapshot(decision.event, camera_id=camera_id)
         # Qoida Telegram so'raganmi — hodisaning o'zida yozib qo'yiladi.
         # Bungacha `telegram_alert` harakati dekorativ edi: cloud faqat
@@ -502,22 +531,25 @@ class RetailPipeline:
             return []
         return list(getattr(camera.analyzer, "last_detections", []))
 
-    def _attach_face_crop(self, event: EdgeEvent, *, camera_id: str) -> None:
+    def _attach_face_crop(self, event: EdgeEvent, *, camera_id: str) -> bool:
         """`face_captured` uchun odam ramkasining yuqori qismini kesib oladi.
+
+        Qaytaradi: hodisa yuborilsinmi.  `False` — kadr ishlatib
+        bo'lmaydigan darajada mayda, hodisa ham tashlanadi.
 
         To'liq kadr yuborilmaydi — maxfiylik (kadrda boshqa odamlar bor)
         va hajm: crop odatda 20-60 KB, to'liq kadr esa yarim megabayt.
         Yuzni topish/tanish bu yerda YO'Q — hammasi cloudda.
         """
         if event.event_type != "face_captured" or self.snapshot_dir is None:
-            return
+            return True
         bbox = (event.metadata or {}).get("bbox")
         camera = self._cameras.get(camera_id)
         frame = camera.last_frame if camera is not None else None
         if frame is None or not bbox or len(bbox) != 4:
             with self._lock:
                 self._totals.snapshots_missing += 1
-            return
+            return False
         height, width = frame.shape[:2]
         x1, y1, x2, y2 = (int(value) for value in bbox)
         # Yuqori ~35% + yon tomonlarga 10% chekka: bosh ramka chetiga tegib
@@ -527,10 +559,21 @@ class RetailPipeline:
         bottom = min(height, y1 + max(1, int((y2 - y1) * 0.35)))
         left = max(0, x1 - margin)
         right = min(width, x2 + margin)
-        if bottom - top < 16 or right - left < 16:
+        # Chegara 16 px EMAS, 96 px.
+        #
+        # 16 px ataylab qo'yilgan emas edi — u "bo'sh kesma bo'lmasin"
+        # degan himoya edi va yuzning O'QILISHI haqida hech narsa
+        # demasdi.  2026-08-26 da oqibati o'lchandi: jonli do'kondan
+        # 4 606 ta yuz kadri keldi, o'rtacha hajmi 727 bayt, va cloud
+        # ularning BIRORTASINI ham tanimadi.  Ro'yxatga olingan xodim
+        # rasmi esa 329 KB.
+        #
+        # 96 px — `face-reidentification-retail-0095` 128x128 tekislangan
+        # yuz kutadi; undan kichik kesmadan chiqadigan embedding shovqin.
+        if bottom - top < FACE_MIN_CROP_PX or right - left < FACE_MIN_CROP_PX:
             with self._lock:
-                self._totals.snapshots_missing += 1
-            return
+                self._totals.face_crops_too_small += 1
+            return False
         path = self.snapshot_dir / f"{camera_id}-{event.event_id}-face.jpg"
         try:
             written = self.snapshot_writer(path, frame[top:bottom, left:right])
@@ -541,8 +584,11 @@ class RetailPipeline:
             if written:
                 event.snapshot_path = str(path)
                 self._totals.snapshots_written += 1
+                self._totals.face_crops_written += 1
             else:
                 self._totals.snapshots_missing += 1
+        # Rasm yozilmagan bo'lsa hodisadan foyda yo'q — u ham tashlanadi.
+        return written
 
     def _attach_security_snapshot(self, event: EdgeEvent, *, camera_id: str) -> None:
         # Oddiy zona kirishi retail analitikasi, xavfsizlik hodisasi emas.
@@ -682,6 +728,35 @@ class RetailPipeline:
             "snapshots": {
                 "written": self._totals.snapshots_written,
                 "missing": self._totals.snapshots_missing,
+            },
+            # Davomat oqimining SIFATI.  `too_small` noldan katta bo'lsa
+            # kamera juda uzoqda yoki substream past sifatli — bu
+            # "davomat ishlamayapti" savolining birinchi javobi.
+            "face_crops": {
+                "written": self._totals.face_crops_written,
+                "too_small": self._totals.face_crops_too_small,
+                # Shift tufayli chiqarilmaganlar (kamera bo'yicha jami).
+                "suppressed": sum(
+                    int(getattr(camera.analyzer, "face_emits_suppressed", 0))
+                    for camera in self._cameras.values()
+                ),
+            },
+            # Demografiya: urinish bo'ldimi va yuz topildimi.
+            #
+            # `attempts > 0, found == 0` — model ishlayapti, lekin yuz
+            # topa olmayapti (kamera uzoq / substream past sifatli).
+            # `attempts == 0` — funksiya umuman ishga tushmagan; sabab
+            # `off_reason` da.
+            "demography": {
+                "attempts": sum(
+                    int(getattr(camera.analyzer, "demography_attempts", 0))
+                    for camera in self._cameras.values()
+                ),
+                "found": sum(
+                    int(getattr(camera.analyzer, "demography_found", 0))
+                    for camera in self._cameras.values()
+                ),
+                "off_reason": demography_module.LAST_OFF_REASON["value"],
             },
             "clips": {
                 "pending": len(self._pending),

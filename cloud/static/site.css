@@ -282,9 +282,19 @@ h1 em { margin-top: 6px; color: var(--blue); font-style: normal; }
 .faq summary { cursor: pointer; font-weight: 750; }
 .faq details p { color: var(--muted); font-size: 14px; }
 
-footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 34px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+/* Uchinchi ustun ATAYLAB `minmax(0, …)`.
+ *
+ * Ilgari u `auto` edi va oqibati skrinshotdan ko'rindi: `auto` ustun
+ * 9 ta havolaning MAX-CONTENT kengligini talab qiladi, `1fr` esa
+ * qolganini oladi — ya'ni minimalni.  Natijada tavsif matni bitta
+ * so'z kengligidagi ustunga siqilib, harflar vertikal ustun bo'lib
+ * qolgan edi.  `minmax(0, …)` havolalar ustunini siqilishga majbur
+ * qiladi, matn esa o'z minimal kengligini oladi. */
+footer { max-width: 1180px; margin: auto; padding: 42px 24px 60px; display: grid; grid-template-columns: auto minmax(240px, 1fr) minmax(0, 1.4fr); align-items: center; gap: 34px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
 footer p { margin: 0; }
-footer > div { display: flex; flex-wrap: wrap; gap: 20px; }
+footer > div { display: flex; flex-wrap: wrap; gap: 20px; min-width: 0; }
+/* Mahsulot kimniki ekani — hamma ustun ostida, alohida qatorda. */
+.footer-powered { grid-column: 1 / -1; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
 footer > div a { text-decoration: none; }
 footer > div a:hover { color: var(--blue-dark); }
 

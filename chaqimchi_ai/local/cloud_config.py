@@ -375,6 +375,21 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         "analyzed": int(status.get("analyzed") or 0),
         "analysis_errors": int(status.get("errors") or 0),
         "queue_errors": int(status.get("action_errors") or 0),
+        # Davomat va mijoz portreti ISHLAYAPTIMI.
+        #
+        # 2026-08-26 gacha bu ikkalasi jimgina o'lik edi va tashqaridan
+        # buni bilishning yo'li yo'q edi: cloudda 4 606 ta yuz kadri
+        # bor, tanish esa nol; `demography_daily` butunlay nol.
+        # Endi sabab qurilmadan aytiladi.
+        "face_crops": {
+            key: int((status.get("face_crops") or {}).get(key) or 0)
+            for key in ("written", "too_small", "suppressed")
+        },
+        "demography": {
+            "attempts": int((status.get("demography") or {}).get("attempts") or 0),
+            "found": int((status.get("demography") or {}).get("found") or 0),
+            "off_reason": (status.get("demography") or {}).get("off_reason"),
+        },
         "app_version": __version__,
         "product_name": "Chaqimchi Windows",
         # Qurilmaning O'Z soati.  Ataylab `now()` — u xato bo'lsa ham

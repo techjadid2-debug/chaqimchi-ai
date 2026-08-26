@@ -137,6 +137,26 @@ def test_sitemap_exists_only_on_the_apex(client: TestClient, monkeypatch) -> Non
     assert client.get("/sitemap.xml", headers={"host": "app.chaqimchi.uz"}).status_code == 404
 
 
+def test_sitemap_carries_a_real_lastmod(client: TestClient, monkeypatch) -> None:
+    """`lastmod` — faylning haqiqiy o'zgarish sanasi, qo'lda yozilgan emas.
+
+    Qo'lda yozilgan sana bir marta to'g'ri bo'ladi, keyin abadiy
+    eskiradi va Google uni e'tiborsiz qoldiradi.
+    """
+    import re
+    from datetime import date
+
+    _subdomains(monkeypatch)
+    body = client.get("/sitemap.xml", headers={"host": "chaqimchi.uz"}).text
+
+    stamps = re.findall(r"<lastmod>(\d{4}-\d{2}-\d{2})</lastmod>", body)
+    assert stamps, "birorta sahifada `lastmod` yo'q"
+    # Kelajakdagi sana — soat noto'g'ri yoki qiymat qo'lda yozilgan.
+    assert max(stamps) <= date.today().isoformat()
+    # Har `<loc>` uchun sanasi bo'lsin.
+    assert len(stamps) == body.count("<loc>")
+
+
 # ── Platforma manzillari endpointi ───────────────────────────────────────
 
 

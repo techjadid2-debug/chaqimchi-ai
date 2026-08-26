@@ -1248,3 +1248,77 @@ def test_every_admin_section_can_actually_load_its_data() -> None:
     assert needed, "birorta `deps` topilmadi — regex eskirgan bo'lishi mumkin"
     assert needed <= loader_keys, f"yuklovchisi yo'q: {sorted(needed - loader_keys)}"
     assert needed <= state_keys, f"`S` da joyi yo'q: {sorted(needed - state_keys)}"
+
+
+# ── Sotuv sahifasi: faqat ISHLAYDIGAN narsa va'da qilinadi ──────────────
+#
+# 2026-08-26 o'lchovi: jonli do'kondan 4 606 ta yuz kadri keldi va cloud
+# ularning BIRORTASINI ham tanimadi; `demography_daily` butunlay nol edi.
+# Sayt esa ikkalasini ham "olasiz" deb sotardi.  Bu FORBIDDEN_CLAIMS ga
+# qo'shilmaydi (ibora emas, FUNKSIYA), shuning uchun alohida test.
+
+
+def _landing_text() -> str:
+    """Bosh sahifaning ko'rinadigan matni — HTML izohlarisiz.
+
+    Izohlar chiqarib tashlanadi: ular aynan "nega bu yerda yo'q" degan
+    sababni yozadi va tekshiruvni yolg'on yiqitardi.
+    """
+    import re
+
+    html = (STATIC / "site.html").read_text(encoding="utf-8")
+    return re.sub(r"<!--.*?-->", "", html, flags=re.S).lower()
+
+
+def test_landing_does_not_sell_attendance_or_demography() -> None:
+    """Yopiq pilot sotuv sahifasida sotilmaydi.
+
+    Ishlayotgani O'LCHANGACH qaytariladi — o'shanda bu testni ham
+    yangilash kerak bo'ladi va aynan shu narsa esdan chiqmasligini
+    ta'minlaydi.
+    """
+    text = _landing_text()
+    for claim in ("xodim davomati", "xodimlar davomati", "face id", "mijoz portreti"):
+        assert claim not in text, (
+            f"bosh sahifada «{claim}» sotilyapti — u hozir yopiq pilot va "
+            "jonli o'lchovda ishlamayapti"
+        )
+
+
+def test_landing_promises_only_measured_features() -> None:
+    """Va'da qilinayotgan to'rttasi jonli bazada tasdiqlangan."""
+    text = _landing_text()
+    # Sanash, xarita, tungi nazorat va navbat — 2026-08-26 da o'lchandi.
+    assert "kirdi" in text
+    assert "javon oldida" in text or "xarita" in text
+    assert "yopiq payt" in text
+    assert "navbat" in text
+
+
+def test_footer_credits_the_hardware_partner() -> None:
+    html = (STATIC / "site.html").read_text(encoding="utf-8")
+    assert "Powered by NS camera" in html
+
+
+def test_landing_has_canonical_and_valid_structured_data() -> None:
+    """Google uchun mashina o'qiydigan ma'lumot — va u BUZUQ bo'lmasin.
+
+    JSON-LD sintaksis xatosi bilan jimgina e'tiborsiz qolinadi: sahifa
+    ochiladi, hech qanday xato ko'rinmaydi, foyda esa nol.
+    """
+    import json
+    import re
+
+    html = (STATIC / "site.html").read_text(encoding="utf-8")
+    assert 'rel="canonical"' in html
+
+    block = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+    assert block, "JSON-LD bloki yo'q"
+    data = json.loads(block.group(1).replace("__PUBLIC_ORIGIN__", "https://chaqimchi.uz"))
+    types = [item["@type"] for item in data["@graph"]]
+    assert types == ["Organization", "SoftwareApplication", "FAQPage"]
+    # Razmetkadagi savol sahifada ham bo'lishi kerak — Google mos
+    # kelmagan FAQ razmetkasini jazolaydi.
+    for question in data["@graph"][2]["mainEntity"]:
+        needle = question["name"].split("?")[0][:24]
+        assert needle in html, f"razmetkadagi savol sahifada yo'q: {needle}"

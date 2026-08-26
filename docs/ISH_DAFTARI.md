@@ -163,6 +163,62 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
+### 2026-08-26 — Sayt, SEO va sotilayotgan funksiyalarni tekshirish
+Nima: footer tuzatildi, Google uchun razmetka qo'shildi, admin
+sozlamalaridan ichki narx jadvali olindi va sotuv sahifasi faqat
+ISHLAYDIGAN funksiyalarni va'da qiladigan bo'ldi.
+
+**Eng muhimi — o'lchov.** Saytda va'da qilingan 4 funksiyadan
+**ikkitasi umuman ishlamayotgani** aniqlandi:
+
+| Sayt va'dasi | Haqiqat |
+|---|---|
+| Mijozlar oqimi | ✅ 28 kirdi / 32 chiqdi, yo'nalish to'g'ri |
+| Issiqlik xaritasi | ✅ 13 696 kadr, joriy soat |
+| Jonli ogohlantirish | ✅ tungi 12, tamper 8, zona 44 |
+| Xodimlar davomati | ❌ **4 606 yuz kadri → 0 ta tanish** |
+| Mijoz portreti | ❌ `demography_daily` butunlay 0 |
+
+**Ikkalasining sababi BITTA:** yuz kadrlari o'rtacha **727 bayt**
+(~40×40 px), ro'yxatdagi xodim rasmi esa 329 KB.  Zanjir kesmani
+tahlil substreamidan oladi va chegara 16 px edi — u "bo'sh kesma
+bo'lmasin" degan himoya, yuzning O'QILISHI haqida emas.  Xuddi shu
+sabab demografiyani ham o'ldiradi: yuz detektori o'sha kadrdan yuz
+topa olmaydi va `_estimate_demography()` **jimgina `None`** qaytaradi.
+
+Qayerda: `retail/pipeline.py` (`FACE_MIN_CROP_PX = 96`, mayda kesmali
+hodisa endi UMUMAN yuborilmaydi — uning yagona qiymati rasmda edi);
+`retail/demography.py` (`LAST_OFF_REASON` — nega o'chiq);
+`scene_analytics.py` (`demography_attempts` / `demography_found`);
+`local/cloud_config.py` + `cloud/main.py` (heartbeat);
+`cloud/static/admin.html` (qurilma kartochkasida ko'rinadi).
+
+**Yana bir topilma:** `scripts/calibrate_face_threshold.py` — Face ID
+ni sozlaydigan YAGONA asbob — hech qachon ishlamagan.  U
+`employee_face()` dan embedding kutardi, o'sha metod esa faqat panel
+maydonlarini qaytaradi.  Jonli bazada birinchi qatordayoq
+`KeyError: 'embedding_b64'`.  Tuzatildi (`face_embeddings()` ga
+o'tkazildi) va shartnoma test bilan qulflandi.
+
+Sayt: sarlavhalar endi funksiya nomi emas, mijozning savoli
+("Qaysi javon oldida odam to'planadi").  Davomat va mijoz portreti
+sotuv sahifasidan **olib tashlandi** — ishlagani o'lchangach
+qaytariladi; `test_landing_does_not_sell_attendance_or_demography`
+buni qulflaydi.
+
+SEO: canonical, JSON-LD (Organization + SoftwareApplication +
+FAQPage), sitemap'da `lastmod` (fayl sanasidan), sarlavhada
+qidiriladigan so'zlar.  Sizdan kutiladigan ikki qadam —
+[SEO.md](SEO.md).
+
+Test: 1792 ta o'tdi (avval 1782), lint va TS typecheck toza.
+
+Diqqat: `FACE_MIN_CROP_PX` va demografiya hisoblagichlari QURILMA
+tomonida — ular yangi reliz talab qiladi.  Chegarani o'lchash (4c)
+esa **hali bajarilmagan**: skript endi ishlaydi, lekin unga har
+xodimdan kamida 2 ta rasm va yangi relizdan keyingi haqiqiy kesmalar
+kerak.
+
 ### 2026-08-26 — Rasm hech qayerda ko'rinmasdi: oltita sabab
 Nima: sinov do'konida hodisa kelayotgan edi-yu rasm panelda ham,
 Telegramda ham yo'q edi.  **Oltita** mustaqil sabab topildi va tuzatildi.

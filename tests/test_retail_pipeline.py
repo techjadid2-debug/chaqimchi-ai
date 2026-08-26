@@ -711,11 +711,16 @@ def test_ai_review_action_is_accepted_but_does_nothing(tmp_path: Path) -> None:
 # ── Davomat: yuz kadri crop ──────────────────────────────────────────────
 
 
-def face_captured() -> EdgeEvent:
+def face_captured(bbox=None) -> EdgeEvent:
+    """Yaqin kelgan odam: kesma `FACE_MIN_CROP_PX` dan katta chiqadi.
+
+    Standart bbox 120x300 — kesma 105x144 bo'ladi, ya'ni chegaradan
+    o'tadi.  Mayda kesmani sinash uchun `bbox` ni o'zingiz bering.
+    """
     return EdgeEvent(
         event_type="face_captured",
         camera_id="kassa-01",
-        metadata={"bbox": [40, 20, 80, 120]},
+        metadata={"bbox": bbox or [40, 20, 160, 320]},
     )
 
 
@@ -733,19 +738,50 @@ def test_face_capture_ships_an_upper_body_crop_not_the_full_frame(tmp_path: Path
         return True
 
     pipeline.snapshot_writer = writer
-    big_frame = np.zeros((200, 200, 3), dtype=np.uint8)
+    big_frame = np.zeros((400, 400, 3), dtype=np.uint8)
 
     run(pipeline, frame=big_frame)
 
     event = recorder.actions[0][1]
     assert event.snapshot_path and event.snapshot_path.endswith("-face.jpg")
     height, width, _ = captured["shape"]
-    assert height == 35, "bbox balandligining ~35% qismi (100 * 0.35)"
-    assert width == 48, "bbox eni + 10% chekka (40 + 2*4)"
+    assert height == 105, "bbox balandligining ~35% qismi (300 * 0.35)"
+    assert width == 144, "bbox eni + 10% chekka (120 + 2*12)"
+    # To'liq kadr EMAS — maxfiylik va hajm.
+    assert (height, width) != big_frame.shape[:2]
 
 
-def test_face_capture_without_a_frame_is_sent_without_media(tmp_path: Path) -> None:
-    """Kadr topilmasa hodisa matn bo'lib ketaveradi — oqim to'xtamaydi."""
+def test_tiny_face_crop_is_dropped_entirely(tmp_path: Path) -> None:
+    """Uzoqdagi odamdan chiqqan mayda kesma hodisa bo'lib ham ketmasin.
+
+    2026-08-26 jonli o'lchovi: do'kondan 4 606 ta yuz kadri keldi,
+    o'rtacha hajmi **727 bayt** (taxminan 40x40 px) va cloud ularning
+    BIRORTASINI ham tanimadi.  Chegara o'sha paytda 16 px edi — u
+    "bo'sh kesma bo'lmasin" degan himoya, yuzning o'qilishi haqida
+    emas.  Bunday hodisa tarmoqni, cloud byudjetini va mijozning
+    panelidagi joyni bekorga yeydi.
+    """
+    small = face_captured(bbox=[40, 20, 80, 120])  # kesma 48x35 — 96 dan kichik
+    pipeline, _analyzer, recorder, _buffer = build(
+        tmp_path, events=[small], snapshots=True
+    )
+
+    run(pipeline, frame=np.zeros((200, 200, 3), dtype=np.uint8))
+
+    assert recorder.actions == [], "mayda kesmali hodisa umuman yuborilmasin"
+    assert pipeline.stats()["face_crops"]["too_small"] == 1, (
+        "sabab hisoblanishi kerak — aks holda nosozlik yana jimgina o'tadi"
+    )
+
+
+def test_face_capture_without_a_frame_is_dropped(tmp_path: Path) -> None:
+    """Kadrsiz `face_captured` — foydasi yo'q, yuborilmaydi.
+
+    Ilgari u matn bo'lib ketardi.  Lekin bu hodisaning YAGONA qiymati
+    rasmda: cloud uni xodim bilan solishtiradi.  Rasmsiz u panelda
+    "Yuz kadri (davomat)" bo'lib ko'rinadi-yu, hech qachon hech kimga
+    aylanmaydi.
+    """
     pipeline, _analyzer, recorder, _buffer = build(
         tmp_path, events=[face_captured()], snapshots=True
     )
@@ -757,4 +793,4 @@ def test_face_capture_without_a_frame_is_sent_without_media(tmp_path: Path) -> N
         camera_id="kassa-01",
     )
 
-    assert recorder.actions[0][1].snapshot_path is None
+    assert recorder.actions == []

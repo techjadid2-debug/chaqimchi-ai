@@ -921,3 +921,38 @@ def test_face_flood_does_not_starve_store_event_snapshots(pilot_client) -> None:
     stored = main.get_event_store().event(site["site_id"], "evt-dokon")
     assert stored["has_snapshot"], "rasm saqlanishi kerak edi"
     assert stored["snapshot_key"]
+
+
+def test_calibration_script_can_read_the_embeddings(pilot_client) -> None:
+    """Chegarani o'lchash skripti bazadan vektorni OLA olsin.
+
+    2026-08-26: `scripts/calibrate_face_threshold.py` jonli bazada
+    birinchi qatordayoq `KeyError: 'embedding_b64'` bilan yiqildi — u
+    `employee_face()` dan embedding kutardi, o'sha metod esa faqat
+    panel maydonlarini qaytaradi (`id`, `photo_key`, `det_score`).
+    Ya'ni Face ID ni sozlaydigan yagona asbob hech qachon ishlamagan.
+
+    Bu test shu shartnomani qulflaydi: qaysi metod embedding beradi va
+    qaysi biri ATAYLAB bermaydi.
+    """
+    import cloud.main as main
+
+    site, _headers = _site_with_device(pilot_client)
+    employee = _employee(pilot_client, site["site_id"])
+    _upload_photo(pilot_client, site["site_id"], employee["id"], b"rasm-ali-1")
+
+    store = main.get_event_store()
+
+    # Moslash va kalibrlash uchun — embedding BOR.
+    rows = store.face_embeddings(site["site_id"])
+    assert rows, "faol xodimning vektori qaytarilishi kerak"
+    assert rows[0]["embedding_b64"], "vektor bo'sh bo'lmasin"
+    assert rows[0]["embedding_dim"] == main.faces.current_embedding_dim()
+
+    # Panel uchun — embedding ATAYLAB YO'Q (biometrik ma'lumot
+    # kerak bo'lmagan joyga oqib chiqmasin).
+    listed = store.list_employee_faces(site["site_id"], employee_id=employee["id"])
+    assert listed
+    assert "embedding_b64" not in listed[0], (
+        "panel ro'yxati biometrik vektorni qaytarmasligi kerak"
+    )

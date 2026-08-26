@@ -595,6 +595,35 @@ class EventStore:
                 accepted.append(event.event_id)
         return accepted
 
+    def active_edge_versions(self, *, minutes: int = 15) -> Dict[str, Dict[str, int]]:
+        """Har obyektda oxirgi daqiqalarda QAYSI versiyalar hodisa yuborgan.
+
+        Bitta kompyuterda bitta zanjir bo'lishi kerak, ya'ni bitta obyekt
+        bitta versiya yuborishi shart.  Ikkitadan ko'p bo'lsa — bu HAR
+        DOIM nosozlik: eski zanjir yangilanishdan keyin o'lmagan.
+
+        2026-08-26 da do'kon kompyuterida BESHTA zanjir bir vaqtda
+        ishlayotgani shu so'rov bilan aniqlandi (0.6.13, 0.6.16, 0.6.17,
+        0.6.18, 0.6.19 — beshtasi ham o'sha daqiqada hodisa yuborardi).
+        Har chegara jarayonlar soniga ko'payib ketardi va bir necha reliz
+        "ishlamayotgandek" ko'rindi.  Nosozlik oylab sezilmadi, chunki
+        buni ko'rsatadigan birorta o'lchov yo'q edi.
+        """
+        since = (datetime.now(timezone.utc) - timedelta(minutes=int(minutes))).isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT site_id,edge_version,COUNT(*) AS n FROM production_events "
+                    "WHERE occurred_at > ? GROUP BY site_id,edge_version"
+                ),
+                (since,),
+            ).fetchall()
+        summary: Dict[str, Dict[str, int]] = {}
+        for row in rows:
+            site = str(row["site_id"])
+            summary.setdefault(site, {})[str(row["edge_version"])] = int(row["n"])
+        return summary
+
     def existing_event_ids(self, site_id: str, event_ids: List[str]) -> set[str]:
         """Idempotent retry yangi Telegram alert deb hisoblanmasligi uchun."""
         unique = list(dict.fromkeys(str(item) for item in event_ids if item))

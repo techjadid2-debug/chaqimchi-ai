@@ -701,6 +701,14 @@
         } else if (Number(demo.attempts)) {
           parts.push(`mijoz portreti: ${Number(demo.attempts)} urinishdan ${Number(demo.found || 0)} tasida yuz topildi`);
         }
+        // Yangilanishdan keyin qolgan eski zanjirlar — eng jiddiy belgi.
+        const stale = health.stale_chains || {};
+        if (Number(stale.running) > 1 || Number(stale.after_update) > 0) {
+          const many = Number(stale.running) > 1
+            ? `${Number(stale.running)} ta zanjir bir vaqtda ishlayapti`
+            : `yangilanishdan keyin ${Number(stale.after_update)} ta eski zanjir qoldi`;
+          parts.push(`<b>${many}</b> — «Eski jarayonlarni tozalash» tugmasini bosing`);
+        }
         (health.cameras || []).forEach((camera) => {
           const state = camera.connected && !camera.offline ? "ishlayapti" : "javob bermayapti";
           parts.push(`${esc(camera.camera_id)}: ${state}${camera.codec ? ` · ${esc(camera.codec)}` : ""}` +
@@ -718,7 +726,18 @@
             ${deviceDiagnostics(dev.health)}</span>
           ${badge(CONN_LABEL[dev.connection] || dev.connection, CONN_BADGE[dev.connection] || "mute")}
           <span class="hint">${esc(sinceLabel(dev.minutes_since_seen))}</span>
-        </div>`).join("");
+        </div>`).join("") +
+        // Yetim zanjirlarni tozalash — texnik xizmat tugmasi.
+        //
+        // Yangilanishdan keyin eski zanjir o'lmasa u ESKI kodda ishlashda
+        // davom etadi va o'zini to'xtatishni bilmaydi.  2026-08-26 da
+        // do'kon kompyuterida beshta zanjir bir vaqtda ishlab turgan edi
+        // (0.6.13 dan 0.6.19 gacha) va har chegara jarayonlar soniga
+        // ko'payib ketgan edi.
+        ((d.devices || []).length
+          ? `<div class="action-row"><button class="button ghost small" type="button"
+               data-act="clean-chains" data-id="${esc(d.site.id)}">Eski jarayonlarni tozalash</button></div>`
+          : "");
 
       // Bajarilganlari yig'ib qo'yiladi: ekranda faqat qolgan ishlar tursin.
       const stepRow = (step) => `<div class="member-row">
@@ -1218,6 +1237,13 @@
         });
         notify(paused ? "Yangilanish to'xtatildi" : "Yangilanish yoqildi");
         await reload("updates");
+      },
+      "clean-chains": async (el) => {
+        const answer = await api(`/api/v1/admin/sites/${el.dataset.id}/jobs/clean-chains`,
+          { method: "POST" });
+        notify(answer.job && answer.job.reused
+          ? "Tozalash allaqachon boshlangan — natijani kuting"
+          : "Tozalash yuborildi — natija bir necha soniyada ko'rinadi");
       },
       "alert-test": async () => {
         await api("/api/v1/admin/alerts/test", { method: "POST" });

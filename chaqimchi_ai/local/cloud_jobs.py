@@ -229,6 +229,28 @@ def _run_probe(params: Dict[str, Any], report: Callable[[int, str], None], job_i
     return {"width": probe.width, "height": probe.height}
 
 
+def _run_clean_chains(report: Callable[[int, str], None]) -> Dict[str, Any]:
+    """Yetim AI zanjirlarini to'xtatadi (masofadan yuborilgan topshiriq).
+
+    Nega masofadan kerak: yetim jarayonlar ESKI kodda ishlaydi va
+    o'zlarini to'xtatishni bilmaydi.  Ularni faqat tashqaridan
+    o'ldirish mumkin.  Bu topshiriqni esa DASTUR bajaradi — u
+    yangilangan, ya'ni yetimlar hech narsani tushunishi shart emas.
+
+    2026-08-26: do'kon kompyuterida beshta zanjir bir vaqtda ishlab
+    turgan edi va ularning to'rttasi eski versiyalardan qolgan.
+    """
+    from chaqimchi_ai.local import chain_processes
+
+    report(20, "Ishlab turgan zanjirlar qidirilmoqda")
+    result = chain_processes.kill_chains()
+    report(90, f"{result['killed']} ta to'xtatildi")
+    if result["remaining"]:
+        # Xato EMAS, lekin javobda ko'rinadi: qolganini admin biladi.
+        logger.warning("Tozalashdan keyin %s ta zanjir qoldi", result["remaining"])
+    return result
+
+
 def run_one(job: Dict[str, Any]) -> None:
     """Bitta topshiriqni bajarib, natijani bulutga yuboradi."""
     job_id = str(job.get("job_id") or "")
@@ -244,6 +266,8 @@ def run_one(job: Dict[str, Any]) -> None:
             result = _run_channels(params, report)
         elif kind == "probe":
             result = _run_probe(params, report, job_id)
+        elif kind == "clean_chains":
+            result = _run_clean_chains(report)
         else:
             raise RuntimeError(f"Noma'lum topshiriq turi: {kind}")
     except Exception as exc:  # noqa: BLE001 - har qanday xato bulutga yetsin

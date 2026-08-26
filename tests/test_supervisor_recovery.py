@@ -194,99 +194,91 @@ def test_a_recovered_chain_forgets_the_cooldown(
 
 # ── Yetim zanjir ─────────────────────────────────────────────────────────
 #
-# 2026-08-26 jonli topilmasi: do'kon kompyuterida TO'RTTA tahlil jarayoni
+# 2026-08-26 jonli topilmasi: do'kon kompyuterida BESHTA tahlil jarayoni
 # bir vaqtda ishlayotgan edi — hodisalardagi `edge_version` 0.6.13,
-# 0.6.16, 0.6.17 va 0.6.18 ni ko'rsatdi va to'rttasi ham o'sha daqiqada
-# hodisa yuborardi.  Sabab: dastur yangilanganda eski nusxaning bolasi
-# yetim qolardi.  Oqibati: har chegara jarayonlar soniga ko'payib
+# 0.6.16, 0.6.17, 0.6.18 va 0.6.19 ni ko'rsatdi va beshtasi ham o'sha
+# daqiqada hodisa yuborardi.  Sabab: dastur yangilanganda eski nusxaning
+# bolasi yetim qolardi.  Oqibati: har chegara jarayonlar soniga ko'payib
 # ketardi va bir necha reliz "ishlamayotgandek" ko'rindi.
 
 
-def _status_with_pid(tmp_path, pid: int, *, age_sec: float = 0.0) -> None:
-    import json
-    import time
+def test_all_orphans_are_killed_not_just_one(monkeypatch) -> None:
+    """Beshta yetim bo'lsa beshtasi ham to'xtatilsin.
 
-    from chaqimchi_ai.local import paths
+    Ilgari bu yerda holat faylidagi BITTA PID o'ldirilardi — beshta
+    yetim bo'lsa har restartda bittadan kamayardi.
+    """
+    from chaqimchi_ai.local import chain_processes
 
-    paths.status_path().write_text(
-        json.dumps({"pid": pid, "updated_at": time.time() - age_sec}),
-        encoding="utf-8",
-    )
-
-
-def test_a_live_orphan_is_terminated_before_spawning(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    import importlib
-
-    from chaqimchi_ai.local import paths, supervisor
-
-    importlib.reload(paths)
-    importlib.reload(supervisor)
-
-    _status_with_pid(tmp_path, 424242)
+    monkeypatch.setattr(chain_processes.os, "name", "nt")
+    monkeypatch.setattr(chain_processes, "_powershell_pids", lambda: [101, 102, 103, 104])
     killed = []
-    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(chain_processes.os, "kill", lambda pid, sig: killed.append(pid))
 
-    supervisor.RetailSupervisor()._kill_orphan_chain()
+    result = chain_processes.kill_chains()
 
-    assert killed and killed[0][0] == 424242
+    assert sorted(killed) == [101, 102, 103, 104]
+    assert result["found"] == 4 and result["killed"] == 4
 
 
-def test_a_stale_status_file_is_left_alone(tmp_path, monkeypatch) -> None:
-    """Eski fayl — jarayon o'lgan; PID begonaga tegishli bo'lishi mumkin."""
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    import importlib
+def test_our_own_child_is_never_killed(monkeypatch) -> None:
+    from chaqimchi_ai.local import chain_processes
 
-    from chaqimchi_ai.local import paths, supervisor
-
-    importlib.reload(paths)
-    importlib.reload(supervisor)
-
-    _status_with_pid(tmp_path, 424242, age_sec=supervisor.ORPHAN_STATUS_MAX_AGE_SEC + 60)
+    monkeypatch.setattr(chain_processes.os, "name", "nt")
+    monkeypatch.setattr(chain_processes, "_powershell_pids", lambda: [101, 777])
     killed = []
-    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(chain_processes.os, "kill", lambda pid, sig: killed.append(pid))
 
-    supervisor.RetailSupervisor()._kill_orphan_chain()
+    chain_processes.kill_chains(exclude={777})
 
-    assert killed == [], "eski PID begona jarayonga tegishli bo'lishi mumkin"
+    assert killed == [101]
 
 
-def test_our_own_child_is_never_killed(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    import importlib
+def test_surviving_processes_are_reported(monkeypatch) -> None:
+    """O'ldirish ishlamasa buni KO'RISH kerak.
 
-    from chaqimchi_ai.local import paths, supervisor
+    Aynan shu "jim muvaffaqiyatsizlik" beshta zanjirni to'plagan edi:
+    o'rnatuvchi urinardi, natijani esa hech kim tekshirmasdi.
+    """
+    from chaqimchi_ai.local import chain_processes
 
-    importlib.reload(paths)
-    importlib.reload(supervisor)
+    monkeypatch.setattr(chain_processes.os, "name", "nt")
+    monkeypatch.setattr(chain_processes, "_powershell_pids", lambda: [101, 102])
 
-    _status_with_pid(tmp_path, 777)
+    def refuse(pid, sig):
+        raise PermissionError("huquq yetmadi")
+
+    monkeypatch.setattr(chain_processes.os, "kill", refuse)
+
+    result = chain_processes.kill_chains()
+
+    assert result["found"] == 2
+    assert result["killed"] == 0
+    assert result["remaining"] == 2, "qolganlar sanalishi shart"
+
+
+def test_a_broken_process_listing_is_not_fatal(monkeypatch) -> None:
+    """PowerShell yo'q yoki cheklangan bo'lsa zanjir baribir ko'tariladi."""
+    from chaqimchi_ai.local import chain_processes
+
+    monkeypatch.setattr(chain_processes.os, "name", "nt")
+
+    def explode(*_args, **_kwargs):
+        raise OSError("powershell topilmadi")
+
+    monkeypatch.setattr(chain_processes.subprocess, "run", explode)
+
+    assert chain_processes.find_chains() == []
+    assert chain_processes.kill_chains()["found"] == 0
+
+
+def test_nothing_is_killed_outside_windows(monkeypatch) -> None:
+    """Linux'da zanjirni systemd boshqaradi — yetim muammosi yo'q."""
+    from chaqimchi_ai.local import chain_processes
+
+    monkeypatch.setattr(chain_processes.os, "name", "posix")
     killed = []
-    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(chain_processes.os, "kill", lambda pid, sig: killed.append(pid))
 
-    manager = supervisor.RetailSupervisor()
-
-    class Child:
-        pid = 777
-
-    manager._process = Child()
-    manager._kill_orphan_chain()
-
-    assert killed == []
-
-
-def test_missing_status_file_is_harmless(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    import importlib
-
-    from chaqimchi_ai.local import paths, supervisor
-
-    importlib.reload(paths)
-    importlib.reload(supervisor)
-
-    killed = []
-    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append(pid))
-
-    supervisor.RetailSupervisor()._kill_orphan_chain()  # fayl yo'q
-
+    assert chain_processes.kill_chains()["found"] == 0
     assert killed == []

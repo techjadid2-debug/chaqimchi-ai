@@ -338,3 +338,50 @@ def test_a_broken_cloud_never_blocks_the_first_run(monkeypatch) -> None:
     monkeypatch.setattr(cloud_link, "is_connected", _boom)
 
     assert local_app._first_run_url("http://127.0.0.1:8760") == "http://127.0.0.1:8760"
+
+
+# ── Masofadan tozalash ───────────────────────────────────────────────────
+#
+# 2026-08-26: do'kon kompyuterida beshta zanjir bir vaqtda ishlab turgan
+# edi.  Yetimlar ESKI kodda va o'zlarini to'xtatishni bilmaydi — ularni
+# faqat tashqaridan o'ldirish mumkin.  Topshiriqni DASTUR bajaradi.
+
+
+def test_clean_chains_job_reports_what_it_killed(monkeypatch) -> None:
+    from chaqimchi_ai.local import chain_processes, cloud_jobs
+
+    monkeypatch.setattr(
+        chain_processes,
+        "kill_chains",
+        lambda exclude=None: {"found": 4, "killed": 4, "remaining": 0, "pids": [1, 2, 3, 4]},
+    )
+    sent = []
+    monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
+
+    cloud_jobs.run_one({"job_id": "j1", "kind": "clean_chains", "params": {}})
+
+    assert sent, "natija cloudga yuborilishi kerak"
+    final = sent[-1]
+    assert final["ok"] is True
+    assert final["result"]["found"] == 4
+    assert final["result"]["remaining"] == 0
+
+
+def test_clean_chains_reports_survivors_instead_of_hiding_them(monkeypatch) -> None:
+    """O'ldirish ishlamasa bu javobda KO'RINSIN.
+
+    "Jim muvaffaqiyatsizlik" aynan shu nosozlikni oylab yashirgan edi.
+    """
+    from chaqimchi_ai.local import chain_processes, cloud_jobs
+
+    monkeypatch.setattr(
+        chain_processes,
+        "kill_chains",
+        lambda exclude=None: {"found": 3, "killed": 0, "remaining": 3, "pids": [1, 2, 3]},
+    )
+    sent = []
+    monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
+
+    cloud_jobs.run_one({"job_id": "j2", "kind": "clean_chains", "params": {}})
+
+    assert sent[-1]["result"]["remaining"] == 3

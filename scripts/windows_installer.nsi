@@ -494,7 +494,29 @@ Function .onInit
          Where-Object { $$_.CommandLine -match $$pat }; \
        if (-not $$left) { break }; \
        Kill-Match $$pat; \
-       Start-Sleep -Milliseconds 250 }"'
+       Start-Sleep -Milliseconds 250 }; \
+     $$left = @(Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
+       Where-Object { $$_.CommandLine -match $$pat }); \
+     $$dir = Join-Path $$env:ProgramData $\"Chaqimchi$\"; \
+     New-Item -ItemType Directory -Force -Path $$dir | Out-Null; \
+     @{ remaining = $$left.Count; at = (Get-Date).ToString($\"o$\") } | ConvertTo-Json -Compress | \
+       Set-Content -Path (Join-Path $$dir $\"update-warning.json$\") -Encoding UTF8"'
+  ; NATIJA TEKSHIRILADI va faylga yoziladi.
+  ;
+  ; Bungacha o'ldirish urinardi-yu, natijasi HECH QAYERDA
+  ; tekshirilmasdi: `nsExec::ExecToLog` javob kodi o'qilmaydi,
+  ; `Stop-Process -ErrorAction SilentlyContinue` esa xatoni yutadi.
+  ; Muvaffaqiyatsiz bo'lsa yangilanish baribir davom etardi va ortda
+  ; tirik zombi qolardi.
+  ;
+  ; 2026-08-26 da oqibati o'lchandi: do'kon kompyuterida BESHTA zanjir
+  ; bir vaqtda ishlayotgan edi (0.6.13, 0.6.16, 0.6.17, 0.6.18, 0.6.19).
+  ; Har chegara jarayonlar soniga ko'payib ketardi.
+  ;
+  ; Yangilanish ATAYLAB to'xtatilmaydi — xavfsizlik tuzatishi yetib
+  ; borishi muhimroq.  Lekin endi holat `update-warning.json` ga
+  ; yoziladi, dastur uni heartbeat bilan yuboradi va admin panelda
+  ; qizil qator bo'lib chiqadi.
   Sleep 500
 FunctionEnd
 

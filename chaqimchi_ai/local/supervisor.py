@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import signal
 import subprocess
 import sys
 import threading
@@ -24,18 +23,13 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 
-from chaqimchi_ai.local import config_store, counters, paths
+from chaqimchi_ai.local import chain_processes, config_store, counters, paths
 
 logger = logging.getLogger(__name__)
 
 #: Zanjir shuncha soniyadan tez yiqilsa — bu "tugab qolish" emas, **xato**.
 #: Cheksiz qayta urinish diskni log bilan to'ldirardi va mijoz muammoni
 #: ko'rmasdan qolardi.
-#: Yetim zanjirni o'ldirishdan oldin holat fayli shundan yangi bo'lsin.
-#: Tirik zanjir statusni har necha soniyada yangilaydi, ya'ni bu
-#: chegara faqat PID qayta ishlatilishidan himoya qiladi.
-ORPHAN_STATUS_MAX_AGE_SEC = 120
-
 CRASH_WINDOW_SEC = 20
 
 #: Ketma-ket shuncha marta tez yiqilgandan keyin darhol qayta urinishni
@@ -74,6 +68,9 @@ class RetailSupervisor:
 
     def __init__(self) -> None:
         self._process: Optional[subprocess.Popen] = None
+        #: Oxirgi tozalash natijasi — heartbeat shu yerdan oladi.
+        #: `remaining` noldan katta bo'lsa yetimlar o'lmagan.
+        self.last_orphan_cleanup: Dict[str, Any] = {}
         # `RLock`: `restart()` qulfni ushlab turib `start()` ni chaqiradi.
         # Oddiy `Lock` bilan qulfni oraliqda bo'shatishga to'g'ri kelardi
         # va aynan o'sha oynada kuzatuvchi ip "to'xtatilgan" deb chiqib
@@ -148,45 +145,45 @@ class RetailSupervisor:
         return self._process is not None and self._process.poll() is None
 
     def _kill_orphan_chain(self) -> None:
-        """Oldingi dastur nusxasidan qolgan zanjirni to'xtatadi.
+        """Oldingi dastur nusxasidan qolgan zanjirlarni to'xtatadi.
 
         NEGA KERAK.  Supervisor faqat O'Z bolasini biladi
         (`self._process`).  Dastur yangilanganda eski nusxa o'ladi, uning
         bolasi esa **yetim qolib ishlashda davom etadi** — uni hech kim
         to'xtatmaydi.
 
-        2026-08-26 da oqibati o'lchandi: do'kon kompyuterida bir vaqtda
-        TO'RTTA zanjir ishlayotgan edi (hodisalardagi `edge_version`:
-        0.6.13, 0.6.16, 0.6.17 va 0.6.18 — to'rttasi ham o'sha daqiqada
+        2026-08-26 da oqibati o'lchandi: do'kon kompyuterida BESHTA
+        zanjir bir vaqtda ishlayotgan edi (`edge_version`: 0.6.13,
+        0.6.16, 0.6.17, 0.6.18, 0.6.19 — beshtasi ham o'sha daqiqada
         hodisa yuborardi).  Har chegara jarayonlar soniga ko'payib
         ketardi: yuz kadri soatlik shifti, davomat ro'yxati, kamera
         byudjeti.  Shu sabab bir necha reliz "ishlamayotgandek"
         ko'rindi — aslida ular ishlayotgan, lekin eski jarayonlar ham
         yonma-yon ishlayotgan edi.
 
-        Xavfsizlik: PID qayta ishlatilishi mumkin, shuning uchun holat
-        fayli **yangi** bo'lgandagina o'ldiramiz.  Tirik zanjir statusni
-        muntazam yangilab turadi; eski fayl esa allaqachon o'lgan
-        jarayonni bildiradi va uning PID'i begonaga tegishli bo'lishi
-        mumkin.
+        Ilgari bu yerda **bitta** PID (holat faylidagisi) o'ldirilardi.
+        Beshta yetim bo'lsa bu yetmaydi: har restartda bittadan
+        kamayardi.  Endi ro'yxat buyruq qatori bo'yicha olinadi va
+        hammasi bir yo'la to'xtatiladi.
+
+        Natija saqlanadi (`last_orphan_cleanup`) va heartbeat orqali
+        panelga chiqadi: `remaining` noldan katta bo'lsa o'ldirish
+        ishlamagan va buni KO'RISH kerak.
         """
+        own = {self._process.pid} if self._process is not None else set()
         try:
-            status = json.loads(paths.status_path().read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            result = chain_processes.kill_chains(exclude=own)
+        except Exception:  # noqa: BLE001 — tozalash zanjirni ko'tarishga to'sqinlik qilmasin
+            logger.exception("Eski zanjirlarni tozalashda kutilmagan xato")
             return
-        pid = status.get("pid")
-        updated_at = status.get("updated_at")
-        if not isinstance(pid, int) or pid <= 0 or not isinstance(updated_at, (int, float)):
-            return
-        if time.time() - float(updated_at) > ORPHAN_STATUS_MAX_AGE_SEC:
-            return  # eski fayl — jarayon allaqachon o'lgan
-        if self._process is not None and self._process.pid == pid:
-            return  # o'z bolamiz
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError, OSError):
-            return
-        logger.warning("Yetim qolgan zanjir to'xtatildi (pid %s)", pid)
+        if result["found"]:
+            logger.warning(
+                "Yetim zanjirlar: topildi %s, to'xtatildi %s, qoldi %s",
+                result["found"],
+                result["killed"],
+                result["remaining"],
+            )
+        self.last_orphan_cleanup = result
 
     def _spawn(self) -> None:
         # Yangi zanjirni ko'tarishdan OLDIN eskisini to'xtatamiz — aks

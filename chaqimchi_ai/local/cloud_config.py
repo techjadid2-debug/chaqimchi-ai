@@ -390,6 +390,13 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
             "found": int((status.get("demography") or {}).get("found") or 0),
             "off_reason": (status.get("demography") or {}).get("off_reason"),
         },
+        # Yangilanishdan keyin nechta eski zanjir tirik qolgan.
+        #
+        # 2026-08-26: do'kon kompyuterida BESHTA zanjir bir vaqtda
+        # ishlayotgani aniqlandi.  O'rnatuvchi ularni o'ldirishga
+        # urinardi, lekin natija hech qayerda tekshirilmasdi va
+        # nosozlik oylab sezilmadi.
+        "stale_chains": _stale_chains(),
         "app_version": __version__,
         "product_name": "Chaqimchi Windows",
         # Qurilmaning O'Z soati.  Ataylab `now()` — u xato bo'lsa ham
@@ -543,6 +550,36 @@ def live_request_path() -> Path:
 
 def live_frames_dir() -> Path:
     return paths.data_dir() / "live"
+
+
+def _stale_chains() -> Dict[str, Any]:
+    """O'rnatuvchi qoldirgan ogohlantirish + hozirgi holat.
+
+    Ikki manba: o'rnatuvchi yozgan `update-warning.json` (yangilanish
+    paytida nechta jarayon qolgani) va hozirgi jonli hisob.  Ikkalasi
+    ham nol bo'lsa kalit umuman qo'shilmaydi — panelda bo'sh qator
+    ko'rinmasin.
+    """
+    payload: Dict[str, Any] = {}
+    try:
+        data = json.loads(
+            (paths.data_dir() / "update-warning.json").read_text(encoding="utf-8")
+        )
+        if int(data.get("remaining") or 0) > 0:
+            payload["after_update"] = int(data["remaining"])
+            payload["at"] = str(data.get("at") or "")
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        from chaqimchi_ai.local import chain_processes
+
+        live = len(chain_processes.find_chains())
+        if live > 1:
+            # Bittasi normal (ishlab turgan zanjir), ortiqchasi — yetim.
+            payload["running"] = live
+    except Exception:  # noqa: BLE001 — nazorat heartbeat'ni to'xtatmasin
+        pass
+    return payload
 
 
 def _system_metrics(status: Dict[str, Any]) -> Dict[str, Any]:

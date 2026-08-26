@@ -1072,3 +1072,98 @@ def test_rate_limited_site_notifies_the_platform_admin(cloud_client, monkeypatch
     # Ikkinchi chaqiruv — takror xabar YO'Q (kuniga bir marta).
     asyncio.run(main._notify_rate_limited_sites())
     assert len(sent) == 1, "6 315 ta rad etish 6 315 ta xabar bo'lmasin"
+
+
+# ── Bitta kompyuterda bitta zanjir ───────────────────────────────────────
+#
+# 2026-08-26: do'kon kompyuterida BESHTA AI zanjiri bir vaqtda ishlayotgani
+# aniqlandi (edge_version 0.6.13 dan 0.6.19 gacha, beshtasi ham o'sha
+# daqiqada hodisa yuborardi).  Yangilanishdan keyin eskisi o'lmagan.
+# Har chegara jarayonlar soniga ko'payib ketardi va bir necha reliz
+# "ishlamayotgandek" ko'rindi.  Buni ko'rsatadigan birorta o'lchov yo'q edi.
+
+
+def _site_with_device(client, name: str = "Versiya"):
+    site = client.post(
+        "/api/v1/admin/sites", headers={"X-Cloud-Admin-Key": "test-admin"}, json={"name": name}
+    ).json()
+    device = client.post(
+        "/api/v1/devices/claim", json={"pairing_code": site["pairing_code"]}
+    ).json()
+    return site, {
+        "X-Site-Id": device["site_id"],
+        "X-Device-Id": device["device_id"],
+        "X-Device-Token": device["device_token"],
+    }
+
+
+def _send_event(client, headers, event_id: str, edge_version: str) -> None:
+    response = client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": event_id,
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "severity": "info",
+                    "edge_version": edge_version,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_one_version_per_site_is_healthy(cloud_client) -> None:
+    _site, headers = _site_with_device(cloud_client)
+    import cloud.main as main
+
+    _send_event(cloud_client, headers, "evt-a", "0.6.19")
+    _send_event(cloud_client, headers, "evt-b", "0.6.19")
+
+    assert main.multi_version_sites() == {}, "bitta versiya — nosozlik emas"
+
+
+def test_two_versions_from_one_site_are_flagged(cloud_client) -> None:
+    """Aynan shu holat jonli do'konda oylab sezilmadi."""
+    site, headers = _site_with_device(cloud_client)
+    import cloud.main as main
+
+    _send_event(cloud_client, headers, "evt-eski", "0.6.13")
+    _send_event(cloud_client, headers, "evt-yangi", "0.6.19")
+
+    flagged = main.multi_version_sites()
+    assert site["site_id"] in flagged
+    assert flagged[site["site_id"]] == {"0.6.13": 1, "0.6.19": 1}
+
+
+def test_multi_version_alert_reaches_the_admin_once_a_day(cloud_client, monkeypatch) -> None:
+    import asyncio
+
+    import cloud.main as main
+
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "555")
+    site, headers = _site_with_device(cloud_client, name="Besh zanjir")
+    _send_event(cloud_client, headers, "evt-1", "0.6.13")
+    _send_event(cloud_client, headers, "evt-2", "0.6.19")
+
+    sent: list = []
+
+    class FakeSender:
+        async def send_to(self, chat_id, text):
+            sent.append(text)
+            return True
+
+    monkeypatch.setattr(main.get_alerts(), "sender", FakeSender())
+    main._multi_version_notified.clear()
+
+    asyncio.run(main._notify_multi_version_sites())
+    assert len(sent) == 1
+    assert "Besh zanjir" in sent[0]
+    assert "0.6.13" in sent[0] and "0.6.19" in sent[0]
+
+    # Takrorlanmaydi — har tekshiruvda xabar yuborilsa bu spam bo'lardi.
+    asyncio.run(main._notify_multi_version_sites())
+    assert len(sent) == 1

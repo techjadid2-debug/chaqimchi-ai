@@ -3056,7 +3056,15 @@ class CloudStore:
     #: Har topshiriq turi uchun muddat.  Qurilma javob bermasa job shu
     #: vaqtdan keyin `failed` bo'ladi va panel "javob kelmadi" deb
     #: yozadi — foydalanuvchi cheksiz aylanuvchi spinnerga qaramaydi.
-    JOB_DEADLINE_SEC = {"lan_scan": 120, "onvif": 60, "channels": 150, "probe": 45}
+    JOB_DEADLINE_SEC = {
+        "lan_scan": 120,
+        "onvif": 60,
+        "channels": 150,
+        "probe": 45,
+        # Yetim zanjirlarni tozalash — jarayon ro'yxatini olish va
+        # o'ldirish, sekundlar ichida tugaydi.
+        "clean_chains": 30,
+    }
     #: Natija hajmi chegarasi: 64 kanalli NVR ro'yxati ham bemalol
     #: sig'adi, buzuq qurilma esa bazani to'ldira olmaydi.
     JOB_RESULT_MAX_BYTES = 64 * 1024

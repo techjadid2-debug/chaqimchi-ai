@@ -536,6 +536,9 @@ class EdgeHeartbeatBody(BaseModel):
     #: Mijoz portreti: urinish bo'ldimi va yuz topildimi.
     #: `off_reason` bo'sh bo'lmasa funksiya umuman ishga tushmagan.
     demography: Dict[str, Any] = Field(default_factory=dict)
+    #: Yangilanishdan keyin tirik qolgan eski zanjirlar.  Bo'sh bo'lishi
+    #: KERAK: bitta kompyuterda bitta zanjir.
+    stale_chains: Dict[str, Any] = Field(default_factory=dict)
     #: Karnaydan ovoz berish natijasi: `played_file`, `played_tts`, `failed`.
     #:
     #: Model maydonisiz Pydantic uni JIMGINA tashlab yuboradi
@@ -1538,6 +1541,61 @@ _MAINTENANCE_STEP_SEC = 1_800
 _PURGE_EVERY_STEPS = 12
 
 
+#: Ko'p versiya ogohlantirishi shu obyekt uchun oxirgi marta qachon ketgani.
+_multi_version_notified: Dict[str, float] = {}
+
+
+def multi_version_sites(minutes: int = 15) -> Dict[str, Dict[str, int]]:
+    """Bir vaqtda BIR NECHTA versiyadan hodisa yuborayotgan obyektlar.
+
+    Bitta kompyuterda bitta zanjir bo'lishi kerak.  Ikkitadan ko'p
+    versiya — bu har doim nosozlik: yangilanishdan keyin eski zanjir
+    o'lmagan va endi ikkalasi bir xil kamerani o'qiydi.
+
+    2026-08-26: sinov do'konida BESHTA zanjir topildi (0.6.13 dan
+    0.6.19 gacha).  Oqibati bir necha reliz davomida sezilmadi —
+    har chegara jarayonlar soniga ko'payib ketardi va tuzatishlar
+    "ishlamayotgandek" ko'rinardi.
+    """
+    return {
+        site: versions
+        for site, versions in get_event_store().active_edge_versions(minutes=minutes).items()
+        if len(versions) > 1
+    }
+
+
+async def _notify_multi_version_sites() -> None:
+    """Ko'p versiyali obyekt haqida platforma adminiga xabar (kuniga bir marta)."""
+    recipients = _lead_recipient_ids()
+    if not recipients:
+        return
+    try:
+        affected = await asyncio.to_thread(multi_version_sites)
+    except Exception:  # noqa: BLE001 — nazorat xizmat halqasini to'xtatmasin
+        logger.exception("Versiya nazorati bajarilmadi")
+        return
+    now = time.monotonic()
+    for site_id, versions in affected.items():
+        last = _multi_version_notified.get(site_id)
+        if last is not None and now - last < RATE_LIMIT_NOTICE_EVERY_SEC:
+            continue
+        _multi_version_notified[site_id] = now
+        site = await asyncio.to_thread(get_store().get_site, site_id)
+        name = (site or {}).get("name") or site_id
+        listing = ", ".join(f"{version} ({count} ta)" for version, count in sorted(versions.items()))
+        text = (
+            f"⚠️ {name}: kompyuterda {len(versions)} ta AI zanjiri bir vaqtda ishlayapti.\n"
+            f"Versiyalar: {listing}\n"
+            "Yangilanishdan keyin eskisi o'lmagan — chegaralar ko'payib ketadi.\n"
+            "Yechim: admin panelda «Eski jarayonlarni tozalash»."
+        )
+        for chat_id in recipients:
+            try:
+                await get_alerts().sender.send_to(chat_id, text)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Versiya ogohlantirishi %s ga yetmadi: %s", chat_id, exc)
+
+
 async def _maintenance_loop() -> None:
     step = 0
     while True:
@@ -1545,6 +1603,7 @@ async def _maintenance_loop() -> None:
             if step % _PURGE_EVERY_STEPS == 0:
                 await asyncio.to_thread(_purge_expired_events)
             await _notify_rate_limited_sites()
+            await _notify_multi_version_sites()
         except asyncio.CancelledError:
             break
         except Exception:
@@ -1848,6 +1907,11 @@ async def health_deep(
             # `/health` esa "hammasi joyida" derdi.  Nosozlikni mijoz
             # aytganda bildik.  Bo'sh lug'at — hech narsa rad etilmagan.
             "rate_limited": ratelimit.limiter().rejections(),
+            # Bir vaqtda bir nechta versiyadan hodisa yuborayotgan
+            # obyektlar.  Bo'sh bo'lishi KERAK: bitta kompyuterda bitta
+            # zanjir.  Noldan katta bo'lsa yangilanishdan keyin eski
+            # jarayon o'lmagan va chegaralar ko'payib ketgan.
+            "multi_version_sites": multi_version_sites(),
         }
     return {
         "ok": ok,
@@ -4648,6 +4712,39 @@ async def admin_site_detail(
     # izi `INFO` access log edi va uni hech kim o'qimasdi.
     detail["rate_limited"] = ratelimit.limiter().rejections(site_id)
     return detail
+
+
+@app.post("/api/v1/admin/sites/{site_id}/jobs/clean-chains")
+async def admin_clean_chains(
+    site_id: str,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Do'kon kompyuteridagi yetim AI zanjirlarini to'xtatadi.
+
+    Nega ADMIN uchun, owner uchun emas: bu texnik xizmat amali.  Do'kon
+    egasi "jarayon" degan so'zni bilmasligi kerak va bunday tugmani
+    tasodifan bosishi ham mumkin emas.
+
+    Nega umuman kerak: yangilanishdan keyin eski zanjir o'lmasa u ESKI
+    kodda ishlashda davom etadi va o'zini to'xtatishni bilmaydi.
+    2026-08-26 da do'kon kompyuterida beshta zanjir bir vaqtda ishlab
+    turgan edi (`edge_version` 0.6.13 dan 0.6.19 gacha) va har chegara
+    jarayonlar soniga ko'payib ketgan edi.
+
+    Topshiriqni DASTUR bajaradi — u yangilangan, ya'ni yetimlar hech
+    narsani tushunishi shart emas.
+    """
+    site = get_store().get_site(site_id)
+    if not site:
+        raise HTTPException(404, "Obyekt topilmadi")
+    job = get_store().create_job(
+        site_id,
+        kind="clean_chains",
+        params={},
+        requested_by=_audit_actor(admin),
+    )
+    _wake_live_watchers(site_id)
+    return {"job": job, "poll_after_sec": 2}
 
 
 @app.get("/api/v1/admin/sites/{site_id}/onboarding")

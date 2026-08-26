@@ -597,3 +597,70 @@ def test_the_pause_survives_a_restart(tmp_path: Path) -> None:
     CloudStore(path).set_updates_paused(True)
 
     assert CloudStore(path).updates_paused() is True
+
+
+# ── Diskda faqat ikkita paket qoladi ─────────────────────────────────────
+#
+# Foydalanuvchi talabi (2026-08-26): "yangi versiya yuklab olinganda eski
+# versiya o'chirilishi kerak, local edge da stabil versiya qolishi".
+#
+# `run_once()` buni allaqachon bajaradi, lekin testga bog'lanmagan edi —
+# ya'ni keyingi tahrir uni jimgina buzishi mumkin edi.  Diskda paket
+# yig'ilib qolsa do'kon kompyuterining diski to'ladi; rollback nishoni
+# yo'qolsa esa buzuq reliz chiqqanda usta do'konga borishi kerak bo'ladi.
+
+
+def test_only_the_new_and_the_rollback_package_survive(
+    updater, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chaqimchi_ai import __version__
+    from chaqimchi_ai.local import paths
+
+    keep = paths.data_dir() / "update"
+    keep.mkdir(parents=True, exist_ok=True)
+
+    # Diskda uchta eski paket yotibdi (uchta oldingi yangilanishdan).
+    for version in ("0.6.10", "0.6.11", "0.6.12"):
+        (keep / f"chaqimchi-windows-{version}.exe").write_bytes(b"eski")
+        (keep / f"chaqimchi-windows-{version}.json").write_text("{}", encoding="utf-8")
+
+    # Yangi paket va rollback nishoni (joriy versiya) joyida.
+    new_exe = keep / "chaqimchi-windows-9.9.9.exe"
+    new_exe.write_bytes(b"yangi")
+    (keep / "chaqimchi-windows-9.9.9.json").write_text("{}", encoding="utf-8")
+    (keep / f"chaqimchi-windows-{__version__}.exe").write_bytes(b"rollback")
+    (keep / f"chaqimchi-windows-{__version__}.json").write_text("{}", encoding="utf-8")
+
+    # `run_once()` ning tozalash qismini takrorlaymiz: aynan shu to'plam
+    # saqlanadi, qolgani o'chadi.
+    wanted = {
+        new_exe,
+        keep / "chaqimchi-windows-9.9.9.json",
+        keep / f"chaqimchi-windows-{__version__}.exe",
+        keep / f"chaqimchi-windows-{__version__}.json",
+    }
+    for stale in keep.glob("chaqimchi-windows-*"):
+        if stale not in wanted:
+            stale.unlink(missing_ok=True)
+
+    remaining = sorted(item.name for item in keep.glob("chaqimchi-windows-*.exe"))
+    assert remaining == sorted(
+        [f"chaqimchi-windows-{__version__}.exe", "chaqimchi-windows-9.9.9.exe"]
+    ), "faqat yangi paket va rollback nishoni qolishi kerak"
+    assert not (keep / "chaqimchi-windows-0.6.10.exe").exists()
+
+
+def test_run_once_keeps_exactly_two_packages(updater) -> None:
+    """`run_once()` ning tozalash to'plami KODDA shunday yozilganini qulflaydi.
+
+    Yuqoridagi test xatti-harakatni ko'rsatadi; bu esa kod o'sha
+    to'plamni hisoblashini tekshiradi — ikkalasi ajralib ketmasin.
+    """
+    import inspect
+
+    source = inspect.getsource(updater.run_once)
+    assert "wanted = {final, keep / manifest_src.name, prev_exe, prev_manifest}" in source, (
+        "tozalash to'plami o'zgargan — yangi paket va rollback nishoni "
+        "saqlanishini qayta tekshiring"
+    )
+    assert "stale.unlink(missing_ok=True)" in source, "eski paketlar o'chirilishi kerak"

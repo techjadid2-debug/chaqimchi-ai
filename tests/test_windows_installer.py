@@ -699,3 +699,21 @@ def test_the_readme_explains_the_cloud_flow_first() -> None:
     assert "TO'XTAMAYDI" in readme
     # Qurilma sahifasi ham qoladi, lekin ikkinchi o'rinda.
     assert readme.index("ro'yxatdan o'ting") < readme.index("localhost")
+
+
+def test_installer_verifies_that_old_chains_actually_died() -> None:
+    """O'ldirish natijasi TEKSHIRILSIN va faylga yozilsin.
+
+    2026-08-26: o'rnatuvchida uchta o'ldirish qatlami bor edi va uchalasi
+    to'g'ri yozilgan edi — lekin natijani hech kim tekshirmasdi.
+    `nsExec::ExecToLog` javob kodi o'qilmaydi, `Stop-Process
+    -ErrorAction SilentlyContinue` esa xatoni yutadi.  Oqibati: do'kon
+    kompyuterida BESHTA zanjir bir vaqtda ishlab turgan edi
+    (`edge_version` 0.6.13 dan 0.6.19 gacha) va buni oylab hech kim
+    sezmadi.
+    """
+    source = NSIS.read_text(encoding="utf-8")
+    assert "update-warning.json" in source, (
+        "o'ldirishdan keyin qolgan jarayonlar soni faylga yozilishi kerak"
+    )
+    assert "remaining = $$left.Count" in source, "qolganlar SANALISHI kerak"

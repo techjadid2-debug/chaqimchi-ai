@@ -163,6 +163,55 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
+### 2026-08-26 — Nega eski jarayonlar o'chmadi: javob va yechim
+Nima: o'rnatuvchida eski zanjirni o'ldiradigan **uchta** qatlam bor va
+uchalasi to'g'ri yozilgan.  Muammo mantiqda emas — **natija hech qayerda
+tekshirilmasdi**: `nsExec::ExecToLog` javob kodi o'qilmaydi,
+`Stop-Process -ErrorAction SilentlyContinue` xatoni yutadi, uchinchi
+qatlam esa windowsiz jarayonni printsipial topa olmaydi.  O'ldirish
+yiqilsa yangilanish baribir davom etardi va ortda tirik zombi qolardi.
+
+**Bu uchinchi marta takrorlandi** — `windows_installer.nsi` ning o'zida
+0.6.9 dagi xuddi shu holat haqida izoh bor.  Har safar mantiq
+kuchaytirildi, tekshiruv esa qo'shilmadi.
+
+Beshta ish:
+
+1. **`chaqimchi_ai/local/chain_processes.py`** (yangi) —
+   `find_chains()` / `kill_chains()`.  Mantiq NSIS ichidagi PowerShell
+   satrlaridan modulga ko'chdi: endi u testlanadi va uchta joyga xizmat
+   qiladi (supervisor, masofaviy topshiriq, heartbeat).  `kill_chains()`
+   **hammasini** o'ldiradi — ilgari holat faylidagi bitta PID edi va
+   beshta yetimda har restartda bittadan kamayardi.
+2. **O'rnatuvchi natijani tekshiradi** — qolgan jarayonlar sanalib
+   `update-warning.json` ga yoziladi.  Yangilanish ataylab
+   to'xtatilmaydi (foydalanuvchi qarori): xavfsizlik tuzatishi yetib
+   borishi muhimroq, lekin holat endi ko'rinadi.
+3. **Heartbeat `stale_chains` yuboradi** — admin panelda qizil qator:
+   "N ta zanjir bir vaqtda ishlayapti".
+4. **Masofadan tozalash** — `clean_chains` topshirig'i va admin
+   panelda tugma.  Muhim nuqta: topshiriqni **dastur** bajaradi, ya'ni
+   eski yetimlar hech narsani tushunishi shart emas.
+5. **Cloud o'zi sezadi** (eng qimmatlisi, relizsiz):
+   `multi_version_sites()` — bitta obyektdan bir nechta `edge_version`
+   kelsa admin Telegramiga kuniga bir marta xabar va `/health/deep` da
+   `multi_version_sites`.  Bu nosozlikni oylar oldin ushlagan bo'lardi.
+
+Fayllar bo'yicha esa hammasi joyida edi: `updater.run_once()` yangi
+paket va rollback nishonini qoldirib, qolganini o'chiradi.  Endi bu
+testga bog'landi (`test_windows_update.py`).
+
+Qayerda: `chaqimchi_ai/local/chain_processes.py` (yangi),
+`local/supervisor.py`, `local/cloud_jobs.py`, `local/cloud_config.py`,
+`scripts/windows_installer.nsi`, `cloud/event_store.py`
+(`active_edge_versions`), `cloud/main.py`, `cloud/store.py`,
+`cloud/static/admin.html`.
+Test: 1805 ta o'tdi (avval 1799).
+
+Diqqat: yagona yiqilgan test — ma'lum beqaror
+`test_cloud_load.py::test_clip_retention_is_configurable` (yolg'iz
+o'tadi, "Ochiq muammolar" da qayd etilgan).
+
 ### 2026-08-26 — Do'kon kompyuterida TO'RTTA zanjir ishlayotgan ekan
 Nima: bir necha relizdan beri "tuzatish ishlamayapti" degan holat bor
 edi.  Sabab topildi va u kutilganidan jiddiyroq.

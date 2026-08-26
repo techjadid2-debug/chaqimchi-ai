@@ -163,6 +163,64 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
+### 2026-08-26 — Do'kon kompyuterida TO'RTTA zanjir ishlayotgan ekan
+Nima: bir necha relizdan beri "tuzatish ishlamayapti" degan holat bor
+edi.  Sabab topildi va u kutilganidan jiddiyroq.
+
+**Dalil.** Hodisalardagi `edge_version` bir vaqtda to'rtta qiymat
+ko'rsatdi va to'rttasi ham o'sha daqiqada hodisa yuborardi:
+
+| edge_version | hodisa | oxirgisi |
+|---|---|---|
+| 0.6.13 | 528 | 13:12 |
+| 0.6.16 | 505 | 13:12 |
+| 0.6.17 | 71 | 13:06 |
+| 0.6.18 | 4 | 13:12 |
+
+**Sabab.** `RetailSupervisor` faqat O'Z bolasini biladi
+(`self._process`).  Dastur yangilanganda eski nusxa o'ladi, uning bolasi
+esa **yetim qolib ishlashda davom etadi** — uni hech kim to'xtatmaydi.
+Har yangilanish bitta zombi qoldirgan.
+
+**Nima uchun bu hamma narsani buzdi.** Har chegara jarayonlar soniga
+ko'payib ketardi: yuz kadri soatlik shifti (40 emas, 160), davomat
+kamerasi ro'yxati (eski jarayonlarda eski ro'yxat), kamera byudjeti.
+Shuning uchun:
+
+* 0.6.17 dagi `FACE_EMITS_PER_HOUR` "ushlab turmagandek" ko'rindi;
+* davomatni bitta kameraga tushirish "yetmagandek" ko'rindi;
+* 0.6.18 dagi 96 px chegarasi umuman ta'sir qilmadi.
+
+Uchalasi ham aslida ISHLAYOTGAN edi — faqat eski jarayonlar ham yonma-yon
+ishlayotgan edi.
+
+**Ikki himoya qo'shildi** (bir-birini to'ldiradi):
+
+1. `supervisor._kill_orphan_chain()` — yangi zanjirni ko'tarishdan
+   oldin holat faylidagi PID bo'yicha eskisini to'xtatadi.  PID qayta
+   ishlatilishidan himoya: holat fayli 120 soniyadan yangi bo'lsagina
+   o'ldiriladi.
+2. `service.claim_ownership()` / `_still_the_owner()` — yangi zanjir
+   egalik faylini qayta yozadi, eski jarayon buni ko'rib **o'zi**
+   chiqadi.  Supervisor yetimlarni ko'rmaydi, shuning uchun ikkinchi
+   himoya ichkaridan ishlaydi.  Fayl buzilsa `True` qaytadi: ishlab
+   turgan zanjirni to'xtatish nazoratsiz qolishdan yomonroq.
+
+Qayerda: `chaqimchi_ai/local/supervisor.py`,
+`chaqimchi_ai/retail/service.py` (`write_status` ga `pid` qo'shildi).
+Test: `test_supervisor_recovery.py` (4 ta), `test_retail_service.py`
+(3 ta) — jami 1799 test o'tdi.
+
+**DIQQAT — bir martalik qo'l ishi.** Hozirgi to'rtta yetim ESKI kodda
+ishlayapti va ularda egalik tekshiruvi yo'q.  0.6.19 o'rnatilgach
+supervisor bittasini o'ldiradi, qolganlari esa **do'kon kompyuteri
+qayta yuklanmaguncha** ishlashda davom etadi.  Eng ishonchli yo'l:
+mijozdan kompyuterni bir marta qayta yuklashni so'rash.
+
+Tekshirish: `SELECT edge_version, count(*) FROM production_events
+WHERE occurred_at > '<qayta yuklashdan keyin>' GROUP BY 1;` — faqat
+bitta versiya qolishi kerak.
+
 ### 2026-08-26 — Sayt, SEO va sotilayotgan funksiyalarni tekshirish
 Nima: footer tuzatildi, Google uchun razmetka qo'shildi, admin
 sozlamalaridan ichki narx jadvali olindi va sotuv sahifasi faqat

@@ -543,6 +543,16 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
     streams = stats.get("streams") or {}
     payload = {
         "updated_at": time.time() if now is None else float(now),
+        # Jarayon raqami — supervisor ORFAN zanjirni shu bo'yicha topadi.
+        #
+        # 2026-08-26 da do'kon kompyuterida TO'RTTA zanjir bir vaqtda
+        # ishlayotgani aniqlandi (0.6.13, 0.6.16, 0.6.17 va 0.6.18 —
+        # hodisalardagi `edge_version` shuni ko'rsatdi).  Sabab: dastur
+        # yangilanganda eski nusxaning bolasi yetim qolardi va uni hech
+        # kim to'xtatmasdi.  Oqibati: har chegara (yuz kadri shifti,
+        # davomat ro'yxati, kamera byudjeti) jarayonlar soniga ko'payib
+        # ketardi va tuzatishlar "ishlamayotgandek" ko'rinardi.
+        "pid": os.getpid(),
         "cameras_configured": len(streams),
         "cameras_active": sum(
             1 for item in streams.values() if item.get("connected") and not item.get("offline")
@@ -607,6 +617,35 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
             pass
 
 
+def owner_path() -> Path:
+    """Qaysi jarayon HOZIR zanjir egasi ekani yozilgan fayl."""
+    from chaqimchi_ai.local import paths as local_paths
+
+    return local_paths.data_dir() / "retail-owner.json"
+
+
+def claim_ownership() -> None:
+    """Shu jarayonni zanjir egasi deb belgilaydi (startda chaqiriladi)."""
+    path = owner_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+
+
+def _still_the_owner() -> bool:
+    """Egalik hali shu jarayondami.
+
+    Fayl yo'q yoki o'qilmasa **True** qaytadi: egalik mexanizmi
+    buzilgani sabab ishlab turgan zanjirni to'xtatish undan ham yomon —
+    do'kon nazoratsiz qolardi.
+    """
+    try:
+        data = json.loads(owner_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    pid = data.get("pid")
+    return not isinstance(pid, int) or pid == os.getpid()
+
+
 def _watcher(
     settings: AppSettings, base_dir: Path, stopped: threading.Event
 ) -> Callable[[Dict[str, Any]], None]:
@@ -627,6 +666,22 @@ def _watcher(
 
     def observe(stats: Dict[str, Any]) -> None:
         _log_stats(stats)
+        # Egalik tekshiruvi HAMMA narsadan oldin.
+        #
+        # Supervisor yangi zanjirni ko'targanda egalik faylini qayta
+        # yozadi.  Eski jarayon buni ko'rib O'ZI chiqib ketadi — bu
+        # yagona ishonchli yo'l: supervisor faqat o'z bolasini biladi,
+        # oldingi dastur nusxasidan qolgan yetimlarni esa umuman
+        # ko'rmaydi.
+        #
+        # 2026-08-26 da do'kon kompyuterida TO'RTTA zanjir bir vaqtda
+        # ishlayotgani aniqlandi (`edge_version`: 0.6.13, 0.6.16, 0.6.17,
+        # 0.6.18).  Har chegara jarayonlar soniga ko'payib ketardi va
+        # bir necha reliz "ishlamayotgandek" ko'rindi.
+        if not _still_the_owner():
+            logger.warning("Yangi zanjir ishga tushdi — bu jarayon chiqadi")
+            stopped.set()
+            return
         write_status(status, stats)
         if not settings.retail.restart_on_config_change:
             return
@@ -774,6 +829,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     config_path = _resolve(base_dir, args.config) if args.config else default_config_path(base_dir)
     logger.info("Konfig: %s", config_path)
     settings = AppSettings.load(config_path, base_dir=base_dir)
+
+    # Egalikni DARHOL olamiz: shu daqiqadan boshlab eski zanjirlar
+    # (agar ular yangi kod bilan ishlayotgan bo'lsa) o'zlarini
+    # to'xtatishadi.  Supervisor ham `_kill_orphan_chain()` bilan
+    # eskisini urib qo'yadi — ikkala himoya bir-birini to'ldiradi:
+    # biri eski jarayonni tashqaridan, ikkinchisi ichkaridan yopadi.
+    claim_ownership()
 
     stopped = threading.Event()
     sync_cfg = settings.cloud_sync

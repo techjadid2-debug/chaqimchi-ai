@@ -505,3 +505,65 @@ def test_checkout_alerts_ride_the_queue_feature(tmp_path: Path) -> None:
         event = EdgeEvent(event_type=kind, camera_id="camera-02", severity="warning")
         assert filter_for("queue_length", queue_dir)(event) is True, kind
         assert filter_for("person_count", counting_dir)(event) is False, kind
+
+
+# ── Egalik: bitta kompyuterda BITTA zanjir ───────────────────────────────
+#
+# 2026-08-26: do'kon kompyuterida to'rtta zanjir bir vaqtda ishlayotgani
+# aniqlandi (`edge_version` 0.6.13, 0.6.16, 0.6.17, 0.6.18 — to'rttasi
+# ham o'sha daqiqada hodisa yuborardi).  Dastur yangilanganda eski
+# nusxaning bolasi yetim qolardi va har chegara jarayonlar soniga
+# ko'payib ketardi.
+
+
+def test_ownership_is_claimed_and_recognised(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    import importlib
+
+    from chaqimchi_ai.local import paths as local_paths
+    from chaqimchi_ai.retail import service
+
+    importlib.reload(local_paths)
+
+    service.claim_ownership()
+    assert service._still_the_owner()
+
+
+def test_a_newer_process_takes_ownership_away(tmp_path, monkeypatch) -> None:
+    """Yangi zanjir egalikni olsa, eskisi buni ko'radi va chiqadi."""
+    import importlib
+    import json
+    import os
+
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    from chaqimchi_ai.local import paths as local_paths
+    from chaqimchi_ai.retail import service
+
+    importlib.reload(local_paths)
+
+    service.claim_ownership()
+    # Boshqa jarayon egalikni oldi.
+    service.owner_path().write_text(json.dumps({"pid": os.getpid() + 1}), encoding="utf-8")
+
+    assert not service._still_the_owner()
+
+
+def test_a_broken_owner_file_never_stops_a_working_chain(tmp_path, monkeypatch) -> None:
+    """Mexanizm buzilsa zanjir ISHLASHDA DAVOM ETADI.
+
+    To'xtatish undan ham yomon: do'kon nazoratsiz qolardi.
+    """
+    import importlib
+
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    from chaqimchi_ai.local import paths as local_paths
+    from chaqimchi_ai.retail import service
+
+    importlib.reload(local_paths)
+
+    service.owner_path().parent.mkdir(parents=True, exist_ok=True)
+    service.owner_path().write_text("buzuq json", encoding="utf-8")
+    assert service._still_the_owner()
+
+    service.owner_path().unlink()
+    assert service._still_the_owner()

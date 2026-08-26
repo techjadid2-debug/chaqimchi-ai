@@ -190,3 +190,103 @@ def test_a_recovered_chain_forgets_the_cooldown(
 
     assert instance._cooldown_step == 0
     assert instance._last_error == ""
+
+
+# ── Yetim zanjir ─────────────────────────────────────────────────────────
+#
+# 2026-08-26 jonli topilmasi: do'kon kompyuterida TO'RTTA tahlil jarayoni
+# bir vaqtda ishlayotgan edi — hodisalardagi `edge_version` 0.6.13,
+# 0.6.16, 0.6.17 va 0.6.18 ni ko'rsatdi va to'rttasi ham o'sha daqiqada
+# hodisa yuborardi.  Sabab: dastur yangilanganda eski nusxaning bolasi
+# yetim qolardi.  Oqibati: har chegara jarayonlar soniga ko'payib
+# ketardi va bir necha reliz "ishlamayotgandek" ko'rindi.
+
+
+def _status_with_pid(tmp_path, pid: int, *, age_sec: float = 0.0) -> None:
+    import json
+    import time
+
+    from chaqimchi_ai.local import paths
+
+    paths.status_path().write_text(
+        json.dumps({"pid": pid, "updated_at": time.time() - age_sec}),
+        encoding="utf-8",
+    )
+
+
+def test_a_live_orphan_is_terminated_before_spawning(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    import importlib
+
+    from chaqimchi_ai.local import paths, supervisor
+
+    importlib.reload(paths)
+    importlib.reload(supervisor)
+
+    _status_with_pid(tmp_path, 424242)
+    killed = []
+    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+
+    supervisor.RetailSupervisor()._kill_orphan_chain()
+
+    assert killed and killed[0][0] == 424242
+
+
+def test_a_stale_status_file_is_left_alone(tmp_path, monkeypatch) -> None:
+    """Eski fayl — jarayon o'lgan; PID begonaga tegishli bo'lishi mumkin."""
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    import importlib
+
+    from chaqimchi_ai.local import paths, supervisor
+
+    importlib.reload(paths)
+    importlib.reload(supervisor)
+
+    _status_with_pid(tmp_path, 424242, age_sec=supervisor.ORPHAN_STATUS_MAX_AGE_SEC + 60)
+    killed = []
+    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append(pid))
+
+    supervisor.RetailSupervisor()._kill_orphan_chain()
+
+    assert killed == [], "eski PID begona jarayonga tegishli bo'lishi mumkin"
+
+
+def test_our_own_child_is_never_killed(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    import importlib
+
+    from chaqimchi_ai.local import paths, supervisor
+
+    importlib.reload(paths)
+    importlib.reload(supervisor)
+
+    _status_with_pid(tmp_path, 777)
+    killed = []
+    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append(pid))
+
+    manager = supervisor.RetailSupervisor()
+
+    class Child:
+        pid = 777
+
+    manager._process = Child()
+    manager._kill_orphan_chain()
+
+    assert killed == []
+
+
+def test_missing_status_file_is_harmless(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    import importlib
+
+    from chaqimchi_ai.local import paths, supervisor
+
+    importlib.reload(paths)
+    importlib.reload(supervisor)
+
+    killed = []
+    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: killed.append(pid))
+
+    supervisor.RetailSupervisor()._kill_orphan_chain()  # fayl yo'q
+
+    assert killed == []

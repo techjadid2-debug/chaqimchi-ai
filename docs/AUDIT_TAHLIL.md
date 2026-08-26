@@ -73,9 +73,9 @@ joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
 | O-3 | Faqat o'zbek tili — rus tili yo'q | O'rta | L |
 | O-4 | Analitika yo'q — konversiya o'lchanmaydi | O'rta | S |
 
-Qolganlari: O-5 (narx dollarga bog'langan),
-O-7 (JWT kaliti — serverda tekshirilsin), O-8 (token bekor qilib
-bo'lmaydi), O-9 (rate limit xotirada).
+Qolganlari: O-5 (narx dollarga bog'langan), O-8 (token bekor qilib
+bo'lmaydi), O-9 (rate limit xotirada). O-7 (JWT kaliti) serverda
+tekshirildi — **muammo yo'q**, kalit qo'yilmagan.
 
 ---
 
@@ -1206,9 +1206,13 @@ Qolgan yagona A ishi — **A9**: serverda
 `grep CHAQIMCHI_JWT_SECRET .env.production`. Buni faqat server
 egasi bajara oladi (10 daqiqa).
 
-**DIQQAT:** A0–A8 kodda tayyor, lekin **hali deploy qilinmagan** —
-jonli saytda eski matnlar va ochiq `/health/deep` turibdi. Deploy
-B4 bilan birga: `./scripts/deploy_cloud.sh`.
+**DEPLOY QILINDI (2026-08-26).** Cloud 0.6.15 jonli, hamma konteyner
+healthy. Jonli tekshiruv o'tdi: `/oferta` 200, hudud va'dasi yo'q,
+Edu'da faqat ikkita modul sotiladi, `/health/deep` begonaga raqam
+bermaydi, o'rnatish vaqti bir xil.
+
+**Qolgan yagona deploy ishi — B4:** mijoz hamon 0.6.13 yuklab oladi
+(cloud esa 0.6.15). Build va imzo kaliti kerak.
 
 Ochiq qolgan yagona kritik — **K-3 (ommaviy oferta)**, u B1 da.
 
@@ -1229,8 +1233,8 @@ yuborilmasin**.
 | ~~A6~~ | ✅ **BAJARILDI** — fayl nomi relizdan olinadi, eski noto'g'ri nom hamma sahifadan ketdi | `cloud/static/install.html`, `installer-guide.html` | Frontend | — |
 | ~~A7~~ | ✅ **BAJARILDI** — ikkita halol raqam: mijoz 30 daqiqagacha, usta 45–90 daqiqa | 5 ta sahifa | Product | — |
 | ~~**A0**~~ | ✅ **BAJARILDI** — biometrik marshrutlarga rol tekshiruvi (KRITIK-4) | `cloud/main.py:842` + 7 ta marshrut | Security | — |
-| ~~A8~~ | ✅ **BAJARILDI** (kodda) — raqamlar admin kaliti ostida, monitoring uchun 503 ochiq qoldi | `cloud/main.py` | DevOps | deploy kutilmoqda |
-| A9 | Serverda `grep CHAQIMCHI_JWT_SECRET .env.production` — bor bo'lsa o'chirish (O'RTA-7) | server | DevOps | 10 daqiqa |
+| ~~A8~~ | ✅ **BAJARILDI va DEPLOY QILINDI** — raqamlar admin kaliti ostida, monitoring uchun 503 ochiq qoldi | `cloud/main.py` | DevOps | — |
+| ~~A9~~ | ✅ **TEKSHIRILDI** — `CHAQIMCHI_JWT_SECRET` serverda qo'yilmagan, kalit ajratilishi buzilmagan | server | DevOps | — |
 
 **A0 birinchi bajarilsin** — u eng arzon (30 daqiqa) va eng qimmat
 xatoni yopadi: biometrik ma'lumot xodimga berilgan yozma va'da

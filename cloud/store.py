@@ -871,6 +871,24 @@ class CloudStore:
             raise ValueError("Kamera topilmadi")
         return until
 
+    def stop_live(self, site_id: str, camera_id: str) -> bool:
+        """Jonli ko'rishni DARHOL to'xtatadi.
+
+        Muddat o'zi ham tugaydi, lekin 90 soniya kutish bekorga:
+        panel yopilgandan keyin qurilma kadr yuborishda davom etadi va
+        kunlik `live-frame` byudjetini (4 000) yeydi.  Ega tugmani
+        o'chirganda oqim ham o'chsin.
+        """
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET live_until=NULL,live_overlay=0,updated_at=? "
+            "WHERE site_id=? AND camera_id=? AND enabled=1",
+            (_iso(_utc_now()), site_id, camera_id),
+        )
+        conn.commit()
+        conn.close()
+        return bool(cursor.rowcount)
+
     def live_cameras(self, site_id: str) -> List[Dict[str, Any]]:
         """Hozir jonli rejimda kutilayotgan kameralar (muddat bilan)."""
         now = _iso(_utc_now())
@@ -943,6 +961,23 @@ class CloudStore:
         conn = self._connect()
         row = conn.execute(
             "SELECT live_key FROM site_cameras WHERE site_id=? AND camera_id=?",
+            (site_id, camera_id),
+        ).fetchone()
+        conn.close()
+        return str(row[0]) if row and row[0] else None
+
+    def camera_frame_at(self, site_id: str, camera_id: str, *, live: bool) -> Optional[str]:
+        """Kadr QACHON kelgani (ISO) — panel uni eskirganini bilishi uchun.
+
+        Usiz panel o'z soatini ko'rsatardi: qurilma kadr yuborishni
+        to'xtatsa ham server oxirgi saqlangan rasmni qaytaraveradi,
+        panel esa har muvaffaqiyatli javobda vaqtni yangilardi.
+        Natijada muzlagan rasm ustida soat tikillab turardi.
+        """
+        column = "live_at" if live else "preview_at"
+        conn = self._connect()
+        row = conn.execute(
+            f"SELECT {column} FROM site_cameras WHERE site_id=? AND camera_id=?",
             (site_id, camera_id),
         ).fetchone()
         conn.close()

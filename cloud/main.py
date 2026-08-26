@@ -565,6 +565,10 @@ class EdgeHeartbeatBody(BaseModel):
 
 class LiveRequestBody(BaseModel):
     overlay: bool = False
+    #: `true` — jonli ko'rishni darhol to'xtatish.  Muddat o'zi ham
+    #: tugaydi (90 s), lekin panel yopilgandan keyingi o'sha 90 soniya
+    #: kunlik kadr byudjetini bekorga yeydi.
+    stop: bool = False
 
 
 class ConfigAckBody(BaseModel):
@@ -4370,11 +4374,14 @@ async def _camera_preview_response(
     except FileNotFoundError as exc:
         raise HTTPException(404, "Kamera rasmi topilmadi") from exc
     # Kamera qayta qaratilganda eski rasm ko'rinib qolmasin.
-    return Response(
-        content=content,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "no-store"},
-    )
+    headers = {"Cache-Control": "no-store"}
+    # Kadrning O'Z sanasi: panel shu bilan "jonli"mi yoki muzlaganmi
+    # degan savolga halol javob beradi.  Klient soati yaramaydi — u
+    # server eski rasmni qaytarganda ham oldinga yuraveradi.
+    frame_at = store.camera_frame_at(site_id, camera_id, live=live)
+    if frame_at:
+        headers["X-Frame-At"] = frame_at
+    return Response(content=content, media_type="image/jpeg", headers=headers)
 
 
 @app.get("/api/v1/installer/assignments")
@@ -4590,6 +4597,11 @@ async def owner_request_live(
     kompyuteri va VPS uchun eng arzon "jonli" — kadr allaqachon tahlil
     uchun xotirada turadi, faqat siqib yuboriladi.
     """
+    if body and body.stop:
+        if not get_store().stop_live(owner.site_id, camera_id):
+            raise HTTPException(404, "Kamera topilmadi")
+        _wake_live_watchers(owner.site_id)
+        return {"ok": True, "until": None, "overlay": False, "first_frame_wait_sec": 0}
     try:
         until = get_store().request_live(
             owner.site_id, camera_id, overlay=bool(body and body.overlay)
@@ -6449,6 +6461,41 @@ async def owner_events(
     return {"events": events}
 
 
+@app.get("/api/v1/owner/notifications")
+async def owner_notifications(
+    limit: int = 20,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Qo'ng'iroq uchun: o'qilmagan son va oxirgi ogohlantirishlar.
+
+    Nega alohida marshrut (panel allaqachon `/owner/dashboard` oladi):
+    qo'ng'iroq dashboard'dan tez-tez yangilanishi kerak, dashboard esa
+    og'ir — u salomatlik, hisobot va obunani ham yig'adi.  Ilgari son
+    aynan dashboard'dagi hodisalar ro'yxatining uzunligi edi
+    (`data.events.length`) va u **hech qachon kamaymasdi**.
+
+    «O'qildi» belgisi HAR A'ZO uchun alohida (`member_id`): egasi va
+    menejeri bir do'konda ishlaydi, lekin xabarlarni alohida o'qiydi.
+    """
+    result = get_event_store().notifications(owner.site_id, owner.member_id, limit=limit)
+    for item in result["events"]:
+        item["label"] = event_label(str(item.get("event_type", "")))
+    return result
+
+
+@app.post("/api/v1/owner/notifications/read")
+async def owner_notifications_read(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Hammasi o'qildi deb belgilaydi.
+
+    Rol talab qilinmaydi: menejer ham o'z ro'yxatini o'qiy oladi va
+    belgisi egasinikiga tegmaydi.
+    """
+    moment = get_event_store().mark_notifications_read(owner.site_id, owner.member_id)
+    return {"ok": True, "last_read_at": moment, "unread": 0}
+
+
 def _vision_ready(site_id: str) -> Dict[str, Any]:
     settings = get_event_store().vision_settings(site_id)
     if not settings["consented"]:
@@ -7989,6 +8036,13 @@ async def owner_face_events(
     limit: int = 30, owner: OwnerPrincipal = Depends(require_active_owner)
 ) -> Dict[str, Any]:
     require_attendance()
+    # Ro'yxatning O'ZI ham biometrik ma'lumot: javobda `person_name` va
+    # `person_id` bor, ya'ni "qaysi xodim qachon tanildi" degan savolga
+    # rasm ochmasdan javob beradi.  Yonidagi `/image` marshrutida bu
+    # tekshiruv bor edi, bu yerda esa unutilgan — aynan audit KRITIK-4
+    # yopgan sinf: o'qish marshrutlari yozish marshrutlaridan orqada
+    # qolgan edi.
+    require_biometric_access(owner)
     return {"events": get_event_store().list_face_events(owner.site_id, limit=limit)}
 
 
@@ -8234,30 +8288,64 @@ async def owner_clip(
     return Response(content=content, media_type="video/mp4")
 
 
+#: Yuzga tegadigan hodisa turlari.  Platforma admini ularni ko'rishga
+#: HAQLI (`require_biometric_access` da `service_admin` bor), lekin
+#: ko'rgani IZSIZ qolmasligi kerak: xodimga imzolatilgan rozilik
+#: shabloni "kim ko'rdi" degan savolga javob berishni talab qiladi.
+BIOMETRIC_EVENT_TYPES = {"face_captured", "employee_seen"}
+
+
+def _audit_biometric_view(
+    admin: Optional[PortalPrincipal], site_id: str, event: Dict[str, Any], kind: str
+) -> None:
+    """Admin yuz kadri yoki klipini ochsa jurnalga yozadi.
+
+    Faqat biometrik hodisa uchun: har oddiy snapshot ko'rishni yozish
+    jurnalni shovqinga to'ldiradi va muhimini ko'rinmas qiladi.
+    """
+    if str(event.get("event_type") or "") not in BIOMETRIC_EVENT_TYPES:
+        return
+    get_store().audit_portal_action(
+        "biometrics.media.viewed",
+        actor_id=_audit_actor(admin),
+        target_type="site",
+        target_id=site_id,
+        detail={
+            "event_id": str(event.get("event_id") or ""),
+            "event_type": str(event.get("event_type") or ""),
+            "kind": kind,
+        },
+    )
+
+
 @app.get("/api/v1/admin/sites/{site_id}/events/{event_id}/snapshot")
 async def admin_event_snapshot(
-    site_id: str, event_id: str, _: None = Depends(require_admin)
+    site_id: str, event_id: str, admin: Optional[PortalPrincipal] = Depends(require_admin)
 ) -> Response:
     event = get_event_store().event(site_id, event_id)
     if not event or not event.get("snapshot_key"):
         raise HTTPException(404, "Snapshot topilmadi")
     try:
-        return Response(content=await media_get(event["snapshot_key"]), media_type="image/jpeg")
+        content = await media_get(event["snapshot_key"])
     except FileNotFoundError as exc:
         raise HTTPException(404, "Snapshot topilmadi") from exc
+    _audit_biometric_view(admin, site_id, event, "snapshot")
+    return Response(content=content, media_type="image/jpeg")
 
 
 @app.get("/api/v1/admin/sites/{site_id}/events/{event_id}/clip")
 async def admin_event_clip(
-    site_id: str, event_id: str, _: None = Depends(require_admin)
+    site_id: str, event_id: str, admin: Optional[PortalPrincipal] = Depends(require_admin)
 ) -> Response:
     event = get_event_store().event(site_id, event_id)
     if not event or not event.get("clip_key"):
         raise HTTPException(404, "Videoklip topilmadi")
     try:
-        return Response(content=await media_get(event["clip_key"]), media_type="video/mp4")
+        content = await media_get(event["clip_key"])
     except FileNotFoundError as exc:
         raise HTTPException(404, "Videoklip topilmadi") from exc
+    _audit_biometric_view(admin, site_id, event, "clip")
+    return Response(content=content, media_type="video/mp4")
 
 
 #: Tugma ma'lumoti — `speak:deter` ko'rinishida.  Telegram `callback_data`

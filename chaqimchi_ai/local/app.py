@@ -728,6 +728,16 @@ async def onvif_probe(body: OnvifBody) -> Dict[str, Any]:
             }
         )
 
+    # Ovoz FAQAT ishlaydigan oqim uchun tekshiriladi.  Har profil uchun
+    # `DESCRIBE` yuborilsa sehrgar profil soniga ko'paygan kutishni
+    # oladi; mijoz esa baribir shu bitta oqimni ishlatadi.  Kadr
+    # olingandan keyin javob keshdan keladi, ya'ni bu deyarli bepul.
+    audio = camera_probe.AudioTrack()
+    if working_token:
+        working = next((item for item in streams if item["token"] == working_token), None)
+        if working:
+            audio = camera_probe.probe_audio(str(working["rtsp_url"]))
+
     return {
         "ok": True,
         "brand": onvif_client.normalise_brand(result.device.brand),
@@ -738,6 +748,15 @@ async def onvif_probe(body: OnvifBody) -> Dict[str, Any]:
         # Hech bir oqim ochilmasa sehrgar aniq sabab ko'rsatadi (odatda
         # H.265+ / Smart Codec).
         "verified": bool(working_token),
+        # Ovoz bilan ishlaydigan funksiyalar uchun: kamera mikrofon
+        # beradimi.  `verified` bo'lmasa javob "noma'lum" (present=False,
+        # codec bo'sh) — buni "ovozsiz" deb ko'rsatmaslik kerak.
+        "audio": {
+            "present": audio.present,
+            "codec": audio.codec,
+            "sample_rate": audio.sample_rate,
+            "checked": bool(working_token),
+        },
     }
 
 

@@ -51,6 +51,20 @@ WEEKDAYS = (
 MIN_BOTH_CAMERA_DEPARTURE_MINUTES = 30
 
 
+#: Qo'ng'iroqqa tushadigan hodisa darajalari.
+#:
+#: `info` ataylab YO'Q: unda `person_detected`, `line_crossed` va
+#: `face_captured` bor — gavjum do'konda kuniga minglab.  Ularni
+#: qo'shish "9+" ni abadiy qilib qo'yardi, ya'ni tuzatilayotgan
+#: muammoning aynan o'zini takrorlardi.
+#:
+#: Telegram darajasidan (`telegram_min_severity`) MUSTAQIL: u kanal
+#: sozlamasi ("telefonimga qaysi xabar kelsin"), bu esa panelda
+#: e'tibor talab qiladigan narsalar ro'yxati.  Ega Telegramni
+#: o'chirib qo'ysa ham panelda hammasini ko'radi.
+NOTIFICATION_SEVERITIES: Tuple[str, ...] = ("critical", "warning")
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -403,8 +417,27 @@ class EventStore:
                 created_at TEXT NOT NULL
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS notification_reads (
+                site_id TEXT NOT NULL,
+                principal_id TEXT NOT NULL,
+                last_read_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, principal_id)
+            )
+            """,
             "CREATE INDEX IF NOT EXISTS idx_prod_events_site_time "
             "ON production_events(site_id,occurred_at)",
+            # Qo'ng'iroq ikki xil so'rov qiladi va ular IKKI XIL ustun
+            # bo'yicha ishlaydi, shuning uchun indeks ham ikkita:
+            #   * sanash  — `created_at` (bulut qachon bilgani);
+            #   * ro'yxat — `occurred_at` (hodisa qachon sodir bo'lgani).
+            # Qo'ng'iroq tez-tez so'raladi, jadval esa millionlab qatorga
+            # o'sadi — to'liq skan bu yerda qimmat.
+            "CREATE INDEX IF NOT EXISTS idx_prod_events_site_sev_created "
+            "ON production_events(site_id,severity,created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_prod_events_site_sev_time "
+            "ON production_events(site_id,severity,occurred_at)",
             "CREATE INDEX IF NOT EXISTS idx_owner_members_telegram "
             "ON owner_members(telegram_id,active)",
             "CREATE INDEX IF NOT EXISTS idx_owner_login_links_hash "
@@ -743,6 +776,11 @@ class EventStore:
             except ValueError:
                 metadata = {}
             row["face"] = metadata.get("face") or {}
+            # Saqlagich kaliti brauzerga CHIQMAYDI — rasm har doim
+            # autentifikatsiyali `/faces/events/{id}/image` orqali
+            # beriladi.  `_decode_event(public=True)` da bu tamoyil
+            # allaqachon bor edi, galereya yo'lida esa unutilgan edi.
+            row["has_image"] = bool(row.pop("snapshot_key", None))
             events.append(row)
         return events
 
@@ -876,6 +914,99 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [self._decode_event(row, public=True) for row in rows]
+
+    # ── Bildirishnomalar ──────────────────────────────────────────────────
+    #
+    # Qo'ng'iroqdagi son ilgari `data.events.length` edi — ya'ni panel
+    # olgan oxirgi 12 ta hodisa soni.  U hech qachon kamaymasdi va gavjum
+    # do'konda abadiy "9+" bo'lib turardi.  Endi son SERVERDA hisoblanadi
+    # va "o'qildi" belgisi ham serverda: ega telefonda ko'rgan xabar
+    # kompyuterda ham o'qilgan bo'lib turishi kerak.
+
+    def mark_notifications_read(self, site_id: str, principal_id: str) -> str:
+        """«O'qildi» belgisini hozirgi vaqtga suradi.
+
+        Har hodisa uchun alohida qator ATAYLAB emas: bitta vaqt belgisi
+        yetadi va u do'kon yoshiga qarab o'smaydi.  Yon ta'siri —
+        "bittasini o'qilmagan qilib qo'yish" yo'q; amalda buni hech kim
+        so'ramagan, jadval esa cheksiz o'sishdan qutuladi.
+        """
+        moment = _now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO notification_reads(site_id,principal_id,last_read_at,updated_at) "
+                    "VALUES(?,?,?,?) ON CONFLICT(site_id,principal_id) DO UPDATE SET "
+                    "last_read_at=excluded.last_read_at,updated_at=excluded.updated_at"
+                ),
+                (site_id, principal_id, moment, moment),
+            )
+        return moment
+
+    def notifications(
+        self, site_id: str, principal_id: str, *, limit: int = 20
+    ) -> Dict[str, Any]:
+        """O'qilmagan son va oxirgi ogohlantirishlar.
+
+        `unread` ro'yxat uzunligidan MUSTAQIL hisoblanadi: 20 ta
+        ko'rsatib, 47 ta o'qilmagan bo'lishi mumkin va son shuni aytadi.
+        """
+        limit = max(1, min(int(limit), 100))
+        placeholders = ",".join("?" for _ in NOTIFICATION_SEVERITIES)
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT last_read_at FROM notification_reads "
+                    "WHERE site_id=? AND principal_id=?"
+                ),
+                (site_id, principal_id),
+            ).fetchone()
+            last_read = str(self._dict(row)["last_read_at"]) if row else ""
+
+            # Solishtirish `created_at` bo'yicha — `occurred_at` emas.
+            #
+            # Sababi mahsulotning asosiy stsenariysida: internet uzilsa
+            # hodisalar `outbox.db` da navbatda turadi va aloqa
+            # tiklanganda ESKI sanalar bilan keladi.  `occurred_at`
+            # bo'yicha solishtirilsa ular "o'qilgan" bo'lib chiqadi va
+            # ega ularni HECH QACHON ko'rmaydi — aynan uzilish paytidagi,
+            # ya'ni eng muhim hodisalarni.
+            #
+            # `created_at` — bulut ularni QACHON bilgani.  U doim oldinga
+            # yuradi, ya'ni "shu vaqtgacha ko'rganman" degan belgi bilan
+            # to'g'ri ishlaydi.  Ro'yxat tartibi esa `occurred_at`
+            # bo'yicha qoladi: egaga hodisa qachon SODIR bo'lgani muhim.
+            params: List[Any] = [site_id, *NOTIFICATION_SEVERITIES]
+            unread_where = ""
+            if last_read:
+                unread_where = " AND created_at > ?"
+                params.append(last_read)
+            unread = int(
+                conn.execute(
+                    self._sql(
+                        "SELECT COUNT(*) FROM production_events WHERE site_id=? "
+                        f"AND severity IN ({placeholders}){unread_where}"
+                    ),
+                    tuple(params),
+                ).fetchone()[0]
+            )
+
+            rows = conn.execute(
+                self._sql(
+                    "SELECT * FROM production_events WHERE site_id=? "
+                    f"AND severity IN ({placeholders}) ORDER BY occurred_at DESC LIMIT ?"
+                ),
+                (site_id, *NOTIFICATION_SEVERITIES, limit),
+            ).fetchall()
+
+        events = []
+        for raw in rows:
+            item = self._decode_event(raw, public=True)
+            # Har hodisa yonida "yangimi" — ro'yxat ochilgandan keyin
+            # ham qaysi biri yangi ekani ko'rinib tursin.
+            item["unread"] = bool(not last_read or str(item.get("created_at") or "") > last_read)
+            events.append(item)
+        return {"unread": unread, "last_read_at": last_read, "events": events}
 
     # ── Vision Agent ──────────────────────────────────────────────────────
     # Agent eventlarning yangi manbasi emas: RTSP/Edge yozgan ishonchli

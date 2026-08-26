@@ -277,6 +277,43 @@ export async function loginWithTelegram(): Promise<boolean> {
 }
 
 /** Bot manzili — server `owner.html` qobig'iga o'rnatib beradi. */
+/** Matnni buferga nusxalaydi.  Muvaffaqiyatni `boolean` bilan aytadi.
+ *
+ * `navigator.clipboard` HAR JOYDA yo'q: HTTP ustida, eski Android
+ * WebView'da va Telegram Mini App ichida u `undefined` bo'lishi mumkin.
+ * Ilgari kod `navigator.clipboard?.writeText(...)` deb yozilgan edi —
+ * ya'ni bunday muhitda tugma bosilardi va **jimgina hech narsa
+ * bo'lmasdi**.  Do'kon egasi uchun bu buzuq tugma.
+ *
+ * Zaxira yo'l `execCommand("copy")` — eskirgan, lekin aynan o'sha
+ * muhitlarda ishlaydi.
+ */
+export async function copyText(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    /* Ruxsat berilmadi — pastdagi zaxira yo'l sinaladi. */
+  }
+  try {
+    const field = document.createElement("textarea");
+    field.value = value;
+    // Ekrandan tashqarida, lekin `readOnly` EMAS: iOS faqat
+    // tahrirlanadigan maydondan nusxa oladi.
+    field.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(field);
+    field.select();
+    field.setSelectionRange(0, value.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(field);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function telegramBotUrl(): string {
   const raw = (window as Window & { __CHAQIMCHI_BOT_URL__?: string }).__CHAQIMCHI_BOT_URL__ || "";
   return raw.startsWith("http") ? raw : "";

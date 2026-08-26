@@ -186,6 +186,99 @@ def _status_code(response: str) -> int:
         return 0
 
 
+@dataclass(frozen=True)
+class AudioTrack:
+    """Kamera oqimida ovoz bormi va qaysi kodekda.
+
+    Nega alohida tur: "ovoz bor" degan javob yetarli emas.  G.711
+    (`PCMU`/`PCMA`) deyarli har kamerada bor va ffmpeg uni bemalol
+    o'qiydi; ba'zi NVR'lar esa G.726 yoki mulkiy kodek beradi va u
+    yerda "bor" degan javob mijozni aldab qo'yadi.  Shuning uchun
+    kodek nomi ham qaytariladi va panelda ko'rinadi.
+    """
+
+    present: bool = False
+    #: SDP'dagi `a=rtpmap` nomi: PCMU, PCMA, MPEG4-GENERIC (AAC)...
+    codec: str = ""
+    #: Diskretlash chastotasi (Gts).  8000 — telefon sifati, ko'p
+    #: kamerada shu; shovqin darajasini o'lchash uchun yetarli.
+    sample_rate: int = 0
+
+
+def audio_track(sdp: str) -> AudioTrack:
+    """RTSP `DESCRIBE` javobidan ovoz yo'lagini o'qiydi.
+
+    `rtsp_describe()` allaqachon to'liq javobni qaytaradi, lekin
+    bugungacha undan faqat status kodi ishlatilardi — SDP tanasi
+    tashlab yuborilardi.  Ovoz bilan ishlaydigan funksiyalarni
+    rejalashtirish uchun birinchi savol aynan shu: mijozning
+    kamerasi umuman ovoz beradimi.  Javobni **so'ramasdan** olamiz:
+    qo'shimcha so'rov ham, yangi ulanish ham kerak emas.
+
+    SDP ko'rinishi (RFC 4566):
+
+        m=audio 0 RTP/AVP 8
+        a=rtpmap:8 PCMA/8000
+
+    `m=audio` qatoridagi port 0 bo'lishi normal — RTSP'da haqiqiy
+    port `SETUP` da beriladi, `m=` faqat yo'lakni e'lon qiladi.
+    Shuning uchun port tekshirilmaydi.
+    """
+    if not sdp:
+        return AudioTrack()
+
+    payload_types: List[str] = []
+    for line in sdp.splitlines():
+        stripped = line.strip()
+        if not stripped.lower().startswith("m=audio"):
+            continue
+        # `m=audio <port> <proto> <fmt> [<fmt>...]` — to'rtinchi maydondan
+        # boshlab payload turlari.
+        parts = stripped.split()
+        payload_types = parts[3:]
+        break
+
+    if not payload_types:
+        return AudioTrack()
+
+    for payload in payload_types:
+        match = re.search(
+            rf"^a=rtpmap:{re.escape(payload)}\s+([^/\s]+)(?:/(\d+))?",
+            sdp,
+            re.I | re.M,
+        )
+        if match:
+            return AudioTrack(
+                present=True,
+                codec=match.group(1).upper(),
+                sample_rate=int(match.group(2) or 0),
+            )
+
+    # `m=audio` bor, lekin `a=rtpmap` yo'q: statik payload turlari
+    # (0 = PCMU, 8 = PCMA) rtpmap'siz ham qonuniy (RFC 3551).
+    static = {"0": ("PCMU", 8000), "8": ("PCMA", 8000)}
+    known = static.get(payload_types[0])
+    if known:
+        return AudioTrack(present=True, codec=known[0], sample_rate=known[1])
+    return AudioTrack(present=True)
+
+
+def probe_audio(url: str, *, timeout_sec: float = 4.0) -> AudioTrack:
+    """Manzil bo'yicha ovoz yo'lagini aniqlaydi.
+
+    `rtsp_describe()` natijasi 10 soniya keshlanadi
+    (`DESCRIBE_CACHE_TTL_SEC`), ya'ni kadr olingandan keyin darhol
+    chaqirilsa bu **qo'shimcha tarmoq so'rovi emas** — keshdan keladi.
+    Shuning uchun sehrgar sekinlashmaydi.
+    """
+    code, raw = rtsp_describe(url, timeout_sec=timeout_sec)
+    if code != 200:
+        # Ovoz yo'q emas — NOMA'LUM.  Ikkalasini bir xil ko'rsatish
+        # mijozni "kameramda mikrofon bor-ku" degan savolga olib keladi.
+        return AudioTrack()
+    return audio_track(raw)
+
+
 def _digest_challenge(response: str) -> Optional[Dict[str, str]]:
     match = re.search(r"WWW-Authenticate:\s*Digest\s*(.+)", response, re.I)
     if not match:

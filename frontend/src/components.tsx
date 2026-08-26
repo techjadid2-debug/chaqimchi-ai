@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { copyText } from "./api";
 import { Icon, Logo } from "./icons";
 import { Sparkline, Delta } from "./charts";
 
@@ -107,6 +108,25 @@ export function ActionMenu({ items }: { items: { label: string; onSelect: () => 
       {items.map(item => <button key={item.label} role="menuitem" className={item.danger ? "danger" : ""} onClick={() => { setOpen(false); item.onSelect(); }}>{item.label}</button>)}
     </div> : null}
   </div>;
+}
+
+/** Nusxalash tugmasi — natijani KO'RSATADI.
+ *
+ * Javobsiz tugma buzuq tugmadan farq qilmaydi: foydalanuvchi uni yana
+ * bosadi va baribir ishonchi bo'lmaydi.  Nusxalash imkonsiz muhitda
+ * halol aytiladi ("qo'lda nusxalang") — jimgina yutilmaydi.
+ */
+export function CopyButton({ value, label = "Nusxalash" }: { value: string; label?: string }) {
+  const [state, setState] = useState<"" | "ok" | "fail">("");
+  useEffect(() => {
+    if (!state) return;
+    const timer = window.setTimeout(() => setState(""), 2200);
+    return () => window.clearTimeout(timer);
+  }, [state]);
+  return <button
+    className={`btn${state === "ok" ? " btn-copied" : ""}`}
+    onClick={() => { void copyText(value).then(ok => setState(ok ? "ok" : "fail")); }}
+  >{state === "ok" ? "Nusxalandi ✓" : state === "fail" ? "Qo‘lda nusxalang" : label}</button>;
 }
 
 export type SearchEntry = { id: string; label: string; hint?: string; onSelect: () => void };

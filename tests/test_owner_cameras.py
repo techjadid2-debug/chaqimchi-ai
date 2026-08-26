@@ -265,3 +265,71 @@ def test_a_manager_cannot_change_cameras(client: TestClient, shop: dict) -> None
     )
 
     assert refused.status_code == 403
+
+
+# ── Jonli ko'rish: yoqish, ushlab turish, to'xtatish ─────────────────
+#
+# Server so'rovni 90 soniyaga yozadi va `store.request_live` izohi
+# "panel har 60 soniyada qayta chaqiradi" deb va'da qiladi — lekin panel
+# buni HECH QACHON qilmasdi.  90 soniyadan keyin qurilma kadr yuborishni
+# to'xtatardi, panel esa eski kadrni ko'rsatib, yonida o'z soatini
+# tikillatib turardi: ega 5 daqiqa oldingi rasmni "jonli" deb ko'rardi.
+
+
+def test_live_view_can_be_extended_and_stopped(client: TestClient, shop: dict) -> None:
+    """Muddat uzayadi, to'xtatish esa DARHOL ishlaydi."""
+    client.put(
+        "/api/v1/owner/cameras/camera-01",
+        headers=shop["owner"],
+        json={"label": "Kirish", "rtsp_url": RTSP, "enabled": True},
+    )
+
+    first = client.post(
+        "/api/v1/owner/cameras/camera-01/live", headers=shop["owner"], json={"overlay": True}
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["until"], "muddat qaytsin"
+
+    # Qurilma so'rovni heartbeat javobida ko'radi (config revizyasi
+    # orqali EMAS: revizya o'zgarsa zanjir qayta ishga tushardi).
+    beat = client.post("/api/v1/edge/heartbeat", headers=shop["device"], json={}).json()
+    assert any(item["camera_id"] == "camera-01" for item in beat.get("live_requested") or [])
+
+    # Panel yopilganda oqim TO'XTAYDI: aks holda qurilma yana 90
+    # soniya kadr yuborib, kunlik byudjetni bekorga yeydi.
+    stopped = client.post(
+        "/api/v1/owner/cameras/camera-01/live", headers=shop["owner"], json={"stop": True}
+    )
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["until"] is None
+
+    after = client.post("/api/v1/edge/heartbeat", headers=shop["device"], json={}).json()
+    assert not [
+        item for item in (after.get("live_requested") or []) if item["camera_id"] == "camera-01"
+    ], "to'xtatilgandan keyin qurilma kadr yubormasin"
+
+
+def test_the_frame_carries_its_own_timestamp(client: TestClient, shop: dict) -> None:
+    """Kadr sanasi javobda bo'lsin — panel klient soatiga ishonmasin.
+
+    Usiz muzlagan rasm ustida soat tikillab turardi: server oxirgi
+    saqlangan kadrni qaytaraveradi va panel har javobda vaqtni
+    yangilardi.
+    """
+    client.put(
+        "/api/v1/owner/cameras/camera-01",
+        headers=shop["owner"],
+        json={"label": "Kirish", "rtsp_url": RTSP, "enabled": True},
+    )
+    client.post("/api/v1/owner/cameras/camera-01/live", headers=shop["owner"], json={})
+
+    uploaded = client.put(
+        "/api/v1/edge/cameras/camera-01/live-frame",
+        headers={**shop["device"], "Content-Type": "image/jpeg"},
+        content=b"\xff\xd8\xff\xe0jonli-kadr",
+    )
+    assert uploaded.status_code == 200, uploaded.text
+
+    frame = client.get("/api/v1/owner/cameras/camera-01/live-frame", headers=shop["owner"])
+    assert frame.status_code == 200, frame.text
+    assert frame.headers.get("X-Frame-At"), "kadr sanasi sarlavhada bo'lsin"

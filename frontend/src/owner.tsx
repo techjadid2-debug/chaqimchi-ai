@@ -1,8 +1,8 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, hasFeature, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
+import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, hasFeature, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
 import { Demography } from "./Demography";
-import { AppShell, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, PlanLock, Skeleton, StatusDot, type NavItem } from "./components";
+import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, PlanLock, Skeleton, StatusDot, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
@@ -110,11 +110,111 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
   </div>;
 }
 
+type Notification = { event_id: string; event_type: string; label?: string; camera_id?: string; occurred_at?: string; severity?: string; unread?: boolean };
+
+/** Qo'ng'iroq — o'qilmagan ogohlantirishlar.
+ *
+ * Ilgari bu tugmadagi son `data.events.length` edi: panel olgan oxirgi
+ * 12 ta hodisa soni.  U hech qachon kamaymasdi va gavjum do'konda
+ * abadiy "9+" bo'lib turardi, ya'ni egaga hech narsa aytmasdi.
+ *
+ * Endi son SERVERDAN keladi va "o'qildi" belgisi ham serverda
+ * (`/owner/notifications`): ega telefonda ko'rgan xabar kompyuterda
+ * ham o'qilgan bo'lib turishi kerak.
+ */
+function NotificationBell({ siteId, onOpenEvent }: { siteId: string; onOpenEvent: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [items, setItems] = useState<Notification[] | null>(null);
+  const [error, setError] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api<{ unread: number; events: Notification[] }>("/api/v1/owner/notifications?limit=20", "owner", { siteId });
+      setUnread(data.unread || 0);
+      setItems(data.events || []);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Bildirishnomalar olinmadi");
+    }
+  }, [siteId]);
+
+  /* Qo'ng'iroq dashboard'dan ALOHIDA so'raladi: dashboard og'ir
+     (salomatlik, hisobot, obuna), qo'ng'iroq esa tez-tez yangilanishi
+     kerak.  60 soniya — yangi hodisa Telegramga ham shu atrofda
+     boradi, ya'ni panel undan orqada qolmaydi. */
+  useEffect(() => {
+    if (!siteId) return;
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 60000);
+    return () => window.clearInterval(timer);
+  }, [load, siteId]);
+
+  // Tashqariga bosish va Escape — `ActionMenu` dagi bilan bir xil naqsh.
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
+  }, [open]);
+
+  const markRead = async () => {
+    /* Son DARHOL nolga tushadi, server javobini kutmasdan: tugma
+       bosilganda hech narsa o'zgarmasa foydalanuvchi uni yana bosadi.
+       So'rov yiqilsa keyingi `load()` haqiqatni qaytaradi. */
+    setUnread(0);
+    setItems(current => current?.map(item => ({ ...item, unread: false })) || null);
+    try {
+      await api("/api/v1/owner/notifications/read", "owner", { method: "POST", siteId });
+    } catch {
+      void load();
+    }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) void load();
+  };
+
+  return <div className="notif-wrap" ref={box}>
+    <button className="btn btn-icon topbar-bell" aria-expanded={open} onClick={toggle} aria-label={unread ? `Bildirishnomalar: ${unread} ta o‘qilmagan` : "Bildirishnomalar"}>
+      <Icon name="bell"/>
+      {unread ? <i className="bell-badge">{unread > 9 ? "9+" : unread}</i> : null}
+    </button>
+    {open ? <div className="notif-panel" role="dialog" aria-label="Bildirishnomalar">
+      <div className="notif-head">
+        <b>{unread ? `${formatNumber(unread)} ta o‘qilmagan` : "Yangi ogohlantirish yo‘q"}</b>
+        {unread ? <button className="btn btn-small" onClick={() => void markRead()}>Hammasi o‘qildi</button> : null}
+      </div>
+      {error ? <p className="notif-empty">{error}</p> : null}
+      {items === null ? <div className="notif-empty"><Skeleton height={60}/></div>
+        : items.length ? <ul className="notif-list">
+            {items.map(item => <li key={item.event_id} className={item.unread ? "is-unread" : ""}>
+              <span className={`notif-dot sev-${item.severity || "info"}`}/>
+              <div>
+                <b>{item.label || item.event_type}</b>
+                <small>{item.camera_id || "Tizim"} · {formatTimeUz(item.occurred_at)}</small>
+              </div>
+            </li>)}
+          </ul>
+        /* Bo'sh holat AYBLAMAYDI: ogohlantirish yo'qligi yaxshi
+           xabar, "hech narsa topilmadi" esa buzuqday ko'rinadi. */
+        : <p className="notif-empty">Hozircha tinch — e’tibor talab qiladigan hodisa yo‘q.</p>}
+      <button className="btn btn-wide" onClick={() => { setOpen(false); onOpenEvent(); }}>Hammasini ko‘rish</button>
+    </div> : null}
+  </div>;
+}
+
 function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId: string; overlay: boolean; live: boolean }) {
   const [src, setSrc] = useState("");
   const [error, setError] = useState(false);
   const [requested, setRequested] = useState(false);
   const [stamp, setStamp] = useState("");
+  const [frameAt, setFrameAt] = useState("");
   useEffect(() => {
     let timer = 0;
     let stopped = false;
@@ -152,7 +252,14 @@ function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId
         if (stopped) { URL.revokeObjectURL(next); return; }
         if (current) URL.revokeObjectURL(current);
         current = next; setSrc(next); setError(false);
-        setStamp(new Date().toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+        /* Vaqt KADRNING O'ZINIKI (`X-Frame-At`), klient soati emas.
+           Ilgari bu yerda `new Date()` turardi: qurilma kadr yuborishni
+           to'xtatsa ham server oxirgi saqlangan rasmni qaytaraverardi
+           va panel har javobda vaqtni yangilardi — muzlagan rasm ustida
+           soat tikillab turardi va ega uni "jonli" deb o'ylardi. */
+        const frameAt = response.headers.get("X-Frame-At") || "";
+        setStamp(formatTimeUz(frameAt) || "—");
+        setFrameAt(frameAt);
       } catch {
         // `current` — shu effektning O'Z holati.  Ilgari bu yerda
         // `src` tekshirilardi: u effekt yopilmasidan oldingi qiymatni
@@ -175,10 +282,15 @@ function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId
     return () => { stopped = true; window.clearTimeout(timer); if (current) URL.revokeObjectURL(current); };
   }, [camera.camera_id, live, overlay, siteId]);
   const emptyLabel = error ? (requested ? "Kadr so‘raldi, 20 soniyacha kuting…" : "Kadr hozircha kelmadi") : "Kadr yuklanmoqda…";
+  /* Jonli rejimda kadr 2-3 soniyada yangilanadi.  25 soniyadan eski
+     bo'lsa oqim uzilgan: buni AYTISH kerak, aks holda ega eski rasmga
+     qarab do'konda hozir nima bo'layotgani haqida qaror qabul qiladi. */
+  const frameAge = live && frameAt ? (Date.now() - new Date(frameAt).getTime()) / 1000 : 0;
+  const frozen = live && frameAt && frameAge > 25;
   return <div className="camera-frame">
     {src ? <img src={src} alt={`${camera.label || camera.camera_id} kamerasi`} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{emptyLabel}</span></div>}
     {overlay && src ? <span className="camera-overlay-badge">AI tahlil</span> : null}
-    {stamp && src ? <span className="camera-stamp">{stamp}</span> : null}
+    {stamp && src ? <span className={`camera-stamp${frozen ? " is-stale" : ""}`}>{frozen ? `${stamp} · yangilanmayapti` : stamp}</span> : null}
   </div>;
 }
 
@@ -187,14 +299,63 @@ function CamerasBlock({ dashboard, siteId, expanded = false, onOpenAll }: { dash
   const [live, setLive] = useState(false);
   const cameras = expanded ? dashboard.cameras : dashboard.cameras.slice(0, 4);
   const stateMap = useMemo(() => new Map(dashboard.camera_states.map(item => [item.camera_id, item])), [dashboard.camera_states]);
-  const toggleLive = async () => {
-    const next = !live;
-    setLive(next);
-    if (next) await Promise.all(cameras.map(camera => api(`/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/live`, "owner", { method: "POST", siteId, body: JSON.stringify({ overlay }) }).catch(() => null)));
-  };
-  const toggleOverlay = async () => {
-    const next = !overlay; setOverlay(next);
-    if (live) await Promise.all(cameras.map(camera => api(`/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/live`, "owner", { method: "POST", siteId, body: JSON.stringify({ overlay: next }) }).catch(() => null)));
+
+  /* Kamera ro'yxati `useEffect` bog'liqligi bo'lib ishlatiladi, lekin
+     `slice()` har renderda YANGI massiv qaytaradi — usiz keepalive
+     taymeri har renderda qayta qurilardi. */
+  const cameraIds = useMemo(() => cameras.map(camera => camera.camera_id).join(","), [cameras]);
+
+  const askLive = useCallback(async (body: Record<string, unknown>) => {
+    const ids = cameraIds ? cameraIds.split(",") : [];
+    await Promise.all(ids.map(id => api(`/api/v1/owner/cameras/${encodeURIComponent(id)}/live`, "owner", { method: "POST", siteId, body: JSON.stringify(body) }).catch(() => null)));
+  }, [cameraIds, siteId]);
+
+  /* JONLI REJIMNI USHLAB TURISH.
+   *
+   * Server so'rovni 90 soniyaga yozadi (`store.request_live`,
+   * `ttl_sec=90`) va uning izohida "panel har 60 soniyada qayta
+   * chaqiradi" deb yozilgan — lekin panel buni HECH QACHON
+   * qilmasdi.  Natijada 90 soniyadan keyin qurilma kadr yuborishni
+   * to'xtatardi, panel esa eski kadrni ko'rsatishda davom etardi va
+   * yonida soat tikillab turardi: ega 5 daqiqa oldingi rasmni
+   * "jonli" deb ko'rardi.
+   *
+   * 60 soniya — 90 lik muddatga nisbatan bitta o'tkazib yuborilgan
+   * so'rovga zaxira qoldiradi. */
+  useEffect(() => {
+    if (!live || !cameraIds) return;
+    let stopped = false;
+    void askLive({ overlay });
+    const timer = window.setInterval(() => { if (!stopped) void askLive({ overlay }); }, 60000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [live, overlay, cameraIds, askLive]);
+
+  /* To'xtatish ALOHIDA effektda va faqat `live` ga bog'liq.
+   *
+   * Yuqoridagi effekt ichida qilinsa `overlay` o'zgarganda ham cleanup
+   * ishlab, "to'xtat" va "yoq" ikkitasi yonma-yon ketardi — ikkalasi
+   * asinxron, ya'ni "to'xtat" keyinroq yetib borsa jonli ko'rish
+   * JIMGINA o'lardi.  Aynan shu tuzatilayotgan xatoning o'zi. */
+  const askLiveRef = useRef(askLive);
+  useEffect(() => { askLiveRef.current = askLive; }, [askLive]);
+  useEffect(() => {
+    if (!live) return;
+    /* Panel yopilganda oqim to'xtatiladi: aks holda qurilma yana
+       90 soniya kadr yuboradi va kunlik byudjetni bekorga yeydi. */
+    return () => { void askLiveRef.current({ stop: true }); };
+  }, [live]);
+
+  const toggleLive = () => setLive(value => !value);
+
+  /* "AI ramkani ko'rsatish" jonli rejimni O'ZI yoqadi.
+   *
+   * Ilgari jonli rejim o'chiq bo'lsa bu tugma faqat rasm ustiga
+   * "AI tahlil" yorlig'ini qo'yardi — ramka esa chizilmasdi, chunki
+   * ramka QURILMADA, faqat jonli kadrga chiziladi.  Ya'ni tugma nomi
+   * va'da qilgan narsani bajarmasdi. */
+  const toggleOverlay = () => {
+    setOverlay(value => !value);
+    if (!live) setLive(true);
   };
   return <Card>
     <div className="card-head">
@@ -318,7 +479,7 @@ function TelegramPage({siteId}:{siteId:string}) {
   useEffect(()=>{void load();},[load]);
   const createInvite=async()=>{setBusy(true);setError("");try{const result=await api<{url:string;expires_minutes:number}>("/api/v1/owner/telegram-invite","owner",{method:"POST",siteId,body:JSON.stringify({role,display_name:name.trim()||null})});setInvite(result);}catch(reason){setError(reason instanceof Error?reason.message:"Taklif yaratilmadi");}finally{setBusy(false);}};
   const remove=async(member:TelegramMember)=>{if(!window.confirm(`${member.display_name||member.telegram_id} a’zoligini o‘chirasizmi?`))return;setError("");try{await api(`/api/v1/owner/members/${encodeURIComponent(member.id)}`,"owner",{method:"DELETE",siteId});await load();}catch(reason){setError(reason instanceof Error?reason.message:"A’zo o‘chirilmadi");}};
-  return <><PageHeader title="Telegram" subtitle="Egalar va menejerlar uchun botga xavfsiz, bir martalik taklif."/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>Taklif havolasi</h2><p>Havola 30 daqiqada eskiradi va bir marta ishlaydi</p></div></div><div className="card-body"><div className="form-grid"><label>Kim uchun<select className="select" value={role} onChange={event=>setRole(event.target.value as "owner"|"manager")}><option value="manager">Menejer</option><option value="owner">Biznes egasi</option></select></label><label>Ism (ixtiyoriy)<input className="input" value={name} onChange={event=>setName(event.target.value)} maxLength={120}/></label></div><button className="btn btn-primary" disabled={busy} onClick={()=>void createInvite()}>{busy?"Yaratilmoqda…":"Taklif yaratish"}</button>{invite?<div className="invite-result"><b>Taklif tayyor · {invite.expires_minutes} daqiqa</b><a href={invite.url} target="_blank" rel="noreferrer">{invite.url}</a><div className="page-actions"><button className="btn" onClick={()=>navigator.clipboard?.writeText(invite.url)}>Nusxalash</button><a className="btn btn-primary" href={invite.url} target="_blank" rel="noreferrer">Telegramda ochish</a></div></div>:null}</div></Card><Card><div className="card-head"><div><h2>Nima yuboriladi?</h2><p>Filial bo‘yicha ruxsatga bog‘liq</p></div></div><div className="card-body"><p className="metric-note">Muhim kamera va tizim ogohlantirishlari, kunlik biznes xulosasi hamda Mini App havolasi. Boshqa filial ma’lumoti berilmaydi.</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>Telegram bilan muammo:</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>Ulangan foydalanuvchilar</h2><p>Faol bot a’zolari</p></div></div>{members===null?<div className="card-body"><Skeleton height={130}/></div>:members.length?<div className="table-wrap"><table><thead><tr><th>Foydalanuvchi</th><th>Rol</th><th>Kunlik xulosa</th><th>Amal</th></tr></thead><tbody>{members.map(member=><tr key={member.id}><td><div className="table-title">{member.display_name||`Telegram ${member.telegram_id}`}</div></td><td>{member.role==="owner"?"Egasi":member.role==="manager"?"Menejer":"Servis admin"}</td><td>{member.digest_muted?"O‘chirilgan":"Yoqilgan"}</td><td><button className="btn btn-danger" onClick={()=>void remove(member)}>O‘chirish</button></td></tr>)}</tbody></table></div>:<EmptyState icon="bell" title="Telegram ulanmagan" detail="Taklif yarating va uni kerakli egasi yoki menejerga yuboring."/>}</Card></>;
+  return <><PageHeader title="Telegram" subtitle="Egalar va menejerlar uchun botga xavfsiz, bir martalik taklif."/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>Taklif havolasi</h2><p>Havola 30 daqiqada eskiradi va bir marta ishlaydi</p></div></div><div className="card-body"><div className="form-grid"><label>Kim uchun<select className="select" value={role} onChange={event=>setRole(event.target.value as "owner"|"manager")}><option value="manager">Menejer</option><option value="owner">Biznes egasi</option></select></label><label>Ism (ixtiyoriy)<input className="input" value={name} onChange={event=>setName(event.target.value)} maxLength={120}/></label></div><button className="btn btn-primary" disabled={busy} onClick={()=>void createInvite()}>{busy?"Yaratilmoqda…":"Taklif yaratish"}</button>{invite?<div className="invite-result"><b>Taklif tayyor · {invite.expires_minutes} daqiqa</b><a href={invite.url} target="_blank" rel="noreferrer">{invite.url}</a><div className="page-actions"><CopyButton value={invite.url}/><a className="btn btn-primary" href={invite.url} target="_blank" rel="noreferrer">Telegramda ochish</a></div></div>:null}</div></Card><Card><div className="card-head"><div><h2>Nima yuboriladi?</h2><p>Filial bo‘yicha ruxsatga bog‘liq</p></div></div><div className="card-body"><p className="metric-note">Muhim kamera va tizim ogohlantirishlari, kunlik biznes xulosasi hamda Mini App havolasi. Boshqa filial ma’lumoti berilmaydi.</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>Telegram bilan muammo:</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>Ulangan foydalanuvchilar</h2><p>Faol bot a’zolari</p></div></div>{members===null?<div className="card-body"><Skeleton height={130}/></div>:members.length?<div className="table-wrap"><table><thead><tr><th>Foydalanuvchi</th><th>Rol</th><th>Kunlik xulosa</th><th>Amal</th></tr></thead><tbody>{members.map(member=><tr key={member.id}><td><div className="table-title">{member.display_name||`Telegram ${member.telegram_id}`}</div></td><td>{member.role==="owner"?"Egasi":member.role==="manager"?"Menejer":"Servis admin"}</td><td>{member.digest_muted?"O‘chirilgan":"Yoqilgan"}</td><td><button className="btn btn-danger" onClick={()=>void remove(member)}>O‘chirish</button></td></tr>)}</tbody></table></div>:<EmptyState icon="bell" title="Telegram ulanmagan" detail="Taklif yarating va uni kerakli egasi yoki menejerga yuboring."/>}</Card></>;
 }
 
 function downloadTrafficCsv(dashboard:Dashboard) {
@@ -328,16 +489,16 @@ function downloadTrafficCsv(dashboard:Dashboard) {
   const link=document.createElement("a");link.href=url;link.download=`chaqimchi-${dashboard.site.id}-14-kun.csv`;link.click();URL.revokeObjectURL(url);
 }
 
-function GenericPage({ id, dashboard, sites, siteId, onNavigate }: { id:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:(id:string)=>void }) {
+function GenericPage({ id, dashboard, sites, siteId, onNavigate, focusEventId = "" }: { id:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:(id:string,focus?:string)=>void; focusEventId?:string }) {
   if (id === "cameras") return <><PageHeader title="Kameralar" subtitle="Jonli kadr, ulanish holati va AI tahlil qatlami."/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>;
   if (id === "traffic") return <TrafficPage dashboard={dashboard}/>;
   if (id === "heatmap") return <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   if (id === "branches") return <><PageHeader title="Filiallar" subtitle="Barcha savdo nuqtalaringizning aloqa va kamera holati."/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? "Aloqada" : "Aloqani tekshiring")} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
-  if (id === "alerts") return <EventEvidence kind="owner" siteId={siteId}/>;
+  if (id === "alerts") return <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId}/>;
   if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>CSV yuklash</button>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
   if (id === "billing") return <BillingPage dashboard={dashboard} siteId={siteId}/>;
   if (id === "telegram") return <TelegramPage siteId={siteId}/>;
-  if (id === "settings") return <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId}/>;
+  if (id === "settings") return <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>;
   return <><PageHeader title="Bo‘lim" subtitle="Bu bo‘lim panel tarkibida."/><Card><EmptyState icon="settings" title="Soddalashtirilgan ish maydoni" detail="Kerakli ma’lumotlar yig‘ilgach mazmun avtomatik ko‘rinadi."/></Card></>;
 }
 
@@ -420,7 +581,7 @@ function TelegramLevelPicker({ siteId }: { siteId: string }) {
 
 /** Sozlamalar: hozircha faqat HAQIQATAN mavjud bo'lgan ma'lumot.
  *  Ilgari bu sahifa bo'sh "ish olib borilmoqda" yozuvi edi. */
-function SettingsPage({ dashboard, sites, siteId }: { dashboard: Dashboard; sites: Site[]; siteId: string }) {
+function SettingsPage({ dashboard, sites, siteId, onNavigate }: { dashboard: Dashboard; sites: Site[]; siteId: string; onNavigate: (id: string) => void }) {
   const site = sites.find(item => item.id === siteId);
   return <>
     <PageHeader title="Sozlamalar" subtitle="Do‘kon ma’lumotlari va bildirishnoma kanallari."/>
@@ -440,7 +601,9 @@ function SettingsPage({ dashboard, sites, siteId }: { dashboard: Dashboard; site
         <div className="card-body">
           <TelegramLevelPicker siteId={siteId}/>
           <p className="metric-note">Kunlik xulosa darajadan qat’i nazar boradi. Kim olishini «Telegram» bo‘limida boshqarasiz.</p>
-          <a className="btn btn-wide" href="/owner/telegram">Telegram a’zolari</a>
+          {/* `<a href>` EMAS: to'liq sahifa qayta yuklanishi va hash
+              rejimida (`router.ts`) 404 beradi.  SPA ichida qolamiz. */}
+          <button className="btn btn-wide" onClick={() => onNavigate("telegram")}>Telegram a’zolari</button>
         </div>
       </Card>
     </div>
@@ -456,6 +619,7 @@ function OwnerApp() {
   const [sites,setSites] = useState<Site[]>([]); const [siteId,setSiteId] = useState("");
   const [active,navigateTo] = usePanelRoute("/owner", ROUTE_IDS, "home");
   const [drawer,setDrawer] = useState(false);
+  const [focusEvent,setFocusEvent] = useState("");
   const [loginError,setLoginError] = useState(""); const [busy,setBusy] = useState(false);
   const {data,error,loading,refresh} = useAdaptiveDashboard(siteId,authenticated);
 
@@ -502,7 +666,13 @@ function OwnerApp() {
 
   const submit = async (username:string,password:string) => { setBusy(true);setLoginError("");try { await login(username,password,"owner");setAuthenticated(true); } catch(reason) { setLoginError(reason instanceof Error ? reason.message : "Kirish amalga oshmadi"); } finally { setBusy(false); } };
   const logout = () => { clearToken("owner");setAuthenticated(false);setSites([]);setSiteId(""); };
-  const navigate = (id:string) => { if (id === "more") setDrawer(true); else { navigateTo(id); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"}); } };
+  /* Ikkinchi argument — ochilishi kerak bo'lgan aniq hodisa.
+     "Dalilni ochish" tugmasi shuni uzatadi. */
+  const navigate = (id:string, focus?:string) => {
+    if (id === "more") { setDrawer(true); return; }
+    setFocusEvent(focus || "");
+    navigateTo(id); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"});
+  };
 
   const splash = (title:string) => <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">BIZNES PANELI</span><h1>{title}</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={54}/><div style={{height:14}}/><Skeleton height={150}/></div></section></div>;
   if (checkingLink) return splash("Havola tekshirilmoqda.");
@@ -539,7 +709,6 @@ function OwnerApp() {
 
   const selected = sites.find(site => site.id === siteId);
   const today = formatDateUz();
-  const alertCount = data.events.length;
   return <AppShell
     nav={NAV}
     mobileNav={MOBILE_NAV}
@@ -552,7 +721,7 @@ function OwnerApp() {
     headerActions={<>
       {sites.length > 1 ? <select className="select" value={siteId} onChange={event => setSiteId(event.target.value)} aria-label="Filialni tanlash">{sites.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : null}
       <span className="topbar-date"><Icon name="calendar" size={16}/>{today}</span>
-      <button className="btn btn-icon topbar-bell" onClick={() => navigate("alerts")} aria-label={`Ogohlantirishlar: ${alertCount}`}><Icon name="bell"/>{alertCount ? <i className="bell-badge">{alertCount > 9 ? "9+" : alertCount}</i> : null}</button>
+      <NotificationBell siteId={siteId} onOpenEvent={() => navigate("alerts")}/>
       <button className="btn btn-icon" onClick={() => refresh()} aria-label="Yangilash"><Icon name="pulse"/></button>
     </>}>
     {error ? <div className="alert-strip"><Icon name="bell"/><div><strong>Yangilashda muammo:</strong> {error}. Oxirgi olingan ma’lumot ko‘rsatilmoqda.</div></div> : null}
@@ -565,7 +734,7 @@ function OwnerApp() {
       : active === "setup" ? <SetupCameras siteId={siteId} onDone={() => { void refresh(); navigate("zones"); }}/>
       : active === "zones" ? <GeometryEditor siteId={siteId} cameras={data.cameras}/>
       : active === "agent" ? <VisionAgent siteId={siteId} onNavigate={navigate}/>
-      : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate}/>}
+      : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} focusEventId={focusEvent}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label="Yopish"><Icon name="close"/></button></div><nav>{NAV.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>Chiqish</button></nav></aside></div> : null}
   </AppShell>;
 }

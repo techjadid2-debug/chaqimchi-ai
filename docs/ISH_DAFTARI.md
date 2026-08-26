@@ -20,6 +20,10 @@
   ishlar edi (0.6.13 … 0.6.19) — masofaviy `clean_chains` topshirig'idan
   keyin **bitta** qoldi: `0.6.20`.  Cloud nazorati ham toza:
   `multi_version_sites: {}`.  Endi har o'lchov bitta jarayondan keladi.
+- **Panel ishi boshlandi (2026-08-26 kechqurun).** Bildirishnoma
+  markazi, jonli ko'rish keepalive va to'rtta yolg'on tugma tuzatildi;
+  T6 biometrik teshigi yopildi. Tafsilot tarixning birinchi yozuvida.
+  **Hali deploy qilinmagan.**
 - Shox: `loitering-rasmsiz`, `origin` bilan sinxron. Asosiy shox `main`.
 - Audit ([AUDIT_TAHLIL.md](AUDIT_TAHLIL.md)) bo'yicha **A bosqichi
   (A0–A9) va B bosqichining katta qismi tugadi**. C boshlanmagan.
@@ -29,6 +33,24 @@
 - **Sotuv hali ochilmagan** — pastdagi ikkita darvoza yopiq.
 
 ## KEYINGI ISH
+
+**1) Panel o'zgarishlarini deploy qilish** — kod tayyor, testlar o'tdi.
+`scripts/deploy_cloud.sh` orqali (u zaxira talab qiladi). Keyin ko'z
+bilan: qo'ng'iroqda haqiqiy o'qilmagan son, bosilganda ro'yxat ochiladi
+va son kamayadi; "Jonli ko'rish" 5 daqiqa ochiq turganda muzlamaydi.
+
+**2) DAVOMAT JIMGINA O'LIK — qurilma relizi kerak.** Ikki chegara
+zid (batafsil: tarixning birinchi yozuvi va "Ochiq muammolar").
+Kelishilgan yechim: davomat kamerasi uchun **asosiy oqim** ochiladi
+(`runner.py:63-81`), chegaralar bitta formuladan chiqariladi. Narxi
+i5-4590 da o'lchansin — `scripts/benchmark_n100.py` haqiqiy RTSP bilan
+(`--source` bermasangiz o'lchov yolg'on).
+
+**3) Qolgan reja** — hodisa kadrlari yon tomonda + "bu odam xodim"
+tugmasi (backend tayyor: `cloud/main.py:7910`), zona muharriri
+(`shelf` flagi yo'qolishi, fon kadri, o'chirish tarqalmasligi), ovoz.
+
+---
 
 **0.6.17 qurilmaga yetganini tasdiqlash.** Cloud va reliz chiqdi;
 qurilma `auto` bo'lgani uchun o'zi oladi. Tekshirish:
@@ -63,7 +85,39 @@ Qabul tartibi: [DOKON_MVP.md](DOKON_MVP.md) "Qabul mezoni".
 
 ## OCHIQ MUAMMOLAR
 
-**⚠ YANGI VA HAL QILINMAGAN — camera-02 yuz kadri to'xtamayapti**
+**⚠ DAVOMAT JIMGINA O'LIK — ikki chegara bir-biriga zid**
+
+Topildi 2026-08-26 kechqurun, **hali tuzatilmagan** (qurilma relizi
+kerak).
+
+| Gate | Joyi | 640×360 substreamda talab |
+|---|---|---|
+| `FACE_MIN_BBOX_RATIO = 0.28` | `scene_analytics.py:153`, chaqiruv `:511` | bbox balandligi ≥ **101 px** |
+| `FACE_MIN_CROP_PX = 96`, crop = `0.35 × bbox` | `pipeline.py:86`, chaqiruv `:573` | bbox balandligi ≥ **274 px** (ratio 0.76) |
+
+Analizator 101 px dan katta odam uchun `face_captured` chiqaradi,
+pipeline esa 274 px dan kichigini **tashlaydi** (`return False` →
+hodisa ham yuborilmaydi). Ya'ni odam kadr balandligining 76% ini
+egallashi kerak — amalda faqat kameraga tegay deb turgan odam.
+
+**Nima uchun bu muhim:** "4 606 yuz kadri → 0 ta tanish" tuzatilgandan
+keyin ham davomat ishlamaydi. Ilgari mayda kadr kelardi, endi umuman
+kelmaydi. Ikkalasining natijasi bir xil: nol tanish.
+
+**Tekshirish:** qurilmada `face_crops_too_small` hisoblagichi
+(`pipeline.py:180`) — u o'sib borayotgan bo'lsa tashxis tasdiqlanadi.
+
+**Kelishilgan yechim:** davomat kamerasi uchun **asosiy oqim** ochiladi
+(naqsh bor: klip uchun main stream `ringbuffer.py:103-133` da shunday
+ochiladi), va ikki chegara bitta formuladan chiqariladi. Narxi
+o'lchansin — i5-4590 da qo'shimcha 1080p dekod, 4 kamera kafolatiga
+tegishi mumkin.
+
+**Yon eslatma:** pastdagi "camera-02 yuz kadri to'xtamayapti" muammosi
+shu bilan bog'liq bo'lishi mumkin — beshta yetim zanjir tozalangandan
+keyin qayta o'lchanmagan.
+
+**⚠ camera-02 yuz kadri to'xtamayapti (yetimlar tozalangach qayta o'lchanmagan)**
 
 0.6.17 chiqqandan keyin ham sinov do'konining `camera-02` kamerasi
 daqiqasiga ~11 ta `face_captured` yuborishda davom etyapti.  Ikkala
@@ -166,6 +220,93 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-26 — Panel: qo'ng'iroq rostdan ishlaydi, jonli ko'rish muzlamaydi (commit qilinmagan)
+Nima: mijoz panelidagi to'rtta yolg'on gapiradigan tugma tuzatildi va
+bildirishnoma markazi qurildi.
+
+**Eng muhim topilma — davomat JIMGINA O'LIK.** Ikki chegara bir-biriga
+zid: `scene_analytics.py:153` (`FACE_MIN_BBOX_RATIO = 0.28`) hodisa
+chiqarish uchun odam kadr balandligining 28% ini egallashini talab
+qiladi; `pipeline.py:86` (`FACE_MIN_CROP_PX = 96`, crop `0.35×bbox`) esa
+kesmani saqlash uchun 274 px, ya'ni **76%** ni talab qiladi. 640×360
+substreamda odam kadrning uchdan ikkisidan ko'pini egallashi kerak —
+amalda faqat kameraga tegay deb turgan odam. Shuning uchun "4 606 yuz
+kadri → 0 ta tanish" tuzatilgandan keyin ham davomat ishlamaydi: ilgari
+mayda kadr kelardi, endi umuman kelmaydi. **Hali tuzatilmagan** —
+qurilma relizi kerak (reja: davomat kamerasi asosiy oqimdan o'qiydi).
+
+Tuzatilganlar:
+
+1. **Bildirishnoma markazi** — `notification_reads` jadvali,
+   `GET/POST /api/v1/owner/notifications`. Qo'ng'iroqdagi son ilgari
+   `data.events.length` edi (panel olgan oxirgi 12 ta hodisa) va hech
+   qachon kamaymasdi. Endi son serverda hisoblanadi, "o'qildi" belgisi
+   har a'zoda alohida (`member_id`), qo'ng'iroq ro'yxat ochadi.
+
+   **Test loyiha xatosini topdi:** dastlab `occurred_at` bo'yicha
+   solishtirgan edim. Internet uzilib qayta ulangan qurilma ESKI sanali
+   hodisalarni yuboradi — ular "o'qilgan" bo'lib jimgina yo'qolardi,
+   ya'ni aynan uzilish paytidagi eng muhim hodisalar. Endi solishtirish
+   `created_at` (bulut qachon bilgani) bo'yicha.
+
+2. **Jonli ko'rish 90 soniyada muzlardi.** `store.request_live` izohi
+   "panel har 60 soniyada qayta chaqiradi" deb va'da qilgan, panel esa
+   HECH QACHON chaqirmagan. Ustiga panel `new Date()` bilan o'z soatini
+   ko'rsatardi — muzlagan rasm ustida soat tikillab turardi. Endi:
+   keepalive har 60 s, `X-Frame-At` sarlavhasi (kadrning O'Z sanasi),
+   25 soniyadan eski kadrda qizil "yangilanmayapti", va panel yopilganda
+   `{stop:true}` bilan oqim to'xtatiladi (kunlik byudjet tejaladi).
+
+3. **"AI ramkani ko'rsatish"** jonli rejimsiz faqat yorliq qo'yardi —
+   ramka qurilmada, faqat jonli kadrga chiziladi. Endi tugma jonli
+   rejimni o'zi yoqadi.
+
+4. **"Nusxalash"** `navigator.clipboard?.` edi — HTTP, eski WebView va
+   Telegram Mini App'da jimgina hech narsa qilmasdi. `copyText()`
+   zaxira yo'l bilan va `CopyButton` natijani ko'rsatadi.
+
+5. **"Dalilni ochish"** `event_id` ni umuman ishlatmasdi. Endi aynan
+   o'sha hodisa ochiladi va ekranga suriladi.
+
+6. **T6 — menejer xodim ismini ko'rardi.** `/owner/faces/events`
+   `require_biometric_access()` dan o'tmasdi (yonidagi `/image` o'tardi)
+   va javobda `person_name`, `person_id`, `snapshot_key` bor edi. Bu
+   audit KRITIK-4 yopgan sinfning aynan o'zi. Endi tekshiruv bor,
+   `snapshot_key` javobdan olindi (`has_image` qoldi), admin biometrik
+   media ochgani audit jurnaliga yoziladi.
+
+7. **Ovoz uchun tayyorgarlik** — `camera_probe.audio_track()` RTSP
+   `DESCRIBE` javobidan (u allaqachon olinadi, faqat status kodi
+   ishlatilardi) audio yo'lagini o'qiydi. Sozlash ustasi endi
+   "kamerada mikrofon bormi" degan savolga javob beradi.
+
+Qayerda: `cloud/event_store.py` (`notification_reads`,
+`NOTIFICATION_SEVERITIES`, `notifications()`), `cloud/main.py`
+(bildirishnoma endpointlari, `X-Frame-At`, `_audit_biometric_view`),
+`cloud/store.py` (`stop_live`, `camera_frame_at`),
+`frontend/src/owner.tsx` (`NotificationBell`, keepalive),
+`frontend/src/components.tsx` (`CopyButton`), `frontend/src/api.ts`
+(`copyText`), `chaqimchi_ai/local/camera_probe.py` (`audio_track`).
+
+Test: 4 ta yangi fayl/bo'lim — `test_owner_notifications.py` (6 ta),
+`test_camera_audio_track.py` (5 ta), `test_owner_cameras.py` (jonli
+ko'rish 2 ta), `test_cloud_faces.py` (biometrik audit 1 ta).
+
+Diqqat — ikkita narsa:
+
+* **Repodagi `cloud/static/v2/` bundle 25-avgustdan eskirgan edi** va
+  26-avgust tuzatishlari (Telegram darajasi, preview POST) unda yo'q
+  edi. **Lekin production'ga ta'sir qilmagan:** `Dockerfile.cloud:25`
+  panelni har build'da qaytadan quradi. Tekshirildi — jonli saytdagi
+  `owner-Op4c4Sdx.js` da hammasi bor. Bundle endi yangilandi, ya'ni
+  `make run-cloud` lokalda ham to'g'ri panelni beradi.
+* **Admin `snapshot`/`clip` marshrutlarida biometrik tekshiruv yo'qligi
+  NOSOZLIK EMAS** — `require_admin` platforma adminini bildiradi, u esa
+  `require_biometric_access` ruxsat beradigan `service_admin`. Kamchilik
+  jurnal edi va u qo'shildi. (Bu — auditning uchinchi marta shu sinfda
+  xato topilma yozishi bo'lardi.)
+
 
 ### 2026-08-26 — Yetimlar tozalandi, o'lchov endi ishonchli
 Nima: masofaviy `clean_chains` topshirig'i yuborildi va beshta

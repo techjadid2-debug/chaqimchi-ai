@@ -410,6 +410,11 @@ def test_owner_sees_employees_gallery_and_images(pilot_client) -> None:
 
     events = pilot_client.get("/api/v1/owner/faces/events", headers=owner).json()["events"]
     assert events and events[0]["person_name"] == "Ali"
+    # Obyekt-saqlagich kaliti brauzerga chiqmaydi: rasm faqat
+    # autentifikatsiyali `/image` orqali beriladi.  Panel bor-yo'qlikni
+    # `has_image` dan biladi.
+    assert "snapshot_key" not in events[0]
+    assert events[0]["has_image"] is True
 
     assert (
         pilot_client.get(f"/api/v1/owner/faces/photos/{photo_id}/image", headers=owner).status_code
@@ -449,6 +454,11 @@ def test_a_manager_cannot_open_any_biometric_image(pilot_client) -> None:
         f"/api/v1/owner/faces/photos/{photo_id}/image",
         "/api/v1/owner/faces/events/evt-face-manager/image",
         "/api/v1/owner/events/evt-face-manager/snapshot",
+        # Ro'yxatning O'ZI ham shu yerda: javobida `person_name` bor,
+        # ya'ni rasmni ochmasdan ham "qaysi xodim qachon tanildi" degan
+        # savolga javob beradi.  Bu marshrut ro'yxatdan tushib qolgan
+        # edi va menejer uni bemalol o'qiy olardi.
+        "/api/v1/owner/faces/events",
     ):
         assert pilot_client.get(path, headers=manager).status_code == 403, path
 
@@ -956,3 +966,34 @@ def test_calibration_script_can_read_the_embeddings(pilot_client) -> None:
     assert "embedding_b64" not in listed[0], (
         "panel ro'yxati biometrik vektorni qaytarmasligi kerak"
     )
+
+
+def test_admin_viewing_a_face_frame_is_written_to_the_audit_log(pilot_client) -> None:
+    """Platforma admini yuz kadrini ochsa iz qolsin.
+
+    Admin buni ko'rishga HAQLI — `require_biometric_access` da
+    `service_admin` bor va qo'llab-quvvatlash usiz ishlay olmaydi.
+    Lekin xodimga imzolatilgan rozilik shabloni "kim ko'rdi" degan
+    savolga javob berishni talab qiladi, jurnalsiz esa "hech kim
+    ko'rmadi" degan gapdan boshqa dalil yo'q.
+
+    Oddiy (biometrik bo'lmagan) snapshot ataylab yozilmaydi: har
+    ko'rishni yozish jurnalni shovqinga to'ldiradi va muhimini
+    ko'rinmas qiladi.
+    """
+    site, headers = _site_with_device(pilot_client)
+    site_id = site["site_id"]
+    _send_face_capture(pilot_client, headers, "evt-face-audit", b"kadr-begona")
+
+    before = pilot_client.get("/api/v1/admin/portal-audit", headers=ADMIN).json()["events"]
+    assert not [row for row in before if row["action"] == "biometrics.media.viewed"]
+
+    opened = pilot_client.get(
+        f"/api/v1/admin/sites/{site_id}/events/evt-face-audit/snapshot", headers=ADMIN
+    )
+    assert opened.status_code == 200
+
+    after = pilot_client.get("/api/v1/admin/portal-audit", headers=ADMIN).json()["events"]
+    viewed = [row for row in after if row["action"] == "biometrics.media.viewed"]
+    assert len(viewed) == 1, "yuz kadri ochilgani jurnalda bo'lsin"
+    assert viewed[0]["target_id"] == site_id

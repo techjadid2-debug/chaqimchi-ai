@@ -168,6 +168,16 @@ h1,h2,h3,p { margin-top: 0; }
 .camera-overlay-badge { position: absolute; top: 9px; right: 9px; padding: 5px 8px; border-radius: 8px; background: rgba(66,133,244,.9); color: #fff; font-size: 10px; font-weight: 800; }
 .camera-stamp { position: absolute; top: 9px; right: 9px; padding: 4px 8px; border-radius: 7px; background: rgba(16,24,40,.7); color: #fff; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .camera-overlay-badge ~ .camera-stamp { top: 34px; }
+/* Kadr eskirgani QIZIL bilan aytiladi: "jonli" yozuvi yashil turib,
+   rasm muzlagan bo'lishi eng yomon holat — ega eski rasmga qarab
+   do'konda hozir nima bo'layotgani haqida qaror qabul qiladi. */
+.camera-stamp.is-stale { background: rgba(234,67,53,.88); }
+
+/* Nusxalash muvaffaqiyatli — tugma bir lahzaga yashil bo'ladi.
+   Javobsiz tugma buzuq tugmadan farq qilmaydi. */
+.btn.btn-copied { border-color: var(--green); background: var(--green-soft); color: #08754d; }
+/* Dalil kartasi AI yordamchisidan ochilganda ajralib tursin. */
+.evidence-card.is-focused { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 12px; }
 /* Sarlavha va "Jonli" belgisi kadr USTIDA turadi: shunda plitka
    balandligi kamera nomi uzunligiga bog'liq bo'lmaydi va to'rt plitka
    bir xil o'lchamda qoladi. */
@@ -230,6 +240,26 @@ h1,h2,h3,p { margin-top: 0; }
 .topbar-date { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .topbar-bell { position: relative; }
 .bell-badge { position: absolute; top: 5px; right: 5px; min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: 9px; font-style: normal; font-weight: 800; }
+
+/* Bildirishnoma paneli.
+   `.action-list` bilan bir xil qatlam va soya: panelda ikkita boshqacha
+   ko'rinadigan ochiluvchi ro'yxat bo'lmasin. */
+.notif-wrap { position: relative; }
+.notif-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(340px, calc(100vw - 28px)); display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); box-shadow: 0 12px 30px rgba(16,24,40,.14); }
+.notif-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.btn-small { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.notif-list { display: grid; gap: 2px; margin: 0; padding: 0; max-height: min(50vh, 340px); overflow-y: auto; list-style: none; }
+.notif-list li { display: flex; align-items: flex-start; gap: 9px; padding: 8px; border-radius: 9px; }
+/* O'qilmagan qator ajralib tursin — RANG bilan emas, FON bilan:
+   severity nuqtasi allaqachon rangli va ikkinchi rang chalkashtiradi. */
+.notif-list li.is-unread { background: var(--blue-soft); }
+.notif-list li b { display: block; font-size: 13px; font-weight: 700; }
+.notif-list li small { color: var(--muted); font-size: 11px; }
+.notif-dot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--muted); }
+.notif-dot.sev-critical { background: var(--red); }
+.notif-dot.sev-warning { background: var(--yellow); }
+.notif-empty { margin: 0; padding: 10px 2px; color: var(--muted); font-size: 12.5px; }
+
 .status-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .status-chip i { width: 8px; height: 8px; border-radius: 50%; }
 .status-chip.is-ok { background: var(--green-soft); color: #08754d; }

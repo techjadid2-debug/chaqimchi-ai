@@ -325,7 +325,7 @@ class CloudStore:
                 id TEXT PRIMARY KEY,
                 site_id TEXT NOT NULL,
                 kind TEXT NOT NULL
-                    CHECK(kind IN ('lan_scan','onvif','channels','probe')),
+                    CHECK(kind IN ('lan_scan','onvif','channels','probe','clean_chains')),
                 params_enc TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'queued'
                     CHECK(status IN ('queued','running','done','failed','expired')),
@@ -1385,6 +1385,47 @@ class CloudStore:
                 DROP TABLE lead_delivery_old;
                 CREATE INDEX IF NOT EXISTS idx_lead_delivery_retry
                     ON lead_notification_deliveries(state, next_attempt_at, updated_at);
+                """
+            )
+
+        # `device_jobs.kind` ro'yxatiga `clean_chains` qo'shildi.
+        #
+        # SQLite'da CHECK cheklovini `ALTER` bilan o'zgartirib bo'lmaydi —
+        # jadval qayta quriladi.  Migratsiyasiz yangi topshiriq turi
+        # `IntegrityError` bilan yiqilardi va aynan shu jonli serverda
+        # 500 xatosi bo'lib chiqdi (2026-08-26): `JOB_DEADLINE_SEC` ga
+        # qo'shildi, CHECK esa unutildi.
+        jobs_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='device_jobs'"
+        ).fetchone()
+        if jobs_sql and "clean_chains" not in str(jobs_sql[0]):
+            conn.executescript(
+                """
+                ALTER TABLE device_jobs RENAME TO device_jobs_old;
+                CREATE TABLE device_jobs (
+                    id TEXT PRIMARY KEY,
+                    site_id TEXT NOT NULL,
+                    kind TEXT NOT NULL
+                        CHECK(kind IN ('lan_scan','onvif','channels','probe','clean_chains')),
+                    params_enc TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'queued'
+                        CHECK(status IN ('queued','running','done','failed','expired')),
+                    progress INTEGER NOT NULL DEFAULT 0,
+                    note TEXT NOT NULL DEFAULT '',
+                    result_enc TEXT,
+                    error TEXT,
+                    frame_key TEXT,
+                    requested_by TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    taken_at TEXT,
+                    updated_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    FOREIGN KEY (site_id) REFERENCES sites(id)
+                );
+                INSERT INTO device_jobs SELECT * FROM device_jobs_old;
+                DROP TABLE device_jobs_old;
+                CREATE INDEX IF NOT EXISTS idx_device_jobs_site
+                    ON device_jobs(site_id, status, created_at DESC);
                 """
             )
 

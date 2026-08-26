@@ -328,3 +328,36 @@ def test_the_existing_heartbeat_keys_are_untouched(client: TestClient, shop: dic
 
     for key in ("preview_requested", "live_requested", "speak_requested", "job_requested"):
         assert key in answer, key
+
+
+# ── Topshiriq turlari bazada ham ruxsat etilgan bo'lsin ──────────────────
+#
+# 2026-08-26: `clean_chains` `JOB_DEADLINE_SEC` ga qo'shildi, lekin
+# `device_jobs.kind` dagi CHECK ro'yxatiga qo'shilmadi.  Test yo'q edi,
+# shuning uchun xato JONLI SERVERDA 500 bo'lib chiqdi.
+
+
+def test_every_known_job_kind_can_actually_be_created(tmp_path) -> None:
+    """`JOB_DEADLINE_SEC` dagi har tur bazaga yozila olsin.
+
+    Ikki ro'yxat (kod va CHECK cheklovi) ajralib ketsa yangi tur faqat
+    production'da yiqiladi — aynan shunday bo'ldi.
+    """
+    from cloud.store import CloudStore
+
+    store = CloudStore(tmp_path / "c.db")
+    site = store.create_site("Turlar", plan="lite")
+
+    for kind in CloudStore.JOB_DEADLINE_SEC:
+        job = store.create_job(site["site_id"], kind=kind, params={}, requested_by="test")
+        assert job["kind"] == kind, f"«{kind}» bazaga yozilmadi"
+        # Keyingi tur uchun joy bo'shatamiz: bir vaqtda bitta tirik
+        # topshiriq bo'ladi (`create_job` mavjudini qaytaradi).
+        store.job_result(site["site_id"], job["job_id"], ok=True, result={})
+
+
+def test_clean_chains_is_a_known_kind() -> None:
+    """Yetimlarni tozalash turi ro'yxatda bo'lishi shart."""
+    from cloud.store import CloudStore
+
+    assert "clean_chains" in CloudStore.JOB_DEADLINE_SEC

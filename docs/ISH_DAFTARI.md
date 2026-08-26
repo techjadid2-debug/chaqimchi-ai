@@ -16,6 +16,10 @@
   (`dl.chaqimchi.uz`). Sinov do'koni `auto` rejimida — 15 daqiqada oladi.
 - **O'lchangan natija:** snapshot 429 lari **2 618 ta/10 daqiqa → 0**;
   deploydan keyingi 2 daqiqada 86 ta rasm muvaffaqiyatli saqlandi.
+- **YETIMLAR TOZALANDI** (2026-08-26 14:12). Beshta zanjir bir vaqtda
+  ishlar edi (0.6.13 … 0.6.19) — masofaviy `clean_chains` topshirig'idan
+  keyin **bitta** qoldi: `0.6.20`.  Cloud nazorati ham toza:
+  `multi_version_sites: {}`.  Endi har o'lchov bitta jarayondan keladi.
 - Shox: `loitering-rasmsiz`, `origin` bilan sinxron. Asosiy shox `main`.
 - Audit ([AUDIT_TAHLIL.md](AUDIT_TAHLIL.md)) bo'yicha **A bosqichi
   (A0–A9) va B bosqichining katta qismi tugadi**. C boshlanmagan.
@@ -162,6 +166,29 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-26 — Yetimlar tozalandi, o'lchov endi ishonchli
+Nima: masofaviy `clean_chains` topshirig'i yuborildi va beshta
+zanjirdan **bittasi** qoldi.
+
+| | Oldin | Keyin |
+|---|---|---|
+| Ishlayotgan versiyalar | 0.6.13, 0.6.16, 0.6.17, 0.6.18, 0.6.19 | **faqat 0.6.20** |
+| `multi_version_sites` | 4 ta versiya | `{}` |
+
+Yo'lda bitta xato chiqdi va tuzatildi: `clean_chains`
+`JOB_DEADLINE_SEC` ga qo'shilgan, lekin `device_jobs.kind` dagi CHECK
+ro'yxatiga qo'shilmagan edi — birinchi chaqiruv jonli serverda 500
+berdi.  Ikki ro'yxat ajralib ketgan va buni ushlaydigan test yo'q edi.
+Endi `test_every_known_job_kind_can_actually_be_created` har turni
+bazaga rostdan yozib ko'radi; mavjud bazalar uchun migratsiya ham
+qo'shildi va eski sxemada sinovdan o'tkazildi.
+
+**Nima uchun bu muhim:** bugungacha davomat, mijoz portreti va yuz
+kadri bo'yicha har o'lchov beshta jarayonning ARALASHMASI edi.  Endi
+o'lchov bitta jarayondan keladi va unga ishonish mumkin.
+
+Test: 1809 ta o'tdi.
 
 ### 2026-08-26 — Nega eski jarayonlar o'chmadi: javob va yechim
 Nima: o'rnatuvchida eski zanjirni o'ldiradigan **uchta** qatlam bor va

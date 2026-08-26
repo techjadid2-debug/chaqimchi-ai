@@ -113,11 +113,35 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
 function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId: string; overlay: boolean; live: boolean }) {
   const [src, setSrc] = useState("");
   const [error, setError] = useState(false);
+  const [requested, setRequested] = useState(false);
   const [stamp, setStamp] = useState("");
   useEffect(() => {
     let timer = 0;
     let stopped = false;
     let current = "";
+    /* Tayanch kadrni bir marta SO'RAB olamiz.
+     *
+     * Ilgari bu komponent faqat GET qilardi.  Kadr hali yuborilmagan
+     * do'konda server 404 qaytarardi va panel abadiy "Kadr hozircha
+     * kelmadi" deb turardi — mijozda uni tuzatadigan birorta tugma yo'q
+     * edi.  2026-08-26 da jonli do'konda aynan shu ko'rindi: 6 soatda
+     * 33 ta GET, hammasi 404, birorta POST yo'q.
+     *
+     * Kadrni so'raydigan endpoint allaqachon bor
+     * (`owner_request_camera_preview`) — panel uni chaqirmasdi.
+     * Bir marta: serverda soatiga 30 so'rov chegarasi bor va uni
+     * avtomatik takror so'rov yeb qo'yardi. */
+    let asked = false;
+    const requestFrame = async () => {
+      if (asked || live) return;
+      asked = true;
+      try {
+        await api(`/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/preview`, "owner", { method: "POST", siteId });
+        if (!stopped) setRequested(true);
+      } catch {
+        /* Chegara yoki tarmoq — yozuv baribir "kelmadi" bo'lib qoladi. */
+      }
+    };
     const load = async () => {
       const path = live ? `/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/live-frame?t=${Date.now()}` : `/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/preview?t=${Date.now()}`;
       try {
@@ -135,14 +159,24 @@ function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId
         // eslab qolgan edi, shuning uchun birinchi muvaffaqiyatli
         // kadrdan keyin ham "Kadr kelmadi" yozuvi chiqib ketardi.
         if (!current) setError(true);
+        if (!current && !asked && !live) {
+          await requestFrame();
+          // Qurilma so'rovni keyingi salomda ko'radi (20 s gacha), keyin
+          // kadr yuklanadi.  Uch marta qaraymiz — ~45 soniya.
+          for (let attempt = 0; attempt < 3 && !stopped && !current; attempt += 1) {
+            await new Promise(resolve => { timer = window.setTimeout(resolve, 15000); });
+            if (!stopped && !current) await load();
+          }
+        }
       }
       if (!stopped && live) timer = window.setTimeout(load, 2500);
     };
     void load();
     return () => { stopped = true; window.clearTimeout(timer); if (current) URL.revokeObjectURL(current); };
   }, [camera.camera_id, live, overlay, siteId]);
+  const emptyLabel = error ? (requested ? "Kadr so‘raldi, 20 soniyacha kuting…" : "Kadr hozircha kelmadi") : "Kadr yuklanmoqda…";
   return <div className="camera-frame">
-    {src ? <img src={src} alt={`${camera.label || camera.camera_id} kamerasi`} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{error ? "Kadr hozircha kelmadi" : "Kadr yuklanmoqda…"}</span></div>}
+    {src ? <img src={src} alt={`${camera.label || camera.camera_id} kamerasi`} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{emptyLabel}</span></div>}
     {overlay && src ? <span className="camera-overlay-badge">AI tahlil</span> : null}
     {stamp && src ? <span className="camera-stamp">{stamp}</span> : null}
   </div>;
@@ -328,6 +362,62 @@ function TrafficPage({ dashboard }: { dashboard: Dashboard }) {
   </>;
 }
 
+/** Telegramga qaysi hodisalar borsin.
+ *
+ * Ilgari bu kodda qotirilgan edi (faqat `critical`) va hech qayerda
+ * aytilmasdi.  2026-08-26 da sinov do'konida 449 hodisadan 9 tasi botga
+ * bordi — ega "bot buzilgan" deb o'yladi, chunki qolgan 440 tasi jimgina
+ * panelda qolgani hech qanday joyda yozilmagan edi. */
+const TELEGRAM_LEVELS = [
+  { id: "critical", label: "Faqat muhimi", note: "Kamera buzilishi, tungi harakat, taqiqlangan zona" },
+  { id: "warning", label: "Muhim + ogohlantirish", note: "Yuqoridagilar va navbat, uzoq turish, bo‘sh kassa" },
+  { id: "all", label: "Hammasi", note: "Har bir hodisa — kuniga yuzlab xabar bo‘lishi mumkin" },
+] as const;
+
+function TelegramLevelPicker({ siteId }: { siteId: string }) {
+  const [config, setConfig] = useState<Record<string, unknown> | null>(null);
+  const [saving, setSaving] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let stopped = false;
+    api<{ config: Record<string, unknown> }>("/api/v1/owner/config", "owner", { siteId })
+      .then(answer => { if (!stopped) setConfig(answer.config); })
+      .catch(() => { if (!stopped) setError("Sozlama olinmadi"); });
+    return () => { stopped = true; };
+  }, [siteId]);
+
+  const choose = async (level: string) => {
+    if (!config || saving) return;
+    setSaving(level); setError("");
+    try {
+      /* `...config` SHART: validator TO'LIQ hujjatni kutadi — faqat bitta
+         maydon yuborilsa ish vaqti, zona va davomat sozlamalari standart
+         qiymatga qaytardi (GeometryEditor'dagi bilan bir xil tuzoq). */
+      await api("/api/v1/owner/config", "owner", {
+        method: "PUT", siteId,
+        body: JSON.stringify({ ...config, telegram_min_severity: level }),
+      });
+      setConfig({ ...config, telegram_min_severity: level });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Saqlanmadi");
+    } finally { setSaving(""); }
+  };
+
+  const current = String(config?.telegram_min_severity || "critical");
+  return <div className="simple-list">
+    {TELEGRAM_LEVELS.map(level => <button
+      key={level.id}
+      className={`simple-row level-row${current === level.id ? " is-active" : ""}`}
+      disabled={!config || Boolean(saving)}
+      onClick={() => void choose(level.id)}
+    >
+      <div><b>{level.label}</b><div className="table-sub">{level.note}</div></div>
+      {current === level.id ? <Pill state="active">Tanlangan</Pill> : null}
+    </button>)}
+    {error ? <p className="media-error">{error}</p> : null}
+  </div>;
+}
+
 /** Sozlamalar: hozircha faqat HAQIQATAN mavjud bo'lgan ma'lumot.
  *  Ilgari bu sahifa bo'sh "ish olib borilmoqda" yozuvi edi. */
 function SettingsPage({ dashboard, sites, siteId }: { dashboard: Dashboard; sites: Site[]; siteId: string }) {
@@ -348,7 +438,8 @@ function SettingsPage({ dashboard, sites, siteId }: { dashboard: Dashboard; site
       <Card>
         <div className="card-head"><div><h2>Bildirishnomalar</h2><p>Telegram orqali yuboriladi</p></div></div>
         <div className="card-body">
-          <p className="metric-note">Muhim kamera va tizim holatlari hamda kunlik xulosa botga boradi. Kim olishini «Telegram» bo‘limida boshqarasiz.</p>
+          <TelegramLevelPicker siteId={siteId}/>
+          <p className="metric-note">Kunlik xulosa darajadan qat’i nazar boradi. Kim olishini «Telegram» bo‘limida boshqarasiz.</p>
           <a className="btn btn-wide" href="/owner/telegram">Telegram a’zolari</a>
         </div>
       </Card>

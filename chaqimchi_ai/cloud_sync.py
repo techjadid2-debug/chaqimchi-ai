@@ -73,6 +73,13 @@ class CloudEventSync:
         self._blocked_until = 0.0
         #: Bo'sh navbatda o'sadigan kutish oralig'i.
         self._idle_interval = float(settings.interval_sec)
+        #: Cloud rad etgani uchun rasmsiz/klipsiz qolgan hodisalar soni.
+        #:
+        #: Bu — shu jarayonning ichki hisobi (log va test uchun).  Mijozga
+        #: ko'rsatiladigan raqam CLOUD tomonda sanaladi
+        #: (`cloud/ratelimit.py` rad etish hisoblagichi): qurilma o'zi
+        #: yiqilgan holatda ham u haqiqatni ko'rsatishda davom etadi.
+        self.media_dropped = 0
 
     @property
     def blocked_for(self) -> float:
@@ -130,37 +137,79 @@ class CloudEventSync:
                 self.outbox.fail(event_id, "cloud eventni qabul qilmadi")
                 failed += 1
                 continue
-            snapshot = row.get("snapshot_path")
-            if snapshot and Path(snapshot).is_file():
-                try:
-                    with Path(snapshot).open("rb") as handle:
-                        upload = await client.put(
-                            f"{base}/api/v1/edge/events/{event_id}/snapshot",
-                            headers={**self.headers, "Content-Type": "image/jpeg"},
-                            content=handle.read(),
-                        )
-                    upload.raise_for_status()
-                except Exception as exc:  # noqa: BLE001
-                    self.outbox.fail(event_id, str(exc))
-                    failed += 1
-                    continue
-            clip = row.get("clip_path")
-            if clip and Path(clip).is_file():
-                try:
-                    with Path(clip).open("rb") as handle:
-                        upload = await client.put(
-                            f"{base}/api/v1/edge/events/{event_id}/clip",
-                            headers={**self.headers, "Content-Type": "video/mp4"},
-                            content=handle.read(),
-                        )
-                    upload.raise_for_status()
-                except Exception as exc:  # noqa: BLE001
-                    self.outbox.fail(event_id, str(exc))
-                    failed += 1
-                    continue
+            verdict = await self._upload_media(client, base, event_id, row)
+            if verdict == "retry":
+                failed += 1
+                continue
             completed.append(event_id)
         self.outbox.acknowledge(completed)
         return {"sent": len(completed), "failed": failed, "pending": len(rows)}
+
+    async def _upload_media(
+        self,
+        client: httpx.AsyncClient,
+        base: str,
+        event_id: str,
+        row: Dict[str, object],
+    ) -> str:
+        """Hodisaning rasmi va klipini yuboradi.
+
+        Qaytaradi: `"ok"` — yuborildi yoki yuboradigan narsa yo'q;
+        `"dropped"` — media yo'qoldi, lekin **hodisa saqlanadi**;
+        `"retry"` — vaqtinchalik xato, hodisa navbatda qolsin.
+
+        Nega media xatosi hodisani o'ldirmasligi kerak: bu joyga kelganda
+        cloud hodisani ALLAQACHON qabul qilgan (u `accepted` ro'yxatida).
+        Ilgari har qanday yuklash xatosi `outbox.fail()` ga ketardi va
+        butun hodisa qayta yuborilardi — cloud esa uni qayta qabul qilib,
+        rasmni yana rad etardi.  2026-08-26 da shu halqa jonli do'konda
+        3 soatda 6 315 ta bekor so'rov berdi va do'konning HAMMA rasmi
+        yo'qoldi: kunlik snapshot byudjeti tugagach har urinish 429 edi.
+
+        Shuning uchun xato ikkiga bo'linadi:
+
+        * **4xx — qat'iy.**  429 (chegara), 403 (taqiq), 413 (hajm),
+          415 (format) — qayta urinishdan hech biri o'zgarmaydi.  Media
+          yo'qoladi, hodisaning o'zi esa saqlanib qoladi: raqam rasmdan
+          muhimroq.
+        * **5xx va tarmoq — vaqtinchalik.**  Server tiklanadi, shuning
+          uchun hodisa navbatda qoladi va keyingi siklda qayta urinadi.
+        """
+        verdict = "ok"
+        for path_key, endpoint, mime in (
+            ("snapshot_path", "snapshot", "image/jpeg"),
+            ("clip_path", "clip", "video/mp4"),
+        ):
+            raw = row.get(path_key)
+            if not raw or not Path(str(raw)).is_file():
+                continue
+            try:
+                with Path(str(raw)).open("rb") as handle:
+                    upload = await client.put(
+                        f"{base}/api/v1/edge/events/{event_id}/{endpoint}",
+                        headers={**self.headers, "Content-Type": mime},
+                        content=handle.read(),
+                    )
+                upload.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if 400 <= exc.response.status_code < 500:
+                    self.media_dropped += 1
+                    # `warning`, `info` emas: rasmsiz qolgan hodisa mijoz
+                    # ko'radigan kamchilik, jimgina o'tmasligi kerak.
+                    logger.warning(
+                        "Media qabul qilinmadi (%s %s) — hodisa rasmsiz saqlanadi: %s",
+                        endpoint,
+                        exc.response.status_code,
+                        event_id,
+                    )
+                    verdict = "dropped"
+                    continue
+                self.outbox.fail(event_id, str(exc))
+                return "retry"
+            except Exception as exc:  # noqa: BLE001 — tarmoq: keyingi siklda
+                self.outbox.fail(event_id, str(exc))
+                return "retry"
+        return verdict
 
     async def heartbeat_once(self) -> None:
         if self.health_provider is None:

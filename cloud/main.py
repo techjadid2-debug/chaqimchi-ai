@@ -74,6 +74,7 @@ from cloud import botfmt, faces, ratelimit, rtsp, server_health, trust_score, ur
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
+from cloud.notify import DEFAULT_TELEGRAM_LEVEL as notify_default_level
 from cloud.notify import event_label, select_alert_events
 from cloud.notify import summarize as notify_summarize
 from cloud.owner_auth import (
@@ -609,6 +610,16 @@ class SiteConfigBody(BaseModel):
     attendance_camera_ids: List[str] = Field(default_factory=list, max_length=2)
     attendance_camera_roles: Dict[str, Literal["arrival", "departure", "both"]] = Field(
         default_factory=dict
+    )
+    #: Telegramga qaysi hodisalar borsin: `critical` (standart),
+    #: `warning` (kritik + ogohlantirish) yoki `all`.
+    #:
+    #: Ilgari bu kodda qotirilgan edi va hech qayerda aytilmasdi.
+    #: 2026-08-26 da sinov do'konida 449 hodisadan 9 tasi botga bordi —
+    #: ega "bot buzilgan" deb o'yladi.  Standart o'zgarmadi: mavjud
+    #: obyektlarda xabar oqimi kutilmaganda kengayib ketmasin.
+    telegram_min_severity: Literal["critical", "warning", "all"] = Field(
+        default=notify_default_level
     )
     zones: List[SceneZoneSettings] = Field(default_factory=list, max_length=128)
     lines: List[SceneLineSettings] = Field(default_factory=list, max_length=32)
@@ -1198,6 +1209,19 @@ async def _notify_site_members(
 #: hisoboti unga tayanadi.
 MEDIALESS_EVENTS = frozenset({"loitering"})
 
+
+def _telegram_level(site_id: str) -> str:
+    """Obyekt uchun tanlangan Telegram darajasi.
+
+    Sozlama o'qilmasa standart (`critical`) qaytadi — xabar oqimi
+    kutilmaganda kengayib ketgandan ko'ra tor qolgani yaxshi.
+    """
+    try:
+        config = get_event_store().get_site_config(site_id)["config"]
+    except Exception:  # noqa: BLE001 — xabar yuborish sozlama uchun to'xtamasin
+        return notify_default_level
+    return str(config.get("telegram_min_severity") or notify_default_level)
+
 #: Snapshot batchdan KEYIN alohida yuklanadi — rasm yetib kelishini shu
 #: muddatgacha kutamiz (2 soniyalik qadamlar bilan).
 ALERT_SNAPSHOT_WAIT_SEC = 20
@@ -1453,15 +1477,72 @@ def _face_retention_days() -> int:
         return 14
 
 
+#: Chegara ogohlantirishi shu obyekt uchun oxirgi marta qachon ketgani.
+#: Kuniga bir marta: 2026-08-26 da rad etishlar soni 6 315 ta edi va har
+#: biri uchun xabar yuborilsa u ogohlantirish emas, spam bo'lardi.
+_rate_limit_notified: Dict[str, float] = {}
+RATE_LIMIT_NOTICE_EVERY_SEC = 86_400
+
+
+async def _notify_rate_limited_sites() -> None:
+    """Chegaraga urilgan obyektlar haqida platforma adminiga xabar.
+
+    Nega kerak: 2026-08-26 da sinov do'koni 3 soat davomida rasmsiz
+    ishladi.  Yagona izi `INFO` access logdagi 429 qatorlari edi —
+    ERROR yo'q, panelda son yo'q, monitoring ham ko'rmasdi.  Nosozlikni
+    MIJOZ aytdi, biz emas.  Bu halqa aynan shuni oldini oladi.
+    """
+    recipients = _lead_recipient_ids()
+    if not recipients:
+        return
+    now = time.monotonic()
+    for site in await asyncio.to_thread(get_store().list_sites):
+        site_id = str(site.get("site_id") or site.get("id") or "")
+        if not site_id:
+            continue
+        rejected = ratelimit.limiter().rejections(site_id)
+        # Faqat MEDIA chegaralari: mijoz uchun ko'rinadigan yo'qotish shu.
+        media = sum(rejected.get(key, 0) for key in ("snapshots", "face-snapshots", "clips"))
+        if not media:
+            continue
+        last = _rate_limit_notified.get(site_id)
+        if last is not None and now - last < RATE_LIMIT_NOTICE_EVERY_SEC:
+            continue
+        _rate_limit_notified[site_id] = now
+        text = (
+            f"⚠️ {site.get('name') or site_id}: kunlik media chegarasi urildi.\n"
+            f"Saqlanmagan: {media} ta.\n"
+            f"Tafsilot: {rejected}\n"
+            "Mijoz panelda rasmsiz hodisa ko'radi."
+        )
+        for chat_id in recipients:
+            try:
+                await get_alerts().sender.send_to(chat_id, text)
+            except Exception as exc:  # noqa: BLE001 — xabar ketmasa ham halqa yursin
+                logger.warning("Chegara ogohlantirishi %s ga yetmadi: %s", chat_id, exc)
+
+
+#: Halqa shu qadam bilan aylanadi; tozalash har 12-qadamda (6 soat).
+#: Ikki ish ikki tezlikda: tozalash — og'ir baza skani, chegara nazorati
+#: esa arzon va tez bo'lishi kerak (chegara kun o'rtasida uriladi va biz
+#: buni kun oxirida emas, o'sha payt bilishimiz kerak).
+_MAINTENANCE_STEP_SEC = 1_800
+_PURGE_EVERY_STEPS = 12
+
+
 async def _maintenance_loop() -> None:
+    step = 0
     while True:
         try:
-            await asyncio.to_thread(_purge_expired_events)
+            if step % _PURGE_EVERY_STEPS == 0:
+                await asyncio.to_thread(_purge_expired_events)
+            await _notify_rate_limited_sites()
         except asyncio.CancelledError:
             break
         except Exception:
             logger.exception("Cloud maintenance bajarilmadi")
-        await asyncio.sleep(21_600)
+        step += 1
+        await asyncio.sleep(_MAINTENANCE_STEP_SEC)
 
 
 async def _lead_notification_loop() -> None:
@@ -1752,6 +1833,13 @@ async def health_deep(
             "service": "chaqimchi-cloud",
             "version": __version__,
             "checks": checks,
+            # Chegara tufayli rad etilgan so'rovlar — bucket bo'yicha.
+            #
+            # 2026-08-26 da bu raqam BO'LMAGANI uchun 6 315 ta rasm 3 soat
+            # davomida jimgina rad etildi: ERROR log yo'q, panelda son yo'q,
+            # `/health` esa "hammasi joyida" derdi.  Nosozlikni mijoz
+            # aytganda bildik.  Bo'sh lug'at — hech narsa rad etilmagan.
+            "rate_limited": ratelimit.limiter().rejections(),
         }
     return {
         "ok": ok,
@@ -4517,6 +4605,12 @@ async def admin_site_detail(
         if record:
             device["health"] = record.get("health") or {}
             device["health_at"] = record.get("received_at")
+    # Chegara tufayli rad etilgan so'rovlar — shu obyekt kesimida.
+    #
+    # `snapshots`/`face-snapshots` noldan katta bo'lsa mijoz RASMSIZ
+    # qolyapti.  2026-08-26 da aynan shu holat 3 soat sezilmadi: yagona
+    # izi `INFO` access log edi va uni hech kim o'qimasdi.
+    detail["rate_limited"] = ratelimit.limiter().rejections(site_id)
     return detail
 
 
@@ -4848,7 +4942,12 @@ async def ingest_event_batch(
     # yo'qotardi — batafsili `cloud/notify.py` da.  Tormoz bazada turadi:
     # xotiradagisi har deploy'da nolga qaytib, xabar bo'roni berardi.
     # Xabar imkon bo'lsa hodisa RASMI bilan ketadi (`_notify_alert`).
-    allowed = select_alert_events(device["site_id"], new_events, throttle_service=_durable_throttle)
+    allowed = select_alert_events(
+        device["site_id"],
+        new_events,
+        throttle_service=_durable_throttle,
+        level=_telegram_level(device["site_id"]),
+    )
     if allowed:
         background_tasks.add_task(_notify_alert, device["site_id"], allowed)
     return {"ok": True, "accepted": accepted, "rejected": rejected}
@@ -4880,15 +4979,6 @@ async def upload_event_snapshot(
     if event["event_type"] in MEDIALESS_EVENTS:
         return {"ok": True, "stored": False}
 
-    # Snapshot 8 MB gacha bo'lishi mumkin — kunlik chegara S3 hisobini va
-    # diskni bitta buzuq qurilmadan himoya qiladi.
-    ratelimit.check(
-        "snapshots",
-        device["site_id"],
-        limit=500,
-        window_sec=86_400,
-        message="Kunlik snapshot chegarasi oshdi",
-    )
     if event["event_type"] == "employee_seen":
         # `employee_seen` — moslash NATIJASI, media'siz qoladi.  Yuz kadri
         # faqat `face_captured` orqali keladi va davomat darvozasi ortida.
@@ -4897,6 +4987,17 @@ async def upload_event_snapshot(
             "Davomat biometrik snapshotlari cloudga yuklanmaydi",
         )
     face_capture = event["event_type"] == "face_captured"
+    # Chegara IKKIGA BO'LINGAN va yuz kadri umumiy byudjetni SARFLAMAYDI.
+    #
+    # Ilgari `snapshots` (500) tekshiruvi eng birinchi turardi, ya'ni yuz
+    # kadri avval umumiy byudjetdan yeb, keyin o'z chegarasiga tegardi.
+    # 2026-08-26 da jonli do'konda oqibati shu bo'ldi: 45 daqiqada 399 ta
+    # `face_captured` umumiy 500 talik byudjetning 78% ini yedi, qolgani
+    # 20 daqiqada tugadi va SHUNDAN KEYIN do'konning hamma hodisasi —
+    # navbat, dwell, chiziq — rasmsiz qoldi (har yuklash 429).
+    #
+    # Endi ikki oqim bir-birini och qoldira olmaydi: davomat qanchalik
+    # toshib ketmasin, do'kon hodisalarining rasmi o'z byudjetida qoladi.
     if face_capture:
         if not _attendance_enabled():
             raise HTTPException(403, "Davomat piloti yoqilmagan")
@@ -4909,6 +5010,16 @@ async def upload_event_snapshot(
             limit=200,
             window_sec=86_400,
             message="Kunlik yuz kadrlari chegarasi oshdi",
+        )
+    else:
+        # Snapshot 8 MB gacha bo'lishi mumkin — kunlik chegara S3 hisobini va
+        # diskni bitta buzuq qurilmadan himoya qiladi.
+        ratelimit.check(
+            "snapshots",
+            device["site_id"],
+            limit=500,
+            window_sec=86_400,
+            message="Kunlik snapshot chegarasi oshdi",
         )
     if request.headers.get("content-type", "").split(";", 1)[0] != "image/jpeg":
         raise HTTPException(415, "Faqat image/jpeg qabul qilinadi")
@@ -6166,6 +6277,12 @@ async def owner_dashboard(
         },
         "capabilities": capabilities,
         "diagnostics": events_store.latest_device_diagnostics(owner.site_id),
+        # Chegara tufayli saqlanmagan rasm/klip soni.
+        #
+        # Ega buni KO'RISHI kerak.  2026-08-26 da rasm kelmayotgani uch
+        # soat sezilmadi, chunki panel rasm yo'qligini jimgina yashirar
+        # edi — "hodisa bor, rasmi yo'q" holati hech qanday izoh bermasdi.
+        "media_dropped": ratelimit.limiter().rejections(owner.site_id).get("snapshots", 0),
         "updated_at": updated_at,
         "revision": f"{owner.site_id}:{updated_at}",
     }

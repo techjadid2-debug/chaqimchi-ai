@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, formatMoney, formatNumber } from "./api";
+import { api, formatMoney, formatNumber, formatTimeUz } from "./api";
 import { Avatar, Card, EmptyState, Pill, StatCard, StatusDot } from "./components";
 import { Percent } from "./admin";
 import { Bars, Donut, LineChart, type Point, type Segment } from "./charts";
@@ -216,7 +216,7 @@ export function AdminHome({ data, onNavigate }: {
                       <StatusDot state={item.event_type?.startsWith("camera") || item.event_type?.includes("offline") ? "offline" : "online"} />
                       <div><b>{item.label || item.event_type}</b><small>{item.site_name || "—"} · {item.camera_id || "Tizim"}</small></div>
                     </div>
-                    <span className="list-value">{item.occurred_at ? new Date(item.occurred_at).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" }) : "—"}</span>
+                    <span className="list-value">{formatTimeUz(item.occurred_at)}</span>
                   </div>)}
                 </div>
               : <EmptyState icon="pulse" title="Hodisa yo‘q" detail="Qurilmalar hodisa yuborgach ular shu yerda ko‘rinadi." />}

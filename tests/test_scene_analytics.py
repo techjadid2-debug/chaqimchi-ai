@@ -1,5 +1,6 @@
 import numpy as np
 
+from chaqimchi_ai import scene_analytics as scene
 from chaqimchi_ai.scene_analytics import SceneAnalyzer
 from chaqimchi_ai.settings import SceneSettings
 
@@ -190,3 +191,62 @@ def test_qimirlamaydigan_obyekt_uzoq_turish_bermaydi() -> None:
     assert analyzer.tracker.active == 1, "odam o'lchamidagi ramka kuzatilishi kerak"
     assert analyzer.tracker.is_static(1), "60 kadr qimirlamagan — statik deb tanilsin"
     assert loitering == [], f"qimirlamaydigan obyekt uzoq turish berdi: {len(loitering)} ta"
+
+
+def test_camera_hour_ceiling_survives_track_churn() -> None:
+    """Track almashuvi yuz kadri byudjetini noldan boshlab yubormasin.
+
+    2026-08-26 jonli nosozligi: `FACE_EMITS_PER_TRACK` faqat `track_id` ga
+    bog'langan edi.  Tracker odamni yo'qotib qayta topganda YANGI track
+    tug'ilardi va byudjet qaytadan ochilardi — atigi 9 ta tashrifchidan
+    45 daqiqada 399 ta `face_captured` chiqdi, cloud'dagi kunlik byudjet
+    tugadi va do'konning HAMMA hodisasi rasmsiz qoldi.
+
+    Bu yerda eng yomon holat takrorlanadi: har kadrda ramka uzoqqa
+    sakraydi, ya'ni IoU hech qachon mos kelmaydi va har safar yangi track.
+    """
+
+    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+
+    emitted = 0
+    for step in range(200):
+        # Tracker odamni yo'qotdi — keyingi kadrda u YANGI track bo'ladi.
+        # Aynan shu jonli do'konda 200 marta takrorlangan.
+        analyzer.tracker._tracks.clear()
+        emitted += len(face_events(analyzer.analyze(frame, now=10 + step)))
+
+    assert emitted == scene.FACE_EMITS_PER_HOUR, (
+        f"soatlik shift ushlab qolishi kerak edi, {emitted} ta chiqdi"
+    )
+    assert analyzer.face_emits_suppressed > 0, "to'xtatilganlar sanalsin"
+
+
+def test_hour_ceiling_reopens_in_the_next_window() -> None:
+    """Shift — sirpanuvchi oyna, abadiy qulf emas."""
+    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+
+    # Oynani sun'iy to'ldiramiz: soat oldin yuborilgan kadrlar.
+    analyzer._face_emit_times = [1000.0] * scene.FACE_EMITS_PER_HOUR
+
+    assert face_events(analyzer.analyze(frame, now=1500.0)) == [], "oyna hali to'la"
+    # Bir soatdan keyin eski yozuvlar oynadan chiqadi.
+    assert len(face_events(analyzer.analyze(frame, now=1000.0 + scene.FACE_HOUR_WINDOW_SEC + 1))) == 1
+
+
+def test_hour_ceiling_does_not_stop_heatmap_and_zones() -> None:
+    """Yuz kadri to'xtaganda issiqlik xaritasi va zona ishlashda davom etsin.
+
+    Shift `continue` bilan qilinsa kadrning qolgan tahlili — issiqlik
+    xaritasi, zona, demografiya — jimgina o'chib qolardi.
+    """
+    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    analyzer._face_emit_times = [1000.0] * scene.FACE_EMITS_PER_HOUR
+
+    events = analyzer.analyze(frame, now=1500.0)
+
+    assert face_events(events) == [], "yuz kadri to'xtagan bo'lsin"
+    _cells, _frames, points = analyzer.heatmap.drain()
+    assert points > 0, "issiqlik xaritasi ishlashda davom etsin"

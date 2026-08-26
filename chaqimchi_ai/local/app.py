@@ -1448,16 +1448,28 @@ def _start_config_sync() -> None:
                 cloud_config.upload_heatmaps()
 
                 applied = cloud_config.sync_once()
-                if applied and (applied.get("cameras") or applied.get("hours")):
-                    # Kamera ro'yxati YOKI ish vaqti o'zgardi — zanjir
-                    # ikkalasini ham faqat startda o'qiydi
-                    # (`retail/service.py`: `build_runner`), shuning uchun
-                    # qayta ishga tushiramiz.
+                if applied and (
+                    applied.get("cameras") or applied.get("hours") or applied.get("attendance")
+                ):
+                    # Kamera ro'yxati, ish vaqti YOKI davomat kameralari
+                    # o'zgardi — zanjir uchalasini ham faqat startda
+                    # o'qiydi (`retail/service.py`: `build_runner`),
+                    # shuning uchun qayta ishga tushiramiz.
                     #
-                    # Ish vaqti bungacha ro'yxatda yo'q edi: yangi soat
-                    # faylga yozilardi-yu, ishlab turgan zanjir uni hech
-                    # qachon ko'rmasdi.  Natijada "ish vaqtidan tashqari
-                    # harakat" hodisasi umuman chiqmasdi.
+                    # Bu ro'yxat ikki marta to'liqsiz bo'lgan va har safar
+                    # oqibati BIR XIL: sozlama faylga yozilardi, panel
+                    # "saqlandi" derdi, ishlab turgan zanjir esa uni hech
+                    # qachon ko'rmasdi.
+                    #
+                    # * ish vaqti — "ish vaqtidan tashqari harakat"
+                    #   hodisasi umuman chiqmasdi;
+                    # * davomat kameralari (2026-08-26) — panelda kamera
+                    #   ro'yxatidan olingan kamera 12 daqiqadan keyin ham
+                    #   yuz kadri yuborishda davom etardi va cloud'dagi
+                    #   kunlik byudjetni yeb qo'yardi.
+                    #
+                    # Yangi sozlama qo'shsangiz: u zanjir tomonidan
+                    # startda o'qiladimi?  Ha bo'lsa — shu ro'yxatga.
                     if supervisor.status()["running"]:
                         supervisor.restart()
                     else:

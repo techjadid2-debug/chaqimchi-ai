@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -255,3 +256,110 @@ def test_block_wins_over_the_idle_interval(tmp_path: Path) -> None:
 def test_max_interval_cannot_be_below_the_floor() -> None:
     with pytest.raises(ValueError, match="max_interval_sec"):
         CloudSyncSettings(interval_sec=30, max_interval_sec=10)
+
+
+def _event_with_snapshot(tmp_path: Path, event_id: str = "evt-media") -> EdgeEvent:
+    snapshot = tmp_path / f"{event_id}.jpg"
+    snapshot.write_bytes(b"jpeg")
+    return EdgeEvent(
+        event_id=event_id,
+        event_type="zone_entered",
+        severity="critical",
+        camera_id="camera-01",
+        snapshot_path=str(snapshot),
+    )
+
+
+def test_rate_limited_snapshot_does_not_kill_the_event(tmp_path: Path) -> None:
+    """429 rasmni yo'qotadi, HODISANI emas.
+
+    2026-08-26 jonli nosozligi: kunlik snapshot byudjeti tugagach har
+    yuklash 429 qaytardi, `outbox.fail()` esa butun hodisani navbatga
+    qaytarardi.  Cloud hodisani qayta qabul qilib rasmni yana rad etardi —
+    3 soatda 6 315 ta bekor so'rov va do'konning hamma rasmi yo'q.
+    """
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=100_000)
+    outbox.enqueue(_event_with_snapshot(tmp_path))
+    attempts = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request.url.path)
+        if request.url.path.endswith("/events/batch"):
+            return httpx.Response(200, json={"accepted": ["evt-media"]})
+        return httpx.Response(429, json={"detail": "Kunlik snapshot chegarasi oshdi"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sync = CloudEventSync(
+        CloudSyncSettings(
+            enabled=True,
+            url="https://cloud.test",
+            site_id="site",
+            device_id="device",
+            device_token="token",
+        ),
+        outbox,
+        client=client,
+    )
+
+    async def exercise() -> dict:
+        result = await sync.sync_once()
+        await client.aclose()
+        return result
+
+    result = asyncio.run(exercise())
+
+    # Hodisa yuborilgan deb hisoblanadi va navbatdan chiqadi.
+    assert result["sent"] == 1
+    assert result["failed"] == 0
+    assert outbox.pending() == []
+    assert sync.media_dropped == 1
+
+    # Ikkinchi sikl umuman so'rov yubormasin — halqa yopilgan.
+    attempts.clear()
+
+    async def again() -> None:
+        client2 = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        sync.client = client2
+        await sync.sync_once()
+        await client2.aclose()
+
+    asyncio.run(again())
+    assert attempts == []
+
+
+def test_server_error_on_snapshot_still_retries_the_event(tmp_path: Path) -> None:
+    """5xx — vaqtinchalik: hodisa navbatda qolsin va qayta urinsin."""
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=100_000)
+    outbox.enqueue(_event_with_snapshot(tmp_path, "evt-5xx"))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/events/batch"):
+            return httpx.Response(200, json={"accepted": ["evt-5xx"]})
+        return httpx.Response(503, json={"detail": "server band"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sync = CloudEventSync(
+        CloudSyncSettings(
+            enabled=True,
+            url="https://cloud.test",
+            site_id="site",
+            device_id="device",
+            device_token="token",
+        ),
+        outbox,
+        client=client,
+    )
+
+    async def exercise() -> dict:
+        result = await sync.sync_once()
+        await client.aclose()
+        return result
+
+    result = asyncio.run(exercise())
+    assert result["sent"] == 0
+    assert result["failed"] == 1
+    assert sync.media_dropped == 0
+    # Navbatda qoldi: backoff o'tgach hodisa yana yuborishga tayyor bo'ladi.
+    assert outbox.pending() == []  # hozir — backoff kutmoqda
+    later = datetime.now(timezone.utc) + timedelta(hours=1)
+    assert [row["event_id"] for row in outbox.pending(now=later)] == ["evt-5xx"]

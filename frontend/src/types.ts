@@ -88,6 +88,8 @@ export type Dashboard = {
     geometry?: { ready?: boolean; lines_drawn?: boolean; zones_drawn?: boolean; reason?: string };
   };
   diagnostics?: { created_at?: string; payload?: { outbox?: { pending?: number; poisoned?: number }; cloud?: { dns_ok?: boolean } } } | null;
+  /** Chegara tufayli saqlanmagan rasm soni — 0 dan katta bo'lsa egaga aytiladi. */
+  media_dropped?: number;
   updated_at: string;
   revision?: string;
 };

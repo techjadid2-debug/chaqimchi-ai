@@ -132,6 +132,29 @@ def _write_cache(payload: Dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _cached_payload() -> Dict[str, Any]:
+    """Keshdagi oxirgi cloud javobi (o'qilmasa bo'sh lug'at)."""
+    try:
+        data = json.loads(cache_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _attendance_signature(payload: Dict[str, Any]) -> tuple:
+    """Davomatga ta'sir qiladigan sozlamalar — taqqoslash uchun.
+
+    Ro'yxat TARTIBLANADI: cloud bir xil kameralarni boshqa tartibda
+    qaytarsa zanjir bekorga qayta ishga tushmasin.
+    """
+    site = payload.get("config") or {}
+    return (
+        bool((payload.get("attendance") or {}).get("enabled")),
+        tuple(sorted(str(item) for item in (site.get("attendance_camera_ids") or []))),
+        tuple(sorted((site.get("attendance_camera_roles") or {}).items())),
+    )
+
+
 def _cached_cameras() -> Any:
     """Keshda turgan kamera ro'yxati (bo'lmasa `None`).
 
@@ -164,6 +187,16 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
         # paneldagi maydon jonli qurilmada hech qachon ishlamasdi va
         # "ish vaqtidan tashqari harakat" hech qachon chiqmasdi.
         "hours": False,
+        # Davomat kameralari — XUDDI SHU tuzoq, ikkinchi marta.
+        #
+        # 2026-08-26: sinov do'konida ikkala kamera ham davomat kamerasi
+        # edi va yuz kadrlari cloud byudjetini yeb qo'yardi.  Sozlama
+        # admin panelda darhol o'zgartirildi (revision 6 → 7), lekin
+        # qurilma 12 daqiqadan keyin ham eskicha ishlab turdi: bu kalit
+        # yo'q edi, ya'ni zanjir qayta ishga tushmasdi.  Zanjir esa
+        # davomat ro'yxatini FAQAT startda o'qiydi
+        # (`retail/service.py: build_runner`).
+        "attendance": False,
     }
 
     # Keshni HAR DOIM yozamiz va yo'lini configga qo'yamiz.
@@ -176,6 +209,12 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
     # bunday do'konda hech qachon ishlamasdi va hech qanday xato ham
     # chiqmasdi.  Yo'l qo'yilmagani esa yana battar edi: `retail/service.py`
     # standart **Linux** yo'lini qidiradi va Windows'da hech narsa topmaydi.
+    # Davomat o'zgarganini keshni YOZISHDAN OLDIN taqqoslaymiz — keyin
+    # eski qiymat yo'qoladi.
+    changed["attendance"] = _attendance_signature(_cached_payload()) != _attendance_signature(
+        payload
+    )
+
     cameras = [item for item in (payload.get("cameras") or []) if item.get("source")]
     authoritative = bool(payload.get("cameras_authoritative"))
     to_cache = dict(payload)

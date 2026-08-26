@@ -37,6 +37,29 @@ MAX_LINES = 6
 #: xavfni ham o'tkazib yuboradi.
 ALERT_SEVERITIES = frozenset({"critical"})
 
+#: Obyekt sozlamasidagi `telegram_min_severity` qiymatlari.
+#:
+#: Minimal rejim standart bo'lib qoladi, lekin endi u QULF emas: 2026-08-26
+#: da sinov do'konida 449 hodisadan 9 tasi botga bordi va ega "bot buzilgan"
+#: deb o'yladi — chunki bu tanlov hech qayerda aytilmagan edi.  Endi u
+#: panelda ko'rinadi va egasi o'zi qaror qiladi.
+TELEGRAM_SEVERITY_LEVELS: Dict[str, frozenset] = {
+    "critical": frozenset({"critical"}),
+    "warning": frozenset({"critical", "warning"}),
+    "all": frozenset({"critical", "warning", "info"}),
+}
+
+#: Sozlama yo'q yoki noma'lum bo'lsa — hozirgi xatti-harakat.
+DEFAULT_TELEGRAM_LEVEL = "critical"
+
+
+def severities_for(level: Optional[str]) -> frozenset:
+    """Tanlangan darajaga mos severity to'plami."""
+    return TELEGRAM_SEVERITY_LEVELS.get(
+        str(level or "").strip().lower(), TELEGRAM_SEVERITY_LEVELS[DEFAULT_TELEGRAM_LEVEL]
+    )
+
+
 #: "Buzildi" xabarining "tiklandi" jufti — severity past bo'lsa ham boradi.
 #: Usiz mijoz faqat muammolarni ko'rar, tizim o'zini "doim buzuq" qilib
 #: ko'rsatar edi.
@@ -195,6 +218,7 @@ def select_alert_events(
     events: Iterable[EdgeEvent],
     *,
     throttle_service: Optional[AlertThrottle] = None,
+    level: Optional[str] = None,
 ) -> List[EdgeEvent]:
     """Batchdan botga chiqishi kerak bo'lgan hodisalar — tormoz bilan.
 
@@ -202,7 +226,7 @@ def select_alert_events(
     ro'yxatni oladi, snapshot kutadi, keyin matn/rasm yasaydi.
     """
     limiter = throttle_service or _throttle
-    alerts = [event for event in events if wants_telegram(event)]
+    alerts = [event for event in events if wants_telegram(event, level)]
     if not alerts:
         return []
     seen: Dict[Tuple[str, str], bool] = {}
@@ -216,7 +240,7 @@ def select_alert_events(
     return allowed
 
 
-def wants_telegram(event: EdgeEvent) -> bool:
+def wants_telegram(event: EdgeEvent, level: Optional[str] = None) -> bool:
     """Hodisa botga yuborilsinmi.
 
     Ikki qatlam:
@@ -225,18 +249,25 @@ def wants_telegram(event: EdgeEvent) -> bool:
        hodisa `metadata.alert` bayrog'i bilan keladi va bayroq yakuniy
        so'zga ega: qoida Telegram so'ramagan bo'lsa, severity qanday
        bo'lmasin xabar ketmaydi.
-    2. Minimal rejim: bayroq bilan ham faqat `critical` (va "tiklandi"
-       juftlari) boradi — `warning` hodisalar panelda qoladi.
+    2. Obyekt darajasi (`telegram_min_severity`, standart `critical`):
+       bayroq bilan ham faqat tanlangan darajadagi hodisalar boradi.
+       Standartda `warning` hodisalar panelda qoladi — ular botga oqsa
+       mijoz botni o'chirib qo'yadi va keyin haqiqiy xavfni ham
+       o'tkazib yuboradi.  Ega buni panelda o'zgartira oladi.
 
     Eski qurilma versiyalari bayroq yubormaydi — ular uchun faqat
-    severity qaraladi (o'sha ham minimal: critical).
+    severity qaraladi.
+
+    "Tiklandi" juftlari darajadan QAT'I NAZAR boradi: "buzildi" xabarini
+    olgan mijoz "tuzaldi" xabarini ham olishi kerak.
     """
+    allowed = severities_for(level)
     metadata = event.metadata or {}
     if "alert" in metadata:
         if not metadata.get("alert"):
             return False
-        return event.severity in ALERT_SEVERITIES or event.event_type in RECOVERY_EVENTS
-    return event.severity in ALERT_SEVERITIES
+        return event.severity in allowed or event.event_type in RECOVERY_EVENTS
+    return event.severity in allowed or event.event_type in RECOVERY_EVENTS
 
 
 def build_alert(
@@ -244,13 +275,14 @@ def build_alert(
     events: Iterable[EdgeEvent],
     *,
     throttle_service: Optional[AlertThrottle] = None,
+    level: Optional[str] = None,
 ) -> Optional[str]:
     """Batchdan yuboriladigan bitta xabar — yoki hech narsa.
 
     Tormoz shu yerda qo'llanadi: bir xil (tur, kamera) juftligi oynada
     allaqachon yuborilgan bo'lsa, uning **hamma** eventlari xabardan tushadi.
     """
-    allowed = select_alert_events(site_id, events, throttle_service=throttle_service)
+    allowed = select_alert_events(site_id, events, throttle_service=throttle_service, level=level)
     if not allowed:
         return None
     return summarize(allowed)

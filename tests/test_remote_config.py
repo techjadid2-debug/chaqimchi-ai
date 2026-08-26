@@ -477,3 +477,74 @@ def test_heatmap_files_survive_a_network_failure(local, monkeypatch) -> None:
 
     assert local.upload_heatmaps() == 0
     assert list(directory.glob("*.json")), "fayl saqlanib qoladi"
+
+
+# ── Davomat sozlamasi zanjirga yetsin ────────────────────────────────────
+#
+# 2026-08-26 jonli holati: sinov do'konida ikkala kamera ham davomat
+# kamerasi edi va yuz kadrlari cloud'dagi kunlik rasm byudjetini yeb
+# qo'yardi.  Sozlama admin panelda darhol o'zgartirildi (revision 6 → 7),
+# lekin camera-02 O'N IKKI DAQIQADAN keyin ham yuz kadri yuborardi:
+# `apply()` bu o'zgarishni `changed` ga yozmasdi, ya'ni zanjir qayta ishga
+# tushmasdi.  Zanjir esa davomat ro'yxatini faqat startda o'qiydi.
+
+
+def _attendance_payload(revision: int, camera_ids: list) -> Dict[str, Any]:
+    return {
+        "revision": revision,
+        "cameras": [CAMERA],
+        "attendance": {"enabled": True},
+        "config": {
+            "attendance_camera_ids": camera_ids,
+            "attendance_camera_roles": {camera_id: "both" for camera_id in camera_ids},
+        },
+    }
+
+
+def test_attendance_camera_change_restarts_the_chain(local, monkeypatch) -> None:
+    _reply(local, _attendance_payload(6, ["camera-01", "camera-02"]), monkeypatch)
+    first = local.sync_once()
+    assert first is not None
+    assert first["attendance"] is True, "birinchi marta — o'zgarish deb hisoblansin"
+
+    # Aynan shu javob qayta kelsa zanjir BEKORGA qayta ishga tushmasin.
+    _reply(local, _attendance_payload(6, ["camera-01", "camera-02"]), monkeypatch)
+    local._last_revision["value"] = None
+    again = local.sync_once()
+    assert again is not None and again["attendance"] is False
+
+    # Endi davomat bitta kameraga tushdi — zanjir buni BILISHI kerak.
+    _reply(local, _attendance_payload(7, ["camera-01"]), monkeypatch)
+    local._last_revision["value"] = None
+    after = local.sync_once()
+    assert after is not None
+    assert after["attendance"] is True, (
+        "davomat kameralari o'zgardi — zanjir qayta ishga tushishi kerak"
+    )
+
+    cached = json.loads(local.cache_path().read_text(encoding="utf-8"))
+    assert cached["config"]["attendance_camera_ids"] == ["camera-01"]
+
+
+def test_camera_order_alone_does_not_restart_the_chain(local, monkeypatch) -> None:
+    """Tartib o'zgarishi — o'zgarish emas: zanjir bekorga uzilmasin."""
+    _reply(local, _attendance_payload(6, ["camera-01", "camera-02"]), monkeypatch)
+    local.sync_once()
+
+    _reply(local, _attendance_payload(7, ["camera-02", "camera-01"]), monkeypatch)
+    local._last_revision["value"] = None
+    after = local.sync_once()
+    assert after is not None and after["attendance"] is False
+
+
+def test_turning_attendance_off_restarts_the_chain(local, monkeypatch) -> None:
+    """Davomat butunlay o'chirilsa ham zanjir buni bilishi kerak."""
+    _reply(local, _attendance_payload(6, ["camera-01"]), monkeypatch)
+    local.sync_once()
+
+    payload = _attendance_payload(7, ["camera-01"])
+    payload["attendance"] = {"enabled": False}
+    _reply(local, payload, monkeypatch)
+    local._last_revision["value"] = None
+    after = local.sync_once()
+    assert after is not None and after["attendance"] is True

@@ -97,3 +97,46 @@ def test_check_raises_429_with_retry_after() -> None:
         ratelimit.check("otp", "555", limit=1, window_sec=600, message="Kod juda ko'p so'raldi")
     assert exc.value.status_code == 429
     assert exc.value.headers["Retry-After"] == "600"
+
+
+# ── Rad etishlar KO'RINSIN ───────────────────────────────────────────────
+#
+# 2026-08-26: jonli do'konda 3 soat davomida 6 315 ta rasm rad etildi va
+# buni hech kim sezmadi.  429 qaytarilib UNUTILARDI: ERROR log yo'q,
+# panelda son yo'q, `/health` esa "hammasi joyida" derdi.  Nosozlikni
+# mijoz aytdi, biz emas.
+
+
+def test_rejections_are_counted_per_bucket_and_key() -> None:
+    limiter = RateLimiter()
+    for _ in range(5):
+        limiter.hit("snapshots", "site-1", limit=3, window_sec=3600)
+
+    # 3 tasi o'tdi, 2 tasi rad etildi.
+    assert limiter.rejections("site-1") == {"snapshots": 2}
+    assert limiter.used("snapshots", "site-1") == 5
+
+
+def test_rejections_do_not_leak_between_sites() -> None:
+    limiter = RateLimiter()
+    for _ in range(4):
+        limiter.hit("snapshots", "site-1", limit=1, window_sec=3600)
+    limiter.hit("snapshots", "site-2", limit=10, window_sec=3600)
+
+    assert limiter.rejections("site-1") == {"snapshots": 3}
+    assert limiter.rejections("site-2") == {}
+    # Kalitsiz chaqiruv — butun platforma bo'yicha yig'indi.
+    assert limiter.rejections() == {"snapshots": 3}
+
+
+def test_clean_limiter_reports_nothing() -> None:
+    """Hech narsa rad etilmagan bo'lsa panel bo'sh ko'rsatsin — nol emas."""
+    limiter = RateLimiter()
+    limiter.hit("snapshots", "site-1", limit=10, window_sec=3600)
+    assert limiter.rejections() == {}
+
+
+def test_used_forgets_an_expired_window() -> None:
+    limiter = RateLimiter()
+    limiter.hit("snapshots", "site-1", limit=10, window_sec=0)
+    assert limiter.used("snapshots", "site-1") == 0

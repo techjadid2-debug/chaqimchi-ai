@@ -857,3 +857,67 @@ def test_a_capture_from_another_shop_cannot_become_a_template(pilot_client) -> N
     )
 
     assert response.status_code == 404
+
+
+def test_face_flood_does_not_starve_store_event_snapshots(pilot_client) -> None:
+    """Davomat oqimi do'kon hodisalarining rasm byudjetini yemasin.
+
+    2026-08-26 jonli nosozligi: 45 daqiqada 399 ta `face_captured` umumiy
+    500 talik `snapshots` byudjetini tugatdi va shundan keyin do'konning
+    HAMMA hodisasi rasmsiz qoldi — navbat, dwell, chiziq, hammasi 429.
+    Yuz kadri endi faqat o'z chegarasini (`face-snapshots`, 200) sarflaydi.
+    """
+    from cloud import ratelimit
+
+    site, headers = _site_with_device(pilot_client)
+
+    # Yuz kadrlari o'z chegarasini oxirigacha yeydi va undan oshadi.
+    limit_hit = False
+    for index in range(205):
+        response = _send_face_capture(pilot_client, headers, f"evt-flood-{index}", b"kadr")
+        if response.status_code == 429:
+            limit_hit = True
+    assert limit_hit, "yuz kadrlari o'z chegarasiga tegishi kerak edi"
+
+    # ASOSIY TASDIQ: umumiy `snapshots` byudjeti umuman tegilmagan bo'lsin.
+    # Tuzatishdan oldin bu 205 bo'lardi — ya'ni har yuz kadri (rad
+    # etilgani ham) do'kon hodisalari uchun ajratilgan joyni yeb borardi.
+    assert ratelimit.limiter().used("snapshots", site["site_id"]) == 0, (
+        "yuz kadri umumiy snapshot byudjetini sarflamasligi kerak"
+    )
+    assert ratelimit.limiter().rejections(site["site_id"]).get("face-snapshots", 0) > 0, (
+        "rad etishlar sanalishi kerak — jimgina yo'qolmasin"
+    )
+
+    # Endi oddiy do'kon hodisasi — rasmi baribir qabul qilinsin.
+    batch = pilot_client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-dokon",
+                    "event_type": "queue_threshold_exceeded",
+                    "camera_id": "camera-02",
+                    "severity": "warning",
+                    "has_snapshot": True,
+                }
+            ]
+        },
+    )
+    assert batch.status_code == 200, batch.text
+    upload = pilot_client.put(
+        "/api/v1/edge/events/evt-dokon/snapshot",
+        headers={**headers, "Content-Type": "image/jpeg"},
+        content=b"do-kon-kadri",
+    )
+    assert upload.status_code == 200, (
+        "davomat oqimi do'kon hodisasining rasmini och qoldirmasligi kerak: " + upload.text
+    )
+    # Rasm rostdan yozilganini bazadan tasdiqlaymiz — 200 ning o'zi
+    # yetarli emas, MEDIALESS hodisa ham 200 qaytaradi.
+    import cloud.main as main
+
+    stored = main.get_event_store().event(site["site_id"], "evt-dokon")
+    assert stored["has_snapshot"], "rasm saqlanishi kerak edi"
+    assert stored["snapshot_key"]

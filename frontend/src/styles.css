@@ -505,3 +505,10 @@ tr:last-child td { border-bottom: 0; }
   display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
   padding: 0; border: 0; background: none; cursor: pointer; color: #5f6368; border-radius: 8px; }
 .pw-eye:hover { color: var(--blue, #1a73e8); background: var(--blue-soft, rgba(26,115,232,.08)); }
+
+/* Sozlamalardagi tanlov qatori — tugma, lekin ro'yxat qatoriday ko'rinadi. */
+.level-row { width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #edf0f5; cursor: pointer; font: inherit; color: inherit; padding: 8px 0; }
+.level-row:last-of-type { border-bottom: 0; }
+.level-row:hover:not(:disabled) { background: var(--blue-soft); }
+.level-row:disabled { opacity: .6; cursor: default; }
+.level-row.is-active b { color: var(--blue-dark); }

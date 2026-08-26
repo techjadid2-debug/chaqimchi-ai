@@ -9,8 +9,10 @@
 
 ## HOZIRGI HOLAT · 2026-08-26
 
-- **Cloud 0.6.16 jonli**, mijoz ham 0.6.16 yuklab oladi — versiya
-  nomuvofiqligi yopildi.
+- **0.6.17 tayyorlandi** (hali chiqarilmagan) — sinov do'konidagi
+  "rasm kelmayapti" nosozligining oltita sababi tuzatildi.
+  Tafsilot: pastdagi tarixning birinchi yozuvi.
+- Cloud **0.6.16** jonli; mijoz ham 0.6.16.
 - Shox: `loitering-rasmsiz`, `origin` bilan sinxron. Asosiy shox `main`.
 - Audit ([AUDIT_TAHLIL.md](AUDIT_TAHLIL.md)) bo'yicha **A bosqichi
   (A0–A9) va B bosqichining katta qismi tugadi**. C boshlanmagan.
@@ -21,7 +23,15 @@
 
 ## KEYINGI ISH
 
-**C1 — haqiqiy do'konda qabul sinovi.** Ikki qismdan iborat:
+**0.6.17 ni chiqarish.** Kod va testlar tayyor, versiya ko'tarilgan.
+Qadamlar: `.exe` qurish/imzolash/nashr + cloud deploy (`CLAUDE.md`
+"Windows reliz" va "Cloud deploy").  **T8 allaqachon bajarilgan** —
+sinov do'konida davomat bitta kameraga tushirildi (revision 7).
+
+Deploydan keyin tekshirish: 429 to'xtadimi, panelda rasm chiqdimi,
+soat Toshkent bo'yichami.
+
+Undan keyin — **C1, haqiqiy do'konda qabul sinovi.** Ikki qismdan iborat:
 
 1. Sig'imni o'lchash — `scripts/benchmark_n100.py`, haqiqiy RTSP manzil
    bilan (`--source` bermasangiz o'lchov yolg'on bo'ladi, skript o'zi
@@ -112,6 +122,79 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-26 — Rasm hech qayerda ko'rinmasdi: oltita sabab
+Nima: sinov do'konida hodisa kelayotgan edi-yu rasm panelda ham,
+Telegramda ham yo'q edi.  **Oltita** mustaqil sabab topildi va tuzatildi.
+Nega: har biri alohida "kichik" edi, birga esa mahsulotning ko'zini
+o'chirgan.
+
+**Dalillar** (serverdagi log va baza):
+3 soatda **6 315 ta** snapshot yuklash 429 oldi (200 OK — atigi 204 ta);
+6 soatda **0 ta** `live-frame`; panel **33 ta GET → hammasi 404**, POST
+umuman yo'q; 45 daqiqada **399 ta** `face_captured` (9 ta tashrifchidan);
+`line_crossed` 26 ta — rasmli 0; **ERROR darajasidagi log 0 ta**.
+
+**S1 · 429 o'lim halqasi** (asosiy).  `face_captured` toshqini kunlik
+snapshot byudjetini (500) yedi, keyin HAR bir rasm 429 oldi, va
+`cloud_sync.py` uni **hodisa xatosi** deb butun hodisani qayta
+navbatga qo'ydi → cheksiz halqa.
+Qayerda: `chaqimchi_ai/cloud_sync.py:_upload_media` (4xx endi hodisani
+o'ldirmaydi, 5xx esa avvalgidek qayta urinadi);
+`cloud/main.py:upload_event_snapshot` (yuz kadri endi FAQAT o'z
+chegarasini sarflaydi, umumiy byudjetga tegmaydi);
+`chaqimchi_ai/scene_analytics.py` (`FACE_EMITS_PER_HOUR = 40` — track
+almashuvidan mustaqil shift; tuzatishsiz 200 track = 200 kadr edi).
+
+**S2 · Panel kadrni hech qachon SO'RAMASDI.**  `CameraImage` faqat GET
+qilardi; kadr so'raydigan POST endpoint bor edi, lekin v2 panel uni
+chaqirmasdi — "Kadr hozircha kelmadi" boshi berk ko'cha edi.
+Qayerda: `frontend/src/owner.tsx` (404 da bir marta POST, keyin uch
+marta qayta o'qish; yozuv "Kadr so'raldi…").
+
+**S3 · Telegramga faqat `critical` borardi** va bu hech qayerda
+aytilmagan edi: 449 hodisadan 9 tasi ketdi.  Endi ega o'zi tanlaydi
+(`telegram_min_severity`: faqat muhimi / +ogohlantirish / hammasi),
+standart o'zgarmadi.
+Qayerda: `cloud/notify.py`, `cloud/main.py:SiteConfigBody`,
+owner "Sozlamalar".
+
+**S4 · Owner panel vaqtni UTC ko'rsatardi** — `slice(11,16)` xom ISO
+dan kesardi.  Skrinshotda sarlavha "14:47", hodisalar "09:47" edi.
+Qayerda: `frontend/src/api.ts:formatTimeUz` (Toshkent qat'iy, `Intl`siz
+— ba'zi WebView'da ICU yo'q), `OwnerHome.tsx`, `AdminHome.tsx`.
+
+**S6 · Sozlama qurilmaga YETMASDI** (tuzatish paytida topildi).
+Davomatni bitta kameraga tushirdim, admin panel "saqlandi" dedi
+(revision 6 → 7), lekin camera-02 **12 daqiqadan keyin ham** yuz kadri
+yuborardi.  Sabab: `cloud_config.apply()` davomat o'zgarishini `changed`
+ga yozmasdi, ya'ni zanjir qayta ishga tushmasdi — u esa davomat
+ro'yxatini faqat startda o'qiydi.  **Bu xato ikkinchi marta:** aynan shu
+tuzoq ilgari "ish vaqti" bilan bo'lgan va kodda izohi ham bor edi.
+Qayerda: `chaqimchi_ai/local/cloud_config.py:_attendance_signature`,
+`chaqimchi_ai/local/app.py` (restart sharti + yangi sozlama qo'shganda
+nima tekshirish kerakligi yozib qo'yildi).
+
+**S5 · Bunday nosozlik hech kimga bildirilmasdi** — eng qimmat topilma.
+Endi: rad etishlar sanaladi (`cloud/ratelimit.py:rejections`), admin
+panel va `/health/deep` da ko'rinadi, platforma adminiga kuniga bir
+marta Telegram xabar, egaga panelda halol yozuv.
+
+Test: `test_cloud_sync.py` (429 → hodisa saqlanadi, 503 → qayta urinish),
+`test_cloud_faces.py::test_face_flood_does_not_starve_store_event_snapshots`,
+`test_scene_analytics.py` (track churn + shift oynasi + issiqlik xaritasi
+to'xtamasligi), `test_notify.py` (uch daraja), `test_ratelimit.py`,
+`test_cloud_api.py::test_rate_limited_site_notifies_the_platform_admin`,
+`test_remote_config.py` (davomat o'zgarishi zanjirga yetadi, tartib
+o'zgarishi esa bekorga restart bermaydi).
+Jami **1782 test** o'tdi (avval 1755), lint va TS typecheck toza.
+
+Diqqat: T2 va T8 **serverda darhol** ta'sir qiladi; T1, T3 va S6
+tuzatishi esa qurilma 0.6.17 ni olmaguncha ishlamaydi — ya'ni reliz tarqalmaguncha
+429 halqasi eski qurilmalarda davom etadi.
+**Sinov do'koni sozlamasi allaqachon o'zgartirildi** (revision 7):
+`attendance_camera_ids` ikkitadan bittaga tushdi — lekin S6 tufayli u
+**qurilma 0.6.17 ni olgandan keyin** kuchga kiradi.
 
 ### 2026-08-26 — Agent uchun kirish hujjati (`0133865`)
 Nima: yangi agent endi loyihani qaytadan o'rganmaydi — `CLAUDE.md` ni

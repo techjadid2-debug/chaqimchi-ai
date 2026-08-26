@@ -181,3 +181,56 @@ def test_repeated_conclusions_keep_the_first() -> None:
     assert "   ↳ Birinchi" in message
     assert "Ikkinchi" not in message
     assert "×2" in message
+
+
+# ── Obyekt darajasi: egasi o'zi tanlaydi ─────────────────────────────────
+#
+# 2026-08-26: sinov do'konida 449 hodisadan 9 tasi botga bordi va ega
+# "bot buzilgan" deb o'yladi.  Daraja kodda qotirilgan va hech qayerda
+# aytilmagan edi.  Standart o'zgarmadi — endi u tanlanadi.
+
+
+def test_default_level_still_only_sends_critical() -> None:
+    """Standart — hozirgidek: mavjud obyektlarda oqim kengaymasin."""
+    warning = event("loitering", "camera-01", severity="warning")
+    assert build_alert("site-1", [warning], throttle_service=AlertThrottle()) is None
+
+
+def test_warning_level_lets_warnings_through() -> None:
+    warning = event("queue_threshold_exceeded", "camera-01", severity="warning")
+    message = build_alert(
+        "site-1", [warning], throttle_service=AlertThrottle(), level="warning"
+    )
+    assert message and "Navbat uzun" in message
+
+    # `info` esa hali ham to'xtaydi.
+    info = event("line_crossed", "camera-01", severity="info")
+    assert (
+        build_alert("site-1", [info], throttle_service=AlertThrottle(), level="warning")
+        is None
+    )
+
+
+def test_all_level_sends_even_info() -> None:
+    info = event("line_crossed", "camera-01", severity="info")
+    message = build_alert("site-1", [info], throttle_service=AlertThrottle(), level="all")
+    assert message and "Kirish/chiqish" in message
+
+
+def test_unknown_level_falls_back_to_critical() -> None:
+    """Buzuq sozlama xabar oqimini kengaytirib yubormasin."""
+    warning = event("loitering", "camera-01", severity="warning")
+    for level in ("", "hammasi", None, "ALL "):
+        result = build_alert(
+            "site-1", [warning], throttle_service=AlertThrottle(), level=level
+        )
+        if level == "ALL ":
+            assert result, "bo'sh joy va katta harf tozalanishi kerak"
+        else:
+            assert result is None, f"noma'lum daraja ({level!r}) standartga tushsin"
+
+
+def test_recovery_reaches_the_owner_at_every_level() -> None:
+    """"Buzildi" xabarini olgan mijoz "tuzaldi" ni ham olishi kerak."""
+    recovered = event("camera_recovered", "camera-01", severity="info")
+    assert build_alert("site-1", [recovered], throttle_service=AlertThrottle())

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, formatDateShort, formatMoney, formatNumber, relativeMinutes, telegramBotUrl } from "./api";
+import { api, formatDateShort, formatMoney, formatNumber, formatTimeUz, relativeMinutes, telegramBotUrl } from "./api";
 import { Avatar, Card, EmptyState, Pill, StatCard, StatusDot } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Demography } from "./Demography";
@@ -237,6 +237,13 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
       <div className="stack">
         <Card>
           <div className="card-head"><div><h2>AI hodisalari</h2><p>So‘nggi qayd etilganlar</p></div><button className="btn btn-icon" aria-label="Barchasini ko‘rish" onClick={() => onNavigate("alerts")}><Icon name="bell" /></button></div>
+          {/* Rasm yo'qligini YASHIRMAYMIZ.  2026-08-26 da do'kon uch soat
+              rasmsiz ishladi va panel buni hech qanday tarzda aytmadi —
+              hodisa bor, rasmi yo'q, sababi noma'lum edi. */}
+          {dashboard.media_dropped ? <p className="metric-note media-error">
+            Bugun {formatNumber(dashboard.media_dropped)} ta rasm kunlik chegara tufayli saqlanmadi.
+            Hodisalarning o‘zi joyida. Chegarani ko‘tarish uchun qo‘llab-quvvatlash xizmatiga yozing.
+          </p> : null}
           {dashboard.events.length ? <>
             <div className="event-list">
               {dashboard.events.slice(0, 6).map((item, index) => <div className="event-row" key={item.id || index}>
@@ -244,7 +251,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
                   <StatusDot state={item.event_type?.startsWith("camera") ? "offline" : "online"} />
                   <div><b>{item.label || item.event_type}</b><small>{item.camera_id || "Tizim"}</small></div>
                 </div>
-                <span className="list-value">{String(item.occurred_at || item.created_at || "").slice(11, 16) || "—"}</span>
+                <span className="list-value">{formatTimeUz(item.occurred_at || item.created_at)}</span>
               </div>)}
             </div>
             <button className="btn btn-wide" onClick={() => onNavigate("alerts")}>Barchasini ko‘rish</button>

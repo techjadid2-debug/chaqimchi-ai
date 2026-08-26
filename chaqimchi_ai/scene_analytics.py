@@ -159,6 +159,21 @@ FACE_EMITS_PER_TRACK = 2
 #: Ikkinchi kadr kamida shuncha soniyadan keyin (birinchisi sifatsiz chiqsa
 #: zaxira bo'ladi).
 FACE_DEBOUNCE_SEC = 60.0
+#: Bitta KAMERADAN soatiga ko'pi bilan shuncha yuz kadri.
+#:
+#: Yuqoridagi ikki chegara `track_id` ga bog'langan va aynan shu ularning
+#: zaif joyi: tracker odamni yo'qotib qayta topsa YANGI track tug'iladi va
+#: byudjet noldan boshlanadi.  2026-08-26 da jonli do'konda oqibati shu
+#: bo'ldi — atigi 9 ta tashrifchidan 45 daqiqada 399 ta `face_captured`
+#: chiqdi (~200 ta track), cloud'dagi kunlik byudjet tugadi va do'konning
+#: HAMMA hodisasi rasmsiz qoldi.
+#:
+#: Bu shift tracker'ga umuman bog'liq emas: track qanchalik almashsa ham
+#: sirpanuvchi oynadagi son o'smaydi.  40 — kunlik 200 lik cloud
+#: chegarasiga mos: 5 soatlik gavjum ish kuni to'liq qoplanadi.
+FACE_EMITS_PER_HOUR = 40
+#: Shift oynasi.
+FACE_HOUR_WINDOW_SEC = 3600.0
 
 #: Bosim shundan oshsa demografiya o'tkazib yuboriladi — xavfsizlik va
 #: sanash muhimroq (himoya klapani).
@@ -186,6 +201,12 @@ class SceneAnalyzer:
         self.attendance = bool(attendance)
         self._track_face_emits: Dict[int, int] = {}
         self._track_face_last: Dict[int, float] = {}
+        #: Kamera bo'yicha yuborilgan yuz kadrlarining vaqtlari — track
+        #: almashuvidan mustaqil shift (`FACE_EMITS_PER_HOUR`).
+        self._face_emit_times: List[float] = []
+        #: Shift tufayli yuborilmagan kadrlar soni.  Nol bo'lmasa "bu
+        #: kamera juda ko'p yuz ko'ryapti" degani — sozlash signali.
+        self.face_emits_suppressed = 0
         #: Demografiya (jins/yosh): faqat kirish chizig'i bor kamerada
         #: beriladi; natija anonim raqamlar, rasm saqlanmaydi.
         self.demography = demography
@@ -480,17 +501,32 @@ class SceneAnalyzer:
                 if emits < FACE_EMITS_PER_TRACK and (
                     last is None or now - last >= FACE_DEBOUNCE_SEC
                 ):
-                    self._track_face_emits[track_id] = emits + 1
-                    self._track_face_last[track_id] = now
-                    events.append(
-                        EdgeEvent(
-                            event_type="face_captured",
-                            camera_id=self.camera_id,
-                            track_id=track_id,
-                            score=float(detection.get("score", 0.0)),
-                            metadata={"bbox": detection["bbox"]},
+                    # Kamera shifti track byudjetidan KEYIN tekshiriladi:
+                    # shift urilganda track hisobini oshirmaymiz, aks holda
+                    # oyna bo'shagach o'sha odamdan kadr olinmay qolardi.
+                    self._face_emit_times = [
+                        moment
+                        for moment in self._face_emit_times
+                        if now - moment < FACE_HOUR_WINDOW_SEC
+                    ]
+                    if len(self._face_emit_times) >= FACE_EMITS_PER_HOUR:
+                        # `continue` EMAS: quyida issiqlik xaritasi, zona va
+                        # demografiya bor — yuz kadri to'xtagani ular ham
+                        # to'xtashi degani emas.
+                        self.face_emits_suppressed += 1
+                    else:
+                        self._face_emit_times.append(now)
+                        self._track_face_emits[track_id] = emits + 1
+                        self._track_face_last[track_id] = now
+                        events.append(
+                            EdgeEvent(
+                                event_type="face_captured",
+                                camera_id=self.camera_id,
+                                track_id=track_id,
+                                score=float(detection.get("score", 0.0)),
+                                metadata={"bbox": detection["bbox"]},
+                            )
                         )
-                    )
 
             center = ((x1 + x2) / 2 / width, y2 / height)
             self.heatmap.add(center[0], center[1])

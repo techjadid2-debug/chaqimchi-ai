@@ -304,6 +304,40 @@ export function formatDateShort(value: string | null | undefined) {
   return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
 }
 
+/** Toshkent vaqti bo'yicha daqiqa: UTC+5, yozgi vaqt yo'q. */
+const TASHKENT_OFFSET_MIN = 5 * 60;
+
+/** "14:47" — hodisa vaqti, HAR DOIM Toshkent bo'yicha.
+ *
+ * Ikki xato bir joyda tuzatildi.
+ *
+ * 1. `OwnerHome` ISO satridan `slice(11, 16)` bilan soat kesib olardi —
+ *    bu XOM UTC.  2026-08-26 da mijoz panelida sarlavha "14:47" deb
+ *    turgan payt hodisalar "09:47" ko'rinardi va ega ularni besh soat
+ *    eskirgan deb o'yladi.
+ * 2. `AdminHome` brauzer mintaqasini ishlatardi — chet eldan ochilganda
+ *    panel kunlik hisobot bilan boshqa raqam ko'rsatardi.  Backend esa
+ *    hamma joyda `ZoneInfo("Asia/Tashkent")` bilan hisoblaydi
+ *    (`cloud/main.py`, `cloud/digest.py`), ya'ni do'konning kuni
+ *    Toshkent bo'yicha boshlanadi va tugaydi.
+ *
+ * `Intl`/`toLocaleTimeString` ATAYLAB ishlatilmadi: `formatNumber` dagi
+ * kabi sabab — ba'zi WebView'larda ICU yo'q va `timeZone` jimgina
+ * e'tiborsiz qolib, yana brauzer mintaqasi chiqadi.  Qo'lda siljitish
+ * har joyda bir xil natija beradi.
+ */
+export function formatTimeUz(value: string | null | undefined) {
+  if (!value) return "—";
+  // Mintaqasiz ISO satrini JS LOKAL vaqt deb o'qiydi; server esa uni UTC
+  // deb yozadi.  Shuning uchun belgisi yo'q bo'lsa "Z" qo'shamiz.
+  const text = String(value);
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
+  const date = new Date(hasZone ? text : `${text}Z`);
+  if (Number.isNaN(date.getTime())) return "—";
+  const shifted = new Date(date.getTime() + TASHKENT_OFFSET_MIN * 60_000);
+  return `${String(shifted.getUTCHours()).padStart(2, "0")}:${String(shifted.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 /** "1 234 567" — mingliklar orasida probel.
  *
  * `Intl` emas: ba'zi WebView'larda `uz-UZ` uchun ICU yo'q va raqam

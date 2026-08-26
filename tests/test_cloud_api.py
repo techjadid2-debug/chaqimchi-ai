@@ -1019,3 +1019,56 @@ def test_the_master_key_is_not_an_anonymous_actor(cloud_client) -> None:
     entry = _audit_actions(cloud_client)["site.plan.changed"]
 
     assert entry["actor_id"] == "cloud-admin-key"
+
+
+# ── Chegara ogohlantirishi platforma adminiga yetsin ─────────────────────
+
+
+def test_rate_limited_site_notifies_the_platform_admin(cloud_client, monkeypatch) -> None:
+    """Media chegarasi urilsa admin XABAR OLADI — kuniga bir marta.
+
+    2026-08-26 nosozligining eng qimmat qismi: do'kon 3 soat rasmsiz
+    ishladi va bu hech kimga bildirilmadi.  Yagona izi `INFO` access
+    logdagi 6 315 ta 429 qatori edi.
+    """
+    import asyncio
+
+    import cloud.main as main
+    from cloud import ratelimit
+
+    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "555")
+    site = cloud_client.post(
+        "/api/v1/admin/sites",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"name": "Chegara do'koni", "plan": "lite"},
+    ).json()
+    site_id = site["site_id"]
+
+    sent: list = []
+
+    class FakeSender:
+        async def send_to(self, chat_id, text):
+            sent.append((chat_id, text))
+            return True
+
+    monkeypatch.setattr(main.get_alerts(), "sender", FakeSender())
+    main._rate_limit_notified.clear()
+
+    # Hali hech narsa rad etilmagan — xabar ham yo'q.
+    asyncio.run(main._notify_rate_limited_sites())
+    assert sent == [], "sog'lom obyekt uchun xabar yuborilmasin"
+
+    # Chegara uriladi.
+    for _ in range(4):
+        ratelimit.limiter().hit("snapshots", site_id, limit=1, window_sec=3600)
+
+    asyncio.run(main._notify_rate_limited_sites())
+    assert len(sent) == 1
+    chat_id, text = sent[0]
+    assert chat_id == "555"
+    assert "Chegara do'koni" in text
+    assert "3" in text, "saqlanmagan rasm soni xabarda bo'lsin"
+
+    # Ikkinchi chaqiruv — takror xabar YO'Q (kuniga bir marta).
+    asyncio.run(main._notify_rate_limited_sites())
+    assert len(sent) == 1, "6 315 ta rad etish 6 315 ta xabar bo'lmasin"

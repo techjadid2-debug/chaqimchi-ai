@@ -16,7 +16,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from fastapi import HTTPException
 
@@ -31,6 +31,13 @@ class _Window:
     #: Shu oynaning o'z muddati.  Tozalash aynan shunga qarab ishlaydi:
     #: aks holda sutkalik chegara ham 5 daqiqada o'chib ketardi.
     window_sec: int
+    #: Chegara oshgani uchun rad etilgan so'rovlar soni.
+    #:
+    #: Ilgari 429 qaytarilib UNUTILARDI.  2026-08-26 da jonli do'konda shu
+    #: sabab 3 soat davomida 6 315 ta rasm jimgina rad etildi: log faqat
+    #: `INFO` access qatori edi, panelda raqam yo'q, ERROR ham yo'q.
+    #: Mijoz "rasm kelmayapti" deb aytmaganda buni hech kim bilmasdi.
+    rejected: int = 0
 
 
 class RateLimiter:
@@ -70,7 +77,37 @@ class RateLimiter:
                 )
                 return True
             entry.count += 1
-            return entry.count <= limit
+            if entry.count > limit:
+                entry.rejected += 1
+                return False
+            return True
+
+    def used(self, bucket: str, key: str) -> int:
+        """Joriy oynada nechta so'rov sanalgan (muddati o'tgan bo'lsa 0)."""
+        now = time.monotonic()
+        with self._lock:
+            entry = self._windows.get((bucket, key))
+            if entry is None or now - entry.started_at >= entry.window_sec:
+                return 0
+            return entry.count
+
+    def rejections(self, key: Optional[str] = None) -> Dict[str, int]:
+        """Rad etilgan so'rovlar — bucket bo'yicha, faqat noldan kattalari.
+
+        `key` berilsa bitta obyekt kesimida.  Bu raqam admin panelda va
+        `/health/deep` da ko'rinadi: nol bo'lmagan qiymat "mijoz nimadir
+        yo'qotyapti" degani va uni ko'rish uchun logni titish shart emas.
+        """
+        now = time.monotonic()
+        summary: Dict[str, int] = {}
+        with self._lock:
+            for (bucket, entry_key), window in self._windows.items():
+                if key is not None and entry_key != key:
+                    continue
+                if not window.rejected or now - window.started_at >= window.window_sec:
+                    continue
+                summary[bucket] = summary.get(bucket, 0) + window.rejected
+        return summary
 
     def size(self) -> int:
         """Kuzatilayotgan kalitlar soni — xotira o'smayotganini tekshirish uchun."""

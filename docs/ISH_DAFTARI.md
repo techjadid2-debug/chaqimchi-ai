@@ -20,10 +20,12 @@
   ishlar edi (0.6.13 … 0.6.19) — masofaviy `clean_chains` topshirig'idan
   keyin **bitta** qoldi: `0.6.20`.  Cloud nazorati ham toza:
   `multi_version_sites: {}`.  Endi har o'lchov bitta jarayondan keladi.
-- **Panel ishi boshlandi (2026-08-26 kechqurun).** Bildirishnoma
-  markazi, jonli ko'rish keepalive va to'rtta yolg'on tugma tuzatildi;
-  T6 biometrik teshigi yopildi. Tafsilot tarixning birinchi yozuvida.
-  **Hali deploy qilinmagan.**
+- **Panel tuzatishlari JONLI** (2026-08-26 kechqurun, `e05ac3a`).
+  Bildirishnoma markazi, jonli ko'rish keepalive va to'rtta yolg'on
+  tugma tuzatildi; T6 biometrik teshigi yopildi. Deploy tasdiqlandi:
+  hamma konteyner healthy, prodda `owner-DHdgNa-q.js`, 5 daqiqalik
+  log'da **0 ta xato**, PostgreSQL'da `notification_reads` jadvali va
+  ikkala yangi indeks o'z joyida.
 - Shox: `loitering-rasmsiz`, `origin` bilan sinxron. Asosiy shox `main`.
 - Audit ([AUDIT_TAHLIL.md](AUDIT_TAHLIL.md)) bo'yicha **A bosqichi
   (A0–A9) va B bosqichining katta qismi tugadi**. C boshlanmagan.
@@ -34,10 +36,11 @@
 
 ## KEYINGI ISH
 
-**1) Panel o'zgarishlarini deploy qilish** — kod tayyor, testlar o'tdi.
-`scripts/deploy_cloud.sh` orqali (u zaxira talab qiladi). Keyin ko'z
-bilan: qo'ng'iroqda haqiqiy o'qilmagan son, bosilganda ro'yxat ochiladi
-va son kamayadi; "Jonli ko'rish" 5 daqiqa ochiq turganda muzlamaydi.
+**1) Ko'z bilan tekshirish** (deploy bajarilgan, kod jonli). Owner
+panelni toza brauzerda oching: qo'ng'iroqda haqiqiy o'qilmagan son
+bo'lsin, bosilganda ro'yxat ochilsin va "Hammasi o'qildi" dan keyin
+son nolga tushsin; "Jonli ko'rish" 5 daqiqa ochiq turganda muzlamasin
+(kadr sanasi yangilanib tursin, eskirsa qizil "yangilanmayapti").
 
 **2) DAVOMAT JIMGINA O'LIK — qurilma relizi kerak.** Ikki chegara
 zid (batafsil: tarixning birinchi yozuvi va "Ochiq muammolar").
@@ -221,7 +224,7 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
-### 2026-08-26 — Panel: qo'ng'iroq rostdan ishlaydi, jonli ko'rish muzlamaydi (commit qilinmagan)
+### 2026-08-26 — Panel: qo'ng'iroq rostdan ishlaydi, jonli ko'rish muzlamaydi (`e05ac3a`, deploy qilingan)
 Nima: mijoz panelidagi to'rtta yolg'on gapiradigan tugma tuzatildi va
 bildirishnoma markazi qurildi.
 

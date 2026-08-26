@@ -59,6 +59,34 @@ Qabul tartibi: [DOKON_MVP.md](DOKON_MVP.md) "Qabul mezoni".
 
 ## OCHIQ MUAMMOLAR
 
+**⚠ YANGI VA HAL QILINMAGAN — camera-02 yuz kadri to'xtamayapti**
+
+0.6.17 chiqqandan keyin ham sinov do'konining `camera-02` kamerasi
+daqiqasiga ~11 ta `face_captured` yuborishda davom etyapti.  Ikkala
+himoya ham ishlamayapti va sabab **hali topilmagan**.
+
+Nima tekshirilgan va INKOR qilingan:
+
+| Gumon | Natija |
+|---|---|
+| Qurilma eski versiyada | ✗ heartbeat `app_version: 0.6.17` |
+| Shift kodi relizga tushmagan | ✗ `build/payload/.../scene_analytics.py` da `FACE_EMITS_PER_HOUR` bor |
+| Sozlama cloudda o'zgarmagan | ✗ revision 8, `attendance_camera_ids: ["camera-01"]` |
+| Qurilma sozlamani olmagan | ✗ `config/ack` keldi |
+| Zanjir qayta ishga tushmagan | ✗ `analyzed` 16622 → 3917 (hisoblagich nolga tushdi) |
+| `now` noto'g'ri birlikda | ✗ `runner.py:135` — `time.monotonic` |
+| Analizator har ulanishda qayta yaratiladi | ✗ faqat `build_runner` da, bir marta |
+
+Ya'ni: yangi kod, yangi sozlama, qayta ishga tushgan zanjir — va
+baribir eski xatti-harakat.  Keyingi qadam **qurilmaning o'z logini
+ko'rish** (`%PROGRAMDATA%\Chaqimchi\logs`): `build_runner` qaysi
+`attendance_cameras` to'plami bilan qurilayotgani va
+`face_emits_suppressed` o'syaptimi.  Masofadan aniqlab bo'lmadi.
+
+**Zarari cheklangan:** T2 tufayli bu oqim do'kon hodisalarining rasm
+byudjetiga tegmaydi — `/health/deep` da `rate_limited` faqat
+`face-snapshots` ni ko'rsatadi, `snapshots` toza.
+
 **Sotuvni to'sib turgan ikki darvoza**
 
 - `available_feature_codes()` → `[]`, chunki qabul fayli yo'q (yuqoriga

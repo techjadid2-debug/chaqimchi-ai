@@ -113,6 +113,21 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
+### 2026-08-26 — Agent uchun kirish hujjati (`0133865`)
+Nima: yangi agent endi loyihani qaytadan o'rganmaydi — `CLAUDE.md` ni
+o'qib qayerdan boshlashni biladi.
+Nega: har sessiya boshida 8 720 qatorli `cloud/main.py` va 101 ta test
+fayli qaytadan o'rganilardi; avvalgi sessiya nima qilgani esa faqat
+commit xabarlarida qolardi.
+Qayerda: `CLAUDE.md` (ildizda, Claude Code o'zi o'qiydi),
+`docs/ISH_DAFTARI.md` (shu fayl), `docs/ARXITEKTURA_XARITASI.md`
+(9 ta chizma + §10 kengayishga tayyorlik).
+Test: kod tegilmadi — lint toza, 1755 test o'tdi.
+Diqqat: §10 da yettita kengayish chegarasi tartiblangan. Eng birinchi
+va eng arzoni — `main.py` ni `cloud/api/` ga bo'lish, lekin **avval**
+`app.routes` ni qulflaydigan testni yozing: marshrutlar faylda aralash
+yotibdi va bitta unutilgan dekorator jimgina 404 beradi.
+
 ### 2026-08-26 — Elektr mijozning xarajati, bizniki emas (`6ac4784`)
 Nima: foyda hisobida elektr endi bizning tannarxdan chiqarildi.
 Nega: Windows yo'lida dastur **mijozning o'z kompyuterida** ishlaydi —

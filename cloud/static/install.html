@@ -52,8 +52,8 @@
       </div>
 
       <p class="hint" style="margin-top:14px">
-        Fayl nomi <code>chaqimchi-windows-</code> bilan boshlanadi va versiya
-        raqami bilan tugaydi — masalan <code id="guideFileName">chaqimchi-windows-0.6.13.exe</code>.
+        Fayl nomi <code>Chaqimchi_AI_Setup-</code> bilan boshlanadi va versiya
+        raqami bilan tugaydi — masalan <code id="guideFileName">Chaqimchi_AI_Setup-0.6.16.exe</code>.
         Raqam har yangi versiyada o‘zgaradi, ya’ni yangisini olganingizni
         shundan bilasiz.
       </p>
@@ -215,7 +215,7 @@
           Siz <b>manba kodini</b> yuklab olgansiz (GitHub’dagi “Download ZIP”).
           U o‘rnatilmaydi — dasturchilar uchun. Tayyor dasturni shu sahifadagi
           <b>“Windows uchun yuklab olish”</b> tugmasidan oling: fayl nomi
-          <code>chaqimchi-windows-</code> bilan boshlanadi va <code>.exe</code>
+          <code>Chaqimchi_AI_Setup-</code> bilan boshlanadi va <code>.exe</code>
           bilan tugaydi.
         </p>
       </details>
@@ -273,14 +273,18 @@
           label.textContent = `Versiya ${release.version}`;
           label.hidden = false;
         }
-        // Fayl nomi ham RELIZDAN olinadi.  Sahifada qo'lda yozilgan nom
-        // turardi va u haqiqiy fayl bilan mos emas edi ("Chaqimchi_AI_Setup-",
-        // aslida esa "chaqimchi-windows-"): mijoz yuklamalar papkasida
-        // aytilgan faylni topolmasdi va SmartScreen ogohlantirishi ustiga
-        // bu "virus" degan shubhani kuchaytirardi.
+        // Fayl nomi ham RELIZDAN olinadi — sahifada qo'lda yozilgan raqam
+        // turardi va u versiyadan orqada qolardi.
+        //
+        // Nom `Chaqimchi_AI_Setup-<versiya>.exe`: serverdagi fayl
+        // `chaqimchi-windows-<versiya>.exe` deb saqlanadi, lekin yuklab
+        // olishda `content-disposition` uni shu ko'rinishda beradi
+        // (`cloud/main.py: public_download_installer`) — mijoz aynan shu
+        // nomni ko'radi.  Ikkalasini adashtirish oson, shuning uchun
+        // nom SHU YERDA, bitta joyda yasaladi.
         const fileName = document.getElementById("guideFileName");
         if (fileName && release.version) {
-          fileName.textContent = `chaqimchi-windows-${release.version}.exe`;
+          fileName.textContent = `Chaqimchi_AI_Setup-${release.version}.exe`;
         }
         document.getElementById("guideDownloadReady").hidden = false;
         document.getElementById("guideDownloadPending").hidden = true;

@@ -56,7 +56,7 @@ joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
 | K-4 | ~~Biometrik rasmlar `manager` roliga ochiq~~ | Kritik | ✅ **TUZATILDI** |
 | Y-0 | ~~`/health/deep` ochiq — mijozlar soni oshkor~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-1 | ~~"Xodim davomati" sotiladi, tarif bermaydi~~ | Yuqori | ✅ **TUZATILDI** |
-| Y-2 | Mijozga beriladigan o'rnatuvchi 2 versiya orqada | Yuqori | 1 kun |
+| Y-2 | ~~Mijozga beriladigan o'rnatuvchi 2 versiya orqada~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-3 | ~~Yo'riqnoma noto'g'ri fayl nomini aytadi~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-4 | ~~O'rnatish vaqti 4 xil aytilgan~~ | Yuqori | ✅ **TUZATILDI** |
 | Y-5 | ~~Hero "4 kamera", arzon tarifda 2 kamera~~ | Yuqori | ✅ **TUZATILDI** |
@@ -474,6 +474,48 @@ huquqiy savol yuristga beriladi (B2).
 ---
 
 ### YUQORI-2 · Mijozga beriladigan o'rnatuvchi 2 versiya orqada
+
+> ## ✅ TUZATILDI — 2026-08-26
+>
+> **Haqiqiy sabab audit taxmin qilganidan boshqa chiqdi.** 0.6.14 ham,
+> 0.6.15 ham serverga **allaqachon chiqarilgan** edi (25-avgust), imzosi
+> joyida. Muammo build'da emas — `.env.production` da:
+>
+> ```
+> CHAQIMCHI_WINDOWS_INSTALLER_URL=...chaqimchi-windows-0.6.13.exe
+> ```
+>
+> Qotirilgan URL 0.6.13 da qolib ketgan va ikkita reliz hech kimga
+> bormagan. Kod'dagi `latest_windows_release()` aynan shu ish uchun
+> yozilgan, lekin env pini uni chetlab o'tardi.
+>
+> **Bundan ham yomoni:** pin faqat kodsiz havolada ishlardi. Kod bilan
+> kelgan mijoz (`?code=A1B2C3`) faylni to'g'ridan-to'g'ri olardi, ya'ni
+> **0.6.15** ni; kodsiz kelgan esa **0.6.13** ni. Bitta sayt ikki xil
+> versiya tarqatib turgan ekan.
+>
+> **Bajarilgani:**
+> 1. Versiya **0.6.16** ga ko'tarildi va qurildi — 0.6.15 ni qayta
+>    qurish ataylab qilinmadi: u imzolangan va serverda turgan edi, bir
+>    xil versiya ostida boshqa baytlarni chiqarish OTA butunligini
+>    buzardi.
+> 2. Imzolandi (Ed25519) va nashr qilindi; imzo qurilmadagi ochiq kalit
+>    bilan tekshirildi.
+> 3. **Env pini olib tashlandi** — manzil endi eng yangi imzolangan
+>    relizdan o'zi keladi va bu xato takrorlanmaydi.
+>
+> **Yon natija:** pin ketgach pairing kod fayl nomida ishlaydigan bo'ldi
+> (`Chaqimchi_AI_Setup-0.6.16-A1B2C3.exe`). Ilgari redirect nomni
+> yo'qotardi va mijoz 6 belgini qo'lda kiritardi.
+>
+> **Yon oqibat:** fayl nomi ham o'zgardi, shuning uchun A6 tuzatishi
+> teskari tomonga to'g'rilandi — `install.html` endi
+> `Chaqimchi_AI_Setup-<versiya>.exe` deydi va nom relizdan yasaladi.
+>
+> Jonli tekshiruv: yuklab olish 0.6.16 beradi, sahifadagi nom mos,
+> API 0.6.16 deydi. Hozir birorta qurilma ulanmagan (4 saytdan 3 tasi
+> `not_paired`, 1 tasi `offline`), ya'ni bu reliz ishlab turgan
+> do'konni buzmaydi.
 
 **Dalil (jonli o'lchangan):**
 ```
@@ -1261,7 +1303,7 @@ javobidagi har bir modul kod bilan asoslangan.
 | ~~B1~~ | 🟡 **YOZILDI** — `/oferta` jonli, footer va sitemapda; STIR/rekvizit bo'sh, yurist ko'rigi kutilmoqda | Product + yurist | B2 da |
 | B2 | Yurist ko'rigi: oferta, `/maxfiylik`, `/rozilik-shabloni` **+ bitta aniq savol** (pastda) | Yurist | 2 kun |
 | ~~B3~~ | ✅ **BAJARILDI** — `_attendance_enabled()` da `or` → `and`; Biznes kartasidan bullet olindi | Product + Backend | — |
-| B4 | 0.6.15 build + imzo + `dl.` ga chiqarish, bosqichli tarqatish | DevOps | 1 kun |
+| ~~B4~~ | ✅ **BAJARILDI** — 0.6.16 qurildi, imzolandi, nashr qilindi; env pini olib tashlandi | DevOps | — |
 | ~~B5~~ | ✅ **BAJARILDI** — izoh yangilandi: sabab litsenziya emas, hosting hududi va o'lchanmagan aniqlik | Backend | — |
 | ~~B6~~ | ✅ **BAJARILDI** — 7 turdagi amal yoziladi, master kalit endi anonim emas | Backend | — |
 | ~~B7~~ | ✅ **BAJARILDI** — o'rnatuvchida `w32time`, heartbeat'da soat farqi, egaga tushunarli ogohlantirish | Backend + Installer | — |

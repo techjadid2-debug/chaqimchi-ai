@@ -3566,6 +3566,19 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
 GEMINI_INPUT_USD_PER_M_DEFAULT = 0.30
 GEMINI_OUTPUT_USD_PER_M_DEFAULT = 2.50
 
+#: 1 kVt·soat elektr narxi.  Tarif viloyat va iste'molchi turiga qarab
+#: farq qiladi, shuning uchun env bilan boshqariladi.
+KWH_UZS_DEFAULT = 1_000.0
+
+#: Qurilma turi bo'yicha quvvat.  Do'kon kompyuteri — odatiy ofis
+#: desktop'i (i5 sinf, `docs/DOKON_MVP.md` dagi sinov mashinasi);
+#: Box — N100 mini-PC.
+#:
+#: Bu O'LCHANGAN emas, BAHOLANGAN qiymat: rozetka o'lchagichi bilan
+#: tekshirilmagan.  Panelda ham shunday deb yoziladi.
+DEVICE_WATTS_WINDOWS_DEFAULT = 65.0
+DEVICE_WATTS_BOX_DEFAULT = 12.0
+
 
 def _finance_env_float(key: str, default: float) -> float:
     raw = os.environ.get(key, "").strip()
@@ -3611,6 +3624,12 @@ async def admin_finance(
         "CHAQIMCHI_GEMINI_OUTPUT_USD_PER_M", GEMINI_OUTPUT_USD_PER_M_DEFAULT
     )
 
+    kwh_uzs = _finance_env_float("CHAQIMCHI_COST_KWH_UZS", KWH_UZS_DEFAULT)
+    watts_windows = _finance_env_float(
+        "CHAQIMCHI_DEVICE_WATTS_WINDOWS", DEVICE_WATTS_WINDOWS_DEFAULT
+    )
+    watts_box = _finance_env_float("CHAQIMCHI_DEVICE_WATTS_BOX", DEVICE_WATTS_BOX_DEFAULT)
+
     server_monthly_uzs = round(server_monthly_usd * rate)
     domain_monthly_uzs = round(domain_yearly_uzs / 12)
     fixed_monthly_uzs = server_monthly_uzs + domain_monthly_uzs
@@ -3626,6 +3645,11 @@ async def admin_finance(
         item["site_id"]: item
         for item in get_event_store().vision_usage_by_site(start_iso, end_iso)
     }
+    # Elektr O'LCHANGAN ish vaqtidan hisoblanadi.  Kompyuter kechasi
+    # o'chirilsa yoki bir hafta ishlamasa, xarajat ham shunga yarasha
+    # kamayadi — taxminiy "24/7" bilan hisoblash mijozning haqiqiy
+    # tannarxini yolg'on ko'rsatardi.
+    uptime_minutes = get_event_store().device_uptime_minutes_by_site(start_iso, end_iso)
     # Infra ulushi faqat QURILMA ULANGAN saytlarga bo'linadi; birorta ham
     # bo'lmasa hammasiga (bo'linmagan xarajat yashirin qolmasin).
     billable_ids = {str(s["id"]) for s in sites if int(s.get("devices") or 0) > 0}
@@ -3637,6 +3661,7 @@ async def admin_finance(
     totals = {
         "revenue_uzs": 0,
         "gemini_cost_uzs": 0,
+        "energy_cost_uzs": 0,
         "input_tokens": 0,
         "output_tokens": 0,
         "jobs": 0,
@@ -3649,8 +3674,29 @@ async def admin_finance(
         output_tokens = int(usage.get("output_tokens") or 0)
         gemini_uzs = gemini_cost_uzs(input_tokens, output_tokens)
         shared = share_uzs if site_id in billable_ids else 0
-        revenue = int(site.get("monthly_price_uzs") or 0)
         billable = site_id in billable_ids
+        # Daromad faqat TO'LOVI JOYIDA bo'lgan mijozdan sanaladi.  Ilgari
+        # bu shart yo'q edi va obunasi tugagan do'kon ham daromad bo'lib
+        # turardi — "Boshqaruv" sahifasi esa (`store.stats()`) uni
+        # sanamasdi, ya'ni ikki sahifa ikki xil raqam ko'rsatardi.
+        paying = billable and str(site.get("license_status") or "") in ("active", "grace")
+        revenue = int(site.get("monthly_price_uzs") or 0) if paying else 0
+
+        # `None` — "o'lchov yo'q" (bucket 30 kun saqlanadi, eski oyda
+        # ma'lumot bo'lmaydi).  Uni nolga aylantirish "elektr bepul edi"
+        # degan yolg'on ko'rsatkich berardi.
+        minutes = uptime_minutes.get(site_id)
+        watts = watts_windows if int(site.get("windows_devices") or 0) > 0 else watts_box
+        if minutes:
+            uptime_hours = round(minutes / 60, 1)
+            energy_kwh = round(uptime_hours * watts / 1000, 2)
+            energy_uzs = round(energy_kwh * kwh_uzs)
+        else:
+            uptime_hours = 0.0
+            energy_kwh = 0.0
+            energy_uzs = 0
+
+        cost = gemini_uzs + shared + energy_uzs
         site_rows.append(
             {
                 "site_id": site_id,
@@ -3658,20 +3704,28 @@ async def admin_finance(
                 "plan": site.get("plan"),
                 "devices": int(site.get("devices") or 0),
                 "billable": billable,
-                "revenue_uzs": revenue if billable else 0,
+                "license_status": site.get("license_status"),
+                "revenue_uzs": revenue,
                 "gemini_jobs": int(usage.get("jobs") or 0),
                 "gemini_untracked_jobs": int(usage.get("untracked_jobs") or 0),
                 "gemini_input_tokens": input_tokens,
                 "gemini_output_tokens": output_tokens,
                 "gemini_cost_uzs": gemini_uzs,
                 "shared_cost_uzs": shared,
-                "total_cost_uzs": gemini_uzs + shared,
-                "margin_uzs": (revenue if billable else 0) - gemini_uzs - shared,
+                "energy_measured": bool(minutes),
+                "energy_watts": watts,
+                "energy_uptime_hours": uptime_hours,
+                "energy_kwh": energy_kwh,
+                "energy_cost_uzs": energy_uzs,
+                # Bir mijozning TANNARXI: uchala qism qo'shilgani.
+                "total_cost_uzs": cost,
+                "margin_uzs": revenue - cost,
+                "margin_percent": round((revenue - cost) / revenue * 100, 1) if revenue else None,
             }
         )
-        if billable:
-            totals["revenue_uzs"] += revenue
+        totals["revenue_uzs"] += revenue
         totals["gemini_cost_uzs"] += gemini_uzs
+        totals["energy_cost_uzs"] += energy_uzs
         totals["input_tokens"] += input_tokens
         totals["output_tokens"] += output_tokens
         totals["jobs"] += int(usage.get("jobs") or 0)
@@ -3679,7 +3733,10 @@ async def admin_finance(
     # Eng qimmat mijoz tepada — panel savoli aynan "kim nechchiga tushyapti".
     site_rows.sort(key=lambda item: item["total_cost_uzs"], reverse=True)
 
-    total_cost_uzs = fixed_monthly_uzs + totals["gemini_cost_uzs"]
+    total_cost_uzs = (
+        fixed_monthly_uzs + totals["gemini_cost_uzs"] + totals["energy_cost_uzs"]
+    )
+    total_revenue_uzs = totals["revenue_uzs"]
     return {
         "month": month,
         "usd_rate_uzs": rate,
@@ -3692,6 +3749,16 @@ async def admin_finance(
             "total_monthly_uzs": fixed_monthly_uzs,
             "split_between": len(billable_ids),
             "share_per_site_uzs": share_uzs,
+            "kwh_uzs": kwh_uzs,
+            "watts_windows": watts_windows,
+            "watts_box": watts_box,
+        },
+        "energy": {
+            "cost_uzs": totals["energy_cost_uzs"],
+            "kwh_uzs": kwh_uzs,
+            # Elektr O'LCHANGAN ish vaqtidan hisoblanadi, quvvat esa
+            # baholangan — panel shu farqni aytishi uchun.
+            "watts_measured": False,
         },
         "gemini": {
             "jobs": totals["jobs"],
@@ -3705,9 +3772,19 @@ async def admin_finance(
         },
         "sites": site_rows,
         "totals": {
-            "revenue_uzs": totals["revenue_uzs"],
+            "revenue_uzs": total_revenue_uzs,
             "cost_uzs": total_cost_uzs,
-            "margin_uzs": totals["revenue_uzs"] - total_cost_uzs,
+            "gemini_cost_uzs": totals["gemini_cost_uzs"],
+            "energy_cost_uzs": totals["energy_cost_uzs"],
+            "fixed_cost_uzs": fixed_monthly_uzs,
+            "margin_uzs": total_revenue_uzs - total_cost_uzs,
+            "margin_percent": (
+                round((total_revenue_uzs - total_cost_uzs) / total_revenue_uzs * 100, 1)
+                if total_revenue_uzs
+                else None
+            ),
+            "sites_billable": len(billable_ids),
+            "sites_paying": sum(1 for row in site_rows if row["revenue_uzs"] > 0),
         },
     }
 

@@ -2286,12 +2286,20 @@ class CloudStore:
         rows = conn.execute("SELECT * FROM sites ORDER BY created_at DESC").fetchall()
         device_rows = conn.execute(
             "SELECT site_id, COUNT(*) AS n, MAX(last_seen) AS last_seen,"
-            " SUM(COALESCE(active_cameras, 0)) AS cameras"
+            " SUM(COALESCE(active_cameras, 0)) AS cameras,"
+            # Moliya paneli elektr xarajatini shu bo'yicha hisoblaydi: do'kon
+            # kompyuteri Box'dan bir necha barobar ko'p tok yeydi.  Saytda
+            # ikkala tur ham bo'lsa Windows ustun keladi — kam emas, KO'P
+            # baholash to'g'riroq: kam baholangan xarajat foydani yolg'on
+            # ko'rsatadi.
+            " SUM(CASE WHEN product_name LIKE 'Chaqimchi Windows%' THEN 1 ELSE 0 END)"
+            " AS windows_devices"
             " FROM devices GROUP BY site_id"
         ).fetchall()
         device_counts = {r["site_id"]: r["n"] for r in device_rows}
         last_seen_by_site = {r["site_id"]: r["last_seen"] for r in device_rows}
         cameras_by_site = {r["site_id"]: r["cameras"] for r in device_rows}
+        windows_by_site = {r["site_id"]: r["windows_devices"] for r in device_rows}
         conn.close()
 
         now = _utc_now().replace(tzinfo=None)
@@ -2303,6 +2311,7 @@ class CloudStore:
             site["license_status"] = computed["status"]
             site["days_left"] = computed["days_left"]
             site["devices"] = device_counts.get(site["id"], 0)
+            site["windows_devices"] = int(windows_by_site.get(site["id"]) or 0)
             site["last_seen"] = last_seen_by_site.get(site["id"])
             site.update(_connection_state(site["last_seen"], site["devices"], now))
             site["cameras_active"] = int(cameras_by_site.get(site["id"]) or 0)

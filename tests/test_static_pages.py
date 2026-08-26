@@ -560,11 +560,16 @@ def test_admin_customer_page_is_deep_linkable() -> None:
 
 
 def test_admin_panel_speaks_plain_uzbek() -> None:
-    """Ichki jargon ekranga chiqmasin."""
+    """Ichki jargon ekranga chiqmasin.
+
+    «Tannarx» bu ro'yxatdan 2026-08-26 da CHIQARILDI: u jargon emas,
+    oddiy biznes atamasi va Moliya sahifasining asosiy savoli aynan shu
+    («bir mijoz nechchiga tushadi»).  Bu sahifani mijoz emas, egasining
+    o'zi ko'radi.
+    """
     html = (STATIC / "admin.html").read_text(encoding="utf-8")
     for word in (
         "Production tayyorligi",
-        "Tannarx",
         "Draftni",
         "Biznes preset",
         "Onboarding",
@@ -1212,3 +1217,34 @@ def test_the_offer_repeats_the_limits_the_site_promises() -> None:
 
     for denial in ("o‘g‘rilikni", "yong‘in", "xaridorni", "kafolatlamaydi"):
         assert denial in offer, denial
+
+
+def test_every_admin_section_can_actually_load_its_data() -> None:
+    """Legacy admin panelidagi uchta ro'yxat bir-biridan uzoqlashmasin.
+
+    `NAV[].deps` — bo'lim nimani so'raydi, `LOADERS` — uni qanday olish,
+    `S` — natija qayerda turadi.  `need()` faqat `S[k] === null` ni
+    yuklaydi, ya'ni `S` da yo'q kalit `undefined` bo'lib qoladi va so'rov
+    UMUMAN yuborilmaydi.
+
+    Aynan shu bo'lgan edi: `finance` `LOADERS` va `NAV` ga qo'shilgan,
+    `S` ga esa unutilgan.  Natijada Moliya sahifasi ishga tushirilganidan
+    beri "Ma'lumot kelmadi" deb turgan, hech qanday xato ko'rsatmasdan —
+    chunki yuborilmagan so'rov yiqilmaydi ham.
+    """
+    source = (STATIC / "admin.html").read_text(encoding="utf-8")
+
+    state_block = re.search(r"const S = \{(.*?)\n    \};", source, re.S)
+    assert state_block, "admin.html dagi `const S = {…}` topilmadi"
+    state_keys = set(re.findall(r"(\w+):\s*null", state_block.group(1)))
+
+    loader_block = re.search(r"const LOADERS = \{(.*?)\n    \};", source, re.S)
+    assert loader_block, "admin.html dagi `const LOADERS = {…}` topilmadi"
+    loader_keys = set(re.findall(r"^\s*(\w+):", loader_block.group(1), re.M))
+
+    deps = set(re.findall(r'deps:\s*\[([^\]]*)\]', source))
+    needed = {name.strip().strip('"\'') for group in deps for name in group.split(",") if name.strip()}
+
+    assert needed, "birorta `deps` topilmadi — regex eskirgan bo'lishi mumkin"
+    assert needed <= loader_keys, f"yuklovchisi yo'q: {sorted(needed - loader_keys)}"
+    assert needed <= state_keys, f"`S` da joyi yo'q: {sorted(needed - state_keys)}"

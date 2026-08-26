@@ -333,10 +333,16 @@
 
     // ── Ma'lumot: har bo'lim faqat o'ziga keraklisini yuklaydi ─────────
     // Ilgari har bosishda 11 ta so'rov ketardi va sahifa "sakrardi".
+    // DIQQAT: bu yerdagi kalitlar `LOADERS` va `NAV[].deps` bilan bir xil
+    // bo'lishi SHART.  `need()` faqat `=== null` ni yuklaydi, ya'ni bu
+    // ro'yxatda yo'q kalit `undefined` bo'lib qoladi va so'rov UMUMAN
+    // yuborilmaydi — bo'lim esa "Ma'lumot kelmadi" deb turadi, hech qanday
+    // xato ko'rsatmasdan.  `finance` aynan shunday unutilgan edi va Moliya
+    // sahifasi ishga tushirilganidan beri bo'sh ochilardi.
     const S = {
       stats: null, sites: null, leads: null, invoices: null, providers: null,
       alerts: null, readiness: null, catalog: null, templates: null,
-      accounts: null, assignments: null, updates: null,
+      accounts: null, assignments: null, updates: null, finance: null,
     };
     // Moliya bo'limida tanlangan oy (bo'sh — joriy oy).
     let financeMonth = "";
@@ -850,8 +856,12 @@
           <td><small>${tokens(s.gemini_input_tokens)} kirish<br>${tokens(s.gemini_output_tokens)} chiqish</small></td>
           <td>${uzs(s.gemini_cost_uzs)}</td>
           <td>${s.billable ? uzs(s.shared_cost_uzs) : "—"}</td>
+          <td>${s.energy_measured
+            ? `${uzs(s.energy_cost_uzs)}<br><small>${s.energy_uptime_hours} soat · ${s.energy_watts} Vt</small>`
+            : `—<br><small>o'lchov yo'q</small>`}</td>
           <td><b>${uzs(s.total_cost_uzs)}</b></td>
-          <td style="color:${s.margin_uzs >= 0 ? "#137333" : "#b3261e"}"><b>${uzs(s.margin_uzs)}</b></td>
+          <td style="color:${s.margin_uzs >= 0 ? "#137333" : "#b3261e"}"><b>${uzs(s.margin_uzs)}</b>${
+            s.margin_percent === null || s.margin_percent === undefined ? "" : `<br><small>${s.margin_percent}%</small>`}</td>
         </tr>`).join("");
 
       el.innerHTML = `
@@ -866,10 +876,12 @@
           Contabo oylik summasini serverdagi <code>.env.production</code> ga
           <code>CHAQIMCHI_COST_SERVER_MONTHLY_USD</code> qilib yozing — shunda bu sahifa to'liq bo'ladi.</div>`}
         <div class="stats">
-          <div class="stat"><small>Oylik xarajat (jami)</small><strong>${uzs(totals.cost_uzs)}</strong><span>infra + Gemini</span></div>
-          <div class="stat"><small>Oylik daromad</small><strong>${uzs(totals.revenue_uzs)}</strong><span>faol mijoz tariflari</span></div>
-          <div class="stat"><small>Marja</small><strong style="color:${(totals.margin_uzs || 0) >= 0 ? "#137333" : "#b3261e"}">${uzs(totals.margin_uzs)}</strong><span>daromad − xarajat</span></div>
-          <div class="stat"><small>Gemini (${esc(f.month)})</small><strong>${uzs(gem.cost_uzs)}</strong><span>${gem.jobs || 0} ta savol</span></div>
+          <div class="stat"><small>Oylik daromad</small><strong>${uzs(totals.revenue_uzs)}</strong><span>${totals.sites_paying || 0} ta to'lovchi mijoz</span></div>
+          <div class="stat"><small>Tannarx (jami)</small><strong>${uzs(totals.cost_uzs)}</strong><span>infra + Gemini + elektr</span></div>
+          <div class="stat"><small>Foyda</small><strong style="color:${(totals.margin_uzs || 0) >= 0 ? "#137333" : "#b3261e"}">${uzs(totals.margin_uzs)}</strong><span>${
+            totals.margin_percent === null || totals.margin_percent === undefined ? "daromad − tannarx" : `${totals.margin_percent}% · daromad − tannarx`}</span></div>
+          <div class="stat"><small>Bir mijozga o'rtacha</small><strong>${
+            totals.sites_paying ? uzs(Math.round(totals.cost_uzs / totals.sites_paying)) : "—"}</strong><span>tannarx</span></div>
         </div>
 
         <section class="card"><div class="card-head"><h2>Doimiy xarajatlar</h2></div>
@@ -881,6 +893,17 @@
             <dt>Jami oyiga</dt><dd><b>${uzs(fixed.total_monthly_uzs)}</b></dd>
             <dt>Bo'linish</dt><dd>${fixed.split_between} ta ulangan do'kon orasida — har biriga ${uzs(fixed.share_per_site_uzs)}</dd>
           </dl>
+        </section>
+
+        <section class="card"><div class="card-head"><h2>Elektr</h2></div>
+          <dl class="kv">
+            <dt>Tarif</dt><dd>${uzs(fixed.kwh_uzs)} / kVt·soat</dd>
+            <dt>Quvvat</dt><dd>Do'kon kompyuteri ${fixed.watts_windows} Vt · Box ${fixed.watts_box} Vt</dd>
+            <dt>Oylik jami</dt><dd><b>${uzs(totals.energy_cost_uzs)}</b></dd>
+          </dl>
+          <p class="hint">Ish vaqti <b>o'lchanadi</b> (qurilma har daqiqada holat yuboradi), quvvat esa
+            <b>baholangan</b> — rozetka o'lchagichi bilan tekshirilmagan. Kompyuter o'chiq turgan
+            vaqt hisobga kirmaydi. O'lchov 30 kun saqlanadi, eski oyda «o'lchov yo'q» chiqadi.</p>
         </section>
 
         <section class="card"><div class="card-head"><h2>Gemini (AI yordamchi)</h2></div>
@@ -896,10 +919,11 @@
 
         <section class="card"><div class="card-head"><h2>Har mijoz nechchiga tushyapti</h2></div>
           ${rows ? `<div class="scroll-x"><table class="events">
-            <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini savollar</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Jami xarajat</th><th>Marja</th></tr></thead>
+            <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini savollar</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Elektr</th><th>Tannarx</th><th>Foyda</th></tr></thead>
             <tbody>${rows}</tbody>
           </table></div>
-          <p class="hint">Infra ulushi = (server + domen) / ulangan do'konlar soni. Gemini — har mijozning o'z sarfi.</p>`
+          <p class="hint">Tannarx = Gemini + infra ulushi + elektr. Infra ulushi = (server + domen) / ulangan do'konlar soni.
+            Daromad faqat to'lovi joyida bo'lgan mijozdan sanaladi — to'xtatilgan do'kon xarajat bo'lib qolaveradi.</p>`
           : emptyState({ title: "Mijoz yo'q", hint: "Mijoz qo'shilgach xarajat taqsimoti shu yerda ko'rinadi.", actionLabel: "Mijozlar", actionHref: "#/mijozlar" })}
         </section>`;
 

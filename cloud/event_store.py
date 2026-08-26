@@ -1120,6 +1120,38 @@ class EventStore:
             for item in (self._dict(row) for row in rows)
         ]
 
+    def device_uptime_minutes_by_site(self, start_iso: str, end_iso: str) -> Dict[str, int]:
+        """Davr ichida qurilma necha DAQIQA ishlagani — elektr hisobi manbasi.
+
+        `device_metrics` daqiqalik bucket yozadi (`PRIMARY KEY(device_id,
+        bucket_at)`), ya'ni bucket sanog'i — ishlagan daqiqalar soni.
+
+        Nega `uptime_sec` emas: u qayta yuklashda nolga tushadi.  Do'kon
+        kompyuteri har kecha o'chib ertalab yonadi, ya'ni oxirgi
+        `uptime_sec` bir kunlikdan oshmaydi va oylik yig'indi uchun umuman
+        yaramaydi.  Bucket sanog'i esa kompyuter qachon o'chgan bo'lsa
+        o'sha daqiqalarni tabiiy ravishda hisobga olmaydi.
+
+        Bir saytda ikkita qurilma bo'lsa daqiqalar qo'shiladi — ikkalasi
+        ham tok yeydi.
+
+        **Chegara:** `device_metrics` 30 kun saqlanadi (`record_health`
+        retention).  Eski oy uchun bu metod bo'sh qaytaradi va chaqiruvchi
+        buni "0 daqiqa" emas, "o'lchov yo'q" deb talqin qilishi kerak.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT site_id, COUNT(*) AS minutes FROM device_metrics"
+                    " WHERE bucket_at>=? AND bucket_at<? GROUP BY site_id"
+                ),
+                (start_iso, end_iso),
+            ).fetchall()
+        return {
+            str(item["site_id"]): int(item["minutes"] or 0)
+            for item in (self._dict(row) for row in rows)
+        }
+
     def search_vision_events(
         self,
         site_id: str,

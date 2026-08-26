@@ -4,7 +4,7 @@ Gemini — Google `usageMetadata`sidan yozilgan token sarfi; infra — env'dagi
 summalar.  Bu testlar hisob matematikasi va taqsimotni qulflaydi.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -25,6 +25,9 @@ def finance_client(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("CHAQIMCHI_COST_DOMAIN_YEARLY_UZS", "27000")
     monkeypatch.setenv("CHAQIMCHI_GEMINI_INPUT_USD_PER_M", "0.30")
     monkeypatch.setenv("CHAQIMCHI_GEMINI_OUTPUT_USD_PER_M", "2.50")
+    monkeypatch.setenv("CHAQIMCHI_COST_KWH_UZS", "1000")
+    monkeypatch.setenv("CHAQIMCHI_DEVICE_WATTS_WINDOWS", "65")
+    monkeypatch.setenv("CHAQIMCHI_DEVICE_WATTS_BOX", "12")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
@@ -177,3 +180,167 @@ def test_completed_job_stores_zero_tokens_as_tracked(tmp_path: Path) -> None:
     assert usage == [
         {"site_id": "site-a", "jobs": 1, "input_tokens": 0, "output_tokens": 0, "untracked_jobs": 0}
     ]
+
+
+# ── Elektr sarfi ─────────────────────────────────────────────────────────
+#
+# Elektr O'LCHANGAN ish vaqtidan hisoblanadi: `device_metrics` daqiqalik
+# bucket yozadi, ya'ni bucket sanog'i — kompyuter necha daqiqa ishlagani.
+# Taxminiy "24/7" bilan hisoblash kechasi o'chiriladigan do'kon
+# kompyuterining tannarxini ikki barobar oshirib yuborardi.
+
+
+def _add_uptime(site_id: str, minutes: int, *, device_id: str = "dev-1") -> None:
+    """Sayt uchun `minutes` ta daqiqalik bucket yozadi (joriy oyning boshidan)."""
+    import json
+
+    store = main.get_event_store()
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    payload = json.dumps({"cameras_active": 2})
+    with store._connect() as conn:
+        for i in range(minutes):
+            bucket = (start + timedelta(minutes=i)).isoformat()
+            conn.execute(
+                store._sql(
+                    "INSERT INTO device_metrics (device_id,site_id,bucket_at,payload_json,received_at)"
+                    " VALUES (?,?,?,?,?)"
+                ),
+                (device_id, site_id, bucket, payload, bucket),
+            )
+
+
+def _windows_site(client: TestClient, name: str) -> str:
+    """Do'kon kompyuteri ulangan sayt.
+
+    `devices/claim` standart holda qurilmani "Sotqin" (Box) deb yozadi —
+    elektr hisobida bu Box vattini beradi.  Windows yo'lini sinash uchun
+    tur ANIQ ko'rsatiladi.
+    """
+    site = client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": name, "plan": "biznes"}
+    ).json()
+    client.post(
+        "/api/v1/devices/claim",
+        json={"pairing_code": site["pairing_code"], "product_name": "Chaqimchi Windows"},
+    )
+    return str(site["site_id"])
+
+
+def _site_row(client: TestClient, site_id: str) -> dict:
+    body = client.get("/api/v1/admin/finance", headers=ADMIN).json()
+    return next(row for row in body["sites"] if row["site_id"] == site_id)
+
+
+def test_energy_is_computed_from_measured_uptime(finance_client) -> None:
+    """720 soat × 65 Vt × 1000 so'm/kVt·soat = 46 800 so'm."""
+    site_id = _windows_site(finance_client, "Elektr")
+    _add_uptime(site_id, 720 * 60)
+
+    row = _site_row(finance_client, site_id)
+
+    assert row["energy_measured"] is True
+    assert row["energy_uptime_hours"] == 720.0
+    assert row["energy_kwh"] == 46.8
+    assert row["energy_cost_uzs"] == 46_800
+
+
+def test_a_computer_switched_off_half_the_month_costs_half(finance_client) -> None:
+    """O'lchov haqiqatan ishlatilsin — aks holda bu son shunchaki
+    konstantaga ko'paytirilgan taxmin bo'lardi."""
+    site_id = _windows_site(finance_client, "Yarim oy")
+    _add_uptime(site_id, 360 * 60)
+
+    row = _site_row(finance_client, site_id)
+
+    assert row["energy_uptime_hours"] == 360.0
+    assert row["energy_cost_uzs"] == 23_400
+
+
+def test_no_measurement_is_not_the_same_as_zero(finance_client) -> None:
+    """`device_metrics` 30 kun saqlanadi — eski oyda bucket bo'lmaydi.
+
+    O'shanda "elektr 0 so'm" deb ko'rsatish "bepul edi" degan yolg'on
+    xulosaga olib borardi.  Panel `energy_measured` ni ko'rib `—` chizadi.
+    """
+    site_id = _make_site(finance_client, "O'lchovsiz", pair=True)
+
+    row = _site_row(finance_client, site_id)
+
+    assert row["energy_measured"] is False
+    assert row["energy_cost_uzs"] == 0
+    assert row["energy_uptime_hours"] == 0.0
+
+
+def test_the_shop_computer_is_costlier_than_a_box(finance_client) -> None:
+    """Windows desktop N100 qutisidan bir necha barobar ko'p tok yeydi —
+    bir xil ish vaqtida tannarx ham shunga yarasha farq qilsin."""
+    windows = _windows_site(finance_client, "Windows do'kon")
+    box = _make_site(finance_client, "Box do'kon", pair=True)
+    _add_uptime(windows, 100 * 60, device_id="dev-win")
+    _add_uptime(box, 100 * 60, device_id="dev-box")
+
+    win_row = _site_row(finance_client, windows)
+    box_row = _site_row(finance_client, box)
+
+    assert win_row["energy_uptime_hours"] == box_row["energy_uptime_hours"] == 100.0
+    assert win_row["energy_watts"] == 65
+    assert box_row["energy_watts"] == 12
+    assert win_row["energy_cost_uzs"] == 6_500
+    assert box_row["energy_cost_uzs"] == 1_200
+
+
+def test_cost_price_is_the_sum_of_every_part(finance_client) -> None:
+    """Tannarx = Gemini + infra ulushi + elektr.  Bittasi tushib qolsa
+    foyda yolg'on katta ko'rinadi."""
+    site_id = _make_site(finance_client, "Tannarx", pair=True)
+    _add_uptime(site_id, 100 * 60)
+
+    row = _site_row(finance_client, site_id)
+
+    assert row["total_cost_uzs"] == (
+        row["gemini_cost_uzs"] + row["shared_cost_uzs"] + row["energy_cost_uzs"]
+    )
+    assert row["margin_uzs"] == row["revenue_uzs"] - row["total_cost_uzs"]
+
+
+def test_totals_carry_energy_and_margin_percent(finance_client) -> None:
+    site_id = _make_site(finance_client, "Jami", pair=True)
+    _add_uptime(site_id, 100 * 60)
+
+    totals = finance_client.get("/api/v1/admin/finance", headers=ADMIN).json()["totals"]
+
+    assert totals["energy_cost_uzs"] > 0
+    assert totals["cost_uzs"] == (
+        totals["fixed_cost_uzs"] + totals["gemini_cost_uzs"] + totals["energy_cost_uzs"]
+    )
+    assert totals["margin_uzs"] == totals["revenue_uzs"] - totals["cost_uzs"]
+    assert totals["margin_percent"] is not None
+
+
+def test_a_customer_who_stopped_paying_is_not_counted_as_revenue(finance_client) -> None:
+    """Obunasi to'xtatilgan do'kon daromad bo'lib turmasin.
+
+    Ilgari daromad faqat "qurilma ulanganmi" shartiga bog'liq edi va
+    `license_status` umuman tekshirilmasdi.  Natijada Moliya sahifasi
+    to'xtatilgan mijozni ham sanardi, "Boshqaruv" esa sanamasdi
+    (`cloud/store.py: stats()` faqat active/grace) — bir xil savolga
+    ikki xil javob.
+    """
+    site_id = _windows_site(finance_client, "To'xtatilgan")
+    _add_uptime(site_id, 100 * 60)
+
+    before = _site_row(finance_client, site_id)
+    assert before["revenue_uzs"] > 0
+
+    finance_client.post(
+        f"/api/v1/admin/sites/{site_id}/status", headers=ADMIN, json={"status": "suspended"}
+    )
+    after = _site_row(finance_client, site_id)
+
+    assert after["revenue_uzs"] == 0
+    assert after["license_status"] == "suspended"
+    # Xarajat esa QOLADI: to'lamayapti, lekin qurilmasi hamon tok yeb,
+    # server joyini egallab turibdi.  Aynan shu — zarar keltiruvchi mijoz.
+    assert after["energy_cost_uzs"] > 0
+    assert after["margin_uzs"] < 0

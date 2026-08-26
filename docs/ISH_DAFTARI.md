@@ -9,10 +9,13 @@
 
 ## HOZIRGI HOLAT · 2026-08-26
 
-- **0.6.17 tayyorlandi** (hali chiqarilmagan) — sinov do'konidagi
-  "rasm kelmayapti" nosozligining oltita sababi tuzatildi.
-  Tafsilot: pastdagi tarixning birinchi yozuvi.
-- Cloud **0.6.16** jonli; mijoz ham 0.6.16.
+- **Cloud 0.6.17 jonli** (deploy 2026-08-26, hamma konteyner healthy).
+  Sinov do'konidagi "rasm kelmayapti" nosozligining oltita sababi
+  tuzatildi — tafsilot pastdagi tarixning birinchi yozuvida.
+- **Windows 0.6.17 nashr qilindi va imzosi tekshirildi**
+  (`dl.chaqimchi.uz`). Sinov do'koni `auto` rejimida — 15 daqiqada oladi.
+- **O'lchangan natija:** snapshot 429 lari **2 618 ta/10 daqiqa → 0**;
+  deploydan keyingi 2 daqiqada 86 ta rasm muvaffaqiyatli saqlandi.
 - Shox: `loitering-rasmsiz`, `origin` bilan sinxron. Asosiy shox `main`.
 - Audit ([AUDIT_TAHLIL.md](AUDIT_TAHLIL.md)) bo'yicha **A bosqichi
   (A0–A9) va B bosqichining katta qismi tugadi**. C boshlanmagan.
@@ -23,13 +26,22 @@
 
 ## KEYINGI ISH
 
-**0.6.17 ni chiqarish.** Kod va testlar tayyor, versiya ko'tarilgan.
-Qadamlar: `.exe` qurish/imzolash/nashr + cloud deploy (`CLAUDE.md`
-"Windows reliz" va "Cloud deploy").  **T8 allaqachon bajarilgan** —
-sinov do'konida davomat bitta kameraga tushirildi (revision 7).
+**0.6.17 qurilmaga yetganini tasdiqlash.** Cloud va reliz chiqdi;
+qurilma `auto` bo'lgani uchun o'zi oladi. Tekshirish:
 
-Deploydan keyin tekshirish: 429 to'xtadimi, panelda rasm chiqdimi,
-soat Toshkent bo'yichami.
+```
+docker compose -f docker-compose.chaqimchi.yml exec -T cloud \
+  python scripts/rollout.py --holat      # 0.6.16 → 0.6.17 bo'lsin
+```
+
+Yetgach ikkita narsa o'zi hal bo'ladi: yuz kadri oqimi soatiga 40 ga
+tushadi (`FACE_EMITS_PER_HOUR`) va davomat bitta kameraga qoladi
+(sozlama allaqachon revision 7 da, lekin S6 tufayli u faqat yangi
+versiyada kuchga kiradi).
+
+Ko'z bilan: owner panelni toza brauzerda oching — kamera kartochkasida
+"Kadr so'raldi…" chiqib, 20 soniyada rasm ko'rinsin; hodisalar soati
+Toshkent vaqtida bo'lsin.
 
 Undan keyin — **C1, haqiqiy do'konda qabul sinovi.** Ikki qismdan iborat:
 

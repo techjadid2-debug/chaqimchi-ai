@@ -290,32 +290,59 @@ def test_the_shop_computer_is_costlier_than_a_box(finance_client) -> None:
     assert box_row["energy_cost_uzs"] == 1_200
 
 
-def test_cost_price_is_the_sum_of_every_part(finance_client) -> None:
-    """Tannarx = Gemini + infra ulushi + elektr.  Bittasi tushib qolsa
-    foyda yolg'on katta ko'rinadi."""
-    site_id = _make_site(finance_client, "Tannarx", pair=True)
+def test_electricity_is_the_customers_bill_not_ours(finance_client) -> None:
+    """Elektr bizning tannarxga KIRMAYDI.
+
+    Windows yo'lida dastur mijozning o'z kompyuterida ishlaydi va tokni
+    u to'laydi.  Uni bizning xarajatga qo'shish foydani soxta
+    kamaytirardi.  Raqam esa yo'qolmaydi — u mijozning JAMI xarajatini
+    ko'rsatadi va sotuvda aynan shu savolga javob beradi.
+    """
+    site_id = _windows_site(finance_client, "Kim to'laydi")
     _add_uptime(site_id, 100 * 60)
 
     row = _site_row(finance_client, site_id)
 
-    assert row["total_cost_uzs"] == (
-        row["gemini_cost_uzs"] + row["shared_cost_uzs"] + row["energy_cost_uzs"]
-    )
+    assert row["energy_cost_uzs"] == 6_500
+    # Bizning tannarx: faqat Gemini + infra.
+    assert row["total_cost_uzs"] == row["gemini_cost_uzs"] + row["shared_cost_uzs"]
     assert row["margin_uzs"] == row["revenue_uzs"] - row["total_cost_uzs"]
+    # Mijozga jami: obuna + o'z toki.
+    assert row["customer_total_uzs"] == row["revenue_uzs"] + row["energy_cost_uzs"]
 
 
-def test_totals_carry_energy_and_margin_percent(finance_client) -> None:
-    site_id = _make_site(finance_client, "Jami", pair=True)
+def test_energy_does_not_shrink_our_profit(finance_client) -> None:
+    """Elektr o'ssa ham foydamiz o'zgarmasin — u bizning cho'ntagimizdan
+    chiqmaydi.  Bu testsiz kelajakda uni yana tannarxga qo'shib
+    yuborish oson."""
+    quiet = _windows_site(finance_client, "Kam ishlagan")
+    _add_uptime(quiet, 10 * 60, device_id="dev-quiet")
+    busy = _windows_site(finance_client, "Ko'p ishlagan")
+    _add_uptime(busy, 700 * 60, device_id="dev-busy")
+
+    quiet_row = _site_row(finance_client, quiet)
+    busy_row = _site_row(finance_client, busy)
+
+    assert busy_row["energy_cost_uzs"] > quiet_row["energy_cost_uzs"] * 50
+    # Elektr 70 barobar farq qiladi, foyda esa bir xil.
+    assert busy_row["margin_uzs"] == quiet_row["margin_uzs"]
+
+
+def test_totals_keep_our_cost_and_the_customer_bill_apart(finance_client) -> None:
+    site_id = _windows_site(finance_client, "Jami")
     _add_uptime(site_id, 100 * 60)
 
-    totals = finance_client.get("/api/v1/admin/finance", headers=ADMIN).json()["totals"]
+    body = finance_client.get("/api/v1/admin/finance", headers=ADMIN).json()
+    totals = body["totals"]
 
-    assert totals["energy_cost_uzs"] > 0
-    assert totals["cost_uzs"] == (
-        totals["fixed_cost_uzs"] + totals["gemini_cost_uzs"] + totals["energy_cost_uzs"]
-    )
+    # Bizning tannarx — elektrsiz.
+    assert totals["cost_uzs"] == totals["fixed_cost_uzs"] + totals["gemini_cost_uzs"]
     assert totals["margin_uzs"] == totals["revenue_uzs"] - totals["cost_uzs"]
     assert totals["margin_percent"] is not None
+    # Mijozlar to'laydigan elektr alohida turadi.
+    assert totals["energy_cost_uzs"] > 0
+    assert totals["customer_total_uzs"] == totals["revenue_uzs"] + totals["energy_cost_uzs"]
+    assert body["energy"]["paid_by"] == "customer"
 
 
 def test_a_customer_who_stopped_paying_is_not_counted_as_revenue(finance_client) -> None:
@@ -340,7 +367,6 @@ def test_a_customer_who_stopped_paying_is_not_counted_as_revenue(finance_client)
 
     assert after["revenue_uzs"] == 0
     assert after["license_status"] == "suspended"
-    # Xarajat esa QOLADI: to'lamayapti, lekin qurilmasi hamon tok yeb,
-    # server joyini egallab turibdi.  Aynan shu — zarar keltiruvchi mijoz.
-    assert after["energy_cost_uzs"] > 0
+    # Bizning xarajat esa QOLADI: to'lamayapti, lekin server joyini
+    # egallab turibdi.  Aynan shu — zarar keltiruvchi mijoz.
     assert after["margin_uzs"] < 0

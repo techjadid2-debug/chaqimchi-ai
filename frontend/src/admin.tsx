@@ -144,14 +144,14 @@ function PlansPage() {
 /* Moliya: platforma va HAR MIJOZ nechchiga tushayapti.  Gemini xarajati
    haqiqiy token sarfidan (usageMetadata), infra env'dagi summalardan —
    sahifada qo'lda yozilgan raqam yo'q. */
-type FinanceSite = {site_id:string;name?:string;plan?:string;billable:boolean;license_status?:string;revenue_uzs:number;gemini_jobs:number;gemini_untracked_jobs:number;gemini_input_tokens:number;gemini_output_tokens:number;gemini_cost_uzs:number;shared_cost_uzs:number;energy_measured:boolean;energy_watts:number;energy_uptime_hours:number;energy_kwh:number;energy_cost_uzs:number;total_cost_uzs:number;margin_uzs:number;margin_percent:number|null};
+type FinanceSite = {site_id:string;name?:string;plan?:string;billable:boolean;license_status?:string;revenue_uzs:number;gemini_jobs:number;gemini_untracked_jobs:number;gemini_input_tokens:number;gemini_output_tokens:number;gemini_cost_uzs:number;shared_cost_uzs:number;energy_measured:boolean;energy_watts:number;energy_uptime_hours:number;energy_kwh:number;energy_cost_uzs:number;customer_total_uzs:number;total_cost_uzs:number;margin_uzs:number;margin_percent:number|null};
 type Finance = {
   month:string; usd_rate_uzs:number;
   fixed:{server_monthly_usd:number;server_monthly_uzs:number;server_configured:boolean;domain_yearly_uzs:number;domain_monthly_uzs:number;total_monthly_uzs:number;split_between:number;share_per_site_uzs:number;kwh_uzs:number;watts_windows:number;watts_box:number};
   gemini:{jobs:number;untracked_jobs:number;input_tokens:number;output_tokens:number;cost_uzs:number;input_usd_per_m:number;output_usd_per_m:number;model?:string|null};
   sites:FinanceSite[];
-  energy:{cost_uzs:number;kwh_uzs:number};
-  totals:{revenue_uzs:number;cost_uzs:number;gemini_cost_uzs:number;energy_cost_uzs:number;fixed_cost_uzs:number;margin_uzs:number;margin_percent:number|null;sites_billable:number;sites_paying:number};
+  energy:{cost_uzs:number;kwh_uzs:number;paid_by:string};
+  totals:{revenue_uzs:number;cost_uzs:number;gemini_cost_uzs:number;energy_cost_uzs:number;fixed_cost_uzs:number;margin_uzs:number;margin_percent:number|null;sites_billable:number;sites_paying:number;customer_total_uzs:number};
 };
 
 function financeMonths():string[] {
@@ -173,9 +173,9 @@ function FinancePage() {
     {!fixed.server_configured?<div className="alert-strip alert-warning"><Icon name="bell"/><div><strong>Server narxi kiritilmagan.</strong> Contabo oylik summasini serverdagi .env.production ga CHAQIMCHI_COST_SERVER_MONTHLY_USD qilib yozing.</div></div>:null}
     <div className="metric-grid">
       <MetricCard label="Oylik daromad" value={formatMoney(totals.revenue_uzs)} note={`${totals.sites_paying} ta to‘lovchi mijoz`} icon="card" tone="green"/>
-      <MetricCard label="Tannarx (jami)" value={formatMoney(totals.cost_uzs)} note="infra + Gemini + elektr" icon="invoice" tone="red"/>
+      <MetricCard label="Tannarx (bizniki)" value={formatMoney(totals.cost_uzs)} note="infra + Gemini" icon="invoice" tone="red"/>
       <MetricCard label="Foyda" value={formatMoney(totals.margin_uzs)} note={totals.margin_percent===null?"daromad − tannarx":`${totals.margin_percent}% · daromad − tannarx`} icon="chart" tone={totals.margin_uzs>=0?"green":"red"}/>
-      <MetricCard label="Bir mijozga o‘rtacha" value={totals.sites_paying?formatMoney(Math.round(totals.cost_uzs/totals.sites_paying)):"—"} note="tannarx" icon="pulse" tone="blue"/>
+      <MetricCard label="Mijozga jami tushadi" value={formatMoney(totals.customer_total_uzs)} note="obuna + o‘z toki" icon="pulse" tone="blue"/>
     </div>
     <div className="dashboard-grid section-gap">
       <Card><div className="card-head"><div><h2>Doimiy xarajatlar</h2><p>Ulangan do‘konlar orasida teng bo‘linadi</p></div></div><div className="card-body">
@@ -183,7 +183,7 @@ function FinancePage() {
         <div className="simple-row"><span>Domen</span><b>{formatMoney(fixed.domain_yearly_uzs)}/yil ≈ {formatMoney(fixed.domain_monthly_uzs)}/oy</b></div>
         <div className="simple-row"><span>Jami oyiga</span><b>{formatMoney(fixed.total_monthly_uzs)}</b></div>
         <div className="simple-row"><span>Bo‘linish</span><b>{fixed.split_between} do‘kon · {formatMoney(fixed.share_per_site_uzs)} dan</b></div>
-        <div className="simple-row"><span>Elektr (oylik)</span><b>{formatMoney(totals.energy_cost_uzs)}</b></div>
+        <div className="simple-row"><span>Elektr — mijoz to‘laydi</span><b>{formatMoney(totals.energy_cost_uzs)}</b></div>
         <div className="simple-row"><span>Tok tarifi</span><b>{formatMoney(fixed.kwh_uzs)} / kVt·soat</b></div>
         <div className="simple-row"><span>Quvvat</span><b>kompyuter {fixed.watts_windows} Vt · Box {fixed.watts_box} Vt</b></div>
       </div></Card>
@@ -194,9 +194,9 @@ function FinancePage() {
         <div className="simple-row"><span>Tarif</span><b>${gemini.input_usd_per_m}/1M · ${gemini.output_usd_per_m}/1M</b></div>
       </div></Card>
     </div>
-    <Card className="section-gap"><div className="card-head"><div><h2>Har mijoz nechchiga tushyapti</h2><p>Tannarx = Gemini + infra ulushi + elektr; foyda = tarif − tannarx</p></div></div>
+    <Card className="section-gap"><div className="card-head"><div><h2>Har mijoz nechchiga tushyapti</h2><p>Tannarx = Gemini + infra ulushi; foyda = tarif − tannarx. Elektrni mijoz to‘laydi</p></div></div>
       {data.sites.length?<div className="table-wrap"><table>
-        <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Elektr</th><th>Tannarx</th><th>Foyda</th></tr></thead>
+        <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Tannarx</th><th>Foyda</th><th>Elektr (mijoz)</th></tr></thead>
         <tbody>{data.sites.map(s=><tr key={s.site_id}>
           <td><div className="table-title">{s.name||s.site_id}</div><div className="table-sub">{s.plan||"—"}{s.billable?"":" · qurilma ulanmagan"}</div></td>
           <td>{s.billable?formatMoney(s.revenue_uzs):"—"}</td>
@@ -204,9 +204,9 @@ function FinancePage() {
           <td><small>{t(s.gemini_input_tokens)} / {t(s.gemini_output_tokens)}</small></td>
           <td>{formatMoney(s.gemini_cost_uzs)}</td>
           <td>{s.billable?formatMoney(s.shared_cost_uzs):"—"}</td>
-          <td>{s.energy_measured?<>{formatMoney(s.energy_cost_uzs)}<div className="table-sub">{s.energy_uptime_hours} soat · {s.energy_watts} Vt</div></>:<>—<div className="table-sub">o‘lchov yo‘q</div></>}</td>
           <td><b>{formatMoney(s.total_cost_uzs)}</b></td>
           <td><Pill state={s.margin_uzs>=0?"active":"failed"}>{formatMoney(s.margin_uzs)}</Pill>{s.margin_percent===null?null:<div className="table-sub">{s.margin_percent}%</div>}</td>
+          <td className="table-sub">{s.energy_measured?<>{formatMoney(s.energy_cost_uzs)}<div className="table-sub">{s.energy_uptime_hours} soat · {s.energy_watts} Vt</div></>:<>—<div className="table-sub">o‘lchov yo‘q</div></>}</td>
         </tr>)}</tbody>
       </table></div>:<EmptyState icon="branch" title="Mijoz yo‘q" detail="Mijoz qo‘shilgach xarajat taqsimoti shu yerda ko‘rinadi."/>}
     </Card>

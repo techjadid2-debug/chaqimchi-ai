@@ -856,12 +856,12 @@
           <td><small>${tokens(s.gemini_input_tokens)} kirish<br>${tokens(s.gemini_output_tokens)} chiqish</small></td>
           <td>${uzs(s.gemini_cost_uzs)}</td>
           <td>${s.billable ? uzs(s.shared_cost_uzs) : "—"}</td>
-          <td>${s.energy_measured
-            ? `${uzs(s.energy_cost_uzs)}<br><small>${s.energy_uptime_hours} soat · ${s.energy_watts} Vt</small>`
-            : `—<br><small>o'lchov yo'q</small>`}</td>
           <td><b>${uzs(s.total_cost_uzs)}</b></td>
           <td style="color:${s.margin_uzs >= 0 ? "#137333" : "#b3261e"}"><b>${uzs(s.margin_uzs)}</b>${
             s.margin_percent === null || s.margin_percent === undefined ? "" : `<br><small>${s.margin_percent}%</small>`}</td>
+          <td style="color:var(--muted)">${s.energy_measured
+            ? `${uzs(s.energy_cost_uzs)}<br><small>${s.energy_uptime_hours} soat · ${s.energy_watts} Vt</small>`
+            : `—<br><small>o'lchov yo'q</small>`}</td>
         </tr>`).join("");
 
       el.innerHTML = `
@@ -877,11 +877,10 @@
           <code>CHAQIMCHI_COST_SERVER_MONTHLY_USD</code> qilib yozing — shunda bu sahifa to'liq bo'ladi.</div>`}
         <div class="stats">
           <div class="stat"><small>Oylik daromad</small><strong>${uzs(totals.revenue_uzs)}</strong><span>${totals.sites_paying || 0} ta to'lovchi mijoz</span></div>
-          <div class="stat"><small>Tannarx (jami)</small><strong>${uzs(totals.cost_uzs)}</strong><span>infra + Gemini + elektr</span></div>
+          <div class="stat"><small>Tannarx (bizniki)</small><strong>${uzs(totals.cost_uzs)}</strong><span>infra + Gemini</span></div>
           <div class="stat"><small>Foyda</small><strong style="color:${(totals.margin_uzs || 0) >= 0 ? "#137333" : "#b3261e"}">${uzs(totals.margin_uzs)}</strong><span>${
             totals.margin_percent === null || totals.margin_percent === undefined ? "daromad − tannarx" : `${totals.margin_percent}% · daromad − tannarx`}</span></div>
-          <div class="stat"><small>Bir mijozga o'rtacha</small><strong>${
-            totals.sites_paying ? uzs(Math.round(totals.cost_uzs / totals.sites_paying)) : "—"}</strong><span>tannarx</span></div>
+          <div class="stat"><small>Mijozga jami tushadi</small><strong>${uzs(totals.customer_total_uzs)}</strong><span>obuna + o'z toki</span></div>
         </div>
 
         <section class="card"><div class="card-head"><h2>Doimiy xarajatlar</h2></div>
@@ -895,13 +894,16 @@
           </dl>
         </section>
 
-        <section class="card"><div class="card-head"><h2>Elektr</h2></div>
+        <section class="card"><div class="card-head"><h2>Elektr — mijoz to'laydi</h2></div>
           <dl class="kv">
             <dt>Tarif</dt><dd>${uzs(fixed.kwh_uzs)} / kVt·soat</dd>
             <dt>Quvvat</dt><dd>Do'kon kompyuteri ${fixed.watts_windows} Vt · Box ${fixed.watts_box} Vt</dd>
-            <dt>Oylik jami</dt><dd><b>${uzs(totals.energy_cost_uzs)}</b></dd>
+            <dt>Mijozlar jami to'laydi</dt><dd><b>${uzs(totals.energy_cost_uzs)}</b></dd>
           </dl>
-          <p class="hint">Ish vaqti <b>o'lchanadi</b> (qurilma har daqiqada holat yuboradi), quvvat esa
+          <p class="hint">Bu <b>bizning xarajat emas</b>: dastur mijozning o'z kompyuterida ishlaydi va
+            tokni u to'laydi. Shuning uchun tannarxga qo'shilmaydi va foydani kamaytirmaydi —
+            raqam faqat «mijozga jami nechchiga tushadi» degan savolga javob beradi.<br>
+            Ish vaqti <b>o'lchanadi</b> (qurilma har daqiqada holat yuboradi), quvvat esa
             <b>baholangan</b> — rozetka o'lchagichi bilan tekshirilmagan. Kompyuter o'chiq turgan
             vaqt hisobga kirmaydi. O'lchov 30 kun saqlanadi, eski oyda «o'lchov yo'q» chiqadi.</p>
         </section>
@@ -919,10 +921,11 @@
 
         <section class="card"><div class="card-head"><h2>Har mijoz nechchiga tushyapti</h2></div>
           ${rows ? `<div class="scroll-x"><table class="events">
-            <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini savollar</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Elektr</th><th>Tannarx</th><th>Foyda</th></tr></thead>
+            <thead><tr><th>Mijoz</th><th>Tarif (daromad)</th><th>Gemini savollar</th><th>Tokenlar</th><th>Gemini xarajat</th><th>Infra ulushi</th><th>Tannarx</th><th>Foyda</th><th>Elektr<br><small>mijoz to'laydi</small></th></tr></thead>
             <tbody>${rows}</tbody>
           </table></div>
-          <p class="hint">Tannarx = Gemini + infra ulushi + elektr. Infra ulushi = (server + domen) / ulangan do'konlar soni.
+          <p class="hint">Tannarx = Gemini + infra ulushi. Infra ulushi = (server + domen) / ulangan do'konlar soni.
+            Elektr oxirgi ustunda — u <b>mijozning</b> xarajati va foydaga ta'sir qilmaydi.
             Daromad faqat to'lovi joyida bo'lgan mijozdan sanaladi — to'xtatilgan do'kon xarajat bo'lib qolaveradi.</p>`
           : emptyState({ title: "Mijoz yo'q", hint: "Mijoz qo'shilgach xarajat taqsimoti shu yerda ko'rinadi.", actionLabel: "Mijozlar", actionHref: "#/mijozlar" })}
         </section>`;

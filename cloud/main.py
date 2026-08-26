@@ -3696,7 +3696,14 @@ async def admin_finance(
             energy_kwh = 0.0
             energy_uzs = 0
 
-        cost = gemini_uzs + shared + energy_uzs
+        # Elektr BIZNING tannarxga KIRMAYDI: Windows yo'lida dastur
+        # mijozning o'z kompyuterida ishlaydi va tokni u to'laydi.  Uni
+        # bizning xarajatga qo'shish foydani soxta kamaytirardi.
+        #
+        # Lekin raqam yo'qolmaydi — u mijozning JAMI xarajatini ko'rsatadi
+        # ("bizning obuna 299 000 + elektr 47 000 = 346 000") va sotuvda
+        # aynan shu savolga javob beradi.
+        cost = gemini_uzs + shared
         site_rows.append(
             {
                 "site_id": site_id,
@@ -3712,12 +3719,15 @@ async def admin_finance(
                 "gemini_output_tokens": output_tokens,
                 "gemini_cost_uzs": gemini_uzs,
                 "shared_cost_uzs": shared,
+                # ── Mijozning xarajati (bizniki EMAS) ──
                 "energy_measured": bool(minutes),
                 "energy_watts": watts,
                 "energy_uptime_hours": uptime_hours,
                 "energy_kwh": energy_kwh,
                 "energy_cost_uzs": energy_uzs,
-                # Bir mijozning TANNARXI: uchala qism qo'shilgani.
+                # Mijozga oyiga jami nechchiga tushadi: obuna + o'z toki.
+                "customer_total_uzs": revenue + energy_uzs,
+                # ── Bizning tannarx va foyda ──
                 "total_cost_uzs": cost,
                 "margin_uzs": revenue - cost,
                 "margin_percent": round((revenue - cost) / revenue * 100, 1) if revenue else None,
@@ -3733,9 +3743,9 @@ async def admin_finance(
     # Eng qimmat mijoz tepada — panel savoli aynan "kim nechchiga tushyapti".
     site_rows.sort(key=lambda item: item["total_cost_uzs"], reverse=True)
 
-    total_cost_uzs = (
-        fixed_monthly_uzs + totals["gemini_cost_uzs"] + totals["energy_cost_uzs"]
-    )
+    # Elektr bu yig'indiga QO'SHILMAYDI — u mijozning xarajati (yuqoridagi
+    # izohga qarang), shuning uchun alohida maydonda turadi.
+    total_cost_uzs = fixed_monthly_uzs + totals["gemini_cost_uzs"]
     total_revenue_uzs = totals["revenue_uzs"]
     return {
         "month": month,
@@ -3756,8 +3766,11 @@ async def admin_finance(
         "energy": {
             "cost_uzs": totals["energy_cost_uzs"],
             "kwh_uzs": kwh_uzs,
-            # Elektr O'LCHANGAN ish vaqtidan hisoblanadi, quvvat esa
-            # baholangan — panel shu farqni aytishi uchun.
+            # Kimning xarajati: elektrni mijoz to'laydi (dastur uning o'z
+            # kompyuterida ishlaydi), shuning uchun bu son bizning
+            # tannarxga KIRMAYDI.  Panel shuni aniq yozishi uchun.
+            "paid_by": "customer",
+            # Ish vaqti o'lchanadi, quvvat esa baholangan.
             "watts_measured": False,
         },
         "gemini": {
@@ -3775,8 +3788,10 @@ async def admin_finance(
             "revenue_uzs": total_revenue_uzs,
             "cost_uzs": total_cost_uzs,
             "gemini_cost_uzs": totals["gemini_cost_uzs"],
-            "energy_cost_uzs": totals["energy_cost_uzs"],
             "fixed_cost_uzs": fixed_monthly_uzs,
+            # Mijozlar to'laydigan elektr — bizning tannarxdan tashqarida.
+            "energy_cost_uzs": totals["energy_cost_uzs"],
+            "customer_total_uzs": total_revenue_uzs + totals["energy_cost_uzs"],
             "margin_uzs": total_revenue_uzs - total_cost_uzs,
             "margin_percent": (
                 round((total_revenue_uzs - total_cost_uzs) / total_revenue_uzs * 100, 1)

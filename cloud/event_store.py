@@ -981,14 +981,24 @@ class EventStore:
             if last_read:
                 unread_where = " AND created_at > ?"
                 params.append(last_read)
+            # `AS unread` va `_dict` — raqamli indeks EMAS.
+            #
+            # `row[0]` SQLite'da ishlaydi (`sqlite3.Row` raqamli indeksni
+            # qo'llaydi), PostgreSQL'da esa ulanish `dict_row` bilan
+            # ochiladi va `row[0]` → `KeyError: 0`.  Ya'ni testlar o'tardi,
+            # production esa yiqilardi: 2026-08-27 da bu marshrut 48 soatda
+            # 49 marta 500 berdi va egasi qo'ng'iroqni umuman ocholmasdi.
             unread = int(
-                conn.execute(
-                    self._sql(
-                        "SELECT COUNT(*) FROM production_events WHERE site_id=? "
-                        f"AND severity IN ({placeholders}){unread_where}"
-                    ),
-                    tuple(params),
-                ).fetchone()[0]
+                self._dict(
+                    conn.execute(
+                        self._sql(
+                            "SELECT COUNT(*) AS unread FROM production_events "
+                            f"WHERE site_id=? AND severity IN ({placeholders})"
+                            f"{unread_where}"
+                        ),
+                        tuple(params),
+                    ).fetchone()
+                )["unread"]
             )
 
             rows = conn.execute(
@@ -2389,7 +2399,10 @@ class EventStore:
             if current is None:
                 result[item["site_id"]] = payload
                 continue
-            for key in ("analysis_errors", "queue_errors"):
+            # `outbox_poisoned` ham shu ro'yxatda: ikki qurilmali do'konda
+            # sog'lomi kasalining yo'qotgan hodisalarini yashirmasin —
+            # harorat bilan bo'lgan xatoning aynan o'zi.
+            for key in ("analysis_errors", "queue_errors", "outbox_poisoned"):
                 current[key] = max(int(current.get(key) or 0), int(payload.get(key) or 0))
             current["analyzed"] = max(
                 int(current.get("analyzed") or 0), int(payload.get("analyzed") or 0)

@@ -71,6 +71,10 @@ class EventOutbox:
                     priority INTEGER NOT NULL DEFAULT 10,
                     created_at TEXT NOT NULL,
                     attempts INTEGER NOT NULL DEFAULT 0,
+                    -- Cloud hodisaning O'ZINI rad etgan urinishlar soni.
+                    -- `attempts` dan farqi: tarmoq uzilishi va 5xx bu
+                    -- yerga YOZILMAYDI (pastdagi `fail()` izohiga qarang).
+                    hard_failures INTEGER NOT NULL DEFAULT 0,
                     last_error TEXT,
                     -- Shu vaqtdan oldin qayta urinilmaydi.  `NULL` — hali
                     -- urinilmagan, ya'ni darhol yuboriladi.
@@ -105,6 +109,14 @@ class EventOutbox:
                 conn.execute("ALTER TABLE outbox ADD COLUMN next_attempt_at TEXT")
             if "sent_at" not in columns:
                 conn.execute("ALTER TABLE outbox ADD COLUMN sent_at TEXT")
+            if "hard_failures" not in columns:
+                # Mavjud navbatda nol bilan boshlanadi: eski `attempts`
+                # ichida tarmoq uzilishlari ham bor va ularni "cloud rad
+                # etdi" deb hisoblash aynan tuzatilayotgan xatoni
+                # takrorlagan bo'lardi.
+                conn.execute(
+                    "ALTER TABLE outbox ADD COLUMN hard_failures INTEGER NOT NULL DEFAULT 0"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30)
@@ -202,41 +214,75 @@ class EventOutbox:
             )
             return int(cursor.rowcount)
 
-    def fail(self, event_id: str, error: str, *, now: Optional[datetime] = None) -> None:
+    def fail(
+        self,
+        event_id: str,
+        error: str,
+        *,
+        permanent: bool = False,
+        now: Optional[datetime] = None,
+    ) -> None:
         """Urinish muvaffaqiyatsiz — keyingisini kechiktiradi.
 
-        `MAX_ATTEMPTS` dan oshsa yozuv `dead_letter` ga ko'chadi: navbatdan
-        chiqadi (boshqalarni to'smasin), lekin diagnostika uchun qoladi.
+        `permanent` — cloud hodisaning O'ZINI rad etdimi (4xx, "qabul
+        qilinmadi").  Faqat shunday xatolar `MAX_ATTEMPTS` hisobiga
+        kiradi va hodisani `dead_letter` ga olib boradi.
+
+        Nega ajratildi.  Bungacha HAR qanday muvaffaqiyatsizlik hisobga
+        kirardi va tarmoq uzilishi hodisani o'ldirardi: 20 urinish
+        eksponensial kutish bilan ~3 soat, ya'ni yarim kunlik internet
+        nosozligi butun navbatni yo'q qilardi.  2026-08-27 da sinov
+        do'konida shu tarzda **3 375 ta** hodisa yo'qolgan edi va eng
+        ko'p uchragan sabab — "All connection attempts failed", ya'ni
+        aynan vaqtinchalik xato.  Do'kon jami 7 227 hodisa yuborgan.
+
+        Vaqtinchalik xato baribir kutishni uzaytiradi (`attempts`
+        backoff uchun qoladi) — aks holda uzilish paytida navbat
+        serverni har 5 soniyada urardi.  Cheklovi esa boshqa: yozuv
+        `retention_days` dan oshsa `purge()` uni `dead_letter` ga
+        ko'chiradi, ya'ni yo'qotish ko'rinmay qolmaydi.
         """
         moment = now or datetime.now(timezone.utc)
+        # Bo'sh sabab diagnostikani ko'r qiladi: jonli do'kondagi
+        # 3 375 ta tashlangan hodisaning 602 tasi "sabab yozilmagan"
+        # edi — `str(exc)` ba'zi httpx xatolarida bo'sh satr qaytaradi.
+        reason = (error or "").strip()[:1000] or f"sabab yozilmagan ({type(error).__name__})"
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT attempts,payload,created_at FROM outbox WHERE event_id=?", (event_id,)
+                "SELECT attempts,hard_failures,payload,created_at FROM outbox WHERE event_id=?",
+                (event_id,),
             ).fetchone()
             if row is None:
                 return
             attempts = int(row["attempts"]) + 1
-            if attempts >= MAX_ATTEMPTS:
-                conn.execute(
-                    "INSERT OR REPLACE INTO dead_letter"
-                    "(event_id,payload,attempts,last_error,created_at,failed_at) "
-                    "VALUES(?,?,?,?,?,?)",
-                    (
-                        event_id,
-                        row["payload"],
-                        attempts,
-                        error[:1000],
-                        row["created_at"],
-                        moment.isoformat(),
-                    ),
-                )
-                conn.execute("DELETE FROM outbox WHERE event_id=?", (event_id,))
+            hard = int(row["hard_failures"] or 0) + (1 if permanent else 0)
+            if hard >= MAX_ATTEMPTS:
+                self._dead_letter(conn, row, event_id, attempts, reason, moment)
                 return
             retry_at = moment + timedelta(seconds=retry_delay(attempts))
             conn.execute(
-                "UPDATE outbox SET attempts=?,last_error=?,next_attempt_at=? WHERE event_id=?",
-                (attempts, error[:1000], retry_at.isoformat(), event_id),
+                "UPDATE outbox SET attempts=?,hard_failures=?,last_error=?,next_attempt_at=? "
+                "WHERE event_id=?",
+                (attempts, hard, reason, retry_at.isoformat(), event_id),
             )
+
+    @staticmethod
+    def _dead_letter(
+        conn: sqlite3.Connection,
+        row: Any,
+        event_id: str,
+        attempts: int,
+        reason: str,
+        moment: datetime,
+    ) -> None:
+        """Hodisa navbatdan chiqadi, lekin sanoqdan chiqmaydi."""
+        conn.execute(
+            "INSERT OR REPLACE INTO dead_letter"
+            "(event_id,payload,attempts,last_error,created_at,failed_at) "
+            "VALUES(?,?,?,?,?,?)",
+            (event_id, row["payload"], attempts, reason, row["created_at"], moment.isoformat()),
+        )
+        conn.execute("DELETE FROM outbox WHERE event_id=?", (event_id,))
 
     def stats(self, *, now: Optional[datetime] = None) -> Dict[str, int]:
         moment = (now or datetime.now(timezone.utc)).isoformat()
@@ -277,6 +323,31 @@ class EventOutbox:
         sent_cutoff = (now - timedelta(days=SENT_KEEP_DAYS)).isoformat()
         removed = 0
         with self._connect() as conn:
+            # Yoshi bo'yicha chiqib ketayotgan YUBORILMAGAN yozuv jimgina
+            # o'chirilmaydi — u `dead_letter` ga ko'chadi.
+            #
+            # Bungacha u shunchaki `DELETE` bo'lardi va hisoblagichga
+            # tushmasdi: ya'ni bir hafta internetsiz qolgan do'konning
+            # hodisalari yo'qolar, `outbox_poisoned` esa nol turaverardi.
+            # Vaqtinchalik xato endi urinishlar sonini yemaydi
+            # (`fail(permanent=...)`), shuning uchun uzoq uzilishning
+            # YAGONA chegarasi shu yosh — va u ko'rinishi shart.
+            expired = conn.execute(
+                "SELECT event_id,attempts,payload,created_at,last_error FROM outbox "
+                "WHERE created_at < ? AND sent_at IS NULL",
+                (cutoff,),
+            ).fetchall()
+            for row in expired:
+                self._dead_letter(
+                    conn,
+                    row,
+                    str(row["event_id"]),
+                    int(row["attempts"] or 0),
+                    f"{self.retention_days} kun ichida yuborilmadi"
+                    + (f" ({row['last_error']})" if row["last_error"] else ""),
+                    now,
+                )
+            removed += len(expired)
             cursor = conn.execute("DELETE FROM outbox WHERE created_at < ?", (cutoff,))
             removed += int(cursor.rowcount)
             # Yuborilgani cloudda saqlangan — bu yerda faqat panelning

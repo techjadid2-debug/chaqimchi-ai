@@ -583,6 +583,20 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # kameraga `record_url` berilmagan, `missing` — ffmpeg fayl
         # yozmadi, `dropped` — navbat to'lgan.
         "clips": stats.get("clips") or {},
+        # Davomat va mijoz portreti ISHLAYAPTIMI.
+        #
+        # Bu ikkalasi `stats()` da 2026-08-26 da qo'shilgan edi va
+        # heartbeat ularni o'qishga urinardi — lekin shu yerdan
+        # o'tmagani uchun cloudga DOIM `0, 0, null` borardi.  Uch kunlik
+        # 1 515 o'lchovda hammasi nol edi va bu "davomat o'chiq" degan
+        # NOTO'G'RI tashxisga olib keldi: aslida demografiya ishlayotgan
+        # (257 kirishdan 2 tasida yuz topilgan), telemetriya esa ko'r edi.
+        #
+        # Bu xatoning UCHINCHI marta takrorlanishi (`analyzed`/`errors`
+        # va `fps`/`pressure` bilan ham xuddi shunday bo'lgan) — shuning
+        # uchun endi `test_status_chain.py` zanjirni qulflaydi.
+        "face_crops": stats.get("face_crops") or {},
+        "demography": stats.get("demography") or {},
         # Hodisani navbatga yozib bo'lmadi (odatda disk to'lgan) — bu
         # hodisa butunlay yo'qoldi degani, uni keyin tiklab bo'lmaydi.
         "action_errors": stats.get("action_errors", 0),

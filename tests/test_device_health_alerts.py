@@ -38,6 +38,7 @@ def _health(**kwargs) -> dict:
         "analyzed": kwargs.get("analyzed", 5_000),
         "analysis_errors": kwargs.get("analysis_errors", 0),
         "queue_errors": kwargs.get("queue_errors", 0),
+        "outbox_poisoned": kwargs.get("outbox_poisoned", 0),
         "disk_free_bytes": kwargs.get("disk_free_bytes", 40 * GB),
         # Harorat ixtiyoriy: Windows qurilmalar uni yubormaydi.
         **({"temperature_c": kwargs["temperature_c"]} if "temperature_c" in kwargs else {}),
@@ -428,3 +429,50 @@ def test_the_owner_hears_when_the_clock_is_fixed() -> None:
     assert len(alerts) == 1
     assert alerts[0].state == "ok"
     assert "soati" in (alerts[0].owner_text or "").lower()
+
+
+# ── Hodisa butunlay yo'qolgan ────────────────────────────────────────────
+#
+# Bu tahlil xatosidan boshqa muammo: tahlil yiqilsa hodisa TUG'ILMAYDI,
+# bu yerda esa hodisa tug'ilgan, diskka yozilgan va keyin tashlangan.
+# 2026-08-27 da sinov do'konida 3 375 ta hodisa shunday yo'qolgan edi va
+# ogohlantirish umuman yo'q edi — faqat admin panelda passiv yozuv.
+
+
+def test_thrown_away_events_are_reported() -> None:
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health(outbox_poisoned=3_375)}, {})
+
+    assert len(alerts) == 1
+    assert alerts[0].remember == "poison"
+    assert "3375" in alerts[0].text.replace(" ", "")
+
+
+def test_a_handful_of_losses_during_an_outage_stays_quiet() -> None:
+    """Internet uzilganda bir nechta hodisa urinishlarni yeb qo'yishi normal."""
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health(outbox_poisoned=7)}, {})
+
+    assert alerts == []
+
+
+def test_the_loss_is_not_repeated_every_check() -> None:
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(outbox_poisoned=3_375)}, {"s1": "poison"}
+    )
+
+    assert alerts == []
+
+
+def test_the_owner_is_not_told_about_lost_events() -> None:
+    """Ega buni hal qila olmaydi — bu bizning texnik signalimiz."""
+    alerts, _ = plan_device_health_alerts([_site()], {"s1": _health(outbox_poisoned=3_375)}, {})
+
+    assert alerts[0].owner_text is None
+
+
+def test_overheating_still_wins_over_already_lost_events() -> None:
+    """Qizish HOZIR temirni buzyapti; yo'qolgan hodisa esa o'tgan zarar."""
+    alerts, _ = plan_device_health_alerts(
+        [_site()], {"s1": _health(outbox_poisoned=3_375, temperature_c=90.0)}, {}
+    )
+
+    assert alerts[0].remember == "temp"

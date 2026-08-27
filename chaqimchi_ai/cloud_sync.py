@@ -50,6 +50,22 @@ def parse_retry_after(value: Optional[str]) -> float:
     return min(MAX_RETRY_AFTER_SEC, seconds)
 
 
+def _is_permanent(exc: BaseException) -> bool:
+    """Cloud so'rovni QAT'IY rad etdimi.
+
+    4xx — hodisa yoki so'rovning o'zida ayb bor va qayta urinish hech
+    narsani o'zgartirmaydi.  Ikkita istisno: 408 (timeout) va 429
+    (chegara) — ular vaqt haqida, mazmun haqida emas.  429 yuqorida
+    alohida ushlanadi, lekin bu yerda ham to'g'ri turishi kerak: bir
+    joyda tekshirilgan qoida ikkinchi yo'l bilan chetlab o'tilmasin.
+    """
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    if not isinstance(status, int):
+        return False
+    return 400 <= status < 500 and status not in (408, 429)
+
+
 class CloudEventSync:
     def __init__(
         self,
@@ -124,8 +140,12 @@ class CloudEventSync:
             response.raise_for_status()
             accepted = set(response.json().get("accepted", []))
         except Exception as exc:  # noqa: BLE001 - navbat keyingi siklda qayta urinadi
+            # Tarmoq va 5xx — VAQTINCHALIK: hodisa urinishlar hisobini
+            # yemasin (`outbox.fail` izohiga qarang).  Faqat cloud
+            # so'rovning o'zini rad etgan bo'lsa (4xx) hodisa aybdor.
+            permanent = _is_permanent(exc)
             for row in rows:
-                self.outbox.fail(row["event_id"], str(exc))
+                self.outbox.fail(row["event_id"], str(exc), permanent=permanent)
             logger.warning("Cloud event sync muvaffaqiyatsiz: %s", exc)
             return {"sent": 0, "failed": len(rows), "pending": len(rows)}
 
@@ -134,7 +154,10 @@ class CloudEventSync:
         for row in rows:
             event_id = row["event_id"]
             if event_id not in accepted:
-                self.outbox.fail(event_id, "cloud eventni qabul qilmadi")
+                # Cloud butun batchni qabul qildi, LEKIN shu hodisani
+                # ro'yxatga qo'shmadi — ya'ni ayb hodisada (sxema, tarif
+                # filtri, buzuq maydon).  Qayta urinish uni tuzatmaydi.
+                self.outbox.fail(event_id, "cloud eventni qabul qilmadi", permanent=True)
                 failed += 1
                 continue
             verdict = await self._upload_media(client, base, event_id, row)
@@ -204,6 +227,7 @@ class CloudEventSync:
                     )
                     verdict = "dropped"
                     continue
+                # 5xx — server tiklanadi, hodisa aybdor emas.
                 self.outbox.fail(event_id, str(exc))
                 return "retry"
             except Exception as exc:  # noqa: BLE001 — tarmoq: keyingi siklda

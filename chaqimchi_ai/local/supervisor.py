@@ -412,6 +412,13 @@ class RetailSupervisor:
             # Klip hisoblagichlari: "hodisa bor, klip yo'q" holatini panel
             # ham, cloud ham ko'rsin.
             "clips": status_file.get("clips") or {},
+            # Davomat va mijoz portreti sifati.  Holat faylida bor
+            # (`retail/service.py: write_status`) va heartbeat ularni
+            # kutadi (`local/cloud_config.py`) — o'rtada shu qator
+            # yo'q edi va cloudga doim nol borardi.  Yuqoridagi
+            # `analyzed`/`errors` izohi bilan bir xil sabab.
+            "face_crops": status_file.get("face_crops") or {},
+            "demography": status_file.get("demography") or {},
             # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel
             # "hisobot cloudga bormayapti" ogohlantirishini shundan chiqaradi.
             "plan_filtered": status_file.get("plan_filtered", 0),

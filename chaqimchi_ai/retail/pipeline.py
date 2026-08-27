@@ -32,12 +32,12 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
 from datetime import time as clock_time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from chaqimchi_ai.event_models import EdgeEvent
+from chaqimchi_ai.limits import store_now
 from chaqimchi_ai.retail import demography as demography_module
 from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.claims import Priority
@@ -239,8 +239,16 @@ class RetailPipeline:
         #: UTC nomi bilan yoziladi, shuning uchun bu monoton soat emas.
         self._wall_clock = wall_clock
         #: Qoida jadvallari do'konning **mahalliy** vaqtiga qaraydi ("09:00 dan
-        #: 21:00 gacha") — qurilma do'kon bilan bir zonada turadi.
-        self._local_time = local_time or (lambda: datetime.now().time())
+        #: 21:00 gacha").
+        #:
+        #: Standart qiymat `datetime.now()` EMAS, `store_now()`.  Ilgari
+        #: mashinaning o'z zonasiga ishonilardi va 2026-08-27 da sinov
+        #: do'konining kompyuteri UTC+3 da turgani aniqlandi: UTC to'g'ri
+        #: edi, ya'ni soat nazorati (`clock_skew_sec`) buni ko'rmadi.
+        #: Natijada har ertalab 08:30–10:30 orasida do'kon ochiq bo'la
+        #: turib kritik trevoga ketardi, kechqurun 22:00–00:00 orasida
+        #: esa nazorat umuman ishlamasdi.
+        self._local_time = local_time or (lambda: store_now().time())
         #: Do'kon ish vaqti.  Berilsa, tashqarisida ko'ringan odam uchun
         #: `after_hours_presence` chiqadi.  Berilmasa bu hodisa umuman yo'q.
         self.business_hours = business_hours

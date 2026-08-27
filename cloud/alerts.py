@@ -36,6 +36,8 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
+from chaqimchi_ai.limits import STORE_UTC_OFFSET_HOURS
+
 logger = logging.getLogger(__name__)
 
 #: Aloqa nazorati qanchalik tez-tez tekshiriladi (standart 15 daqiqa).
@@ -658,6 +660,24 @@ DEVICE_TEMP_OK_C = 75.0
 #: shovqin bo'lardi — NTP'siz mashina kuniga bir necha soniya qochadi.
 DEVICE_CLOCK_SKEW_SEC = 300.0
 
+#: Qurilma shuncha hodisani butunlay tashlagan bo'lsa — xabar.
+#:
+#: Nol emas: internet uzilganda bir necha hodisa `MAX_ATTEMPTS` ni yeb
+#: qo'yishi mumkin va bu do'kon uchun sezilarli yo'qotish emas.  Yuzdan
+#: oshsa esa navbat siyosatining O'ZI ishlamayapti.  2026-08-27 da sinov
+#: do'konida bu son 4 401 gacha chiqqan edi — jami yuborilgan
+#: hodisalarning taxminan uchdan biri — va buni HECH KIM ko'rmagan:
+#: `admin.html` da passiv yozuv bor edi, ogohlantirish esa yo'q.
+#:
+#: Hisoblagich kümülativ va `dead_letter` 7 kundan keyin tozalanadi,
+#: ya'ni muammo to'xtasa holat o'zi "ok" ga qaytadi.
+DEVICE_POISONED_EVENTS = 100
+
+#: Do'kon kompyuterining vaqt mintaqasi shu qiymatda bo'lishi kerak
+#: (Toshkent, UTC+5 → 300 daqiqa).  `chaqimchi_ai.limits.STORE_TZ` bilan
+#: bir xil manba: ikkalasi ajralib ketmasin.
+STORE_TZ_OFFSET_MIN = STORE_UTC_OFFSET_HOURS * 60
+
 
 def _device_problem(
     health: Dict[str, Any], previous: Optional[str] = None
@@ -695,6 +715,33 @@ def _device_problem(
         yonalish = "oldinda" if skew > 0 else "orqada"
         olcham = f"{minutes:.0f} daqiqa" if minutes < 120 else f"{minutes / 60:.1f} soat"
         return "clock", f"kompyuter soati {olcham} {yonalish} — tungi nazorat noto'g'ri ishlaydi"
+
+    # Vaqt mintaqasi: soat bilan bir oilada, lekin BOSHQA o'lchov.
+    # Mashina UTC'ni to'g'ri bilib turib zonasi noto'g'ri bo'lishi mumkin
+    # va u holda `clock_skew_sec` nol chiqadi.  2026-08-27 da sinov
+    # do'konida aynan shunday bo'ldi: kompyuter UTC+3 da edi va nosozlik
+    # olti kun davomida sog'lom ko'rinib turdi.
+    #
+    # 0.6.21 dan boshlab zanjir qarorni `store_now()` dan oladi, ya'ni
+    # bu endi tungi nazoratni buzmaydi.  Lekin mashina zonasi noto'g'ri
+    # bo'lsa Windows jurnali, mijoz skrinshoti va NVR vaqti chalkash
+    # bo'ladi — nosozlik izlaganda buni bilib turish arzon.
+    offset = health.get("device_tz_offset_min")
+    if isinstance(offset, (int, float)) and int(offset) != STORE_TZ_OFFSET_MIN:
+        farq = (int(offset) - STORE_TZ_OFFSET_MIN) / 60
+        return "timezone", (
+            f"kompyuter vaqt mintaqasi noto'g'ri (Toshkentdan {farq:+.0f} soat) — "
+            "jurnal va skrinshotlardagi vaqt chalkash bo'ladi"
+        )
+
+    # Tashlangan hodisa: soat va haroratdan KEYIN, chunki ular hozir zarar
+    # yetkazyapti, bu esa yetkazib bo'lgan zararni sanaydi.  Lekin tahlil
+    # xatosidan OLDIN: tahlil yiqilsa hodisa TUG'ILMAYDI, bu yerda esa
+    # hodisa tug'ilgan, yozilgan va keyin YO'QOTILGAN — mahsulotning
+    # "yo'qolgan kritik hodisa 0" mezoniga to'g'ridan-to'g'ri zid.
+    poisoned = int(health.get("outbox_poisoned") or 0)
+    if poisoned >= DEVICE_POISONED_EVENTS:
+        return "poison", f"{poisoned} ta hodisa butunlay yo'qolgan (cloudga yetmagan)"
 
     analyzed = int(health.get("analyzed") or 0)
     errors = int(health.get("analysis_errors") or 0)
@@ -1177,6 +1224,8 @@ __all__ = [
     "AlertConfig",
     "AlertRun",
     "AlertService",
+    "DEVICE_POISONED_EVENTS",
+    "STORE_TZ_OFFSET_MIN",
     "DEVICE_TEMP_ALERT_C",
     "DISK_ALERT_PERCENT",
     "SERVER_CPU_ALERT_PERCENT",

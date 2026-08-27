@@ -28,7 +28,7 @@ import os
 import shutil
 import socket
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -326,10 +326,10 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
 
     # Kamera boshiga holat: qaysi biri tirik, qaysi biri uzilib turibdi.
     # Faqat SON yuborilganda panel qaysi kamera o'chganini ko'rsatolmasdi.
-    codecs = {
-        str(item.get("id")): item.get("codec")
-        for item in (config_store.read_raw().get("retail") or {}).get("cameras") or []
-        if item.get("id")
+    cameras_raw = (config_store.read_raw().get("retail") or {}).get("cameras") or []
+    codecs = {str(item.get("id")): item.get("codec") for item in cameras_raw if item.get("id")}
+    record_urls = {
+        str(item.get("id")): item.get("record_url") for item in cameras_raw if item.get("id")
     }
     cameras = [
         {
@@ -340,6 +340,15 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
             # Format sozlamada turadi (sehrgar aniqlagan), holat faylida
             # emas — sekin ishlayotgan kameraning sababi shundan ko'rinadi.
             "codec": codecs.get(str(camera_id)),
+            # Klip uchun asosiy oqim berilganmi.
+            #
+            # `clips.unavailable` noldan katta bo'lsa savol darhol
+            # tug'iladi: "qaysi kameraga `record_url` qo'yilmagan?".
+            # Bugungacha javob faqat DIAGNOSTIKA PAKETIDA ko'rinardi va
+            # u hech qachon yuborilmagan (`device_diagnostics` jadvali
+            # bo'sh).  Manzilning O'ZI emas, faqat bor-yo'qligi: manzilda
+            # kamera paroli bo'ladi.
+            "record_url_set": bool(record_urls.get(str(camera_id))),
         }
         for camera_id, item in (status.get("cameras") or {}).items()
         if isinstance(item, dict)
@@ -399,6 +408,18 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         "stale_chains": _stale_chains(),
         "app_version": __version__,
         "product_name": "Chaqimchi Windows",
+        # Qurilma HOZIR qaysi sozlama revisionida ishlayapti.
+        #
+        # Maydon Windows yo'lida umuman yuborilmasdi va cloud standart
+        # `0` ni ko'rardi (`cloud/main.py: EdgeHeartbeatBody`).  Natijada
+        # `config_changed` HAR salomda `True` chiqardi — qurilma
+        # sozlamani olgan bo'lsa ham.  Ya'ni "qurilma sozlamani olmadi"
+        # degan tashxis Windows'da ishonchsiz edi.
+        #
+        # `_last_revision` — oxirgi MUVAFFAQIYATLI qo'llangan revision
+        # (`apply()` ning oxirida yoziladi), ya'ni "oldim" emas,
+        # "qo'lladim" degani.
+        "config_revision": int(_last_revision.get("value") or 0),
         # Qurilmaning O'Z soati.  Ataylab `now()` — u xato bo'lsa ham
         # shundayligicha yuboriladi, chunki o'lchanadigan narsa aynan
         # xatoning o'zi.
@@ -412,6 +433,22 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # qurilmaning QARORINI tuzata olmaydi — shuning uchun farqni
         # o'lchab, egasiga aytish kerak.
         "device_clock": datetime.now(timezone.utc).isoformat(),
+        # Kompyuterning VAQT MINTAQASI — soatdan ALOHIDA o'lchov.
+        #
+        # 2026-08-27 da sinov do'konining mashinasi UTC+3 da turgani
+        # aniqlandi: UTC to'g'ri edi (`clock_skew_sec` −0,8 s), ya'ni
+        # yuqoridagi soat nazorati buni KO'RMADI.  Lekin qurilmaning
+        # devor soati ikki soat orqada edi va tungi nazorat shundan
+        # chiqadi — ertalab do'kon ochiq bo'la turib kritik trevoga
+        # ketardi, kechqurun 22:00–00:00 orasida esa nazorat jim edi.
+        #
+        # Endi zanjir qarorni `store_now()` dan oladi, ya'ni bu maydon
+        # nosozlik emas — DIAGNOSTIKA: mashina zonasi noto'g'ri bo'lsa
+        # boshqa narsalar (Windows jurnali, mijoz skrinshoti, NVR vaqti)
+        # ham chalkash bo'ladi va buni bilib turish arzon.
+        "device_tz_offset_min": round(
+            (datetime.now().astimezone().utcoffset() or timedelta(0)).total_seconds() / 60
+        ),
         # Server jonli ko'rish so'ralishini shuncha soniya kutib tursin.
         #
         # Bungacha panel "Jonli" tugmasini bosgach birinchi kadr 14-27

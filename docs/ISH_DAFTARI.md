@@ -7,180 +7,186 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-08-26
+## HOZIRGI HOLAT · 2026-08-27
 
-- **Cloud 0.6.17 jonli** (deploy 2026-08-26, hamma konteyner healthy).
-  Sinov do'konidagi "rasm kelmayapti" nosozligining oltita sababi
-  tuzatildi — tafsilot pastdagi tarixning birinchi yozuvida.
-- **Windows 0.6.17 nashr qilindi va imzosi tekshirildi**
-  (`dl.chaqimchi.uz`). Sinov do'koni `auto` rejimida — 15 daqiqada oladi.
-- **O'lchangan natija:** snapshot 429 lari **2 618 ta/10 daqiqa → 0**;
-  deploydan keyingi 2 daqiqada 86 ta rasm muvaffaqiyatli saqlandi.
-- **YETIMLAR TOZALANDI** (2026-08-26 14:12). Beshta zanjir bir vaqtda
-  ishlar edi (0.6.13 … 0.6.19) — masofaviy `clean_chains` topshirig'idan
-  keyin **bitta** qoldi: `0.6.20`.  Cloud nazorati ham toza:
-  `multi_version_sites: {}`.  Endi har o'lchov bitta jarayondan keladi.
-- **Panel tuzatishlari JONLI** (2026-08-26 kechqurun, `e05ac3a`).
-  Bildirishnoma markazi, jonli ko'rish keepalive va to'rtta yolg'on
-  tugma tuzatildi; T6 biometrik teshigi yopildi. Deploy tasdiqlandi:
-  hamma konteyner healthy, prodda `owner-DHdgNa-q.js`, 5 daqiqalik
-  log'da **0 ta xato**, PostgreSQL'da `notification_reads` jadvali va
-  ikkala yangi indeks o'z joyida.
-- Shox: `loitering-rasmsiz`, `origin` bilan sinxron. Asosiy shox `main`.
-- Audit ([AUDIT_TAHLIL.md](AUDIT_TAHLIL.md)) bo'yicha **A bosqichi
-  (A0–A9) va B bosqichining katta qismi tugadi**. C boshlanmagan.
-- Server: `169.58.198.111` (Contabo, Fransiya), kod
-  `/home/deploy/chaqimchi-ai`, compose `docker-compose.chaqimchi.yml`.
-  SSH kaliti `.deploy_keys/chaqimchi_prod`.
+- **Cloud 0.6.21 jonli** (ikki marta deploy: 12:30 va 13:25 CEST,
+  hamma konteyner healthy).
+- **Windows 0.6.21 nashr qilindi** — vaqt mintaqasi, telemetriya teshigi
+  va hodisa yo'qotilishi tuzatildi. Sinov do'koni `auto` rejimida.
+- **Panel qo'ng'irog'i tuzatildi va JONLI TASDIQLANDI.** U production'da
+  48 soat davomida **har safar 500** qaytargan (49 marta) — kechagi
+  ishning asosiy funksiyasi umuman ishlamagan. Deploydan keyin egasining
+  o'z brauzeridan (83.222.7.214) **200 OK**, log'da 0 ta 500.
+- **Do'kon 5070 kompyuterining vaqt mintaqasi UTC+3 edi** (Toshkent
+  UTC+5). Mijoz soatni to'g'riladi, zanjir masofadan qayta ishga
+  tushirildi (`clean_chains`, `restarts` 1→2, `analyzed` 53 616→88).
+  0.6.21 dan boshlab zanjir mashina zonasiga UMUMAN qaramaydi.
+- **Yetimlar rostdan o'lgan** — 24 soatda faqat `0.6.20` hodisa yubordi.
+  `camera-02` yuz kadri toshqini ham to'xtagan (bugun 0 ta).
+- Shox: `loitering-rasmsiz`. Asosiy shox `main`.
+- Server: `169.58.198.111`, kod `/home/deploy/chaqimchi-ai`.
 - **Sotuv hali ochilmagan** — pastdagi ikkita darvoza yopiq.
 
 ## KEYINGI ISH
 
-**1) Ko'z bilan tekshirish** (deploy bajarilgan, kod jonli). Owner
-panelni toza brauzerda oching: qo'ng'iroqda haqiqiy o'qilmagan son
-bo'lsin, bosilganda ro'yxat ochilsin va "Hammasi o'qildi" dan keyin
-son nolga tushsin; "Jonli ko'rish" 5 daqiqa ochiq turganda muzlamasin
-(kadr sanasi yangilanib tursin, eskirsa qizil "yangilanmayapti").
+**1) Bugun kechqurun 17:05 UTC (22:05 Toshkent) — mintaqani tasdiqlash.**
+Bu yagona to'g'ridan-to'g'ri dalil:
 
-**2) DAVOMAT JIMGINA O'LIK — qurilma relizi kerak.** Ikki chegara
-zid (batafsil: tarixning birinchi yozuvi va "Ochiq muammolar").
-Kelishilgan yechim: davomat kamerasi uchun **asosiy oqim** ochiladi
-(`runner.py:63-81`), chegaralar bitta formuladan chiqariladi. Narxi
-i5-4590 da o'lchansin — `scripts/benchmark_n100.py` haqiqiy RTSP bilan
-(`--source` bermasangiz o'lchov yolg'on).
+```sql
+select occurred_at, metadata_json->>'local_time'
+from production_events where event_type='after_hours_presence'
+order by occurred_at desc limit 5;
+```
+Birinchi tungi hodisa **17:00 UTC atrofida** chiqsa mintaqa to'g'ri
+(22:00 Toshkent). 19:00 UTC da chiqsa — hali UTC+3.
+0.6.21 yetgach heartbeat `device_tz_offset_min: 300` yuboradi va
+taxmin qilish kerak bo'lmaydi.
 
-**3) Qolgan reja** — hodisa kadrlari yon tomonda + "bu odam xodim"
-tugmasi (backend tayyor: `cloud/main.py:7910`), zona muharriri
-(`shelf` flagi yo'qolishi, fon kadri, o'chirish tarqalmasligi), ovoz.
-
----
-
-**0.6.17 qurilmaga yetganini tasdiqlash.** Cloud va reliz chiqdi;
-qurilma `auto` bo'lgani uchun o'zi oladi. Tekshirish:
+**2) 0.6.21 yetganini tasdiqlash** va endi ROSTDAN ishlaydigan
+diagnostikani o'qish:
 
 ```
 docker compose -f docker-compose.chaqimchi.yml exec -T cloud \
-  python scripts/rollout.py --holat      # 0.6.16 → 0.6.17 bo'lsin
+  python scripts/rollout.py --holat      # 0.6.20 → 0.6.21
 ```
+Heartbeatda ko'rilsin: `face_crops` va `demography` noldan farqli
+(uch kun davomida ular YOLG'ON nol edi), `record_url_set` har kamera
+uchun, `config_revision: 11`.
 
-Yetgach ikkita narsa o'zi hal bo'ladi: yuz kadri oqimi soatiga 40 ga
-tushadi (`FACE_EMITS_PER_HOUR`) va davomat bitta kameraga qoladi
-(sozlama allaqachon revision 7 da, lekin S6 tufayli u faqat yangi
-versiyada kuchga kiradi).
+**3) `outbox_poisoned` kuzatilsin** — 3 375 dan **o'smasligi** kerak.
+O'ssa: tarmoq/5xx endi urinishlar hisobini yemaydi, ya'ni o'sish faqat
+cloud hodisani rostdan rad etayotganini bildiradi.
 
-Ko'z bilan: owner panelni toza brauzerda oching — kamera kartochkasida
-"Kadr so'raldi…" chiqib, 20 soniyada rasm ko'rinsin; hodisalar soati
-Toshkent vaqtida bo'lsin.
+**4) Asosiy oqim narxini o'lchash** (kelishilgan yo'l) —
+`scripts/benchmark_n100.py` **haqiqiy RTSP bilan** (`--source` bermasangiz
+o'lchov yolg'on). Bitta o'lchov uchta savolga javob beradi: klip
+(`clips.written` uch kun 0), demografiya (257 kirishdan 2 tasi) va
+davomat. Uchalasi ham bir ildizdan: tahlil 640×360 substreamdan ketadi.
 
-Undan keyin — **C1, haqiqiy do'konda qabul sinovi.** Ikki qismdan iborat:
-
-1. Sig'imni o'lchash — `scripts/benchmark_n100.py`, haqiqiy RTSP manzil
-   bilan (`--source` bermasangiz o'lchov yolg'on bo'ladi, skript o'zi
-   ogohlantiradi).
-2. 72 soatlik soak — `scripts/soak_windows.py`, natija qabul fayliga
-   yoziladi va `CHAQIMCHI_N100_ACCEPTANCE_FILE` shunga ko'rsatiladi.
-
-**Nega aynan shu birinchi:** bu tugamaguncha
-`available_feature_codes()` production'da bo'sh ro'yxat qaytaradi
-(`cloud/store.py:52`) — ya'ni edge AI funksiyalari rasman sotuvga
-ochilmaydi. Mezonlar: [AUDIT_TAHLIL.md](AUDIT_TAHLIL.md) §3, C bosqichi.
-Qabul tartibi: [DOKON_MVP.md](DOKON_MVP.md) "Qabul mezoni".
+**5) C1, haqiqiy do'konda qabul sinovi** — 72 soatlik soak
+(`scripts/soak_windows.py`). Bu tugamaguncha `available_feature_codes()`
+production'da bo'sh ro'yxat qaytaradi (`cloud/store.py:52`).
 
 ## OCHIQ MUAMMOLAR
 
-**⚠ DAVOMAT JIMGINA O'LIK — ikki chegara bir-biriga zid**
+**✅ YOPILDI — "camera-02 yuz kadri to'xtamayapti"**
 
-Topildi 2026-08-26 kechqurun, **hali tuzatilmagan** (qurilma relizi
-kerak).
+Sabab **yetim zanjirlar** bo'lgan. 26-avgustda tozalangandan keyin
+o'lchov: 27-avgust kuni `camera-02` dan **0 ta** `face_captured`
+(oldingi kuni 2 383 ta). Alohida qazish shart emas edi.
+
+**⚠ DAVOMAT: bugun bitta yuz kadri**
+
+Ikki chegara zid bo'lib qolyapti:
 
 | Gate | Joyi | 640×360 substreamda talab |
 |---|---|---|
-| `FACE_MIN_BBOX_RATIO = 0.28` | `scene_analytics.py:153`, chaqiruv `:511` | bbox balandligi ≥ **101 px** |
+| `FACE_MIN_BBOX_RATIO = 0.28` | `scene_analytics.py:155`, chaqiruv `:509` | bbox balandligi ≥ **101 px** |
 | `FACE_MIN_CROP_PX = 96`, crop = `0.35 × bbox` | `pipeline.py:86`, chaqiruv `:573` | bbox balandligi ≥ **274 px** (ratio 0.76) |
 
-Analizator 101 px dan katta odam uchun `face_captured` chiqaradi,
-pipeline esa 274 px dan kichigini **tashlaydi** (`return False` →
-hodisa ham yuborilmaydi). Ya'ni odam kadr balandligining 76% ini
-egallashi kerak — amalda faqat kameraga tegay deb turgan odam.
+Yangi dalil: cloudda saqlangan `face_captured` rasmlarining **o'rtacha
+hajmi 2 373 bayt**, boshqa turlar esa ~100 KB. Ya'ni 96 px chegarasidan
+o'tgan kesma ham yuz tanish uchun juda mayda.
 
-**Nima uchun bu muhim:** "4 606 yuz kadri → 0 ta tanish" tuzatilgandan
-keyin ham davomat ishlamaydi. Ilgari mayda kadr kelardi, endi umuman
-kelmaydi. Ikkalasining natijasi bir xil: nol tanish.
+**Kelishilgan yechim:** avval `benchmark_n100.py` bilan asosiy oqim
+narxi o'lchansin, keyin ikkala chegara bitta formuladan chiqarilsin.
 
-**Tekshirish:** qurilmada `face_crops_too_small` hisoblagichi
-(`pipeline.py:180`) — u o'sib borayotgan bo'lsa tashxis tasdiqlanadi.
+**❌ TASHXIS NOTO'G'RI EDI — demografiya "o'chiq" emas**
 
-**Kelishilgan yechim:** davomat kamerasi uchun **asosiy oqim** ochiladi
-(naqsh bor: klip uchun main stream `ringbuffer.py:103-133` da shunday
-ochiladi), va ikki chegara bitta formuladan chiqariladi. Narxi
-o'lchansin — i5-4590 da qo'shimcha 1080p dekod, 4 kamera kafolatiga
-tegishi mumkin.
+Ilgari bu yerda "`demography_daily` butunlay 0, funksiya o'chiq" deb
+yozilgan edi. Baza boshqasini ko'rsatadi: **257 ta "kirish"
+kesishmasidan 2 tasida** `jins` metadatasi bor. Model yuklangan va
+ishlayapti — 640×360 substreamda yuz **topolmayapti** (0.8%).
 
-**Yon eslatma:** pastdagi "camera-02 yuz kadri to'xtamayapti" muammosi
-shu bilan bog'liq bo'lishi mumkin — beshta yetim zanjir tozalangandan
-keyin qayta o'lchanmagan.
+Nega noto'g'ri tashxis qo'yilgan: heartbeatdagi `demography.attempts`
+uch kun davomida yolg'on `0` ko'rsatgan (pastdagi telemetriya teshigi).
 
-**⚠ camera-02 yuz kadri to'xtamayapti (yetimlar tozalangach qayta o'lchanmagan)**
+**⚠ KLIP HECH QACHON YOZILMAGAN**
 
-0.6.17 chiqqandan keyin ham sinov do'konining `camera-02` kamerasi
-daqiqasiga ~11 ta `face_captured` yuborishda davom etyapti.  Ikkala
-himoya ham ishlamayapti va sabab **hali topilmagan**.
+`clips.written` uch kunlik 1 515 o'lchovda **doim 0**, `unavailable` 43
+gacha. Ya'ni kameraga `record_url` (asosiy oqim) berilmagan va panelda
+"Dalilni ochish" da video yo'q.
 
-Nima tekshirilgan va INKOR qilingan:
+0.6.21 dan boshlab heartbeat har kamera uchun `record_url_set` yuboradi,
+ya'ni javob masofadan ko'rinadi. Bugungacha u faqat diagnostika
+paketida bo'lardi va `device_diagnostics` jadvali **bo'sh** — paket hech
+qachon yuborilmagan.
 
-| Gumon | Natija |
-|---|---|
-| Qurilma eski versiyada | ✗ heartbeat `app_version: 0.6.17` |
-| Shift kodi relizga tushmagan | ✗ `build/payload/.../scene_analytics.py` da `FACE_EMITS_PER_HOUR` bor |
-| Sozlama cloudda o'zgarmagan | ✗ revision 8, `attendance_camera_ids: ["camera-01"]` |
-| Qurilma sozlamani olmagan | ✗ `config/ack` keldi |
-| Zanjir qayta ishga tushmagan | ✗ `analyzed` 16622 → 3917 (hisoblagich nolga tushdi) |
-| `now` noto'g'ri birlikda | ✗ `runner.py:135` — `time.monotonic` |
-| Analizator har ulanishda qayta yaratiladi | ✗ faqat `build_runner` da, bir marta |
+**⚠ `zone_entered` 26-avgust 13:37 dan beri nol**
 
-Ya'ni: yangi kod, yangi sozlama, qayta ishga tushgan zanjir — va
-baribir eski xatti-harakat.  Keyingi qadam **qurilmaning o'z logini
-ko'rish** (`%PROGRAMDATA%\Chaqimchi\logs`): `build_runner` qaysi
-`attendance_cameras` to'plami bilan qurilayotgani va
-`face_emits_suppressed` o'syaptimi.  Masofadan aniqlab bo'lmadi.
-
-**Zarari cheklangan:** T2 tufayli bu oqim do'kon hodisalarining rasm
-byudjetiga tegmaydi — `/health/deep` da `rate_limited` faqat
-`face-snapshots` ni ko'rsatadi, `snapshots` toza.
+Aynan yetimlar o'ldirilgan daqiqa. Zonalar yuklangan
+(`queue_threshold_exceeded` o'sha "Kassa navbati" zonasidan ishlayapti),
+shuning uchun sabab boshqa. 0.6.21 yetgach 24 soat kuzatilsin.
 
 **Sotuvni to'sib turgan ikki darvoza**
 
-- `available_feature_codes()` → `[]`, chunki qabul fayli yo'q (yuqoriga
-  qarang). `cloud/store.py:52`.
-- **Oferta tayyor emas:** STIR va rekvizit bo'sh (ro'yxatdan o'tilmagan)
-  + yurist ko'rigi (B2) o'tmagan. Sotuvni ochishdan oldin ikkalasi
-  SHART. Yuristga beriladigan aniq savol
-  [AUDIT_TAHLIL.md](AUDIT_TAHLIL.md) B bosqichida.
+- `available_feature_codes()` → `[]`, chunki qabul fayli yo'q
+  (`CHAQIMCHI_AVAILABLE_FEATURES` serverda qo'yilmagan). `cloud/store.py:52`.
+- **Oferta tayyor emas:** STIR va rekvizit bo'sh + yurist ko'rigi (B2)
+  o'tmagan. Sotuvni ochishdan oldin ikkalasi SHART.
 
 **Texnik**
 
-- **Beqaror test:**
-  `tests/test_cloud_load.py::test_clip_retention_is_configurable` —
-  to'liq to'plamda ~50% yiqiladi, yolg'iz o'tadi. Klip saqlash mantiqi
-  tekshirildi va **to'g'ri**; sabab hali topilmagan. Inkor qilingan
-  gumonlar ro'yxati: [AUDIT_TAHLIL.md](AUDIT_TAHLIL.md) YUQORI-11.
-  Yiqilsa — o'zingizdan deb o'ylamang, avval yolg'iz ishlatib ko'ring.
+- **Beqaror test:** `tests/test_cloud_load.py::test_clip_retention_is_configurable`
+  — to'liq to'plamda ba'zan yiqiladi, yolg'iz o'tadi. Sabab hali
+  topilmagan. Yiqilsa — o'zingizdan deb o'ylamang.
 - **`cloud/store.py` faqat SQLite** — litsenziya, to'lov va portal
   parollari production'da ham SQLite'da (audit YUQORI-10). Shu sabab
-  `Dockerfile.cloud` da `--workers 1`. Yechim rejasi:
-  [ARXITEKTURA_XARITASI.md](ARXITEKTURA_XARITASI.md) "Kengayishga
-  tayyorlik" §2.
+  `Dockerfile.cloud` da `--workers 1`.
 - **Rate limit xotirada** (`cloud/ratelimit.py`) — restart bilan
-  aylanib o'tiladi (audit O'RTA-9). Bitta VPS uchun yetadi, ikkinchi
-  instansiya qo'shilsa yaramaydi.
+  aylanib o'tiladi (audit O'RTA-9).
 - **CSP sarlavhasi yo'q** (audit O'RTA-2).
 - **Token `localStorage` da**, server tomonda "chiqish" yo'q (O'RTA-8).
 - **AI aniqligi hech qachon o'lchanmagan** (YUQORI-6) — C bosqichida.
-- **Video va AI yo'lida haqiqiy sinov yo'q** (YUQORI-8) — testlar
-  kamerasiz ishlaydi, bu ataylab, lekin uchidan-uchiga sinov ham kerak.
+- **Video va AI yo'lida haqiqiy sinov yo'q** (YUQORI-8).
 - **Faqat o'zbek tili** — rus tili yo'q (O'RTA-3).
+- **Vision agent (Gemini) deyarli ishlatilmagan** — 3 ta ish,
+  `vision_observations` 0 ta. Saytda va'da qilinmagan, shuning uchun
+  muammo emas; lekin funksiya sifatida o'lik.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **SQLite testda o'tadi, PostgreSQL production'da yiqiladi.**
+  `cloud/event_store.py` da `fetchone()[0]` yozmang. `sqlite3.Row`
+  raqamli indeksni qo'llaydi, psycopg `dict_row` esa **yo'q** —
+  `KeyError: 0`. 1 800+ test o'tib turgan holda marshrut jonli serverda
+  48 soat davomida har safar 500 bergan. `SELECT COUNT(*) AS nom` qilib
+  `self._dict(row)["nom"]` o'qing. `test_owner_notifications.py` endi
+  naqshning O'ZINI qulflaydi. (`cloud/store.py` da bu naqsh to'g'ri —
+  u faqat SQLite.)
+
+- **Soat to'g'ri, mintaqa noto'g'ri — `clock_skew_sec` buni KO'RMAYDI.**
+  Do'kon 5070 kompyuteri UTC ni 0,8 soniya aniqlikda bilardi va
+  mintaqasi UTC+3 edi (Toshkent UTC+5). Natijada tungi nazorat ikki
+  soat surilgan: ertalab 08:30–10:30 orasida yolg'on kritik trevoga,
+  kechqurun 22:00–00:00 orasida esa — o'g'rilik uchun eng ehtimolli
+  ikki soat — nazorat UMUMAN yo'q. Endi zanjir `limits.store_now()` dan
+  o'qiydi va mashina zonasiga qaramaydi; heartbeat esa
+  `device_tz_offset_min` yuboradi.
+
+- **Windows'da vaqt mintaqasini o'zgartirish ishlab turgan jarayonga
+  ta'sir qilmaydi.** Dastur mintaqani START paytida o'qiydi. Mijoz
+  soatni to'g'rilagach zanjir **qayta ishga tushirilishi** shart —
+  aks holda hech narsa o'zgarmaydi va buni tashqaridan sezib
+  bo'lmaydi. Masofadan: admin paneldagi `clean_chains` tugmasi
+  (supervisor darhol yangisini ko'taradi).
+
+- **Hisoblagich qo'shsangiz — ZANJIRNI ham tekshiring.** Raqam cloudga
+  yetguncha to'rtta qo'ldan o'tadi: `pipeline._stats()` →
+  `service.write_status()` → `supervisor.status()` →
+  `cloud_config.send_heartbeat()`. Bittasini unutish qiymatni JIMGINA
+  nolga aylantiradi — hisoblagich bor, so'rov bor, javob bor, faqat
+  doim nol. Bu **uch marta** sodir bo'lgan (`analyzed`/`errors`,
+  `fps`/`pressure`, `face_crops`/`demography`). Oxirgisi uch kun
+  davomida "davomat o'chiq" degan noto'g'ri tashxis berdi.
+  `tests/test_status_chain.py` endi zanjirni qulflaydi.
+
+- **`loitering` uchun rasm ATAYLAB olinmaydi.** `SECURITY_MEDIA_EVENTS`
+  ga uni qaytarmang. 2026-08-21 o'lchovi: 7,4 soatda 321 hodisadan 300
+  tasi loitering edi va 29 MB rasmning 28,9 MB'i (99,6%) shundan
+  chiqqan — kunlik 500 talik snapshot chegarasining 302 tasi kechgacha
+  yeb bo'lingan, ya'ni haqiqiy o'g'rilik hodisasiga rasm ilinmay
+  qolardi. Sabab `pipeline.py:66-77` da yozilgan.
 
 - **`PYTHONPATH="$PWD"` reliz build'ida SHART.** Usiz
   `build_windows_payload.py` oxirgi qadamda yiqiladi.
@@ -223,6 +229,91 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-27 — Jonli serverdan to'liq tekshiruv: oltita nosozlik (0.6.21)
+Nima: bulut va Do'kon 5070 jonli ma'lumotdan tekshirildi (PostgreSQL,
+konteyner loglari, 3 kunlik `device_metrics` — 1 515 daqiqalik o'lchov).
+Oltita nosozlik topildi; ikkitasi mijozga o'sha kuni zarar yetkazayotgan
+edi va **ikkitasi ilgari yozilgan tashxisni bekor qildi**.
+
+**K1 · Panel qo'ng'irog'i production'da 100% yiqilardi.**
+`cloud/event_store.py:991` da `.fetchone()[0]`. PostgreSQL ulanishi
+`dict_row` bilan ochiladi va `row[0]` → `KeyError: 0`; SQLite'da esa
+`sqlite3.Row` raqamli indeksni qo'llaydi. Ya'ni **1 800+ test o'tardi,
+production yiqilardi**: 48 soatda 49 marta 500, `notification_reads`
+jadvalida 0 qator — hech kim hech qachon "o'qildi" qila olmagan. Bu
+kechagi (`e05ac3a`) ishning asosiy funksiyasi edi.
+Deploydan keyin egasining o'z brauzeridan (83.222.7.214) **200 OK**.
+
+**K2 · Do'kon kompyuterining vaqt mintaqasi UTC+3 edi (Toshkent UTC+5).**
+Dalil `after_hours_presence` metadatasidan: `occurred_at` 03:34 UTC,
+`local_time` **06:34** (Toshkentda 08:34). UTC to'g'ri edi
+(`clock_skew_sec` −0,8 s) — shuning uchun 26-avgustda qo'yilgan soat
+nazorati buni **ko'rmadi**. Oqibati ikki tomonlama va ikkalasi ham
+qimmat: har ertalab 08:30–10:30 orasida do'kon OCHIQ bo'la turib kritik
+Telegram trevogasi ketardi (o'sha kuni 26 ta), kechqurun 22:00–00:00
+orasida esa nazorat UMUMAN jim edi. Bu saytdagi to'rtta va'dadan
+uchinchisini ("Do'kon yopiq payt kimdir kirsa") buzardi.
+
+**K3 · Davomat/demografiya diagnostikasi YOLG'ON nol ko'rsatardi.**
+26-avgustda qo'shilgan `face_crops` va `demography` hisoblagichlari
+heartbeatga hech qachon yetib bormagan: `write_status()` ularni holat
+fayliga yozmasdi, `supervisor.status()` ham o'tkazmasdi. Uch kunlik
+1 515 o'lchovda hammasi nol. Bu xatoning **uchinchi marta** takrorlanishi.
+
+**K4 · Demografiya "o'chiq" emas — 0.8% da ishlaydi.** Bazadan: 257 ta
+"kirish" kesishmasidan **2 tasida** `jins` bor. Model yuklangan; yuz
+topilmayapti. Ilgari yozilgan "funksiya o'chiq" tashxisi K3 tufayli
+noto'g'ri chiqqan.
+
+**K5 · "camera-02 yuz kadri to'xtamayapti" — YOPILDI.** Sabab yetim
+zanjirlar bo'lgan: tozalashdan keyin 27-avgust kuni camera-02 dan
+**0 ta** `face_captured` (oldingi kuni 2 383 ta).
+
+**K6 · 3 375 ta hodisa butunlay yo'qolgan.** `outbox_poisoned` 4 401
+gacha chiqqan; do'kon jami 7 227 hodisa yuborgan, ya'ni ~uchdan biri.
+Eng ko'p sabab — "All connection attempts failed", ya'ni **vaqtinchalik**
+xato. Har muvaffaqiyatsizlik `MAX_ATTEMPTS = 20` ni yeb borardi va 20
+urinish backoff bilan ~3 soat: yarim kunlik uzilish navbatni o'ldirardi.
+
+Tuzatishlar:
+
+1. `event_store.py` — `SELECT COUNT(*) AS unread` + `_dict()`.
+2. `limits.py` — `STORE_TZ` / `store_now()`. `zoneinfo` EMAS: Windows'da
+   tz bazasi yo'q va `tzdata` paketi ham yo'q; O'zbekistonda yozgi vaqt
+   bo'lmagani uchun qat'iy UTC+5 to'liq to'g'ri javob beradi.
+   `pipeline.py` va `local/app.py` shundan o'qiydi.
+3. Heartbeat: `device_tz_offset_min`, `config_revision`, kamera bo'yicha
+   `record_url_set`; `alerts.py` da mintaqa va `outbox_poisoned`
+   ogohlantirishlari.
+4. `write_status()` + `supervisor.status()` — `face_crops`/`demography`.
+5. `outbox.fail(permanent=...)` — tarmoq va 5xx endi urinishlar hisobini
+   yemaydi; yoshi o'tgan yuborilmagan yozuv esa jimgina o'chirilmay
+   `dead_letter` ga ko'chadi (aks holda uzoq uzilish ko'rinmay qolardi).
+   Bo'sh sabab ham to'ldiriladi ("602× sabab yozilmagan" shundan edi).
+
+Qayerda: `cloud/event_store.py`, `cloud/alerts.py`, `cloud/main.py`,
+`chaqimchi_ai/limits.py`, `chaqimchi_ai/retail/pipeline.py`,
+`chaqimchi_ai/retail/service.py`, `chaqimchi_ai/local/supervisor.py`,
+`chaqimchi_ai/local/cloud_config.py`, `chaqimchi_ai/local/app.py`,
+`chaqimchi_ai/outbox.py`, `chaqimchi_ai/cloud_sync.py`.
+
+Test: `test_status_chain.py` (yangi, 4 ta — zanjirni qulflaydi),
+`test_owner_notifications.py` (+3, `dict_row` va naqsh qulfi),
+`test_device_health_alerts.py` (+5), `test_outbox.py` (+4),
+`test_cloud_sync.py` (+2). Jami **1 834 test** o'tdi, lint va TS toza.
+
+Diqqat — uchta narsa:
+
+* **Windows'da mintaqani o'zgartirish ishlab turgan jarayonga ta'sir
+  qilmaydi.** Mijoz soatni to'g'rilagach zanjir 25 soat eski qiymatda
+  ishlab turdi; masofadan `clean_chains` bilan qayta ishga tushirildi
+  (`restarts` 1→2, `analyzed` 53 616→88).
+* **`loitering` uchun rasmni qaytarmang** — 2026-08-21 o'lchovi bilan
+  ataylab olib tashlangan (tuzoqlar bo'limiga qarang). Dastlabki rejada
+  buni qaytarish bor edi va u **noto'g'ri** bo'lardi.
+* Mintaqa tuzatilganini tasdiqlash **bugun kechqurun 17:05 UTC** da
+  mumkin — "Keyingi ish" ning 1-bandi.
 
 ### 2026-08-26 — Panel: qo'ng'iroq rostdan ishlaydi, jonli ko'rish muzlamaydi (`e05ac3a`, deploy qilingan)
 Nima: mijoz panelidagi to'rtta yolg'on gapiradigan tugma tuzatildi va

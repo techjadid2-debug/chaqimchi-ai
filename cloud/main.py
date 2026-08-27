@@ -480,6 +480,10 @@ class EdgeCameraHealth(BaseModel):
     #: ko'rinadi; bitta suratda "ishlayapti" bo'lsa ham.
     reconnects: int = Field(default=0, ge=0)
     codec: Optional[str] = Field(default=None, max_length=16)
+    #: Klip uchun asosiy oqim manzili qo'yilganmi.  Manzilning O'ZI emas
+    #: (unda kamera paroli bo'ladi), faqat bor-yo'qligi: `clips.written`
+    #: nol bo'lsa birinchi savol shu.  Eski qurilma yubormaydi.
+    record_url_set: Optional[bool] = Field(default=None)
 
 
 class EdgeHeartbeatBody(BaseModel):
@@ -513,6 +517,13 @@ class EdgeHeartbeatBody(BaseModel):
     #: oladi.  Ya'ni adashgan soat tungi ogohlantirishlarni jimgina
     #: buzadi va buni faqat shu maydon ko'rsatadi.
     device_clock: Optional[str] = Field(default=None, max_length=64)
+    #: Kompyuterning vaqt MINTAQASI (UTC dan farq, daqiqada).  Soatdan
+    #: alohida o'lchov: mashina UTC'ni to'g'ri bilib turib, zonasi
+    #: noto'g'ri bo'lishi mumkin — 2026-08-27 da sinov do'konida aynan
+    #: shunday edi (UTC+3) va `clock_skew_sec` buni ko'rmadi.
+    #:
+    #: Eski qurilma yubormaydi — `None` "noma'lum", "to'g'ri" emas.
+    device_tz_offset_min: Optional[int] = Field(default=None, ge=-900, le=900)
     # Faqat qurilma haqiqiy NPU o'lchovini bersa to'ladi; aks holda admin
     # panel «— / yig'ilmoqda» ko'rsatadi va marketing raqam yasamaydi.
     npu_percent: Optional[float] = Field(default=None, ge=0, le=100)

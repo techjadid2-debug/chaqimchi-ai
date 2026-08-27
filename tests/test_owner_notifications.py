@@ -11,6 +11,7 @@ belgisi bor.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -206,3 +207,75 @@ def test_events_replayed_after_an_outage_are_still_unread(client) -> None:
     assert result["unread"] == 1, "kechikkan hodisa o'qilmagan bo'lib qolsin"
     replayed = next(item for item in result["events"] if item["event_id"] == "during-outage")
     assert replayed["unread"] is True
+
+
+# ── PostgreSQL qator shakli ───────────────────────────────────────────────
+#
+# Yuqoridagi testlar SQLite'da ishlaydi, production esa PostgreSQL'da.
+# Ikkalasi qatorni BOSHQACHA beradi: `sqlite3.Row` raqamli indeksni ham
+# qo'llaydi, psycopg `dict_row` esa faqat ustun nomini.  Shu farq
+# 2026-08-27 da qo'ng'iroqni butunlay o'ldirdi — `fetchone()[0]`
+# testlarda o'tib, jonli serverda `KeyError: 0` bergan va marshrut 48
+# soatda 49 marta 500 qaytargan.
+
+
+def _dict_rows(cursor, row):
+    """psycopg `dict_row` bilan bir xil: raqamli indeks YO'Q."""
+    return {column[0]: row[index] for index, column in enumerate(cursor.description)}
+
+
+@pytest.fixture
+def dict_row_store(tmp_path: Path, monkeypatch):
+    """`EventStore`, lekin qatorlari lug'at — ya'ni production shaklida."""
+    from cloud.event_store import EventStore
+
+    original = EventStore._connect
+
+    @contextmanager
+    def dict_connect(self):
+        with original(self) as conn:
+            conn.row_factory = _dict_rows
+            yield conn
+
+    monkeypatch.setattr(EventStore, "_connect", dict_connect)
+    return EventStore(sqlite_path=tmp_path / "events.db")
+
+
+def test_bell_works_when_rows_are_dicts(dict_row_store) -> None:
+    from chaqimchi_ai.event_models import EdgeEvent
+
+    dict_row_store.ingest(
+        "site-1",
+        "device-1",
+        [EdgeEvent(event_type="after_hours_presence", severity="critical", camera_id="camera-01")],
+    )
+
+    result = dict_row_store.notifications("site-1", "member-1")
+
+    assert result["unread"] == 1
+    assert len(result["events"]) == 1
+
+
+def test_bell_works_when_rows_are_dicts_and_nothing_happened(dict_row_store) -> None:
+    """Bo'sh do'kon ham 500 bermasin — hisoblash so'rovi baribir ishlaydi."""
+    assert dict_row_store.notifications("site-bosh", "member-1")["unread"] == 0
+
+
+def test_event_store_never_reads_a_row_by_number() -> None:
+    """`fetchone()[0]` butun sinf bo'lib qaytmasin.
+
+    Bitta joyni tuzatish yetmaydi: xato o'zi ko'rinmaydi (test o'tadi,
+    production yiqiladi), shuning uchun naqshning O'ZI qulflanadi.
+    `cloud/store.py` da bu naqsh to'g'ri — u faqat SQLite bilan ishlaydi.
+    """
+    source = (Path(__file__).resolve().parents[1] / "cloud" / "event_store.py").read_text(
+        encoding="utf-8"
+    )
+    offenders = [
+        line.strip()
+        for line in source.splitlines()
+        if "fetchone()[" in line or "fetchall()[0][" in line
+    ]
+    assert offenders == [], (
+        "PostgreSQL qatorini raqam bilan o'qib bo'lmaydi (`dict_row`): " + "; ".join(offenders)
+    )

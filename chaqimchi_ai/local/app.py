@@ -35,7 +35,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from chaqimchi_ai import __version__
-from chaqimchi_ai.limits import NVR_SCAN_CHANNELS, SHOP_MAX_CAMERAS
+from chaqimchi_ai.limits import NVR_SCAN_CHANNELS, SHOP_MAX_CAMERAS, STORE_TZ, store_now
 from chaqimchi_ai.local import (
     autostart,
     camera_probe,
@@ -1202,7 +1202,12 @@ async def report(date: Optional[str] = None) -> Dict[str, Any]:
     kuni birinchi kunning raqamini olishning iloji yo'q edi: hisobot
     faqat "hozir" ni bilardi.
     """
-    now_local = datetime.now().astimezone()
+    # `datetime.now().astimezone()` EMAS: u kompyuter zonasiga ishonadi.
+    # 2026-08-27 da sinov do'konining mashinasi UTC+3 da turgani aniqlandi
+    # va bu yerda oqibati aynan yuqoridagi izoh ogohlantirgan narsa —
+    # ertalabki savdo kechagi kunga tushib qolishi — bo'lardi, faqat
+    # sababi UTC emas, mashina sozlamasi.
+    now_local = store_now()
     if date:
         try:
             today = datetime.strptime(date.strip(), "%Y-%m-%d").date()
@@ -1230,10 +1235,10 @@ async def report(date: Optional[str] = None) -> Dict[str, Any]:
             moment = datetime.fromisoformat(occurred.replace("Z", "+00:00"))
         except ValueError:
             continue
-        # Zanjir vaqtni UTC da yozadi; taqqoslash mahalliy vaqtda bo'ladi.
+        # Zanjir vaqtni UTC da yozadi; taqqoslash do'kon vaqtida bo'ladi.
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=timezone.utc)
-        moment = moment.astimezone()
+        moment = moment.astimezone(STORE_TZ)
         if moment.date() != today:
             continue
         kind = event.get("event_type")

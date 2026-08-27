@@ -145,7 +145,10 @@ def test_a_hopeless_event_is_dropped_but_not_lost(tmp_path: Path) -> None:
     moment = datetime.now(timezone.utc)
 
     for attempt in range(MAX_ATTEMPTS):
-        outbox.fail("umidsiz", f"{attempt}-urinish rad etildi", now=moment)
+        # `permanent=True` — cloud hodisaning O'ZINI rad etdi.  Faqat
+        # shunday xato hisobga kiradi: tarmoq uzilishi hodisani
+        # o'ldirmasligi kerak (pastdagi testlarga qarang).
+        outbox.fail("umidsiz", f"{attempt}-urinish rad etildi", permanent=True, now=moment)
         moment += timedelta(seconds=MAX_RETRY_DELAY_SEC + 1)
 
     assert outbox.pending(now=moment) == []
@@ -281,7 +284,7 @@ def test_dead_letters_do_not_pile_up_forever(tmp_path: Path) -> None:
     outbox.enqueue(_event("eski"))
     old = datetime.now(timezone.utc) - timedelta(days=5)
     for _ in range(MAX_ATTEMPTS):
-        outbox.fail("eski", "rad etildi", now=old)
+        outbox.fail("eski", "rad etildi", permanent=True, now=old)
 
     assert outbox.stats()["poisoned"] == 1
     outbox.prune()
@@ -310,3 +313,86 @@ def test_the_schema_upgrades_an_existing_database(tmp_path: Path) -> None:
     assert outbox.pending()[0]["event_id"] == "eski"
     outbox.fail("eski", "xato")
     assert outbox.stats()["waiting"] == 1
+
+
+# ── Tarmoq uzilishi hodisani o'ldirmaydi ─────────────────────────────────
+#
+# 2026-08-27 da sinov do'konida `outbox_poisoned` 4 401 gacha chiqqan edi
+# — do'kon jami yuborgan 7 227 hodisaning taxminan uchdan biri.  Eng ko'p
+# uchragan sabab "All connection attempts failed" edi, ya'ni internet
+# uzilishi.  Har muvaffaqiyatsizlik `MAX_ATTEMPTS` ni yeb borardi va 20
+# urinish eksponensial kutish bilan ~3 soatga cho'zilardi: yarim kunlik
+# nosozlik butun navbatni yo'q qilardi.
+
+
+def test_a_network_outage_never_throws_events_away(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("uzilish"))
+    moment = datetime.now(timezone.utc)
+
+    # Ikki barobar ko'p urinish — baribir tirik.
+    for _ in range(MAX_ATTEMPTS * 2):
+        outbox.fail("uzilish", "All connection attempts failed", now=moment)
+        moment += timedelta(seconds=MAX_RETRY_DELAY_SEC + 1)
+
+    assert outbox.stats()["poisoned"] == 0
+    assert [row["event_id"] for row in outbox.pending(now=moment)] == ["uzilish"]
+
+
+def test_a_long_outage_still_backs_off(tmp_path: Path) -> None:
+    """Urinishlar hisobga kirmasa ham kutish uzayishi kerak.
+
+    Aks holda uzilish paytida navbat serverni har 5 soniyada urardi.
+    """
+    from datetime import datetime, timezone
+
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("uzilish"))
+    moment = datetime.now(timezone.utc)
+
+    for _ in range(6):
+        outbox.fail("uzilish", "tarmoq", now=moment)
+
+    assert outbox.pending(now=moment) == []
+
+
+def test_an_event_stuck_past_retention_is_counted_not_silently_deleted(tmp_path: Path) -> None:
+    """Uzoq uzilishning yagona chegarasi — yosh, va u KO'RINISHI shart.
+
+    Bungacha yoshi o'tgan yuborilmagan yozuv shunchaki `DELETE` bo'lardi
+    va hisoblagichga tushmasdi: bir hafta internetsiz qolgan do'konning
+    hodisalari yo'qolar, `outbox_poisoned` esa nol turaverardi.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7, retention_days=7)
+    outbox.enqueue(_event("qolib-ketgan"))
+    old = datetime.now(timezone.utc) - timedelta(days=9)
+    with sqlite3.connect(tmp_path / "outbox.db") as conn:
+        conn.execute("UPDATE outbox SET created_at=?", (old.isoformat(),))
+
+    outbox.fail("qolib-ketgan", "All connection attempts failed")
+    outbox.prune()
+
+    dropped = outbox.dead_letters()
+    assert len(dropped) == 1
+    assert "yuborilmadi" in dropped[0]["last_error"]
+
+
+def test_the_reason_is_never_empty(tmp_path: Path) -> None:
+    """Sababsiz raqamning foydasi yo'q.
+
+    Jonli do'kondagi 3 375 ta tashlangan hodisaning 602 tasi "sabab
+    yozilmagan" edi — `str(exc)` ba'zi httpx xatolarida bo'sh satr.
+    """
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("sababsiz"))
+
+    outbox.fail("sababsiz", "")
+
+    with sqlite3.connect(tmp_path / "outbox.db") as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT last_error FROM outbox").fetchone()
+    assert row["last_error"]

@@ -363,3 +363,61 @@ def test_server_error_on_snapshot_still_retries_the_event(tmp_path: Path) -> Non
     assert outbox.pending() == []  # hozir — backoff kutmoqda
     later = datetime.now(timezone.utc) + timedelta(hours=1)
     assert [row["event_id"] for row in outbox.pending(now=later)] == ["evt-5xx"]
+
+
+# ── Uzoq uzilish navbatni yo'q qilmasin ──────────────────────────────────
+#
+# 2026-08-27 da sinov do'konida 3 375 ta hodisa butunlay yo'qolgan edi va
+# eng ko'p uchragan sabab "All connection attempts failed" — ya'ni
+# internet uzilishi.  Har muvaffaqiyatsizlik `MAX_ATTEMPTS` ni yeb
+# borardi, 20 urinish esa eksponensial kutish bilan ~3 soat: yarim
+# kunlik nosozlik navbatning hammasini o'ldirardi.
+
+
+def test_a_long_outage_does_not_empty_the_queue(tmp_path: Path) -> None:
+    from chaqimchi_ai.outbox import MAX_ATTEMPTS
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("All connection attempts failed", request=request)
+
+    sync, outbox, _clock = sync_for(tmp_path, handler=handler)
+    outbox.enqueue(EdgeEvent(event_id="evt-1", event_type="line_crossed", camera_id="camera-01"))
+
+    async def exercise() -> None:
+        for _ in range(MAX_ATTEMPTS + 5):
+            await sync.sync_once()
+        await sync.close()
+
+    asyncio.run(exercise())
+
+    assert outbox.stats()["poisoned"] == 0
+    later = datetime.now(timezone.utc) + timedelta(days=1)
+    assert [row["event_id"] for row in outbox.pending(now=later)] == ["evt-1"]
+
+
+def test_an_event_the_cloud_refuses_counts_against_itself(tmp_path: Path) -> None:
+    """Ayb hodisada bo'lsa u navbatni abadiy to'sib turmasligi kerak.
+
+    Cloud batchni qabul qildi-yu shu hodisani `accepted` ga qo'shmadi:
+    sxema yoki maydon buzuq va qayta urinish uni tuzatmaydi.  Tarmoq
+    xatosidan farqi shu — bu urinishlar hisobiga KIRADI.
+    """
+    import sqlite3
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"accepted": []})
+
+    sync, outbox, _clock = sync_for(tmp_path, handler=handler)
+    outbox.enqueue(EdgeEvent(event_id="evt-1", event_type="line_crossed", camera_id="camera-01"))
+
+    async def exercise() -> None:
+        assert (await sync.sync_once())["failed"] == 1
+        await sync.close()
+
+    asyncio.run(exercise())
+
+    with sqlite3.connect(tmp_path / "outbox.db") as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT attempts,hard_failures FROM outbox").fetchone()
+    assert row["attempts"] == 1
+    assert row["hard_failures"] == 1

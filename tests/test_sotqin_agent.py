@@ -175,7 +175,9 @@ def test_health_reports_poisoned_events(tmp_path) -> None:
     outbox.enqueue(EdgeEvent(event_id="umidsiz", event_type="line_crossed", camera_id="camera-01"))
     moment = datetime.now(timezone.utc)
     for _ in range(MAX_ATTEMPTS):
-        outbox.fail("umidsiz", "rad etildi", now=moment)
+        # `permanent=True` — cloud hodisaning O'ZINI rad etdi.  Tarmoq
+        # uzilishi hodisani o'ldirmaydi (`tests/test_outbox.py`).
+        outbox.fail("umidsiz", "rad etildi", permanent=True, now=moment)
         moment += timedelta(seconds=600)
 
     control = module.SotqinAgent()

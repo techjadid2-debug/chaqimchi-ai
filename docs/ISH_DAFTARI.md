@@ -36,6 +36,34 @@
 - Shox: `loitering-rasmsiz`. Server: `169.58.198.111`.
 - **Sotuv hali ochilmagan** — pastdagi ikkita darvoza yopiq.
 
+- **SIG'IM O'LCHANDI** (2026-08-28, loyihada birinchi marta —
+  ilgari raqam taxmin edi):
+
+  | Nima | O'lchov |
+  |---|---|
+  | Detektor | 33,7 inferens/s, p95 **36 ms**, p99 49 ms |
+  | Byudjet qabul qiladigan tezlik | **22,1 fps** |
+  | 4 kamera uchun kerak | 8 fps |
+  | Ko'taradigan kamera | **11 ta** · zaxira **176%** |
+  | Barqarorlik | 9,8% sekinlashish (chegara 15%) — qizish yo'q |
+  | Dekodlash | 1,19 ms/kadr, oqim 15,9 fps |
+  | Kadr yuki | motion 1,8 ms + tamper 1,1 ms = 2,9 ms |
+  | Xulosa | `ok: true`, ogohlantirishsiz |
+
+  **720p ko'tariladi.** Detektor narxi oqim o'lchamiga BOG'LIQ EMAS
+  (model kirishi qat'iy 320×544), ya'ni 22,1 fps o'zgarmaydi.
+  O'zgaradigani faqat dekodlash: 1,19 ms → taxminan 4,8 ms, kadr yuki
+  esa 0,08 yadrodan ~0,15 yadroga chiqadi. Bu ahamiyatsiz.
+
+- **Kamera manzillari bulutda** (0.6.24 dan) va ular darhol javob berdi:
+
+  | | camera-01 | camera-02 |
+  |---|---|---|
+  | IP | 192.168.1.64 | 192.168.1.170 |
+  | Brend | **Hikvision** | eski/generik |
+  | Tahlil oqimi | `/Streaming/Channels/102` | `/mpeg4cif` — ya'ni **352×288** |
+  | Klip oqimi | `/Streaming/Channels/101` | **yo'q** |
+
 ## KEYINGI ISH
 
 **1) ✅ BAJARILDI — cloud deploy qilindi va tasdiqlandi** (2026-08-28).
@@ -57,7 +85,7 @@ Yangi versiyada ko'rilsin: `clips` ichida `no_segments` va
 `cut_failed` alohida, `cameras_configured` bor, `snapshots{}` bor,
 `device_diagnostics` jadvali endi **bo'sh emas**.
 
-**3) Sig'imni O'LCHANG** — admin panelda «Sig'imni o'lchash» tugmasi
+**3) ✅ BAJARILDI — sig'im o'lchandi** (yuqoridagi jadval). Eski matn: — admin panelda «Sig'imni o'lchash» tugmasi
 (0.6.22 kerak). Natija `device_diagnostics` da ko'rinadi. Hozirgi
 zaxira katta ko'rinadi (CPU 8.8%, RAM 40%, 2 kamera), lekin
 **o'lchovsiz 720p ga o'tilmaydi**.
@@ -123,6 +151,20 @@ va tozalash daqiqasida (26-avg 13:37) to'xtagan.
 Xuddi shunday: camera-02 da «kirish» chizig'i **4 piksel** uzunlikda.
 Endi admin panelda ro'yxat chiqadi (`cloud/config_health.py`), lekin
 **chizmani mijoz bilan qayta chizish kerak**.
+
+**⚠ camera-02 — eng band kamera eng past sifatli oqimda**
+
+Uch kunda 571 ta `line_crossed` (camera-01 da 44 ta), ya'ni do'konning
+asosiy sanog'i shu kameradan keladi. Oqimi esa **MPEG-4 CIF (352×288)**
+va unda `record_url` yo'q — klip printsipial yozilmaydi. 720p ni
+ko'tarmasligi ehtimoli yuqori; almashtirish kerak bo'lishi mumkin.
+
+**⚠ camera-02 paroli `123456`**
+
+Manzilda MD5 ko'rinishida (`e10adc3949ba59abbe56e057f20f883e`).
+Mijozning kamerasi va uning qarori, lekin 0.6.24 dan boshlab bu parol
+bizning bulutimizda ham turadi (shifrlangan). Mijozga almashtirishni
+taklif qilish kerak.
 
 **Sotuvni to'sib turgan ikki darvoza**
 

@@ -6,7 +6,15 @@ degan hisob sof mantiq — va aynan shu raqamga qarab va'da beriladi.
 
 from __future__ import annotations
 
-from scripts.benchmark_n100 import BUDGET_SAFETY, Samples, capacity_verdict, percentile
+# O'lchov yadrosi endi paket ichida: do'kon kompyuteriga faqat
+# `chaqimchi_ai` ko'chiriladi, `scripts/` esa YO'Q — ya'ni skriptda
+# qolgan yadroni mijozning mashinasida ishlatib bo'lmasdi.
+from chaqimchi_ai.local.benchmark import (
+    BUDGET_SAFETY,
+    Samples,
+    capacity_verdict,
+    percentile,
+)
 
 
 def verdict(**overrides):

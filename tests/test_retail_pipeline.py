@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from chaqimchi_ai.event_models import EdgeEvent
+from chaqimchi_ai.retail import ringbuffer
 from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.budget import InferenceBudget
 from chaqimchi_ai.retail.claims import Priority
@@ -60,19 +61,28 @@ class FakeAnalyzer:
 
 
 class FakeBuffer:
-    """`RingBuffer` o'rniga: qaysi lahza so'ralganini yozib boradi."""
+    """`RingBuffer` o'rniga: qaysi lahza so'ralganini yozib boradi.
 
-    def __init__(self, *, found: bool = True) -> None:
+    `reason` — klip chiqmagan holatda qaysi sabab qaytarilsin.  Ikkalasi
+    ajratilgani muhim: `no_segments` recorder ishlamayotganini,
+    `cut_failed` esa ffmpeg segmentni kesa olmaganini bildiradi va ular
+    butunlay boshqa tuzatishni talab qiladi.
+    """
+
+    def __init__(self, *, found: bool = True, reason: str = ringbuffer.NO_SEGMENTS) -> None:
         self.found = found
+        self.reason = reason
         self.requests: List[Tuple[float, float, float]] = []
 
-    def extract(self, moment: float, *, output: Path, pre_sec: float, post_sec: float):
+    def extract_detailed(
+        self, moment: float, *, output: Path, pre_sec: float, post_sec: float
+    ) -> ringbuffer.ClipResult:
         self.requests.append((moment, pre_sec, post_sec))
         if not self.found:
-            return None
+            return ringbuffer.ClipResult(None, self.reason, "sinov")
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"klip")
-        return output
+        return ringbuffer.ClipResult(output)
 
 
 class Recorder:
@@ -462,6 +472,50 @@ def test_missing_footage_is_counted_not_raised(tmp_path: Path) -> None:
     run(pipeline)
     assert pipeline.flush_clips(wall_now=WALL + 30.0) == []
     assert pipeline.stats()["clips"]["missing"] == 1
+
+
+def test_a_recorder_that_never_wrote_is_told_apart_from_a_failed_cut(tmp_path: Path) -> None:
+    """`missing` ning ikki sababi AJRATILSIN.
+
+    2026-08-28 da jonli do'konda `{written: 0, missing: 2}` ko'rindi va
+    bu raqamdan qaysi nosozlik ekanini aytib bo'lmasdi:
+
+    * recorder umuman yozmayaptimi (`record_url` xato, ffmpeg o'lgan);
+    * yoki segment bor-u ffmpeg kesa olmadimi (buzuq segment, disk).
+
+    Ular BOSHQA-BOSHQA tuzatishni talab qiladi, ya'ni tashxis qo'yish
+    do'konga borishni talab qilardi.
+    """
+    pipeline, _a, _r, _b = build(
+        tmp_path,
+        events=[line_crossed()],
+        rules=CLIP_RULES,
+        clips=FakeBuffer(found=False, reason=ringbuffer.NO_SEGMENTS),
+    )
+    run(pipeline)
+    pipeline.flush_clips(wall_now=WALL + 30.0)
+    clips = pipeline.stats()["clips"]
+
+    assert clips["missing"] == 1, "eski maydon o'z ma'nosini saqlasin"
+    assert clips["no_segments"] == 1
+    assert clips["cut_failed"] == 0
+
+
+def test_a_failed_ffmpeg_cut_keeps_its_reason(tmp_path: Path) -> None:
+    """ffmpeg nima deganini qurilma SAQLASIN — ilgari `stderr` tashlanardi."""
+    pipeline, _a, _r, _b = build(
+        tmp_path,
+        events=[line_crossed()],
+        rules=CLIP_RULES,
+        clips=FakeBuffer(found=False, reason=ringbuffer.CUT_FAILED),
+    )
+    run(pipeline)
+    pipeline.flush_clips(wall_now=WALL + 30.0)
+    clips = pipeline.stats()["clips"]
+
+    assert clips["cut_failed"] == 1
+    assert clips["no_segments"] == 0
+    assert clips["last_error"] == "sinov", "sabab matni yo'qolmasin"
 
 
 def test_broken_ffmpeg_does_not_grow_the_queue_forever(tmp_path: Path) -> None:

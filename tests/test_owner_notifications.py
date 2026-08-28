@@ -11,6 +11,7 @@ belgisi bor.
 
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -261,21 +262,33 @@ def test_bell_works_when_rows_are_dicts_and_nothing_happened(dict_row_store) -> 
     assert dict_row_store.notifications("site-bosh", "member-1")["unread"] == 0
 
 
-def test_event_store_never_reads_a_row_by_number() -> None:
+#: Qator raqam bilan o'qilgan joylar.  `fetchone()["nom"]` mos kelmaydi —
+#: kvadrat qavsdan keyin ATAYLAB raqam qidiriladi.
+_POSITIONAL_ROW = re.compile(r"fetchone\(\)\[\s*\d|fetchall\(\)\[\s*\d|\brow\[\s*\d")
+
+#: Baza bilan ishlaydigan hamma modul.  `event_store.py` PostgreSQL'da
+#: yuradi va u yerda naqsh HOZIRNING O'ZIDA yiqiladi; qolgan ikkitasi
+#: bugun SQLite'da, lekin bir kun ko'chirilsa xato jimgina qaytadi —
+#: shuning uchun uchalasi ham bir xil qoidada tutiladi.
+_DB_MODULES = ("event_store.py", "store.py", "payments/store.py")
+
+
+@pytest.mark.parametrize("module", _DB_MODULES)
+def test_the_store_never_reads_a_row_by_number(module: str) -> None:
     """`fetchone()[0]` butun sinf bo'lib qaytmasin.
 
     Bitta joyni tuzatish yetmaydi: xato o'zi ko'rinmaydi (test o'tadi,
     production yiqiladi), shuning uchun naqshning O'ZI qulflanadi.
-    `cloud/store.py` da bu naqsh to'g'ri — u faqat SQLite bilan ishlaydi.
+    2026-08-27 da aynan shu naqsh 1 800+ test o'tib turgan holda jonli
+    serverda 48 soat davomida har safar 500 bergan.
     """
-    source = (Path(__file__).resolve().parents[1] / "cloud" / "event_store.py").read_text(
-        encoding="utf-8"
-    )
+    source = (Path(__file__).resolve().parents[1] / "cloud" / module).read_text(encoding="utf-8")
     offenders = [
         line.strip()
         for line in source.splitlines()
-        if "fetchone()[" in line or "fetchall()[0][" in line
+        if _POSITIONAL_ROW.search(line) and not line.strip().startswith("#")
     ]
     assert offenders == [], (
-        "PostgreSQL qatorini raqam bilan o'qib bo'lmaydi (`dict_row`): " + "; ".join(offenders)
+        f"{module}: qatorni raqam bilan o'qib bo'lmaydi (`dict_row` → KeyError: 0): "
+        + "; ".join(offenders)
     )

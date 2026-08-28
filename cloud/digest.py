@@ -42,6 +42,36 @@ RENEWAL_HOUR = 11
 #: Obuna tugashiga shuncha kun qolganda birinchi eslatma ketadi.
 RENEWAL_FIRST_DAYS = 7
 
+#: Demografiya foizini KO'RSATISH uchun eng kam o'lchov soni.
+#:
+#: 27-avgust jonli o'lchovi: 207 ta kirishdan 9 tasida jins metadatasi
+#: bor edi, lekin xabar "11% ayol · 89% erkak" deb FAKT sifatida
+#: yozardi.  n=9 da bitta odam foizni 11 punktga siljitadi; 20 da —
+#: 5 punktga.  Shundan pastda raqam o'lchov emas, tasodif.
+DEMOGRAPHY_MIN_SAMPLE = 20
+
+#: ...va kirganlarning kamida shuncha ulushi o'lchangan bo'lsin.
+#:
+#: Qamrov sondan MUHIMROQ.  Past qamrovda o'lchanganlar tasodifiy
+#: tanlanmagan: ular kameraga eng yaqin o'tgan odamlar, ya'ni natija
+#: shovqinli emas — OG'GAN.  Yuz topilishi yaxshilanmaguncha qator
+#: umuman chiqmaydi (`trust_score` ham o'lchanmagan qismni ballga
+#: qo'shmaydi — hisobot ham shu intizomda bo'lsin).
+DEMOGRAPHY_MIN_COVERAGE = 0.30
+
+
+def _demography_is_representative(
+    demografiya: Dict[str, Any], traffic: Dict[str, Any]
+) -> bool:
+    """Foiz ko'rsatishga arziydigan o'lchov bormi."""
+    counted = int(demografiya.get("hisoblangan") or 0)
+    if counted < DEMOGRAPHY_MIN_SAMPLE:
+        return False
+    entered = int(traffic.get("entered") or 0)
+    # Har o'lchov kirish kesishmasidan chiqadi, ya'ni `entered` noldan
+    # katta bo'lishi shart; nolga bo'lishdan himoya baribir arzon.
+    return bool(entered) and counted >= entered * DEMOGRAPHY_MIN_COVERAGE
+
 
 def _duration(seconds: float) -> str:
     return f"{int(seconds // 60)} daq" if seconds >= 60 else f"{int(seconds)} s"
@@ -102,9 +132,10 @@ def build_digest(
         lines.append(f"Gavjum soat: {busiest['hour']:02d}:00 — {busiest['entered']} kishi")
 
     # Demografiya — faqat ma'lumot yig'ilgan kunda (xodimlar hisobga
-    # kirmaydi, ular davomatda).
+    # kirmaydi, ular davomatda) VA o'lchov vakillik qilganda.
+    # Chegaralar yuqorida, sabab bilan.
     demografiya = report.get("demografiya") or {}
-    if demografiya.get("hisoblangan"):
+    if _demography_is_representative(demografiya, traffic):
         jins = demografiya.get("jins") or {}
         yosh = demografiya.get("yosh") or {}
         line = f"🚻 {jins.get('ayol', 0)}% ayol · {jins.get('erkak', 0)}% erkak"
@@ -161,6 +192,8 @@ def build_digest(
         alarms.append(f"{security['restricted_zone']} marta taqiqlangan zona")
     if security.get("loitering"):
         alarms.append(f"{security['loitering']} marta uzoq turish")
+    if security.get("checkout_unattended"):
+        alarms.append(f"{security['checkout_unattended']} marta kassada hech kim yo'q")
     if alarms:
         lines.append("⚠️ " + ", ".join(alarms))
 

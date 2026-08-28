@@ -22,6 +22,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
 
+#: Klip nega chiqmagani.  Ikkalasi butunlay boshqa nosozlik va boshqa
+#: tuzatishni talab qiladi — bitta `missing` ostida yashirilmasin.
+NO_SEGMENTS = "no_segments"
+CUT_FAILED = "cut_failed"
+
+
+@dataclass(frozen=True)
+class ClipResult:
+    """Kesish natijasi.  `path` bo'lsa muvaffaqiyat, `reason` esa `None`."""
+
+    path: Optional[Path]
+    reason: Optional[str] = None
+    #: Odam o'qiydigan tafsilot (ffmpeg chiqishi) — logga va diagnostikaga.
+    detail: Optional[str] = None
+
 
 def default_ffmpeg_binary() -> str:
     """ffmpeg qayerda — Windows payload'idagi birga kelgan nusxa birinchi.
@@ -221,25 +236,39 @@ class RingBuffer:
             str(output),
         ]
 
-    def extract(
+    def extract_detailed(
         self,
         moment: float,
         *,
         output: Path,
         pre_sec: float = 10.0,
         post_sec: float = 20.0,
-    ) -> Optional[Path]:
-        """Hodisa atrofidagi klip.  Segment topilmasa `None`.
+    ) -> ClipResult:
+        """Hodisa atrofidagi klip — sababi bilan.
 
-        `None` qaytishi normal holat: hodisa buffer to'lgunicha yuz bergan
-        yoki kamera endi ulangan bo'lishi mumkin.  Hodisaning o'zi baribir
-        yuboriladi — klipsiz hodisa klipsiz qolgandan ko'ra yaxshi.
+        Nega sabab kerak.  Ilgari bu metod ikki butunlay boshqa holatda
+        bir xil `None` qaytarardi va qurilma ularni bitta `clips.missing`
+        hisoblagichiga qo'shardi.  2026-08-28 da jonli do'konda
+        `{written: 0, missing: 2}` ko'rindi va bu raqamdan **qaysi**
+        nosozlik ekanini aytib bo'lmasdi:
+
+        * `NO_SEGMENTS` — recorder umuman yozmayapti (`record_url` xato,
+          ffmpeg o'lgan, disk to'lgan).  Tuzatish: kamera sozlamasi.
+        * `CUT_FAILED` — segment bor, lekin ffmpeg kesa olmadi (buzuq
+          segment, kodek, joy yo'q).  Tuzatish: butunlay boshqa yo'nalish.
+
+        Ikkalasi ajratilmagani uchun tashxis qo'yish do'konga borishni
+        talab qilardi.  Endi javob bitta heartbeat masofasida.
+
+        `NO_SEGMENTS` ba'zan NORMAL: hodisa buffer to'lgunicha yuz bergan
+        yoki kamera endi ulangan bo'lishi mumkin.  Hodisaning o'zi
+        baribir yuboriladi — klipsiz hodisa hodisasiz qolgandan yaxshi.
         """
         start = moment - pre_sec
         end = moment + post_sec
         segments = self.segments_for(start, end)
         if not segments:
-            return None
+            return ClipResult(None, NO_SEGMENTS, "buferda segment yo'q")
         output.parent.mkdir(parents=True, exist_ok=True)
         completed = self.runner(
             self.clip_command(
@@ -254,8 +283,28 @@ class RingBuffer:
             check=False,
         )
         if completed.returncode != 0 or not output.is_file():
-            return None
-        return output
+            # ffmpeg nima deganini SAQLAYMIZ.  Ilgari `stderr` jimgina
+            # tashlanardi va nosozlikning yagona izi nol hisoblagich edi.
+            detail = (getattr(completed, "stderr", "") or "").strip().splitlines()
+            return ClipResult(
+                None,
+                CUT_FAILED,
+                f"ffmpeg {completed.returncode}: {detail[-1][:200] if detail else 'sababsiz'}",
+            )
+        return ClipResult(output, None, None)
+
+    def extract(
+        self,
+        moment: float,
+        *,
+        output: Path,
+        pre_sec: float = 10.0,
+        post_sec: float = 20.0,
+    ) -> Optional[Path]:
+        """`extract_detailed` ning qisqa shakli — faqat yo'l kerak bo'lganda."""
+        return self.extract_detailed(
+            moment, output=output, pre_sec=pre_sec, post_sec=post_sec
+        ).path
 
     def stats(self) -> dict:
         segments = self.scan()

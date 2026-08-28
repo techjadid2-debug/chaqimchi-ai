@@ -70,7 +70,17 @@ from chaqimchi_ai.sotqin_profile import (
     MIN_FREE_BYTES,
     product_payload,
 )
-from cloud import botfmt, faces, ratelimit, rtsp, server_health, trust_score, urls, vision_agent
+from cloud import (
+    botfmt,
+    config_health,
+    faces,
+    ratelimit,
+    rtsp,
+    server_health,
+    trust_score,
+    urls,
+    vision_agent,
+)
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
@@ -537,8 +547,31 @@ class EdgeHeartbeatBody(BaseModel):
     #: Sonning o'zi nima buzilganini aytmasdi.
     outbox_poisoned_reasons: List[str] = Field(default_factory=list, max_length=3)
     #: Klip yozish hisoblagichlari — hodisa bor-u klip yo'q holatini
-    #: cloudda ko'rish uchun.
+    #: cloudda ko'rish uchun.  `missing` ichida ikki sabab bor:
+    #: `no_segments` (recorder umuman yozmayapti) va `cut_failed`
+    #: (ffmpeg segmentni kesa olmadi).  Ular boshqa-boshqa tuzatishni
+    #: talab qiladi, shuning uchun 0.6.22 dan boshlab alohida keladi.
     clips: Dict[str, int] = Field(default_factory=dict)
+    #: ffmpeg nima degani.  Raqam "nechta" ga, matn "nega" ga javob beradi.
+    clips_last_error: str = Field(default="", max_length=200)
+    #: Zanjir nechta hodisa YARATGANI.  Cloud faqat o'ziga yetib
+    #: kelganini biladi — ikki son solishtirilmasa "hodisa yo'lda
+    #: yo'qolyapti" holati ko'rinmaydi.
+    events: int = Field(default=0, ge=0)
+    #: Tarif faollashtirilmagani sabab qurilmada tashlanganlar.
+    plan_filtered: int = Field(default=0, ge=0)
+    #: Rasm yozildimi.  Klip uchun hisoblagich bor edi, rasm uchun yo'q —
+    #: "hodisa keldi, rasm yo'q" holati 2026-08-26 da uch soat sezilmadi.
+    snapshots: Dict[str, int] = Field(default_factory=dict)
+    #: Nechta kamera SOZLANGAN.  `cameras_active` yolg'iz "4 tadan 2 tasi
+    #: ishlayapti" farqini ayta olmaydi va cloud do'konning yarmi
+    #: o'chganini ko'rmasdi.  Eski qurilma yubormaydi — `0` "noma'lum".
+    cameras_configured: int = Field(default=0, ge=0)
+    #: Zanjir tirik-u holat fayli qotib qolgan.  Mijoz uchun bu
+    #: "ishlamayapti" bilan bir xil, lekin cloud buni bilmasdi.
+    status_stale: bool = False
+    #: Byudjet bosimi — tahlil sekinlashayotganini shu ko'rsatadi.
+    pressure: Dict[str, Any] = Field(default_factory=dict)
     #: Davomat oqimining sifati: nechta yuz kadri yozildi, nechtasi juda
     #: mayda bo'lgani uchun tashlandi, nechtasi soatlik shift tufayli.
     #: `too_small` noldan katta bo'lsa kamera uzoq yoki substream past —
@@ -4734,6 +4767,18 @@ async def admin_site_detail(
     # qolyapti.  2026-08-26 da aynan shu holat 3 soat sezilmadi: yagona
     # izi `INFO` access log edi va uni hech kim o'qimasdi.
     detail["rate_limited"] = ratelimit.limiter().rejections(site_id)
+    # Hech qachon hodisa bermaydigan chiziq va zonalar.
+    #
+    # Bu nosozlik "xato" ko'rinishida emas, JIMLIK ko'rinishida keladi:
+    # chizma saqlanadi, revision o'sadi, qurilma sozlamani qabul qiladi —
+    # faqat hodisa yo'q.  2026-08-28 da sinov do'konida 4 pikselli chiziq
+    # va 29x20 pikselli "Taqiqlangan zona" aynan shunday topildi.
+    try:
+        config = get_event_store().get_site_config(site_id)["config"]
+        detail["geometry_problems"] = config_health.geometry_problems(config)
+    except Exception:  # sozlama o'qilmasa ham sayt kartochkasi ochilsin
+        logger.exception("chizma tekshiruvi yiqildi: %s", site_id)
+        detail["geometry_problems"] = []
     return detail
 
 
@@ -4768,6 +4813,40 @@ async def admin_clean_chains(
     )
     _wake_live_watchers(site_id)
     return {"job": job, "poll_after_sec": 2}
+
+
+@app.post("/api/v1/admin/sites/{site_id}/jobs/benchmark")
+async def admin_benchmark(
+    site_id: str,
+    admin: Optional[PortalPrincipal] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Do'kon kompyuterining sig'imini MASOFADAN o'lchaydi.
+
+    Nega kerak: "avval o'lchang, keyin chegarani o'zgartiring" degan
+    qoida bor edi, lekin uni bajarish mumkin emasdi.  O'lchov ma'noli
+    bo'ladigan yagona joy — mijozning o'z kompyuteri — va u yerda na
+    terminal, na `scripts/` bor (Windows payload'iga faqat
+    `chaqimchi_ai` ko'chiriladi).  Natijada sig'im raqami taxmin bo'lib
+    qolgan va aynan shu taxminga suyanib mijozga kamera soni va'da
+    qilinardi.
+
+    Nega ADMIN uchun: o'lchov paytida protsessor to'liq yuklanadi va
+    tahlil sekinlashadi.  Do'kon egasi buni bilmasligi va tasodifan
+    bosmasligi kerak.
+    """
+    site = get_store().get_site(site_id)
+    if not site:
+        raise HTTPException(404, "Obyekt topilmadi")
+    job = get_store().create_job(
+        site_id,
+        kind="benchmark",
+        params={},
+        requested_by=_audit_actor(admin),
+    )
+    _wake_live_watchers(site_id)
+    # `poll_after_sec` uzunroq: o'lchov daqiqalar oladi va panel har
+    # ikki soniyada so'rasa bekorga yuk beradi.
+    return {"job": job, "poll_after_sec": 10}
 
 
 @app.get("/api/v1/admin/sites/{site_id}/onboarding")

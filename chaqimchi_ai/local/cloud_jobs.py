@@ -31,6 +31,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
+from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
 from chaqimchi_ai.local import camera_probe, cloud_link, config_store, onvif_client
 
 logger = logging.getLogger(__name__)
@@ -251,6 +252,71 @@ def _run_clean_chains(report: Callable[[int, str], None]) -> Dict[str, Any]:
     return result
 
 
+def _run_benchmark(params: Dict[str, Any], report: Callable[[int, str], None]) -> Dict[str, Any]:
+    """Shu kompyuter nechta kamerani ko'taradi — MASOFADAN o'lchaydi.
+
+    Nega masofadan kerak.  "Avval o'lchang, keyin chegarani o'zgartiring"
+    degan qoida yozilgan edi, lekin uni bajarish mumkin emasdi: o'lchov
+    ma'noli bo'ladigan yagona joy — mijozning o'z kompyuteri — va u
+    yerda na terminal, na `scripts/` bor.  Natijada 2026-08-28 gacha
+    birorta ham haqiqiy o'lchov olinmagan va sig'im raqami taxmin
+    bo'lib qolgan.
+
+    O'lchov HAQIQIY oqimdan olinadi: sun'iy bo'sh kadrda detektor hech
+    kim topmaydi va natija yolg'on chiqadi.  Manba berilmasa
+    sozlamadagi birinchi kamera olinadi.
+    """
+    from chaqimchi_ai.local import benchmark, paths
+
+    seconds = float(params.get("seconds") or 60.0)
+    device = str(params.get("device") or "CPU")
+    cameras = int(params.get("cameras") or SHOP_MAX_CAMERAS)
+
+    source = str(params.get("source") or "").strip()
+    if not source:
+        # Sozlamadagi birinchi ishlaydigan kamera — mijozdan RTSP
+        # manzilini so'rash kerak bo'lmasin.
+        for camera in config_store.read_raw().get("cameras") or []:
+            url = str((camera or {}).get("url") or "").strip()
+            if url:
+                source = url
+                break
+    if not source:
+        raise RuntimeError("Kamera manzili yo'q — o'lchov sun'iy kadrda yolg'on chiqadi")
+
+    report(10, "Kadrlar yig'ilmoqda")
+    frames = benchmark.frames_from_source(source)
+
+    report(25, "Model yuklanmoqda")
+    from chaqimchi_ai.retail.detector_ov import OpenVINOPersonDetector
+
+    detector = OpenVINOPersonDetector(paths.model_path(), device=device)
+
+    report(40, f"Detektor o'lchanmoqda ({int(seconds)} s)")
+    detector_result = benchmark.measure_detector(
+        detector, frames, seconds=seconds, warmup=5.0, workers=1
+    )
+
+    report(75, "Kadr yuki o'lchanmoqda")
+    overhead = benchmark.measure_frame_overhead(frames, seconds=5.0)
+
+    report(85, "Dekodlash narxi o'lchanmoqda")
+    decode = benchmark.measure_decode(source, seconds=5.0)
+
+    report(95, "Xulosa")
+    verdict = benchmark.capacity_verdict(
+        detector_result, overhead, decode, cameras=cameras, per_camera_fps=2.0, cores=4
+    )
+    return {
+        "device": device,
+        "frame_size": [benchmark.FRAME_WIDTH, benchmark.FRAME_HEIGHT],
+        "detector": detector_result,
+        "frame_overhead": overhead,
+        "decode": decode,
+        "verdict": verdict,
+    }
+
+
 def run_one(job: Dict[str, Any]) -> None:
     """Bitta topshiriqni bajarib, natijani bulutga yuboradi."""
     job_id = str(job.get("job_id") or "")
@@ -268,6 +334,8 @@ def run_one(job: Dict[str, Any]) -> None:
             result = _run_probe(params, report, job_id)
         elif kind == "clean_chains":
             result = _run_clean_chains(report)
+        elif kind == "benchmark":
+            result = _run_benchmark(params, report)
         else:
             raise RuntimeError(f"Noma'lum topshiriq turi: {kind}")
     except Exception as exc:  # noqa: BLE001 - har qanday xato bulutga yetsin

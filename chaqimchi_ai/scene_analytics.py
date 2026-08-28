@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from chaqimchi_ai.event_models import EdgeEvent
+from chaqimchi_ai.limits import face_min_bbox_ratio
 from chaqimchi_ai.retail.lines import CountingLine, DwellTracker, LineCounter
 from chaqimchi_ai.retail.shelf import ShelfWatcher, crop_polygon
 from chaqimchi_ai.retail.tracker import MotionTracker
@@ -149,10 +150,15 @@ def _inside(point: Tuple[float, float], polygon: Sequence[Tuple[float, float]]) 
     return cv2.pointPolygonTest(contour, point, False) >= 0
 
 
-#: Davomat kadri uchun odam ramkasining minimal balandligi (kadr ulushida).
-#: Kichik ramka = uzoqdagi odam = crop ichida yuz o'qib bo'lmaydigan darajada
-#: mayda bo'ladi va cloud bekorga ishlaydi.
-FACE_MIN_BBOX_RATIO = 0.28
+#: Davomat kadri uchun odam ramkasining minimal balandligi endi QATTIQ
+#: son emas — `chaqimchi_ai/limits.face_min_bbox_ratio(kadr_balandligi)`.
+#:
+#: Ilgari bu yerda 0.28 turardi va `pipeline.FACE_MIN_CROP_PX = 96` bilan
+#: ZID edi: 0.28 ruxsat bergan ramka (360p da 101 px) kesmasi 35 px
+#: chiqardi va 96 px chegarasida doim tashlanardi.  2026-08-28 jonli
+#: o'lchovi: 93 urinish, 0 ta yaroqli kesma.  Ikki son bir-birini
+#: inkor qilardi va buni hech qaysi test ko'rmasdi, chunki ular ikki
+#: faylda alohida yozilgan edi.  Endi ikkalasi bitta formuladan.
 #: Bitta trackdan ko'pi bilan shuncha yuz kadri — odam eshik oldida turib
 #: qolsa ham oqim to'lib ketmaydi.
 FACE_EMITS_PER_TRACK = 2
@@ -506,7 +512,7 @@ class SceneAnalyzer:
             x1, y1, x2, y2 = detection["bbox"]
 
             # Davomat: yetarlicha yaqin kelgan odamdan yuz kadri.
-            if self.attendance and (y2 - y1) / height >= FACE_MIN_BBOX_RATIO:
+            if self.attendance and (y2 - y1) / height >= face_min_bbox_ratio(height):
                 emits = self._track_face_emits.get(track_id, 0)
                 last = self._track_face_last.get(track_id)
                 if emits < FACE_EMITS_PER_TRACK and (

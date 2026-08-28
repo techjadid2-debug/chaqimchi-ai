@@ -1,5 +1,6 @@
 import numpy as np
 
+from chaqimchi_ai import limits
 from chaqimchi_ai import scene_analytics as scene
 from chaqimchi_ai.scene_analytics import SceneAnalyzer
 from chaqimchi_ai.settings import SceneSettings
@@ -64,6 +65,38 @@ def face_events(events):
     return [event for event in events if event.event_type == "face_captured"]
 
 
+#: Davomat testlari uchun HAQIQIY oqim o'lchami.
+#:
+#: Ilgari 100x100 kadr ishlatilardi va bu chegarani ma'nosiz qilardi:
+#: bunday oqim hech qachon bo'lmaydi, chegara esa endi kadr
+#: balandligidan hisoblanadi (`limits.face_min_bbox_ratio`).  720p —
+#: mijoz kamerasi uchun kelishilgan keyingi qadam.
+FACE_FRAME_WIDTH = 1280
+FACE_FRAME_HEIGHT = 720
+
+
+def _face_frame():
+    return np.zeros((FACE_FRAME_HEIGHT, FACE_FRAME_WIDTH, 3), dtype=np.uint8)
+
+
+def _person_bbox(bbox_height: int) -> list:
+    """Berilgan balandlikdagi tik turgan odam ramkasi (kadr markazida)."""
+    bbox_width = int(bbox_height * 0.40)
+    x1 = (FACE_FRAME_WIDTH - bbox_width) // 2
+    y1 = (FACE_FRAME_HEIGHT - bbox_height) // 2
+    return [float(x1), float(y1), float(x1 + bbox_width), float(y1 + bbox_height)]
+
+
+def _near_person() -> list:
+    """Chegaradan O'TADIGAN ramka — yaqin kelgan odam."""
+    return _person_bbox(limits.face_min_bbox_px() + 10)
+
+
+def _far_person() -> list:
+    """Chegaradan o'tMAYdigan ramka — uzoqdagi odam."""
+    return _person_bbox(limits.face_min_bbox_px() - 20)
+
+
 def _attendance_analyzer(bbox):
     class Detector:
         def detect(self, frame):
@@ -77,42 +110,42 @@ def _attendance_analyzer(bbox):
 
 
 def test_attendance_camera_emits_a_face_capture() -> None:
-    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])  # bo'yi 80% — yaqin
-    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    bbox = _near_person()
+    analyzer = _attendance_analyzer(bbox)
 
-    events = face_events(analyzer.analyze(frame, now=10))
+    events = face_events(analyzer.analyze(_face_frame(), now=10))
 
     assert len(events) == 1
     assert events[0].camera_id == "cam-1"
-    assert events[0].metadata["bbox"] == [20.0, 10.0, 80.0, 90.0]
+    assert events[0].metadata["bbox"] == bbox
 
 
 def test_ordinary_cameras_never_emit_face_captures() -> None:
     class Detector:
         def detect(self, frame):
-            return [{"bbox": [20.0, 10.0, 80.0, 90.0], "score": 0.9}]
+            return [{"bbox": _near_person(), "score": 0.9}]
 
     analyzer = SceneAnalyzer("cam-1", Detector(), SceneSettings(event_debounce_sec=1))
     analyzer.motion.has_motion = lambda _frame: True
 
-    events = face_events(analyzer.analyze(np.zeros((100, 100, 3), dtype=np.uint8), now=10))
+    events = face_events(analyzer.analyze(_face_frame(), now=10))
 
     assert events == []
 
 
 def test_far_away_person_is_skipped() -> None:
     """Kichik ramka = mayda yuz — cloud bekorga ishlamasin."""
-    analyzer = _attendance_analyzer([20.0, 40.0, 40.0, 60.0])  # bo'yi 20% < 28%
+    analyzer = _attendance_analyzer(_far_person())
 
-    events = face_events(analyzer.analyze(np.zeros((100, 100, 3), dtype=np.uint8), now=10))
+    events = face_events(analyzer.analyze(_face_frame(), now=10))
 
     assert events == []
 
 
 def test_one_track_sends_at_most_two_captures_with_a_pause() -> None:
     """Eshik oldida turgan odam oqimni to'ldirmasin: 2 ta kadr, orasi 60 s."""
-    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])
-    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    analyzer = _attendance_analyzer(_near_person())
+    frame = _face_frame()
 
     assert len(face_events(analyzer.analyze(frame, now=10))) == 1
     assert face_events(analyzer.analyze(frame, now=30)) == [], "60 s o'tmadi"
@@ -206,8 +239,8 @@ def test_camera_hour_ceiling_survives_track_churn() -> None:
     sakraydi, ya'ni IoU hech qachon mos kelmaydi va har safar yangi track.
     """
 
-    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])
-    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    analyzer = _attendance_analyzer(_near_person())
+    frame = _face_frame()
 
     emitted = 0
     for step in range(200):
@@ -224,8 +257,8 @@ def test_camera_hour_ceiling_survives_track_churn() -> None:
 
 def test_hour_ceiling_reopens_in_the_next_window() -> None:
     """Shift — sirpanuvchi oyna, abadiy qulf emas."""
-    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])
-    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    analyzer = _attendance_analyzer(_near_person())
+    frame = _face_frame()
 
     # Oynani sun'iy to'ldiramiz: soat oldin yuborilgan kadrlar.
     analyzer._face_emit_times = [1000.0] * scene.FACE_EMITS_PER_HOUR
@@ -241,8 +274,8 @@ def test_hour_ceiling_does_not_stop_heatmap_and_zones() -> None:
     Shift `continue` bilan qilinsa kadrning qolgan tahlili — issiqlik
     xaritasi, zona, demografiya — jimgina o'chib qolardi.
     """
-    analyzer = _attendance_analyzer([20.0, 10.0, 80.0, 90.0])
-    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    analyzer = _attendance_analyzer(_near_person())
+    frame = _face_frame()
     analyzer._face_emit_times = [1000.0] * scene.FACE_EMITS_PER_HOUR
 
     events = analyzer.analyze(frame, now=1500.0)

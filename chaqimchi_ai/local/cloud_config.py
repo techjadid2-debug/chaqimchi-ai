@@ -28,6 +28,7 @@ import os
 import shutil
 import socket
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -372,8 +373,38 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # sondan ko'rinadi (`unavailable` — kamera uchun yozuv manzili yo'q).
         "clips": {
             key: int((status.get("clips") or {}).get(key) or 0)
-            for key in ("written", "missing", "dropped", "unavailable", "pending")
+            for key in (
+                "written",
+                "missing",
+                "dropped",
+                "unavailable",
+                "pending",
+                # `missing` ning IKKI sababi.  Ular bir xil raqam ostida
+                # yashiringanda 2026-08-28 dagi `{written: 0, missing: 2}`
+                # dan qaysi nosozlik ekanini aytib bo'lmadi: recorder
+                # umuman yozmayaptimi (`no_segments`) yoki ffmpeg kesa
+                # olmadimi (`cut_failed`).  Ular boshqa-boshqa tuzatish.
+                "no_segments",
+                "cut_failed",
+            )
         },
+        # ffmpeg nima deganini — raqam "nechta" ga, matn "nega" ga javob
+        # beradi.  Ilgari `stderr` jimgina tashlanardi.
+        "clips_last_error": str((status.get("clips") or {}).get("last_error") or "")[:200],
+        # Rasm yozildimi.  Klip uchun hisoblagich bor edi, rasm uchun yo'q.
+        "snapshots": {
+            key: int((status.get("snapshots") or {}).get(key) or 0)
+            for key in ("written", "missing")
+        },
+        # Nechta kamera SOZLANGAN — `cameras_active` yolg'iz "4 tadan
+        # 2 tasi ishlayapti" farqini ayta olmaydi va cloud do'konning
+        # yarmi o'chganini ko'rmaydi.
+        "cameras_configured": int(status.get("cameras_configured") or 0),
+        # Zanjir tirik-u holat fayli qotib qolgan bo'lsa — mijoz uchun bu
+        # "ishlamayapti" bilan bir xil, lekin cloud buni bilmasdi.
+        "status_stale": bool(status.get("status_stale") or False),
+        # Byudjet bosimi: tahlil sekinlashayotgani shundan ko'rinadi.
+        "pressure": dict(status.get("pressure") or {}),
         # 72 soatlik sinovning asosiy mezoni: zanjir necha marta o'zi
         # yiqilib qayta ko'tarilgan.  Cloudda bu son umuman ko'rinmasdi.
         "chain_restarts": int(status.get("restart_count") or 0),
@@ -384,6 +415,14 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         "analyzed": int(status.get("analyzed") or 0),
         "analysis_errors": int(status.get("errors") or 0),
         "queue_errors": int(status.get("action_errors") or 0),
+        # Zanjir NECHTA hodisa yaratgani.  Cloud faqat o'ziga YETIB
+        # KELGANINI biladi; ikki son solishtirilmasa "hodisa yo'lda
+        # yo'qolyapti" holati ko'rinmaydi.
+        "events": int(status.get("events") or 0),
+        # Tarif faollashtirilmagani sabab tashlanganlar.  Panel buni
+        # ko'rsatardi, cloud esa ko'rmasdi — ya'ni "mijozda hodisa bor,
+        # bizda yo'q" savoliga javob faqat do'konda edi.
+        "plan_filtered": int(status.get("plan_filtered") or 0),
         # Davomat va mijoz portreti ISHLAYAPTIMI.
         #
         # 2026-08-26 gacha bu ikkalasi jimgina o'lik edi va tashqaridan
@@ -969,6 +1008,44 @@ def _free_disk_bytes() -> Optional[int]:
         # Disk o'lchovi olinmasa diagnostika BUTUNLAY yiqilmasin — aynan
         # muammoli qurilmada bu 500 bo'lib chiqardi.
         return None
+
+
+#: Diagnostika paketi qanchalik tez-tez o'zi yuborilsin.
+#:
+#: Bugungacha u FAQAT lokal paneldagi tugma bilan yuborilardi va
+#: natijada `device_diagnostics` jadvali production'da BO'SH edi
+#: (2026-08-28 o'lchovi: 0 qator).  Ya'ni support uchun eng batafsil
+#: paket mavjud, endpoint mavjud, 14 kunlik retention mavjud — faqat
+#: hech kim tugmani bosmagan.
+#:
+#: Sutkada bir marta: paket katta va u tez o'zgarmaydi, lekin
+#: nosozlik chiqqanda "oxirgi holat" bir kundan eski bo'lmasligi kerak.
+DIAGNOSTICS_INTERVAL_SEC = 24 * 3600.0
+
+#: Oxirgi muvaffaqiyatli yuborish (monoton soat).  `None` — hali
+#: yuborilmagan, ya'ni birinchi salomdayoq ketadi.
+_last_diagnostics_at: Optional[float] = None
+
+
+def upload_diagnostics_if_due(*, now: Optional[float] = None) -> bool:
+    """Vaqti kelgan bo'lsa diagnostika paketini yuboradi.
+
+    Qaytaradi: yuborildimi.  Xato bo'lsa `False` va keyingi siklda
+    QAYTA urinadi — soat faqat muvaffaqiyatda suriladi, aks holda
+    bitta tarmoq uzilishi paketni bir kunga kechiktirardi.
+    """
+    global _last_diagnostics_at
+    moment = time.monotonic() if now is None else float(now)
+    if _last_diagnostics_at is not None and moment - _last_diagnostics_at < (
+        DIAGNOSTICS_INTERVAL_SEC
+    ):
+        return False
+    result = upload_diagnostics()
+    if not result.get("ok"):
+        logger.debug("diagnostika yuborilmadi: %s", result.get("error"))
+        return False
+    _last_diagnostics_at = moment
+    return True
 
 
 def upload_diagnostics() -> Dict[str, Any]:

@@ -325,7 +325,7 @@ class CloudStore:
                 id TEXT PRIMARY KEY,
                 site_id TEXT NOT NULL,
                 kind TEXT NOT NULL
-                    CHECK(kind IN ('lan_scan','onvif','channels','probe','clean_chains')),
+                    CHECK(kind IN ('lan_scan','onvif','channels','probe','clean_chains','benchmark')),
                 params_enc TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'queued'
                     CHECK(status IN ('queued','running','done','failed','expired')),
@@ -847,7 +847,7 @@ class CloudStore:
             (site_id,),
         ).fetchall()
         conn.close()
-        return [str(row[0]) for row in rows]
+        return [str(row["camera_id"]) for row in rows]
 
     def request_live(
         self, site_id: str, camera_id: str, *, ttl_sec: int = 90, overlay: bool = False
@@ -901,7 +901,11 @@ class CloudStore:
         ).fetchall()
         conn.close()
         return [
-            {"camera_id": str(row[0]), "until": str(row[1]), "overlay": bool(row[2])}
+            {
+                "camera_id": str(row["camera_id"]),
+                "until": str(row["live_until"]),
+                "overlay": bool(row["live_overlay"]),
+            }
             for row in rows
         ]
 
@@ -912,7 +916,9 @@ class CloudStore:
             (site_id, camera_id),
         ).fetchone()
         conn.close()
-        return bool(row and row[0] and str(row[0]) > _iso(_utc_now()))
+        return bool(
+            row and row["live_until"] and str(row["live_until"]) > _iso(_utc_now())
+        )
 
     def set_camera_preview(self, site_id: str, camera_id: str, key: str) -> None:
         """Rasm keldi: so'rov bayrog'i o'chadi, kalit saqlanadi."""
@@ -935,7 +941,7 @@ class CloudStore:
             (site_id, camera_id),
         ).fetchone()
         conn.close()
-        return str(row[0]) if row and row[0] else None
+        return str(row["preview_key"]) if row and row["preview_key"] else None
 
     def set_camera_live_frame(self, site_id: str, camera_id: str, key: str) -> None:
         """Jonli kadr keldi.
@@ -964,7 +970,7 @@ class CloudStore:
             (site_id, camera_id),
         ).fetchone()
         conn.close()
-        return str(row[0]) if row and row[0] else None
+        return str(row["live_key"]) if row and row["live_key"] else None
 
     def camera_frame_at(self, site_id: str, camera_id: str, *, live: bool) -> Optional[str]:
         """Kadr QACHON kelgani (ISO) — panel uni eskirganini bilishi uchun.
@@ -981,7 +987,7 @@ class CloudStore:
             (site_id, camera_id),
         ).fetchone()
         conn.close()
-        return str(row[0]) if row and row[0] else None
+        return str(row[column]) if row and row[column] else None
 
     def record_camera_probe(
         self,
@@ -1393,7 +1399,7 @@ class CloudStore:
             conn.execute(
                 "SELECT sql FROM sqlite_master WHERE type='table' "
                 "AND name='lead_notification_deliveries'"
-            ).fetchone()[0]
+            ).fetchone()["sql"]
             or ""
         )
         if "abandoned" not in delivery_sql:
@@ -1441,7 +1447,49 @@ class CloudStore:
                     id TEXT PRIMARY KEY,
                     site_id TEXT NOT NULL,
                     kind TEXT NOT NULL
-                        CHECK(kind IN ('lan_scan','onvif','channels','probe','clean_chains')),
+                        CHECK(kind IN ('lan_scan','onvif','channels','probe','clean_chains','benchmark')),
+                    params_enc TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'queued'
+                        CHECK(status IN ('queued','running','done','failed','expired')),
+                    progress INTEGER NOT NULL DEFAULT 0,
+                    note TEXT NOT NULL DEFAULT '',
+                    result_enc TEXT,
+                    error TEXT,
+                    frame_key TEXT,
+                    requested_by TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    taken_at TEXT,
+                    updated_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    FOREIGN KEY (site_id) REFERENCES sites(id)
+                );
+                INSERT INTO device_jobs SELECT * FROM device_jobs_old;
+                DROP TABLE device_jobs_old;
+                CREATE INDEX IF NOT EXISTS idx_device_jobs_site
+                    ON device_jobs(site_id, status, created_at DESC);
+                """
+            )
+
+        # `device_jobs.kind` ro'yxatiga `benchmark` qo'shildi.
+        #
+        # Yuqoridagi migratsiya faqat `clean_chains` ni tekshiradi, ya'ni
+        # 2026-08-26 dan keyin qurilgan baza uni O'TKAZIB YUBORADI va
+        # yangi tur baribir `IntegrityError` beradi.  Har yangi tur uchun
+        # ALOHIDA tekshiruv shart — bu xato jonli serverda bir marta
+        # 500 bo'lib chiqqan.
+        jobs_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='device_jobs'"
+        ).fetchone()
+        if jobs_sql and "benchmark" not in str(jobs_sql["sql"]):
+            conn.executescript(
+                """
+                ALTER TABLE device_jobs RENAME TO device_jobs_old;
+                CREATE TABLE device_jobs (
+                    id TEXT PRIMARY KEY,
+                    site_id TEXT NOT NULL,
+                    kind TEXT NOT NULL
+                        CHECK(kind IN ('lan_scan','onvif','channels','probe',
+                                       'clean_chains','benchmark')),
                     params_enc TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL DEFAULT 'queued'
                         CHECK(status IN ('queued','running','done','failed','expired')),
@@ -2352,7 +2400,7 @@ class CloudStore:
         """
         conn = self._connect()
         try:
-            return int(conn.execute("SELECT COUNT(*) FROM sites").fetchone()[0])
+            return int(conn.execute("SELECT COUNT(*) AS n FROM sites").fetchone()["n"])
         finally:
             conn.close()
 
@@ -3140,6 +3188,11 @@ class CloudStore:
         # Yetim zanjirlarni tozalash — jarayon ro'yxatini olish va
         # o'ldirish, sekundlar ichida tugaydi.
         "clean_chains": 30,
+        # Sig'im o'lchovi: qizib sekinlashish bir necha daqiqadan keyin
+        # ko'rinadi, shuning uchun o'lchovning o'zi 60 soniyadan kam
+        # bo'lmaydi.  Ustiga model yuklash va kadr yig'ish — 5 daqiqa
+        # zaxira bilan.
+        "benchmark": 300,
     }
     #: Natija hajmi chegarasi: 64 kanalli NVR ro'yxati ham bemalol
     #: sig'adi, buzuq qurilma esa bazani to'ldira olmaydi.

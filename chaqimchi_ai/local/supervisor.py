@@ -412,6 +412,8 @@ class RetailSupervisor:
             # Klip hisoblagichlari: "hodisa bor, klip yo'q" holatini panel
             # ham, cloud ham ko'rsin.
             "clips": status_file.get("clips") or {},
+            # Rasm yozildimi — klip bilan bir xil sabab.
+            "snapshots": status_file.get("snapshots") or {},
             # Davomat va mijoz portreti sifati.  Holat faylida bor
             # (`retail/service.py: write_status`) va heartbeat ularni
             # kutadi (`local/cloud_config.py`) — o'rtada shu qator

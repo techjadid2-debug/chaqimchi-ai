@@ -361,3 +361,71 @@ def test_clean_chains_is_a_known_kind() -> None:
     from cloud.store import CloudStore
 
     assert "clean_chains" in CloudStore.JOB_DEADLINE_SEC
+
+
+def test_benchmark_is_a_known_kind() -> None:
+    """Sig'im o'lchovi turi ro'yxatda bo'lishi shart."""
+    from cloud.store import CloudStore
+
+    assert "benchmark" in CloudStore.JOB_DEADLINE_SEC
+
+
+def test_an_old_database_learns_the_new_job_kind(tmp_path) -> None:
+    """ESKI bazada ham yangi tur yozila olsin.
+
+    `test_every_known_job_kind_can_actually_be_created` faqat YANGI
+    bazani tekshiradi va aynan shu uning ko'r nuqtasi: production'dagi
+    baza yangi emas.  SQLite'da `CHECK` ni `ALTER` bilan o'zgartirib
+    bo'lmaydi, ya'ni jadval qayta qurilishi SHART — bu unutilganda
+    yangi tur faqat jonli serverda `IntegrityError` bilan yiqiladi va
+    2026-08-26 da `clean_chains` bilan aynan shunday bo'lgan.
+
+    Test eski sxemani qo'lda yasab, `CloudStore` uni ochganda
+    migratsiya ishlashini tekshiradi.
+    """
+    import sqlite3
+
+    from cloud.store import CloudStore
+
+    path = tmp_path / "eski.db"
+    store = CloudStore(path)
+    site = store.create_site("Eski baza", plan="lite")
+    site_id = site["site_id"]
+
+    # Jadvalni `benchmark` dan OLDINGI holatga qaytaramiz.
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        ALTER TABLE device_jobs RENAME TO device_jobs_old;
+        CREATE TABLE device_jobs (
+            id TEXT PRIMARY KEY,
+            site_id TEXT NOT NULL,
+            kind TEXT NOT NULL
+                CHECK(kind IN ('lan_scan','onvif','channels','probe','clean_chains')),
+            params_enc TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'queued'
+                CHECK(status IN ('queued','running','done','failed','expired')),
+            progress INTEGER NOT NULL DEFAULT 0,
+            note TEXT NOT NULL DEFAULT '',
+            result_enc TEXT,
+            error TEXT,
+            frame_key TEXT,
+            requested_by TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            taken_at TEXT,
+            updated_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            FOREIGN KEY (site_id) REFERENCES sites(id)
+        );
+        INSERT INTO device_jobs SELECT * FROM device_jobs_old;
+        DROP TABLE device_jobs_old;
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    # Qayta ochish migratsiyani ishga tushiradi.
+    migrated = CloudStore(path)
+    job = migrated.create_job(site_id, kind="benchmark", params={}, requested_by="test")
+
+    assert job["kind"] == "benchmark"

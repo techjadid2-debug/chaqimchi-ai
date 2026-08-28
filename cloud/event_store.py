@@ -32,6 +32,12 @@ REPORT_EVENT_TYPES = (
     "after_hours_presence",
     "zone_entered",
     "loitering",
+    # Kassada hech kim yo'q.  Uzoq vaqt ro'yxatda YO'Q edi va oqibati
+    # jimgina bo'ldi: 2026-08-28 o'lchovida sinov do'konidan uch kunda
+    # 35 ta chiqqan, lekin `warning` bo'lgani uchun Telegramga ham
+    # bormasdi (`telegram_min_severity: critical`) va hisobotdan ham
+    # filtrlanib tashlanardi — ya'ni ega buni HECH QAYERDA ko'rmasdi.
+    "checkout_unattended",
 )
 
 
@@ -1575,6 +1581,7 @@ class EventStore:
             "after_hours_presence": 0,
             "restricted_zone": 0,
             "loitering": 0,
+            "checkout_unattended": 0,
         }
         # Do'kon egasi sotib olgan raqam — «bugun nechta MIJOZ kirdi».  Xodim
         # kuniga o'n martalab eshikdan o'tadi, shuning uchun uning o'tishlari

@@ -205,7 +205,38 @@ def test_security_events_are_summarised(tmp_path: Path) -> None:
         "after_hours_presence": 1,
         "restricted_zone": 1,
         "loitering": 0,
+        "checkout_unattended": 0,
     }
+
+
+def test_an_unattended_checkout_reaches_the_owner(tmp_path: Path) -> None:
+    """`checkout_unattended` hisobotdan JIMGINA tushib qolgan edi.
+
+    U `REPORT_EVENT_TYPES` da yo'q edi, ya'ni kunlik so'rov uni umuman
+    o'qimasdi; `warning` bo'lgani uchun Telegram trevogasiga ham
+    tushmasdi (`telegram_min_severity: critical`).  Natijada sinov
+    do'konida uch kunda 35 ta hodisa bo'ldi va ega ularni HECH QAYERDA
+    ko'rmadi.
+    """
+    events = [
+        crossing(12, "in"),
+        EdgeEvent(
+            event_type="checkout_unattended",
+            camera_id="kassa-01",
+            severity="warning",
+            occurred_at=moment(13),
+        ),
+        EdgeEvent(
+            event_type="checkout_unattended",
+            camera_id="kassa-01",
+            severity="warning",
+            occurred_at=moment(14),
+        ),
+    ]
+    store = store_with(events, tmp_path)
+
+    assert store.retail_report("site-1", day=DAY)["security"]["checkout_unattended"] == 2
+    assert "⚠️ 2 marta kassada hech kim yo'q" in digest_for(tmp_path, events)
 
 
 # ── Chegaralar ───────────────────────────────────────────────────────────
@@ -770,11 +801,21 @@ def test_recycled_track_id_outside_the_window_still_counts(tmp_path: Path) -> No
     assert report["traffic"]["xodim_chiqarilgan"] == 0
 
 
+def demo_crossings(count: int) -> List[EdgeEvent]:
+    """`count` ta demografiyali kirish (daqiqa 60 dan oshmasin)."""
+    return [
+        demo_crossing(10 + index // 50, index % 50, index, "ayol", 25)
+        for index in range(count)
+    ]
+
+
+def plain_crossings(count: int) -> List[EdgeEvent]:
+    """`count` ta demografiyasiz kirish — qamrovni pasaytirish uchun."""
+    return [crossing(14 + index // 50, "in", index % 50) for index in range(count)]
+
+
 def test_digest_gets_a_demography_line(tmp_path: Path) -> None:
-    store = store_with(
-        [demo_crossing(10, 0, 1, "ayol", 25), demo_crossing(10, 5, 2, "ayol", 28)],
-        tmp_path,
-    )
+    store = store_with(demo_crossings(20) + plain_crossings(20), tmp_path)
 
     text = build_digest(
         "Oq Saroy",
@@ -784,6 +825,42 @@ def test_digest_gets_a_demography_line(tmp_path: Path) -> None:
     )
 
     assert "🚻 100% ayol · 0% erkak · asosan 18-30 yosh" in text
+
+
+def test_a_handful_of_measurements_is_not_shown_as_a_percentage(tmp_path: Path) -> None:
+    """To'qqizta o'lchovda bitta odam foizni 11 punktga siljitadi.
+
+    Jonli holat (27-avgust): 207 kirishdan 9 tasida jins bor edi va
+    xabar "11% ayol · 89% erkak" deb FAKT sifatida yozardi.
+    """
+    store = store_with(demo_crossings(9), tmp_path)
+
+    text = build_digest(
+        "Oq Saroy",
+        DAY.isoformat(),
+        store.stats("site-1", day=DAY),
+        store.retail_report("site-1", day=DAY),
+    )
+
+    assert "🚻" not in text
+    assert "Kirdi: <b>9</b> kishi" in text, "qolgan qatorlar joyida qolsin"
+
+
+def test_low_coverage_is_not_shown_even_with_enough_samples(tmp_path: Path) -> None:
+    """Qamrov past bo'lsa natija shovqinli emas — OG'GAN.
+
+    O'lchanganlar tasodifiy tanlanmagan: ular kameraga eng yaqin
+    o'tganlar.  Shuning uchun son yetarli bo'lsa ham qator chiqmaydi.
+    """
+    store = store_with(demo_crossings(20) + plain_crossings(60), tmp_path)
+    report = store.retail_report("site-1", day=DAY)
+
+    assert report["demografiya"]["hisoblangan"] == 20, "o'lchov hisobotda qoladi"
+    assert report["traffic"]["entered"] == 80
+
+    text = build_digest("Oq Saroy", DAY.isoformat(), store.stats("site-1", day=DAY), report)
+
+    assert "🚻" not in text
 
 
 def test_quiet_day_digest_has_no_demography_line(tmp_path: Path) -> None:

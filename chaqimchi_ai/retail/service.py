@@ -583,6 +583,11 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # kameraga `record_url` berilmagan, `missing` — ffmpeg fayl
         # yozmadi, `dropped` — navbat to'lgan.
         "clips": stats.get("clips") or {},
+        # Rasm YOZILDIMI.  Klip uchun hisoblagich bor edi, rasm uchun
+        # esa yo'q — holbuki "hodisa keldi, rasm yo'q" holati 2026-08-26
+        # da uch soat sezilmadi va uni faqat server logidan topish
+        # mumkin edi.  Endi javob heartbeatda.
+        "snapshots": stats.get("snapshots") or {},
         # Davomat va mijoz portreti ISHLAYAPTIMI.
         #
         # Bu ikkalasi `stats()` da 2026-08-26 da qo'shilgan edi va

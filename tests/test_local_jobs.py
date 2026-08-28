@@ -385,3 +385,66 @@ def test_clean_chains_reports_survivors_instead_of_hiding_them(monkeypatch) -> N
     cloud_jobs.run_one({"job_id": "j2", "kind": "clean_chains", "params": {}})
 
     assert sent[-1]["result"]["remaining"] == 3
+
+
+# ── Masofadan sig'im o'lchash ────────────────────────────────────────────
+#
+# "Avval o'lchang, keyin chegarani o'zgartiring" degan qoida bor edi,
+# lekin uni bajarish MUMKIN EMASDI: o'lchov ma'noli bo'ladigan yagona
+# joy — mijozning o'z kompyuteri — va u yerda na terminal, na `scripts/`
+# bor (Windows payload'iga faqat `chaqimchi_ai` ko'chiriladi).  Natijada
+# 2026-08-28 gacha birorta ham haqiqiy o'lchov olinmagan.
+
+
+def test_benchmark_job_measures_the_real_camera(monkeypatch, tmp_path) -> None:
+    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+
+    monkeypatch.setattr(
+        config_store, "read_raw", lambda: {"cameras": [{"url": "rtsp://kamera/substream"}]}
+    )
+    monkeypatch.setattr(paths, "model_path", lambda: tmp_path / "model.xml")
+    monkeypatch.setattr(benchmark, "frames_from_source", lambda source, count=60: ["kadr"])
+    monkeypatch.setattr(
+        benchmark, "measure_detector", lambda *a, **k: {"per_second": 30.0, "p95_ms": 40.0}
+    )
+    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"per_frame_ms": 1.0})
+    monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {"fps": 25.0})
+    monkeypatch.setattr(benchmark, "capacity_verdict", lambda *a, **k: {"cameras": 4, "ok": True})
+
+    class FakeDetector:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    import chaqimchi_ai.retail.detector_ov as detector_module
+
+    monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", FakeDetector)
+
+    sent = []
+    monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
+
+    cloud_jobs.run_one({"job_id": "b1", "kind": "benchmark", "params": {"seconds": 1}})
+
+    assert sent, "natija cloudga yuborilishi kerak"
+    final = sent[-1]
+    assert final["ok"] is True, final.get("error")
+    assert final["result"]["verdict"]["cameras"] == 4
+
+
+def test_benchmark_refuses_to_measure_without_a_camera(monkeypatch) -> None:
+    """Sun'iy bo'sh kadrda o'lchov YOLG'ON chiqadi — o'lchamagan yaxshi.
+
+    Bo'sh kadrda detektor hech kim topmaydi va natijani dekodlash eng
+    qisqa yo'ldan o'tadi: raqam haqiqiy do'kon kadridan sezilarli
+    yuqori bo'ladi va aynan shunday raqamga suyanib kamera soni va'da
+    qilinardi.
+    """
+    from chaqimchi_ai.local import cloud_jobs, config_store
+
+    monkeypatch.setattr(config_store, "read_raw", lambda: {"cameras": []})
+    sent = []
+    monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
+
+    cloud_jobs.run_one({"job_id": "b2", "kind": "benchmark", "params": {}})
+
+    assert sent[-1]["ok"] is False
+    assert "Kamera manzili yo'q" in sent[-1]["error"]

@@ -1470,6 +1470,14 @@ def _start_config_sync() -> None:
                 # umuman ketmaydi.
                 cloud_config.publish_cameras()
                 cloud_config.upload_heatmaps()
+                # Support paketi — sutkada bir marta, o'zi.
+                #
+                # Ilgari u faqat lokal paneldagi tugma bilan ketardi va
+                # `device_diagnostics` jadvali production'da BO'SH edi:
+                # nosozlik chiqqanda eng batafsil ma'lumot mavjud
+                # bo'lsa-da, uni olishning yagona yo'li mijozdan tugma
+                # bosishini so'rash edi.
+                cloud_config.upload_diagnostics_if_due()
 
                 applied = cloud_config.sync_once()
                 if applied and (

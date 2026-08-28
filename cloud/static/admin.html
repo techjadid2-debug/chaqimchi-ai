@@ -717,6 +717,22 @@
         return parts.length ? `<div class="hint">${parts.join(" · ")}</div>` : "";
       };
 
+      // Hech qachon hodisa bermaydigan chiziq va zonalar.
+      //
+      // Bu nosozlik "xato" ko'rinishida emas, JIMLIK ko'rinishida keladi:
+      // chizma saqlanadi, revision o'sadi, qurilma qabul qiladi — faqat
+      // hodisa yo'q.  2026-08-28 da sinov do'konida 4 pikselli "kirish"
+      // chizig'i va 29x20 pikselli "Taqiqlangan zona" shunday topildi;
+      // ikkinchisi do'konning YAGONA critical signali edi va ikki kun
+      // davomida nol hodisa berdi.
+      const geometryProblems = d.geometry_problems || [];
+      const geometryWarning = geometryProblems.length
+        ? `<div class="note warn"><b>${geometryProblems.length} ta chizma hech qachon ishlamaydi</b>
+            ${geometryProblems.map((p) => `${esc(p.camera_id)} · ${esc(p.kind === "line" ? "chiziq" : "zona")}
+              «${esc(p.name)}» — ${esc(p.problem)}`).join("<br>")}
+            <br><button class="button ghost small" type="button" data-act="geometry" data-id="${esc(d.id)}">Chiziq va zonani ochish</button></div>`
+        : "";
+
       const devices = (d.devices || []).map((dev, i) => `
         <div class="member-row">
           <span class="who"><b>Qurilma ${i + 1}</b>
@@ -736,7 +752,9 @@
         // ko'payib ketgan edi.
         ((d.devices || []).length
           ? `<div class="action-row"><button class="button ghost small" type="button"
-               data-act="clean-chains" data-id="${esc(d.site.id)}">Eski jarayonlarni tozalash</button></div>`
+               data-act="clean-chains" data-id="${esc(d.site.id)}">Eski jarayonlarni tozalash</button>
+             <button class="button ghost small" type="button"
+               data-act="benchmark" data-id="${esc(d.site.id)}">Sig'imni o'lchash</button></div>`
           : "");
 
       // Bajarilganlari yig'ib qo'yiladi: ekranda faqat qolgan ishlar tursin.
@@ -775,6 +793,7 @@
           <div class="card-head"><h2>Qurilma va kamera</h2></div>
           ${cameraRows}
           ${devices || '<p class="hint">Do\'kon kompyuteri hali ulanmagan.</p>'}
+          ${geometryWarning}
           <div class="action-row">
             <button class="button primary" type="button" data-act="camera-add" data-id="${esc(d.id)}">Kamera qo'shish</button>
             <button class="button ghost" type="button" data-act="cameras" data-id="${esc(d.id)}">Kamera soni</button>
@@ -1244,6 +1263,22 @@
         notify(answer.job && answer.job.reused
           ? "Tozalash allaqachon boshlangan — natijani kuting"
           : "Tozalash yuborildi — natija bir necha soniyada ko'rinadi");
+      },
+      // Sig'im o'lchovi — protsessorni to'liq yuklaydi, shuning uchun
+      // ogohlantirish bilan.  Natija diagnostika oynasida ko'rinadi.
+      "benchmark": async (el) => {
+        const ok = await confirmDialog({
+          title: "Sig'imni o'lchash",
+          text: "O'lchov bir necha daqiqa davom etadi va shu vaqtda tahlil "
+            + "sekinlashadi. Natija «Diagnostika» bo'limida ko'rinadi.",
+          confirmLabel: "O'lchash",
+        });
+        if (!ok) return;
+        const answer = await api(`/api/v1/admin/sites/${el.dataset.id}/jobs/benchmark`,
+          { method: "POST" });
+        notify(answer.job && answer.job.reused
+          ? "O'lchov allaqachon ketyapti — natijani kuting"
+          : "O'lchov boshlandi — natija bir necha daqiqada «Diagnostika» da ko'rinadi");
       },
       "alert-test": async () => {
         await api("/api/v1/admin/alerts/test", { method: "POST" });

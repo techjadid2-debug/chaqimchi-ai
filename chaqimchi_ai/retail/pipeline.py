@@ -36,9 +36,11 @@ from datetime import time as clock_time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from chaqimchi_ai import limits
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.limits import store_now
 from chaqimchi_ai.retail import demography as demography_module
+from chaqimchi_ai.retail import ringbuffer
 from chaqimchi_ai.retail.broker import FrameBroker
 from chaqimchi_ai.retail.claims import Priority
 from chaqimchi_ai.retail.ringbuffer import RingBuffer
@@ -75,15 +77,11 @@ MAX_PENDING_CLIPS = 200
 #: Hodisaning o'zi saqlanaveradi — issiqlik xaritasi shunga tayanadi.
 #: Yuz kadrining eng kichik tomoni (piksel).
 #:
-#: `face-reidentification-retail-0095` 128x128 tekislangan yuz kutadi.
-#: Undan kichik kesmadan chiqadigan vektor — shovqin, va u hech qachon
-#: moslik chegarasidan o'tmaydi.
-#:
-#: Ilgari bu yerda 16 px turardi.  U "bo'sh kesma bo'lmasin" degan
-#: himoya edi va yuzning o'qilishi haqida hech narsa demasdi; jonli
-#: do'konda oqibati 4 606 ta ishlatib bo'lmaydigan kadr bo'ldi
-#: (o'rtacha 727 bayt) va davomat umuman ishlamadi.
-FACE_MIN_CROP_PX = 96
+#: Chegara va kesma ulushi endi `chaqimchi_ai/limits.py` da — bitta
+#: manbada.  Ular `scene_analytics` dagi ramka chegarasi bilan ZID
+#: bo'lib qolgan edi (izoh o'sha faylda).  Nom shu yerda qoladi:
+#: mavjud chaqiruvlar va testlar buzilmasin.
+FACE_MIN_CROP_PX = limits.FACE_MIN_CROP_PX
 
 SECURITY_MEDIA_EVENTS = frozenset(
     {"camera_tampered", "after_hours_presence", "zone_entered"}
@@ -162,7 +160,19 @@ class _Totals:
     action_errors: int = 0
     actions: Dict[str, int] = field(default_factory=dict)
     clips_written: int = 0
+    #: `no_segments` va `cut_failed` yig'indisi.  Eski nom saqlanadi:
+    #: cloud modeli va admin paneli allaqachon shu maydonni o'qiydi.
     clips_missing: int = 0
+    #: Recorder umuman yozmayapti — `record_url` xato yoki ffmpeg o'lgan.
+    clips_no_segments: int = 0
+    #: Segment bor, lekin ffmpeg kesa olmadi — butunlay boshqa nosozlik.
+    #:
+    #: 2026-08-28 da jonli do'konda `{written: 0, missing: 2}` ko'rindi va
+    #: bu raqamdan QAYSI nosozlik ekanini aytib bo'lmasdi — tashxis
+    #: do'konga borishni talab qilardi.
+    clips_cut_failed: int = 0
+    #: Oxirgi xatoning matni (ffmpeg chiqishi) — nol emas, JUMLA.
+    clips_last_error: str = ""
     clips_dropped: int = 0
     clips_unavailable: int = 0
     tamper_alerts: int = 0
@@ -564,7 +574,7 @@ class RetailPipeline:
         # turganda ham yuz kesilib qolmasin.
         margin = int((x2 - x1) * 0.10)
         top = max(0, y1)
-        bottom = min(height, y1 + max(1, int((y2 - y1) * 0.35)))
+        bottom = min(height, y1 + max(1, int((y2 - y1) * limits.FACE_CROP_RATIO)))
         left = max(0, x1 - margin)
         right = min(width, x2 + margin)
         # Chegara 16 px EMAS, 96 px.
@@ -675,19 +685,33 @@ class RetailPipeline:
                 continue
             output = Path(self.clip_dir or ".") / f"{item.camera_id}-{item.event.event_id}.mp4"
             try:
-                path = buffer.extract(
+                result = buffer.extract_detailed(
                     item.moment,
                     output=output,
                     pre_sec=self.pre_sec,
                     post_sec=self.post_sec,
                 )
-            except Exception:
-                path = None
+            except Exception as exc:
+                result = ringbuffer.ClipResult(None, ringbuffer.CUT_FAILED, repr(exc))
                 logger.exception("[%s] klip kesilmadi", item.camera_id)
-            if path is None:
+            if result.path is None:
                 with self._lock:
                     self._totals.clips_missing += 1
+                    if result.reason == ringbuffer.NO_SEGMENTS:
+                        self._totals.clips_no_segments += 1
+                    else:
+                        self._totals.clips_cut_failed += 1
+                    self._totals.clips_last_error = str(result.detail or result.reason or "")
+                # Sabab LOGGA ham tushsin: hisoblagich "nechta" ga javob
+                # beradi, log esa "nega" ga.
+                logger.warning(
+                    "[%s] klip chiqmadi (%s): %s",
+                    item.camera_id,
+                    result.reason,
+                    result.detail,
+                )
                 continue
+            path = result.path
             with self._lock:
                 self._totals.clips_written += 1
             item.event.clip_path = str(path)
@@ -770,6 +794,11 @@ class RetailPipeline:
                 "pending": len(self._pending),
                 "written": self._totals.clips_written,
                 "missing": self._totals.clips_missing,
+                # `missing` ning ikki sababi — ular boshqa-boshqa
+                # tuzatishni talab qiladi, shuning uchun alohida.
+                "no_segments": self._totals.clips_no_segments,
+                "cut_failed": self._totals.clips_cut_failed,
+                "last_error": self._totals.clips_last_error,
                 "dropped": self._totals.clips_dropped,
                 "unavailable": self._totals.clips_unavailable,
             },

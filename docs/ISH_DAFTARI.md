@@ -7,116 +7,115 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-08-27
+## HOZIRGI HOLAT · 2026-08-28
 
-- **Cloud 0.6.21 jonli** (ikki marta deploy: 12:30 va 13:25 CEST,
-  hamma konteyner healthy).
-- **Windows 0.6.21 nashr qilindi** — vaqt mintaqasi, telemetriya teshigi
-  va hodisa yo'qotilishi tuzatildi. Sinov do'koni `auto` rejimida.
-- **Panel qo'ng'irog'i tuzatildi va JONLI TASDIQLANDI.** U production'da
-  48 soat davomida **har safar 500** qaytargan (49 marta) — kechagi
-  ishning asosiy funksiyasi umuman ishlamagan. Deploydan keyin egasining
-  o'z brauzeridan (83.222.7.214) **200 OK**, log'da 0 ta 500.
-- **Do'kon 5070 kompyuterining vaqt mintaqasi UTC+3 edi** (Toshkent
-  UTC+5). Mijoz soatni to'g'riladi, zanjir masofadan qayta ishga
-  tushirildi (`clean_chains`, `restarts` 1→2, `analyzed` 53 616→88).
-  0.6.21 dan boshlab zanjir mashina zonasiga UMUMAN qaramaydi.
-- **Yetimlar rostdan o'lgan** — 24 soatda faqat `0.6.20` hodisa yubordi.
-  `camera-02` yuz kadri toshqini ham to'xtagan (bugun 0 ta).
-- Shox: `loitering-rasmsiz`. Asosiy shox `main`.
-- Server: `169.58.198.111`, kod `/home/deploy/chaqimchi-ai`.
+- **Jonli tekshiruv o'tkazildi** (PostgreSQL, `device_metrics`, konteyner
+  loglari, 3 kunlik telemetriya). 27-avgust tuzatishlari **ishlagani
+  tasdiqlandi**:
+  - vaqt mintaqasi tuzalgan — `device_tz_offset_min: 300`,
+    `clock_skew_sec: -0.7`;
+  - ertalabki yolg'on trevoga **26 tadan 0 ga** tushdi;
+  - yetim zanjirlar o'lgan — `stale_chains: {}`, bitta versiya `0.6.21`;
+  - panel qo'ng'irog'i — 24 soatlik logda **0 ta** 5xx;
+  - `outbox_poisoned` **o'smayapti** (4 401 → 2 752), `pending: 0`;
+  - zanjir sog'lom: `analyzed` 52 835, fps 17.4, latency 47 ms,
+    `analysis_errors: 0`, CPU atigi **8.8%**.
+- **Kod 0.6.22 ga ko'tarildi** — reliz hali NASHR QILINMAGAN.
+- Cloud tuzatishlari (1.1–1.4) **deploy qilinmagan**.
+- Shox: `loitering-rasmsiz`. Server: `169.58.198.111`.
 - **Sotuv hali ochilmagan** — pastdagi ikkita darvoza yopiq.
 
 ## KEYINGI ISH
 
-**1) Bugun kechqurun 17:05 UTC (22:05 Toshkent) — mintaqani tasdiqlash.**
-Bu yagona to'g'ridan-to'g'ri dalil:
+**1) Cloud'ni deploy qiling** (qurilma relizini kutmaydi):
 
-```sql
-select occurred_at, metadata_json->>'local_time'
-from production_events where event_type='after_hours_presence'
-order by occurred_at desc limit 5;
+```bash
+rsync -az --delete ... root@169.58.198.111:/home/deploy/chaqimchi-ai/
+ssh root@169.58.198.111 'cd /home/deploy/chaqimchi-ai && \
+  set -a && . /etc/chaqimchi/backup.env && set +a && \
+  CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh'
 ```
-Birinchi tungi hodisa **17:00 UTC atrofida** chiqsa mintaqa to'g'ri
-(22:00 Toshkent). 19:00 UTC da chiqsa — hali UTC+3.
-0.6.21 yetgach heartbeat `device_tz_offset_min: 300` yuboradi va
-taxmin qilish kerak bo'lmaydi.
 
-**2) 0.6.21 yetganini tasdiqlash** va endi ROSTDAN ishlaydigan
-diagnostikani o'qish:
+Deploydan keyin tekshiring: admin panelda sinov do'koni kartochkasida
+**«2 ta chizma hech qachon ishlamaydi»** qatori chiqishi kerak (4 px
+chiziq va 29x20 px zona).
 
+**2) 0.6.22 relizini chiqaring** — usiz AI tuzatishlari do'konga yetmaydi:
+
+```bash
+PYTHONPATH="$PWD" CHAQIMCHI_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
+  python scripts/build_windows_payload.py
+makensis -V2 scripts/windows_installer.nsi
+PYTHONPATH="$PWD" CHAQIMCHI_RELEASE_HOST=root@169.58.198.111 \
+  ./scripts/publish_windows_release.sh --exe releases/Chaqimchi_AI_Setup.exe
 ```
-docker compose -f docker-compose.chaqimchi.yml exec -T cloud \
-  python scripts/rollout.py --holat      # 0.6.20 → 0.6.21
-```
-Heartbeatda ko'rilsin: `face_crops` va `demography` noldan farqli
-(uch kun davomida ular YOLG'ON nol edi), `record_url_set` har kamera
-uchun, `config_revision: 11`.
 
-**3) `outbox_poisoned` kuzatilsin** — 3 375 dan **o'smasligi** kerak.
-O'ssa: tarmoq/5xx endi urinishlar hisobini yemaydi, ya'ni o'sish faqat
-cloud hodisani rostdan rad etayotganini bildiradi.
+**3) Sig'imni O'LCHANG** — admin panelda «Sig'imni o'lchash» tugmasi
+(0.6.22 kerak). Natija `device_diagnostics` da ko'rinadi. Hozirgi
+zaxira katta ko'rinadi (CPU 8.8%, RAM 40%, 2 kamera), lekin
+**o'lchovsiz 720p ga o'tilmaydi**.
 
-**4) Asosiy oqim narxini o'lchash** (kelishilgan yo'l) —
-`scripts/benchmark_n100.py` **haqiqiy RTSP bilan** (`--source` bermasangiz
-o'lchov yolg'on). Bitta o'lchov uchta savolga javob beradi: klip
-(`clips.written` uch kun 0), demografiya (257 kirishdan 2 tasi) va
-davomat. Uchalasi ham bir ildizdan: tahlil 640×360 substreamdan ketadi.
+**4) O'lchov ijobiy bo'lsa — mijoz kamerasida substream 1280x720**
+(kamera veb-interfeysidan, kod o'zgarmaydi). Shundan keyin 24 soat
+kuzating: `face_crops.written > 0` bo'lishi kerak.
 
-**5) C1, haqiqiy do'konda qabul sinovi** — 72 soatlik soak
+**5) Chizmani mijoz bilan tuzating** — «Taqiqlangan zona» qayta
+chizilsin (hozir 29x20 px, ikki kundan beri 0 ta hodisa) va
+camera-02 dagi 4 pikselli «kirish» chizig'i o'chirilsin.
+
+**6) `camera-02` ga `record_url` berilmagan** (`record_url_set: false`)
+— sozlash ustasida `suggest_record_url()` natijasi nega
+qo'llanmaganini tekshiring.
+
+**7) C1, haqiqiy do'konda qabul sinovi** — 72 soatlik soak
 (`scripts/soak_windows.py`). Bu tugamaguncha `available_feature_codes()`
 production'da bo'sh ro'yxat qaytaradi (`cloud/store.py:52`).
 
 ## OCHIQ MUAMMOLAR
 
-**✅ YOPILDI — "camera-02 yuz kadri to'xtamayapti"**
+**✅ YOPILDI — vaqt mintaqasi**
 
-Sabab **yetim zanjirlar** bo'lgan. 26-avgustda tozalangandan keyin
-o'lchov: 27-avgust kuni `camera-02` dan **0 ta** `face_captured`
-(oldingi kuni 2 383 ta). Alohida qazish shart emas edi.
+`device_tz_offset_min: 300` (Toshkent UTC+5), `clock_skew_sec: -0.7`.
+Ertalabki yolg'on trevoga 27-avg **26 ta** → 28-avg **0 ta**.
 
-**⚠ DAVOMAT: bugun bitta yuz kadri**
+**✅ YOPILDI — yetim zanjirlar**
 
-Ikki chegara zid bo'lib qolyapti:
+`stale_chains: {}`, bitta versiya, `chain_restarts: 2`.
 
-| Gate | Joyi | 640×360 substreamda talab |
-|---|---|---|
-| `FACE_MIN_BBOX_RATIO = 0.28` | `scene_analytics.py:155`, chaqiruv `:509` | bbox balandligi ≥ **101 px** |
-| `FACE_MIN_CROP_PX = 96`, crop = `0.35 × bbox` | `pipeline.py:86`, chaqiruv `:573` | bbox balandligi ≥ **274 px** (ratio 0.76) |
+**✅ YOPILDI (kodda) — davomat chegaralari zid edi**
 
-Yangi dalil: cloudda saqlangan `face_captured` rasmlarining **o'rtacha
-hajmi 2 373 bayt**, boshqa turlar esa ~100 KB. Ya'ni 96 px chegarasidan
-o'tgan kesma ham yuz tanish uchun juda mayda.
+Jonli dalil: `face_crops {written: 0, too_small: 93}` — 93 urinishdan
+**0 tasi** o'tgan. Sabab matematik: `0.35 x bbox >= 96 px` uchun
+`bbox >= 275 px` kerak, `FACE_MIN_BBOX_RATIO = 0.28` esa 640x360 da
+atigi 101 px kafolatlardi. Endi ikkala chegara `limits.py` dagi bitta
+formuladan (`face_min_bbox_px`, `face_min_bbox_ratio`).
+**Lekin 720p ga o'tmaguncha davomat baribir ishlamaydi** — 360p da
+formula halol javob beradi: 0.76, ya'ni amalda imkonsiz.
 
-**Kelishilgan yechim:** avval `benchmark_n100.py` bilan asosiy oqim
-narxi o'lchansin, keyin ikkala chegara bitta formuladan chiqarilsin.
+**⚠ KLIP YOZILMAYDI — `record_url` BOR bo'lsa ham**
 
-**❌ TASHXIS NOTO'G'RI EDI — demografiya "o'chiq" emas**
+`clips {written: 0, missing: 2}`, camera-01 da `record_url_set: true`.
+Ilgari tashxis "manzil berilmagan" edi va u **noto'g'ri**. 0.6.22 dan
+boshlab `missing` ikkiga bo'linadi: `no_segments` (recorder umuman
+yozmayapti) va `cut_failed` (ffmpeg kesa olmadi) + `clips_last_error`.
+Reliz yetgach javob bitta heartbeat masofasida bo'ladi.
 
-Ilgari bu yerda "`demography_daily` butunlay 0, funksiya o'chiq" deb
-yozilgan edi. Baza boshqasini ko'rsatadi: **257 ta "kirish"
-kesishmasidan 2 tasida** `jins` metadatasi bor. Model yuklangan va
-ishlayapti — 640×360 substreamda yuz **topolmayapti** (0.8%).
+**⚠ DEMOGRAFIYA 6%**
 
-Nega noto'g'ri tashxis qo'yilgan: heartbeatdagi `demography.attempts`
-uch kun davomida yolg'on `0` ko'rsatgan (pastdagi telemetriya teshigi).
+`{attempts: 95, found: 6}`; kunlik: 207 kirishdan 9 tasi (4.3%).
+Bir ildizdan — 640x360 oqim. 720p buni ikki barobar yaxshilashi kerak.
+Kunlik hisobot endi bu foizni **ko'rsatmaydi** (pastga qarang).
 
-**⚠ KLIP HECH QACHON YOZILMAGAN**
+**⚠ `zone_entered` nol — sabab TOPILDI**
 
-`clips.written` uch kunlik 1 515 o'lchovda **doim 0**, `unavailable` 43
-gacha. Ya'ni kameraga `record_url` (asosiy oqim) berilmagan va panelda
-"Dalilni ochish" da video yo'q.
-
-0.6.21 dan boshlab heartbeat har kamera uchun `record_url_set` yuboradi,
-ya'ni javob masofadan ko'rinadi. Bugungacha u faqat diagnostika
-paketida bo'lardi va `device_diagnostics` jadvali **bo'sh** — paket hech
-qachon yuborilmagan.
-
-**⚠ `zone_entered` 26-avgust 13:37 dan beri nol**
-
-Aynan yetimlar o'ldirilgan daqiqa. Zonalar yuklangan
-(`queue_threshold_exceeded` o'sha "Kassa navbati" zonasidan ishlayapti),
-shuning uchun sabab boshqa. 0.6.21 yetgach 24 soat kuzatilsin.
+Chizmaning o'zi yaroqsiz: «Taqiqlangan zona» polygoni x∈[0.340, 0.385],
+y∈[0.046, 0.102] — 640x360 da **29x20 piksel**, kadr tepasida.
+`scene_analytics.py:544` zonani bbox **markazi** bo'yicha tekshiradi va
+markaz u yerga tushmaydi. 57 ta eski hodisa yetim zanjirlardan kelgan
+va tozalash daqiqasida (26-avg 13:37) to'xtagan.
+Xuddi shunday: camera-02 da «kirish» chizig'i **4 piksel** uzunlikda.
+Endi admin panelda ro'yxat chiqadi (`cloud/config_health.py`), lekin
+**chizmani mijoz bilan qayta chizish kerak**.
 
 **Sotuvni to'sib turgan ikki darvoza**
 
@@ -132,19 +131,77 @@ shuning uchun sabab boshqa. 0.6.21 yetgach 24 soat kuzatilsin.
   topilmagan. Yiqilsa — o'zingizdan deb o'ylamang.
 - **`cloud/store.py` faqat SQLite** — litsenziya, to'lov va portal
   parollari production'da ham SQLite'da (audit YUQORI-10). Shu sabab
-  `Dockerfile.cloud` da `--workers 1`.
+  `Dockerfile.cloud` da `--workers 1`. (Raqamli qator o'qish naqshi
+  2026-08-28 da profilaktika tariqasida tozalandi.)
 - **Rate limit xotirada** (`cloud/ratelimit.py`) — restart bilan
   aylanib o'tiladi (audit O'RTA-9).
 - **CSP sarlavhasi yo'q** (audit O'RTA-2).
 - **Token `localStorage` da**, server tomonda "chiqish" yo'q (O'RTA-8).
-- **AI aniqligi hech qachon o'lchanmagan** (YUQORI-6) — C bosqichida.
-- **Video va AI yo'lida haqiqiy sinov yo'q** (YUQORI-8).
+- **AI aniqligi hech qachon o'lchanmagan** (YUQORI-6) — endi asbob bor
+  (masofaviy `benchmark` topshirig'i), o'lchov hali olinmagan.
+- **Haqiqiy video/model bilan test yo'q** (YUQORI-8) — chegaralar
+  kontrakti (`test_face_crop_contract.py`) yopildi, model yo'li esa yo'q.
 - **Faqat o'zbek tili** — rus tili yo'q (O'RTA-3).
-- **Vision agent (Gemini) deyarli ishlatilmagan** — 3 ta ish,
-  `vision_observations` 0 ta. Saytda va'da qilinmagan, shuning uchun
-  muammo emas; lekin funksiya sifatida o'lik.
+- **Vision agent (Gemini) deyarli ishlatilmagan** — `vision_observations`
+  0 ta. Saytda va'da qilinmagan, lekin funksiya sifatida o'lik.
+- **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Ikki fayldagi ikki son bir-birini INKOR QILISHI mumkin va buni
+  hech qaysi test ko'rmaydi.** `scene_analytics.FACE_MIN_BBOX_RATIO`
+  ramka uchun 0.28 ga ruxsat berardi, `pipeline.FACE_MIN_CROP_PX` esa
+  kesma uchun 96 px talab qilardi. 640x360 da birinchisi 101 px beradi,
+  ikkinchisi 275 px talab qiladi — ya'ni chegara **hech qachon**
+  o'tolmasdi. Har modul alohida to'g'ri edi, 1 835 test o'tardi,
+  davomat esa oylab ishlamadi. Ikki modul o'rtasidagi kelishuvni
+  tekshiradigan test kerak — `tests/test_face_crop_contract.py`.
+
+- **`int()` yaxlitlashi chegarani bir piksel bilan buzadi.**
+  `96 / 0.35 = 274.3`, lekin `int(274 * 0.35) = 95` — 274 px ramka
+  baribir rad etilardi. `limits.face_min_bbox_px()` natijani taxmin
+  qilmaydi, TEKSHIRADI (`while` bilan).
+
+- **"Kalit so'ralyaptimi" testi kalit UNUTILGANINI ko'rmaydi.**
+  `test_status_chain.py` uch marta takrorlangan xatoni to'xtata olmasdi,
+  chunki u faqat "so'ralgan kalit bormi" ni tekshirardi: kalit
+  unutilganda uni hech kim so'ramaydi va test ham jim qoladi. Endi
+  **teskari yo'nalish** ham qulflangan — ishlab chiqarilgan har kalit
+  yo ketishi, yoki sababli ro'yxatga yozilishi shart.
+
+- **Kod to'g'ri bo'lishi yetarli emas — u CHAQIRILISHI ham kerak.**
+  Diagnostika paketi to'liq yozilgan edi (yig'uvchi, endpoint, jadval,
+  14 kunlik retention, admin ko'rinishi) va `device_diagnostics`
+  jadvalida **0 qator** turardi: yuborishning yagona yo'li do'kondagi
+  paneldagi tugma edi. Yangi funksiya qo'shsangiz: uni kim va qachon
+  chaqiradi?
+
+- **`scripts/` do'kon kompyuterida YO'Q.** Windows payload'iga faqat
+  `chaqimchi_ai` ko'chiriladi (`build_windows_payload.py: CODE_DIRS`).
+  Shu sabab "avval `benchmark_n100.py` bilan o'lchang" degan tavsiya
+  bajarib bo'lmaydigan edi — o'lchov ma'noli bo'ladigan yagona mashinada
+  skript yo'q. Qurilmada ishlashi kerak bo'lgan kod `chaqimchi_ai`
+  ichida bo'lsin.
+
+- **Har yangi `device_jobs.kind` uchun ALOHIDA migratsiya kerak.**
+  Mavjud migratsiya `clean_chains` ni tekshiradi, ya'ni undan keyin
+  qurilgan bazani o'tkazib yuboradi. `benchmark` uchun alohida blok
+  yozildi va `test_an_old_database_learns_the_new_job_kind` uni
+  qulfladi (eski sxema qo'lda yasab sinaladi).
+
+- **Chizilgan zona/chiziq YAROQSIZ bo'lishi mumkin va tizim jim
+  turadi.** 4 pikselli chiziq va 29x20 pikselli zona saqlandi, revision
+  o'sdi, qurilma qabul qildi — faqat hodisa yo'q edi. Nosozlik "xato"
+  ko'rinishida emas, JIMLIK ko'rinishida keladi.
+  `cloud/config_health.py` endi buni admin uchun ko'rsatadi.
+
+- **Hisobot kichik namunadan foiz chiqarmasin.** Kunlik xabar 207
+  kirishdan 9 tasi o'lchanganda "11% ayol · 89% erkak" deb FAKT
+  sifatida yozardi. Ikki xato birga: n=9 da bitta odam foizni 11
+  punktga siljitadi, va 4% qamrovda o'lchanganlar tasodifiy tanlanmagan
+  (kameraga eng yaqin o'tganlar) — natija shovqinli emas, **OG'GAN**.
+  `trust_score.py` bu intizomni allaqachon to'g'ri bajaradi; hisobot
+  ham endi shunday.
 
 - **SQLite testda o'tadi, PostgreSQL production'da yiqiladi.**
   `cloud/event_store.py` da `fetchone()[0]` yozmang. `sqlite3.Row`
@@ -229,6 +286,96 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-28 — Jonli tekshiruv: nima ishlaydi, nima yolg'on gapiradi (0.6.22)
+
+Nima: bulut va Do'kon 5070 jonli ma'lumotdan tekshirildi. 27-avgust
+tuzatishlari **ishlagani tasdiqlandi**, lekin AI tomonda uchta funksiya
+nol ko'rsatayotgani va kunlik hisobot **yolg'on raqam** yozayotgani
+aniqlandi. Sakkizta tuzatish kiritildi.
+
+**Tasdiqlangan (jonli dalil bilan):** `device_tz_offset_min: 300`
+(mintaqa tuzalgan), ertalabki yolg'on trevoga 26 → **0**,
+`stale_chains: {}` (yetimlar o'lgan), 24 soatlik logda **0 ta** 5xx,
+`outbox_poisoned` 4 401 → 2 752 (o'smayapti), `analyzed` 52 835,
+CPU atigi **8.8%**.
+
+**T1 · Kunlik hisobot YOLG'ON foiz yozardi.** 27-avgust: 207 kirishdan
+9 tasida jins bor edi, xabar esa "11% ayol · 89% erkak" deb fakt
+sifatida chiqardi. Endi `🚻` qatori faqat namuna vakillik qilganda
+chiqadi (`>= 20` o'lchov **va** `>= 30%` qamrov). **Xabar shakli
+o'zgarmadi** — qator shunchaki chiqmaydi.
+
+**T2 · `checkout_unattended` egaga HECH QAYERDA ko'rinmasdi.**
+Uch kunda 35 ta hodisa: `REPORT_EVENT_TYPES` da yo'q edi (hisobotdan
+filtrlanardi) va `warning` bo'lgani uchun Telegramga ham bormasdi.
+Endi mavjud `⚠️` qatoriga qo'shiladi.
+
+**T3 · Davomat chegaralari bir-birini inkor qilardi.** Jonli dalil:
+`face_crops {written: 0, too_small: 93}` — 93 urinishdan 0 tasi.
+`0.35 x bbox >= 96` uchun `bbox >= 275 px` kerak, `FACE_MIN_BBOX_RATIO
+= 0.28` esa 360p da 101 px kafolatlardi. Endi ikkalasi `limits.py`
+dagi bitta formuladan va u kadr balandligiga moslashadi
+(360p → 0.76, 720p → 0.38, 1080p → 0.25).
+
+**T4 · Klip: `record_url` BOR, klip YO'Q.** Oldingi tashxis
+("manzil berilmagan") **noto'g'ri** edi. `missing` endi ikkiga
+bo'linadi — `no_segments` va `cut_failed` — va ffmpeg xatosi
+`clips_last_error` da saqlanadi.
+
+**T5 · `zone_entered` nolining sababi topildi — chizmaning O'ZI
+yaroqsiz.** «Taqiqlangan zona» 640x360 da **29x20 piksel**, kadr
+tepasida; camera-02 dagi «kirish» chizig'i **4 piksel**. Zona bbox
+markazi bo'yicha tekshiriladi va markaz u yerga tushmaydi. 57 ta eski
+hodisa yetim zanjirlardan kelgan. Yangi `cloud/config_health.py` buni
+admin panelida ko'rsatadi (egaga tegilmaydi — sizning qaroringiz).
+
+**T6 · Diagnostika paketi hech qachon yuborilmagan.**
+`device_diagnostics` jadvalida **0 qator**: kod to'liq yozilgan edi,
+lekin uni faqat do'kondagi paneldagi tugma yuborardi. Endi sutkada bir
+marta o'zi ketadi.
+
+**T7 · Status zanjirining 3→4 bo'g'inida 7 maydon yo'qolardi.**
+`cameras_configured`, `pressure`, `status_stale`, `events`,
+`plan_filtered` + yangi `snapshots{}` va klip sabablari qo'shildi.
+`test_status_chain.py` endi **teskari yo'nalishni** ham qulflaydi.
+
+**T8 · Sig'imni masofadan o'lchash mumkin bo'ldi.** O'lchov yadrosi
+`scripts/benchmark_n100.py` dan `chaqimchi_ai/local/benchmark.py` ga
+ko'chdi (payload'da `scripts/` yo'q edi, ya'ni tavsiya bajarib
+bo'lmasdi) va admin panelda «Sig'imni o'lchash» tugmasi paydo bo'ldi.
+
+Profilaktika: `cloud/store.py` dagi 8 ta raqamli qator o'qish nomli
+aliasga o'tkazildi va naqsh uchala baza moduli uchun testda qulflandi.
+
+Qayerda: `cloud/digest.py`, `cloud/event_store.py`,
+`cloud/config_health.py` (yangi), `cloud/main.py`, `cloud/store.py`,
+`cloud/static/admin.html`, `cloud/static/owner.html`,
+`chaqimchi_ai/limits.py`, `chaqimchi_ai/scene_analytics.py`,
+`chaqimchi_ai/retail/pipeline.py`, `chaqimchi_ai/retail/ringbuffer.py`,
+`chaqimchi_ai/retail/service.py`, `chaqimchi_ai/local/benchmark.py`
+(yangi), `chaqimchi_ai/local/cloud_config.py`,
+`chaqimchi_ai/local/cloud_jobs.py`, `chaqimchi_ai/local/supervisor.py`,
+`chaqimchi_ai/local/app.py`.
+
+Test: `test_config_health.py` (8 ta, yangi — jonli revision 11
+konfiguratsiyasi kirish sifatida), `test_face_crop_contract.py` (8 ta,
+yangi), `test_device_diagnostics.py` (6 ta, yangi),
+`test_status_chain.py` (+5, teskari yo'nalish),
+`test_owner_report.py` (+4), `test_retail_pipeline.py` (+2),
+`test_local_jobs.py` (+2), `test_device_jobs.py` (+2, eski sxema
+migratsiyasi), `test_owner_notifications.py` (naqsh uchala modulga).
+Jami **1 873 test** o'tdi (avval 1 835), lint va TS typecheck toza.
+
+Diqqat — uchta narsa:
+
+* **720p ga o'tmaguncha davomat baribir ishlamaydi.** Formula endi
+  halol javob beradi (360p da 0.76 — amalda imkonsiz), lekin bu
+  nosozlikni KO'RSATADI, tuzatmaydi. Avval sig'imni o'lchang.
+* **Chizmani mijoz bilan qayta chizish kerak.** Admin paneldagi ro'yxat
+  faqat ko'rsatadi; 29x20 pikselli zona o'zidan tuzalmaydi.
+* Ikkita mutatsiya sinovi o'tkazildi (kalitni va migratsiyani ataylab
+  o'chirib): ikkala yangi qulf ham **rostdan ushlaydi**.
 
 ### 2026-08-27 — Jonli serverdan to'liq tekshiruv: oltita nosozlik (0.6.21)
 Nima: bulut va Do'kon 5070 jonli ma'lumotdan tekshirildi (PostgreSQL,

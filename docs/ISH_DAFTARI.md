@@ -26,7 +26,8 @@
   Admin panelda sinov do'koni kartochkasida ikkita yaroqsiz chizma
   ro'yxatga chiqdi (4 px chiziq, 29x20 px zona) va `device_jobs`
   CHECK ro'yxatida `benchmark` bor — migratsiya jonli bazada ishladi.
-- **Windows 0.6.22 NASHR QILINDI** (imzo tekshirildi, tashqaridan
+- **Windows 0.6.23 NASHR QILINDI** (0.6.22 dagi o'lchov xatosi
+  tuzatilgan holda). Oldingi holat: (imzo tekshirildi, tashqaridan
   ochiladi: `dl.chaqimchi.uz/releases/chaqimchi-windows-0.6.22.exe`,
   sha256 `145e240f…`). Cloud uni beryapti
   (`/api/v1/public/windows-release` → `0.6.22`).
@@ -153,6 +154,37 @@ Endi admin panelda ro'yxat chiqadi (`cloud/config_health.py`), lekin
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Soxta ma'lumot koddagi xatoni TAKRORLASA, test uni tasdiqlaydi.**
+  `benchmark` topshirig'i kamera ro'yxatini ildizdagi `cameras` dan
+  o'qirdi, haqiqiysi esa `retail.cameras[].stream_url` da. Test ham
+  aynan shu noto'g'ri shakldagi soxta sozlama bergani uchun **yashil**
+  edi — xato faqat jonli o'lchovda ko'rindi ("Kamera manzili yo'q",
+  holbuki ikkala kamera sozlangan). Soxta ma'lumot HAQIQIY sxemadan
+  olinsin: `settings.py` dagi model yoki jonli bazadagi yozuv.
+
+- **Sozlamada `cameras` IKKI joyda bor.** Ildizda
+  (`AppSettings.cameras` — veb-kamera uchun eski yo'l, do'kon
+  kompyuterida doim bo'sh) va `RetailSettings.cameras` (haqiqiy
+  ro'yxat). Ikkinchisida manzil `stream_url`, `url` emas.
+
+- **Tugma qo'yish yetarli emas — natijani ko'rsatish ham kerak.**
+  «Sig'imni o'lchash» o'lchovni boshlardi, natija esa
+  `device_jobs.result_enc` da qolib ketardi va panelda unga yo'l yo'q
+  edi; xabar matni esa "«Diagnostika» da ko'rinadi" deb yolg'on
+  aytardi. Yangi amal qo'shsangiz: foydalanuvchi javobni QAYERDAN
+  ko'radi?
+
+- **`created_at` bir soniya aniqligida.** Bir kunda ikki marta
+  o'lchansa `ORDER BY created_at DESC` tartibi tasodifiy bo'ladi va
+  admin eski natijani yangisi deb o'qishi mumkin. `rowid` qo'shilsin.
+
+- **Ikkita JONLI o'lchovni `==` bilan solishtirmang.**
+  `test_the_panel_and_the_alert_watch_the_same_disk` disk bandligini
+  ikki marta o'lchab tenglikni talab qilardi; to'liq to'plam ishlaganda
+  vaqtinchalik fayllar tufayli farq chiqib, test tasodifan yiqilardi
+  (`37.07083227 != 37.07083268`). Savol "bir xil YO'L kuzatilyaptimi"
+  edi — endi `pytest.approx(..., abs=0.5)`.
 
 - **Ikki fayldagi ikki son bir-birini INKOR QILISHI mumkin va buni
   hech qaysi test ko'rmaydi.** `scene_analytics.FACE_MIN_BBOX_RATIO`
@@ -292,6 +324,52 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-28 — Sig'im o'lchovi ishlamasdi: uchta xato (0.6.23)
+
+Nima: 0.6.22 dagi «Sig'imni o'lchash» tugmasi jonli do'konda birinchi
+urinishdayoq yiqildi — «Kamera manzili yo'q», holbuki ikkala kamera
+sozlangan edi. Uchta xato topildi va uchalasi ham o'sha kungi ishda
+kiritilgan edi.
+
+**1 · Kamera ro'yxati noto'g'ri joydan.** Sozlamada IKKI joyda
+`cameras` bor: ildizda (`AppSettings.cameras` — veb-kamera uchun eski
+yo'l, do'kon kompyuterida doim bo'sh) va `RetailSettings.cameras`
+(haqiqiy ro'yxat, manzil `stream_url` da). Kod ildizdagisini o'qirdi.
+
+**Testning o'zi ham xato edi** — u koddagi xuddi shu noto'g'ri shakldagi
+soxta sozlama bergani uchun yashil turardi. Ya'ni test xatoni ushlamadi,
+TASDIQLADI. Endi soxta ma'lumot haqiqiy sxemadan va tuzatish mutatsiya
+bilan tekshirildi.
+
+**2 · Admin natijani ko'ra olmasdi.** Tugma o'lchovni boshlardi, natija
+`device_jobs.result_enc` da qolardi va panelda unga yo'l yo'q edi;
+xabar matni esa "«Diagnostika» da ko'rinadi" deb yolg'on aytardi. Endi
+`latest_job_of_kind()` orqali diagnostika javobida keladi va oynada
+odam o'qiydigan qilib chiqadi (nechta kamera, inferens/s, p95).
+
+**3 · Oxirgi o'lchov tartibi noaniq edi.** `created_at` bir soniya
+aniqligida — bir kunda ikki marta o'lchansa admin eskisini yangisi deb
+o'qishi mumkin edi. `rowid` qo'shildi.
+
+Yo'l-yo'lakay: `test_the_panel_and_the_alert_watch_the_same_disk`
+ikkita jonli disk o'lchovini `==` bilan solishtirardi va to'liq
+to'plamda tasodifan yiqilardi. Endi `pytest.approx(abs=0.5)`.
+
+Yana bir topilma (hali tuzatilmagan): **`origin: device` kameralar hech
+qachon probe qilinmaydi** — bulutda `probe_status` abadiy `pending`,
+`width`/`height`/`codec` esa `null`. Sinov do'konining ikkala kamerasi
+shunday, ya'ni oqim o'lchamini bulutdan bilib bo'lmaydi.
+
+Qayerda: `chaqimchi_ai/local/cloud_jobs.py`, `cloud/store.py`
+(`latest_job_of_kind`), `cloud/main.py`, `cloud/static/admin.html`.
+Test: `test_local_jobs.py` (+1 va ikkitasi tuzatildi),
+`test_device_jobs.py` (+3), `test_config_health.py` (+1),
+`test_server_health.py` (beqarorlik tuzatildi).
+Jami **1 878 test** o'tdi, lint va TS toza.
+
+Diqqat: cloud tuzatishi (2 va 3) darhol ta'sir qiladi, 1-band esa
+qurilma 0.6.23 ni olmaguncha ishlamaydi.
 
 ### 2026-08-28 — Jonli tekshiruv: nima ishlaydi, nima yolg'on gapiradi (0.6.22)
 

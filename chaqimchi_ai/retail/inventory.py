@@ -44,6 +44,13 @@ class InventoryCamera:
     source: str
     label: str = ""
     enabled: bool = True
+    #: Klip uchun asosiy oqim — bulutdagi ZAXIRA nusxa.
+    #:
+    #: 0.6.24 dan boshlab qurilma ikkala manzilni ham bulutga yuboradi.
+    #: Bu maydonning butun ma'nosi tiklashda: do'kon kompyuteri qayta
+    #: o'rnatilsa lokal sozlama bo'sh bo'ladi va klip manzili faqat shu
+    #: yerdan kelishi mumkin.  Bo'sh bo'lsa quyidagi tartib ishlaydi.
+    record_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -93,6 +100,7 @@ def read_sotqin_cache(path: Path) -> Dict[str, Any]:
                 source=str(item.get("source") or ""),
                 label=str(item.get("label") or ""),
                 enabled=bool(item.get("enabled", True)),
+                record_url=str(item.get("record_url") or ""),
             )
             for item in (payload.get("cameras") or [])
             if isinstance(item, Mapping)
@@ -125,10 +133,19 @@ def merge_cameras(inventory: Sequence[InventoryCamera], local: Sequence[Any]) ->
                 stream_url=camera.source,
                 origin="cloud",
                 label=camera.label,
-                # Cloud inventari hozir bitta RTSP manzil saqlaydi.  Alohida
-                # main stream berilmagan bo'lsa ham xavfsizlik hodisasining
-                # klipi yo'qolmasin: o'sha substream ring-bufferga yoziladi.
-                record_url=getattr(option, "record_url", None) or camera.source,
+                # Klip manzili uch manbadan, shu TARTIBDA:
+                #
+                # 1. lokal sozlama — mijoz/usta shu kompyuterda kiritgan,
+                #    ya'ni eng aniq;
+                # 2. bulutdagi zaxira — qayta o'rnatilgan kompyuterda
+                #    lokal sozlama bo'sh bo'ladi va klip manzili faqat
+                #    shu yerdan keladi (0.6.24 dan);
+                # 3. substream — hech biri bo'lmasa xavfsizlik
+                #    hodisasining klipi butunlay yo'qolgandan ko'ra
+                #    past sifatli klip yaxshiroq.
+                record_url=(
+                    getattr(option, "record_url", None) or camera.record_url or camera.source
+                ),
                 priority=getattr(option, "priority", "retail"),
                 sample_fps=float(getattr(option, "sample_fps", 5.0)),
                 floor_fps=getattr(option, "floor_fps", None),

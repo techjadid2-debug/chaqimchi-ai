@@ -409,13 +409,27 @@ def test_benchmark_job_measures_the_real_camera(monkeypatch, tmp_path) -> None:
         lambda: {"retail": {"cameras": [{"id": "camera-01", "stream_url": "rtsp://kamera/sub"}]}},
     )
     monkeypatch.setattr(paths, "model_path", lambda: tmp_path / "model.xml")
+    # O'lchovning QIMMAT qismlari almashtiriladi, xulosa esa HAQIQIY
+    # funksiya bilan hisoblanadi.
+    #
+    # Ilgari `capacity_verdict` ham `lambda *a, **k` bilan almashtirilgan
+    # edi va bunday soxta HAR QANDAY chaqiruvni qabul qiladi — natijada
+    # pozitsion argument xatosi testdan o'tib ketdi va o'lchov jonli
+    # do'konda 95% da yiqildi.  Soxta funksiya imzoni tekshirmasa, u
+    # xatoni yashiradi.
+    #
+    # Qaytariladigan lug'atlar ham haqiqiy shaklda: `budget_target_fps`,
+    # `total_ms`, `decode_ms` — `capacity_verdict` aynan shularni kutadi.
     monkeypatch.setattr(benchmark, "frames_from_source", lambda source, count=60: ["kadr"])
     monkeypatch.setattr(
-        benchmark, "measure_detector", lambda *a, **k: {"per_second": 30.0, "p95_ms": 40.0}
+        benchmark,
+        "measure_detector",
+        lambda *a, **k: {"throughput_fps": 30.0, "p95_ms": 40.0, "budget_target_fps": 20.0},
     )
-    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"per_frame_ms": 1.0})
-    monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {"fps": 25.0})
-    monkeypatch.setattr(benchmark, "capacity_verdict", lambda *a, **k: {"cameras": 4, "ok": True})
+    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"total_ms": 1.0})
+    monkeypatch.setattr(
+        benchmark, "measure_decode", lambda *a, **k: {"ok": True, "decode_ms": 4.0}
+    )
 
     class FakeDetector:
         def __init__(self, *args, **kwargs) -> None:
@@ -433,7 +447,11 @@ def test_benchmark_job_measures_the_real_camera(monkeypatch, tmp_path) -> None:
     assert sent, "natija cloudga yuborilishi kerak"
     final = sent[-1]
     assert final["ok"] is True, final.get("error")
-    assert final["result"]["verdict"]["cameras"] == 4
+    verdict = final["result"]["verdict"]
+    # 20 fps byudjet / 2 fps kamera = 10 kamera ko'tariladi.
+    assert verdict["supported_cameras"] == 10
+    assert verdict["ok"] is True
+    assert final["result"]["detector"]["p95_ms"] == 40.0
 
 
 def test_benchmark_refuses_to_measure_without_a_camera(monkeypatch) -> None:
@@ -489,10 +507,11 @@ def test_benchmark_reads_the_camera_list_from_the_right_place(monkeypatch, tmp_p
         return ["kadr"]
 
     monkeypatch.setattr(benchmark, "frames_from_source", fake_frames)
-    monkeypatch.setattr(benchmark, "measure_detector", lambda *a, **k: {"per_second": 30.0})
-    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {})
-    monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {})
-    monkeypatch.setattr(benchmark, "capacity_verdict", lambda *a, **k: {"cameras": 4})
+    monkeypatch.setattr(
+        benchmark, "measure_detector", lambda *a, **k: {"budget_target_fps": 20.0}
+    )
+    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"total_ms": 1.0})
+    monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {"ok": False})
 
     import chaqimchi_ai.retail.detector_ov as detector_module
 

@@ -631,6 +631,15 @@ class CloudStore:
                     item["source"] = cipher.decrypt(encrypted).decode("utf-8")
                 except (InvalidToken, UnicodeDecodeError) as exc:
                     raise RuntimeError(f"{item['camera_id']} RTSP kaliti o'qilmadi") from exc
+            # Klip oqimi — tahlil oqimidan alohida saqlanadi.
+            if cipher is not None and item.get("record_ciphertext"):
+                try:
+                    item["record_url"] = cipher.decrypt(
+                        str(item["record_ciphertext"]).encode("ascii")
+                    ).decode("utf-8")
+                except (InvalidToken, UnicodeDecodeError) as exc:
+                    raise RuntimeError(f"{item['camera_id']} klip kaliti o'qilmadi") from exc
+            item.pop("record_ciphertext", None)
             cameras.append(item)
         return cameras
 
@@ -691,9 +700,28 @@ class CloudStore:
         jonli ko'rish, do'kon xaritasi, davomat kamerasini tanlash va kamera
         rollari, to'rttasi ham jimgina ishlamasdi.
 
-        **Manzil yuborilmaydi.**  RTSP ichida NVR login/paroli bor va u
-        do'konda qolishi kerak (README va'dasi).  Shuning uchun bu yerda
-        faqat `camera_id` va nom yoziladi, `rtsp_ciphertext` bo'sh qoladi.
+        **Manzil ENDI yuboriladi** (0.6.24 dan).  Ilgari bu yerda faqat
+        `camera_id` va nom yozilardi: RTSP ichida NVR paroli bor va u
+        do'konda qolsin degan qaror bor edi.  Qaror ATAYLAB o'zgartirildi
+        va sababi shu:
+
+        * do'kon kompyuteri o'lsa yoki qayta o'rnatilsa sozlama butunlay
+          yo'qolardi — kamera parolini bilgan odam topilmasa, do'konga
+          borib NVR'ni qaytadan sozlash kerak bo'lardi;
+        * masofadan tuzatib bo'lmasdi: 2026-08-28 da camera-02 da
+          `record_url` yo'qligi aniqlandi, lekin uni qo'yish uchun
+          manzil kerak edi va u faqat do'konda turardi;
+        * oqim sifatini (720p) bulutdan tekshirib bo'lmasdi.
+
+        Xavf ongli ravishda qabul qilindi: manzil `CHAQIMCHI_CAMERA_
+        SECRET_KEY` bilan Fernet orqali shifrlanadi (kalit zaxiraga
+        kiradi, zaxiraning o'zi alohida parol bilan yopiladi) va
+        panelga hech qachon qaytarilmaydi — admin oynasi buni
+        allaqachon shunday yozadi.
+
+        **Bo'sh manzil mavjudini O'CHIRMAYDI.**  Eski qurilma (0.6.23 va
+        undan oldin) manzil yubormaydi; agar bo'sh qiymat ustidan
+        yozilsa, bulutdagi yagona nusxa yo'qolardi.
 
         Admin yoki o'rnatuvchi kiritgan qator (`origin='panel'`) HECH QACHON
         ustidan yozilmaydi: unda haqiqiy manzil bor va u qurilmaga
@@ -711,7 +739,11 @@ class CloudStore:
                     f"Pilot kamera ID camera-01..camera-{GUARANTEED_CAMERAS:02d} bo'lishi kerak"
                 )
             label = str(item.get("label") or camera_id).strip() or camera_id
-            seen[camera_id] = label[:120]
+            seen[camera_id] = {
+                "label": label[:120],
+                "source": str(item.get("source") or "").strip(),
+                "record_url": str(item.get("record_url") or "").strip(),
+            }
         now = _iso(_utc_now())
         conn = self._connect()
         existing = {
@@ -731,15 +763,30 @@ class CloudStore:
                 f"Tarifingizda ko'pi bilan {limit} ta kamera. "
                 "Yana kamera ulash uchun tarifni ko'taring."
             )
-        for camera_id, label in seen.items():
+        cipher = self._camera_cipher()
+        for camera_id, item in seen.items():
             if existing.get(camera_id, "device") == "panel":
                 continue
+            # Manzil kelmagan bo'lsa mavjud shifr saqlanadi: `COALESCE`
+            # emas, `CASE` — bo'sh SATR ham `NULL` kabi "yangilanmasin"
+            # deb qaralishi kerak (eski qurilma bo'sh satr yuboradi).
+            source = cipher.encrypt(item["source"].encode("utf-8")).decode("ascii") if item["source"] else ""
+            record = (
+                cipher.encrypt(item["record_url"].encode("utf-8")).decode("ascii")
+                if item["record_url"]
+                else ""
+            )
             conn.execute(
                 "INSERT INTO site_cameras"
-                "(site_id,camera_id,label,rtsp_ciphertext,enabled,updated_at,origin) "
-                "VALUES(?,?,?,'',1,?,'device') ON CONFLICT(site_id,camera_id) DO UPDATE SET "
-                "label=excluded.label,updated_at=excluded.updated_at",
-                (site_id, camera_id, label, now),
+                "(site_id,camera_id,label,rtsp_ciphertext,record_ciphertext,"
+                "enabled,updated_at,origin) "
+                "VALUES(?,?,?,?,?,1,?,'device') ON CONFLICT(site_id,camera_id) DO UPDATE SET "
+                "label=excluded.label,updated_at=excluded.updated_at,"
+                "rtsp_ciphertext=CASE WHEN excluded.rtsp_ciphertext='' "
+                "THEN site_cameras.rtsp_ciphertext ELSE excluded.rtsp_ciphertext END,"
+                "record_ciphertext=CASE WHEN excluded.record_ciphertext='' "
+                "THEN site_cameras.record_ciphertext ELSE excluded.record_ciphertext END",
+                (site_id, camera_id, item["label"], source, record, now),
             )
         for camera_id, origin in existing.items():
             if origin == "device" and camera_id not in seen:
@@ -1372,16 +1419,25 @@ class CloudStore:
             # Jonli ko'rish: shu vaqtgacha qurilma har 2-3 soniyada kadr
             # yuboradi (panel ochiq ekan muddat uzaytirib turiladi).
             "live_until": "TEXT",
-            # Kamerani kim yozdi: `panel` (admin/o'rnatuvchi, RTSP manzili
-            # bilan) yoki `device` (do'kon kompyuteridagi sehrgar, manzilsiz
-            # — parol do'konda qoladi).  Farq muhim: `device` qatorining
-            # manzili yo'q, ya'ni u qurilmaga qaytarilmaydi.
+            # Kamerani kim yozdi: `panel` (admin/o'rnatuvchi) yoki
+            # `device` (do'kon kompyuteridagi sehrgar).  Farq endi
+            # manzilda emas — 0.6.24 dan boshlab qurilma ham manzilni
+            # yuboradi — balki USTUVORLIKDA: panelda kiritilgan qator
+            # qurilma ro'yxati bilan ustidan yozilmaydi.
             "origin": "TEXT NOT NULL DEFAULT 'panel'",
             # Jonli kadr o'z kalitida — `preview_key` barqaror tayanch
             # bo'lib qoladi (xarita foni va zona muharriri o'shani oladi).
             "live_key": "TEXT",
             "live_at": "TEXT",
             "live_overlay": "INTEGER NOT NULL DEFAULT 0",
+            # Klip uchun asosiy oqim — tahlil oqimidan ALOHIDA.
+            #
+            # 2026-08-28: sinov do'konida camera-02 ga `record_url`
+            # berilmagan edi (`record_url_set: false`), ya'ni o'sha
+            # kameradagi hodisalar uchun klip PRINTSIPIAL yozilmasdi.
+            # Manzil faqat do'kon kompyuterida turgani uchun buni
+            # masofadan ko'rib ham, tuzatib ham bo'lmasdi.
+            "record_ciphertext": "TEXT",
         }
         for name, definition in camera_additions.items():
             if name not in camera_columns:

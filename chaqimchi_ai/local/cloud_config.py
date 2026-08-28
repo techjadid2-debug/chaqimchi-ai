@@ -550,8 +550,14 @@ def publish_cameras() -> bool:
     do'kon xaritasi, davomat kamerasini tanlash va kamera rollari,
     to'rttasi ham jimgina ishlamasdi.
 
-    **Manzil yuborilmaydi** — faqat ID va nom.  RTSP ichida NVR
-    login/paroli bor va u do'kon tarmog'idan chiqmasligi kerak.
+    **Manzil ham yuboriladi** (0.6.24 dan).  Ilgari faqat ID va nom
+    ketardi — RTSP ichidagi NVR paroli do'konda qolsin degan qaror bor
+    edi.  U ataylab o'zgartirildi: do'kon kompyuteri o'lsa sozlama
+    butunlay yo'qolardi va masofadan tuzatib bo'lmasdi (2026-08-28 da
+    camera-02 dagi `record_url` aynan shu sababdan qo'yilmay qoldi).
+
+    Bulut manzilni Fernet bilan shifrlab saqlaydi va panelga qaytarmaydi
+    — to'liq sabab `CloudStore.register_device_cameras` da.
     """
     raw_all = config_store.read_raw()
     cloud = raw_all.get("cloud_sync") or {}
@@ -561,6 +567,11 @@ def publish_cameras() -> bool:
         {
             "camera_id": str(item.get("id")),
             "label": str(item.get("label") or item.get("id") or ""),
+            # Ikkala oqim ham: tahlil uchun `stream_url`, klip uchun
+            # `record_url`.  Ikkinchisi bo'sh bo'lishi mumkin va bu
+            # bulutda "klip yozilmaydi" degan belgi bo'lib ko'rinadi.
+            "source": str(item.get("stream_url") or ""),
+            "record_url": str(item.get("record_url") or ""),
         }
         for item in ((raw_all.get("retail") or {}).get("cameras") or [])
         if item.get("id")

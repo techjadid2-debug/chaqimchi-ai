@@ -314,8 +314,20 @@ def _run_benchmark(params: Dict[str, Any], report: Callable[[int, str], None]) -
     decode = benchmark.measure_decode(source, seconds=5.0)
 
     report(95, "Xulosa")
+    # `capacity_verdict` FAQAT nomli argument oladi va o'lchov
+    # lug'atlaridan aniq kalitlarni kutadi.  Birinchi variantda uchta
+    # lug'at pozitsion uzatilgan edi va o'lchov 95% da yiqildi —
+    # test buni ushlamadi, chunki u funksiyani `lambda *a, **k` bilan
+    # almashtirgan edi va bunday soxta HAR QANDAY chaqiruvni qabul
+    # qiladi.  Endi test haqiqiy funksiyani chaqiradi.
     verdict = benchmark.capacity_verdict(
-        detector_result, overhead, decode, cameras=cameras, per_camera_fps=2.0, cores=4
+        budget_target_fps=float(detector_result.get("budget_target_fps") or 0.0),
+        cameras=cameras,
+        per_camera_fps=2.0,
+        sample_fps=5.0,
+        overhead_ms=float(overhead.get("total_ms") or 0.0),
+        decode_ms=float(decode.get("decode_ms") or 0.0) if decode.get("ok") else 0.0,
+        cores=4,
     )
     return {
         "device": device,

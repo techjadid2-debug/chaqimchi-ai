@@ -313,9 +313,27 @@ def test_camera_list_goes_up_to_the_cloud(
 
     assert local.publish_cameras() is True
     assert calls[0]["url"].endswith("/api/v1/edge/cameras")
-    assert calls[0]["json"] == {"cameras": [{"camera_id": "camera-01", "label": "Kirish"}]}
-    # Parol cloudga ketmasin: manzil umuman yuborilmaydi.
-    assert "rtsp" not in json.dumps(calls[0]["json"])
+    # Manzil ENDI yuboriladi (0.6.24 dan).  Ilgari bu yerda "parol
+    # cloudga ketmasin" degan qulf turardi va u qarorni to'g'ri
+    # qo'riqlardi — lekin qarorning O'ZI o'zgardi:
+    #
+    #   * do'kon kompyuteri o'lsa sozlama butunlay yo'qolardi;
+    #   * camera-02 dagi `record_url` yo'qligini masofadan tuzatib
+    #     bo'lmasdi (2026-08-28);
+    #   * oqim sifatini bulutdan tekshirib bo'lmasdi.
+    #
+    # Bulut manzilni Fernet bilan shifrlab saqlaydi va panelga
+    # qaytarmaydi — buni `tests/test_camera_credentials.py` qulflaydi.
+    assert calls[0]["json"] == {
+        "cameras": [
+            {
+                "camera_id": "camera-01",
+                "label": "Kirish",
+                "source": "rtsp://u:p@10.0.0.5/1",
+                "record_url": "",
+            }
+        ]
+    }
 
     # O'zgarmagan ro'yxat qayta yuborilmaydi — har 20 soniyada bir xil
     # so'rov serverni bekorga bezovta qilardi.

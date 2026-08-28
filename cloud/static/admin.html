@@ -1618,10 +1618,11 @@
       const size = (r.frame_size || []).join("×");
       return `<div class="note ok"><b>Sig'im o'lchovi — ${esc(job.updated_at || "")}</b>
         Qurilma: ${esc(r.device || "—")} · kadr ${esc(size || "—")}<br>
-        Detektor: ${Number(det.per_second || 0).toFixed(1)} inferens/s,
+        Detektor: ${Number(det.throughput_fps || 0).toFixed(1)} inferens/s,
         p95 ${Number(det.p95_ms || 0).toFixed(0)} ms<br>
-        Xulosa: <b>${Number(verdict.cameras || 0)} kamera</b>
-        ${verdict.ok === false ? "⚠️ ogohlantirish bilan" : ""}</div>`;
+        Xulosa: <b>${Number(verdict.supported_cameras || 0)} kamera ko'taradi</b>
+        (so'ralgan ${Number(verdict.cameras || 0)})
+        ${verdict.ok === false ? " ⚠️ zaxira yetarli emas" : ""}</div>`;
     }
 
     async function openDiagnostics(siteId) {

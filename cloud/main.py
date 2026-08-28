@@ -5506,6 +5506,17 @@ async def edge_health_heartbeat(
 class EdgeCameraItem(BaseModel):
     camera_id: str = Field(min_length=1, max_length=40)
     label: str = Field(default="", max_length=120)
+    #: Tahlil oqimi (substream) — RTSP, login/parol bilan.
+    #:
+    #: 0.6.24 dan boshlab qurilma manzilni ham yuboradi.  Bulut uni
+    #: Fernet bilan shifrlab saqlaydi va panelga qaytarmaydi.  Sabab
+    #: `CloudStore.register_device_cameras` docstringida.
+    #:
+    #: Bo'sh bo'lishi NORMAL: eski qurilma yubormaydi va o'shanda
+    #: bulutdagi mavjud manzil o'chirilmaydi.
+    source: str = Field(default="", max_length=2_000)
+    #: Klip uchun asosiy oqim.  Bo'sh bo'lsa bu kamerada klip yozilmaydi.
+    record_url: str = Field(default="", max_length=2_000)
 
 
 class EdgeCamerasBody(BaseModel):
@@ -5528,7 +5539,9 @@ async def edge_register_cameras(
     to'rtta bo'lim (jonli ko'rish, xarita, davomat kamerasi, kamera rollari)
     jimgina bo'sh turardi.
 
-    Manzil YUBORILMAYDI — faqat ID va nom (`register_device_cameras`).
+    0.6.24 dan boshlab manzil ham keladi va shifrlangan holda saqlanadi
+    (sabab `register_device_cameras` docstringida).  Javobda manzil
+    HECH QACHON qaytarilmaydi.
     """
     try:
         cameras = get_store().register_device_cameras(

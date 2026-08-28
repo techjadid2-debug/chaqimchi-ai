@@ -1616,8 +1616,12 @@
       const det = r.detector || {};
       const verdict = r.verdict || {};
       const size = (r.frame_size || []).join("×");
+      // Kameraning O'ZI nima berayotgani.  Tahlil o'lchami har doim
+      // 640×360 — u kamera sozlamasi haqida hech narsa aytmaydi.
+      const native = (r.native_size || []).filter(Boolean).join("×");
       return `<div class="note ok"><b>Sig'im o'lchovi — ${esc(job.updated_at || "")}</b>
-        Qurilma: ${esc(r.device || "—")} · kadr ${esc(size || "—")}<br>
+        Qurilma: ${esc(r.device || "—")} · tahlil ${esc(size || "—")}
+        ${native ? `· <b>kamera beryapti ${esc(native)}</b>` : ""}<br>
         Detektor: ${Number(det.throughput_fps || 0).toFixed(1)} inferens/s,
         p95 ${Number(det.p95_ms || 0).toFixed(0)} ms<br>
         Xulosa: <b>${Number(verdict.supported_cameras || 0)} kamera ko'taradi</b>

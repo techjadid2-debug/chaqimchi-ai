@@ -125,3 +125,83 @@ def test_empty_measurement_is_not_a_crash() -> None:
     assert Samples().summary(elapsed=1.0, workers=1) == {"samples": 0}
     assert percentile([], 0.95) == 0.0
     assert percentile([1.0, 2.0, 3.0], 0.5) == 2.0
+
+
+# ── Kameraning HAQIQIY o'lchami ──────────────────────────────────────────
+#
+# Tahlil kadrni doim 640x360 ga keltiradi, ya'ni natijadagi `frame_size`
+# kamerada nima turganini AYTMAYDI.  2026-08-29 da bu sezildi: kamerani
+# 720p ga o'tkazgandan keyin o'zgarish ishlaganini tekshirishning yagona
+# yo'li 24 soat kutib `face_crops.written` ga qarash edi.
+
+
+class _FakeCapture:
+    """`cv2.VideoCapture` o'rniga: berilgan o'lchamdagi kadr qaytaradi."""
+
+    def __init__(self, width: int, height: int, frames: int = 3) -> None:
+        self._width = width
+        self._height = height
+        self._left = frames
+
+    def isOpened(self) -> bool:  # noqa: N802 — cv2 nomi
+        return True
+
+    def grab(self) -> bool:
+        return self._left > 0
+
+    def retrieve(self):
+        import numpy as np
+
+        if self._left <= 0:
+            return False, None
+        self._left -= 1
+        return True, np.zeros((self._height, self._width, 3), dtype=np.uint8)
+
+    def release(self) -> None:
+        return None
+
+
+def test_the_real_stream_size_comes_from_the_frame(monkeypatch) -> None:
+    """O'lcham KADRDAN olinsin, `CAP_PROP` dan emas.
+
+    RTSP'da property'lar ba'zi kameralarda nol yoki eskirgan qiymat
+    qaytaradi; dekodlangan kadr esa har doim rost.
+    """
+    import cv2
+
+    from chaqimchi_ai.local import benchmark
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **k: _FakeCapture(1280, 720))
+
+    result = benchmark.measure_decode("rtsp://kamera/sub", seconds=0.05)
+
+    assert result["ok"] is True
+    assert result["native_width"] == 1280
+    assert result["native_height"] == 720
+
+
+def test_a_360p_stream_is_reported_as_such(monkeypatch) -> None:
+    """Kamera o'zgartirilmagan bo'lsa eski o'lcham ko'rinsin."""
+    import cv2
+
+    from chaqimchi_ai.local import benchmark
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **k: _FakeCapture(640, 360))
+
+    result = benchmark.measure_decode("rtsp://kamera/sub", seconds=0.05)
+
+    assert (result["native_width"], result["native_height"]) == (640, 360)
+
+
+def test_an_unreadable_stream_does_not_invent_a_size(monkeypatch) -> None:
+    """Kadr o'qilmasa o'lcham TAXMIN QILINMASIN."""
+    import cv2
+
+    from chaqimchi_ai.local import benchmark
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **k: _FakeCapture(640, 360, frames=0))
+
+    result = benchmark.measure_decode("rtsp://kamera/sub", seconds=0.05)
+
+    assert result["ok"] is False
+    assert "native_width" not in result

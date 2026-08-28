@@ -23,7 +23,7 @@ import statistics
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 #: Substream o'lchami — tahlil aynan shunda ketadi.
 FRAME_WIDTH = 640
@@ -212,7 +212,22 @@ def measure_frame_overhead(frames: List[Any], *, seconds: float) -> Dict[str, An
 
 
 def measure_decode(source: str, *, seconds: float) -> Dict[str, Any]:
-    """Oqimdan kadr olish narxi: `grab()` (dekodsiz) va `retrieve()` (dekod)."""
+    """Oqimdan kadr olish narxi: `grab()` (dekodsiz) va `retrieve()` (dekod).
+
+    Kadrning HAQIQIY o'lchamini ham qaytaradi (`native_width`/`height`).
+
+    Nega shu yerda: tahlil yo'li kadrni doim 640x360 ga keltiradi
+    (`frames_from_source`), ya'ni o'lchov natijasidagi `frame_size`
+    kamerada nima turganini AYTMAYDI.  2026-08-29 da bu sezildi:
+    "kamerani 720p ga o'tkazdim" degandan keyin o'zgarish ishlaganini
+    tekshirishning yagona yo'li 24 soat kutib `face_crops.written` ga
+    qarash edi.  Bu metod oqimni allaqachon ochadi — qo'shimcha ulanish
+    kerak emas.
+
+    O'lcham `CAP_PROP` dan emas, KADRNING O'ZIDAN olinadi: RTSP'da
+    property'lar ba'zi kameralarda nol yoki eskirgan qiymat qaytaradi,
+    dekodlangan kadr esa har doim rost.
+    """
     import cv2
 
     capture = cv2.VideoCapture(int(source) if source.isdigit() else source)
@@ -220,6 +235,7 @@ def measure_decode(source: str, *, seconds: float) -> Dict[str, Any]:
         return {"ok": False, "error": "manba ochilmadi"}
     grabs: List[float] = []
     decodes: List[float] = []
+    native: Optional[tuple] = None
     stop_at = time.monotonic() + seconds
     try:
         while time.monotonic() < stop_at:
@@ -228,10 +244,13 @@ def measure_decode(source: str, *, seconds: float) -> Dict[str, Any]:
                 break
             grabs.append(time.perf_counter() - before)
             before = time.perf_counter()
-            ok, _frame = capture.retrieve()
+            ok, frame = capture.retrieve()
             if not ok:
                 break
             decodes.append(time.perf_counter() - before)
+            if native is None and frame is not None:
+                height, width = frame.shape[:2]
+                native = (int(width), int(height))
     finally:
         capture.release()
     if not decodes:
@@ -241,6 +260,8 @@ def measure_decode(source: str, *, seconds: float) -> Dict[str, Any]:
         "grab_ms": round(statistics.fmean(grabs) * 1000, 3),
         "decode_ms": round(statistics.fmean(decodes) * 1000, 3),
         "stream_fps": round(len(decodes) / max(sum(grabs) + sum(decodes), 1e-6), 1),
+        "native_width": native[0] if native else None,
+        "native_height": native[1] if native else None,
     }
 
 

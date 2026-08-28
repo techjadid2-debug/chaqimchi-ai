@@ -523,3 +523,74 @@ def test_benchmark_reads_the_camera_list_from_the_right_place(monkeypatch, tmp_p
 
     assert sent[-1]["ok"] is True, sent[-1].get("error")
     assert seen["source"] == "rtsp://kamera/sub", "TAHLIL oqimi o'lchansin, record_url emas"
+
+
+def test_the_benchmark_reports_what_the_camera_actually_sends(monkeypatch, tmp_path) -> None:
+    """`native_size` natijaga YETSIN — u 720p savoliga javob beradi.
+
+    `frame_size` har doim 640x360 (tahlil shunda ketadi) va u kamera
+    sozlamasi haqida hech narsa aytmaydi.  Ikkisi aralashtirilmasin.
+    """
+    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+
+    monkeypatch.setattr(
+        config_store,
+        "read_raw",
+        lambda: {"retail": {"cameras": [{"id": "camera-01", "stream_url": "rtsp://k/sub"}]}},
+    )
+    monkeypatch.setattr(paths, "model_path", lambda: tmp_path / "model.xml")
+    monkeypatch.setattr(benchmark, "frames_from_source", lambda source, count=60: ["kadr"])
+    monkeypatch.setattr(
+        benchmark, "measure_detector", lambda *a, **k: {"budget_target_fps": 20.0}
+    )
+    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"total_ms": 1.0})
+    monkeypatch.setattr(
+        benchmark,
+        "measure_decode",
+        lambda *a, **k: {
+            "ok": True,
+            "decode_ms": 4.8,
+            "native_width": 1280,
+            "native_height": 720,
+        },
+    )
+
+    import chaqimchi_ai.retail.detector_ov as detector_module
+
+    monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", lambda *a, **k: object())
+    sent = []
+    monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
+
+    cloud_jobs.run_one({"job_id": "b9", "kind": "benchmark", "params": {}})
+
+    result = sent[-1]["result"]
+    assert result["native_size"] == [1280, 720], "kamera o'lchami natijaga yetmadi"
+    assert result["frame_size"] == [640, 360], "tahlil o'lchami o'zgarmasin"
+
+
+def test_an_unknown_stream_size_is_null_not_a_guess(monkeypatch, tmp_path) -> None:
+    """O'lcham o'qilmasa `None` — eski qiymat yoki taxmin EMAS."""
+    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+
+    monkeypatch.setattr(
+        config_store,
+        "read_raw",
+        lambda: {"retail": {"cameras": [{"id": "camera-01", "stream_url": "rtsp://k/sub"}]}},
+    )
+    monkeypatch.setattr(paths, "model_path", lambda: tmp_path / "model.xml")
+    monkeypatch.setattr(benchmark, "frames_from_source", lambda source, count=60: ["kadr"])
+    monkeypatch.setattr(
+        benchmark, "measure_detector", lambda *a, **k: {"budget_target_fps": 20.0}
+    )
+    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"total_ms": 1.0})
+    monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {"ok": False})
+
+    import chaqimchi_ai.retail.detector_ov as detector_module
+
+    monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", lambda *a, **k: object())
+    sent = []
+    monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
+
+    cloud_jobs.run_one({"job_id": "b10", "kind": "benchmark", "params": {}})
+
+    assert sent[-1]["result"]["native_size"] is None

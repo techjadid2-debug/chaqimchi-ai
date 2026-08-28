@@ -331,7 +331,15 @@ def _run_benchmark(params: Dict[str, Any], report: Callable[[int, str], None]) -
     )
     return {
         "device": device,
+        # Tahlil SHU o'lchamda ketadi (kadr har doim shunga keltiriladi).
         "frame_size": [benchmark.FRAME_WIDTH, benchmark.FRAME_HEIGHT],
+        # Kameraning O'ZI nima berayotgani — bu boshqa savol va aynan u
+        # "720p ga o'tdimi" degan savolga javob beradi.
+        "native_size": (
+            [decode.get("native_width"), decode.get("native_height")]
+            if decode.get("native_width")
+            else None
+        ),
         "detector": detector_result,
         "frame_overhead": overhead,
         "decode": decode,

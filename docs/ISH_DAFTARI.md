@@ -26,7 +26,10 @@
   Admin panelda sinov do'koni kartochkasida ikkita yaroqsiz chizma
   ro'yxatga chiqdi (4 px chiziq, 29x20 px zona) va `device_jobs`
   CHECK ro'yxatida `benchmark` bor — migratsiya jonli bazada ishladi.
-- **Windows 0.6.24 NASHR QILINDI** (kamera manzili zaxirasi). Oldingi: (0.6.22 dagi o'lchov xatosi
+- **Windows 0.6.25 NASHR QILINDI** — o'lchov endi kameraning
+  HAQIQIY o'lchamini aytadi (`native_size`). Usiz 720p ga o'tish
+  ishlaganini faqat 24 soatdan keyin bilib bo'lardi.
+- 0.6.24 (kamera manzili zaxirasi). Oldingi: (0.6.22 dagi o'lchov xatosi
   tuzatilgan holda). Oldingi holat: (imzo tekshirildi, tashqaridan
   ochiladi: `dl.chaqimchi.uz/releases/chaqimchi-windows-0.6.22.exe`,
   sha256 `145e240f…`). Cloud uni beryapti
@@ -49,6 +52,12 @@
   | Dekodlash | 1,19 ms/kadr, oqim 15,9 fps |
   | Kadr yuki | motion 1,8 ms + tamper 1,1 ms = 2,9 ms |
   | Xulosa | `ok: true`, ogohlantirishsiz |
+
+  **Ikkinchi o'lchov (29-avg 04:11, do'kon bo'sh):** 36,1 inferens/s,
+  p95 33,4 ms, byudjet 24,0 fps, zaxira 200%, sekinlashish 10,1%.
+  Xulosa bir xil — **11 kamera**. Ikki mustaqil o'lchov mos keldi,
+  ya'ni raqamga ishonsa bo'ladi. Kechagisi ish paytiga yaqinroq va
+  shuning uchun ehtiyotkorroq.
 
   **720p ko'tariladi.** Detektor narxi oqim o'lchamiga BOG'LIQ EMAS
   (model kirishi qat'iy 320×544), ya'ni 22,1 fps o'zgarmaydi.
@@ -196,6 +205,13 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **`frame_size` kamera sozlamasi haqida hech narsa aytmaydi.**
+  Tahlil kadrni doim 640x360 ga keltiradi (`frames_from_source`), ya'ni
+  o'lchov natijasidagi `frame_size` har doim shu son. "Kamerani 720p ga
+  o'tkazdim" degandan keyin o'zgarish ishlaganini tekshirish uchun
+  `native_size` kerak (0.6.25 dan) — u kadrning O'ZIDAN olinadi,
+  `CAP_PROP` dan emas (RTSP'da property'lar yolg'on qaytarishi mumkin).
 
 - **Soxta funksiya imzoni TEKSHIRMASA, xatoni yashiradi.**
   `capacity_verdict` faqat nomli argument oladi, chaqiruv esa pozitsion

@@ -1278,7 +1278,7 @@
           { method: "POST" });
         notify(answer.job && answer.job.reused
           ? "O'lchov allaqachon ketyapti — natijani kuting"
-          : "O'lchov boshlandi — natija bir necha daqiqada «Diagnostika» da ko'rinadi");
+          : "O'lchov boshlandi. Bir necha daqiqadan keyin «Diagnostika» tugmasini bosing.");
       },
       "alert-test": async () => {
         await api("/api/v1/admin/alerts/test", { method: "POST" });
@@ -1602,11 +1602,35 @@
        Endpoint allaqachon bor edi, lekin uni O'QIYDIGAN ekran yo'q edi:
        lokal panel «Administrator ko'ra oladi» deb va'da berardi, admin
        esa hech narsa ko'rmasdi. */
+    // Sig'im o'lchovi natijasini odam o'qiydigan qilib yozadi.
+    //
+    // Xom JSON ham quyida qoladi, lekin asosiy savol bitta: "nechta
+    // kamera ko'taradi va oqim sifatini ko'tarsak bo'ladimi".
+    function benchmarkBlock(job) {
+      if (!job) return "";
+      if (job.status !== "done") {
+        const why = job.error ? esc(job.error) : "hali tugamagan";
+        return `<div class="note warn"><b>Sig'im o'lchovi: ${esc(job.status)}</b>${why}</div>`;
+      }
+      const r = job.result || {};
+      const det = r.detector || {};
+      const verdict = r.verdict || {};
+      const size = (r.frame_size || []).join("×");
+      return `<div class="note ok"><b>Sig'im o'lchovi — ${esc(job.updated_at || "")}</b>
+        Qurilma: ${esc(r.device || "—")} · kadr ${esc(size || "—")}<br>
+        Detektor: ${Number(det.per_second || 0).toFixed(1)} inferens/s,
+        p95 ${Number(det.p95_ms || 0).toFixed(0)} ms<br>
+        Xulosa: <b>${Number(verdict.cameras || 0)} kamera</b>
+        ${verdict.ok === false ? "⚠️ ogohlantirish bilan" : ""}</div>`;
+    }
+
     async function openDiagnostics(siteId) {
       let item = null;
+      let benchmark = null;
       try {
         const data = await api(`/api/v1/admin/sites/${siteId}/diagnostics`);
         item = data.diagnostics;
+        benchmark = data.benchmark;
       } catch (e) {
         await openModal({
           title: "Diagnostika",
@@ -1617,9 +1641,11 @@
       if (!item) {
         await openModal({
           title: "Diagnostika",
-          html: `<p class="hint">Bu do'kondan hali diagnostika paketi kelmagan.
-            Mijozdan lokal paneldagi «Diagnostika paketini yuborish» tugmasini
-            bosishini so'rang.</p>`,
+          // 0.6.22 dan boshlab paket sutkada bir marta O'ZI keladi —
+          // mijozdan tugma bosishini so'rash kerak emas.
+          html: benchmarkBlock(benchmark) + `<p class="hint">Bu do'kondan hali
+            diagnostika paketi kelmagan. U 0.6.22 dan boshlab sutkada bir marta
+            o'zi keladi — qurilma yangilanganini tekshiring.</p>`,
           submitLabel: null, cancelLabel: "Yopish",
         });
         return;
@@ -1628,7 +1654,7 @@
       await openModal({
         title: "Diagnostika paketi",
         wide: true,
-        html: `
+        html: benchmarkBlock(benchmark) + `
           <dl class="kv">
             <dt>Qurilma</dt><dd>${esc(item.device_id || "—")}</dd>
             <dt>Kelgan vaqti</dt><dd>${esc(item.created_at || "—")}</dd>

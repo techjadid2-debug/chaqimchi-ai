@@ -3628,7 +3628,13 @@ async def admin_site_diagnostics(
 ) -> Dict[str, Any]:
     if not get_store().get_site(site_id):
         raise HTTPException(404, "Filial topilmadi")
-    return {"diagnostics": get_event_store().latest_device_diagnostics(site_id)}
+    # Sig'im o'lchovi ham shu yerda: admin uni «Sig'imni o'lchash» tugmasi
+    # bilan boshlaydi va natijani KO'RISHI kerak.  Ilgari natija
+    # `device_jobs` da qolib ketardi va unga panelda yo'l yo'q edi.
+    return {
+        "diagnostics": get_event_store().latest_device_diagnostics(site_id),
+        "benchmark": get_store().latest_job_of_kind(site_id, "benchmark", with_result=True),
+    }
 
 
 @app.get("/api/v1/admin/leads")

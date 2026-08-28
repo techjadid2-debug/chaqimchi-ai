@@ -399,8 +399,14 @@ def test_clean_chains_reports_survivors_instead_of_hiding_them(monkeypatch) -> N
 def test_benchmark_job_measures_the_real_camera(monkeypatch, tmp_path) -> None:
     from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
 
+    # Sozlamaning HAQIQIY shakli: `retail.cameras[].stream_url`.
+    # Ilgari bu yerda `{"cameras": [{"url": ...}]}` turardi va test
+    # koddagi xuddi shu xatoni takrorlagani uchun uni TASDIQLAGAN edi —
+    # jonli o'lchov yiqilguncha ikkalasi ham "yashil" ko'rinardi.
     monkeypatch.setattr(
-        config_store, "read_raw", lambda: {"cameras": [{"url": "rtsp://kamera/substream"}]}
+        config_store,
+        "read_raw",
+        lambda: {"retail": {"cameras": [{"id": "camera-01", "stream_url": "rtsp://kamera/sub"}]}},
     )
     monkeypatch.setattr(paths, "model_path", lambda: tmp_path / "model.xml")
     monkeypatch.setattr(benchmark, "frames_from_source", lambda source, count=60: ["kadr"])
@@ -440,7 +446,7 @@ def test_benchmark_refuses_to_measure_without_a_camera(monkeypatch) -> None:
     """
     from chaqimchi_ai.local import cloud_jobs, config_store
 
-    monkeypatch.setattr(config_store, "read_raw", lambda: {"cameras": []})
+    monkeypatch.setattr(config_store, "read_raw", lambda: {"retail": {"cameras": []}})
     sent = []
     monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
 
@@ -448,3 +454,53 @@ def test_benchmark_refuses_to_measure_without_a_camera(monkeypatch) -> None:
 
     assert sent[-1]["ok"] is False
     assert "Kamera manzili yo'q" in sent[-1]["error"]
+
+
+def test_benchmark_reads_the_camera_list_from_the_right_place(monkeypatch, tmp_path) -> None:
+    """Kamera ro'yxati `retail.cameras`, ildizdagi `cameras` EMAS.
+
+    Birinchi jonli o'lchov (2026-08-28) aynan shundan yiqildi:
+    «Kamera manzili yo'q» deb qaytdi, holbuki ikkala kamera sozlangan
+    edi.  Sozlamada IKKI joyda `cameras` bor — ildizda
+    (`AppSettings.cameras`, veb-kamera uchun eski yo'l, do'kon
+    kompyuterida doim bo'sh) va `retail` ichida (haqiqiy ro'yxat).
+    """
+    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+
+    monkeypatch.setattr(
+        config_store,
+        "read_raw",
+        lambda: {
+            # Ildizdagisi bo'sh — do'kon kompyuteridagi haqiqiy holat.
+            "cameras": [],
+            "retail": {
+                "cameras": [
+                    {"id": "camera-01", "stream_url": "rtsp://kamera/sub", "record_url": "rtsp://kamera/main"},
+                ]
+            },
+        },
+    )
+    monkeypatch.setattr(paths, "model_path", lambda: tmp_path / "model.xml")
+
+    seen: dict = {}
+
+    def fake_frames(source, count=60):
+        seen["source"] = source
+        return ["kadr"]
+
+    monkeypatch.setattr(benchmark, "frames_from_source", fake_frames)
+    monkeypatch.setattr(benchmark, "measure_detector", lambda *a, **k: {"per_second": 30.0})
+    monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {})
+    monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {})
+    monkeypatch.setattr(benchmark, "capacity_verdict", lambda *a, **k: {"cameras": 4})
+
+    import chaqimchi_ai.retail.detector_ov as detector_module
+
+    monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", lambda *a, **k: object())
+    sent = []
+    monkeypatch.setattr(cloud_jobs, "_post", lambda path, body, method="POST": sent.append(body))
+
+    cloud_jobs.run_one({"job_id": "b3", "kind": "benchmark", "params": {}})
+
+    assert sent[-1]["ok"] is True, sent[-1].get("error")
+    assert seen["source"] == "rtsp://kamera/sub", "TAHLIL oqimi o'lchansin, record_url emas"

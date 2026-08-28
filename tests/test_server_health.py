@@ -153,8 +153,19 @@ def test_the_hottest_zone_wins(tmp_path: Path, monkeypatch) -> None:
 
 def test_the_panel_and_the_alert_watch_the_same_disk() -> None:
     """Ikki joyda ikki xil yo'l kuzatilsa, panel «joyida» deb turgan
-    payt alert «to'ldi» derdi va qaysi biriga ishonish noma'lum edi."""
-    assert server_health.disk_percent() == alerts.disk_usage_percent(alerts.disk_watch_path())
+    payt alert «to'ldi» derdi va qaysi biriga ishonish noma'lum edi.
+
+    Solishtiruv AYNAN TENG emas, chunki ikkala chaqiruv diskni
+    ALOHIDA-ALOHIDA o'lchaydi va ular orasida disk band bo'lishi
+    o'zgaradi.  To'liq to'plam ishlaganda (vaqtinchalik fayllar
+    yozilayotganda) farq chiqadi va test tasodifan yiqilardi:
+    `37.07083227 != 37.07083268`.  Test savoli "bir xil YO'L
+    kuzatilyaptimi", "bir xil BAYT" emas — shuning uchun 0.5 foizlik
+    farq kifoya: boshqa disk kuzatilsa farq undan ancha katta bo'ladi.
+    """
+    assert server_health.disk_percent() == pytest.approx(
+        alerts.disk_usage_percent(alerts.disk_watch_path()), abs=0.5
+    )
 
 
 # ── Ogohlantirish ────────────────────────────────────────────────────

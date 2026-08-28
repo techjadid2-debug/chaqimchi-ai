@@ -3352,6 +3352,34 @@ class CloudStore:
             payload["frame_key"] = row["frame_key"]
         return payload
 
+    def latest_job_of_kind(
+        self, site_id: str, kind: str, *, with_result: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Shu turdagi oxirgi topshiriq — natijasi bilan.
+
+        Nega kerak: admin «Sig'imni o'lchash» tugmasini bosadi, natija esa
+        `device_jobs.result_enc` da qoladi va uni HECH QAYERDA ko'rib
+        bo'lmasdi.  Ya'ni tugma ishlardi, javob esa faqat bazadan
+        o'qilardi — bu "kod to'g'ri, lekin foydalanib bo'lmaydi" holati.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                # `created_at` bir soniya aniqligida: bir kunda ikki marta
+                # o'lchansa ikkalasi bir xil vaqt bilan yozilishi mumkin va
+                # tartib TASODIFIY bo'lib qolardi — admin eski natijani
+                # yangisi deb o'qishi mumkin edi.  `rowid` yozuv tartibini
+                # saqlaydi, ya'ni javob doim oxirgi o'lchov.
+                "SELECT * FROM device_jobs WHERE site_id=? AND kind=? "
+                "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (site_id, kind),
+            ).fetchone()
+        if not row:
+            return None
+        payload = self._job_row(row)
+        if with_result:
+            payload["result"] = self._decrypt_json(row["result_enc"])
+        return payload
+
     def latest_job(self, site_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(

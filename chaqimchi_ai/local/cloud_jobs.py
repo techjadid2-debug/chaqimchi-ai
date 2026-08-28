@@ -276,8 +276,18 @@ def _run_benchmark(params: Dict[str, Any], report: Callable[[int, str], None]) -
     if not source:
         # Sozlamadagi birinchi ishlaydigan kamera — mijozdan RTSP
         # manzilini so'rash kerak bo'lmasin.
-        for camera in config_store.read_raw().get("cameras") or []:
-            url = str((camera or {}).get("url") or "").strip()
+        #
+        # Yo'l `retail.cameras[].stream_url`, ildizdagi `cameras` EMAS.
+        # Ildizda ham `cameras` bor (`AppSettings.cameras` — veb-kamera
+        # uchun eski yo'l) va u do'kon kompyuterida doim bo'sh: birinchi
+        # jonli o'lchov aynan shundan yiqildi ("Kamera manzili yo'q"),
+        # holbuki ikkala kamera sozlangan edi.
+        #
+        # TAHLIL oqimi olinadi (`stream_url`), `record_url` emas: biz
+        # zanjir ROSTDAN dekodlaydigan narsani o'lchashimiz kerak.
+        retail = config_store.read_raw().get("retail") or {}
+        for camera in retail.get("cameras") or []:
+            url = str((camera or {}).get("stream_url") or "").strip()
             if url:
                 source = url
                 break

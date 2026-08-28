@@ -196,3 +196,33 @@ def test_a_clean_site_reports_an_empty_list(client: TestClient) -> None:
     detail = client.get(f"/api/v1/admin/sites/{site['site_id']}", headers=ADMIN)
 
     assert detail.json()["geometry_problems"] == []
+
+
+def test_the_diagnostics_endpoint_carries_the_benchmark_result(client: TestClient) -> None:
+    """Admin o'lchov natijasini paneldan KO'RA olsin.
+
+    Tugma o'lchovni boshlardi, natija esa `device_jobs` da qolib ketardi
+    va unga panelda yo'l yo'q edi.  Endi u diagnostika javobida keladi —
+    admin uchun bitta joy.
+    """
+    import cloud.main as main
+
+    site = client.post("/api/v1/admin/sites", headers=ADMIN, json={"name": "O'lchov"}).json()
+    site_id = site["site_id"]
+
+    empty = client.get(f"/api/v1/admin/sites/{site_id}/diagnostics", headers=ADMIN)
+    assert empty.status_code == 200
+    assert empty.json()["benchmark"] is None, "o'lchov qilinmagan do'konda bo'sh"
+
+    store = main.get_store()
+    job = store.create_job(site_id, kind="benchmark", params={}, requested_by="admin")
+    store.job_result(
+        site_id, job["job_id"], ok=True, result={"verdict": {"cameras": 4, "ok": True}}
+    )
+
+    answer = client.get(f"/api/v1/admin/sites/{site_id}/diagnostics", headers=ADMIN)
+
+    assert answer.status_code == 200, answer.text
+    benchmark = answer.json()["benchmark"]
+    assert benchmark["status"] == "done"
+    assert benchmark["result"]["verdict"]["cameras"] == 4

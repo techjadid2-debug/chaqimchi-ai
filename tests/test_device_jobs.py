@@ -429,3 +429,65 @@ def test_an_old_database_learns_the_new_job_kind(tmp_path) -> None:
     job = migrated.create_job(site_id, kind="benchmark", params={}, requested_by="test")
 
     assert job["kind"] == "benchmark"
+
+
+def test_the_admin_can_actually_read_the_benchmark_result(tmp_path) -> None:
+    """Tugma natijani KO'RSATSIN, faqat boshlab qo'ymasin.
+
+    Birinchi variantda «Sig'imni o'lchash» tugmasi ishlardi, natija esa
+    `device_jobs.result_enc` da qolib ketardi va panelda unga yo'l yo'q
+    edi — ya'ni admin o'lchovni boshlay olardi, lekin javobni faqat
+    bazadan o'qish mumkin edi.  Bu "kod to'g'ri, foydalanib bo'lmaydi"
+    holati.
+    """
+    from cloud.store import CloudStore
+
+    store = CloudStore(tmp_path / "c.db")
+    site = store.create_site("O'lchov", plan="lite")
+    site_id = site["site_id"]
+
+    assert store.latest_job_of_kind(site_id, "benchmark") is None, "hali o'lchov yo'q"
+
+    job = store.create_job(site_id, kind="benchmark", params={}, requested_by="admin")
+    store.job_result(
+        site_id,
+        job["job_id"],
+        ok=True,
+        result={"verdict": {"cameras": 4, "ok": True}, "detector": {"per_second": 31.4}},
+    )
+
+    latest = store.latest_job_of_kind(site_id, "benchmark", with_result=True)
+
+    assert latest is not None
+    assert latest["status"] == "done"
+    assert latest["result"]["verdict"]["cameras"] == 4
+
+
+def test_the_latest_benchmark_wins_over_older_ones(tmp_path) -> None:
+    """Ikki marta o'lchansa admin OXIRGISINI ko'rsin."""
+    from cloud.store import CloudStore
+
+    store = CloudStore(tmp_path / "c.db")
+    site_id = store.create_site("O'lchov", plan="lite")["site_id"]
+
+    first = store.create_job(site_id, kind="benchmark", params={}, requested_by="admin")
+    store.job_result(site_id, first["job_id"], ok=True, result={"verdict": {"cameras": 2}})
+    second = store.create_job(site_id, kind="benchmark", params={}, requested_by="admin")
+    store.job_result(site_id, second["job_id"], ok=True, result={"verdict": {"cameras": 4}})
+
+    latest = store.latest_job_of_kind(site_id, "benchmark", with_result=True)
+
+    assert latest["result"]["verdict"]["cameras"] == 4
+
+
+def test_a_clean_chains_job_is_not_mistaken_for_a_benchmark(tmp_path) -> None:
+    """Tur bo'yicha ajratilsin — boshqa topshiriq o'lchov o'rniga chiqmasin."""
+    from cloud.store import CloudStore
+
+    store = CloudStore(tmp_path / "c.db")
+    site_id = store.create_site("O'lchov", plan="lite")["site_id"]
+
+    job = store.create_job(site_id, kind="clean_chains", params={}, requested_by="admin")
+    store.job_result(site_id, job["job_id"], ok=True, result={"killed": 3})
+
+    assert store.latest_job_of_kind(site_id, "benchmark") is None

@@ -26,7 +26,7 @@
   Admin panelda sinov do'koni kartochkasida ikkita yaroqsiz chizma
   ro'yxatga chiqdi (4 px chiziq, 29x20 px zona) va `device_jobs`
   CHECK ro'yxatida `benchmark` bor — migratsiya jonli bazada ishladi.
-- **Windows 0.6.23 NASHR QILINDI** (0.6.22 dagi o'lchov xatosi
+- **Windows 0.6.24 NASHR QILINDI** (kamera manzili zaxirasi). Oldingi: (0.6.22 dagi o'lchov xatosi
   tuzatilgan holda). Oldingi holat: (imzo tekshirildi, tashqaridan
   ochiladi: `dl.chaqimchi.uz/releases/chaqimchi-windows-0.6.22.exe`,
   sha256 `145e240f…`). Cloud uni beryapti
@@ -154,6 +154,22 @@ Endi admin panelda ro'yxat chiqadi (`cloud/config_health.py`), lekin
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Soxta funksiya imzoni TEKSHIRMASA, xatoni yashiradi.**
+  `capacity_verdict` faqat nomli argument oladi, chaqiruv esa pozitsion
+  edi. Test uni `lambda *a, **k` bilan almashtirgan va bunday soxta har
+  qanday chaqiruvni qabul qiladi — natijada o'lchov jonli do'konda 95%
+  da yiqildi. Arzon va sof funksiyani (arifmetika) soxtalashtirmang:
+  uni HAQIQIY holda chaqiring, qimmat qismini (model, RTSP) esa
+  almashtiring. Bu sessiyada shu sinf xato **ikki marta** chiqdi.
+
+- **Kamera manzili qaroriga tegishli.** 0.6.24 dan boshlab qurilma
+  RTSP manzilini (parol bilan) bulutga yuboradi va u Fernet bilan
+  shifrlanadi. Ilgari teskarisi edi va `test_camera_list_goes_up_to_
+  the_cloud` uni qulflab turardi. Qaror sabablari commit `5ef77b6` da.
+  **Eski qurilma bo'sh manzil yuboradi va u mavjudini O'CHIRMASLIGI
+  shart** — aks holda yangilanish paytidagi bir necha daqiqa do'konning
+  sozlamasini yo'q qilardi (`test_an_old_device_does_not_wipe_the_only_copy`).
 
 - **Soxta ma'lumot koddagi xatoni TAKRORLASA, test uni tasdiqlaydi.**
   `benchmark` topshirig'i kamera ro'yxatini ildizdagi `cameras` dan
@@ -324,6 +340,51 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-28 — Kamera manzili endi bulutda zaxiralanadi (0.6.24)
+
+Nima: mijoz talabi bo'yicha qurilma kamera RTSP manzilini (IP va parol
+bilan) bulutga yuboradigan bo'ldi. Ilgari faqat ID va nom ketardi.
+
+**Bu ONGLI qarorni bekor qilish edi** — `publish_cameras()` izohida va
+`register_device_cameras()` docstringida "parol do'konda qolsin" deb
+yozilgan, test ham qulflab turardi. Bekor qilish sababi uchta jonli
+holat: do'kon kompyuteri o'lsa sozlama butunlay yo'qolardi; camera-02
+dagi `record_url` yo'qligini masofadan tuzatib bo'lmasdi; oqim
+sifatini bulutdan tekshirib bo'lmasdi.
+
+Tekshirildi: saytda ham, README da ham bunday va'da **yo'q** —
+izohdagi "README va'dasi" muallifning ichki prinsipi ekan. Admin oynasi
+esa allaqachon "parol shifrlangan holda saqlanadi" deb yozadi.
+
+Ikkala oqim saqlanadi: `rtsp_ciphertext` (tahlil) va yangi
+`record_ciphertext` (klip), migratsiya bilan. Zaxira ROSTDAN
+ishlatiladi — `merge_cameras` klip manzilini lokal sozlama → bulut
+zaxirasi → substream tartibida oladi; ikkinchisisiz zaxira "bor, lekin
+foydasiz" bo'lardi.
+
+Eng xavfli holat alohida qulflandi: eski qurilma bo'sh manzil yuboradi
+va u bulutdagi yagona nusxani o'chirmasligi shart.
+
+Yo'l-yo'lakay: sig'im o'lchovi IKKINCHI marta yiqildi —
+`capacity_verdict` faqat nomli argument oladi. Test buni ushlamadi,
+chunki funksiyani `lambda *a, **k` bilan almashtirgan edi. Endi test
+haqiqiy funksiyani chaqiradi. Admin paneldagi kalit nomlari ham
+tuzatildi (`per_second` mavjud emas edi).
+
+Qayerda: `cloud/store.py` (migratsiya, `register_device_cameras`,
+`list_cameras`), `cloud/main.py` (`EdgeCameraItem`),
+`chaqimchi_ai/local/cloud_config.py` (`publish_cameras`),
+`chaqimchi_ai/retail/inventory.py` (`InventoryCamera.record_url`,
+`merge_cameras`), `chaqimchi_ai/local/cloud_jobs.py`.
+Test: `test_camera_credentials.py` (11 ta, yangi),
+`test_device_telemetry.py` (qaror o'zgarishi),
+`test_local_jobs.py` (haqiqiy `capacity_verdict`).
+Jami **1 889 test** o'tdi.
+
+Diqqat: qurilma 0.6.24 ni olgach `cameras_source` `auto` ga o'tadi
+(bulutda endi manzil bor) va zanjir bir marta qayta ishga tushadi.
+Lokal sozlama o'chmaydi — `merge_cameras` uni ustun deb oladi.
 
 ### 2026-08-28 — Sig'im o'lchovi ishlamasdi: uchta xato (0.6.23)
 

@@ -20,25 +20,26 @@
   - `outbox_poisoned` **o'smayapti** (4 401 → 2 752), `pending: 0`;
   - zanjir sog'lom: `analyzed` 52 835, fps 17.4, latency 47 ms,
     `analysis_errors: 0`, CPU atigi **8.8%**.
-- **Kod 0.6.22 ga ko'tarildi** — reliz hali NASHR QILINMAGAN.
-- Cloud tuzatishlari (1.1–1.4) **deploy qilinmagan**.
+- **Cloud deploy qilindi va JONLI TASDIQLANDI** (`ed23cc7`): hamma
+  konteyner healthy, deploydan keyin **0 ta** 5xx, heartbeat 0.6.21
+  qurilmasidan muammosiz kelyapti (yangi maydonlar standart qiymatli).
+  Admin panelda sinov do'koni kartochkasida ikkita yaroqsiz chizma
+  ro'yxatga chiqdi (4 px chiziq, 29x20 px zona) va `device_jobs`
+  CHECK ro'yxatida `benchmark` bor — migratsiya jonli bazada ishladi.
+- **Kod 0.6.22 ga ko'tarildi, reliz hali NASHR QILINMAGAN** — AI
+  tuzatishlari (yuz chegarasi, klip sababi, diagnostika, sig'im
+  o'lchovi) do'konga shu relizsiz yetmaydi.
 - Shox: `loitering-rasmsiz`. Server: `169.58.198.111`.
 - **Sotuv hali ochilmagan** — pastdagi ikkita darvoza yopiq.
 
 ## KEYINGI ISH
 
-**1) Cloud'ni deploy qiling** (qurilma relizini kutmaydi):
+**1) ✅ BAJARILDI — cloud deploy qilindi va tasdiqlandi** (2026-08-28).
 
-```bash
-rsync -az --delete ... root@169.58.198.111:/home/deploy/chaqimchi-ai/
-ssh root@169.58.198.111 'cd /home/deploy/chaqimchi-ai && \
-  set -a && . /etc/chaqimchi/backup.env && set +a && \
-  CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh'
-```
-
-Deploydan keyin tekshiring: admin panelda sinov do'koni kartochkasida
-**«2 ta chizma hech qachon ishlamaydi»** qatori chiqishi kerak (4 px
-chiziq va 29x20 px zona).
+Bugun kechqurun 16:00 UTC (21:00 Toshkent) birinchi kunlik hisobot
+yangi kod bilan ketadi — Telegramda tekshiring: `🚻` qatori
+CHIQMASLIGI kerak (bugun demografiya qamrovi 30% dan past) va
+`⚠️` qatorida «N marta kassada hech kim yo'q» paydo bo'lishi kerak.
 
 **2) 0.6.22 relizini chiqaring** — usiz AI tuzatishlari do'konga yetmaydi:
 

@@ -26,9 +26,12 @@
   Admin panelda sinov do'koni kartochkasida ikkita yaroqsiz chizma
   ro'yxatga chiqdi (4 px chiziq, 29x20 px zona) va `device_jobs`
   CHECK ro'yxatida `benchmark` bor — migratsiya jonli bazada ishladi.
-- **Kod 0.6.22 ga ko'tarildi, reliz hali NASHR QILINMAGAN** — AI
-  tuzatishlari (yuz chegarasi, klip sababi, diagnostika, sig'im
-  o'lchovi) do'konga shu relizsiz yetmaydi.
+- **Windows 0.6.22 NASHR QILINDI** (imzo tekshirildi, tashqaridan
+  ochiladi: `dl.chaqimchi.uz/releases/chaqimchi-windows-0.6.22.exe`,
+  sha256 `145e240f…`). Cloud uni beryapti
+  (`/api/v1/public/windows-release` → `0.6.22`).
+  **Dalada bitta qurilma bor** — Do'kon (5070), siyosat `auto`, ya'ni
+  15 daqiqada oladi. Bosqichma-bosqich tarqatish shart bo'lmadi.
 - Shox: `loitering-rasmsiz`. Server: `169.58.198.111`.
 - **Sotuv hali ochilmagan** — pastdagi ikkita darvoza yopiq.
 
@@ -41,15 +44,17 @@ yangi kod bilan ketadi — Telegramda tekshiring: `🚻` qatori
 CHIQMASLIGI kerak (bugun demografiya qamrovi 30% dan past) va
 `⚠️` qatorida «N marta kassada hech kim yo'q» paydo bo'lishi kerak.
 
-**2) 0.6.22 relizini chiqaring** — usiz AI tuzatishlari do'konga yetmaydi:
+**2) ✅ BAJARILDI — 0.6.22 nashr qilindi** (2026-08-28).
 
-```bash
-PYTHONPATH="$PWD" CHAQIMCHI_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
-  python scripts/build_windows_payload.py
-makensis -V2 scripts/windows_installer.nsi
-PYTHONPATH="$PWD" CHAQIMCHI_RELEASE_HOST=root@169.58.198.111 \
-  ./scripts/publish_windows_release.sh --exe releases/Chaqimchi_AI_Setup.exe
+Qurilma 15 daqiqada oladi. Yetganini shundan tekshiring:
+
+```sql
+select payload_json::jsonb->>'app_version', received_at from device_health;
 ```
+
+Yangi versiyada ko'rilsin: `clips` ichida `no_segments` va
+`cut_failed` alohida, `cameras_configured` bor, `snapshots{}` bor,
+`device_diagnostics` jadvali endi **bo'sh emas**.
 
 **3) Sig'imni O'LCHANG** — admin panelda «Sig'imni o'lchash» tugmasi
 (0.6.22 kerak). Natija `device_diagnostics` da ko'rinadi. Hozirgi

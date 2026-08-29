@@ -17,12 +17,17 @@
   (faqat o'tishda, maks. 2); 4 tadan ko'p topilsa eng yaxshi 4 belgilanadi.
   Yagona manba: `chaqimchi_ai/camera_roles.py`. **Soak muzlatishi
   sabab Windows nashr QILINMAYDI** — soak tugagach chiqadi.
+- **Cloud deploy QILINDI (2026-08-30):** 🚻 tuzatishi + kamera rollari
+  serverga chiqdi (`25a2882`, `af08057`). Tekshirildi: konteynerlar
+  healthy, `site_cameras.role` migratsiyasi jonli bazada ishladi,
+  tashqi API 200, deploydan keyingi loglarda xato yo'q. Bugungi 21:00
+  hisobotida 🚻 qatori son-formatda chiqishini Telegramda tekshiring.
 - **QA sessiyasi (29-avg kunduzi):** 🚻 ayol/erkak qatori kunlik
   hisobotga QAYTARILDI — «aqlli format»: o'lchov vakillik qilsa foiz,
   kam bo'lsa faqat SON (ega qarori — qatorni butunlay yashirish xato
   bo'lgan). Uch haftalik beqaror test (`test_clip_retention_is_
-  configurable`) ildizi topilib tuzatildi. **Cloud deploy hali
-  qilinmagan.** Ega qarori bilan: kameralarga hozircha TEGILMAYDI
+  configurable`) ildizi topilib tuzatildi. Cloud deploy 30-avg da
+  qilindi. Ega qarori bilan: kameralarga hozircha TEGILMAYDI
   (720p, camera-02, chizmalar keyinga), maqsad — avval pilotni
   barqarorlashtirish (72 soatlik soak + soak paytida reliz muzlatish).
 - **Jonli tekshiruv o'tkazildi** (PostgreSQL, `device_metrics`, konteyner
@@ -115,8 +120,8 @@ Yangi versiyada ko'rilsin: `clips` ichida `no_segments` va
 zaxira katta ko'rinadi (CPU 8.8%, RAM 40%, 2 kamera), lekin
 **o'lchovsiz 720p ga o'tilmaydi**.
 
-**4) Cloud deploy — 🚻 qaytishi va beqaror test tuzatishi bilan**
-(29-avg kodda tayyor, `make test` yashil bo'lgach). Deploydan keyingi
+**4) ✅ BAJARILDI — cloud deploy qilindi (2026-08-30)** — 🚻 qaytishi,
+beqaror test tuzatishi va kamera rollari bilan. Deploydan keyingi
 21:00 hisobotida 🚻 qatori son-formatda chiqqanini tekshiring.
 
 **5) 72 soatlik soak — pilotni barqarorlashtirish o'lchovi.**

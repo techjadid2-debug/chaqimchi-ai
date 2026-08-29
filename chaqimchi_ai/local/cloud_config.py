@@ -572,6 +572,11 @@ def publish_cameras() -> bool:
             # bulutda "klip yozilmaydi" degan belgi bo'lib ko'rinadi.
             "source": str(item.get("stream_url") or ""),
             "record_url": str(item.get("record_url") or ""),
+            # Rol DOIM ochiq yuboriladi: tanlanmagani `"none"`.  Bo'sh
+            # satr yuborilsa bulut uni "eski qurilma, tegma" deb o'qiydi
+            # va sehrgarda rolni olib tashlash bulutga hech qachon
+            # yetib bormasdi.
+            "role": str(item.get("role") or "") or "none",
         }
         for item in ((raw_all.get("retail") or {}).get("cameras") or [])
         if item.get("id")

@@ -210,6 +210,7 @@ def save_camera(
     record_url: Optional[str] = None,
     priority: str = "retail",
     codec: Optional[str] = None,
+    role: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Kamerani qo'shadi yoki mavjudini almashtiradi (id bo'yicha).
 
@@ -217,6 +218,11 @@ def save_camera(
     da bunday maydon yo'q va pydantic uni e'tiborsiz qoldiradi; fayl esa xom
     YAML sifatida o'qib-yozilgani uchun nom yo'qolmaydi.  Ya'ni bu ataylab —
     zanjir sxemasini mijoz uchun chiroyli nom deb kengaytirish shart emas.
+
+    DIQQAT: yozuv NOLDAN quriladi — chaqiruvchi bermagan maydon
+    O'CHADI.  Mavjud kamerani qayta saqlayotgan har bir chaqiruvchi
+    (masalan `_backfill_record_urls`) saqlanishi kerak maydonlarni
+    o'zi uzatishi shart.
     """
     entry: Dict[str, Any] = {
         "id": camera_id,
@@ -229,6 +235,8 @@ def save_camera(
         entry["record_url"] = record_url
     if codec:
         entry["codec"] = codec
+    if role:
+        entry["role"] = role
 
     with _LOCK:
         raw = read_raw()
@@ -392,7 +400,7 @@ def feature_status() -> List[Dict[str, Any]]:
     def item(code: str, name: str, active: bool, reason: str) -> Dict[str, Any]:
         return {"code": code, "name": name, "active": active, "reason": None if active else reason}
 
-    return [
+    results = [
         item(
             "line_count",
             "Kirish-chiqish sanash",
@@ -449,6 +457,37 @@ def feature_status() -> List[Dict[str, Any]]:
             ),
         ),
     ]
+
+    # Rol va'da, geometriya esa uni ishga tushiradi: «Kirish» roli
+    # chiziqsiz ham, «Kassa» roli navbat zonasisiz ham JIMGINA hech
+    # narsa qilmaydi.  Bu 2026-08-22 xatosining teskari ko'rinishi
+    # (u paytda rol bor edi-yu, uni hech kim o'qimasdi) — endi rol
+    # o'qiladi, lekin geometriyasiz qolgani baland aytilishi shart.
+    line_cameras = {str(line.get("camera_id")) for line in lines}
+    queue_cameras = {str(zone.get("camera_id")) for zone in queue_zones}
+    for camera in cameras:
+        role = str(camera.get("role") or "")
+        camera_id = str(camera.get("id") or "")
+        title = str(camera.get("label") or camera_id)
+        if role == "entrance" and camera_id not in line_cameras:
+            results.append(
+                item(
+                    f"role_entrance_{camera_id}",
+                    f"{title} — «Kirish» roli",
+                    False,
+                    "Kirish chizig'i chizilmagan — sanash ham, Face ID ham ishlamaydi",
+                )
+            )
+        elif role == "checkout" and camera_id not in queue_cameras:
+            results.append(
+                item(
+                    f"role_checkout_{camera_id}",
+                    f"{title} — «Kassa» roli",
+                    False,
+                    "Navbat zonasi chizilmagan — navbat nazorati ishlamaydi",
+                )
+            )
+    return results
 
 
 def config_file() -> Path:

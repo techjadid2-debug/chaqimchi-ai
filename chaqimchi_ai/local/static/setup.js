@@ -406,42 +406,104 @@
           " " + ((data && data.hint) || ""),
         );
       }
+      // Rol taklifi: tizim kanal nomi va oqim o'lchamidan taxmin qiladi,
+      // ODAM tasdiqlaydi.  Ishonchli belgi bo'lmasa taklif bo'sh keladi.
+      // Eski "1-kanal = Kirish eshigi" avtomatik yozuvi ATAYLAB olib
+      // tashlandi: jim taxmin 2026-08-22 xatosining (hamma kamera
+      // o'z-o'zidan "Kirish" bo'lib qolishi) aynan o'zi edi.
+      let advice = { suggestions: [], max_cameras: 4 };
+      try {
+        advice = await api("/api/setup/role-suggestions", {
+          method: "POST",
+          body: JSON.stringify({
+            items: data.channels.map((item) => ({
+              ref: String(item.channel),
+              name: item.name || "",
+              width: item.width || 0,
+              height: item.height || 0,
+            })),
+          }),
+        });
+      } catch (error) {
+        // Taklif — qulaylik, sozlashning o'zi emas: kelmasa jim davom etamiz.
+      }
+      const adviceByRef = {};
+      for (const s of advice.suggestions || []) adviceByRef[s.ref] = s;
+      const roleOptions = (selected) =>
+        ['<option value="">Rol tanlanmagan</option>']
+          .concat(
+            Object.entries(ROLE_PRESETS).map(
+              ([value, preset]) =>
+                `<option value="${value}"${value === selected ? " selected" : ""}>${preset.label}</option>`,
+            ),
+          )
+          .join("");
+
+      // Tarifdan ortiq kamera topilsa hammasini saqlab bo'lmaydi (5-chisi
+      // 422 qaytaradi) — tizim eng foydali to'rtligini belgilab beradi,
+      // qolganlarini mijoz o'zi almashtirishi mumkin.
+      const overLimit = data.channels.length > (advice.max_cameras || 4);
       $("channelResult").innerHTML =
-        `<div class="note ok"><b>${data.found} ta kamera topildi</b>Nomini yozing va saqlang.</div>` +
+        `<div class="note ok"><b>${data.found} ta kamera topildi</b>` +
+        (overLimit
+          ? ` Tarifda ${advice.max_cameras} ta sig‘adi — belgilanganlari saqlanadi.`
+          : " Rolini tasdiqlang, nomini yozing va saqlang.") +
+        "</div>" +
         data.channels
-          .map(
-            (item) => `
+          .map((item) => {
+            const s = adviceByRef[String(item.channel)] || {};
+            const checked = overLimit ? s.keep !== false : true;
+            const reasons = (s.reasons || []).join(" · ");
+            return `
         <div class="camera-row">
-          <span class="dot on"></span>
+          <input type="checkbox" data-keep="${item.channel}" ${checked ? "checked" : ""}>
           <div class="meta">
             <b>${item.channel}-kanal</b>
             <code>${esc(item.safe_url)}</code>
+            ${reasons ? `<small class="hint">${esc(reasons)}</small>` : ""}
           </div>
+          <select data-role="${item.channel}" style="max-width:170px">${roleOptions(s.role || "")}</select>
           <input type="text" data-name="${item.channel}" placeholder="Masalan: Kirish"
-                 style="max-width:190px" value="${item.channel === 1 ? "Kirish eshigi" : ""}">
-        </div>`,
-          )
+                 style="max-width:190px" value="${s.role && ROLE_PRESETS[s.role] ? esc(ROLE_PRESETS[s.role].label) : ""}">
+        </div>`;
+          })
           .join("") +
-        '<div class="actions"><button class="button primary" id="saveChannelsBtn" type="button">Hammasini saqlash</button></div>';
+        '<div class="actions"><button class="button primary" id="saveChannelsBtn" type="button">Belgilanganlarni saqlash</button></div>';
 
       $("saveChannelsBtn").addEventListener("click", async () => {
         const btn = $("saveChannelsBtn");
         btn.disabled = true;
         try {
+          let saved = 0;
           for (const item of data.channels) {
+            const keep = document.querySelector(`[data-keep="${item.channel}"]`);
+            if (keep && !keep.checked) continue;
+            const roleField = document.querySelector(`[data-role="${item.channel}"]`);
+            const role = roleField ? roleField.value : "";
+            const preset = ROLE_PRESETS[role];
             const field = document.querySelector(`[data-name="${item.channel}"]`);
             await api("/api/setup/cameras", {
               method: "POST",
               body: JSON.stringify({
-                label: (field && field.value.trim()) || `${item.channel}-kanal`,
+                label:
+                  (field && field.value.trim()) ||
+                  (preset ? preset.label : `${item.channel}-kanal`),
                 rtsp_url: item.rtsp_url,
                 codec: item.codec || "",
+                role: role,
+                priority: preset ? preset.priority : "retail",
               }),
             });
+            saved += 1;
           }
           $("password").value = "";
           await loadCameras();
-          note("channelResult", "ok", "Kameralar saqlandi.", " Keyingi qadamga o‘tishingiz mumkin.");
+          note(
+            "channelResult",
+            "ok",
+            `${saved} ta kamera saqlandi.`,
+            " Keyingi qadamga o‘tishingiz mumkin.",
+          );
         } catch (error) {
           note("channelResult", "err", "Saqlanmadi.", " " + error.message);
         } finally {
@@ -489,6 +551,10 @@
           rtsp_url: pendingUrl,
           priority: preset ? preset.priority : "retail",
           codec: pendingCodec,
+          // Rol endi SAQLANADI: ilgari u shu yerda nom+prioritetga
+          // aylanib yo'qolardi va tizim kim nimaga ishlatilishini
+          // bilmasdi (bo'sh qolsa — mijoz tanlamagan, taxmin yo'q).
+          role: $("cameraRole").value || "",
         }),
       });
       pendingUrl = "";

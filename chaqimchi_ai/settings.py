@@ -180,6 +180,13 @@ class RetailCameraSettings(BaseModel):
     #: `security` — taqiqlangan zona va ish vaqtidan tashqari harakat;
     #: `retail` — sanash, navbat, dwell; `background` — statistika.
     priority: Literal["security", "retail", "background"] = "retail"
+    #: Kameraning MAHSULOT vazifasi (sehrgarda tanlanadi, bulutda
+    #: zaxiralanadi).  Prioritetdan farqi: rol mijoz tushunchasida
+    #: ("kirish", "kassa"), prioritet — zanjirning ichki navbati.
+    #: `None` — tanlanmagan; bu yaroqli holat, standart taxmin YO'Q
+    #: (jim standart hamma kamerani "kirish" qilib qo'ygan edi,
+    #: `cloud/main.py` dagi 2026-08-22 izohiga qarang).
+    role: Optional[Literal["entrance", "checkout", "sales", "storage"]] = None
     #: Sekundiga shuncha kadr dekodlanadi; qolgani dekodlanmasdan tashlanadi.
     sample_fps: float = Field(default=5.0, gt=0, le=30)
     #: Kafolatlangan eng past tahlil tezligi.  Berilmasa prioritetdan olinadi.

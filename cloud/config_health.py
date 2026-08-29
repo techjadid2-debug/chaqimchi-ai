@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Sequence, Tuple
 
+from chaqimchi_ai.camera_roles import face_id_check
+
 #: Chiziqning eng kam uzunligi (kadr o'lchamiga nisbatan).
 #:
 #: Eshik odatda kadr enining 20-50% ini egallaydi.  5% dan qisqa chiziq
@@ -193,4 +195,79 @@ def geometry_problems(
                 }
             )
 
+    return problems
+
+
+def role_problems(
+    cameras: Sequence[Dict[str, Any]],
+    config: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Rol va'da qilgan, geometriya esa yo'q — jimlik ro'yxati.
+
+    Rol o'z-o'zidan hodisa chiqarmaydi: «kirish» chizilgan chiziq bilan,
+    «kassa» navbat zonasi bilan ishlaydi.  Nomuvofiqlik xato ko'rinishida
+    emas, JIMLIK ko'rinishida keladi — 2026-08-22 da o'chirilgan rol
+    maydoni aynan shu jimlikda edi (rol bor, o'qiydigan yo'q).  Endi rol
+    o'qiladi, lekin geometriyasiz qolgan rol ham xuddi shunday jim —
+    shu ro'yxat uni admin ko'ziga chiqaradi.
+    """
+    problems: List[Dict[str, Any]] = []
+    line_cameras = {
+        str(line.get("camera_id"))
+        for line in (config.get("lines") or [])
+        if isinstance(line, dict)
+    }
+    queue_cameras = {
+        str(zone.get("camera_id"))
+        for zone in (config.get("zones") or [])
+        if isinstance(zone, dict) and zone.get("queue")
+    }
+    for camera in cameras:
+        if not isinstance(camera, dict):
+            continue
+        role = str(camera.get("role") or "")
+        camera_id = str(camera.get("camera_id") or "")
+        label = str(camera.get("label") or camera_id)
+        if role == "entrance":
+            if camera_id not in line_cameras:
+                problems.append(
+                    {
+                        "kind": "role",
+                        "name": label,
+                        "camera_id": camera_id,
+                        "problem": (
+                            "Rol «Kirish», lekin kirish chizig'i chizilmagan — "
+                            "sanash ham, Face ID ham ishlamaydi."
+                        ),
+                        "measure": None,
+                    }
+                )
+            # Balandlik faqat probe'dan keladi; noma'lum bo'lsa bu muammo
+            # emas — yolg'on trevoga bermaslik uchun jim qolamiz.
+            height = camera.get("height")
+            if height:
+                ok, reason = face_id_check(int(height))
+                if ok is False:
+                    problems.append(
+                        {
+                            "kind": "role",
+                            "name": label,
+                            "camera_id": camera_id,
+                            "problem": f"Rol «Kirish», lekin {reason}.",
+                            "measure": int(height),
+                        }
+                    )
+        elif role == "checkout" and camera_id not in queue_cameras:
+            problems.append(
+                {
+                    "kind": "role",
+                    "name": label,
+                    "camera_id": camera_id,
+                    "problem": (
+                        "Rol «Kassa», lekin navbat zonasi chizilmagan — "
+                        "navbat ham, «kassada hech kim yo'q» ham ishlamaydi."
+                    ),
+                    "measure": None,
+                }
+            )
     return problems

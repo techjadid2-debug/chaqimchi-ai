@@ -169,7 +169,12 @@ rejalashtirilgan vazifa, SYSTEM nomidan, tizimga kirish shart emas
 ## Ochiq qarorlar
 
 - Pilot do‘kon, NVR va to‘rtta kamera modeli/RTSP profili qaysi?
-- Qaysi kamera kirish, kassa, savdo zali va ombor rolida bo‘ladi?
+- ~~Qaysi kamera kirish, kassa, savdo zali va ombor rolida bo‘ladi?~~
+  **HAL QILINDI (2026-08-30):** rolni tizim taklif qiladi (kanal nomi +
+  oqim o‘lchamidan), odam sehrgarda tasdiqlaydi; «kirish» roli kamerani
+  davomat (Face ID) ro‘yxatiga ham qo‘shadi (ko‘pi bilan 2 ta, ega
+  panelda o‘zgartira oladi). 4 tadan ko‘p topilsa tizim eng yaxshi
+  4 tasini belgilab beradi. Yagona manba: `chaqimchi_ai/camera_roles.py`.
 - Taqiqlangan zonalar va ish soatlari aniq qanday?
 - Telegram alert kimlarga va qaysi severity’dan yuboriladi?
 - 72 soat sinovni boshlash sanasi va qabul qiluvchi mas’ul kim?

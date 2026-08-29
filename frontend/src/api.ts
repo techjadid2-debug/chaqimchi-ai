@@ -197,6 +197,8 @@ export async function claimDevice(connectToken: string) {
 
 export type ScanKind = "lan_scan" | "onvif" | "channels" | "probe";
 
+export type CameraRole = "entrance" | "checkout" | "sales" | "storage";
+
 export type ScanStream = {
   stream_ref: number;
   safe_url: string;
@@ -210,6 +212,12 @@ export type ScanStream = {
   vendor_hint?: string;
   has_onvif?: boolean;
   has_rtsp?: boolean;
+  // Server hisoblagan rol taklifi (nom + o'lchamdan).  Bo'sh —
+  // ishonchli belgi yo'q, tanlov odamniki.
+  suggested_role?: CameraRole | "";
+  suggestion_reasons?: string[];
+  face_id_ok?: boolean | null;
+  keep?: boolean;
 };
 
 export type ScanJob = {
@@ -239,7 +247,14 @@ export async function pollScan(siteId: string, jobId: string) {
 
 export async function saveCameraFromScan(
   siteId: string,
-  body: { job_id: string; stream_ref: number; label: string; camera_id?: string },
+  body: {
+    job_id: string;
+    stream_ref: number;
+    label: string;
+    camera_id?: string;
+    // Bo'sh — rol tanlanmagan (yaroqli holat, server saqlanganiga tegmaydi).
+    role?: CameraRole | "";
+  },
 ) {
   return api<{ camera: { camera_id: string }; config_revision: number }>(
     "/api/v1/owner/cameras/from-scan",
@@ -251,7 +266,7 @@ export async function saveCameraFromScan(
 export async function saveCameraManually(
   siteId: string,
   cameraId: string,
-  body: { label: string; rtsp_url: string },
+  body: { label: string; rtsp_url: string; role?: CameraRole | "" },
 ) {
   return api<{ camera: { camera_id: string } }>(
     `/api/v1/owner/cameras/${encodeURIComponent(cameraId)}`,

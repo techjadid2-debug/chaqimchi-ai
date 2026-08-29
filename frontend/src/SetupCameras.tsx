@@ -5,6 +5,7 @@ import {
   saveCameraFromScan,
   saveCameraManually,
   startScan,
+  type CameraRole,
   type ScanJob,
   type ScanStream,
 } from "./api";
@@ -32,6 +33,17 @@ const POLL_MS = 2000;
 //: Shundan keyin "biroz cho'zilyapti" deyiladi — foydalanuvchi
 //: spinnerni "qotib qoldi" deb o'ylamasin.
 const SLOW_AFTER_MS = 60_000;
+
+// Rol — nomdan alohida SAQLANADIGAN maydon (chaqimchi_ai/camera_roles.py).
+// Tugma rolni tanlaydi va nomni to'ldiradi; rolsiz saqlash ham mumkin —
+// majburiy tanlov 2026-08-22 da hamma kamerani jimgina "Kirish" qilib
+// qo'ygan xatoning ildizi edi.
+const ROLE_CHOICES: Array<{ role: CameraRole; label: string }> = [
+  { role: "entrance", label: "Kirish eshigi" },
+  { role: "checkout", label: "Kassa" },
+  { role: "sales", label: "Savdo zali" },
+  { role: "storage", label: "Ombor" },
+];
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -131,7 +143,9 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
   const [step, setStep] = useState<Step>(1);
   const [picked, setPicked] = useState<ScanStream | null>(null);
   const [credentials, setCredentials] = useState({ username: "", password: "" });
-  const [label, setLabel] = useState("Kirish eshigi");
+  // Nom ham, rol ham bo'sh boshlanadi — jim standart yo'q.
+  const [label, setLabel] = useState("");
+  const [role, setRole] = useState<CameraRole | "">("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [manual, setManual] = useState(false);
@@ -151,6 +165,7 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
         job_id: scan.job.job_id,
         stream_ref: picked.stream_ref,
         label: label.trim() || "Kamera",
+        role,
       });
       onDone();
     } catch (reason) {
@@ -169,6 +184,7 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
       await saveCameraManually(siteId, String(data.get("camera_id") || "camera-01"), {
         label: String(data.get("label") || "Kamera"),
         rtsp_url: String(data.get("rtsp_url") || ""),
+        role: String(data.get("role") || "") as CameraRole | "",
       });
       onDone();
     } catch (reason) {
@@ -201,7 +217,19 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                 ))}
               </select>
             </label>
-            <label>Nomi<input className="input" name="label" defaultValue="Kirish eshigi" required /></label>
+            <label>Nomi
+              {/* Bo'sh boshlanadi — "Kirish eshigi" jim standarti hamma
+                  kamerani kirish qilib ko'rsatib qo'yardi. */}
+              <input className="input" name="label" placeholder="Masalan: Kassa" required />
+            </label>
+            <label>Vazifasi
+              <select className="select" name="role" defaultValue="">
+                <option value="">Rol tanlanmagan</option>
+                {ROLE_CHOICES.map(choice => (
+                  <option key={choice.role} value={choice.role}>{choice.label}</option>
+                ))}
+              </select>
+            </label>
           </div>
           <label>RTSP manzil
             <input className="input" name="rtsp_url" required placeholder="rtsp://foydalanuvchi:parol@192.168.1.64:554/..." />
@@ -314,6 +342,12 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                       className="scan-row"
                       onClick={() => {
                         setPicked(item);
+                        // Server taklifi 4-qadamda oldindan tanlangan
+                        // bo'lib chiqadi — tasdiqlash odamda qoladi.
+                        const suggested = (item.suggested_role || "") as CameraRole | "";
+                        setRole(suggested);
+                        const choice = ROLE_CHOICES.find(entry => entry.role === suggested);
+                        setLabel(choice ? choice.label : item.name || "");
                         // Manzil emas, INDEKS yuboriladi — parol
                         // brauzerga umuman tushmaydi.
                         void scan.begin({
@@ -384,22 +418,39 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
         {step === 4 ? (
           <Card>
             <div className="card-head">
-              <div><h2>Kamerani nomlaymiz</h2><p>Nom hisobotlarda va ogohlantirishlarda ko‘rinadi</p></div>
+              <div><h2>Kameraning vazifasi va nomi</h2><p>Rol tizimga bu kamera nimaga ishlatilishini aytadi</p></div>
               <button className="btn" onClick={() => back(3)}>Orqaga</button>
             </div>
             <div className="card-body">
               <div className="page-actions preset-names">
-                {["Kirish eshigi", "Kassa zonasi", "Savdo zali", "Ombor"].map(name => (
+                {ROLE_CHOICES.map(choice => (
                   <button
-                    key={name}
-                    className={`btn ${label === name ? "btn-primary" : ""}`}
-                    onClick={() => setLabel(name)}
+                    key={choice.role}
+                    className={`btn ${role === choice.role ? "btn-primary" : ""}`}
+                    onClick={() => {
+                      setRole(choice.role);
+                      setLabel(current => (current.trim() ? current : choice.label));
+                    }}
                   >
-                    {name}
+                    {choice.label}
                   </button>
                 ))}
+                {/* Ochiq "rolsiz" varianti SHART: majburiy tanlov
+                    2026-08-22 xatosining ildizi edi. */}
+                <button className={`btn ${role === "" ? "btn-primary" : ""}`} onClick={() => setRole("")}>
+                  Rolsiz
+                </button>
               </div>
-              <label>Nomi<input className="input" value={label} onChange={event => setLabel(event.target.value)} /></label>
+              {picked?.suggestion_reasons?.length ? (
+                <p className="metric-note">{picked.suggestion_reasons.join(" · ")}</p>
+              ) : null}
+              {role === "entrance" ? (
+                <p className="metric-note">
+                  «Kirish eshigi» tanlangani uchun bu kamera xodim davomati (Face ID)
+                  kamerasi ham bo‘ladi — keyin «Xodimlar» bo‘limida o‘zgartirsa bo‘ladi.
+                </p>
+              ) : null}
+              <label>Nomi<input className="input" value={label} placeholder="Masalan: Kassa" onChange={event => setLabel(event.target.value)} /></label>
               {saveError ? <div className="form-error" role="alert">{saveError}</div> : null}
               <button className="btn btn-primary btn-wide" disabled={saving} onClick={() => void save()}>
                 {saving ? "Saqlanmoqda…" : "Kamerani saqlash"}

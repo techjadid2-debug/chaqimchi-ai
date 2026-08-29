@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from chaqimchi_ai.camera_roles import CAMERA_ROLES, ROLE_NONE
 from chaqimchi_ai.licensing.plans import (
     DEFAULT_USD_RATE_UZS,
     LITE_MONTHLY_PRICE_USD_CENTS,
@@ -621,6 +622,8 @@ class CloudStore:
             item["has_live"] = bool(item.get("live_key"))
             item.pop("rtsp_ciphertext", None)
             item.setdefault("origin", "panel")
+            # NULL ham, eski qurilmadan qolgan bo'sh satr ham — "tanlanmagan".
+            item["role"] = str(item.get("role") or "") or ROLE_NONE
             # Qurilmadan kelgan qatorda manzil yo'q.  `source` ni bo'sh satr
             # bilan qaytarish MUMKIN EMAS: `cloud_config.apply()` aynan
             # `if item.get("source")` bo'yicha ishlaydi va bo'sh manzil
@@ -644,7 +647,14 @@ class CloudStore:
         return cameras
 
     def upsert_camera(
-        self, site_id: str, camera_id: str, *, label: str, rtsp_url: str, enabled: bool = True
+        self,
+        site_id: str,
+        camera_id: str,
+        *,
+        label: str,
+        rtsp_url: str,
+        enabled: bool = True,
+        role: str = "",
     ) -> Dict[str, Any]:
         if not self.get_site(site_id):
             raise ValueError("Sayt topilmadi")
@@ -673,17 +683,32 @@ class CloudStore:
         clean_label = label.strip()
         if not clean_label:
             raise ValueError("Kamera nomi bo'sh bo'lishi mumkin emas")
+        role_raw = str(role or "").strip().lower()
+        if role_raw and role_raw != ROLE_NONE and role_raw not in CAMERA_ROLES:
+            raise ValueError(f"Kamera roli noto'g'ri: {role_raw}")
         ciphertext = self._camera_cipher().encrypt(source.encode("utf-8")).decode("ascii")
         now = _iso(_utc_now())
         conn = self._connect()
         conn.execute(
             "INSERT INTO site_cameras"
-            "(site_id,camera_id,label,rtsp_ciphertext,enabled,updated_at,origin) "
-            "VALUES(?,?,?,?,?,?,'panel') ON CONFLICT(site_id,camera_id) DO UPDATE SET "
+            "(site_id,camera_id,label,rtsp_ciphertext,enabled,updated_at,origin,role) "
+            "VALUES(?,?,?,?,?,?,'panel',?) ON CONFLICT(site_id,camera_id) DO UPDATE SET "
             "label=excluded.label,rtsp_ciphertext=excluded.rtsp_ciphertext,enabled=excluded.enabled,"
             "probe_status='pending',probe_error=NULL,updated_at=excluded.updated_at,"
-            "origin='panel'",
-            (site_id, camera_id, clean_label[:120], ciphertext, int(enabled), now),
+            "origin='panel',"
+            # Qurilma yo'lidagi bilan bir semantika: bo'sh — tegilmaydi,
+            # `none` — tozalanadi, qiymat — o'rnatiladi.
+            "role=CASE WHEN excluded.role='' "
+            "THEN site_cameras.role ELSE excluded.role END",
+            (
+                site_id,
+                camera_id,
+                clean_label[:120],
+                ciphertext,
+                int(enabled),
+                now,
+                None if role_raw == ROLE_NONE else role_raw,
+            ),
         )
         conn.commit()
         conn.close()
@@ -739,10 +764,19 @@ class CloudStore:
                     f"Pilot kamera ID camera-01..camera-{GUARANTEED_CAMERAS:02d} bo'lishi kerak"
                 )
             label = str(item.get("label") or camera_id).strip() or camera_id
+            role_raw = str(item.get("role") or "").strip().lower()
+            # Yaroqsiz rol JIM tashlanmaydi: `CHAQIMCHI_AVAILABLE_FEATURES`
+            # dagi jim filtr saboqi — xato yutilsa uni hech kim ko'rmaydi.
+            if role_raw and role_raw != ROLE_NONE and role_raw not in CAMERA_ROLES:
+                raise ValueError(f"Kamera roli noto'g'ri: {role_raw}")
             seen[camera_id] = {
                 "label": label[:120],
                 "source": str(item.get("source") or "").strip(),
                 "record_url": str(item.get("record_url") or "").strip(),
+                # Uch holat: `""` — eski qurilma, rolni BILMAYDI (bulutdagi
+                # qiymat saqlanadi); `none` — ochiq "tanlanmagan" (NULL ga
+                # tozalanadi); qiymat — o'rnatiladi.
+                "role": None if role_raw == ROLE_NONE else role_raw,
             }
         now = _iso(_utc_now())
         conn = self._connect()
@@ -779,14 +813,19 @@ class CloudStore:
             conn.execute(
                 "INSERT INTO site_cameras"
                 "(site_id,camera_id,label,rtsp_ciphertext,record_ciphertext,"
-                "enabled,updated_at,origin) "
-                "VALUES(?,?,?,?,?,1,?,'device') ON CONFLICT(site_id,camera_id) DO UPDATE SET "
+                "enabled,updated_at,origin,role) "
+                "VALUES(?,?,?,?,?,1,?,'device',?) ON CONFLICT(site_id,camera_id) DO UPDATE SET "
                 "label=excluded.label,updated_at=excluded.updated_at,"
                 "rtsp_ciphertext=CASE WHEN excluded.rtsp_ciphertext='' "
                 "THEN site_cameras.rtsp_ciphertext ELSE excluded.rtsp_ciphertext END,"
                 "record_ciphertext=CASE WHEN excluded.record_ciphertext='' "
-                "THEN site_cameras.record_ciphertext ELSE excluded.record_ciphertext END",
-                (site_id, camera_id, item["label"], source, record, now),
+                "THEN site_cameras.record_ciphertext ELSE excluded.record_ciphertext END,"
+                # `label=excluded.label` naqshi EMAS: bo'sh satr (eski,
+                # rolni bilmaydigan qurilma) saqlangan rolni o'chirmasin.
+                # NULL (ochiq "none") esa ELSE shoxidan o'tib TOZALAYDI.
+                "role=CASE WHEN excluded.role='' "
+                "THEN site_cameras.role ELSE excluded.role END",
+                (site_id, camera_id, item["label"], source, record, now, item["role"]),
             )
         for camera_id, origin in existing.items():
             if origin == "device" and camera_id not in seen:
@@ -1438,6 +1477,11 @@ class CloudStore:
             # Manzil faqat do'kon kompyuterida turgani uchun buni
             # masofadan ko'rib ham, tuzatib ham bo'lmasdi.
             "record_ciphertext": "TEXT",
+            # Kameraning mahsulot vazifasi (`chaqimchi_ai/camera_roles.py`).
+            # NULL = tanlanmagan — bu halol holat, standart qiymat ATAYLAB
+            # yo'q (jim standart 2026-08-22 da hamma kamerani "Kirish"
+            # qilib qo'ygan edi).
+            "role": "TEXT",
         }
         for name, definition in camera_additions.items():
             if name not in camera_columns:

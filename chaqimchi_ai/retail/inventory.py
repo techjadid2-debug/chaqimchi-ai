@@ -14,7 +14,8 @@ sozlamalarni beradi.
     ├─ camera_id                          ├─ record_url  (klip uchun main stream)
     ├─ source (substream RTSP)            ├─ priority
     ├─ label                              ├─ sample_fps
-    └─ enabled                            └─ floor_fps
+    ├─ role (kirish/kassa/zal/ombor)      └─ floor_fps
+    └─ enabled
 
 Nega bo'lingan: RTSP manzil va kameraning bor-yo'qligi — **inventar**
 ma'lumoti, u cloudda boshqariladi va shifrlangan holda keladi.  Prioritet va
@@ -32,6 +33,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
+
+from chaqimchi_ai.camera_roles import ROLE_NONE, ROLE_PRIORITY
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,10 @@ class InventoryCamera:
     #: o'rnatilsa lokal sozlama bo'sh bo'ladi va klip manzili faqat shu
     #: yerdan kelishi mumkin.  Bo'sh bo'lsa quyidagi tartib ishlaydi.
     record_url: str = ""
+    #: Kameraning mahsulot vazifasi.  Bulut — rolning asosiy manbai:
+    #: sehrgar saqlaganini qurilma bulutga chiqaradi va shu yerdan
+    #: qaytib keladi (qayta o'rnatilgan kompyuterda ham yo'qolmaydi).
+    role: str = ROLE_NONE
 
 
 @dataclass(frozen=True)
@@ -65,6 +72,9 @@ class CameraPlan:
     priority: str = "retail"
     sample_fps: float = 5.0
     floor_fps: Optional[float] = None
+    #: `entrance | checkout | sales | storage | none` — zanjir bundan
+    #: davomat/ogohlantirish qarorlarini oladi (`service.py`).
+    role: str = ROLE_NONE
 
 
 def read_sotqin_cache(path: Path) -> Dict[str, Any]:
@@ -101,6 +111,7 @@ def read_sotqin_cache(path: Path) -> Dict[str, Any]:
                 label=str(item.get("label") or ""),
                 enabled=bool(item.get("enabled", True)),
                 record_url=str(item.get("record_url") or ""),
+                role=str(item.get("role") or "") or ROLE_NONE,
             )
             for item in (payload.get("cameras") or [])
             if isinstance(item, Mapping)
@@ -127,6 +138,13 @@ def merge_cameras(inventory: Sequence[InventoryCamera], local: Sequence[Any]) ->
             continue
         used.add(camera.camera_id)
         option = options.get(camera.camera_id)
+        # Rol bulutdan keladi (nom bilan bir xil manba); bulut hali
+        # bilmasa lokal sozlamadagi qoladi.
+        role = (
+            (camera.role if camera.role != ROLE_NONE else "")
+            or getattr(option, "role", None)
+            or ROLE_NONE
+        )
         plans.append(
             CameraPlan(
                 camera_id=camera.camera_id,
@@ -146,9 +164,16 @@ def merge_cameras(inventory: Sequence[InventoryCamera], local: Sequence[Any]) ->
                 record_url=(
                     getattr(option, "record_url", None) or camera.record_url or camera.source
                 ),
-                priority=getattr(option, "priority", "retail"),
+                # Lokal sozlama bo'lsa prioritet undan (usta/support aniq
+                # qo'ygan).  Bo'lmasa — qayta o'rnatilgan kompyuter — rol
+                # standartni beradi: bulutda tasdiqlangan "kirish" shu
+                # yerda haqiqiy `security` navbatiga aylanadi.
+                priority=(
+                    getattr(option, "priority", None) or ROLE_PRIORITY.get(role, "retail")
+                ),
                 sample_fps=float(getattr(option, "sample_fps", 5.0)),
                 floor_fps=getattr(option, "floor_fps", None),
+                role=role,
             )
         )
 
@@ -166,6 +191,7 @@ def merge_cameras(inventory: Sequence[InventoryCamera], local: Sequence[Any]) ->
                 priority=item.priority,
                 sample_fps=float(item.sample_fps),
                 floor_fps=item.floor_fps,
+                role=getattr(item, "role", None) or ROLE_NONE,
             )
         )
     return plans

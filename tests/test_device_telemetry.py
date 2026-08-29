@@ -331,6 +331,10 @@ def test_camera_list_goes_up_to_the_cloud(
                 "label": "Kirish",
                 "source": "rtsp://u:p@10.0.0.5/1",
                 "record_url": "",
+                # Rol DOIM ochiq ketadi (0.6.26 dan): tanlanmagani —
+                # `"none"`.  Bo'sh satr "eski qurilma, tegma" degani va
+                # yangi kod uni hech qachon yubormasligi kerak.
+                "role": "none",
             }
         ]
     }

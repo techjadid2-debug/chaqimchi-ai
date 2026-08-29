@@ -44,7 +44,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from chaqimchi_ai import __version__, announcements
+from chaqimchi_ai import __version__, announcements, camera_roles
 from chaqimchi_ai.event_models import EdgeEvent
 from chaqimchi_ai.jwt_auth import JwtError
 from chaqimchi_ai.licensing.plans import (
@@ -646,6 +646,13 @@ def _preserve_server_config_flags(site_id: str, new_config: Dict[str, Any]) -> D
     return new_config
 
 
+#: Davomat (Face ID) kameralari soni — DOKON_MVP va'dasi: "ko'pi bilan
+#: 2 ta".  Yuz kadrlari cloud byudjetini yeydi (kamera boshiga 40/soat),
+#: shuning uchun chegara kichik.  Endi ikki joyda ishlatiladi: paneldan
+#: kelgan ro'yxat va rol orqali avto-yozuv — ikkalasi bitta sonda tursin.
+ATTENDANCE_MAX_CAMERAS = 2
+
+
 class SiteConfigBody(BaseModel):
     camera_labels: Dict[str, str] = Field(default_factory=dict)
     # `camera_roles` OLIB TASHLANDI (2026-08-22).  Uni hech kim o'qimasdi:
@@ -666,7 +673,9 @@ class SiteConfigBody(BaseModel):
     checkout_idle_minutes: int = Field(default=5, ge=1, le=60)
     open_from: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     open_to: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
-    attendance_camera_ids: List[str] = Field(default_factory=list, max_length=2)
+    attendance_camera_ids: List[str] = Field(
+        default_factory=list, max_length=ATTENDANCE_MAX_CAMERAS
+    )
     attendance_camera_roles: Dict[str, Literal["arrival", "departure", "both"]] = Field(
         default_factory=dict
     )
@@ -4127,6 +4136,10 @@ class CameraConfigBody(BaseModel):
     label: str = Field(min_length=1, max_length=120)
     rtsp_url: str = Field(min_length=10, max_length=2_000)
     enabled: bool = True
+    #: Kameraning mahsulot vazifasi.  Bo'sh — "tegilmasin" (saqlangan
+    #: rol qoladi), `none` — ochiq tozalash.  Bo'sh variant SHART:
+    #: 2026-08-22 dagi xato aynan majburiy tanlovdan chiqqan edi.
+    role: str = Field(default="", pattern="^(entrance|checkout|sales|storage|none)?$")
 
 
 class CameraProbeBody(BaseModel):
@@ -4285,16 +4298,19 @@ async def admin_upsert_camera_inventory(
     _: None = Depends(require_admin),
 ) -> Dict[str, Any]:
     try:
+        previous_roles = _roles_by_camera(site_id)
         camera = get_store().upsert_camera(
             site_id,
             camera_id,
             label=body.label,
             rtsp_url=body.rtsp_url,
             enabled=body.enabled,
+            role=body.role,
         )
         # Sotqin keyingi poll'da yangi inventarni olishi uchun config revision oshadi.
         current = get_event_store().get_site_config(site_id)
         updated = get_event_store().update_site_config(site_id, current["config"])
+        _sync_attendance_with_roles(site_id, previous_roles)
         return {"camera": camera, "config_revision": updated["revision"]}
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -4499,15 +4515,18 @@ async def installer_upsert_camera(
 ) -> Dict[str, Any]:
     _require_installer_site(installer, site_id)
     try:
+        previous_roles = _roles_by_camera(site_id)
         camera = get_store().upsert_camera(
             site_id,
             camera_id,
             label=body.label,
             rtsp_url=body.rtsp_url,
             enabled=body.enabled,
+            role=body.role,
         )
         current = get_event_store().get_site_config(site_id)
         updated = get_event_store().update_site_config(site_id, current["config"])
+        _sync_attendance_with_roles(site_id, previous_roles)
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(422, str(exc)) from exc
     get_store().audit_portal_action(
@@ -4782,9 +4801,15 @@ async def admin_site_detail(
     try:
         config = get_event_store().get_site_config(site_id)["config"]
         detail["geometry_problems"] = config_health.geometry_problems(config)
+        # Rol berilgan-u, geometriyasi chizilmagan kameralar — xuddi
+        # shu jimlik sinfi: «Kirish» roli chiziqsiz hech narsa qilmaydi.
+        detail["role_problems"] = config_health.role_problems(
+            get_store().list_cameras(site_id), config
+        )
     except Exception:  # sozlama o'qilmasa ham sayt kartochkasi ochilsin
         logger.exception("chizma tekshiruvi yiqildi: %s", site_id)
         detail["geometry_problems"] = []
+        detail["role_problems"] = []
     return detail
 
 
@@ -5517,6 +5542,10 @@ class EdgeCameraItem(BaseModel):
     source: str = Field(default="", max_length=2_000)
     #: Klip uchun asosiy oqim.  Bo'sh bo'lsa bu kamerada klip yozilmaydi.
     record_url: str = Field(default="", max_length=2_000)
+    #: Kameraning mahsulot vazifasi (`chaqimchi_ai/camera_roles.py`).
+    #: Bo'sh — eski qurilma, rolni BILMAYDI: bulutdagi qiymat saqlanadi
+    #: (manzil bilan bir xil no-wipe qoida).  Ochiq "none" — tozalash.
+    role: str = Field(default="", max_length=16)
 
 
 class EdgeCamerasBody(BaseModel):
@@ -5543,12 +5572,17 @@ async def edge_register_cameras(
     (sabab `register_device_cameras` docstringida).  Javobda manzil
     HECH QACHON qaytarilmaydi.
     """
+    previous_roles = _roles_by_camera(device["site_id"])
     try:
         cameras = get_store().register_device_cameras(
             device["site_id"], [item.model_dump() for item in body.cameras]
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    # Sehrgar «Kirish» rolini tasdiqlagan bo'lsa, kamera davomat
+    # ro'yxatiga ham tushadi (faqat rol O'TISHIDA — ega keyin olib
+    # tashlasa qayta urilmaydi).
+    _sync_attendance_with_roles(device["site_id"], previous_roles)
     return {
         "ok": True,
         "cameras": [
@@ -7206,9 +7240,13 @@ class CameraFromScanBody(BaseModel):
     stream_ref: int = Field(ge=0, le=200)
     camera_id: str = Field(default="", max_length=40)
     label: str = Field(min_length=1, max_length=120)
+    #: Semantika `CameraConfigBody.role` bilan bir xil.
+    role: str = Field(default="", pattern="^(entrance|checkout|sales|storage|none)?$")
 
 
-def _owner_camera_saved(site_id: str, camera_id: str, *, label: str, rtsp_url: str, actor: str):
+def _owner_camera_saved(
+    site_id: str, camera_id: str, *, label: str, rtsp_url: str, actor: str, role: str = ""
+):
     """Kamerani saqlaydi va qurilmaga xabar beradigan revizyani ko'taradi.
 
     Tarif chegarasi va Fernet shifrlash `upsert_camera()` ichida —
@@ -7216,13 +7254,15 @@ def _owner_camera_saved(site_id: str, camera_id: str, *, label: str, rtsp_url: s
     yozish ataylab: uning yagona vazifasi `revision` ni oshirish,
     shundagina qurilma keyingi heartbeat'da o'zgarishni sezadi.
     """
+    previous_roles = _roles_by_camera(site_id)
     camera = get_store().upsert_camera(
-        site_id, camera_id, label=label, rtsp_url=rtsp_url, enabled=True
+        site_id, camera_id, label=label, rtsp_url=rtsp_url, enabled=True, role=role
     )
     current = get_event_store().get_site_config(site_id)
     desired = dict(current["config"])
     desired["cameras_authoritative"] = True
     updated = get_event_store().update_site_config(site_id, desired)
+    _sync_attendance_with_roles(site_id, previous_roles)
     get_store().audit_portal_action(
         "owner.camera.saved",
         actor_id=actor,
@@ -7231,6 +7271,57 @@ def _owner_camera_saved(site_id: str, camera_id: str, *, label: str, rtsp_url: s
         detail={"label": label},
     )
     return {"camera": camera, "config_revision": updated["revision"]}
+
+
+def _roles_by_camera(site_id: str) -> Dict[str, str]:
+    """Saytdagi har kameraning joriy roli (o'tishni aniqlash uchun)."""
+    try:
+        return {
+            str(item["camera_id"]): str(item.get("role") or "")
+            for item in get_store().list_cameras(site_id)
+        }
+    except ValueError:
+        # Sayt endi yaratilayotgan bo'lishi mumkin — o'tish tekshiruvi
+        # uchun bo'sh xarita yetarli.
+        return {}
+
+
+def _sync_attendance_with_roles(site_id: str, previous_roles: Dict[str, str]) -> None:
+    """«Kirish» roli YANGI berilgan kamera davomat kamerasi ham bo'ladi.
+
+    Ega qarori (2026-08-30): kirish roli tasdiqlangan kamera avtomatik
+    davomat (Face ID) ro'yxatiga tushadi — alohida qadam bo'lmasin.
+
+    Faqat O'TISHDA ishlaydi (rol ilgari «kirish» bo'lmagan bo'lsa) va
+    shu tufayli idempotent: ega keyin panelda kamerani davomatdan olib
+    tashlasa, o'sha ro'yxat qayta yozilmaydi — qurilma bir xil rolni
+    qayta e'lon qilganda o'tish yo'q.  Chegara (2 ta) saqlanadi: to'la
+    ro'yxatga jimgina qo'shib yubormaymiz.
+    """
+    current = _roles_by_camera(site_id)
+    fresh = [
+        camera_id
+        # Tartiblangan: camera-01 slotlari kichigidan boshlab, ya'ni
+        # bir so'rovda ikkita yangi «kirish» kelsa natija deterministik.
+        for camera_id, role in sorted(current.items())
+        if role == "entrance" and previous_roles.get(camera_id) != "entrance"
+    ]
+    if not fresh:
+        return
+    config = dict(get_event_store().get_site_config(site_id)["config"])
+    chosen = [str(item) for item in (config.get("attendance_camera_ids") or [])]
+    added = False
+    for camera_id in fresh:
+        if camera_id in chosen or len(chosen) >= ATTENDANCE_MAX_CAMERAS:
+            continue
+        chosen.append(camera_id)
+        added = True
+    if not added:
+        return
+    config["attendance_camera_ids"] = chosen
+    # Revision ko'tariladi — qurilma keyingi heartbeat'da yangi davomat
+    # ro'yxatini oladi va zanjir o'zini qayta ishga tushiradi.
+    get_event_store().update_site_config(site_id, config)
 
 
 def _next_camera_slot(site_id: str) -> str:
@@ -7257,6 +7348,7 @@ async def owner_upsert_camera(
             label=body.label,
             rtsp_url=body.rtsp_url,
             actor=owner.member_id,
+            role=body.role,
         )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -7293,6 +7385,7 @@ async def owner_camera_from_scan(
             label=body.label,
             rtsp_url=rtsp_url,
             actor=owner.member_id,
+            role=body.role,
         )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -7389,6 +7482,36 @@ async def owner_start_scan(
     return {"job": job, "poll_after_sec": 2}
 
 
+def _attach_role_suggestions(streams: List[Dict[str, Any]]) -> None:
+    """Skan natijasiga rol taklifini qo'shadi — qo'shimcha qurilma
+    so'rovisiz: nom va o'lcham allaqachon natijaning ichida.
+
+    Taklif — qulaylik, skanning o'zi emas: hisoblash yiqilsa skan
+    natijasi baribir ko'rinishi shart.
+    """
+    try:
+        suggestions = camera_roles.suggest_roles(
+            [
+                camera_roles.RoleCandidate(
+                    camera_id=str(index),
+                    name=str(item.get("name") or item.get("label") or ""),
+                    width=int(item.get("width") or 0),
+                    height=int(item.get("height") or 0),
+                )
+                for index, item in enumerate(streams)
+            ],
+            limit=SHOP_MAX_CAMERAS,
+        )
+    except Exception:  # noqa: BLE001 — taklifsiz ham skan ko'rinsin
+        logger.exception("rol taklifi hisoblanmadi")
+        return
+    for item, suggestion in zip(streams, suggestions):
+        item["suggested_role"] = suggestion.suggested_role or ""
+        item["suggestion_reasons"] = suggestion.reasons
+        item["face_id_ok"] = suggestion.face_id_ok
+        item["keep"] = suggestion.keep
+
+
 def _scan_view(job: Dict[str, Any]) -> Dict[str, Any]:
     """Topshiriq natijasini brauzerga REDAKSIYALANGAN holda beradi.
 
@@ -7402,8 +7525,10 @@ def _scan_view(job: Dict[str, Any]) -> Dict[str, Any]:
         cleaned = dict(result)
         if isinstance(result.get("streams"), list):
             cleaned["streams"] = rtsp.safe_streams(result["streams"])
+            _attach_role_suggestions(cleaned["streams"])
         if isinstance(result.get("cameras"), list):
             cleaned["cameras"] = rtsp.safe_streams(result["cameras"])
+            _attach_role_suggestions(cleaned["cameras"])
         view["result"] = cleaned
     return view
 

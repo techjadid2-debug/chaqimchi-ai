@@ -76,6 +76,7 @@ holda (shifrlangan saqlanadi), xaridorning yuzi (umuman tanilmaydi).
 | Qism | Fayl |
 |---|---|
 | Kamera chegarasi (4 ta) | `chaqimchi_ai/limits.py` |
+| Kamera rollari va taklif dvigateli | `chaqimchi_ai/camera_roles.py` |
 | Sozlash ustasi va lokal panel | `chaqimchi_ai/local/app.py` |
 | Cloudga ulanish (pairing) | `chaqimchi_ai/local/cloud_link.py` |
 | AI zanjiri | `chaqimchi_ai/retail/` — [README](../chaqimchi_ai/retail/README.md) |

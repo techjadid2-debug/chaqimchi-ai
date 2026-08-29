@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from chaqimchi_ai import __version__
+from chaqimchi_ai import __version__, camera_roles
 from chaqimchi_ai.limits import NVR_SCAN_CHANNELS, SHOP_MAX_CAMERAS, STORE_TZ, store_now
 from chaqimchi_ai.local import (
     autostart,
@@ -486,6 +486,10 @@ def _scan_via_onvif(body: ScanChannelsBody, deadline: float) -> List[Dict[str, A
                     "width": result.width,
                     "height": result.height,
                     "codec": candidate.encoding or "",
+                    # NVR kanal nomi — rol taklifi uchun eng kuchli real
+                    # signal: o'rnatuvchilar kanallarni "Kirish", "Kassa"
+                    # deb nomlab qo'yishadi.
+                    "name": candidate.name or "",
                 }
             )
             break
@@ -769,6 +773,10 @@ class CameraSaveBody(BaseModel):
     #: ONVIF aniqlagan format.  Sehrgar biladi, panel esa kamera sekin
     #: ishlaganda sababni ko'rsatishi kerak.
     codec: Optional[str] = Field(default=None, max_length=16)
+    #: Kameraning mahsulot vazifasi.  Bo'sh — tanlanmagan, bu yaroqli:
+    #: standart taxmin ataylab yo'q (jim standart hamma kamerani
+    #: "kirish" qilib qo'ygan edi — 2026-08-22 saboq).
+    role: str = Field(default="", pattern="^(entrance|checkout|sales|storage)?$")
 
 
 @app.get("/api/setup/cameras")
@@ -784,6 +792,7 @@ async def list_cameras() -> Dict[str, Any]:
                 "priority": item.get("priority", "retail"),
                 "codec": item.get("codec") or "",
                 "record_url_set": bool(item.get("record_url")),
+                "role": item.get("role") or "",
             }
             for item in config_store.cameras()
         ],
@@ -817,12 +826,66 @@ async def save_camera(body: CameraSaveBody) -> Dict[str, Any]:
         record_url=record_url,
         priority=body.priority,
         codec=(body.codec or "").strip().upper() or None,
+        role=body.role or None,
     )
     return {
         "ok": True,
         "camera_id": camera_id,
         "record_url_found": bool(record_url),
         **config_store.summary(),
+    }
+
+
+class RoleSuggestItem(BaseModel):
+    #: Kanal raqami yoki camera_id — javob shu belgiga bog'lanadi.
+    ref: str = Field(min_length=1, max_length=40)
+    name: str = Field(default="", max_length=120)
+    width: int = Field(default=0, ge=0, le=16_384)
+    height: int = Field(default=0, ge=0, le=16_384)
+
+
+class RoleSuggestBody(BaseModel):
+    #: Skaner topganidan ko'p bo'lishi mumkin emas; 2x — zaxira.
+    items: List[RoleSuggestItem] = Field(default_factory=list, max_length=NVR_SCAN_CHANNELS * 2)
+
+
+@app.post("/api/setup/role-suggestions")
+async def role_suggestions(body: RoleSuggestBody) -> Dict[str, Any]:
+    """Skaner topgan kameralarga rol TAKLIF qiladi — qaror odamniki.
+
+    Signallar halol: kanal nomi (o'rnatuvchi yozgan bo'lsa) va oqim
+    o'lchami (Face ID imkoni).  Ishonchli belgi bo'lmasa taklif YO'Q —
+    "bilmayman" degan javob noto'g'ri taxmindan yaxshi (2026-08-22 da
+    jim taxmin hamma kamerani "Kirish" qilib qo'ygan edi).
+    """
+    limit = max_cameras()
+    suggestions = camera_roles.suggest_roles(
+        [
+            camera_roles.RoleCandidate(
+                camera_id=item.ref,
+                name=item.name,
+                width=item.width,
+                height=item.height,
+            )
+            for item in body.items
+        ],
+        limit=limit,
+    )
+    return {
+        "max_cameras": limit,
+        "suggestions": [
+            {
+                "ref": suggestion.camera_id,
+                "role": suggestion.suggested_role or "",
+                "label": (
+                    camera_roles.ROLE_LABELS_UZ.get(suggestion.suggested_role or "", "")
+                ),
+                "reasons": suggestion.reasons,
+                "face_id_ok": suggestion.face_id_ok,
+                "keep": suggestion.keep,
+            }
+            for suggestion in suggestions
+        ],
     }
 
 
@@ -868,6 +931,9 @@ def _backfill_record_urls() -> None:
             record_url=verified,
             priority=str(item.get("priority") or "retail"),
             codec=(item.get("codec") or None),
+            # `save_camera` yozuvni noldan quradi — rol uzatilmasa shu
+            # yerda jimgina o'chib ketardi.
+            role=(item.get("role") or None),
         )
         logger.info("Klip oqimi to'ldirildi: %s", item.get("id"))
 

@@ -7,8 +7,24 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-08-28
+## HOZIRGI HOLAT · 2026-08-30
 
+- **Kamera rollari KODDA TAYYOR (0.6.26, nashr qilinmagan):** rol endi
+  saqlanadi va zanjirni boshqaradi — sehrgar → `config.yaml` →
+  bulut (`site_cameras.role`) → edge config → `CameraPlan.role`.
+  Tizim rol TAKLIF qiladi (kanal nomi + oqim o'lchami), odam
+  tasdiqlaydi; «kirish» roli kamerani davomat ro'yxatiga avto-qo'shadi
+  (faqat o'tishda, maks. 2); 4 tadan ko'p topilsa eng yaxshi 4 belgilanadi.
+  Yagona manba: `chaqimchi_ai/camera_roles.py`. **Soak muzlatishi
+  sabab Windows nashr QILINMAYDI** — soak tugagach chiqadi.
+- **QA sessiyasi (29-avg kunduzi):** 🚻 ayol/erkak qatori kunlik
+  hisobotga QAYTARILDI — «aqlli format»: o'lchov vakillik qilsa foiz,
+  kam bo'lsa faqat SON (ega qarori — qatorni butunlay yashirish xato
+  bo'lgan). Uch haftalik beqaror test (`test_clip_retention_is_
+  configurable`) ildizi topilib tuzatildi. **Cloud deploy hali
+  qilinmagan.** Ega qarori bilan: kameralarga hozircha TEGILMAYDI
+  (720p, camera-02, chizmalar keyinga), maqsad — avval pilotni
+  barqarorlashtirish (72 soatlik soak + soak paytida reliz muzlatish).
 - **Jonli tekshiruv o'tkazildi** (PostgreSQL, `device_metrics`, konteyner
   loglari, 3 kunlik telemetriya). 27-avgust tuzatishlari **ishlagani
   tasdiqlandi**:
@@ -99,21 +115,42 @@ Yangi versiyada ko'rilsin: `clips` ichida `no_segments` va
 zaxira katta ko'rinadi (CPU 8.8%, RAM 40%, 2 kamera), lekin
 **o'lchovsiz 720p ga o'tilmaydi**.
 
-**4) O'lchov ijobiy bo'lsa — mijoz kamerasida substream 1280x720**
-(kamera veb-interfeysidan, kod o'zgarmaydi). Shundan keyin 24 soat
-kuzating: `face_crops.written > 0` bo'lishi kerak.
+**4) Cloud deploy — 🚻 qaytishi va beqaror test tuzatishi bilan**
+(29-avg kodda tayyor, `make test` yashil bo'lgach). Deploydan keyingi
+21:00 hisobotida 🚻 qatori son-formatda chiqqanini tekshiring.
 
-**5) Chizmani mijoz bilan tuzating** — «Taqiqlangan zona» qayta
-chizilsin (hozir 29x20 px, ikki kundan beri 0 ta hodisa) va
-camera-02 dagi 4 pikselli «kirish» chizig'i o'chirilsin.
+**5) 72 soatlik soak — pilotni barqarorlashtirish o'lchovi.**
+`scripts/soak_windows.py` ni do'kon kompyuteriga qo'lda ko'chiring
+(payloadda `scripts/` yo'q — tuzoqlarga qarang) va:
+`python soak_windows.py --hours 72 --cameras 2 --output
+soak-windows.json --samples-file soak-samples.jsonl`.
+DIQQAT: `--cameras 2` bilan bu C1 qabul uchun YARAMAYDI (C1 ≥4 kamera
+talab qiladi) — bu faqat barqarorlik o'lchovi. **Soak davomida reliz
+chiqarmang** — avto-yangilanish zanjirni qayta ishga tushirib o'lchovni
+buzadi.
 
-**6) `camera-02` ga `record_url` berilmagan** (`record_url_set: false`)
-— sozlash ustasida `suggest_record_url()` natijasi nega
-qo'llanmaganini tekshiring.
+**6) Soak tugagach — 0.6.26 nashri (kamera rollari).** Kod tayyor,
+versiya ko'tarilgan. Nashrdan keyin tekshirish: sehrgarda kanal skan →
+takliflar chiqadimi; rol «kirish» qilinganda `attendance_camera_ids`
+ga tushadimi (maks. 2); `site_cameras.role` to'ldimi. Keyinga
+qoldirilgan: harakat namunasi tugmasi (30–60 s/kamera) va `role_suggest`
+qurilma job'i — dvigatel (`camera_roles.py`) buni allaqachon qabul
+qiladi, faqat UI/transport yo'q.
 
-**7) C1, haqiqiy do'konda qabul sinovi** — 72 soatlik soak
-(`scripts/soak_windows.py`). Bu tugamaguncha `available_feature_codes()`
-production'da bo'sh ro'yxat qaytaradi (`cloud/store.py:52`).
+**KEYINGA QOLDIRILGAN (ega qarori, 2026-08-29 — kameralarga tegilmaydi):**
+
+- Mijoz kamerasida substream 1280x720 (o'lchov ruxsat berdi: 11 kamera,
+  zaxira 176–200%). Shundan keyin 24 soatda `face_crops.written > 0`.
+- Chizmalarni mijoz bilan tuzatish («Taqiqlangan zona» 29x20 px,
+  camera-02 dagi 4 px chiziq).
+- `camera-02` `record_url` — SABAB TOPILDI (2026-08-29): uning
+  `/mpeg4cif` yo'li `MAIN_STREAM_REWRITES` dagi 6 brend naqshining hech
+  biriga tushmaydi (`camera_probe.py:392`), shuning uchun
+  `suggest_record_url()` `None` qaytaradi. Yechim: naqsh qo'shish yoki
+  manzilni qo'lda kiritish — kamera almashtirish qarori bilan birga.
+- C1 rasmiy qabul (4 kamera sharti pilotda bajarib bo'lmaydi) va sotuv
+  darvozalari (`CHAQIMCHI_AVAILABLE_FEATURES` +
+  `CHAQIMCHI_N100_ACCEPTANCE_FILE`, oferta STIR/yurist).
 
 ## OCHIQ MUAMMOLAR
 
@@ -148,7 +185,8 @@ Reliz yetgach javob bitta heartbeat masofasida bo'ladi.
 
 `{attempts: 95, found: 6}`; kunlik: 207 kirishdan 9 tasi (4.3%).
 Bir ildizdan — 640x360 oqim. 720p buni ikki barobar yaxshilashi kerak.
-Kunlik hisobot endi bu foizni **ko'rsatmaydi** (pastga qarang).
+Kunlik hisobotda bu holat endi foizsiz, SON ko'rinishida chiqadi
+(«O'lchangani 9 kishi: …» — 2026-08-29 qarori).
 
 **⚠ `zone_entered` nol — sabab TOPILDI**
 
@@ -184,9 +222,13 @@ taklif qilish kerak.
 
 **Texnik**
 
-- **Beqaror test:** `tests/test_cloud_load.py::test_clip_retention_is_configurable`
-  — to'liq to'plamda ba'zan yiqiladi, yolg'iz o'tadi. Sabab hali
-  topilmagan. Yiqilsa — o'zingizdan deb o'ylamang.
+- **✅ YOPILDI (2026-08-29) — beqaror test:**
+  `test_clip_retention_is_configurable`. Ildiz: TestClient ochilishi
+  bilan `_maintenance_loop` fon oqimida darhol purge boshlab, testdagi
+  `CHAQIMCHI_CLIP_RETENTION_DAYS=60` o'rnatilishidan OLDIN standart
+  7 kunni muzlatib olardi; to'liq to'plamda oqim kechikib test saytiga
+  yetib borib klipni o'chirardi. Fixture endi fon halqalarini no-op
+  qiladi (testlar purge'ni sinxron o'zi chaqiradi).
 - **`cloud/store.py` faqat SQLite** — litsenziya, to'lov va portal
   parollari production'da ham SQLite'da (audit YUQORI-10). Shu sabab
   `Dockerfile.cloud` da `--workers 1`. (Raqamli qator o'qish naqshi
@@ -205,6 +247,44 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **`save_camera` yozuvni TO'LIQ qayta quradi** (`config_store.py`):
+  chaqiruvchi bermagan maydon JIMGINA o'chadi.  Yangi per-kamera maydon
+  qo'shsangiz BARCHA chaqiruvchilarni tekshiring — `_backfill_record_urls`
+  rolni aynan shu yo'l bilan o'chirib yuborayozdi.  Qulf:
+  `test_the_record_url_backfill_preserves_the_role`.
+
+- **Kamera rolida uch holat bor va ular teng emas:** `""` — eski
+  qurilma, rolni BILMAYDI (bulut tegmaydi); `"none"` — ochiq
+  "tanlanmagan" (bulut NULL ga tozalaydi); qiymat — o'rnatiladi.
+  Yangi kod rolni olib tashlaganda `"none"` yuborishi SHART, aks holda
+  o'chirish bulutga hech qachon yetib bormaydi
+  (`cloud_config.py:publish_cameras` izohi).
+
+- **`record_url_set` heartbeatda LOKAL konfigdan hisoblanadi**
+  (`cloud_config.py:332`), `merge_cameras()` bergan yakuniy rejadan
+  emas. Bulut zaxirasidan record manzili ishlayotgan bo'lsa ham panel
+  `false` ko'rsatishi mumkin — tashxis qo'yishda ikkalasini ham qarang.
+
+- **`CHAQIMCHI_AVAILABLE_FEATURES` dagi xato kod JIMGINA yutiladi.**
+  `available_feature_codes()` noma'lum kodlarni filtrda tashlab
+  yuboradi (`cloud/store.py:52`) — `person_counts` deb yozsangiz xato
+  chiqmaydi, funksiya shunchaki ochilmaydi. Env qo'ygandan keyin
+  natijani API dan tekshiring.
+
+- **Generik kamera `suggest_record_url()` dan o'tmaydi.**
+  `MAIN_STREAM_REWRITES` (`camera_probe.py:383`) faqat 6 brend
+  naqshini biladi; camera-02 ning `/mpeg4cif` yo'li hech biriga
+  tushmaydi → `record_url` avtomatik berilmaydi va bu «usta buzilgan»
+  degani emas. Yangi brend uchun naqsh qo'shing yoki manzilni qo'lda
+  kiriting.
+
+- **TestClient ochilishi bilan fon halqalari DARHOL ishga tushadi.**
+  `_maintenance_loop` birinchi iteratsiyada uyqusiz purge qiladi va
+  test env'ini o'rnatilishidan OLDIN o'qib muzlatib oladi — uch
+  haftalik beqaror test shundan edi. Cloud testida fon halqasiga
+  bog'liq bo'lmagan tekshiruv yozayotgan bo'lsangiz halqalarni no-op
+  qiling (`tests/test_cloud_load.py` fixture'i naqsh).
 
 - **`frame_size` kamera sozlamasi haqida hech narsa aytmaydi.**
   Tahlil kadrni doim 640x360 ga keltiradi (`frames_from_source`), ya'ni
@@ -398,6 +478,98 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-30 — Kamera rollari: tizim taklif qiladi, odam tasdiqlaydi (`af08057`)
+
+Nima: sehrgarda tanlangan rol (kirish/kassa/zal/ombor) endi SAQLANADI
+va tizimni boshqaradi: «kirish» roli kamerani davomat (Face ID)
+ro'yxatiga avto-qo'shadi (maks. 2, faqat rol O'TISHIDA — ega olib
+tashlasa qayta urilmaydi), rol prioritet standartini beradi, skanerdan
+keyin tizim rol taklif qiladi (kanal nomi uz/ru/en + oqim o'lchami;
+ishonchli belgi bo'lmasa taklif YO'Q), 4 tadan ko'p kanal topilsa eng
+yaxshi 4 tasi belgilanadi, rol berilgan-u geometriya chizilmagani
+BALAND aytiladi (`feature_status` + admin `role_problems`).
+
+Nega: o'rnatishda hamma kamera chiqardi-yu, qaysi biri nimaga
+ishlatilishi hech qayerda hal bo'lmasdi (ega qarori, 2026-08-30).
+2026-08-22 da o'chirilgan `camera_roles` xatosi takrorlanmasligi uchun
+rol per-kamera maydon (sayt-konfig dict emas), bo'sh variant har UI da
+bor, va rol haqiqatan O'QILADI.
+
+Qayerda: `chaqimchi_ai/camera_roles.py` (yangi — konstantalar + taklif
+dvigateli), `settings.py:RetailCameraSettings.role`,
+`local/config_store.py:save_camera`, `local/app.py` (`CameraSaveBody.role`,
+`POST /api/setup/role-suggestions`), `local/static/setup.js` (kanal-skan
+UI, 1-kanal «Kirish eshigi» jim prefilli O'CHIRILDI),
+`local/cloud_config.py:publish_cameras` (role doim ochiq, `"none"`),
+`cloud/store.py` (`site_cameras.role` + no-wipe CASE),
+`cloud/main.py` (`EdgeCameraItem.role`, `_sync_attendance_with_roles`,
+`_attach_role_suggestions`, `ATTENDANCE_MAX_CAMERAS`),
+`cloud/config_health.py:role_problems`, `retail/inventory.py`
+(`CameraPlan.role`, prioritet roldan hosila),
+`frontend/src/SetupCameras.tsx` (rol tugmalari + «Rolsiz»).
+
+Test: `tests/test_camera_roles.py` (27 ta: taklif jimligi, no-wipe,
+avto-yozuv o'tishi, backfill regressiyasi, rol-geometriya ogohlantirishi).
+Qulflangan testlar (`test_zone_editor.py:207`,
+`test_static_pages.py:436`) O'ZGARMADI — rol tahriri owner.html ga
+kirmaydi (sehrgar/installer + React onboarding'da).
+
+Diqqat: versiya 0.6.26 ga ko'tarildi, lekin **soak paytida Windows
+nashr taqiqlangan** — reliz soak tugagach. Harakat namunasi bo'yicha
+taklif (`traffic_per_min`) dvigatelda bor, lekin UI tugmasi va
+`role_suggest` qurilma job'i KEYINGA qoldirildi.
+
+### 2026-08-29 — QA tahlili: 🚻 qaytdi, beqaror test yopildi (`25a2882`)
+
+Nima: ega kunlik hisobotda ayol/erkak qatorini sog'inganini aytdi —
+qator «aqlli format»da qaytarildi: o'lchov vakillik qilsa (n≥20 va
+qamrov≥30%) avvalgidek foiz, kam bo'lsa `🚻 O'lchangani 9 kishi:
+1 ayol · 8 erkak`. Bu T1 (28-avg) qarorini QISMAN bekor qilish:
+qatorni butunlay yashirish halollikni saqladi-yu, egadan foydali
+ma'lumotni ham olib qo'ydi. Halollik endi FORMAT bilan saqlanadi —
+kichik namunadan foiz baribir chiqarilmaydi (sonlar tayyor
+`jins_soni` dan olinadi, qurilma relizi kerak emas).
+
+Yo'l-yo'lakay: uch haftalik beqaror test ildizi topildi — TestClient
+lifespan'i `_maintenance_loop` ni yaratishi bilan u fon oqimida darhol
+purge boshlab, test env'i (`CHAQIMCHI_CLIP_RETENTION_DAYS=60`)
+o'rnatilishidan OLDIN standart 7 kunni muzlatib olardi; to'liq
+to'plamda oqim kechikib test saytining klipini o'chirardi. Fixture
+endi `_maintenance_loop` va `_demography_rollup_loop` ni no-op qiladi.
+
+QA tahlilining boshqa topilmalari: camera-02 `record_url` sababi
+(`/mpeg4cif` rewrite naqshlarda yo'q), `record_url_set` lokal konfigdan
+hisoblanishi, feature-env xatosi jimgina yutilishi — tuzoqlarga yozildi.
+Ega qarorlari: kameralarga tegilmaydi, avval pilot barqarorlashtiriladi.
+
+Qayerda: `cloud/digest.py:134-160`, `tests/test_owner_report.py`
+(ikkita test yangi xulqqa moslandi va kuchaytirildi),
+`tests/test_cloud_load.py` (fixture).
+Test: `test_a_handful_of_measurements_is_shown_as_counts_not_percent`,
+`test_low_coverage_shows_counts_even_with_enough_samples`;
+`test_cloud_load.py` 20 marta ketma-ket yashil.
+
+Diqqat: bu cloud-tomon o'zgarish — deploy qilinmaguncha jonli hisobot
+eski xulqda qoladi.
+
+### 2026-08-29 — 0.6.25: kamera ROSTDAN qaysi o'lchamda berayotgani ko'rinadi (`a440a6f`)
+
+Nima: benchmark natijasiga `native_size` qo'shildi — birinchi
+muvaffaqiyatli kadrning O'ZIDAN o'lchanadi (`CAP_PROP` emas: RTSP'da
+property yolg'on qaytarishi mumkin). 720p ga o'tishdan keyin o'zgarish
+ishlaganini shu ko'rsatadi; usiz buni faqat 24 soatlik bilvosita
+statistikadan bilib bo'lardi. Ertalab 04:11 da ikkinchi sig'im o'lchovi
+ham olindi (36,1 inf/s, xulosa o'zgarmadi — 11 kamera).
+
+Qayerda: `chaqimchi_ai/local/benchmark.py`,
+`chaqimchi_ai/local/cloud_jobs.py:338`, `cloud/static/admin.html:1621`.
+Test: `test_benchmark_n100.py` (+3), `test_local_jobs.py` (+2).
+
+Diqqat: `native_size` heartbeatga CHIQMAYDI — faqat admin paneldagi
+«Sig'imni o'lchash» topshirig'i natijasida. 720p tasdiqlash uchun
+tugmani qo'lda bosish kerak. (Bu yozuv reliz kuni yozilmay qolgan
+edi — 29-avg QA sessiyasida retroaktiv qo'shildi.)
 
 ### 2026-08-28 — Kamera manzili endi bulutda zaxiralanadi (0.6.24)
 

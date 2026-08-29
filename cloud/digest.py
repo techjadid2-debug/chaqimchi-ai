@@ -42,21 +42,22 @@ RENEWAL_HOUR = 11
 #: Obuna tugashiga shuncha kun qolganda birinchi eslatma ketadi.
 RENEWAL_FIRST_DAYS = 7
 
-#: Demografiya foizini KO'RSATISH uchun eng kam o'lchov soni.
+#: Demografiyani FOIZDA ko'rsatish uchun eng kam o'lchov soni.
 #:
 #: 27-avgust jonli o'lchovi: 207 ta kirishdan 9 tasida jins metadatasi
 #: bor edi, lekin xabar "11% ayol · 89% erkak" deb FAKT sifatida
 #: yozardi.  n=9 da bitta odam foizni 11 punktga siljitadi; 20 da —
-#: 5 punktga.  Shundan pastda raqam o'lchov emas, tasodif.
+#: 5 punktga.  Shundan pastda foiz o'lchov emas, tasodif — shuning
+#: uchun qator foizsiz, faqat SON ko'rinishida chiqadi.
 DEMOGRAPHY_MIN_SAMPLE = 20
 
 #: ...va kirganlarning kamida shuncha ulushi o'lchangan bo'lsin.
 #:
 #: Qamrov sondan MUHIMROQ.  Past qamrovda o'lchanganlar tasodifiy
 #: tanlanmagan: ular kameraga eng yaqin o'tgan odamlar, ya'ni natija
-#: shovqinli emas — OG'GAN.  Yuz topilishi yaxshilanmaguncha qator
-#: umuman chiqmaydi (`trust_score` ham o'lchanmagan qismni ballga
-#: qo'shmaydi — hisobot ham shu intizomda bo'lsin).
+#: shovqinli emas — OG'GAN.  Bunday kunda ham foiz emas, son chiqadi
+#: (`trust_score` ham o'lchanmagan qismni ballga qo'shmaydi — hisobot
+#: ham shu intizomda bo'lsin).
 DEMOGRAPHY_MIN_COVERAGE = 0.30
 
 
@@ -131,10 +132,14 @@ def build_digest(
     if busiest:
         lines.append(f"Gavjum soat: {busiest['hour']:02d}:00 — {busiest['entered']} kishi")
 
-    # Demografiya — faqat ma'lumot yig'ilgan kunda (xodimlar hisobga
-    # kirmaydi, ular davomatda) VA o'lchov vakillik qilganda.
-    # Chegaralar yuqorida, sabab bilan.
+    # Demografiya — ma'lumot yig'ilgan har kunda chiqadi (xodimlar
+    # hisobga kirmaydi, ular davomatda).  Ega bu qatorni kutadi
+    # (2026-08-29 qarori: butunlay yashirish mahsulotni kambag'allashtirdi);
+    # halollik FORMAT bilan saqlanadi — o'lchov vakillik qilsa foiz,
+    # qilmasa faqat SON, chunki kichik namunadan chiqarilgan foiz
+    # o'lchov emas, tasodif.  Chegaralar yuqorida, sabab bilan.
     demografiya = report.get("demografiya") or {}
+    counted = int(demografiya.get("hisoblangan") or 0)
     if _demography_is_representative(demografiya, traffic):
         jins = demografiya.get("jins") or {}
         yosh = demografiya.get("yosh") or {}
@@ -143,6 +148,12 @@ def build_digest(
             top_age = max(yosh, key=lambda key: yosh[key])
             line += f" · asosan {top_age} yosh"
         lines.append(line)
+    elif counted:
+        soni = demografiya.get("jins_soni") or {}
+        lines.append(
+            f"🚻 O'lchangani {counted} kishi: "
+            f"{int(soni.get('ayol') or 0)} ayol · {int(soni.get('erkak') or 0)} erkak"
+        )
 
     # Soatlik oqim mini-grafigi (08:00–23:00 oralig'i — tungi nol
     # ustunlar grafikni cho'zib yuborardi).

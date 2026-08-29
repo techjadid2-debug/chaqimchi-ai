@@ -40,6 +40,20 @@ def cloud(tmp_path: Path, monkeypatch):
         sent.append((chat_id, text))
 
     monkeypatch.setattr(main, "_send_owner_telegram", fake_send)
+
+    # Fon halqalari o'chiriladi: lifespan `_maintenance_loop` ni yaratishi
+    # bilan u ALOHIDA oqimda darhol purge boshlaydi va testdagi
+    # `setenv("CHAQIMCHI_CLIP_RETENTION_DAYS", ...)` dan OLDIN standart
+    # 7 kunni o'qib muzlatib oladi.  To'liq to'plamda oqim kechikib test
+    # yaratgan saytga yetib borar va uning klipini o'chirar edi — shu
+    # poyga `test_clip_retention_is_configurable` ning uch haftalik
+    # beqarorligi.  Testlar purge'ni baribir sinxron o'zi chaqiradi.
+    async def no_background_loop() -> None:
+        return None
+
+    monkeypatch.setattr(main, "_maintenance_loop", no_background_loop)
+    monkeypatch.setattr(main, "_demography_rollup_loop", no_background_loop)
+
     ratelimit.limiter().reset()
     throttle().reset()
     with TestClient(main.app) as client:

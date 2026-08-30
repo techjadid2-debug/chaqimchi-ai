@@ -213,3 +213,50 @@ def test_vision_settings_are_per_site(tmp_path: Path) -> None:
     store.set_vision_consent("site-a", consented=True, actor_id="owner-a")
     assert store.vision_settings("site-a")["consented"] is True
     assert store.vision_settings("site-b")["consented"] is False
+
+
+def test_a_recently_failed_job_gets_another_try(tmp_path: Path) -> None:
+    """`MAX_JOB_ATTEMPTS` va'dasi `failed` yo'lida ham bajarilsin.
+
+    2026-08-29 da eganing "bugun nimalar bo'ldi?" savoli bitta
+    "Gemini javob bermadi" bilan o'ldi: qayta urinish faqat `running`
+    da qotib qolgan jobga tegishli edi.
+    """
+    store = EventStore(sqlite_path=tmp_path / "events.db")
+    job = store.create_vision_job(
+        "site-a", requester_id="owner-a", requester_kind="owner", question="Bugun nimalar bo'ldi?"
+    )
+    store.finish_vision_job("site-a", str(job["id"]), error="Gemini javob bermadi")
+
+    assert store.requeue_failed_vision_jobs(within_sec=300, max_attempts=MAX_JOB_ATTEMPTS) == 1
+
+    retried = store.vision_job("site-a", str(job["id"]))
+    assert retried["status"] == "queued"
+    assert not retried["error_text"], "eski xato matni yangi urinishga o'tmasin"
+
+
+def test_an_old_failure_is_left_alone(tmp_path: Path) -> None:
+    """Kechagi savolga bugun javob berish javob bermaslikdan yomonroq."""
+    store = EventStore(sqlite_path=tmp_path / "events.db")
+    job = store.create_vision_job(
+        "site-a", requester_id="owner-a", requester_kind="owner", question="Savol?"
+    )
+    store.finish_vision_job("site-a", str(job["id"]), error="Gemini javob bermadi")
+    old = (datetime.now(timezone.utc) - timedelta(hours=20)).isoformat()
+    with store._connect() as conn:  # noqa: SLF001 — test to'g'ridan-to'g'ri holat quradi
+        conn.execute(store._sql("UPDATE vision_jobs SET completed_at=?"), (old,))
+
+    assert store.requeue_failed_vision_jobs(within_sec=300, max_attempts=MAX_JOB_ATTEMPTS) == 0
+    assert store.vision_job("site-a", str(job["id"]))["status"] == "failed"
+
+
+def test_a_job_out_of_attempts_stays_failed(tmp_path: Path) -> None:
+    store = EventStore(sqlite_path=tmp_path / "events.db")
+    job = store.create_vision_job(
+        "site-a", requester_id="owner-a", requester_kind="owner", question="Savol?"
+    )
+    store.finish_vision_job("site-a", str(job["id"]), error="Gemini javob bermadi")
+    with store._connect() as conn:  # noqa: SLF001
+        conn.execute(store._sql("UPDATE vision_jobs SET attempts=?"), (MAX_JOB_ATTEMPTS,))
+
+    assert store.requeue_failed_vision_jobs(within_sec=300, max_attempts=MAX_JOB_ATTEMPTS) == 0

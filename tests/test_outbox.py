@@ -8,6 +8,7 @@ from chaqimchi_ai.outbox import (
     MAX_RETRY_DELAY_SEC,
     SENT_KEEP_DAYS,
     EventOutbox,
+    failure_reason,
     retry_delay,
 )
 
@@ -396,3 +397,63 @@ def test_the_reason_is_never_empty(tmp_path: Path) -> None:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT last_error FROM outbox").fetchone()
     assert row["last_error"]
+
+
+# ── Sabab hech qachon bo'sh qolmasin ─────────────────────────────────────
+#
+# Jonli do'konda tashlangan 3 375 hodisaning 602 tasi "sabab yozilmagan"
+# edi va ular nima uchun yo'qolgani endi hech qachon bilinmaydi.
+
+
+def test_an_exception_without_a_message_still_gets_a_reason() -> None:
+    """`str(exc)` ba'zi httpx istisnolarida bo'sh satr qaytaradi."""
+    import httpx
+
+    assert failure_reason(httpx.ConnectError("")) == "ConnectError"
+
+
+def test_a_normal_exception_keeps_its_message() -> None:
+    reason = failure_reason(ValueError("cloud javob bermadi"))
+
+    assert reason == "ValueError: cloud javob bermadi"
+
+
+def test_an_empty_reason_is_never_written(tmp_path: Path) -> None:
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("sababsiz"))
+
+    for _ in range(MAX_ATTEMPTS):
+        outbox.fail("sababsiz", "   ", permanent=True)
+
+    assert outbox.dead_letters()[0]["last_error"] == "sabab yozilmagan"
+
+
+def test_a_dead_letter_can_be_put_back(tmp_path: Path) -> None:
+    """Qaytarish yo'li bor: bungacha payload bazada yotardi-yu, o'qib
+    navbatga qo'yadigan vosita yo'q edi."""
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    outbox.enqueue(_event("qaytadi"))
+    for _ in range(MAX_ATTEMPTS):
+        outbox.fail("qaytadi", "cloud rad etdi", permanent=True)
+    assert outbox.stats()["poisoned"] == 1
+
+    assert outbox.requeue_dead_letters(["qaytadi"]) == 1
+
+    stats = outbox.stats()
+    assert stats["poisoned"] == 0
+    assert [row["event_id"] for row in outbox.pending()] == ["qaytadi"]
+
+
+def test_requeueing_only_touches_what_it_was_given(tmp_path: Path) -> None:
+    """«Hammasini qaytar» tugmasi ATAYLAB yo'q — eski trevoga
+    mijozning Telegramiga to'kilmasin."""
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10**7)
+    for name in ("eski", "yangi"):
+        outbox.enqueue(_event(name))
+        for _ in range(MAX_ATTEMPTS):
+            outbox.fail(name, "cloud rad etdi", permanent=True)
+
+    assert outbox.requeue_dead_letters(["yangi", "yo-q-bunday"]) == 1
+
+    assert outbox.stats()["poisoned"] == 1
+    assert [row["event_id"] for row in outbox.dead_letters()] == ["eski"]

@@ -13,5 +13,5 @@ git tegida turadi.  Yuz tanish keyinchalik **cloud** tomonda quriladi
 #: o'qish ham mumkin emas: u reliz paketiga kirmaydi.
 #:
 #: Ikkalasining mosligini `tests/test_sotqin_release_contract.py` ushlab turadi.
-__version__ = "0.6.26"
+__version__ = "0.6.27"
 __all__ = ["__version__"]

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from cloud.config_health import geometry_problems
+from cloud.config_health import feature_problems, geometry_problems
 from cloud.snapshots import LocalSnapshotStore
 
 #: Sinov do'konining HAQIQIY sozlamasi (revision 11, 2026-08-28).
@@ -226,3 +226,84 @@ def test_the_diagnostics_endpoint_carries_the_benchmark_result(client: TestClien
     benchmark = answer.json()["benchmark"]
     assert benchmark["status"] == "done"
     assert benchmark["result"]["verdict"]["cameras"] == 4
+
+
+# ── To'lovchi mijoz hodisa olmayotgan holat ──────────────────────────────
+#
+# 2026-08-29 dan 08-30 gacha "Do'kon (5070)" ning hamma biznes hodisasi
+# qurilmada tashlandi.  Quyidagi raqamlar HAQIQIY heartbeat'dan olingan
+# (30-avgust 07:45): 806 hodisa yaratildi, 806 tasi tashlandi.
+
+
+def test_a_paying_site_without_features_is_flagged() -> None:
+    problems = feature_problems({"status": "active"}, [])
+
+    assert len(problems) == 1
+    assert problems[0]["kind"] == "feature"
+    assert "birorta funksiya ketmayapti" in problems[0]["problem"]
+
+
+def test_grace_counts_as_serving() -> None:
+    """Sayt "obuna tugagach yana 14 kun ishlaydi" deb va'da qiladi."""
+    assert feature_problems({"status": "grace"}, [])
+
+
+def test_an_expired_site_is_not_a_problem() -> None:
+    """Obunasi tugagan saytda bo'sh ro'yxat — nosozlik emas, qoida."""
+    assert feature_problems({"status": "expired"}, []) == []
+    assert feature_problems({"status": "suspended"}, []) == []
+
+
+def test_a_site_with_features_is_quiet() -> None:
+    assert feature_problems({"status": "active"}, [{"code": "person_count"}]) == []
+
+
+def test_the_device_dropping_everything_is_flagged() -> None:
+    """Natija bo'yicha tekshiruv — sabab noma'lum bo'lsa ham ishlaydi."""
+    problems = feature_problems(
+        {"status": "active"},
+        [{"code": "person_count"}],  # ro'yxat BOR, lekin qurilma baribir tashlayapti
+        {"events": 806, "plan_filtered": 806},
+    )
+
+    assert len(problems) == 1
+    assert problems[0]["measure"] == "806 ta hodisadan 806 tasi tashlangan"
+
+
+def test_partial_filtering_is_normal() -> None:
+    """Bir qism tashlanishi normal: tarifga kirmagan hodisa turlari bor."""
+    assert (
+        feature_problems(
+            {"status": "active"},
+            [{"code": "person_count"}],
+            {"events": 806, "plan_filtered": 40},
+        )
+        == []
+    )
+
+
+def test_a_broken_heartbeat_does_not_crash_the_check() -> None:
+    """Maydon yo'q yoki buzuq bo'lsa sayt kartochkasi baribir ochilsin."""
+    assert feature_problems({"status": "active"}, [{"code": "x"}], {}) == []
+    assert (
+        feature_problems(
+            {"status": "active"}, [{"code": "x"}], {"events": "yo'q", "plan_filtered": None}
+        )
+        == []
+    )
+
+
+def test_the_site_card_carries_the_feature_check(client) -> None:
+    """Tekshiruv admin kartochkasiga ULANGAN bo'lsin.
+
+    Mantiq yuqorida sinaladi; bu test faqat simni qulflaydi — 2026-08-29
+    dagi nosozlik aynan "hech kim ko'rmadi" degan joyda yashiringan edi.
+    """
+    site = client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Sim tekshiruvi"}
+    ).json()
+
+    detail = client.get(f"/api/v1/admin/sites/{site['site_id']}", headers=ADMIN)
+
+    assert detail.status_code == 200, detail.text
+    assert "feature_problems" in detail.json()

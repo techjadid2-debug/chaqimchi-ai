@@ -1369,8 +1369,24 @@ def test_biznes_device_gets_queue_and_security(production_client) -> None:
     assert codes == {"person_count", "queue_length", "store_security"}
 
 
-def test_production_plan_features_stay_closed_until_acceptance(production_client, monkeypatch) -> None:
-    """Tarif fallback'i public acceptance gate'ini chetlab o'tmasin."""
+def test_a_paying_site_keeps_its_plan_features_without_acceptance(
+    production_client, monkeypatch
+) -> None:
+    """Qabul sinovi o'tmagan bo'lsa ham TO'LOVCHI mijoz funksiyasini oladi.
+
+    2026-08-29 da aynan buning teskarisi bo'ldi: qabul darvozasi
+    (`available_feature_codes()`) shu yo'lda turgani uchun obunasi FAOL
+    do'kon bo'sh ro'yxat oldi, qurilma esa kuniga ~7 600 hodisani
+    jimgina tashladi.  Mijoz besh kun nol raqamli hisobot oldi va buni
+    hech bir log, panel yoki ogohlantirish ko'rsatmadi.
+
+    Darvoza tuzilishi bo'yicha ham noto'g'ri joyda edi: obunasi tugagan
+    sayt undan OLDIN bo'sh ro'yxat oladi
+    (`test_an_expired_subscription_stops_the_features_but_not_the_camera_alarm`),
+    ya'ni bu tekshiruv faqat to'layotgan mijozga yeta olardi.  Qabul
+    sinovi sotuvni to'ssin — `test_public_pricing` uni o'sha yerda
+    qulflaydi.
+    """
     from cryptography.fernet import Fernet
 
     client, _messages = production_client
@@ -1381,7 +1397,9 @@ def test_production_plan_features_stay_closed_until_acceptance(production_client
 
     config = client.get("/api/v1/sotqin/config", headers=headers).json()
 
-    assert config["cloud_features"] == []
+    codes = {item["code"] for item in config["cloud_features"]}
+    assert codes == {"person_count", "queue_length", "store_security"}
+    assert config["subscription"]["status"] == "active"
 
 
 def test_edge_config_camera_limit_follows_the_plan(production_client) -> None:

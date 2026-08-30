@@ -19,7 +19,7 @@ import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from chaqimchi_ai.event_models import EdgeEvent
 
@@ -40,6 +40,21 @@ MAX_ATTEMPTS = 20
 #: kompyuteridagi panelning **bugungi** hisoboti uchun kerak, shuning
 #: uchun ikki kun yetarli — kechagi kun bilan taqqoslash ham sig'adi.
 SENT_KEEP_DAYS = 2
+
+
+def failure_reason(exc: BaseException) -> str:
+    """Istisnodan HECH QACHON bo'sh bo'lmaydigan sabab yasaydi.
+
+    `str(exc)` ba'zi `httpx` istisnolarida bo'sh satr qaytaradi va
+    o'shanda navbatdagi yozuv sababsiz qolardi: jonli do'konda
+    tashlangan 3 375 hodisaning **602 tasi** "sabab yozilmagan" edi va
+    ular nima uchun yo'qolgani endi hech qachon bilinmaydi.
+
+    Tur nomi chaqiruv joyida qo'shiladi, `fail()` ichida emas: u yergacha
+    istisno allaqachon satrga aylangan bo'ladi.
+    """
+    text = str(exc).strip()
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
 
 
 def retry_delay(attempts: int) -> float:
@@ -246,7 +261,11 @@ class EventOutbox:
         # Bo'sh sabab diagnostikani ko'r qiladi: jonli do'kondagi
         # 3 375 ta tashlangan hodisaning 602 tasi "sabab yozilmagan"
         # edi — `str(exc)` ba'zi httpx xatolarida bo'sh satr qaytaradi.
-        reason = (error or "").strip()[:1000] or f"sabab yozilmagan ({type(error).__name__})"
+        # `type(error).__name__` YOZILMAYDI: `error` bu yerga allaqachon
+        # satr bo'lib keladi, ya'ni u doim "str" derdi va diagnostikaga
+        # hech narsa qo'shmasdi.  Istisno turini chaqiruvchi biladi —
+        # shuning uchun u `failure_reason()` dan o'tkazadi.
+        reason = (error or "").strip()[:1000] or "sabab yozilmagan"
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT attempts,hard_failures,payload,created_at FROM outbox WHERE event_id=?",
@@ -316,6 +335,44 @@ class EventOutbox:
                 "SELECT * FROM dead_letter ORDER BY failed_at DESC LIMIT ?", (int(limit),)
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def requeue_dead_letters(self, event_ids: Sequence[str]) -> int:
+        """Tashlangan hodisalarni navbatga QAYTARADI.
+
+        `event_ids` ataylab MAJBURIY: "hammasini qaytar" degan tugma
+        xavfli.  Tashlangan hodisa eskiradi va uni qaytarish mijozning
+        Telegramiga bir haftalik trevogani to'kishi mumkin — 2026-08-30
+        holatiga ko'ra navbatda 21-26 avgustdan qolgan 2 738 ta yozuv
+        turgan edi.  Operator avval `scripts/dead_letters.py --dry-run`
+        bilan ro'yxatni ko'rsin, keyin ataylab tanlasin.
+
+        Media (rasm/klip) qaytmaydi: `dead_letter` faqat payload'ni
+        saqlaydi va fayllar allaqachon tozalangan bo'lishi mumkin.
+        """
+        moment = datetime.now(timezone.utc).isoformat()
+        restored = 0
+        with self._connect() as conn:
+            for event_id in event_ids:
+                row = conn.execute(
+                    "SELECT payload,created_at FROM dead_letter WHERE event_id=?",
+                    (str(event_id),),
+                ).fetchone()
+                if row is None:
+                    continue
+                try:
+                    severity = str(json.loads(row["payload"]).get("severity") or "")
+                except (json.JSONDecodeError, AttributeError, TypeError):
+                    severity = ""
+                priority = {"critical": 30, "warning": 20}.get(severity, 10)
+                conn.execute(
+                    "INSERT OR REPLACE INTO outbox "
+                    "(event_id,payload,priority,created_at,attempts,hard_failures,"
+                    "next_attempt_at,sent_at) VALUES (?,?,?,?,0,0,NULL,NULL)",
+                    (str(event_id), row["payload"], priority, row["created_at"] or moment),
+                )
+                conn.execute("DELETE FROM dead_letter WHERE event_id=?", (str(event_id),))
+                restored += 1
+        return restored
 
     def prune(self) -> int:
         now = datetime.now(timezone.utc)

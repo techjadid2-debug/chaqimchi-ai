@@ -733,6 +733,19 @@
             <br><button class="button ghost small" type="button" data-act="geometry" data-id="${esc(d.id)}">Chiziq va zonani ochish</button></div>`
         : "";
 
+      // To'lovchi mijoz hodisa OLMAYAPTI — uchinchi jimlik sinfi.
+      //
+      // 2026-08-29 dan 08-30 gacha "Do'kon (5070)" ning hamma biznes
+      // hodisasi qurilmada tashlandi (kuniga ~7 600 ta) va mijoz nol
+      // raqamli hisobot oldi.  Buni na log, na shu panel ko'rsatmagan
+      // edi — endi ko'rsatadi.
+      const featureProblems = d.feature_problems || [];
+      const featureWarning = featureProblems.length
+        ? `<div class="note warn"><b>Mijoz hodisa olmayapti</b>
+            ${featureProblems.map((p) => `${esc(p.name)} — ${esc(p.problem)}
+              ${p.measure ? `<small>(${esc(p.measure)})</small>` : ""}`).join("<br>")}</div>`
+        : "";
+
       const devices = (d.devices || []).map((dev, i) => `
         <div class="member-row">
           <span class="who"><b>Qurilma ${i + 1}</b>
@@ -793,6 +806,7 @@
           <div class="card-head"><h2>Qurilma va kamera</h2></div>
           ${cameraRows}
           ${devices || '<p class="hint">Do\'kon kompyuteri hali ulanmagan.</p>'}
+          ${featureWarning}
           ${geometryWarning}
           <div class="action-row">
             <button class="button primary" type="button" data-act="camera-add" data-id="${esc(d.id)}">Kamera qo'shish</button>

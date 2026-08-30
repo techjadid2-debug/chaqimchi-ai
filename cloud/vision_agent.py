@@ -465,6 +465,19 @@ async def worker_loop(
                 )
                 if requeued:
                     logger.info("Egasiz agent joblari qayta navbatga olindi: %d", requeued)
+                # Xato bilan yopilgan job ham `MAX_JOB_ATTEMPTS` gacha
+                # sinaladi.  Bungacha u BIR urinishdan keyin o'lardi va
+                # mijoz javobsiz qolardi (2026-08-29, "Gemini javob
+                # bermadi").  Model zanjiri (asosiy → zaxira) provayder
+                # xatosini o'zi yutadi, lekin butun so'rov yiqilganda
+                # qayta urinadigan hech kim yo'q edi.
+                retried = await asyncio.to_thread(
+                    store.requeue_failed_vision_jobs,
+                    within_sec=STALE_JOB_SEC,
+                    max_attempts=MAX_JOB_ATTEMPTS,
+                )
+                if retried:
+                    logger.info("Yiqilgan agent joblari qayta sinaladi: %d", retried)
             worked = await process_next_job(
                 store,
                 cameras_for_site=cameras_for_site,

@@ -9,6 +9,28 @@
 
 ## HOZIRGI HOLAT · 2026-08-30
 
+- **🔴 TUZATILDI VA JONLI TASDIQLANDI (0.6.27): do'kon besh kun hodisa
+  yubormagan edi.** 29-avgust ertalabidan 30-avgust 13:14 gacha
+  "Do'kon (5070)" ning HAMMA biznes hodisasi qurilmada tashlangan —
+  kuniga ~7 600 ta.  Mijoz 29 va 30-avgust uchun **nol raqamli** kunlik
+  hisobot oldi.  Sabab: bulut qurilmaga bo'sh funksiya ro'yxati
+  yuborardi, `retail_event_filter` esa bo'sh ro'yxatni ko'rib har bir
+  hodisani rad etardi.  Deploydan keyin: tashlash **100% → 74%** ga
+  tushdi (qolgani normal — `person_detected` va sovutishlar) va
+  30-avgust 13:14 da birinchi `line_crossed` bulutga yetdi.
+- **Qabul darvozasi (`available_feature_codes()`) UCH joydan olindi**
+  (ega qarori, 2026-08-30): qurilma konfigi, admin biriktirish va
+  mijozning O'Z paneli.  Sotuv sahifasida QOLDI.  Sabab: darvoza
+  obunasi tugagan saytga umuman yetib bormaydi (u yuqorida bo'sh
+  ro'yxat oladi), ya'ni u faqat PUL TO'LAYOTGAN mijozni to'sardi.
+- **Jimlikka signalizatsiya qo'shildi** — `config_health.feature_problems()`.
+  Ikki tekshiruv: obuna faol-u ro'yxat bo'sh (sabab) va
+  `plan_filtered == events` (natija).  Admin sayt kartochkasida qizil
+  qator bo'lib chiqadi.
+- **Zaxiraning tashqi nusxasi endi bor** — Telegram yo'li yoqildi va
+  jonli sinaldi (1,1 MB arxiv ketdi).  ⚠️ `CHAQIMCHI_BACKUP_PASSWORD`
+  hali FAQAT serverda — parol menejeriga ko'chirilmaguncha bu nusxa
+  server o'lganda ochilmaydi.
 - **Kamera rollari KODDA TAYYOR (0.6.26, nashr qilinmagan):** rol endi
   saqlanadi va zanjirni boshqaradi — sehrgar → `config.yaml` →
   bulut (`site_cameras.role`) → edge config → `CameraPlan.role`.
@@ -96,6 +118,17 @@
 
 ## KEYINGI ISH
 
+**0) ⚠️ EGA QILADI — zaxira parolini ko'chiring.**
+`CHAQIMCHI_BACKUP_PASSWORD` faqat serverda (`/etc/chaqimchi/backup.env`).
+Telegramdagi kunlik nusxa shu parolsiz ochilmaydi — ya'ni server o'lsa
+zaxira ham foydasiz.  Parol menejeriga ko'chiring.
+
+**0b) Mijoz bilan: chizmalar va 720p.**
+`camera-02` da 4 pikselli «kirish» chizig'i va 29x20 pikselli
+«Taqiqlangan zona» hali ham yaroqsiz — admin panelda ro'yxatda turibdi.
+`camera-01` ni 1280x720 ga o'tkazish (o'lchov ruxsat bergan) — usiz
+demografiya va davomat ishlamaydi.
+
 **1) ✅ BAJARILDI — cloud deploy qilindi va tasdiqlandi** (2026-08-28).
 
 Bugun kechqurun 16:00 UTC (21:00 Toshkent) birinchi kunlik hisobot
@@ -158,6 +191,20 @@ qiladi, faqat UI/transport yo'q.
   `CHAQIMCHI_N100_ACCEPTANCE_FILE`, oferta STIR/yurist).
 
 ## OCHIQ MUAMMOLAR
+
+**✅ YOPILDI (2026-08-30) — hodisalar mijozgacha yetmasdi**
+
+Qabul darvozasi to'lovchi mijozning funksiyalarini nolga tushirardi.
+Uch joydan olindi, jonli tasdiqlandi.  Tafsilot: Tarix, 2026-08-30.
+
+**⚠ HEARTBEATDA `suppressed` YO'Q — keyingi ko'r nuqta**
+
+Zanjir `suppressed` (qoidalar tashlagan hodisa) ni sanaydi
+(`pipeline.py:401`), lekin u heartbeatga CHIQMAYDI.  30-avgustdagi
+tekshiruvda aynan shu raqam yetishmadi: "hodisa filtrdan o'tdi, lekin
+bulutga kelmadi" savoliga masofadan javob berib bo'lmadi va sabab
+faqat kutish orqali aniqlandi.  Qo'shilsa keyingi tashxis daqiqalar
+emas, soniyalar oladi.
 
 **✅ YOPILDI — vaqt mintaqasi**
 
@@ -252,6 +299,23 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Bitta darvoza UCH joyda turardi.**  `available_feature_codes()`
+  qurilma konfigida, admin biriktirishda (`store.py: feature_quote`) va
+  mijoz panelida — uchtasi ham alohida yozilgan edi.  30-avgustda
+  birinchisi topilib "zaxira yo'l bor" deb o'ylandi, biriktirish esa
+  aynan shu darvoza bilan **422** qaytardi.  Yangi cheklov qo'shsangiz
+  `grep -rn` bilan HAMMA chaqiruv joyini sanang.
+- **Funksiya ro'yxati o'zgarsa `revision` ni OSHIRING.**  Qurilma
+  konfigni faqat revision o'zgarganda qayta o'qiydi
+  (`cloud_config.py:925`).  Bulutdagi ro'yxat to'g'rilangani bilan
+  qurilma eski keshda qolaveradi — `approve_feature_draft` shu sababdan
+  `cloud_feature_revision` ni oshiradi.
+- **Biznes hodisasi soatiga 20-30 ta, daqiqasiga emas.**  Tuzatishdan
+  keyin 12 daqiqa kutib "ishlamadi" degan xulosa chiqarilayozdi.
+  Zanjir daqiqasiga ~100 xom hodisa yasaydi, ularning ko'pi
+  `person_detected` va sovutishlarda qoladi.  Tasdiqlash uchun
+  **kamida 30-60 daqiqa** kuting yoki `plan_filtered` nisbatiga qarang.
 
 - **`save_camera` yozuvni TO'LIQ qayta quradi** (`config_store.py`):
   chaqiruvchi bermagan maydon JIMGINA o'chadi.  Yangi per-kamera maydon
@@ -483,6 +547,45 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-30 — Do'kon besh kun hodisa yubormagan edi (`commit qilinmagan`, 0.6.27)
+
+Nima: mijozning hodisalari qaytdi — 29-avgustdan beri birinchi
+`line_crossed` 30-avgust 13:14 da bulutga yetdi.  Qurilmada tashlanish
+**100% dan 74% ga** tushdi (qolgani normal).
+
+Nega: bulut qurilmaga bo'sh funksiya ro'yxati yuborardi va
+`retail_event_filter` bo'sh ro'yxatni ko'rib HAR BIR biznes hodisasini
+rad etardi — kuniga ~7 600 ta.  Ildizi: `available_feature_codes()`
+qabul darvozasi.  U 2026-08-24 da qo'yilib 08-28 deployi bilan jonli
+chiqqan, qurilma esa 0.6.24 ga yangilanib qayta ishga tushgach yangi
+(bo'sh) sozlamani olgan.  Darvoza tuzilishi bo'yicha noto'g'ri joyda
+edi: obunasi tugagan sayt unga yetib bormaydi (yuqorida bo'sh ro'yxat
+oladi), ya'ni u faqat **pul to'layotgan** mijozni to'sardi.  Ega qarori
+bilan uch joydan olindi; sotuv sahifasida qoldi.
+
+Qayerda: `cloud/main.py` (`site_cloud_features()` — yangi yagona manba,
+`/api/v1/edge/config` va `/api/v1/owner/dashboard`),
+`cloud/store.py: feature_quote`, `cloud/config_health.py:
+feature_problems()`, `cloud/static/admin.html`,
+`cloud/event_store.py: requeue_failed_vision_jobs()`,
+`chaqimchi_ai/outbox.py: failure_reason(), requeue_dead_letters()`,
+`chaqimchi_ai/cloud_sync.py`, `scripts/dead_letters.py` (yangi).
+
+Test: `test_a_paying_site_keeps_plan_features_without_acceptance`
+(`test_cloud_events_owner.py`), `test_config_health.py` dagi yettita
+`feature_problems` testi, `test_vision_agent.py` dagi uchta qayta
+urinish testi, `test_outbox.py` dagi beshta sabab/qaytarish testi.
+Obunasi tugagan sayt hali ham bo'sh ro'yxat oladi — buni eski
+`test_an_expired_subscription_stops_the_features_but_not_the_camera_alarm`
+qulflaydi.
+
+Diqqat: nosozlik BESH KUN ko'rinmadi — na log, na panel, na
+ogohlantirish.  `plan_filtered` raqami heartbeatda shu davr ichida
+turgan, lekin uni hech kim o'qimagan.  Shu sababdan tuzatish bilan
+birga signalizatsiya qo'shildi.  Yonaki ish: zaxiraning tashqi nusxasi
+yoqildi (Telegram, jonli sinaldi) — lekin shifr paroli hali faqat
+serverda.
 
 ### 2026-08-30 — Kamera rollari: tizim taklif qiladi, odam tasdiqlaydi (`af08057`)
 

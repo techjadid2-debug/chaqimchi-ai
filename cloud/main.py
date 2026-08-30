@@ -4810,6 +4810,25 @@ async def admin_site_detail(
         logger.exception("chizma tekshiruvi yiqildi: %s", site_id)
         detail["geometry_problems"] = []
         detail["role_problems"] = []
+    # Uchinchi jimlik sinfi: to'lovchi mijoz hodisa OLMAYAPTI.
+    #
+    # Ro'yxat qurilmaga ROSTDAN ketadigan javobdan olinadi
+    # (`site_cloud_features`), taxminan qayta hisoblanmaydi — aks holda
+    # tekshiruv o'zi tekshirayotgan narsadan uzoqlashardi.
+    try:
+        latest = max(
+            (item for item in health.values() if item.get("received_at")),
+            key=lambda item: str(item.get("received_at")),
+            default=None,
+        )
+        detail["feature_problems"] = config_health.feature_problems(
+            get_store().subscription_status(site_id),
+            site_cloud_features(site_id),
+            (latest or {}).get("health") or {},
+        )
+    except Exception:  # tekshiruv yiqilsa ham sayt kartochkasi ochilsin
+        logger.exception("funksiya tekshiruvi yiqildi: %s", site_id)
+        detail["feature_problems"] = []
     return detail
 
 
@@ -5896,6 +5915,102 @@ def _windows_release_by_version(version: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def site_cloud_features(
+    site_id: str,
+    *,
+    features: Optional[Dict[str, Any]] = None,
+    subscription: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Qurilmaga ROSTDAN ketadigan funksiya ro'yxati — YAGONA manba.
+
+    Ikki chaqiruvchisi bor: `/api/v1/edge/config` (qurilmaga yuboradi) va
+    `config_health.feature_problems()` (admin panelga "bu sayt jim" deb
+    aytadi).  Ular bir xil javobni ko'rishi SHART — aks holda tekshiruv
+    o'zi tekshirayotgan narsadan boshqa narsani o'lchaydi.
+
+    Tartib: avval qo'lda tasdiqlangan assignmentlar (maxsus shartnoma),
+    bo'lmasa tarif.  Ilgari kodlar faqat assignmentlardan kelardi va hech
+    bir saytga avto-biriktirilmasdi — pullik mijozning qurilmasi
+    litsenziya filtri sabab hodisalarni jimgina tashlab yuborardi.
+
+    `is_sellable()` EMAS, `plan_feature_codes()`: uch tarif joriy
+    qilinganda `lite` sotuvdan chiqdi, ya'ni `is_sellable("lite")` False
+    bo'ldi.  Eski tekshiruv qolganda mavjud to'lovchi mijozning qurilmasi
+    hamma funksiyani jimgina yo'qotardi va do'kon nazoratsiz qolardi.
+
+    Obuna tugagan yoki to'xtatilgan bo'lsa ro'yxat bo'sh.  Bungacha obuna
+    muddati QURILMADA umuman majburlanmasdi: `require_device` faqat
+    tokenni tekshirardi, `/edge/heartbeat` esa litsenziya maydonlarini
+    tashlab yuborardi.  Bitta tarif va tekin sinov paytida bu yumshoq oqim
+    edi; uch xil narx e'lon qilingach — to'lashni to'xtatishning eng oson
+    yo'li.
+
+    `grace` (14 kun) ATAYLAB to'xtatilmaydi: sayt va FAQ aynan shuni
+    va'da qiladi — "obuna tugagach tizim yana 14 kun ishlaydi".  Kamera
+    sog'ligi hodisalari baribir chiqaveradi (`HEALTH_EVENTS` qurilmada
+    filtrdan o'tmaydi), ya'ni do'kon "kamerangiz o'chdi" xabarini
+    yo'qotmaydi.
+    """
+    if subscription is None:
+        subscription = get_store().subscription_status(site_id)
+    if subscription["status"] in {"expired", "suspended"}:
+        return []
+
+    if features is None:
+        features = get_store().site_feature_summary(site_id)
+    assigned = [
+        {
+            "code": item["feature_code"],
+            "camera_count": item["camera_count"],
+            "queue_kind": item["queue_kind"],
+        }
+        for item in features["assignments"]
+        if item["status"] == "active"
+    ]
+    if assigned:
+        return assigned
+
+    site = get_store().get_site(site_id)
+    plan_key = str((site or {}).get("plan") or "")
+    allowed = set(plan_feature_codes(plan_key))
+    # Qabul sinovi (`available_feature_codes()`) BU YERDA tekshirilmaydi.
+    #
+    # 2026-08-24 da u shu yo'lga qo'yilgan edi: "sayt `available: false`
+    # degan funksiyani qurilma yashirin yoqmasin".  Narxi 2026-08-29 da
+    # ko'rindi — pul to'lab turgan do'konning HAMMA hodisasi (kuniga
+    # ~7 600 ta) besh kun davomida qurilmada jimgina tashlandi va mijoz
+    # nol raqamli kunlik hisobot oldi.
+    #
+    # Xato tuzilishda edi: obunasi tugagan yoki to'xtatilgan sayt bu
+    # yergacha yetib kelmaydi (yuqorida bo'sh ro'yxat qaytadi), ya'ni
+    # darvoza FAQAT `active` va `grace` saytlarga — faqat to'layotgan
+    # mijozga — yeta olardi.  U hech kimni to'smasdi, faqat sotib
+    # olganni to'sardi.
+    #
+    # Qabul sinovi SOTUVni to'ssin: `/api/v1/public/pricing` dagi
+    # `available` bayrog'i o'z joyida qoladi.
+    if not allowed:
+        # Bu satr 2026-08-29 da BO'LMAGANI uchun nosozlik besh kun
+        # ko'rinmadi: qurilma bo'sh ro'yxat olardi, log esa jim edi.
+        logger.warning(
+            "Sayt %s (tarif %r) qurilmaga BIRORTA funksiya olmayapti — "
+            "qurilma hamma hodisani tashlaydi",
+            site_id,
+            plan_key,
+        )
+        return []
+    limits = get_plan(plan_key)
+    return [
+        {
+            "code": code,
+            "camera_count": limits.max_cameras,
+            "queue_kind": queue_kind,
+        }
+        for code, _name, _category, queue_kind, _price in DEFAULT_FEATURES
+        if code in allowed
+    ]
+
+
 @app.get("/api/v1/edge/config")
 @app.get("/api/v1/sotqin/config")
 async def edge_site_config(
@@ -5953,38 +6068,6 @@ async def edge_site_config(
     config["cameras_authoritative"] = bool(
         (config.get("config") or {}).get("cameras_authoritative")
     )
-    config["cloud_features"] = [
-        {
-            "code": item["feature_code"],
-            "camera_count": item["camera_count"],
-            "queue_kind": item["queue_kind"],
-        }
-        for item in features["assignments"]
-        if item["status"] == "active"
-    ]
-    # Funksiyalar tarifdan keladi.  Ilgari kodlar faqat qo'lda approve
-    # qilingan assignmentlardan kelardi va hech bir saytga
-    # avto-biriktirilmasdi — pullik mijozning qurilmasi litsenziya filtri
-    # sabab hodisalarni jimgina tashlab yuborardi.  Assignmentlar bo'lsa
-    # ular ustun (maxsus shartnomalar uchun), bo'lmasa tarifdan keladi.
-    #
-    # `is_sellable()` EMAS, `plan_feature_codes()`: uch tarif joriy
-    # qilinganda `lite` sotuvdan chiqdi, ya'ni `is_sellable("lite")` False
-    # bo'ldi.  Eski tekshiruv qolganda mavjud to'lovchi mijozning qurilmasi
-    # hamma funksiyani jimgina yo'qotardi va do'kon nazoratsiz qolardi.
-    # Obuna tugagan bo'lsa funksiyalar berilmaydi.
-    #
-    # Bungacha obuna muddati QURILMADA umuman majburlanmasdi:
-    # `require_device` faqat tokenni tekshirardi, `/edge/heartbeat` esa
-    # litsenziya maydonlarini tashlab yuborardi.  Bitta tarif va tekin
-    # sinov paytida bu yumshoq oqim edi; uch xil narx e'lon qilingach —
-    # to'lashni to'xtatishning eng oson yo'li.
-    #
-    # `grace` (14 kun) ATAYLAB to'xtatilmaydi: sayt va FAQ aynan shuni
-    # va'da qiladi — "obuna tugagach tizim yana 14 kun ishlaydi".
-    # Kamera sog'ligi hodisalari baribir chiqaveradi (`HEALTH_EVENTS`
-    # qurilmada filtrdan o'tmaydi), ya'ni do'kon "kamerangiz o'chdi"
-    # xabarini yo'qotmaydi.
     subscription = get_store().subscription_status(device["site_id"])
     config["subscription"] = {
         "status": subscription["status"],
@@ -5992,32 +6075,13 @@ async def edge_site_config(
         "message": subscription["message"],
     }
     expired = subscription["status"] in {"expired", "suspended"}
-    if expired:
-        # Erta `return` QILINMAYDI: quyida `attendance` va boshqa
-        # maydonlar to'ldiriladi va yarim javob qurilmani chalg'itardi.
-        config["cloud_features"] = []
-
-    if not expired and not config["cloud_features"]:
-        site = get_store().get_site(device["site_id"])
-        plan_key = str((site or {}).get("plan") or "")
-        allowed = set(plan_feature_codes(plan_key))
-        # Tarif funksiyani belgilaydi, ammo production'da qabul sinovidan
-        # o'tmagan funksiyani qurilmaga yubora olmaydi. Oldin bu fallback
-        # `available_feature_codes()` gate'ini chetlab o'tib, sayt
-        # "available: false" degan funksiyalarni ham yashirin yoqardi.
-        if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production":
-            allowed &= set(available_feature_codes())
-        if allowed:
-            limits = get_plan(plan_key)
-            config["cloud_features"] = [
-                {
-                    "code": code,
-                    "camera_count": limits.max_cameras,
-                    "queue_kind": queue_kind,
-                }
-                for code, _name, _category, queue_kind, _price in DEFAULT_FEATURES
-                if code in allowed
-            ]
+    # Ro'yxatning o'zi `site_cloud_features()` da — admin sog'liq tekshiruvi
+    # ham AYNAN shu funksiyani chaqiradi.  Ikki joyda alohida hisoblansa
+    # ular albatta uzoqlashadi va "hammasi joyida" degan tekshiruv
+    # qurilma olayotgan narsadan boshqa narsani ko'rsatib turaverardi.
+    config["cloud_features"] = site_cloud_features(
+        device["site_id"], features=features, subscription=subscription
+    )
     config["attendance"] = {
         # Obuna tugagan bo'lsa davomat ham to'xtaydi — u ham sotiladigan
         # funksiya, faqat boshqa yo'l bilan yetkaziladi.
@@ -6482,8 +6546,11 @@ async def owner_dashboard(
         for item in live_devices
     )
     plan_codes = set(plan_feature_codes(str(detail.get("plan") or "")))
-    if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production":
-        plan_codes &= set(available_feature_codes())
+    # Qabul sinovi bu yerda ham tekshirilmaydi (2026-08-30).  Bu mijozning
+    # O'Z paneli: u sotib olgan tarif funksiyalarini ko'rishi kerak.
+    # Bungacha darvoza to'lovchi mijozdan aynan o'zi sotib olgan bo'limlarni
+    # yashirardi — `/api/v1/edge/config` dagi bilan bir xil xato, faqat
+    # boshqa ekranda.
     capabilities = {
         "cameras": {
             "ready": bool(active) and (not expected or active >= expected),

@@ -27,7 +27,7 @@ gapdan xulosa chiqara olmaydi.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from chaqimchi_ai.camera_roles import face_id_check
 
@@ -271,3 +271,77 @@ def role_problems(
                 }
             )
     return problems
+
+
+#: Obuna shu holatlarda mijoz xizmatni OLISHI kerak.  `grace` ham shu
+#: yerda: sayt "obuna tugagach tizim yana 14 kun ishlaydi" deb va'da
+#: qiladi, ya'ni bu davrda jimlik ham nosozlik.
+SERVING_SUBSCRIPTION_STATES = frozenset({"active", "grace"})
+
+
+def feature_problems(
+    subscription: Dict[str, Any],
+    cloud_features: Sequence[Dict[str, Any]],
+    health: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """To'lovchi mijoz hodisa olmayotgan holat — jimlik ro'yxati.
+
+    **Nega kerak.**  2026-08-29 dan 08-30 gacha "Do'kon (5070)" ning
+    HAMMA biznes hodisasi qurilmada tashlandi: bulut unga bo'sh funksiya
+    ro'yxatini yuborardi, `retail_event_filter` esa bo'sh ro'yxatni
+    ko'rib har bir hodisani rad etardi.  Besh kun davomida na log, na
+    panel, na ogohlantirish — mijoz nol raqamli kunlik hisobot oldi va
+    nosozlikni faqat qo'lda tekshiruv topdi.
+
+    Ikkita mustaqil tekshiruv bor va ular ATAYLAB bir-birini takrorlaydi:
+
+    * **sabab** — obuna faol, lekin qurilmaga ketadigan ro'yxat bo'sh;
+    * **natija** — qurilmaning oxirgi heartbeat'ida `plan_filtered`
+      `events` ga TENG, ya'ni u amalda hammasini tashlayapti.
+
+    Ikkinchisi kuchliroq: u sababdan qat'i nazar ishlaydi.  Aynan shu
+    raqam besh kun davomida heartbeat ichida turgan edi — uni hech kim
+    o'qimagani uchun nosozlik ko'rinmadi.
+    """
+    problems: List[Dict[str, Any]] = []
+    status = str(subscription.get("status") or "")
+
+    if status in SERVING_SUBSCRIPTION_STATES and not cloud_features:
+        problems.append(
+            {
+                "kind": "feature",
+                "name": "Funksiya ro'yxati",
+                "camera_id": "—",
+                "problem": (
+                    "Obuna faol, lekin qurilmaga birorta funksiya ketmayapti — "
+                    "hamma hodisa qurilmada tashlanadi."
+                ),
+                "measure": f"obuna: {status}, funksiya: 0 ta",
+            }
+        )
+
+    events = _int((health or {}).get("events"))
+    filtered = _int((health or {}).get("plan_filtered"))
+    if events > 0 and filtered >= events:
+        problems.append(
+            {
+                "kind": "feature",
+                "name": "Tarif filtri",
+                "camera_id": "—",
+                "problem": (
+                    "Qurilma yaratgan hodisaning HAMMASINI tashlayapti — "
+                    "bulutga hech narsa yetib bormaydi."
+                ),
+                "measure": f"{events} ta hodisadan {filtered} tasi tashlangan",
+            }
+        )
+
+    return problems
+
+
+def _int(value: Any) -> int:
+    """Heartbeat maydoni yo'q yoki buzuq bo'lsa tekshiruv yiqilmasin."""
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0

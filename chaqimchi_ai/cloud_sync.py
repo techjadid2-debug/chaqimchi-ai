@@ -22,7 +22,7 @@ from typing import Callable, Dict, Optional
 
 import httpx
 
-from chaqimchi_ai.outbox import EventOutbox
+from chaqimchi_ai.outbox import EventOutbox, failure_reason
 from chaqimchi_ai.settings import CloudSyncSettings
 
 logger = logging.getLogger(__name__)
@@ -145,7 +145,7 @@ class CloudEventSync:
             # so'rovning o'zini rad etgan bo'lsa (4xx) hodisa aybdor.
             permanent = _is_permanent(exc)
             for row in rows:
-                self.outbox.fail(row["event_id"], str(exc), permanent=permanent)
+                self.outbox.fail(row["event_id"], failure_reason(exc), permanent=permanent)
             logger.warning("Cloud event sync muvaffaqiyatsiz: %s", exc)
             return {"sent": 0, "failed": len(rows), "pending": len(rows)}
 
@@ -228,10 +228,10 @@ class CloudEventSync:
                     verdict = "dropped"
                     continue
                 # 5xx — server tiklanadi, hodisa aybdor emas.
-                self.outbox.fail(event_id, str(exc))
+                self.outbox.fail(event_id, failure_reason(exc))
                 return "retry"
             except Exception as exc:  # noqa: BLE001 — tarmoq: keyingi siklda
-                self.outbox.fail(event_id, str(exc))
+                self.outbox.fail(event_id, failure_reason(exc))
                 return "retry"
         return verdict
 

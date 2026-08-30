@@ -1231,11 +1231,15 @@ class CloudStore:
                 raise ValueError(f"Funksiya takrorlangan: {code}")
             if code not in catalog or not catalog[code]["active"]:
                 raise ValueError(f"Noma'lum yoki o'chirilgan funksiya: {code}")
-            if (
-                os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production"
-                and code not in available_feature_codes()
-            ):
-                raise ValueError(f"Funksiya N100 qabul testidan o'tmagan: {code}")
+            # Qabul sinovi (`available_feature_codes()`) bu yerda
+            # TEKSHIRILMAYDI.  2026-08-30 gacha tekshirilardi va natijada
+            # admin PUL TO'LAB turgan saytga funksiya biriktira olmasdi:
+            # "Funksiya N100 qabul testidan o'tmagan".  Ya'ni qurilma
+            # yo'li yopilganda mijozni qo'lda tiklashning yagona zaxira
+            # yo'li ham yopiq edi va do'kon besh kun hodisasiz qoldi.
+            #
+            # Sinov SOTUVni to'sish uchun: u `/api/v1/public/pricing`
+            # dagi `available` bayrog'ida o'z joyida turibdi.
             if not 1 <= count <= GUARANTEED_CAMERAS:
                 raise ValueError(
                     f"Har funksiya uchun kamera soni 1–{GUARANTEED_CAMERAS} bo'lishi kerak"

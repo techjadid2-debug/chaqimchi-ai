@@ -1194,6 +1194,33 @@ class EventStore:
             )
         return int(requeued or 0)
 
+    def requeue_failed_vision_jobs(self, *, within_sec: int, max_attempts: int) -> int:
+        """Yaqinda yiqilgan joblarni yana bir bor sinaydi.
+
+        `MAX_JOB_ATTEMPTS` "bitta savol uch marta urinishi mumkin" deb
+        va'da qiladi, lekin bu va'da yarim bajarilardi: qayta urinish
+        faqat `running` da qotib qolgan jobga tegishli edi.  Xato bilan
+        yopilgan job esa BIR urinishdan keyin o'lardi — 2026-08-29 da
+        egasining "bugun nimalar bo'ldi?" savoli aynan shunday, bitta
+        "Gemini javob bermadi" bilan javobsiz qoldi.
+
+        `within_sec` — ataylab qisqa oyna.  Kechagi savolga bugun javob
+        berish javob bermaslikdan yomonroq: mijoz uni allaqachon
+        unutgan, javob esa suhbatga eskirgan holda tushadi.
+        """
+        cutoff = (_now() - timedelta(seconds=max(30, within_sec))).isoformat()
+        with self._connect() as conn:
+            requeued = conn.execute(
+                self._sql(
+                    "UPDATE vision_jobs SET status='queued',started_at=NULL,"
+                    "completed_at=NULL,error_text=NULL "
+                    "WHERE status='failed' AND attempts<? "
+                    "AND completed_at IS NOT NULL AND completed_at>?"
+                ),
+                (max_attempts, cutoff),
+            ).rowcount
+        return int(requeued or 0)
+
     def purge_vision_data(self, *, retention_days: int = 90) -> List[str]:
         """Eski agent yozuvlarini o'chiradi; qaytgan ro'yxat — obyekt kalitlari.
 

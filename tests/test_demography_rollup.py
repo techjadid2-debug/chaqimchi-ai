@@ -242,9 +242,11 @@ def test_the_rollup_runs_before_the_purge_in_maintenance() -> None:
     block = source[source.index("def _purge_expired_events") :]
     block = block[: block.index("\ndef ")]
 
-    # Yig'ish endi `_rollup_demography_for_site` orqali: u purge'dan OLDIN
+    # Yig'ish endi `_rollup_site_history` orqali: u purge'dan OLDIN
     # chaqiriladi va muvaffaqiyatsiz bo'lsa purge o'tkazib yuboriladi.
-    assert block.index("_rollup_demography_for_site") < block.index("purge_site")
+    # (2026-08-30 dan u demografiya bilan birga retail raqamlarini ham
+    # yozadi — himoya ikkalasiga baravar tegishli.)
+    assert block.index("_rollup_site_history") < block.index("purge_site")
     assert "continue" in block[: block.index("purge_site")], (
         "rollup xatosida sayt hodisalari purge qilinmasligi kerak"
     )

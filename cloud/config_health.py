@@ -283,6 +283,9 @@ def feature_problems(
     subscription: Dict[str, Any],
     cloud_features: Sequence[Dict[str, Any]],
     health: Optional[Dict[str, Any]] = None,
+    *,
+    yesterday_events: Optional[int] = None,
+    device_online: bool = False,
 ) -> List[Dict[str, Any]]:
     """To'lovchi mijoz hodisa olmayotgan holat — jimlik ro'yxati.
 
@@ -333,6 +336,35 @@ def feature_problems(
                     "bulutga hech narsa yetib bormaydi."
                 ),
                 "measure": f"{events} ta hodisadan {filtered} tasi tashlangan",
+            }
+        )
+
+    # Uchinchi tekshiruv — KUN darajasida, sababdan butunlay mustaqil.
+    #
+    # Yuqoridagi ikkisi qurilma nima deyayotganiga tayanadi.  Bu esa
+    # bizda NIMA SAQLANGANIGA qaraydi: qurilma tirik-u, tugagan kunga
+    # birorta hodisa yozilmagan bo'lsa — sababi nima bo'lishidan qat'i
+    # nazar, o'sha kun mijoz uchun yo'q.  2026-08-29 dagi besh kunlik
+    # jimlik aynan shunday ko'rinardi va uni hech narsa aytmadi.
+    #
+    # Yolg'on ogohlantirish mumkin (dam olish kuni, ta'til) — lekin u
+    # faqat admin ro'yxatida bir qator, jimlikning narxi esa besh kun edi.
+    if (
+        status in SERVING_SUBSCRIPTION_STATES
+        and device_online
+        and yesterday_events is not None
+        and yesterday_events == 0
+    ):
+        problems.append(
+            {
+                "kind": "feature",
+                "name": "Kechagi kun",
+                "camera_id": "—",
+                "problem": (
+                    "Qurilma aloqada, lekin kecha butun kun davomida birorta "
+                    "hodisa saqlanmagan — do'kon yopiq bo'lmasa, bu nosozlik."
+                ),
+                "measure": "kecha: 0 ta hodisa",
             }
         )
 

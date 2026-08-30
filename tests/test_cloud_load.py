@@ -52,7 +52,7 @@ def cloud(tmp_path: Path, monkeypatch):
         return None
 
     monkeypatch.setattr(main, "_maintenance_loop", no_background_loop)
-    monkeypatch.setattr(main, "_demography_rollup_loop", no_background_loop)
+    monkeypatch.setattr(main, "_history_rollup_loop", no_background_loop)
 
     ratelimit.limiter().reset()
     throttle().reset()
@@ -259,10 +259,10 @@ def test_clips_expire_sooner_than_the_archive_the_customer_paid_for(cloud) -> No
     assert event["clip_key"] is None
 
 
-def test_clip_retention_is_configurable(cloud, monkeypatch) -> None:
+def test_media_retention_is_configurable(cloud, monkeypatch) -> None:
     """Muddatni env bilan uzaytirib bo'lsin — aks holda orqaga qaytish yo'li yo'q."""
     main, client, _sent = cloud
-    monkeypatch.setenv("CHAQIMCHI_CLIP_RETENTION_DAYS", "60")
+    monkeypatch.setenv("CHAQIMCHI_MEDIA_RETENTION_HOURS", str(60 * 24))
     site, headers = _site(client, "Uzoq klip", plan="enterprise")
 
     client.post(
@@ -277,6 +277,35 @@ def test_clip_retention_is_configurable(cloud, monkeypatch) -> None:
     main._purge_expired_events()
 
     assert store.event(site["site_id"], event_id)["has_clip"] == 1
+
+
+def test_media_dies_in_48_hours_but_the_event_stays(cloud) -> None:
+    """Ega qarori (2026-08-30): bulutda rasm 48 soat, keyin faqat raqam.
+
+    Hodisa qatorining O'ZI qolishi SHART — narx sahifasida «aniqlangan
+    hodisalar va kunlik raqamlar 30 kun saqlanadi» deb sotilgan.  Media
+    bilan birga hodisani ham o'chirish mijoz to'lagan narsani olib
+    qo'yish bo'lardi.
+    """
+    main, client, _sent = cloud
+    site, headers = _site(client, "Ikki kunlik media", plan="biznes")
+
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={"events": _events(1, days_ago=3, prefix="m")},
+    )
+    store = main.get_event_store()
+    event_id = store.list_events(site["site_id"], limit=5)[0]["event_id"]
+    store.set_clip(site["site_id"], event_id, f"{site['site_id']}/{event_id}.mp4", size_bytes=1024)
+
+    main._purge_expired_events()
+
+    event = store.event(site["site_id"], event_id)
+    assert event is not None, "hodisa 30 kunlik arxivda qolishi kerak"
+    assert event["has_clip"] == 0, "48 soatdan eski klip o'chsin"
+    assert event["clip_key"] is None
+    assert event["has_snapshot"] == 0, "48 soatdan eski rasm ham o'chsin"
 
 
 def test_monthly_receipt_is_silent_without_the_owners_revenue(cloud) -> None:

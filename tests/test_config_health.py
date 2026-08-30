@@ -307,3 +307,59 @@ def test_the_site_card_carries_the_feature_check(client) -> None:
 
     assert detail.status_code == 200, detail.text
     assert "feature_problems" in detail.json()
+
+
+# ── Kun darajasidagi jimlik ──────────────────────────────────────────────
+#
+# Yuqoridagi ikkita tekshiruv qurilma NIMA DEYAYOTGANIGA tayanadi.  Bu
+# esa bizda NIMA SAQLANGANIGA qaraydi va shu sababdan sababdan mustaqil.
+
+
+def test_an_online_device_with_a_silent_day_is_flagged() -> None:
+    problems = feature_problems(
+        {"status": "active"},
+        [{"code": "person_count"}],
+        {},
+        yesterday_events=0,
+        device_online=True,
+    )
+
+    assert len(problems) == 1
+    assert "birorta hodisa saqlanmagan" in problems[0]["problem"]
+
+
+def test_a_day_with_events_is_quiet() -> None:
+    assert (
+        feature_problems(
+            {"status": "active"},
+            [{"code": "person_count"}],
+            {},
+            yesterday_events=243,
+            device_online=True,
+        )
+        == []
+    )
+
+
+def test_an_offline_device_is_not_blamed_for_the_silence() -> None:
+    """Qurilma o'chgan bo'lsa sabab boshqa joyda — aloqa ogohlantirishi bor."""
+    assert (
+        feature_problems(
+            {"status": "active"},
+            [{"code": "person_count"}],
+            {},
+            yesterday_events=0,
+            device_online=False,
+        )
+        == []
+    )
+
+
+def test_an_unknown_yesterday_is_not_guessed() -> None:
+    """Sanoq berilmasa tekshiruv jim turadi — taxmin qilmaydi."""
+    assert (
+        feature_problems(
+            {"status": "active"}, [{"code": "person_count"}], {}, device_online=True
+        )
+        == []
+    )

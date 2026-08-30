@@ -424,6 +424,10 @@ class RetailSupervisor:
             # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel
             # "hisobot cloudga bormayapti" ogohlantirishini shundan chiqaradi.
             "plan_filtered": status_file.get("plan_filtered", 0),
+            # Qoidalar tashlagani — tarif filtridan alohida.  Ikkalasi
+            # ko'rinmasa "hodisa qayerda yo'qolyapti" savoliga faqat
+            # do'konga borib javob berish mumkin edi.
+            "suppressed": status_file.get("suppressed", 0),
             # Bu uchtasi holat faylida allaqachon bor edi, lekin shu yerdan
             # o'tmasdi — natijada `cloud_config.send_heartbeat()` ularni
             # `status` dan o'qiy olmay, cloudga DOIM `0, 0, 0` yuborardi va

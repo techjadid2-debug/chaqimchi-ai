@@ -348,6 +348,51 @@ class EventStore:
             """,
             "CREATE INDEX IF NOT EXISTS idx_demography_daily_site "
             "ON demography_daily(site_id,day)",
+            # Kunlik va soatlik RAQAMLAR — xom hodisalardan ALOHIDA yashaydi.
+            #
+            # Bungacha panelning har bir raqami (`retail_report`,
+            # `traffic_trend`, `stats`) har safar `production_events` dan
+            # qayta hisoblanardi, xom hodisalar esa tarif muddatida
+            # (30/90/365 kun) o'chadi.  Ya'ni 30-kuni mijozning o'sha
+            # kungi kirish soni, soatlik grafigi, navbati va xavfsizlik
+            # sanog'i BUTUNLAY yo'qolardi va buni hech narsa aytmasdi.
+            # Demografiya uchun yechim allaqachon shu edi
+            # (`demography_daily`) — qolgan raqamlar ham shu yo'lga
+            # o'tkazildi.
+            #
+            # `report_json` — `retail_report()` ning to'liq javobi.  Faqat
+            # ustunlar saqlansa, hisobotga yangi maydon qo'shilgan kuni u
+            # eski kunlar uchun abadiy bo'sh qolardi.  Ustunlar esa tez
+            # so'rovlar uchun: trend kunlarni SUM qiladi.
+            """
+            CREATE TABLE IF NOT EXISTS retail_daily (
+                site_id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                entered INTEGER NOT NULL DEFAULT 0,
+                exited INTEGER NOT NULL DEFAULT 0,
+                staff_crossings INTEGER NOT NULL DEFAULT 0,
+                report_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, day)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_retail_daily_site "
+            "ON retail_daily(site_id,day)",
+            # Soat formati `heatmap_hourly` bilan BIR XIL (`%Y-%m-%dT%H`,
+            # Toshkent vaqti) — ikkita soatlik jadval ikki xil kalitda
+            # yozilsa, ularni birga o'qish jimgina noto'g'ri natija berardi.
+            """
+            CREATE TABLE IF NOT EXISTS retail_hourly (
+                site_id TEXT NOT NULL,
+                bucket_hour TEXT NOT NULL,
+                entered INTEGER NOT NULL DEFAULT 0,
+                exited INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, bucket_hour)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_retail_hourly_site "
+            "ON retail_hourly(site_id,bucket_hour)",
             """
             CREATE TABLE IF NOT EXISTS heatmap_hourly (
                 site_id TEXT NOT NULL,
@@ -789,33 +834,6 @@ class EventStore:
             row["has_image"] = bool(row.pop("snapshot_key", None))
             events.append(row)
         return events
-
-    def purge_face_media(self, site_id: str, *, retention_days: int) -> List[str]:
-        """Muddati o'tgan yuz kadrlarini butunlay o'chiradi.
-
-        Oddiy hodisalardan farqi: yozuvning O'ZI ham o'chadi — biometrik iz
-        (kim qachon ko'ringani rasm bilan) kerak bo'lgandan uzoq yashamasligi
-        kerak.  Davomat statistikasi `employee_seen`da — u qoladi.
-        """
-        cutoff = (_now() - timedelta(days=max(1, retention_days))).isoformat()
-        keys: List[str] = []
-        with self._connect() as conn:
-            rows = conn.execute(
-                self._sql(
-                    "SELECT event_id,snapshot_key FROM production_events "
-                    "WHERE site_id=? AND event_type='face_captured' AND occurred_at<?"
-                ),
-                (site_id, cutoff),
-            ).fetchall()
-            for raw in rows:
-                row = self._dict(raw)
-                if row["snapshot_key"]:
-                    keys.append(str(row["snapshot_key"]))
-                conn.execute(
-                    self._sql("DELETE FROM production_events WHERE site_id=? AND event_id=?"),
-                    (site_id, row["event_id"]),
-                )
-        return keys
 
     def purge_inactive_employee_faces(self, site_id: str) -> List[str]:
         """Ro'yxatdan chiqarilgan xodimlarning yuz namunalarini o'chiradi.
@@ -1581,6 +1599,47 @@ class EventStore:
         return round(max(0.0, min(1.0, 1 - ratio)) * 100, 1)
 
     def retail_report(self, site_id: str, *, day: Optional[date] = None) -> Dict[str, Any]:
+        """Kunlik hisobot — TUGAGAN kun uchun yig'indidan, bugun uchun jonli.
+
+        Nega ikki manba.  Xom hodisalar tarif muddatida (30/90/365 kun)
+        o'chadi va ilgari ular bilan birga o'sha kunning HAMMA raqami
+        ketardi: kirish soni, soatlik grafik, navbat, dwell, xavfsizlik.
+        Endi tugagan kun `retail_daily` da saqlanadi va hisobot 30 kundan
+        keyin ham javob beradi.
+
+        Bugungi kun ataylab yig'indidan o'qilmaydi — u hali tugamagan va
+        har daqiqada o'zgaradi.  Yig'indi yo'q bo'lsa (eski sayt, hali
+        yig'ilmagan kun) xom hodisalarga tushiladi: yig'indining yo'qligi
+        raqamni yo'qotmasin.
+        """
+        timezone_tashkent = ZoneInfo("Asia/Tashkent")
+        day = day or datetime.now(timezone_tashkent).date()
+        if day < datetime.now(timezone_tashkent).date():
+            stored = self.retail_rollup(site_id, day)
+            if stored is not None:
+                return stored
+        return self._retail_report_from_events(site_id, day=day)
+
+    def retail_rollup(self, site_id: str, day: date) -> Optional[Dict[str, Any]]:
+        """Saqlangan kunlik hisobot; yozilmagan bo'lsa `None`."""
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT report_json FROM retail_daily WHERE site_id=? AND day=?"),
+                (site_id, day.isoformat()),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            return json.loads(self._dict(row)["report_json"])
+        except (json.JSONDecodeError, TypeError):
+            # Buzuq yozuv butun hisobotni yiqitmasin — xom hodisalarga
+            # tushamiz va keyingi yig'ish uni qayta yozadi.
+            logger.exception("retail_daily yozuvi o'qilmadi: %s %s", site_id, day)
+            return None
+
+    def _retail_report_from_events(
+        self, site_id: str, *, day: Optional[date] = None
+    ) -> Dict[str, Any]:
         """Do'kon egasi uchun kunlik hisobot.
 
         Xom hodisa sanog'i ("line_crossed: 680") mijozga hech narsa aytmaydi:
@@ -1716,6 +1775,109 @@ class EventStore:
                 "yosh": age_buckets,
             },
         }
+
+    #: Raqamli yig'indi shuncha kun yashaydi.
+    #:
+    #: `DEMOGRAPHY_RETENTION_DAYS` bilan bir xil (3 yil): bir kun uchun
+    #: bitta kunlik + 24 ta soatlik qator, ya'ni joy amalda hech narsa.
+    #: Mijoz esa o'tgan yilning shu oyi bilan solishtira oladi — xom
+    #: hodisalar allaqachon o'chgan bo'lsa ham.
+    RETAIL_ROLLUP_RETENTION_DAYS = 1095
+
+    def rollup_retail(self, site_id: str, day: date) -> Dict[str, Any]:
+        """Bitta kunning raqamlarini yozadi (qayta chaqirsa yangilaydi).
+
+        Hisob `retail_report` ning O'ZIDAN olinadi — ikkinchi marta
+        yozilgan hisoblash mantiqi muqarrar uzoqlashardi va mijoz panel
+        bilan yig'indi orasidan qaysi raqamga ishonishni bilmasdi.
+        Shu sababdan XOM manba majburlanadi: yig'ish paytida saqlangan
+        yozuvni qayta o'qish o'zini-o'zi ko'chirish bo'lardi.
+        """
+        report = self._retail_report_from_events(site_id, day=day)
+        traffic = report.get("traffic") or {}
+        now = _now().isoformat()
+        payload = json.dumps(report, ensure_ascii=False)
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO retail_daily"
+                    "(site_id,day,entered,exited,staff_crossings,report_json,updated_at) "
+                    "VALUES(?,?,?,?,?,?,?) "
+                    "ON CONFLICT(site_id,day) DO UPDATE SET "
+                    "entered=excluded.entered,exited=excluded.exited,"
+                    "staff_crossings=excluded.staff_crossings,"
+                    "report_json=excluded.report_json,updated_at=excluded.updated_at"
+                ),
+                (
+                    site_id,
+                    day.isoformat(),
+                    int(traffic.get("entered") or 0),
+                    int(traffic.get("exited") or 0),
+                    int(traffic.get("xodim_chiqarilgan") or 0),
+                    payload,
+                    now,
+                ),
+            )
+            for hour in traffic.get("hourly") or []:
+                bucket = f"{day.isoformat()}T{int(hour.get('hour') or 0):02d}"
+                conn.execute(
+                    self._sql(
+                        "INSERT INTO retail_hourly"
+                        "(site_id,bucket_hour,entered,exited,updated_at) "
+                        "VALUES(?,?,?,?,?) "
+                        "ON CONFLICT(site_id,bucket_hour) DO UPDATE SET "
+                        "entered=excluded.entered,exited=excluded.exited,"
+                        "updated_at=excluded.updated_at"
+                    ),
+                    (
+                        site_id,
+                        bucket,
+                        int(hour.get("entered") or 0),
+                        int(hour.get("exited") or 0),
+                        now,
+                    ),
+                )
+        return report
+
+    def rollup_pending_retail(self, site_id: str) -> int:
+        """Yozilmagan TUGAGAN kunlarni yig'adi.  Nechta kun yozilgani.
+
+        `rollup_pending_demography` bilan bir xil oyna
+        (`ROLLUP_LOOKBACK_DAYS`): bulut bir necha kun o'chib tursa ham
+        yig'ilmagan kunlar tashlab ketilmaydi.  Bugungi kunga tegilmaydi.
+        """
+        today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql("SELECT day FROM retail_daily WHERE site_id=? AND day>=?"),
+                (site_id, (today - timedelta(days=self.ROLLUP_LOOKBACK_DAYS)).isoformat()),
+            ).fetchall()
+        known = {str(self._dict(row)["day"]) for row in rows}
+
+        written = 0
+        for back in range(1, self.ROLLUP_LOOKBACK_DAYS + 1):
+            day = today - timedelta(days=back)
+            if day.isoformat() in known:
+                continue
+            self.rollup_retail(site_id, day)
+            written += 1
+        return written
+
+    def purge_retail_rollups(self, site_id: str) -> int:
+        cutoff = (
+            _now() - timedelta(days=self.RETAIL_ROLLUP_RETENTION_DAYS)
+        ).date().isoformat()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("DELETE FROM retail_daily WHERE site_id=? AND day<?"),
+                (site_id, cutoff),
+            )
+            removed = int(cursor.rowcount or 0)
+            conn.execute(
+                self._sql("DELETE FROM retail_hourly WHERE site_id=? AND bucket_hour<?"),
+                (site_id, cutoff),
+            )
+        return removed
 
     # ── Issiqlik xaritasi ────────────────────────────────────────────────
 
@@ -1892,7 +2054,9 @@ class EventStore:
         joyda ikki xil son chiqsa, mijoz qaysi biriga ishonishni
         bilmasdi.
         """
-        report = self.retail_report(site_id, day=day)
+        # XOM manba majburlanadi: `retail_report` tugagan kun uchun
+        # yig'indidan o'qiydi va yig'ish o'zini-o'zi ko'chirgan bo'lardi.
+        report = self._retail_report_from_events(site_id, day=day)
         demo = report.get("demografiya") or {}
         gender = demo.get("jins") or {}
         ages = demo.get("yosh") or {}
@@ -2180,7 +2344,33 @@ class EventStore:
             if local is None:
                 continue
             counts[local.date()] = counts.get(local.date(), 0) + 1
+        # Saqlangan kun YIG'INDIDAN olinadi va xom sanoqni bosib o'tadi.
+        #
+        # Xom hodisalar tarif muddatida o'chadi — ular o'chgan kun uchun
+        # yuqoridagi sanoq nol qaytarardi va grafik "o'sha kuni hech kim
+        # kelmagan" deb turardi.  Bugungi kun yig'indida bo'lmaydi, ya'ni
+        # jonli sanoq o'z joyida qoladi.
+        counts.update(self._stored_entered_by_day(site_id, start, end))
         return counts
+
+    def _stored_entered_by_day(self, site_id: str, start: date, end: date) -> Dict[date, int]:
+        """Yig'indidagi kunlik kirish soni."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT day,entered FROM retail_daily "
+                    "WHERE site_id=? AND day>=? AND day<=?"
+                ),
+                (site_id, start.isoformat(), end.isoformat()),
+            ).fetchall()
+        stored: Dict[date, int] = {}
+        for row in rows:
+            item = self._dict(row)
+            try:
+                stored[date.fromisoformat(str(item["day"]))] = int(item["entered"] or 0)
+            except (TypeError, ValueError):
+                continue  # buzuq kalit butun grafikni yiqitmasin
+        return stored
 
     def value_inputs(self, site_id: str, *, start: date, end: date) -> Dict[str, int]:
         """Oylik pul hisobi uchun ikkita raqam — bitta so'rovda.
@@ -3596,38 +3786,89 @@ class EventStore:
         return [str(key) for row in rows for key in (row["snapshot_key"], row["clip_key"]) if key]
 
 
-    def purge_clips_older_than(self, site_id: str, *, retention_days: int) -> List[str]:
-        """Faqat VIDEO kliplarni o'chiradi — hodisa va rasm joyida qoladi.
+    def purge_media_older_than(self, site_id: str, *, hours: int) -> List[str]:
+        """Bulutdagi HAMMA hodisa mediasini o'chiradi — soat aniqligida.
 
-        Disk hisobi: bitta klip 50 MB gacha, kuniga 100 tagacha ruxsat
-        etilgan; snapshot esa ~100 KB.  Ya'ni diskni deyarli butunlay
-        kliplar yeydi va sig'imni aynan shular belgilaydi.
+        Rasm, yuz kadri va klip bir xil muddatda ketadi (ega qarori,
+        2026-08-30: «cloudda rasmlar 48 soat saqlansin, keyin faqat
+        raqamli ma'lumot»).  Bungacha uch xil muddat bor edi — klip
+        7 kun, yuz kadri 14 kun, hodisa rasmi esa tarif muddati bilan
+        birga 30 kun — va ularni bir joyda ko'rib bo'lmasdi.
 
-        Muddat tarifdagi `retention_days` dan ALOHIDA ataylab: 30/90/365
-        kun — bu mijozga sotilgan HODISA ARXIVI (statistika, hisobot,
-        rasm) va uni qisqartirish to'langan narsani olib qo'yish bo'lardi.
-        Klip esa hodisani tekshirish uchun kerak — bir haftadan keyin
-        deyarli hech kim ochmaydi.  Sayt ham aniq kun sonini va'da
-        qilmaydi ("qisqa video parchalar").
+        **Hodisa qatorining o'zi o'chmaydi** (`face_captured` dan
+        tashqari): raqam, vaqt va turi tarif muddatigacha qoladi, chunki
+        narx sahifasida aynan shu sotilgan.  O'chadigan narsa — faqat
+        og'ir media.
+
+        `face_captured` esa yozuvi bilan o'chadi: biometrik iz (kim
+        qachon ko'ringani) rasmdan uzoq yashamasligi kerak.  Davomat
+        statistikasi `employee_seen` da qoladi.
+
+        Xodimning ro'yxatdan o'tgan namunalari (`employee_faces`) bunga
+        KIRMAYDI — ular hodisa mediasi emas, davomatning ma'lumotnomasi;
+        o'chsa yuz tanish butunlay ishlamay qolardi.
         """
-        cutoff = (_now() - timedelta(days=max(1, retention_days))).isoformat()
+        cutoff = (_now() - timedelta(hours=max(1, hours))).isoformat()
+        keys: List[str] = []
         with self._connect() as conn:
+            # 1) Yuz kadrlari — yozuvi bilan.
             rows = conn.execute(
                 self._sql(
-                    "SELECT event_id,clip_key FROM production_events "
+                    "SELECT event_id,snapshot_key FROM production_events "
+                    "WHERE site_id=? AND event_type='face_captured' AND occurred_at<?"
+                ),
+                (site_id, cutoff),
+            ).fetchall()
+            for raw in rows:
+                row = self._dict(raw)
+                if row["snapshot_key"]:
+                    keys.append(str(row["snapshot_key"]))
+                conn.execute(
+                    self._sql("DELETE FROM production_events WHERE site_id=? AND event_id=?"),
+                    (site_id, row["event_id"]),
+                )
+            # 2) Qolgan hodisalarning rasmi.  Bayroq ham nolga tushadi —
+            #    aks holda panel mavjud bo'lmagan rasmga havola berardi.
+            rows = conn.execute(
+                self._sql(
+                    "SELECT snapshot_key FROM production_events "
+                    "WHERE site_id=? AND occurred_at<? AND snapshot_key IS NOT NULL"
+                ),
+                (site_id, cutoff),
+            ).fetchall()
+            keys.extend(str(self._dict(row)["snapshot_key"]) for row in rows)
+            # Bayroq kalitdan MUSTAQIL tozalanadi.  Qurilma hodisani
+            # `has_snapshot: true` bilan yuborib, rasmni keyin yuklaydi —
+            # yuklash yiqilsa bayroq qoladi-yu kalit hech qachon kelmaydi.
+            # Jonli bazada shunday **39 ta** qator bor edi va panel ular
+            # uchun "rasmni ochish" tugmasini ko'rsatib, 404 berardi.
+            # Muddat o'tgach hech bir hodisa o'zida bo'lmagan mediani
+            # va'da qilmasin.
+            conn.execute(
+                self._sql(
+                    "UPDATE production_events "
+                    "SET snapshot_key=NULL,has_snapshot=0,snapshot_bytes=0 "
+                    "WHERE site_id=? AND occurred_at<? AND has_snapshot<>0"
+                ),
+                (site_id, cutoff),
+            )
+            # 3) Kliplar.
+            rows = conn.execute(
+                self._sql(
+                    "SELECT clip_key FROM production_events "
                     "WHERE site_id=? AND occurred_at<? AND clip_key IS NOT NULL"
                 ),
                 (site_id, cutoff),
             ).fetchall()
-            if rows:
-                conn.execute(
-                    self._sql(
-                        "UPDATE production_events SET clip_key=NULL,has_clip=0,clip_bytes=0 "
-                        "WHERE site_id=? AND occurred_at<? AND clip_key IS NOT NULL"
-                    ),
-                    (site_id, cutoff),
-                )
-        return [str(self._dict(row)["clip_key"]) for row in rows]
+            keys.extend(str(self._dict(row)["clip_key"]) for row in rows)
+            conn.execute(
+                self._sql(
+                    "UPDATE production_events SET clip_key=NULL,has_clip=0,clip_bytes=0 "
+                    "WHERE site_id=? AND occurred_at<? AND has_clip<>0"
+                ),
+                (site_id, cutoff),
+            )
+        return keys
 
 
 def event_store_from_env(base_dir: Path) -> EventStore:

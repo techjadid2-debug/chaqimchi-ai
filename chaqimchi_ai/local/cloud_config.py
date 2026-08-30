@@ -423,6 +423,10 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # ko'rsatardi, cloud esa ko'rmasdi — ya'ni "mijozda hodisa bor,
         # bizda yo'q" savoliga javob faqat do'konda edi.
         "plan_filtered": int(status.get("plan_filtered") or 0),
+        # Qoidalar tashlagani — `plan_filtered` dan ALOHIDA: biri tarif
+        # qarori, ikkinchisi qoida qarori.  Ikkalasi bir raqamga
+        # qo'shilsa "nega hodisa kelmayapti" savoliga javob yo'qolardi.
+        "suppressed": int(status.get("suppressed") or 0),
         # Davomat va mijoz portreti ISHLAYAPTIMI.
         #
         # 2026-08-26 gacha bu ikkalasi jimgina o'lik edi va tashqaridan

@@ -560,6 +560,10 @@ class EdgeHeartbeatBody(BaseModel):
     events: int = Field(default=0, ge=0)
     #: Tarif faollashtirilmagani sabab qurilmada tashlanganlar.
     plan_filtered: int = Field(default=0, ge=0)
+    #: Qoidalar (sovutish, `ignore`, jadval) tashlaganlar — tarif
+    #: filtridan ALOHIDA.  Ikkalasi ko'rinmasa "hodisa qayerda
+    #: yo'qolyapti" savoliga faqat do'konga borib javob berish mumkin.
+    suppressed: int = Field(default=0, ge=0)
     #: Rasm yozildimi.  Klip uchun hisoblagich bor edi, rasm uchun yo'q —
     #: "hodisa keldi, rasm yo'q" holati 2026-08-26 da uch soat sezilmadi.
     snapshots: Dict[str, int] = Field(default_factory=dict)
@@ -1399,25 +1403,32 @@ async def _notify_alert_once(site_id: str, events: List[EdgeEvent]) -> None:
 SITE_MEDIA_MAX_BYTES_DEFAULT = 10 * 1024**3
 
 
-#: Video kliplar shuncha kundan keyin o'chadi.
+#: Bulutdagi HAMMA hodisa mediasi shuncha soatdan keyin o'chadi:
+#: hodisa rasmi, yuz kadri va qisqa klip.
 #:
-#: Tarifdagi `retention_days` (30/90/365) — bu HODISA ARXIVI: statistika,
-#: hisobot va rasm.  Uni qisqartirish mijoz to'lagan narsani olib qo'yish
-#: bo'lardi.  Diskni esa deyarli butunlay kliplar yeydi (bittasi 50 MB
-#: gacha, snapshot ~100 KB), shuning uchun sig'im aynan shu raqamga
-#: bog'liq: 30 kunda bitta VPS ~10-13 do'konni ko'taradi, 7 kunda esa
-#: ~50-80 tasini.  Klip hodisani tekshirish uchun kerak — bir haftadan
-#: keyin uni deyarli hech kim ochmaydi.
-CLIP_RETENTION_DAYS_DEFAULT = 7
+#: Ega qarori (2026-08-30): «cloudda rasmlar 48 soat saqlansin, keyin
+#: faqat raqamli ma'lumot».  Bungacha uch xil muddat bor edi — klip
+#: 7 kun, yuz kadri 14 kun, hodisa rasmi esa tarif muddati bilan birga
+#: 30 kun — va bulutda nima qancha yotishini bir joyda ko'rib bo'lmasdi.
+#:
+#: Tarifdagi `retention_days` (30/90/365) BU EMAS.  U — hodisa arxivi
+#: (raqam, vaqt, tur) va narx sahifasida aynan shu sotilgan; uni
+#: qisqartirish to'langan narsani olib qo'yish bo'lardi.  Shuning uchun
+#: 48 soatda faqat OG'IR media ketadi, hodisa qatori qoladi.
+#:
+#: Sig'imga ta'siri: diskni deyarli butunlay kliplar yeydi (bittasi
+#: 50 MB gacha, snapshot ~100 KB).  48 soat bilan bitta VPS yuzlab
+#: do'konni ko'taradi.
+MEDIA_RETENTION_HOURS_DEFAULT = 48
 
 
-def _clip_retention_days() -> int:
-    raw = os.environ.get("CHAQIMCHI_CLIP_RETENTION_DAYS", "").strip()
+def _media_retention_hours() -> int:
+    raw = os.environ.get("CHAQIMCHI_MEDIA_RETENTION_HOURS", "").strip()
     try:
-        return max(1, int(raw)) if raw else CLIP_RETENTION_DAYS_DEFAULT
+        return max(1, int(raw)) if raw else MEDIA_RETENTION_HOURS_DEFAULT
     except ValueError:
-        logger.warning("CHAQIMCHI_CLIP_RETENTION_DAYS son emas — standart qiymat")
-        return CLIP_RETENTION_DAYS_DEFAULT
+        logger.warning("CHAQIMCHI_MEDIA_RETENTION_HOURS son emas — standart qiymat")
+        return MEDIA_RETENTION_HOURS_DEFAULT
 
 
 def _site_media_quota_bytes() -> int:
@@ -1434,35 +1445,47 @@ def _site_media_quota_bytes() -> int:
 _demography_rollup_errors: Dict[str, str] = {}
 
 
-def _rollup_demography_for_site(site_id: str) -> bool:
-    """Bitta sayt demografiyasini yig'adi; muvaffaqiyat bayrog'i qaytadi.
+def _rollup_site_history(site_id: str) -> bool:
+    """Saytning kunlik RAQAMLARINI yig'adi; muvaffaqiyat bayrog'i qaytadi.
 
-    Xato yutilmaydi emas — log qilinadi VA `_demography_rollup_errors` da
+    Ikkita yig'indi: demografiya va retail (kirish/chiqish, soatlik
+    grafik, navbat, dwell, xavfsizlik).  Ikkalasi ham xom hodisalardan
+    hisoblanadi, xom hodisalar esa tarif muddatida o'chadi.
+
+    Xato yutilmaydi — log qilinadi VA `_demography_rollup_errors` da
     belgilanadi: purge shu bayroqqa qarab o'sha saytning xom hodisalarini
     O'CHIRMAY turadi.  Avval xato faqat log bo'lib, keyin purge baribir
     o'chirib yuborardi — kun qaytarib bo'lmas darajada yo'qolardi.
+
+    **Invariant:** yig'indisi muvaffaqiyatli yozilmagan kunning xom
+    hodisasi hech qachon o'chirilmaydi.  Yig'ish keyingi siklda qayta
+    uriniladi; navbat qanchalik uzayishidan ko'ra ma'lumot yo'qolishi
+    yomonroq.
     """
+    store = get_event_store()
     try:
-        get_event_store().rollup_pending_demography(site_id)
-        get_event_store().purge_demography(site_id)
+        store.rollup_pending_demography(site_id)
+        store.purge_demography(site_id)
+        store.rollup_pending_retail(site_id)
+        store.purge_retail_rollups(site_id)
     except Exception:  # noqa: BLE001 — bitta sayt qolganini to'xtatmasin
-        logger.exception("Demografiya yig'indisi yozilmadi: %s", site_id)
+        logger.exception("Kunlik raqamlar yig'indisi yozilmadi: %s", site_id)
         _demography_rollup_errors[site_id] = datetime.now(timezone.utc).isoformat()
         return False
     _demography_rollup_errors.pop(site_id, None)
     return True
 
 
-def _rollup_all_demography() -> int:
-    """Barcha saytlar uchun yig'indi — startupda va soatlik loopda."""
+def _rollup_all_history() -> int:
+    """Barcha saytlar uchun kunlik raqamlar — startupda va soatlik loopda."""
     done = 0
     for site in get_store().list_sites():
-        if _rollup_demography_for_site(str(site["id"])):
+        if _rollup_site_history(str(site["id"])):
             done += 1
     return done
 
 
-async def _demography_rollup_loop() -> None:
+async def _history_rollup_loop() -> None:
     """Yig'indi purge'dan MUSTAQIL yuradi.
 
     Avval u faqat 6 soatlik purge loop ichida chaqirilardi: server qulab
@@ -1472,11 +1495,11 @@ async def _demography_rollup_loop() -> None:
     """
     while True:
         try:
-            await asyncio.to_thread(_rollup_all_demography)
+            await asyncio.to_thread(_rollup_all_history)
         except asyncio.CancelledError:
             break
         except Exception:
-            logger.exception("Demografiya rollup loop bajarilmadi")
+            logger.exception("Kunlik raqamlar rollup loop bajarilmadi")
         await asyncio.sleep(3_600)
 
 
@@ -1488,7 +1511,7 @@ def _purge_expired_events() -> int:
     """
     removed = 0
     quota = _site_media_quota_bytes()
-    clip_retention = _clip_retention_days()
+    media_hours = _media_retention_hours()
     for site in get_store().list_sites():
         try:
             retention = get_plan(str(site["plan"])).retention_days
@@ -1498,7 +1521,7 @@ def _purge_expired_events() -> int:
         # Kunlik demografiya yig'indisi hodisalar O'CHIRILISHIDAN OLDIN
         # yozilishi SHART.  Yig'ilmagan saytning hodisalari o'chirilmaydi —
         # keyingi siklda yig'ish yana uriniladi.
-        if not _rollup_demography_for_site(site_id):
+        if not _rollup_site_history(site_id):
             logger.warning(
                 "Sayt %s: rollup xatosi — hodisalar purge qilinmadi (keyingi siklga qoladi)",
                 site_id,
@@ -1507,20 +1530,13 @@ def _purge_expired_events() -> int:
         for key in get_event_store().purge_site(site_id, retention_days=retention):
             get_snapshot_store().delete(key)
             removed += 1
-        # Kliplar hodisadan OLDIN va qisqaroq muddatda ketadi — disk
-        # sig'imini aynan shular belgilaydi.
-        for key in get_event_store().purge_clips_older_than(
-            site_id, retention_days=clip_retention
-        ):
+        # Media hodisadan OLDIN va ancha qisqaroq muddatda ketadi: rasm,
+        # yuz kadri va klip — hammasi bitta 48 soatlik oynada.  Hodisa
+        # qatori (raqam, vaqt, tur) tarif muddatigacha qoladi.
+        for key in get_event_store().purge_media_older_than(site_id, hours=media_hours):
             get_snapshot_store().delete(key)
             removed += 1
         for key in get_event_store().purge_site_media_over_quota(site_id, quota):
-            get_snapshot_store().delete(key)
-            removed += 1
-        # Yuz kadrlari qisqa muddat yashaydi (maxfiylik va'dasi) — yozuvi
-        # bilan birga o'chadi; ketgan xodimning namunalari ham shu yerda.
-        face_retention = _face_retention_days()
-        for key in get_event_store().purge_face_media(site_id, retention_days=face_retention):
             get_snapshot_store().delete(key)
             removed += 1
         for key in get_event_store().purge_inactive_employee_faces(site_id):
@@ -1536,13 +1552,6 @@ def _purge_expired_events() -> int:
         get_snapshot_store().delete(key)
         removed += 1
     return removed
-
-
-def _face_retention_days() -> int:
-    try:
-        return max(1, int(os.environ.get("CHAQIMCHI_FACE_RETENTION_DAYS", "14")))
-    except ValueError:
-        return 14
 
 
 #: Chegara ogohlantirishi shu obyekt uchun oxirgi marta qachon ketgani.
@@ -1765,7 +1774,7 @@ async def lifespan(app: FastAPI):
     _maintenance_task = asyncio.create_task(_maintenance_loop())
     # Startupda darhol bir marta: server qulab qayta ko'tarilganda
     # yig'ilmagan kunlar 6 soatlik purge'ni kutmasin.
-    _demography_rollup_task = asyncio.create_task(_demography_rollup_loop())
+    _demography_rollup_task = asyncio.create_task(_history_rollup_loop())
     _lead_notification_task = asyncio.create_task(_lead_notification_loop())
     _bot_commands_task = asyncio.create_task(_setup_bot_commands())
     # Agent joblari DB'da navbatda turadi; Gemini yoki worker qayta yonsa
@@ -4821,10 +4830,13 @@ async def admin_site_detail(
             key=lambda item: str(item.get("received_at")),
             default=None,
         )
+        yesterday = datetime.now(ZoneInfo("Asia/Tashkent")).date() - timedelta(days=1)
         detail["feature_problems"] = config_health.feature_problems(
             get_store().subscription_status(site_id),
             site_cloud_features(site_id),
             (latest or {}).get("health") or {},
+            yesterday_events=get_event_store().stats(site_id, day=yesterday)["total"],
+            device_online=str(detail.get("connection") or "") == "online",
         )
     except Exception:  # tekshiruv yiqilsa ham sayt kartochkasi ochilsin
         logger.exception("funksiya tekshiruvi yiqildi: %s", site_id)

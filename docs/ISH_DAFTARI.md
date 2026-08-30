@@ -9,6 +9,25 @@
 
 ## HOZIRGI HOLAT · 2026-08-30
 
+- **🔴 MA'LUMOT YO'QOLISHI OLDI OLINDI (0.6.29).** Panelning HAMMA
+  raqami (`retail_report`, `traffic_trend`) xom `production_events` dan
+  qayta hisoblanardi, xom hodisalar esa tarif muddatida (lite = 30 kun)
+  o'chadi.  Ya'ni **~20-sentabrda** 21-avgust kunining kirish soni,
+  soatlik grafigi, navbati va xavfsizlik sanog'i butunlay yo'qolishi
+  kerak edi — va buni hech narsa aytmasdi.  Endi `retail_daily` va
+  `retail_hourly` bor (3 yil), hisobot tugagan kunni o'shandan o'qiydi,
+  purge esa yig'indisi yozilmagan kunga TEGMAYDI.
+- **Media 48 soat (ega qarori).** Rasm, yuz kadri va klip bir xil
+  muddatda ketadi (`purge_media_older_than`).  Hodisa qatorining o'zi
+  tarif muddatigacha qoladi — narx sahifasidagi «Arxiv 30 kun» va'dasi
+  buzilmadi.  Oferta, maxfiylik siyosati va rozilik shabloni yangi
+  muddatga moslandi (yuz kadri: 14 kun → 48 soat).
+- **Panel nega bo'sh ko'rinardi — javob:** (1) 29-avgust rostdan 0 ta
+  kirish (tuzatilgan uzilish); (2) rasm umuman olinmaydi —
+  `SECURITY_MEDIA_EVENTS` faqat uch tur va kun davomida ishlaydigan
+  yagonasi (`zone_entered`) 29x20 pikselli buzuq chizma sabab o'lik;
+  (3) klip hech qachon yozilmagan.
+
 - **🔴 TUZATILDI VA JONLI TASDIQLANDI (0.6.27): do'kon besh kun hodisa
   yubormagan edi.** 29-avgust ertalabidan 30-avgust 13:14 gacha
   "Do'kon (5070)" ning HAMMA biznes hodisasi qurilmada tashlangan —
@@ -300,6 +319,19 @@ taklif qilish kerak.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
 
+- **Hisobotdan hosila bo'lgan raqam hisobot bilan BIRGA o'ladi.**
+  Yig'indi jadvali bo'lmasa, xom hodisani o'chirish jimgina statistikani
+  ham o'chiradi.  Yangi ko'rsatkich qo'shsangiz o'zingizga savol bering:
+  «xom hodisa 30 kundan keyin o'chganda bu raqam qayerdan keladi?»
+- **Yig'ish funksiyasi XOM manbadan o'qisin.**  `retail_report` endi
+  tugagan kunni yig'indidan qaytaradi; yig'ish uni chaqirsa, o'zi yozgan
+  yozuvni qayta ko'chirardi va xato abadiy muzlab qolardi.  Shuning uchun
+  `rollup_retail` va `rollup_demography` `_retail_report_from_events` ni
+  chaqiradi.
+- **Holat faylidagi yangi kalit supervisor'dan ham o'tishi SHART.**
+  `tests/test_status_chain.py` buni qulflaydi: `suppressed` qo'shilganda
+  aynan shu test ushladi.
+
 - **Bitta darvoza UCH joyda turardi.**  `available_feature_codes()`
   qurilma konfigida, admin biriktirishda (`store.py: feature_quote`) va
   mijoz panelida — uchtasi ham alohida yozilgan edi.  30-avgustda
@@ -547,6 +579,48 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-30 — Kunlik raqamlar endi xom hodisalardan alohida yashaydi (0.6.29)
+
+Nima: `retail_daily` va `retail_hourly` jadvallari paydo bo'ldi; hisobot
+tugagan kunni o'shandan o'qiydi, bugungi kunni esa avvalgidek jonli.
+Media (rasm, yuz kadri, klip) endi 48 soat yashaydi.
+
+Nega: panelning har bir raqami xom `production_events` dan qayta
+hisoblanardi va xom hodisalar tarif muddatida o'chadi.  Eng eski hodisa
+21-avgust, lite tarifi 30 kun — ya'ni **20-sentabrda** o'sha kunlarning
+raqamlari ham hodisalar bilan birga ketishi kerak edi.  Demografiya
+uchun bu allaqachon hal qilingan edi (`demography_daily`), qolgan
+raqamlar uchun yo'q.  Yo'qotish hali BOSHLANMAGAN — uch hafta oldin
+ushlandi.
+
+Qayerda: `cloud/event_store.py` (`retail_daily`/`retail_hourly` DDL,
+`rollup_retail`, `rollup_pending_retail`, `purge_retail_rollups`,
+`retail_rollup`, `_retail_report_from_events`, `_stored_entered_by_day`,
+`purge_media_older_than`), `cloud/main.py` (`_rollup_site_history`,
+`MEDIA_RETENTION_HOURS_DEFAULT`, `_media_retention_hours`),
+`cloud/config_health.py` (kunlik jimlik tekshiruvi),
+`cloud/static/oferta.html`, `privacy.html`, `rozilik-shabloni.html`.
+
+Test: `tests/test_retail_rollup.py` (8 ta) — eng muhimi
+`test_the_rollup_matches_the_live_report`: yig'indi va hisobot AYNAN bir
+xil javob berishi qulflangan, aks holda mijoz qaysi raqamga ishonishni
+bilmasdi.  `test_a_finished_day_survives_the_purge` xom hodisa
+o'chirilgandan keyin ham raqam qolishini tekshiradi.
+`test_media_dies_in_48_hours_but_the_event_stays` hodisa qatori
+o'chmasligini qulflaydi.
+
+Diqqat: media bayrog'i KALITDAN mustaqil tozalanadi.  Qurilma hodisani
+«rasmim bor» deb yuborib rasmni keyin yuklaydi; yuklash yiqilsa bayroq
+qoladi-yu kalit kelmaydi.  Jonli bazada shunday **39 ta** qator bor edi
+va panel ular uchun 404 beradigan tugma ko'rsatardi (0.6.29 da yopildi).
+
+Diqqat: `purge_clips_older_than` va `purge_face_media` OLIB TASHLANDI —
+ularning o'rniga bitta `purge_media_older_than`.  Uchta alohida muddat
+(klip 7 kun, yuz 14 kun, rasm 30 kun) bir joyda ko'rinmasdi va
+uzoqlashib ketardi.  `CHAQIMCHI_CLIP_RETENTION_DAYS` va
+`CHAQIMCHI_FACE_RETENTION_DAYS` o'rniga
+`CHAQIMCHI_MEDIA_RETENTION_HOURS` (standart 48).
 
 ### 2026-08-30 — Do'kon besh kun hodisa yubormagan edi (`commit qilinmagan`, 0.6.27)
 

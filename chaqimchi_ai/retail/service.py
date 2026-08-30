@@ -571,6 +571,12 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel buni
         # ko'rsatishi shart: "hodisa bor, lekin cloudga bormayapti".
         "plan_filtered": stats.get("plan_filtered", 0),
+        # Qoidalar (sovutish, `ignore`, jadval) tashlagan hodisalar.
+        # Zanjir buni allaqachon sanardi, lekin holat fayliga
+        # yozilmasdi — 2026-08-30 da "hodisa filtrdan o'tdi, lekin
+        # bulutga kelmadi" savoliga masofadan javob berib bo'lmadi va
+        # sabab faqat kutish orqali aniqlandi.
+        "suppressed": stats.get("suppressed", 0),
         # Xato hisoblagichlari holat faylida BO'LISHI SHART.  Ular
         # `stats()` da allaqachon bor edi, lekin bu yerga yozilmasdi va
         # heartbeat'ga ham chiqmasdi.  Natijada `analyze()` har kadrda

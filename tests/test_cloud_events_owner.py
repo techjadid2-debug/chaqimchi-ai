@@ -102,8 +102,14 @@ def test_media_quota_evicts_oldest_media_but_keeps_events(production_client, mon
     client, _messages = production_client
     site, _device, headers = _provision(client)
 
+    # Vaqtlar ATAYLAB yangi: media 48 soatda o'chadi va sana eski bo'lsa
+    # sinov kvotani emas, yosh chegarasini tekshirib qo'yardi.  Bu yerda
+    # sinaladigan qoida boshqa — "kvotadan oshganda ENG ESKISI ketadi".
     for index in range(3):
         event_id = f"evt-quota-{index}"
+        occurred_at = (
+            datetime.now(timezone.utc) - timedelta(hours=3 - index)
+        ).isoformat()
         client.post(
             "/api/v1/edge/events/batch",
             headers=headers,
@@ -113,7 +119,7 @@ def test_media_quota_evicts_oldest_media_but_keeps_events(production_client, mon
                         "event_id": event_id,
                         "event_type": "line_crossed",
                         "camera_id": "cam-1",
-                        "occurred_at": f"2026-01-0{index + 1}T10:00:00+00:00",
+                        "occurred_at": occurred_at,
                         "has_snapshot": True,
                     }
                 ]

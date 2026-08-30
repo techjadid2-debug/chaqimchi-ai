@@ -1194,7 +1194,7 @@ def test_the_offer_promises_no_more_than_the_code_delivers() -> None:
     bo'ladi.  Shuning uchun bog'liqlik test bilan ushlab turiladi.
     """
     from chaqimchi_ai.licensing.plans import PLANS
-    from cloud.main import CLIP_RETENTION_DAYS_DEFAULT
+    from cloud.main import MEDIA_RETENTION_HOURS_DEFAULT
     from cloud.store import GRACE_DAYS
 
     offer = (STATIC / "oferta.html").read_text(encoding="utf-8")
@@ -1205,7 +1205,7 @@ def test_the_offer_promises_no_more_than_the_code_delivers() -> None:
         assert price in offer, f"{plan_key} narxi ofertada boshqacha: {price}"
         assert f"{plan.max_cameras} tagacha" in offer, plan_key
 
-    assert f"<td>{CLIP_RETENTION_DAYS_DEFAULT} kun</td>" in offer, "klip muddati"
+    assert f"<td>{MEDIA_RETENTION_HOURS_DEFAULT} soat</td>" in offer, "media muddati"
     assert f"<b>{GRACE_DAYS} kun</b>" in offer, "qo'shimcha muddat"
 
 

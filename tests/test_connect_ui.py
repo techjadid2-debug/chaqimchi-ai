@@ -199,11 +199,15 @@ def test_the_card_promises_anonymity_where_the_owner_reads_it() -> None:
 
 def test_a_locked_heatmap_looks_like_an_offer_not_a_breakage() -> None:
     """Bungacha Boshlang'ich egasi serverning 403 matnini «Xarita
-    hozir ochilmadi» ko'rinishida olardi — ya'ni nosozlikdek."""
-    owner = read("owner.tsx")
+    hozir ochilmadi» ko'rinishida olardi — ya'ni nosozlikdek.
 
-    assert 'hasFeature(dashboard,"xarita")' in owner
-    assert "Issiqlik xaritasi Biznes tarifida" in owner
+    Ekran `owner.tsx` dan `Heatmap.tsx` ga ko'chdi (soat rejimi bilan u
+    o'sha faylning eng zich qismiga aylanardi); kafolat o'zgarmadi.
+    """
+    heatmap = read("Heatmap.tsx")
+
+    assert 'hasFeature(dashboard, "xarita")' in heatmap
+    assert "Issiqlik xaritasi Biznes tarifida" in heatmap
 
 
 def test_the_owner_can_switch_between_day_week_month_and_year() -> None:

@@ -5790,12 +5790,18 @@ async def owner_heatmap(
     date: Optional[str] = None,
     hour: Optional[int] = None,
     days: int = 1,
+    by: Optional[str] = None,
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     """Panel xaritasi: kamera ko'rinishi bo'yicha odam-borligi to'ri.
 
     `days=7` — plan rejimi uchun haftalik yig'indi (odam yurmagan joylar
     jihoz sifatida qorayadi).
+
+    `by=hour` — bir kunning 24 soati bitta javobda va **bitta rang
+    shkalasida** (`peak`).  Soatlarni alohida-alohida so'rash har javobga
+    o'z cho'qqisini berardi va ertalabki uch kishi kechqurungi uch yuz
+    kishi bilan bir xil qizil ko'rinardi.
     """
     if not _panel_feature_open(owner.site_id, "xarita"):
         raise HTTPException(403, "Do'kon xaritasi Biznes tarifidan boshlab ishlaydi.")
@@ -5808,6 +5814,17 @@ async def owner_heatmap(
         raise HTTPException(422, "Soat 0..23 oralig'ida")
     if not 1 <= days <= 30:
         raise HTTPException(422, "Kunlar 1..30 oralig'ida")
+    if by is not None and by != "hour":
+        raise HTTPException(422, "`by` faqat `hour` bo'lishi mumkin")
+    if by == "hour":
+        # Jimgina bittasini e'tiborsiz qoldirish eng yomon variant:
+        # panel "7 kunning soatlari" so'ragan bo'lardi va bitta kunning
+        # javobini olib, buni sezmasdi.
+        if days != 1:
+            raise HTTPException(422, "`by=hour` bir kun uchun ishlaydi — `days` bermang")
+        if hour is not None:
+            raise HTTPException(422, "`by=hour` hamma soatni beradi — `hour` bermang")
+        return get_event_store().heatmap_by_hour(owner.site_id, camera_id, day=day)
     return get_event_store().heatmap(owner.site_id, camera_id, day=day, hour=hour, days=days)
 
 

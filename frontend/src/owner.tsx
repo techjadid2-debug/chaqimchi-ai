@@ -1,11 +1,12 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, hasFeature, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
+import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
 import { Demography } from "./Demography";
-import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, PlanLock, Skeleton, StatusDot, type NavItem } from "./components";
+import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
+import { HeatmapPage } from "./Heatmap";
 import { OwnerHome } from "./OwnerHome";
 import { SetupCameras } from "./SetupCameras";
 import { VisionAgent } from "./VisionAgent";
@@ -419,50 +420,6 @@ function EmployeesPage({ siteId }: { siteId: string }) {
     finally { setUploading(""); }
   };
   return <><PageHeader title="Xodimlar" subtitle="Xodim profili va Face ID yopiq pilot holati." actions={<button className="btn btn-primary" onClick={()=>setAdding(value=>!value)}><Icon name="users"/><span>{adding?"Bekor qilish":"Xodim qo‘shish"}</span></button>}/>{adding?<Card className="employee-form"><form className="card-body" onSubmit={create}><div className="form-grid"><label>Ism va familiya<input className="input" name="name" minLength={2} required/></label><label>Ichki ID (ixtiyoriy)<input className="input" name="external_id"/></label></div><label className="consent-row"><input type="checkbox" name="consent" required/><span>Xodimning biometrik ma’lumotlarni qayta ishlash bo‘yicha yozma roziligi olindi.</span></label><button className="btn btn-primary" disabled={busy}>{busy?"Saqlanmoqda…":"Xodimni saqlash"}</button></form></Card>:null}{error?<div className="alert-strip"><Icon name="bell"/><div><strong>Amal bajarilmadi:</strong> {error}</div></div>:null}<Card><div className="card-head"><div><h2>Xodimlar ro‘yxati</h2><p>Yuz rasmi faqat xodim roziligidan keyin yuklanadi va pilot yoqilgan tizimda ishlaydi</p></div></div>{items === null ? <div className="card-body"><Skeleton height={180}/></div> : items.length ? <div className="table-wrap"><table><thead><tr><th>Xodim</th><th>Ichki ID</th><th>Face ID</th><th>Holat</th><th>Amal</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><div className="table-title">{item.name || "Nomsiz xodim"}</div></td><td>{item.external_id || "—"}</td><td>{item.enrollment_status==="enrolled"?`${item.photos?.length || 1} ta shablon`:"Sozlanmagan"}</td><td><Pill state={item.active === false ? "offline" : "active"}>{item.active === false ? "Nofaol" : "Faol"}</Pill></td><td><label className={`btn upload-btn ${uploading===item.id?"disabled":""}`}>{uploading===item.id?"Yuklanmoqda…":"Yuz rasmi"}<input type="file" accept="image/jpeg,image/png" capture="user" disabled={Boolean(uploading)} onChange={event=>{void uploadFace(item,event.target.files?.[0]);event.currentTarget.value="";}}/></label></td></tr>)}</tbody></table></div> : <EmptyState icon="users" title="Xodim qo‘shilmagan" detail="Yopiq pilot yoqilgan bo‘lsa, yozma rozilikdan keyin birinchi xodimni qo‘shing."/>}</Card></>;
-}
-
-function heatRgb(t:number) {
-  const stops=[[37,99,235],[34,211,238],[34,197,94],[250,204,21],[220,38,38]];
-  const x=Math.max(0,Math.min(1,t))*(stops.length-1);const i=Math.min(stops.length-2,Math.floor(x));const f=x-i;
-  return stops[i].map((value,index)=>Math.round(value+(stops[i+1][index]-value)*f));
-}
-
-function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; siteId: string; onNavigate: (id: string) => void }) {
-  const [cameraId, setCameraId] = useState(() => dashboard.cameras[0]?.camera_id || "");
-  const [days, setDays] = useState(7); const [points, setPoints] = useState<number | null>(null); const [error, setError] = useState("");
-  const canvas = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    if (!cameraId) return; let stopped = false; let previewUrl = "";
-    /* Preview ALOHIDA so'raladi va xatosi yutiladi: kamera kadri hali
-       yuborilmagan bo'lsa (404) xarita baribir chiziladi — qoraroq fon
-       ustida.  Avval `Promise.all` edi va preview 404 butun sahifani
-       "Xarita olinmadi"ga tushirardi. */
-    void (async () => {
-      try {
-        const heat = await api<{grid:number[][]; rows:number; cols:number; points?:number}>(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=${days}`, "owner", { siteId });
-        const url = await mediaObjectUrl(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, "owner", siteId).catch(() => "");
-        if (stopped) { if (url) URL.revokeObjectURL(url); return; }
-        previewUrl = url;
-        const target = canvas.current; const ctx = target?.getContext("2d"); if (!target || !ctx) return;
-        const width = target.width, height = target.height; ctx.clearRect(0, 0, width, height);
-        if (url) {
-          const image = new Image(); image.src = url; await image.decode(); if (stopped) return;
-          ctx.drawImage(image, 0, 0, width, height);
-        } else {
-          ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, width, height);
-          ctx.fillStyle = "#64748b"; ctx.font = "600 15px system-ui";
-          ctx.fillText("Kamera kadri hali kelmagan — xarita mavhum fonda", 20, height - 20);
-        }
-        const peak = Math.max(1, ...heat.grid.flat()); ctx.save(); ctx.globalCompositeOperation = "screen";
-        heat.grid.forEach((row, rowIndex) => row.forEach((value, colIndex) => { const strength = Number(value || 0) / peak; if (strength < .1) return; const x = (colIndex + .5) * width / heat.cols, y = (rowIndex + .5) * height / heat.rows, radius = Math.max(width / heat.cols * 2.8, 28) + strength * Math.max(width / heat.cols * 4, 64), rgb = heatRgb(strength); const glow = ctx.createRadialGradient(x, y, 0, x, y, radius); glow.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(.42 + strength * .34).toFixed(2)})`); glow.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = glow; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2); }));
-        ctx.restore(); setPoints(heat.points || 0); setError("");
-      } catch (reason) {
-        if (!stopped) setError(reason instanceof Error ? reason.message : "Xarita olinmadi");
-      }
-    })();
-    return () => { stopped = true; if (previewUrl) URL.revokeObjectURL(previewUrl); };
-  }, [cameraId, days, siteId]);
-  return <><PageHeader title="Faol zonalar" subtitle="Tanlangan kameraning haqiqiy ko‘rinishidagi silliq anonim harakat oqimi." actions={<select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)}>{dashboard.cameras.map(camera => <option value={camera.camera_id} key={camera.camera_id}>{camera.label || camera.camera_id}</option>)}</select>}/><Card><div className="card-head"><div><h2>Kamera ko‘rinishidagi faol zonalar</h2><p>{points == null ? "Ma’lumot yuklanmoqda…" : points ? `${formatNumber(points)} ta anonim harakat nuqtasi` : "Bu davr uchun harakat ma’lumoti yo‘q"}</p></div><div className="segmented">{[1,7,30].map(value => <button key={value} className={days === value ? "active" : ""} onClick={() => setDays(value)}>{value === 1 ? "Bugun" : `${value} kun`}</button>)}</div></div>{!hasFeature(dashboard,"xarita") ? <PlanLock title="Issiqlik xaritasi Biznes tarifida" detail="Mijozlarning qayerda ko‘p to‘xtashini aynan kamera burchagida ko‘rasiz." onUpgrade={() => onNavigate("billing")}/> : error ? <EmptyState icon="heat" title="Xarita hozir ochilmadi" detail={error}/> : cameraId ? <div className="heatmap-wrap"><canvas ref={canvas} width="960" height="540" aria-label="Kamera ko‘rinishidagi faol zonalar"/><div className="heat-legend"><span>past</span><i/><span>yuqori</span></div></div> : <EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera qo‘shilgach faol zonalar shu yerda ko‘rinadi."/>}</Card></>;
 }
 
 function BillingPage({dashboard,siteId}:{dashboard:Dashboard;siteId:string}) {

@@ -7,7 +7,35 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-08-30
+## HOZIRGI HOLAT · 2026-08-31
+
+- **🆕 BOSQICH 1 «KO'RINISH» KODDA TAYYOR (nashr qilinmagan).** Ega 20
+  bandlik ro'yxat berdi (reja: `~/.claude/plans/1-7-kun-demo-*.md`) va
+  birinchi bosqich sifatida **ko'rinish** tanlandi.  Uchta ish bajarildi:
+  (1) hodisalar **vaqt lentasi** — kun bo'ylab 24 ustun, soatga bosilsa
+  kartochkalar filtrlanadi, kadr endi o'zi yuklanadi va rasm yo'q bo'lsa
+  **nega yo'qligi** aytiladi (to'rt holat); (2) **AI yordamchi javobida**
+  manba soatlari o'sha lentada belgilanadi; (3) **issiqlik xaritasi soat
+  bo'yicha** — slayder + ijro, 24 soat bitta so'rovda va **bitta rang
+  shkalasida**.  Faqat cloud + React panel — **qurilma relizi kerak
+  emas, soak bilan to'qnashmaydi**.
+- Yangi marshrutlar: `GET /api/v1/owner/events/timeline`,
+  `GET /api/v1/owner/events?date=&hour=`,
+  `GET /api/v1/owner/heatmap?by=hour`.  Dashboard endi
+  `media_retention_hours` beradi, har hodisa `media_expected` beradi.
+- Boy ko'rinish **Biznes tarifida** (`xavfsizlik`), oddiy ro'yxat hammaga
+  ochiq qoladi — hech kim funksiya yo'qotmaydi (ega qarori).
+- Jonli oqim qo'lda tekshirildi (lokal server): lenta 42 ta hodisani
+  Toshkent soatlariga to'g'ri joyladi, `person_detected` chiqarib
+  tashlandi, soat filtri ishladi, xarita `peak: 300` va bo'sh soat bo'sh.
+- ⚠️ **Deploydan OLDIN serverda tekshiring:**
+  `docker compose exec cloud printenv | grep UI_V2`.  Hammasi React
+  panelga yozildi (`CHAQIMCHI_UI_V2_OWNER=1` production uchun majburiy);
+  eski `owner.html` ga bir qator ham tegilmadi.
+- ⚠️ **Rasm masalasi hal bo'lmasa yangi ko'rinish bo'sh ko'rinadi.**
+  Jonli bazada `zone_entered` buzuq chizma sabab o'lik va kamera 360p —
+  ya'ni ega kartochkada rasmni emas, «rasm nega yo'q» matnini ko'radi.
+  Ega qarori: chizma va 720p ishi **shu bosqich bilan parallel** (0b).
 
 - **🔴 MA'LUMOT YO'QOLISHI OLDI OLINDI (0.6.29).** Panelning HAMMA
   raqami (`retail_report`, `traffic_trend`) xom `production_events` dan
@@ -136,6 +164,23 @@
   | Klip oqimi | `/Streaming/Channels/101` | **yo'q** |
 
 ## KEYINGI ISH
+
+**A) Bosqich 1 ni deploy qilish.** `make lint && make test && make ui-build`
+o'tdi (1 996 test).  Deploy — `scripts/deploy_cloud.sh` orqali.
+Deploydan keyin panelda tekshiring: Hodisalar → kun tanlash → soatga
+bosish kartochkalarni o'zgartiradimi; AI yordamchi javobi ostida lenta
+chiqadimi; Issiqlik xaritasi → «Soat bo'yicha» → slayder so'rov
+yubormasligi.
+
+**B) Keyingi bosqichlar (reja faylida to'liq):** Bosqich 2 — pul
+(7 kunlik demo saytdan o'zi ochiladi, «Tarmoq» → «Moslashtirilgan»
+kalkulyator, Payme/Click merchant shartnomasi va avtomatik yechish,
+tannarx `cloud/finance.py` ga chiqariladi).  Bosqich 3 — raqamlar
+(kirdi/chiqdi eshik bo'yicha, `exit` kamera roli, xodim Face ID orqali,
+konversiya «200 kirdi → 100 chek», ish zonasi va faol ish vaqti).
+Bosqich 4 — sotuv (partnyor komissiyasi va tasdiqlash, kamera qo'yish
+standartlari).  Keyinga: ovoz funksiyalari, video darslar, jonli kamerani
+takomillashtirish.
 
 **0) ⚠️ EGA QILADI — zaxira parolini ko'chiring.**
 `CHAQIMCHI_BACKUP_PASSWORD` faqat serverda (`/etc/chaqimchi/backup.env`).
@@ -318,6 +363,25 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Ro'yxatni RUXSAT emas, TAQIQ qilib yozing.** `REPORT_EVENT_TYPES`
+  ruxsat ro'yxati bo'lgani uchun `checkout_unattended` unga tushmay
+  qolgan va ega uni oylab hech qayerda ko'rmagan.  Vaqt lentasi shuning
+  uchun `TIMELINE_HIDDEN_TYPES` (uch tur) bilan ishlaydi — yangi hodisa
+  turi lentaga O'ZI chiqadi.  Qulf:
+  `test_a_new_event_type_appears_without_touching_the_list`.
+- **Har javob o'z cho'qqisini hisoblasa grafik YOLG'ON bo'ladi.**
+  Issiqlik xaritasida soatlarni alohida-alohida so'rash 09:00 dagi uch
+  kishini 18:00 dagi uch yuz kishi bilan bir xil qizil qilardi.  Shuning
+  uchun `heatmap_by_hour` 24 soatni bitta so'rovda va bitta `peak` bilan
+  qaytaradi.  Bu «kichik namunadan foiz chiqarmang» tuzog'ining
+  xaritadagi ko'rinishi.
+- **«Kadr yo'q» va «kadrga huquq yo'q» — ikki BOSHQA javob.**
+  `media_expected` shu ikkisini ajratadi; muddat esa serverdan keladi
+  (`dashboard.media_retention_hours`), `.tsx` ga «48» yozilmaydi.
+  Ro'yxat ikki joyda (`pipeline.SECURITY_MEDIA_EVENTS` va
+  `notify.MEDIA_EVENT_TYPES`) — `cloud` `cv2` tortadigan modulni import
+  qila olmaydi; tenglikni `tests/test_media_policy_contract.py` qulflaydi.
 
 - **Hisobotdan hosila bo'lgan raqam hisobot bilan BIRGA o'ladi.**
   Yig'indi jadvali bo'lmasa, xom hodisani o'chirish jimgina statistikani
@@ -579,6 +643,52 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-31 — Hodisalar vaqt lentasi, agent javobida grafik, xarita soat bo'yicha (`commit qilinmagan`)
+
+Nima: ega endi kun bo'ylab NIMA bo'lganini bir qarashda ko'radi.  Uchta
+ekran: (1) Hodisalar — 24 ustunli vaqt lentasi + kadrli kartochkalar,
+soatga bosilsa ro'yxat o'sha soatdan; (2) AI yordamchi javobi ostida
+o'sha lenta, manba soatlari belgilangan; (3) Issiqlik xaritasida «Soat
+bo'yicha» rejimi — slayder, ijro/to'xtatish va butun kun uchun bitta
+rang shkalasi.
+
+Nega: hodisalar ro'yxati «kichik matn qatori + Rasm tugmasi» edi va
+tugma amalda hech qachon chiqmasdi (eski panelda `_decode_event(public)`
+kalitlarni olib tashlaydi).  Issiqlik xaritasi uchun soatlik ma'lumot
+2026-08 dan beri yig'ilib turardi (`heatmap_hourly`), lekin uni ko'radigan
+UI yo'q edi.  Ega qarori (2026-08-31): birinchi bosqich — ko'rinish.
+
+Qayerda: `cloud/event_store.py` (`TIMELINE_HIDDEN_TYPES`,
+`events_timeline`, `list_events(since,until)`, `heatmap_by_hour`),
+`cloud/main.py` (`/owner/events/timeline`, `_tashkent_window`,
+`owner_events?date&hour`, `owner_heatmap?by=hour`,
+`dashboard.media_retention_hours`, `owner_events.media_expected`),
+`cloud/notify.py: MEDIA_EVENT_TYPES`, `cloud/vision_agent.py:_answer`
+(manbaga `event_type`), `frontend/src/charts.tsx: Timeline`,
+`frontend/src/EventTimeline.tsx` (yangi), `EventEvidence.tsx` (qayta
+qurildi), `VisionAgent.tsx`, `Heatmap.tsx` (yangi — `owner.tsx` dan
+ko'chirildi), `api.ts` (`tashkentHour/tashkentDay/tashkentToday/hoursSince`),
+`types.ts`, `styles.css`.
+
+Test: `tests/test_events_timeline.py` (15 ta) — eng muhimi
+`test_the_timeline_covers_the_whole_day_not_the_last_500_events`: 600 ta
+hodisadan ertalabki 03:00 dagisi ko'rinishi qulflangan, ya'ni
+`limit=500` yo'liga qaytib bo'lmaydi.
+`tests/test_media_policy_contract.py` (4 ta) qurilma va panel bitta
+ro'yxatni bilishini qulflaydi.  `tests/test_heatmap.py` ga 6 ta
+(`test_every_hour_is_coloured_against_the_same_peak` — cho'qqi butun
+kundan).  `tests/test_events_ui.py` (20 ta struktura testi).
+Jami 1 996 test yashil.
+
+Diqqat: hammasi FAQAT React panelga yozildi — `cloud/static/owner.html`
+ga tegilmadi.  Deploydan oldin serverda `CHAQIMCHI_UI_V2_OWNER` ni
+tekshiring («env pini kodni yengadi»).  Qurilma relizi kerak emas, ya'ni
+soak muzlatishi buzilmaydi.
+
+Diqqat: `test_connect_ui.py:test_a_locked_heatmap_looks_like_an_offer_not_a_breakage`
+endi `Heatmap.tsx` ni o'qiydi (ekran `owner.tsx` dan ko'chdi) — kafolat
+o'zgarmadi.
 
 ### 2026-08-30 — Kunlik raqamlar endi xom hodisalardan alohida yashaydi (0.6.29)
 

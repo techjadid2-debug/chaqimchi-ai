@@ -2109,6 +2109,87 @@ class EventStore:
             "points": sum(sum(row) for row in total),
         }
 
+    def heatmap_by_hour(self, site_id: str, camera_id: str, *, day: date) -> Dict[str, Any]:
+        """Bir kunning 24 soati — BITTA so'rovda va BITTA rang shkalasida.
+
+        Nega yagona `peak`: har soatni o'z cho'qqisiga nisbatan bo'yash
+        09:00 dagi uch kishini 18:00 dagi uch yuz kishi bilan bir xil
+        qizil qilib ko'rsatardi.  Animatsiya ishlardi, chiroyli bo'lardi
+        va **yolg'on** bo'lardi — bu "kichik namunadan foiz chiqarish"
+        xatosining xaritadagi ko'rinishi.
+
+        Nega bitta so'rov: 24 ta alohida so'rov nafaqat 24 ta HTTP, balki
+        har javob o'z cho'qqisini bilishi degani ham edi — ya'ni halol
+        shkalani printsipial bera olmasdi.  Hajm: 24x27x48 ~ 31 ming son,
+        ko'pi nol, gzipdan keyin bir necha o'n kilobayt.
+        """
+        zone = ZoneInfo("Asia/Tashkent")
+        midnight = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+        # UTC bucket satri -> mahalliy soat.  Toshkentda yozgi vaqt yo'q,
+        # ya'ni moslik bir-birga.
+        buckets: Dict[str, int] = {}
+        for local_hour in range(24):
+            moment = midnight + timedelta(hours=local_hour)
+            buckets[moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H")] = local_hour
+
+        placeholders = ",".join("?" for _ in buckets)
+        with self._connect() as conn:
+            rows = conn.execute(
+                self._sql(
+                    "SELECT bucket_hour AS bucket_hour, grid_json AS grid_json, "
+                    "frames AS frames FROM heatmap_hourly WHERE site_id=? AND camera_id=? "
+                    f"AND bucket_hour IN ({placeholders})"
+                ),
+                (site_id, camera_id, *buckets),
+            ).fetchall()
+
+        hours: List[Dict[str, Any]] = [
+            {
+                "hour": index,
+                "grid": [[0] * self.HEATMAP_COLS for _ in range(self.HEATMAP_ROWS)],
+                "frames": 0,
+                "points": 0,
+            }
+            for index in range(24)
+        ]
+        for raw in rows:
+            row = self._dict(raw)
+            local_hour = buckets.get(str(row["bucket_hour"]))
+            if local_hour is None:
+                continue
+            try:
+                cells = json.loads(row["grid_json"])
+            except (ValueError, TypeError):
+                continue
+            bucket = hours[local_hour]
+            grid = bucket["grid"]
+            bucket["frames"] = int(bucket["frames"]) + int(row["frames"] or 0)
+            for row_index in range(min(len(cells), self.HEATMAP_ROWS)):
+                for col_index in range(min(len(cells[row_index]), self.HEATMAP_COLS)):
+                    grid[row_index][col_index] += int(cells[row_index][col_index])
+
+        peak = 0
+        for bucket in hours:
+            grid = bucket["grid"]
+            bucket["points"] = sum(sum(line) for line in grid)
+            for line in grid:
+                highest = max(line, default=0)
+                if highest > peak:
+                    peak = highest
+
+        return {
+            "camera_id": camera_id,
+            "date": day.isoformat(),
+            "cols": self.HEATMAP_COLS,
+            "rows": self.HEATMAP_ROWS,
+            # Butun kunning eng gavjum KATAGI.  Panel har soatni shunga
+            # nisbatan bo'yaydi — shuning uchun u javobda bir marta turadi.
+            "peak": peak,
+            "frames": sum(int(bucket["frames"]) for bucket in hours),
+            "points": sum(int(bucket["points"]) for bucket in hours),
+            "hours": hours,
+        }
+
     def purge_heatmaps(self, site_id: str, *, retention_days: int = 90) -> int:
         cutoff = (_now() - timedelta(days=max(1, retention_days))).strftime("%Y-%m-%dT%H")
         with self._connect() as conn:

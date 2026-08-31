@@ -311,3 +311,117 @@ def test_weekly_aggregate_covers_several_days(client: TestClient) -> None:
 
     assert weekly["points"] >= single["points"]
     assert weekly["points"] == 10, "ikki kunning yig'indisi"
+
+
+# ── Soat bo'yicha: bitta so'rov, BITTA rang shkalasi ─────────────────────
+
+
+def _post_hour(client: TestClient, headers: dict, bucket: str, cell, frames: int = 10) -> None:
+    response = client.post(
+        "/api/v1/edge/heatmap",
+        headers=headers,
+        json={
+            "items": [
+                {"camera_id": "camera-01", "hour": bucket, "grid": _grid(cell), "frames": frames}
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_hourly_mode_returns_twenty_four_buckets(client: TestClient) -> None:
+    """Kunning hamma soati bitta javobda — slayder so'rov yubormasin."""
+    site, headers = _device(client)
+    owner = _owner(client, site["site_id"])
+    # Toshkent 09:00 va 18:00 -> UTC 04 va 13.
+    _post_hour(client, headers, "2026-08-20T04", (5, 10, 3))
+    _post_hour(client, headers, "2026-08-20T13", (5, 10, 300))
+
+    data = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&date=2026-08-20&by=hour", headers=owner
+    ).json()
+
+    assert len(data["hours"]) == 24
+    assert [item["hour"] for item in data["hours"]] == list(range(24))
+    assert data["hours"][9]["grid"][5][10] == 3
+    assert data["hours"][18]["grid"][5][10] == 300
+    assert data["points"] == 303
+
+
+def test_every_hour_is_coloured_against_the_same_peak(client: TestClient) -> None:
+    """Yagona `peak` — ertalabki uch kishi kechqurungi uch yuz kishiday
+    qizil ko'rinmasin.
+
+    Har soatni O'Z cho'qqisiga nisbatan bo'yash animatsiyani chiroyli
+    qilardi va yolg'on qilardi: bu "kichik namunadan foiz chiqarish"
+    xatosining xaritadagi ko'rinishi.
+    """
+    site, headers = _device(client)
+    owner = _owner(client, site["site_id"])
+    _post_hour(client, headers, "2026-08-20T04", (5, 10, 3))
+    _post_hour(client, headers, "2026-08-20T13", (5, 10, 300))
+
+    data = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&date=2026-08-20&by=hour", headers=owner
+    ).json()
+
+    assert data["peak"] == 300, "cho'qqi butun KUNDAN olinsin"
+    assert "peak" not in data["hours"][9], "soatning o'z cho'qqisi berilmasin"
+
+
+def test_an_empty_hour_stays_empty_not_hot(client: TestClient) -> None:
+    site, headers = _device(client)
+    owner = _owner(client, site["site_id"])
+    _post_hour(client, headers, "2026-08-20T13", (5, 10, 42))
+
+    data = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&date=2026-08-20&by=hour", headers=owner
+    ).json()
+
+    assert data["hours"][3]["points"] == 0
+    assert data["hours"][3]["frames"] == 0
+    assert sum(sum(line) for line in data["hours"][3]["grid"]) == 0
+
+
+def test_the_hourly_grid_is_tenant_scoped(client: TestClient) -> None:
+    site, headers = _device(client)
+    _post_hour(client, headers, "2026-08-20T13", (2, 2, 9))
+    other = client.post("/api/v1/admin/sites", headers=ADMIN, json={"name": "O'zga"}).json()
+    stranger = _owner(client, other["site_id"])
+
+    data = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&date=2026-08-20&by=hour", headers=stranger
+    ).json()
+
+    assert data["points"] == 0 and data["peak"] == 0
+
+
+def test_days_and_by_hour_cannot_be_asked_together(client: TestClient) -> None:
+    """Jimgina bittasini e'tiborsiz qoldirish eng yomon variant bo'lardi:
+    panel «7 kunning soatlari» so'rab, bitta kunning javobini olardi."""
+    site, _headers = _device(client)
+    owner = _owner(client, site["site_id"])
+
+    kunlar = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&by=hour&days=7", headers=owner
+    )
+    soat = client.get("/api/v1/owner/heatmap?camera_id=camera-01&by=hour&hour=9", headers=owner)
+    notogri = client.get("/api/v1/owner/heatmap?camera_id=camera-01&by=kun", headers=owner)
+
+    assert kunlar.status_code == 422
+    assert soat.status_code == 422
+    assert notogri.status_code == 422
+
+
+def test_the_hourly_heatmap_still_needs_the_business_plan(client: TestClient) -> None:
+    """Darvoza funksiyaning BIRINCHI qatorida — yangi shox uni meros oladi."""
+    site = client.post(
+        "/api/v1/admin/sites", headers=ADMIN, json={"name": "Arzon", "plan": "boshlangich"}
+    ).json()
+    owner = _owner(client, site["site_id"])
+
+    response = client.get(
+        "/api/v1/owner/heatmap?camera_id=camera-01&by=hour&date=2026-08-20", headers=owner
+    )
+
+    assert response.status_code == 403

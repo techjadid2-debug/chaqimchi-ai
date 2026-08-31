@@ -9,8 +9,19 @@
 
 ## HOZIRGI HOLAT · 2026-08-31
 
-- **🆕 BOSQICH 3 NING CLOUD QISMI BOSHLANDI — eshik sanog'i va
-  konversiya tayyor, DEPLOY QILINMADI.**  Ega qarori (2026-08-31):
+- **✅ DEPLOY QILINDI VA JONLI TASDIQLANDI (2026-08-31, `0a5c3e3`).**
+  Zaxira olindi (760 KB), hamma konteyner healthy, deploydan keyingi
+  15 daqiqada **0 ta** xato/5xx, tashqi API 200.  Jonli bazada
+  `daily_sales` jadvali yaratildi, panel to'plami yangisi
+  (`owner-DZcdnEeq.js`) tarqatilyapti va unda «Chek soni kiritilmagan»,
+  «eshik taqsimoti saqlanmagan» matnlari bor.
+- **📌 DAFTAR SHU JOYDA XATO EDI: 0.6.29 allaqachon 30-avgustda deploy
+  qilingan ekan.**  Dalil: `retail_daily` yozuvlarining `updated_at` i
+  `2026-08-30T11:45…19:53` — ya'ni ma'lumot yo'qolishi xavfi bir kun
+  oldin yopilgan.  Bugungi deploy Bosqich 1 (ko'rinish) va bugungi
+  ishni olib chiqdi.
+- **🆕 BOSQICH 3 NING CLOUD QISMI BAJARILDI — eshik sanog'i va
+  konversiya jonli.**  Ega qarori (2026-08-31):
   deploy bugun, keyingi bosqich — **Raqamlar**, soak ishlab turgani
   uchun **faqat cloud** qismi.  Bajarildi: (1) kirdi/chiqdi **eshik
   bo'yicha** (`line_name` bazada bor edi, hech qayerda o'qilmasdi);
@@ -19,11 +30,23 @@
   qatori; (3) **`Numbers.tsx`** — Hisobotlar sahifasida kunning yakuni
   bitta kartada.  2 034 test yashil, `make lint` va `ui-check` toza,
   `ui-build` qilingan.
-- **⚠️ DEPLOY MENDAN QILINMADI — SSH kaliti rad etildi.**
-  `ssh root@169.58.198.111` `id_ed25519` ni taklif qildi, server qabul
-  qilmadi (`Permission denied (publickey)`).  Ya'ni **bulutda hali eski
-  kod turibdi**: 0.6.29 (ma'lumot saqlash), Bosqich 1 va bugungi ish —
-  hammasi navbatda.  Kalit tiklangach deploy birinchi ish.
+- **Deploy kaliti `.env` da.**  Standart `~/.ssh/id_ed25519` serverda
+  ruxsat etilmagan; ishlaydigani — `CHAQIMCHI_DEPLOY_SSH_KEY`
+  (loyihaning `.env` fayli).  `deploy` foydalanuvchisi bilan
+  `docker compose` ISHLAMAYDI (`/home/deploy/chaqimchi-ai/.env` faqat
+  root uchun o'qiladi) — deploy `root@` bilan, tashxis esa
+  `docker inspect` / `docker exec` bilan qilinadi (deploy `docker`
+  guruhida).
+
+- **🔍 720p HALI YOQILMAGAN — jonli dalil.**  «Sig'imni o'lchash»
+  tugmasi bosilmadi (u soak o'lchovini buzardi); o'rniga heartbeat
+  o'qildi: demografiya `{attempts: 153, found: 3}` — **2%**, ya'ni
+  oldingi 6% dan ham YOMONROQ; `face_crops {written: 0, too_small: 0}`
+  — urinish umuman yo'q.  Bulutdagi kamera yozuvida
+  `probe_status: pending`, `width/height: NULL` — cloud tomondan probe
+  hech qachon ishlamagan, ya'ni bu manba javob bermaydi.  Xulosa:
+  mijoz `camera-01` ni 1280x720 ga o'tkazmagan; xodim/davomat ishi
+  shungacha kutadi.
 - **🆕 BOSQICH 1 «KO'RINISH» COMMIT QILINDI, DEPLOY QILINMADI.** Ega 20
   bandlik ro'yxat berdi (reja: `~/.claude/plans/1-7-kun-demo-*.md`) va
   birinchi bosqich sifatida **ko'rinish** tanlandi.  Uchta ish bajarildi:
@@ -180,26 +203,24 @@
 
 ## KEYINGI ISH
 
-**A) ⚠️ EGA QILADI — SSH kirishini tiklang, keyin deploy.**
-Agent `root@169.58.198.111` ga ulana olmadi: lokal `~/.ssh/id_ed25519`
-serverda ruxsat etilmagan (`Permission denied (publickey)`).  Kalit
-qo'shilgach **bir deployda** to'rt commit + bugungi ish chiqadi:
-0.6.29 (ma'lumot saqlash), Bosqich 1 (ko'rinish), eshik sanog'i va
-konversiya.  `make lint && make test && make ui-build` o'tdi (2 034 test).
-
-Deploydan **oldin**: `docker compose exec cloud printenv | grep UI_V2`.
-Deploydan keyin panelda tekshiring: Hodisalar → kun tanlash → soatga
-bosish kartochkalarni o'zgartiradimi; AI yordamchi javobi ostida lenta
-chiqadimi; Issiqlik xaritasi → «Soat bo'yicha» → slayder so'rov
+**A) ✅ BAJARILDI — deploy qilindi va tasdiqlandi (2026-08-31).**
+Qolgani — **ega ko'zi bilan tekshirish**: Hodisalar → kun tanlash →
+soatga bosish kartochkalarni o'zgartiradimi; AI yordamchi javobi ostida
+lenta chiqadimi; Issiqlik xaritasi → «Soat bo'yicha» → slayder so'rov
 yubormasligi; **Hisobotlar → eshik bo'yicha qator va chek kiritish
-formasi**; Telegramda `/chek 100`.
+formasi**; Telegramda `/chek 100` (javobda konversiya darhol ko'rinishi
+kerak) va bugun 21:00 hisobotida `🧾` qatori.
 
-**A2) 720p tekshiruvi — serverdan (qurilmaga tegmasdan).**
-`native_size` faqat «Sig'imni o'lchash» topshirig'idan keladi, u esa
-qurilmani yuklab **soak o'lchovini buzadi** — tugma BOSILMAYDI.
-O'rniga read-only uchta dalil: `site_cameras.width/height`,
-`device_health` dagi `face_crops {written, too_small}` va demografiya
-`{attempts, found}`.  SSH tiklangach shu ham bajariladi.
+⚠️ **Bugungi (31-avg) kun eshik taqsimotini KO'RSATADI, oldingi kunlar
+yo'q.**  30-avgustgacha yozilgan `retail_daily` yozuvlarida `by_door`
+kaliti umuman yo'q — panel «saqlanmagan» deb aytadi.  Bu kutilgan
+xulq, xato emas.
+
+**A2) ⚠️ MIJOZ BILAN — 720p hali yoqilmagan (tekshirildi).**
+Demografiya `{attempts: 153, found: 3}` = 2%, `face_crops` da urinish
+yo'q.  `camera-01` substream'ini **1280x720** ga o'tkazish kerak
+(o'lchov ruxsat bergan: 11 kamera, zaxira 176–200%).  Shundan keyin
+24 soat ichida `face_crops.written > 0` bo'lishi kutiladi.
 
 **B) Bosqich 3 ning QOLGAN qismi (qurilma relizi kerak, soak tugagach):**
 `exit` kamera roli (3.2), ish zonasi va faol ish vaqti (3.4), xodim/
@@ -295,10 +316,13 @@ qiladi, faqat UI/transport yo'q.
 Qabul darvozasi to'lovchi mijozning funksiyalarini nolga tushirardi.
 Uch joydan olindi, jonli tasdiqlandi.  Tafsilot: Tarix, 2026-08-30.
 
-**⚠ HEARTBEATDA `suppressed` YO'Q — keyingi ko'r nuqta**
+**✅ YOPILDI (tekshirildi 2026-08-31) — `suppressed` heartbeatda BOR**
 
-Zanjir `suppressed` (qoidalar tashlagan hodisa) ni sanaydi
-(`pipeline.py:401`), lekin u heartbeatga CHIQMAYDI.  30-avgustdagi
+Jonli heartbeatda `suppressed: 0` keladi (qurilma 0.6.25).  Quyidagi
+eski yozuv tarix uchun qoldirildi.
+
+~~Zanjir `suppressed` (qoidalar tashlagan hodisa) ni sanaydi
+(`pipeline.py:401`), lekin u heartbeatga CHIQMAYDI.~~  30-avgustdagi
 tekshiruvda aynan shu raqam yetishmadi: "hodisa filtrdan o'tdi, lekin
 bulutga kelmadi" savoliga masofadan javob berib bo'lmadi va sabab
 faqat kutish orqali aniqlandi.  Qo'shilsa keyingi tashxis daqiqalar
@@ -323,8 +347,16 @@ formuladan (`face_min_bbox_px`, `face_min_bbox_ratio`).
 **Lekin 720p ga o'tmaguncha davomat baribir ishlamaydi** — 360p da
 formula halol javob beradi: 0.76, ya'ni amalda imkonsiz.
 
-**⚠ KLIP YOZILMAYDI — `record_url` BOR bo'lsa ham**
+**⚠ KLIP YOZILMAYDI — SABAB ANIQLANDI (2026-08-31): recorder segment
+yozmaydi**
 
+Jonli heartbeat: `clips {written: 0, missing: 6, no_segments: 6,
+cut_failed: 0}` va `clips_last_error: "buferda segment yo'q"`.  Ya'ni
+ffmpeg kesa olmagani emas — **kesish uchun material yo'q**.  Keyingi
+qadam qurilma tomonda: recorder nega buferga yozmayotgani
+(`camera-01` da `record_url_set: true`).
+
+Eski tashxis (0.6.22 gacha) — «manzil berilmagan» — noto'g'ri edi:
 `clips {written: 0, missing: 2}`, camera-01 da `record_url_set: true`.
 Ilgari tashxis "manzil berilmagan" edi va u **noto'g'ri**. 0.6.22 dan
 boshlab `missing` ikkiga bo'linadi: `no_segments` (recorder umuman
@@ -365,8 +397,13 @@ taklif qilish kerak.
 
 **Sotuvni to'sib turgan ikki darvoza**
 
-- `available_feature_codes()` → `[]`, chunki qabul fayli yo'q
-  (`CHAQIMCHI_AVAILABLE_FEATURES` serverda qo'yilmagan). `cloud/store.py:52`.
+- `available_feature_codes()` → `[]`.  **Sabab aniqlashtirildi
+  (2026-08-31): `CHAQIMCHI_AVAILABLE_FEATURES` serverda QO'YILGAN**
+  (`person_count,queue_length,store_security` — uchalasi ham haqiqiy
+  kod).  To'sib turgani — ikkinchi shart: production'da
+  `pilot_acceptance_status()["ok"]` bo'lishi kerak, N100 qabul fayli
+  esa yo'q.  Deploy preflight buni har safar aytadi: «N100 qabul fayli
+  yo'q: public AI funksiyalari sotuvga ochilmaydi».  `cloud/store.py:52`.
 - **Oferta tayyor emas:** STIR va rekvizit bo'sh + yurist ko'rigi (B2)
   o'tmagan. Sotuvni ochishdan oldin ikkalasi SHART.
 
@@ -710,7 +747,7 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
-### 2026-08-31 — Eshik bo'yicha sanoq va konversiya: «200 kirdi → 100 chek» (`commit qilinmagan`)
+### 2026-08-31 — Eshik bo'yicha sanoq va konversiya: «200 kirdi → 100 chek» (`0a5c3e3`, deploy qilindi)
 
 Nima: ega endi (1) qaysi eshikdan necha kishi kirganini, (2) nechta
 tashrif xaridga aylanganini ko'radi.  Chek sonini o'zi kiritadi —

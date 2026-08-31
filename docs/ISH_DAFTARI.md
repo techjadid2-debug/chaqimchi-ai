@@ -9,7 +9,7 @@
 
 ## HOZIRGI HOLAT · 2026-08-31
 
-- **🆕 BOSQICH 1 «KO'RINISH» KODDA TAYYOR (nashr qilinmagan).** Ega 20
+- **🆕 BOSQICH 1 «KO'RINISH» COMMIT QILINDI, DEPLOY QILINMADI.** Ega 20
   bandlik ro'yxat berdi (reja: `~/.claude/plans/1-7-kun-demo-*.md`) va
   birinchi bosqich sifatida **ko'rinish** tanlandi.  Uchta ish bajarildi:
   (1) hodisalar **vaqt lentasi** — kun bo'ylab 24 ustun, soatga bosilsa
@@ -644,7 +644,7 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
-### 2026-08-31 — Hodisalar vaqt lentasi, agent javobida grafik, xarita soat bo'yicha (`commit qilinmagan`)
+### 2026-08-31 — Hodisalar vaqt lentasi, agent javobida grafik, xarita soat bo'yicha (`6ffdbbd`, `2f04bbf`, `c3c79b6`)
 
 Nima: ega endi kun bo'ylab NIMA bo'lganini bir qarashda ko'radi.  Uchta
 ekran: (1) Hodisalar — 24 ustunli vaqt lentasi + kadrli kartochkalar,

@@ -1,11 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, tokenFor } from "./api";
+import { api, formatTimeUz, tashkentDay, tashkentHour, tashkentToday, tokenFor } from "./api";
 import { Card, EmptyState, PageHeader, Skeleton } from "./components";
+import { EventTimeline } from "./EventTimeline";
 import { Icon } from "./icons";
 
 type Settings = { consented: boolean; audio_reply_enabled: boolean; provider_configured: boolean };
-type Source = { event_id: string; camera_id?: string; occurred_at?: string; label?: string; has_snapshot?: boolean; has_clip?: boolean; observation?: { summary?: string; confidence?: number } };
-type Job = { job_id: string; status: "queued" | "running" | "completed" | "failed"; error?: string; has_audio_reply?: boolean; result?: { answer?: string; sources?: Source[] } };
+type Source = { event_id: string; camera_id?: string; occurred_at?: string; label?: string; event_type?: string; has_snapshot?: boolean; has_clip?: boolean; observation?: { summary?: string; confidence?: number } };
+/* `parsed` — savolning offlayn tahlili (`cloud/vision_agent.py:parse_query`).
+   U javobga allaqachon qo'shiladi, ya'ni "qaysi kun haqida so'ralgan"
+   savoliga backendga yangi maydon qo'shmasdan javob bor. */
+type Job = { job_id: string; status: "queued" | "running" | "completed" | "failed"; error?: string; has_audio_reply?: boolean; result?: { answer?: string; sources?: Source[]; parsed?: { start_at?: string; end_at?: string; camera_id?: string | null } } };
+
+/** Javob qaysi kunga tegishli.
+ *
+ * Avval savolning O'ZI tahlil qilingan oynasi (`parsed.start_at`), keyin
+ * birinchi manba.  Ikkalasi ham bo'lmasa bugun: manba topilmagan javob
+ * ostida ham lenta turishi kerak — "14:00-16:00 da hech kim kirmadi"
+ * matnining eng qimmatli davomi o'sha kuni NIMA bo'lgani. */
+function agentDay(job: Job): string {
+  return tashkentDay(job.result?.parsed?.start_at) || tashkentDay(job.result?.sources?.[0]?.occurred_at) || tashkentToday();
+}
+
+/** Manbalar turgan soatlar — lentada belgilanadi (bosilmaydi). */
+function markedHours(job: Job): number[] {
+  const day = agentDay(job);
+  const hours = (job.result?.sources || [])
+    .filter(source => tashkentDay(source.occurred_at) === day)
+    .map(source => tashkentHour(source.occurred_at))
+    .filter((hour): hour is number => hour != null);
+  return Array.from(new Set(hours));
+}
 
 export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate: (id: string, focus?: string) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -90,7 +114,7 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
       : !settings.provider_configured ? <Card><EmptyState icon="pulse" title="Agent tayyorlanmoqda" detail="Filial roziligi saqlandi. Administrator Gemini providerini sozlagach savollar qabul qilinadi."/></Card>
       : <>
         <Card><div className="card-body agent-composer"><label>Masalan: “Bugun 14:00 dan 16:00 gacha kirishda kimdir kirdimi?”<textarea className="input" value={question} onChange={event => setQuestion(event.target.value)} maxLength={4000} rows={4}/></label>{settings.audio_reply_enabled ? <label className="consent-row"><input type="checkbox" checked={audioReply} onChange={event => setAudioReply(event.target.checked)}/><span>Javobni ovozda ham tayyorlash</span></label> : null}<div className="page-actions"><button className="btn btn-primary" disabled={job?.status === "queued" || job?.status === "running"} onClick={() => void ask()}><Icon name="pulse"/>{job?.status === "queued" || job?.status === "running" ? "Dalillar tekshirilmoqda…" : "Savol berish"}</button><label className="btn upload-btn">Ovoz fayli<input type="file" accept="audio/ogg,audio/opus,audio/mpeg,audio/mp4,audio/wav" capture="user" onChange={event => { void askAudio(event.target.files?.[0]); event.currentTarget.value = ""; }}/></label></div></div></Card>
-        {job?.status === "completed" ? <Card className="section-gap"><div className="card-head"><div><h2>Dalilli javob</h2><p>Eventlar Edge tomonidan qayd etilgan, vizual xulosa esa zarur kadrlargina ko‘rilganda beriladi.</p></div>{job.has_audio_reply ? <button className="btn" onClick={() => void playAudio()}><Icon name="pulse"/>Ovozda tinglash</button> : null}</div><div className="card-body"><p className="agent-answer">{job.result?.answer}</p>{job.result?.sources?.length ? <div className="simple-list">{job.result.sources.map(source => <div className="simple-row" key={source.event_id}><div><b>{source.label || "Hodisa"}</b><div className="table-sub">{source.camera_id || "Kamera"} · {source.occurred_at || "—"}{source.observation?.summary ? ` · ${source.observation.summary}` : ""}</div></div><button className="btn" onClick={() => onNavigate("alerts", source.event_id)}>Dalilni ochish</button></div>)}</div> : <EmptyState icon="report" title="Dalil topilmadi" detail="Tanlangan vaqt oralig‘ida saqlangan event yo‘q."/>}</div></Card> : null}
+        {job?.status === "completed" ? <Card className="section-gap"><div className="card-head"><div><h2>Dalilli javob</h2><p>Eventlar Edge tomonidan qayd etilgan, vizual xulosa esa zarur kadrlargina ko‘rilganda beriladi.</p></div>{job.has_audio_reply ? <button className="btn" onClick={() => void playAudio()}><Icon name="pulse"/>Ovozda tinglash</button> : null}</div><div className="card-body"><p className="agent-answer">{job.result?.answer}</p>{agentDay(job) ? <><p className="media-note">Javob tayangan kun: {agentDay(job)}. Manba soatlari lentada belgilangan.</p><EventTimeline siteId={siteId} date={agentDay(job)} markedHours={markedHours(job)}/></> : null}{job.result?.sources?.length ? <div className="simple-list">{job.result.sources.map(source => <div className="simple-row" key={source.event_id}><div><b>{source.label || "Hodisa"}</b><div className="table-sub">{source.camera_id || "Kamera"} · {formatTimeUz(source.occurred_at)}{source.observation?.summary ? ` · ${source.observation.summary}` : ""}</div></div><button className="btn" onClick={() => onNavigate("alerts", source.event_id)}>Dalilni ochish</button></div>)}</div> : <EmptyState icon="report" title="Dalil topilmadi" detail="Tanlangan vaqt oralig‘ida saqlangan event yo‘q."/>}</div></Card> : null}
         {job?.status === "failed" ? <Card className="section-gap"><EmptyState icon="bell" title="Agent javob bera olmadi" detail={job.error || "Keyinroq qayta urinib ko‘ring."}/></Card> : null}
       </>}
   </>;

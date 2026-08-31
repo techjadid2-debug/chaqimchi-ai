@@ -317,6 +317,11 @@ def _answer(question: str, events: List[Dict[str, Any]], observations: Dict[str,
         item = {
             "event_id": event["event_id"], "camera_id": event.get("camera_id"),
             "occurred_at": event.get("occurred_at"), "label": event_label(str(event.get("event_type") or "")),
+            # Xom tur ham beriladi: panel manbani vaqt lentasida O'Z RANGI
+            # bilan belgilaydi, rang esa turdan hisoblanadi.  O'zbekcha
+            # `label` dan teskari xarita qurish mo'rt bo'lardi — matn
+            # o'zgarsa rang jimgina yo'qolardi.
+            "event_type": event.get("event_type"),
             "has_snapshot": bool(event.get("snapshot_key")), "has_clip": bool(event.get("clip_key")),
         }
         if event["event_id"] in observations:

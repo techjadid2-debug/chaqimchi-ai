@@ -178,6 +178,86 @@ export function Donut({ segments, centerValue, centerLabel }: { segments: Segmen
   );
 }
 
+/** Kun bo'ylab vaqt lentasi: 24 ta ustun, har biri turlar bo'yicha bo'lakli.
+ *
+ * `Bars` bilan bir sinf — kutubxonasiz, CSS ustunlar.  Farqi ikkitasi:
+ * ustun ichi bir necha bo'lakdan iborat (qaysi turdagi hodisa) va
+ * ustunni bosish mumkin (o'sha soatning kartochkalari ochiladi).
+ *
+ * `marked` — AI yordamchisi javobining manbalari turgan soatlar.  Ular
+ * bosilmaydi, faqat belgilanadi: agent javobi lentada QAYERDA turganini
+ * ko'rsatish uchun.
+ *
+ * Hamma soat nol bo'lsa `null` qaytadi — fayl boshidagi qoida.  Bo'sh
+ * kunga 24 ta bo'sh ustun chizish "grafik bor, ma'lumot nol" degan
+ * yolg'on taassurot berardi.
+ */
+export type TimelineSegment = { tone: string; value: number; label?: string };
+
+export function Timeline({
+  hours,
+  selected = null,
+  marked = [],
+  onSelect,
+  height = 132,
+}: {
+  hours: { hour: number; segments: TimelineSegment[] }[];
+  selected?: number | null;
+  marked?: number[];
+  onSelect?: (hour: number | null) => void;
+  height?: number;
+}) {
+  const totals = hours.map(item => item.segments.reduce((sum, part) => sum + part.value, 0));
+  const peak = Math.max(...totals, 0);
+  if (peak <= 0) return null;
+  const markedSet = new Set(marked);
+  return (
+    <div className="timeline" style={{ height }}>
+      {hours.map((item, index) => {
+        const total = totals[index];
+        const isSelected = selected === item.hour;
+        const classes = [
+          "timeline-col",
+          isSelected ? "is-selected" : "",
+          markedSet.has(item.hour) ? "is-marked" : "",
+          total ? "" : "is-empty",
+        ].filter(Boolean).join(" ");
+        const title = total
+          ? `${String(item.hour).padStart(2, "0")}:00 — ${total} ta`
+          : `${String(item.hour).padStart(2, "0")}:00 — hodisa yo‘q`;
+        // Bosilmaydigan lentada (agent javobi) ustun tugma bo'lmasin:
+        // bosib bo'lmaydigan tugma "buzilibdi" degan taassurot beradi.
+        const Tag = onSelect ? "button" : "div";
+        return (
+          <Tag
+            key={item.hour}
+            className={classes}
+            title={title}
+            {...(onSelect
+              ? { type: "button" as const, onClick: () => onSelect(isSelected ? null : item.hour) }
+              : {})}
+          >
+            <div className="timeline-stack">
+              {total
+                ? item.segments
+                    .filter(part => part.value > 0)
+                    .map((part, partIndex) => (
+                      <i
+                        key={`${part.tone}-${partIndex}`}
+                        className={`tone-${part.tone}`}
+                        style={{ height: `${(part.value / peak) * 100}%` }}
+                      />
+                    ))
+                : null}
+            </div>
+            <span>{item.hour % 3 === 0 ? String(item.hour).padStart(2, "0") : ""}</span>
+          </Tag>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Ustunli diagramma — kunlik to'lovlar kabi diskret qiymatlar uchun. */
 export function Bars({ items, height = 120 }: { items: Point[]; height?: number }) {
   if (!items.length) return null;

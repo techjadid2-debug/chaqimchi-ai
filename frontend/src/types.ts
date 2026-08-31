@@ -23,6 +23,29 @@ export type EventItem = {
   camera_id?: string;
   created_at?: string;
   occurred_at?: string;
+  /** Bu turdagi hodisaga qurilma kadr ILADIMI.  «Kadr hali yuklanmagan»
+   *  va «bu turda kadr umuman olinmaydi» ikki boshqa javob — ularni bir
+   *  xil ko'rsatish ega uchun jimgina yolg'on bo'lardi. */
+  media_expected?: boolean;
+};
+
+/** Vaqt lentasining bitta soati.  `by_type` bo'sh bo'lishi mumkin:
+ *  javobda 24 ta katak DOIM keladi (o'q to'liq kun bo'lsin), panel esa
+ *  `total === 0` bo'lgan soatga hech narsa chizmaydi. */
+export type TimelineHour = {
+  hour: number;
+  total: number;
+  with_media: number;
+  by_type: Record<string, number>;
+};
+
+export type TimelineAnswer = {
+  date: string;
+  camera_id?: string | null;
+  hours: TimelineHour[];
+  /** Faqat O'SHA kuni bor turlar — afsona shu ro'yxatdan quriladi. */
+  types: { type: string; label?: string; total: number }[];
+  total: number;
 };
 export type TrendPoint = { date?: string; day?: string; entries?: number; entered?: number; count?: number };
 
@@ -90,6 +113,10 @@ export type Dashboard = {
   diagnostics?: { created_at?: string; payload?: { outbox?: { pending?: number; poisoned?: number }; cloud?: { dns_ok?: boolean } } } | null;
   /** Chegara tufayli saqlanmagan rasm soni — 0 dan katta bo'lsa egaga aytiladi. */
   media_dropped?: number;
+  /** Rasm/klip qancha soat yashaydi.  Panel buni O'ZIDA saqlamasin:
+   *  ikki fayldagi ikki son bir-birini inkor qilishi mumkin va buni
+   *  hech qaysi test ko'rmasdi. */
+  media_retention_hours?: number;
   updated_at: string;
   revision?: string;
 };

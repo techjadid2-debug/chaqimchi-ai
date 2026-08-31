@@ -93,6 +93,22 @@ EVENT_LABELS: Dict[str, str] = {
     "ai_review": "AI ko'rdi",
 }
 
+#: Qurilma qaysi hodisaga rasm/klip ILADI.
+#:
+#: Haqiqiy manba — `chaqimchi_ai/retail/pipeline.py: SECURITY_MEDIA_EVENTS`,
+#: lekin `cloud` uni import qila olmaydi: o'sha modul `cv2` va `numpy`
+#: tortadi va ular serverda o'rnatilmagan.  Shuning uchun ro'yxat shu
+#: yerda TAKRORLANADI, tenglik esa test bilan qulflanadi
+#: (`tests/test_media_policy_contract.py`).
+#:
+#: Panelga bu nima uchun kerak: rasmi yo'q kartochka "rasm hali
+#: yuklanmagan" deb turishi mumkin, holbuki bu turdagi hodisaga rasm
+#: umuman OLINMAYDI.  Ikkalasi bir xil ko'rinishi — ega uchun jimgina
+#: yolg'on.
+MEDIA_EVENT_TYPES = frozenset(
+    {"camera_tampered", "after_hours_presence", "zone_entered"}
+)
+
 #: AI izohi shuncha belgidan uzun bo'lsa qisqartiriladi.  Telegram xabari
 #: telefonda bir qarashda o'qiladigan bo'lishi kerak.
 MAX_NOTE_CHARS = 160

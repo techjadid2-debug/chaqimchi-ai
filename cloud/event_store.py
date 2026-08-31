@@ -40,6 +40,24 @@ REPORT_EVENT_TYPES = (
     "checkout_unattended",
 )
 
+#: Vaqt lentasidan CHIQARIB tashlanadigan turlar.
+#:
+#: Ataylab TAQIQ ro'yxati, ruxsat ro'yxati emas.  `REPORT_EVENT_TYPES`
+#: ruxsat ro'yxati bo'lgani uchun `checkout_unattended` unga tushmay
+#: qolgan va ega uni oylab HECH QAYERDA ko'rmagan.  Bu yerda yangi
+#: hodisa turi lentaga o'zi chiqadi — uni hech kim eslab qolishi shart emas.
+#:
+#: Nega aynan shu uchtasi chiqariladi:
+#:   `person_detected` — daqiqasiga ~100 ta, lenta faqat shundan iborat
+#:      bo'lib qolardi;
+#:   `face_captured`   — biometrik kadr, ega uchun "hodisa" emas;
+#:   `employee_seen`   — server o'zi yozadi va u xodim, mijoz emas.
+TIMELINE_HIDDEN_TYPES = (
+    "person_detected",
+    "face_captured",
+    "employee_seen",
+)
+
 
 #: Hafta kunlari — `date.weekday()` tartibida (0 = dushanba).
 WEEKDAYS = (
@@ -920,7 +938,15 @@ class EventStore:
         limit: int = 100,
         event_type: Optional[str] = None,
         camera_id: Optional[str] = None,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
+        """Oxirgi N ta hodisa; `since`/`until` bilan bitta oyna.
+
+        Vaqt oynasi UTC ISO satrida beriladi — nomlash `search_vision_events`
+        bilan bir xil.  Parametrsiz chaqiruv AVVALGIDAY ishlaydi: bu
+        marshrutni bosh sahifa va qo'ng'iroq ham chaqiradi.
+        """
         where = ["site_id=?"]
         params: List[Any] = [site_id]
         if event_type:
@@ -929,6 +955,12 @@ class EventStore:
         if camera_id:
             where.append("camera_id=?")
             params.append(camera_id)
+        if since:
+            where.append("occurred_at>=?")
+            params.append(since)
+        if until:
+            where.append("occurred_at<?")
+            params.append(until)
         params.append(max(1, min(int(limit), 500)))
         query = self._sql(
             "SELECT * FROM production_events WHERE "
@@ -938,6 +970,85 @@ class EventStore:
         with self._connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [self._decode_event(row, public=True) for row in rows]
+
+    def events_timeline(
+        self,
+        site_id: str,
+        *,
+        day: date,
+        camera_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Bir kunning soatlik kesimi — hodisa SANOG'I, hodisalarning o'zi emas.
+
+        Nega alohida so'rov, `list_events` yetmaydimi: u "oxirgi N ta"
+        beradi va limiti 500 ta.  Gavjum do'konda bu kunning faqat oxirgi
+        qismi degani — lenta ertalabki soatlarni BO'SH ko'rsatardi, bu esa
+        "ma'lumot yo'q" emas, yolg'on.
+
+        Bu yerda `metadata_json` umuman o'qilmaydi (u eng og'ir ustun):
+        to'rt ustun va 24 ta katak.  Mavjud `idx_prod_events_site_time`
+        indeksidan foydalanadi.
+
+        Soatga bo'lish PYTHON'da: TZ bo'yicha soat kesish SQLite va
+        PostgreSQL'da har xil yoziladi va ikkalasi bir xil javob berishi
+        kafolatlanmaydi.
+        """
+        zone = ZoneInfo("Asia/Tashkent")
+        start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+        start = start_local.astimezone(timezone.utc).isoformat()
+        end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+
+        where = ["site_id=?", "occurred_at>=?", "occurred_at<?"]
+        params: List[Any] = [site_id, start, end]
+        if camera_id:
+            where.append("camera_id=?")
+            params.append(camera_id)
+        hidden = ",".join("?" for _ in TIMELINE_HIDDEN_TYPES)
+        query = self._sql(
+            "SELECT event_type AS event_type, occurred_at AS occurred_at, "
+            "has_snapshot AS has_snapshot, has_clip AS has_clip "
+            "FROM production_events WHERE "
+            + " AND ".join(where)
+            + f" AND event_type NOT IN ({hidden})"
+        )
+        with self._connect() as conn:
+            rows = conn.execute(query, (*params, *TIMELINE_HIDDEN_TYPES)).fetchall()
+
+        # 24 ta katak DOIM qaytadi — grafikning o'qi to'liq kun bo'lishi
+        # kerak.  Panel esa `total == 0` bo'lgan soatga hech narsa chizmaydi.
+        hours: List[Dict[str, Any]] = [
+            {"hour": index, "total": 0, "with_media": 0, "by_type": {}}
+            for index in range(24)
+        ]
+        totals: Dict[str, int] = {}
+        counted = 0
+        for raw in rows:
+            row = self._dict(raw)
+            local = self._to_local(row["occurred_at"], zone)
+            if local is None or local.date() != day:
+                continue
+            kind = str(row["event_type"] or "")
+            bucket = hours[local.hour]
+            bucket["total"] += 1
+            bucket["by_type"][kind] = int(bucket["by_type"].get(kind, 0)) + 1
+            if row["has_snapshot"] or row["has_clip"]:
+                bucket["with_media"] += 1
+            totals[kind] = totals.get(kind, 0) + 1
+            counted += 1
+
+        # Afsona faqat O'SHA kuni bor turlardan quriladi: bo'lmagan turni
+        # ko'rsatish "nega nol?" degan javobsiz savol tug'diradi.
+        types = [
+            {"type": kind, "total": total}
+            for kind, total in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+        ]
+        return {
+            "date": day.isoformat(),
+            "camera_id": camera_id,
+            "hours": hours,
+            "types": types,
+            "total": counted,
+        }
 
     # ── Bildirishnomalar ──────────────────────────────────────────────────
     #

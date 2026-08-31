@@ -85,7 +85,7 @@ from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.event_store import EventStore, event_store_from_env
 from cloud.notify import DEFAULT_TELEGRAM_LEVEL as notify_default_level
-from cloud.notify import event_label, select_alert_events
+from cloud.notify import MEDIA_EVENT_TYPES, event_label, select_alert_events
 from cloud.notify import summarize as notify_summarize
 from cloud.owner_auth import (
     OwnerPrincipal,
@@ -6650,6 +6650,11 @@ async def owner_dashboard(
         # soat sezilmadi, chunki panel rasm yo'qligini jimgina yashirar
         # edi — "hodisa bor, rasmi yo'q" holati hech qanday izoh bermasdi.
         "media_dropped": ratelimit.limiter().rejections(owner.site_id).get("snapshots", 0),
+        # Rasm/klip qancha yashaydi.  Panel buni O'ZIDA saqlamasin: ikki
+        # fayldagi ikki son bir-birini inkor qilishi mumkin va buni hech
+        # qaysi test ko'rmasdi (`limits.py` dagi yuz chegarasi shundan
+        # oylab ishlamagan).
+        "media_retention_hours": _media_retention_hours(),
         "updated_at": updated_at,
         "revision": f"{owner.site_id}:{updated_at}",
     }
@@ -6663,23 +6668,91 @@ async def owner_diagnostics(
     return {"diagnostics": get_event_store().latest_device_diagnostics(owner.site_id)}
 
 
+def _tashkent_window(
+    date: Optional[str], hour: Optional[int]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Toshkent kuni (ixtiyoriy soati) -> UTC ISO chegaralari.
+
+    Sana berilmasa oyna ham yo'q: chaqiruv avvalgiday "oxirgi N ta"
+    bo'lib qoladi.  Bu marshrutni bosh sahifa va qo'ng'iroq ham
+    chaqiradi va ular sanani bermaydi.
+    """
+    if not date:
+        return None, None
+    zone = ZoneInfo("Asia/Tashkent")
+    try:
+        day = date_type.fromisoformat(date)
+    except ValueError as exc:
+        raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lsin") from exc
+    if hour is not None and not 0 <= hour <= 23:
+        raise HTTPException(422, "Soat 0..23 oralig'ida")
+    start_local = datetime.combine(day, datetime.min.time(), tzinfo=zone)
+    if hour is not None:
+        start_local += timedelta(hours=hour)
+        end_local = start_local + timedelta(hours=1)
+    else:
+        end_local = start_local + timedelta(days=1)
+    return (
+        start_local.astimezone(timezone.utc).isoformat(),
+        end_local.astimezone(timezone.utc).isoformat(),
+    )
+
+
+@app.get("/api/v1/owner/events/timeline")
+async def owner_events_timeline(
+    date: Optional[str] = None,
+    camera_id: Optional[str] = None,
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Kun bo'ylab vaqt lentasi: soat bo'yicha hodisa SANOG'I.
+
+    Nega alohida marshrut: `/owner/events` "oxirgi N ta" beradi (limit
+    500).  Gavjum do'konda bu kunning oxirgi qismi degani va lenta
+    ertalabki soatlarni bo'sh ko'rsatardi — "ma'lumot yo'q" emas,
+    yolg'on.  Bu yerda hisobni server qiladi va javob bir necha kilobayt.
+    """
+    zone = ZoneInfo("Asia/Tashkent")
+    try:
+        day = date_type.fromisoformat(date) if date else datetime.now(zone).date()
+    except ValueError as exc:
+        raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lsin") from exc
+    timeline = get_event_store().events_timeline(
+        owner.site_id, day=day, camera_id=camera_id
+    )
+    # Tarjima serverda va BITTA joyda — `owner_events` bilan bir xil manba.
+    for item in timeline.get("types", []):
+        item["label"] = event_label(str(item.get("type", "")))
+    return timeline
+
+
 @app.get("/api/v1/owner/events")
 async def owner_events(
     limit: int = 100,
     event_type: Optional[str] = None,
     camera_id: Optional[str] = None,
+    date: Optional[str] = None,
+    hour: Optional[int] = None,
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
+    since, until = _tashkent_window(date, hour)
     events = get_event_store().list_events(
         owner.site_id,
         limit=max(1, min(limit, 500)),
         event_type=event_type,
         camera_id=camera_id,
+        since=since,
+        until=until,
     )
     # Mijoz `line_crossed` degan so'zni tushunmaydi.  Tarjima serverda
     # qo'shiladi — panel va Telegram bitta manbadan foydalanadi.
+    #
+    # `media_expected` — "rasm hali yuklanmagan" va "bu turda rasm
+    # UMUMAN olinmaydi" ni ajratish uchun.  Ikkalasi bir xil ko'rinsa
+    # ega uchun bu jimgina yolg'on bo'lardi.
     for item in events:
-        item["label"] = event_label(str(item.get("event_type", "")))
+        kind = str(item.get("event_type", ""))
+        item["label"] = event_label(kind)
+        item["media_expected"] = kind in MEDIA_EVENT_TYPES
     return {"events": events}
 
 

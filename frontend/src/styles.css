@@ -154,6 +154,33 @@ h1,h2,h3,p { margin-top: 0; }
 .bar-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 6px; }
 .bar-col i { display: block; border-radius: 3px 3px 0 0; background: var(--blue); }
 .bar-col span { color: var(--muted); font-size: 9px; text-align: center; }
+/* Vaqt lentasi — `.bars` ning ko'p bo'lakli va bosiladigan varianti.
+   Ranglar mavjud o'zgaruvchilardan: yangi palitra kiritilmaydi. */
+.timeline { display: flex; align-items: stretch; gap: 3px; padding: 18px 20px 10px; }
+.timeline-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 0; border: 0; background: none; border-radius: 5px; }
+.timeline-col > .timeline-stack { display: flex; flex-direction: column; justify-content: flex-end; flex: 1; gap: 1px; }
+.timeline-col i { display: block; border-radius: 2px; min-height: 2px; }
+.timeline i.tone-blue { background: var(--blue); }
+.timeline i.tone-yellow { background: var(--yellow); }
+.timeline i.tone-red { background: var(--red); }
+.timeline i.tone-green { background: var(--green); }
+.timeline i.tone-grey { background: #b6bfcd; }
+.timeline-col > span { color: var(--muted); font-size: 9px; text-align: center; }
+button.timeline-col:hover .timeline-stack { opacity: .78; }
+.timeline-col.is-selected { background: var(--blue-soft); }
+.timeline-col.is-selected > span { color: var(--blue-dark); font-weight: 800; }
+/* AI yordamchisi manbalari — bosilmaydi, faqat belgilanadi. */
+.timeline-col.is-marked > .timeline-stack { box-shadow: inset 0 -3px 0 var(--blue-dark); }
+.timeline-col.is-marked > span { color: var(--blue-dark); font-weight: 800; }
+.timeline-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 20px 16px; }
+.timeline-legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.timeline-legend i { width: 9px; height: 9px; border-radius: 3px; display: block; }
+.timeline-legend i.tone-blue { background: var(--blue); }
+.timeline-legend i.tone-yellow { background: var(--yellow); }
+.timeline-legend i.tone-red { background: var(--red); }
+.timeline-legend i.tone-green { background: var(--green); }
+.timeline-legend i.tone-grey { background: #b6bfcd; }
+.media-note { margin: 0; padding: 10px 0 2px; color: var(--muted); font-size: 12px; }
 .summary-strip { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; padding: 14px 20px 20px; border-top: 1px solid var(--border); }
 .summary-strip span { display: block; color: var(--muted); font-size: 11px; }
 .summary-strip b { font-size: 15px; }

@@ -378,16 +378,60 @@ const TASHKENT_OFFSET_MIN = 5 * 60;
  * e'tiborsiz qolib, yana brauzer mintaqasi chiqadi.  Qo'lda siljitish
  * har joyda bir xil natija beradi.
  */
-export function formatTimeUz(value: string | null | undefined) {
-  if (!value) return "—";
+function tashkentMoment(value: string | null | undefined): Date | null {
+  if (!value) return null;
   // Mintaqasiz ISO satrini JS LOKAL vaqt deb o'qiydi; server esa uni UTC
   // deb yozadi.  Shuning uchun belgisi yo'q bo'lsa "Z" qo'shamiz.
   const text = String(value);
   const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
   const date = new Date(hasZone ? text : `${text}Z`);
-  if (Number.isNaN(date.getTime())) return "—";
-  const shifted = new Date(date.getTime() + TASHKENT_OFFSET_MIN * 60_000);
+  if (Number.isNaN(date.getTime())) return null;
+  // Qaytgan obyektning UTC maydonlari MAHALLIY qiymatni beradi — atayin:
+  // brauzer mintaqasi hisobga olinmasin.
+  return new Date(date.getTime() + TASHKENT_OFFSET_MIN * 60_000);
+}
+
+export function formatTimeUz(value: string | null | undefined) {
+  const shifted = tashkentMoment(value);
+  if (!shifted) return "—";
   return `${String(shifted.getUTCHours()).padStart(2, "0")}:${String(shifted.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+/** Toshkent soati 0..23 — vaqt lentasidagi ustunni topish uchun.
+ *
+ * `formatTimeUz(x).slice(0, 2)` bilan matndan soat KESIB OLMANG: format
+ * o'zgarsa raqam jimgina buziladi va bu yuqorida tuzatilgan xatoning
+ * aynan takrori bo'ladi. */
+export function tashkentHour(value: string | null | undefined): number | null {
+  const shifted = tashkentMoment(value);
+  return shifted ? shifted.getUTCHours() : null;
+}
+
+/** Toshkent kuni "YYYY-MM-DD".  Server ham kunni shu chegara bilan
+ *  kesadi (`ZoneInfo("Asia/Tashkent")`), ya'ni panel va hisobot bitta
+ *  kun haqida gapiradi. */
+export function tashkentDay(value: string | null | undefined): string | null {
+  const shifted = tashkentMoment(value);
+  return shifted ? shifted.toISOString().slice(0, 10) : null;
+}
+
+/** Hodisadan hozirgacha necha soat o'tdi.  Ochib bo'lmasa `null`.
+ *
+ * Mintaqa bilan SURILMAYDI: yosh haqiqiy lahzalar farqi, ya'ni uni
+ * Toshkentga o'girish 5 soatlik yolg'on qo'shardi. */
+export function hoursSince(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const text = String(value);
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
+  const date = new Date(hasZone ? text : `${text}Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return (Date.now() - date.getTime()) / 3_600_000;
+}
+
+/** Bugun — Toshkent bo'yicha.  `new Date().toISOString().slice(0,10)`
+ *  chet eldan ochilganda boshqa kunni berardi. */
+export function tashkentToday(): string {
+  return tashkentDay(new Date().toISOString()) || "";
 }
 
 /** "1 234 567" — mingliklar orasida probel.

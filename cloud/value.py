@@ -102,6 +102,54 @@ def queue_cost(
     }
 
 
+#: Konversiya foizi shundan kam kirishda KO'RSATILMAYDI.
+#:
+#: 3 kishi kirib 2 tasi sotib olsa «67% konversiya» chiqadi — bu o'lchov
+#: emas, tasodif.  Kam namunada faqat SONLAR ko'rsatiladi (🚻 qatori va
+#: `trust_score` shu intizomga bo'ysunadi).
+MIN_VISITORS_FOR_CONVERSION = 20
+
+
+def conversion(*, receipts: Optional[int], entered: int) -> Optional[Dict[str, Any]]:
+    """«200 kirdi → 100 chek»: nechta tashrif xaridga aylandi.
+
+    `None` — egasi chek sonini KIRITMAGAN.  Nol qaytarish yolg'on
+    bo'lardi: nol «hech kim sotib olmadi» degani, kiritilmagan kun esa
+    «ma'lumot yo'q».
+
+    `percent = None` — namuna kichik yoki sanoq ishonchsiz.
+    """
+    if receipts is None:
+        return None
+    receipts = max(0, int(receipts))
+    entered = max(0, int(entered))
+    percent: Optional[int] = None
+    # Chek kirganlardan KO'P bo'lishi — do'kon boy ekanini emas, sanoq
+    # buzilganini bildiradi (chiziq noto'g'ri, yoki sanalmaydigan
+    # ikkinchi eshik bor).  «140% konversiya» butun hisobga bo'lgan
+    # ishonchni bir zumda yo'q qiladi — `MAX_PLAUSIBLE_PER_VISITOR_UZS`
+    # bilan bir xil sabab.
+    if entered >= MIN_VISITORS_FOR_CONVERSION and receipts <= entered:
+        percent = round(receipts * 100 / entered)
+    return {"receipts": receipts, "entered": entered, "percent": percent}
+
+
+def conversion_line(*, receipts: Optional[int], entered: int) -> Optional[str]:
+    """Kunlik xabardagi chek qatori.  Egasi kiritmagan bo'lsa — `None`."""
+    data = conversion(receipts=receipts, entered=entered)
+    if data is None:
+        return None
+    if data["percent"] is None:
+        # Foizsiz halol javob: son o'zi ham savolga javob beradi.
+        return f"🧾 <b>{data['receipts']}</b> chek, {data['entered']} kishi kirgan"
+    line = f"🧾 <b>{data['receipts']}</b> chek / {data['entered']} kirgan"
+    if data["receipts"]:
+        every = round(data["entered"] / data["receipts"])
+        if every >= 2:
+            line += f" — har {every}-mijoz sotib oldi"
+    return line
+
+
 def uzs(amount: int) -> str:
     """So'mni o'qiladigan ko'rinishda: 3 200 000 → «3.2 mln so'm»."""
     if amount >= 1_000_000:

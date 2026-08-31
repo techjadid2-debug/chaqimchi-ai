@@ -79,6 +79,7 @@ from cloud import (
     server_health,
     trust_score,
     urls,
+    value,
     vision_agent,
 )
 from cloud.alerts import AlertService, test_message
@@ -6554,6 +6555,8 @@ async def owner_dashboard(
     report = events_store.retail_report(owner.site_id)
     if not _panel_feature_open(owner.site_id, "demografiya"):
         report.pop("demografiya", None)
+    _name_doors(owner.site_id, report)
+    _with_sales(owner.site_id, report, None)
     event_rows = events_store.list_events(owner.site_id, limit=12)
     for item in event_rows:
         item["label"] = event_label(str(item.get("event_type", "")))
@@ -6999,17 +7002,132 @@ async def admin_vision_job(
     return _vision_job_payload(job)
 
 
+def _name_doors(site_id: str, report: Dict[str, Any]) -> Dict[str, Any]:
+    """Eshik taqsimotidagi kamera ID sini odam o'qiydigan nomga aylantiradi.
+
+    Nom hisobotning O'ZIGA yozilmaydi: `retail_daily` yozuvi uch yil
+    yashaydi, kamera esa oradan keyin qayta nomlanishi mumkin va arxiv
+    eski nom bilan qotib qolardi.  Shuning uchun ID snapshotda qoladi,
+    nom esa har javobda yangidan qo'yiladi.
+
+    Nomlar `site_cameras` da (SQLite), o'tishlar esa `production_events`
+    da (PostgreSQL) — ikki alohida saqlagich, ya'ni buni SQL bilan
+    biriktirib bo'lmaydi va birlashtirish shu qatlamda bajariladi.
+    """
+    doors = ((report.get("traffic") or {}).get("by_door")) or []
+    if not doors:
+        return report
+    try:
+        labels = {
+            str(camera.get("camera_id")): str(camera.get("label") or "")
+            for camera in get_store().list_cameras(site_id)
+        }
+    except ValueError:
+        labels = {}
+    for door in doors:
+        if not isinstance(door, dict):
+            continue
+        camera_id = str(door.get("camera_id") or "")
+        # Chiziq nomi bor bo'lsa u aniqroq: bitta kamerada ikkita eshik
+        # bo'lishi mumkin.  Bo'lmasa kamera nomiga, u ham bo'lmasa ID ga
+        # tushamiz — bo'sh sarlavha «qaysi eshik» savolini javobsiz
+        # qoldiradi.
+        door["label"] = str(door.get("line") or "") or labels.get(camera_id) or camera_id
+    return report
+
+
+#: Bir kunda shundan ko'p chek — deyarli har doim kirish xatosi.
+#:
+#: 4 kameralik do'kon uchun kunlik 20 000 chek real emas; nol qo'shib
+#: yuborilgan raqam esa konversiyani ham, keyingi oylik taqqoslashni
+#: ham jimgina buzardi.
+MAX_DAILY_RECEIPTS = 20_000
+
+
+def _owner_day(value_: Optional[str]) -> date_type:
+    """`?date=` ni kunga aylantiradi; berilmasa — bugungi Toshkent kuni."""
+    if not value_:
+        return datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    try:
+        return date_type.fromisoformat(value_)
+    except ValueError as exc:
+        raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lishi kerak") from exc
+
+
+def _with_sales(site_id: str, report: Dict[str, Any], day: Optional[date_type]) -> Dict[str, Any]:
+    """Hisobotga egasi kiritgan chek sonini va konversiyani qo'shadi.
+
+    Chek soni hisobotning O'ZIGA (`retail_daily.report_json`) yozilmaydi:
+    ega uni ko'pincha ERTASI kuni kiritadi, yig'indi esa kun tugashi
+    bilan muzlab qoladi — o'sha yozuvga qo'shilsa kiritilgan raqam hech
+    qachon ko'rinmasdi.  Shuning uchun u har javobda yangidan qo'shiladi.
+
+    Konversiya `cloud/value.py` da hisoblanadi — «kichik namunadan foiz
+    chiqarmang» qoidasi bitta joyda tursin, panelda va Telegram xabarida
+    alohida-alohida takrorlanmasin.
+    """
+    day = day or datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    sales = get_event_store().daily_sales(site_id, day)
+    report["sales"] = sales
+    report["conversion"] = value.conversion(
+        receipts=(sales or {}).get("receipts") if sales else None,
+        entered=int(((report.get("traffic") or {}).get("entered")) or 0),
+    )
+    return report
+
+
+class OwnerSalesBody(BaseModel):
+    date: Optional[str] = None
+    receipts: int
+    revenue_uzs: int = 0
+
+
+@app.get("/api/v1/owner/sales")
+async def owner_sales(
+    date: Optional[str] = None, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Egasi kiritgan chek soni.  Kiritilmagan kun `null` qaytaradi."""
+    day = _owner_day(date)
+    sales = get_event_store().daily_sales(owner.site_id, day)
+    return {"date": day.isoformat(), "sales": sales}
+
+
+@app.put("/api/v1/owner/sales")
+async def owner_save_sales(
+    body: OwnerSalesBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Chek sonini yozadi.  Qayta yuborilsa ustiga yozadi, ikkilamaydi."""
+    day = _owner_day(body.date)
+    if body.receipts < 0 or body.revenue_uzs < 0:
+        raise HTTPException(422, "Son manfiy bo'lmaydi")
+    # Yuqori chegara — kirish xatosidan himoya: «100000» deb yozib
+    # yuborilgan chek soni konversiyani ham, oylik taqqoslashni ham
+    # buzadi va buni keyin hech kim sezmaydi.
+    if body.receipts > MAX_DAILY_RECEIPTS:
+        raise HTTPException(422, f"Chek soni {MAX_DAILY_RECEIPTS} tadan oshmasin")
+    sales = get_event_store().save_daily_sales(
+        owner.site_id, day, receipts=body.receipts, revenue_uzs=body.revenue_uzs
+    )
+    # Konversiya javobda darhol qaytariladi: panel uni O'ZI hisoblamasin.
+    # «Kichik namunadan foiz chiqarmang» qoidasi bir joyda tursa,
+    # panel va Telegram xabari hech qachon ikki xil javob bermaydi.
+    report = get_event_store().retail_report(owner.site_id, day=day)
+    return {
+        "ok": True,
+        "sales": sales,
+        "conversion": value.conversion(
+            receipts=sales["receipts"],
+            entered=int(((report.get("traffic") or {}).get("entered")) or 0),
+        ),
+    }
+
+
 @app.get("/api/v1/owner/report")
 async def owner_report(
     date: Optional[str] = None, owner: OwnerPrincipal = Depends(require_active_owner)
 ) -> Dict[str, Any]:
     """Kunlik do'kon hisoboti: kirish, gavjum soat, navbat, dwell."""
-    day: Optional[date_type] = None
-    if date:
-        try:
-            day = date_type.fromisoformat(date)
-        except ValueError as exc:
-            raise HTTPException(422, "Sana YYYY-MM-DD ko'rinishida bo'lishi kerak") from exc
+    day = _owner_day(date)
     report = get_event_store().retail_report(owner.site_id, day=day)
     # Demografiya hisobotdan CHIQARILADI, qabuldan emas.
     #
@@ -7018,7 +7136,7 @@ async def owner_report(
     # o'rtasidan boshlanadigan doimiy teshik qolardi.
     if not _panel_feature_open(owner.site_id, "demografiya"):
         report.pop("demografiya", None)
-    return report
+    return _with_sales(owner.site_id, _name_doors(owner.site_id, report), day)
 
 
 #: «Mijoz portreti» davri → nechta kun orqaga.
@@ -9056,6 +9174,7 @@ async def owner_telegram_webhook(
             telegram_id,
             "<b>Chaqimchi AI bot buyruqlari</b>\n\n"
             "/hisobot — bugungi hisobot: kirdi-chiqdi, navbat, gavjum soat\n"
+            "/chek 100 — bugun nechta chek bo'lgani (konversiya shundan)\n"
             "/kamera — har kameradan oxirgi rasm\n"
             "/panel — mijoz paneliga kirish havolasi\n"
             "/yordam — shu ro'yxat\n"
@@ -9079,10 +9198,14 @@ async def owner_telegram_webhook(
         await _bot_send_camera_photos(telegram_id, members)
     elif command == "/hisobot":
         await _bot_send_report(telegram_id, members, base)
+    elif command == "/chek":
+        if not ratelimit.limiter().hit("tg-chek", telegram_id, limit=10, window_sec=600):
+            return {"ok": True}
+        await _bot_save_receipts(telegram_id, members, text)
     else:
         await _send_owner_telegram(
             telegram_id,
-            "Buyruqlar: /hisobot, /kamera, /panel, /yordam",
+            "Buyruqlar: /hisobot, /chek, /kamera, /panel, /yordam",
         )
     return {"ok": True}
 
@@ -9168,6 +9291,10 @@ async def _bot_send_report(telegram_id: str, members: List[Dict[str, Any]], base
             report,
             open_from=open_from,
             first_movement=first_movement,
+            receipts=(
+                store_events.daily_sales(site_id, date_type.fromisoformat(str(report["date"])))
+                or {}
+            ).get("receipts"),
         )
         detail = get_store().site_detail(site_id)
         text_out += (
@@ -9177,6 +9304,70 @@ async def _bot_send_report(telegram_id: str, members: List[Dict[str, Any]], base
         await _send_owner_telegram(
             telegram_id, text_out, reply_markup=botfmt.panel_button(urls.app_url() or base)
         )
+
+
+async def _bot_save_receipts(
+    telegram_id: str, members: List[Dict[str, Any]], text: str
+) -> None:
+    """`/chek 100` — egasi kunlik chek sonini bitta xabar bilan kiritadi.
+
+    Konversiyaning maxraji bizda (nechta kirdi), surati esa faqat egada:
+    kassa integratsiyasi yo'q.  Shuning uchun kiritish yo'li imkon qadar
+    qisqa — ega kechqurun hisobotni o'qiyotganda o'sha yerda javob
+    yozadi, panelga kirish shart emas.
+
+    Kecha uchun ham kiritish mumkin (`/chek 100 kecha`): hisobot 21:00 da
+    keladi, ega esa do'konni yopgach, ya'ni yarim tundan keyin javob
+    yozishi normal holat — usiz raqam noto'g'ri kunga tushardi.
+    """
+    member = members[0]
+    if str(member.get("role")) not in {"owner", "service_admin"}:
+        await _send_owner_telegram(telegram_id, "Chek sonini faqat do'kon egasi kiritadi.")
+        return
+    parts = text.split()
+    raw = parts[1] if len(parts) > 1 else ""
+    if not raw.isdigit():
+        await _send_owner_telegram(
+            telegram_id,
+            "Chek sonini shunday yozing: <code>/chek 100</code>\n"
+            "Kecha uchun: <code>/chek 100 kecha</code>",
+        )
+        return
+    receipts = int(raw)
+    if receipts > MAX_DAILY_RECEIPTS:
+        await _send_owner_telegram(
+            telegram_id, f"Chek soni {MAX_DAILY_RECEIPTS} tadan oshmasin."
+        )
+        return
+    day = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    when = parts[2].lower() if len(parts) > 2 else ""
+    if when == "kecha":
+        day = day - timedelta(days=1)
+    elif when:
+        try:
+            day = date_type.fromisoformat(when)
+        except ValueError:
+            await _send_owner_telegram(
+                telegram_id, "Sanani <code>/chek 100 2026-08-30</code> ko'rinishida yozing."
+            )
+            return
+    site_id = str(member["site_id"])
+    get_event_store().save_daily_sales(site_id, day, receipts=receipts)
+    report = get_event_store().retail_report(site_id, day=day)
+    entered = int((report.get("traffic") or {}).get("entered") or 0)
+    title = botfmt.day_title(f"{day.isoformat()}T12:00:00+05:00") or day.isoformat()
+    # Ko'p filialli egaga QAYSI filialga yozilgani aytiladi.  Raqam
+    # jimgina birinchi filialga tushib ketsa, buni oylab payqamaslik
+    # mumkin — konversiya esa ikkala do'kon uchun ham yolg'on bo'lardi.
+    branch = ""
+    if len({str(item["site_id"]) for item in members}) > 1:
+        site_row = get_store().get_site(site_id) or {}
+        branch = f" ({botfmt.escape(str(site_row.get('name') or site_id))})"
+    lines = [f"✅ {title}{branch} uchun <b>{receipts}</b> chek yozildi."]
+    conversion = value.conversion_line(receipts=receipts, entered=entered)
+    if conversion:
+        lines.append(conversion)
+    await _send_owner_telegram(telegram_id, "\n".join(lines))
 
 
 async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]]) -> None:

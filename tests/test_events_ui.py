@@ -202,3 +202,65 @@ def test_the_new_screens_live_in_their_own_files(name: str) -> None:
     shishirmasin.  Naqsh: `Demography.tsx`, `VisionAgent.tsx`."""
     assert (SRC / name).is_file()
     assert "function HeatmapPage" not in read("owner.tsx")
+
+
+# ── Raqamlar kartasi (chek, konversiya, eshik) ───────────────────────────
+
+
+def test_the_panel_does_not_compute_the_conversion_itself() -> None:
+    """«Kichik namunadan foiz chiqarmang» qoidasi BITTA joyda tursin.
+
+    Panel foizni o'zi hisoblasa, u serverdagi chegaradan (20 tashrif)
+    bexabar qoladi va o'sha kun haqida Telegram xabari bilan ikki xil
+    gapiradi.  Shuning uchun `percent` faqat serverdan olinadi.
+    """
+    source = read("Numbers.tsx")
+
+    assert "conversion.percent" in source
+    # Foizni chiqarishning ikkala tabiiy yo'li ham yopiladi.  (Eshik
+    # ustunining `* 100` i — CSS kengligi, foiz emas.)
+    assert "/ conversion.entered" not in source
+    assert "receipts /" not in source
+
+
+def test_a_day_without_receipts_is_shown_as_empty_not_zero() -> None:
+    """Nol «hech kim sotib olmadi» degani; kiritilmagan kun «ma'lumot yo'q»."""
+    source = read("Numbers.tsx")
+
+    assert "Chek soni kiritilmagan" in source
+
+
+def test_a_small_day_shows_numbers_instead_of_a_percentage() -> None:
+    source = read("Numbers.tsx")
+
+    assert "foiz uchun kam" in source
+
+
+def test_an_old_day_says_the_door_split_was_not_stored() -> None:
+    """Deploydan oldingi kunlarda kalit YO'Q — nol ko'rsatish yolg'on."""
+    source = read("Numbers.tsx")
+
+    assert "doors === undefined" in source
+    assert "eshik taqsimoti saqlanmagan" in source
+
+
+def test_the_door_bars_share_one_scale() -> None:
+    """Har qatorni o'zicha to'ldirish yon eshikni asosiy eshik bilan
+    teng ko'rsatardi — issiqlik xaritasidagi bilan bir xil tuzoq."""
+    source = read("Numbers.tsx")
+
+    assert "Math.max(...doors.map" in source
+
+
+def test_the_receipt_count_can_be_entered_from_telegram_too() -> None:
+    """Ega kechqurun hisobotni Telegramda o'qiydi — panelga kirish shart
+    emasligi o'sha yerda aytilsin."""
+    source = read("Numbers.tsx")
+
+    assert "/chek 100" in source
+
+
+def test_the_numbers_card_lives_in_its_own_file() -> None:
+    assert (SRC / "Numbers.tsx").is_file()
+    assert "function ReceiptsBlock" not in read("owner.tsx")
+    assert "<Numbers " in read("owner.tsx")

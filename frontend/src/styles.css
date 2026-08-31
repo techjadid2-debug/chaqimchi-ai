@@ -181,6 +181,24 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
 .timeline-legend i.tone-green { background: var(--green); }
 .timeline-legend i.tone-grey { background: #b6bfcd; }
 .media-note { margin: 0; padding: 10px 0 2px; color: var(--muted); font-size: 12px; }
+/* ── Chek soni va eshik taqsimoti ─────────────────────────────────── */
+.receipts { padding: 4px 20px 16px; border-top: 1px solid var(--border); }
+.receipts-line { margin: 14px 0 10px; font-size: 14px; }
+.receipts-empty { color: var(--muted); }
+.receipts-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.receipts-form .input { width: 130px; }
+.receipts-hint { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+.receipts-hint code { padding: 2px 5px; border-radius: 5px; background: var(--blue-soft); font-size: 11px; }
+.receipts-error { margin: 10px 0 0; color: #b42328; font-size: 12px; }
+.doors { padding: 6px 20px 18px; border-top: 1px solid var(--border); }
+.doors h3 { margin: 14px 0 10px; font-size: 13px; }
+/* Ustun UZUNLIGI eng gavjum eshikka nisbatan — har qatorni o'zicha
+   to'ldirish yon eshikni asosiy eshik bilan teng ko'rsatardi. */
+.door-row { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr minmax(120px, auto); align-items: center; gap: 12px; padding: 5px 0; }
+.door-name { font-size: 12px; font-weight: 700; }
+.door-bar { display: block; height: 8px; border-radius: 4px; background: var(--blue-soft); overflow: hidden; }
+.door-bar i { display: block; height: 100%; border-radius: 4px; background: var(--blue); }
+.door-count { color: var(--muted); font-size: 11px; text-align: right; }
 .summary-strip { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; padding: 14px 20px 20px; border-top: 1px solid var(--border); }
 .summary-strip span { display: block; color: var(--muted); font-size: 11px; }
 .summary-strip b { font-size: 15px; }

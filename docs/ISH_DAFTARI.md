@@ -9,6 +9,21 @@
 
 ## HOZIRGI HOLAT · 2026-08-31
 
+- **🆕 BOSQICH 3 NING CLOUD QISMI BOSHLANDI — eshik sanog'i va
+  konversiya tayyor, DEPLOY QILINMADI.**  Ega qarori (2026-08-31):
+  deploy bugun, keyingi bosqich — **Raqamlar**, soak ishlab turgani
+  uchun **faqat cloud** qismi.  Bajarildi: (1) kirdi/chiqdi **eshik
+  bo'yicha** (`line_name` bazada bor edi, hech qayerda o'qilmasdi);
+  (2) **konversiya** — ega chek sonini paneldan yoki Telegramdan
+  (`/chek 100`) kiritadi, kunlik hisobotda «🧾 100 chek / 200 kirgan»
+  qatori; (3) **`Numbers.tsx`** — Hisobotlar sahifasida kunning yakuni
+  bitta kartada.  2 034 test yashil, `make lint` va `ui-check` toza,
+  `ui-build` qilingan.
+- **⚠️ DEPLOY MENDAN QILINMADI — SSH kaliti rad etildi.**
+  `ssh root@169.58.198.111` `id_ed25519` ni taklif qildi, server qabul
+  qilmadi (`Permission denied (publickey)`).  Ya'ni **bulutda hali eski
+  kod turibdi**: 0.6.29 (ma'lumot saqlash), Bosqich 1 va bugungi ish —
+  hammasi navbatda.  Kalit tiklangach deploy birinchi ish.
 - **🆕 BOSQICH 1 «KO'RINISH» COMMIT QILINDI, DEPLOY QILINMADI.** Ega 20
   bandlik ro'yxat berdi (reja: `~/.claude/plans/1-7-kun-demo-*.md`) va
   birinchi bosqich sifatida **ko'rinish** tanlandi.  Uchta ish bajarildi:
@@ -165,14 +180,33 @@
 
 ## KEYINGI ISH
 
-**A) Bosqich 1 ni deploy qilish.** `make lint && make test && make ui-build`
-o'tdi (1 996 test).  Deploy — `scripts/deploy_cloud.sh` orqali.
+**A) ⚠️ EGA QILADI — SSH kirishini tiklang, keyin deploy.**
+Agent `root@169.58.198.111` ga ulana olmadi: lokal `~/.ssh/id_ed25519`
+serverda ruxsat etilmagan (`Permission denied (publickey)`).  Kalit
+qo'shilgach **bir deployda** to'rt commit + bugungi ish chiqadi:
+0.6.29 (ma'lumot saqlash), Bosqich 1 (ko'rinish), eshik sanog'i va
+konversiya.  `make lint && make test && make ui-build` o'tdi (2 034 test).
+
+Deploydan **oldin**: `docker compose exec cloud printenv | grep UI_V2`.
 Deploydan keyin panelda tekshiring: Hodisalar → kun tanlash → soatga
 bosish kartochkalarni o'zgartiradimi; AI yordamchi javobi ostida lenta
 chiqadimi; Issiqlik xaritasi → «Soat bo'yicha» → slayder so'rov
-yubormasligi.
+yubormasligi; **Hisobotlar → eshik bo'yicha qator va chek kiritish
+formasi**; Telegramda `/chek 100`.
 
-**B) Keyingi bosqichlar (reja faylida to'liq):** Bosqich 2 — pul
+**A2) 720p tekshiruvi — serverdan (qurilmaga tegmasdan).**
+`native_size` faqat «Sig'imni o'lchash» topshirig'idan keladi, u esa
+qurilmani yuklab **soak o'lchovini buzadi** — tugma BOSILMAYDI.
+O'rniga read-only uchta dalil: `site_cameras.width/height`,
+`device_health` dagi `face_crops {written, too_small}` va demografiya
+`{attempts, found}`.  SSH tiklangach shu ham bajariladi.
+
+**B) Bosqich 3 ning QOLGAN qismi (qurilma relizi kerak, soak tugagach):**
+`exit` kamera roli (3.2), ish zonasi va faol ish vaqti (3.4), xodim/
+davomat (3.3 — 720p tasdiqlangandan keyin).  Bajarilgani: 3.1 (eshik
+bo'yicha), 3.5 (konversiya), 3.6 (birlashgan ko'rinish).
+
+**B2) Keyingi bosqichlar (reja faylida to'liq):** Bosqich 2 — pul
 (7 kunlik demo saytdan o'zi ochiladi, «Tarmoq» → «Moslashtirilgan»
 kalkulyator, Payme/Click merchant shartnomasi va avtomatik yechish,
 tannarx `cloud/finance.py` ga chiqariladi).  Bosqich 3 — raqamlar
@@ -363,6 +397,38 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Yozilgan-u hech qachon O'QILMAGAN ustun bo'lishi mumkin.**
+  `production_events.line_name` qurilmadan kelib bazaga yozilardi va
+  butun kodda bironta ham `SELECT` uni so'ramasdi — ya'ni «qaysi
+  eshikdan» savoli oylab javobsiz qolgan, ma'lumot esa joyida turgan.
+  Yangi ko'rsatkich so'ralganda avval `grep -rn` bilan **bor narsani
+  qidiring**: hisob-kitobning yarmi allaqachon yig'ilgan bo'lishi mumkin.
+
+- **Nom bir saqlagichda, raqam boshqasida.** `site_cameras.label`
+  `cloud/store.py` da (SQLite), `production_events` esa
+  `cloud/event_store.py` da (production'da PostgreSQL).  Ularni SQL
+  bilan biriktirib bo'lmaydi — birlashtirish javob yig'ilayotgan
+  qatlamda bajariladi (`_name_doors`).  Bu «bitta so'rov bilan
+  hal qilaman» degan urinishni oldindan to'xtatadi.
+
+- **Uzoq yashaydigan snapshotga NOM yozmang.**  `retail_daily` uch yil
+  turadi; kamera qayta nomlansa arxiv eski nom bilan qotib qolardi.
+  Snapshotda ID, nom esa ko'rsatish paytida.  Xuddi shu sabab bilan
+  **chek soni ham** snapshotga yozilmaydi: ega uni ertasi kuni
+  kiritadi, snapshot esa kun tugashi bilan muzlaydi.
+
+- **BO'SH va NOL — ikki boshqa javob.**  Kiritilmagan chek soni `null`
+  qaytadi («ma'lumot yo'q»), `0` esa «hech kim sotib olmadi».  Panelda
+  ham, hisobotda ham ular boshqacha ko'rinadi.  Xuddi shu qoida eski
+  kunlardagi `by_door` kalitiga tegishli: kalit yo'q — «saqlanmagan»,
+  bo'sh ro'yxat — «o'tish bo'lmagan».
+
+- **Kunlik xabarga qo'shilgan har qator uni O'QILMAYDIGAN qiladi.**
+  Chek eslatmasi birinchi variantda har kuni chiqardi va
+  `test_a_calm_day_message_stays_short` darhol qulab tushdi.  Yechim:
+  eslatma haftada bir marta (dushanba — `_quiet_reason` bilan bir xil
+  kun) va faqat 20 dan ko'p odam kirgan kunda.
 
 - **Ro'yxatni RUXSAT emas, TAQIQ qilib yozing.** `REPORT_EVENT_TYPES`
   ruxsat ro'yxati bo'lgani uchun `checkout_unattended` unga tushmay
@@ -643,6 +709,52 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-08-31 — Eshik bo'yicha sanoq va konversiya: «200 kirdi → 100 chek» (`commit qilinmagan`)
+
+Nima: ega endi (1) qaysi eshikdan necha kishi kirganini, (2) nechta
+tashrif xaridga aylanganini ko'radi.  Chek sonini o'zi kiritadi —
+paneldan yoki Telegramdan bitta xabar bilan (`/chek 100`, kecha uchun
+`/chek 100 kecha`).  Kunlik hisobotda yangi qator: «🧾 100 chek / 200
+kirgan — har 2-mijoz sotib oldi».
+
+Nega: eshik nomi (`line_name`) qurilmadan kelib bazaga yozilardi-yu
+butun kodda HECH QAYERDA o'qilmasdi — ko'p eshikli do'kon bitta
+yig'indi ko'rardi va yon eshik kunlab yopiq turganini bilmasdi.
+Konversiya esa umuman yo'q edi: kirish sanog'i bizda, chek soni faqat
+egada (kassa integratsiyasi yo'q va yaqin rejada ham yo'q).
+
+Qayerda: `cloud/event_store.py` (`_retail_report_from_events` → `by_door`,
+`daily_sales` jadvali + `save_daily_sales`/`daily_sales`, purge
+yig'indi bilan bir muddatda), `cloud/value.py` (`conversion`,
+`conversion_line`, `MIN_VISITORS_FOR_CONVERSION`), `cloud/main.py`
+(`_name_doors`, `_with_sales`, `_owner_day`, `GET/PUT /api/v1/owner/sales`,
+`/chek` bot buyrug'i, `MAX_DAILY_RECEIPTS`), `cloud/digest.py`
+(konversiya qatori + dushanbadagi eslatma), `frontend/src/Numbers.tsx`
+(yangi), `owner.tsx` (Hisobotlar sahifasiga ulandi), `types.ts`,
+`styles.css`.
+
+Test: `tests/test_daily_sales.py` (13 ta, yangi),
+`tests/test_owner_report.py` (+4 eshik testi),
+`tests/test_retail_rollup.py` (+2 — eng muhimi
+`test_the_door_split_survives_into_the_daily_rollup`: xom hodisa
+o'chgandan keyin ham taqsimot qoladi), `tests/test_cloud_events_owner.py`
+(+9 API va bot testi), `tests/test_events_ui.py` (+7 struktura testi).
+Jami **2 034 test** yashil.
+
+Diqqat: kamera NOMI hisobotning o'ziga (`retail_daily.report_json`)
+yozilmaydi — yig'indi uch yil yashaydi, kamera esa qayta nomlanishi
+mumkin.  Snapshotda ID, nom esa har javobda `site_cameras.label` dan
+qo'shiladi (`_name_doors`).  Ikkalasi ikki BOSHQA saqlagichda, ya'ni
+SQL bilan biriktirib bo'lmaydi.
+
+Diqqat: chek soni ham hisobotning o'ziga yozilmaydi — ega uni ko'pincha
+ERTASI kuni kiritadi, yig'indi esa kun tugashi bilan muzlab qoladi.
+`_with_sales` uni har javobda qo'shadi.
+
+Diqqat: deploydan oldingi kunlarda `by_door` kaliti umuman YO'Q.  Panel
+buni «saqlanmagan» deb aytadi — nol ko'rsatish «o'sha eshikdan hech kim
+kirmadi» degan yolg'on bo'lardi.
 
 ### 2026-08-31 — Hodisalar vaqt lentasi, agent javobida grafik, xarita soat bo'yicha (`6ffdbbd`, `2f04bbf`, `c3c79b6`)
 

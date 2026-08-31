@@ -16,6 +16,7 @@ tiklab bo'lmaydi.
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -218,3 +219,71 @@ def test_media_inside_the_window_is_left_alone(store: EventStore) -> None:
     store.purge_media_older_than(SITE, hours=48)
 
     assert store.event(SITE, event_id)["has_snapshot"] == 1
+
+
+# ── Eshik taqsimoti yig'indida ham qolsin ────────────────────────────
+
+
+def test_the_door_split_survives_into_the_daily_rollup(store: EventStore) -> None:
+    """Yangi ko'rsatkich uchun savol: «xom hodisa o'chganda qayerdan keladi?»
+
+    Javob shu jadval bo'lishi kerak.  Test yig'indi yozilgan va xom
+    hodisa o'chirilgan holatni aynan takrorlaydi — aks holda eshik
+    taqsimoti 30 kundan keyin jimgina yo'qolardi.
+    """
+    day = date.today() - timedelta(days=40)
+    store.ingest(SITE, "device-1", [
+        EdgeEvent(
+            event_type="line_crossed",
+            camera_id="camera-01",
+            direction="in",
+            line="Asosiy eshik",
+            track_id=index,
+            occurred_at=datetime.combine(day, time(10, 0), tzinfo=_TASHKENT).isoformat(),
+        )
+        for index in range(3)
+    ] + [
+        EdgeEvent(
+            event_type="line_crossed",
+            camera_id="camera-02",
+            direction="in",
+            line="Yon eshik",
+            track_id=50,
+            occurred_at=datetime.combine(day, time(11, 0), tzinfo=_TASHKENT).isoformat(),
+        )
+    ])
+    store.rollup_retail(SITE, day)
+
+    store.purge_site(SITE, retention_days=30)
+
+    doors = store.retail_report(SITE, day=day)["traffic"]["by_door"]
+    assert {door["line"]: door["entered"] for door in doors} == {
+        "Asosiy eshik": 3,
+        "Yon eshik": 1,
+    }
+
+
+def test_an_old_rollup_without_doors_does_not_break_the_report(store: EventStore) -> None:
+    """Deploydan OLDIN yozilgan kunlarda bu kalit yo'q.
+
+    Panel o'sha kunni ochganda hisobot yiqilmasligi kerak; taqsimot
+    o'rniga «ma'lumot yo'q» ko'rsatiladi.  Nol yozib qo'yish yolg'on
+    bo'lardi — nol «o'sha eshikdan hech kim kirmadi» degani.
+    """
+    day = date.today() - timedelta(days=40)
+    _day_of_shopping(store, day, entered=4)
+    store.rollup_retail(SITE, day)
+    # Eski yozuvni taqlid qilamiz: yig'indidan kalitni olib tashlaymiz.
+    stored = store.retail_report(SITE, day=day)
+    stored["traffic"].pop("by_door")
+    with store._connect() as conn:  # noqa: SLF001 — eski yozuvni ataylab qayta yozamiz
+        conn.execute(
+            store._sql("UPDATE retail_daily SET report_json=? WHERE site_id=? AND day=?"),  # noqa: SLF001
+            (json.dumps(stored), SITE, day.isoformat()),
+        )
+    store.purge_site(SITE, retention_days=30)
+
+    report = store.retail_report(SITE, day=day)
+
+    assert report["traffic"]["entered"] == 4
+    assert "by_door" not in report["traffic"], "eski kun o'zini yo'q ko'rsatsin, nol emas"

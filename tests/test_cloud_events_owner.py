@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -395,6 +396,167 @@ def test_owner_report_separates_entries_from_exits(production_client) -> None:
     assert report.status_code == 200
     assert report.json()["traffic"]["entered"] == 2
     assert report.json()["traffic"]["exited"] == 1
+
+
+def test_the_report_says_which_door_people_came_through(production_client) -> None:
+    """Chiziq nomi eng aniq javob: bitta kamerada ikkita eshik bo'lishi mumkin."""
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7101")
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": f"door-{index}",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                    "line": line,
+                }
+                for index, line in enumerate(["Asosiy eshik", "Asosiy eshik", "Yon eshik"])
+            ]
+        },
+    )
+
+    doors = client.get("/api/v1/owner/report", headers=owner_headers).json()["traffic"]["by_door"]
+
+    assert [(door["label"], door["entered"]) for door in doors] == [
+        ("Asosiy eshik", 2),
+        ("Yon eshik", 1),
+    ]
+
+
+def test_a_door_without_a_line_name_borrows_the_camera_name(production_client) -> None:
+    """Nomlar `site_cameras` da, o'tishlar `production_events` da.
+
+    Ikki alohida saqlagich (biri SQLite, ikkinchisi PostgreSQL bo'lishi
+    mumkin) — SQL bilan biriktirib bo'lmaydi, shuning uchun birlashtirish
+    javob yig'ilayotgan qatlamda bajariladi.  Bu test aynan o'sha
+    birlashmani qulflaydi: usiz ega "camera-01" degan ID ni ko'rardi.
+    """
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7102")
+    client.post(
+        "/api/v1/edge/cameras",
+        headers=headers,
+        json={"cameras": [{"camera_id": "camera-01", "label": "Orqa eshik"}]},
+    )
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "door-nameless",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                }
+            ]
+        },
+    )
+
+    doors = client.get("/api/v1/owner/report", headers=owner_headers).json()["traffic"]["by_door"]
+
+    assert doors[0]["label"] == "Orqa eshik"
+    assert doors[0]["line"] is None, "nom hisobotning o'ziga yozilmasin"
+
+
+def test_the_owner_enters_the_receipt_count_and_sees_the_conversion(
+    production_client,
+) -> None:
+    """«200 kirdi → 100 chek» — kassa integratsiyasi yo'q, surat egadan."""
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7201")
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": f"in-{index}",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                }
+                for index in range(40)
+            ]
+        },
+    )
+
+    saved = client.put(
+        "/api/v1/owner/sales", headers=owner_headers, json={"receipts": 10}
+    )
+    assert saved.status_code == 200
+
+    report = client.get("/api/v1/owner/report", headers=owner_headers).json()
+    assert report["sales"]["receipts"] == 10
+    assert report["conversion"] == {"receipts": 10, "entered": 40, "percent": 25}
+
+
+def test_a_day_the_owner_never_filled_in_reports_no_conversion(production_client) -> None:
+    """Bo'sh — nol emas.  Nol «hech kim sotib olmadi» degan boshqa javob."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7202")
+
+    report = client.get("/api/v1/owner/report", headers=owner_headers).json()
+
+    assert report["sales"] is None
+    assert report["conversion"] is None
+
+
+def test_the_receipt_count_is_rewritten_not_duplicated(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7203")
+
+    client.put("/api/v1/owner/sales", headers=owner_headers, json={"receipts": 90})
+    client.put("/api/v1/owner/sales", headers=owner_headers, json={"receipts": 104})
+
+    answer = client.get("/api/v1/owner/sales", headers=owner_headers).json()
+    assert answer["sales"]["receipts"] == 104
+
+
+def test_an_impossible_receipt_count_is_refused(production_client) -> None:
+    """Nol qo'shib yuborilgan raqam konversiyani jimgina buzardi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7204")
+
+    assert (
+        client.put(
+            "/api/v1/owner/sales", headers=owner_headers, json={"receipts": 999_999}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.put(
+            "/api/v1/owner/sales", headers=owner_headers, json={"receipts": -1}
+        ).status_code
+        == 422
+    )
+
+
+def test_receipts_can_be_entered_for_an_earlier_day(production_client) -> None:
+    """Hisobot 21:00 da keladi, ega esa do'konni yopgach javob yozadi."""
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="7205")
+
+    client.put(
+        "/api/v1/owner/sales",
+        headers=owner_headers,
+        json={"receipts": 77, "date": "2026-08-20"},
+    )
+
+    answer = client.get("/api/v1/owner/sales?date=2026-08-20", headers=owner_headers).json()
+    assert answer["sales"]["receipts"] == 77
+    assert client.get("/api/v1/owner/sales", headers=owner_headers).json()["sales"] is None
 
 
 def test_owner_report_rejects_a_broken_date(production_client) -> None:
@@ -957,6 +1119,77 @@ def test_hisobot_command_sends_the_daily_report(bot_member_client) -> None:
     assert "kunlik hisobot" in text
     assert "Kirdi: <b>1</b> kishi" in text
     assert "📷 Kamera:" in text
+
+
+def test_the_receipt_command_stores_todays_count(bot_member_client) -> None:
+    """Ega hisobotni o'qiyotgan joyda javob yozadi — panelga kirmasdan."""
+    client, messages, site, headers = bot_member_client
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": f"evt-in-{index}",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                }
+                for index in range(40)
+            ]
+        },
+    )
+    messages.clear()
+
+    assert _webhook(client, "/chek 10").status_code == 200
+
+    assert "10" in messages[-1][1]
+    assert "har 4-mijoz" in messages[-1][1], "javob konversiyani darhol ko'rsatsin"
+    today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    saved = main.get_event_store().daily_sales(site["site_id"], today)
+    assert saved["receipts"] == 10
+
+
+def test_the_receipt_command_accepts_yesterday(bot_member_client) -> None:
+    """Kunlik hisobot 21:00 da keladi, ega esa do'konni yopgach javob yozadi.
+
+    Yarim tundan keyingi javob usiz ertangi kunga tushib ketardi.
+    """
+    client, _messages, site, _headers = bot_member_client
+
+    assert _webhook(client, "/chek 55 kecha").status_code == 200
+
+    yesterday = datetime.now(ZoneInfo("Asia/Tashkent")).date() - timedelta(days=1)
+    assert main.get_event_store().daily_sales(site["site_id"], yesterday)["receipts"] == 55
+
+
+def test_the_receipt_command_rejects_nonsense(bot_member_client) -> None:
+    """Rad javobi ko'rsatma bo'lsin — «xato» so'zi hech narsa o'rgatmaydi."""
+    client, messages, site, _headers = bot_member_client
+    messages.clear()
+
+    assert _webhook(client, "/chek abc").status_code == 200
+
+    assert "/chek 100" in messages[-1][1]
+    today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    assert main.get_event_store().daily_sales(site["site_id"], today) is None
+
+
+def test_only_the_owner_can_enter_receipts(bot_member_client) -> None:
+    """Chek soni — do'kon moliyasi; xodim uni o'zgartira olmasin."""
+    client, messages, site, _headers = bot_member_client
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": "900222", "role": "manager", "display_name": "Sotuvchi"},
+    )
+    messages.clear()
+
+    assert _webhook(client, "/chek 100", chat_id=900222).status_code == 200
+
+    assert "faqat do'kon egasi" in messages[-1][1]
+    today = datetime.now(ZoneInfo("Asia/Tashkent")).date()
+    assert main.get_event_store().daily_sales(site["site_id"], today) is None
 
 
 def test_old_commands_stay_as_aliases(bot_member_client) -> None:

@@ -411,6 +411,24 @@ class EventStore:
             """,
             "CREATE INDEX IF NOT EXISTS idx_retail_hourly_site "
             "ON retail_hourly(site_id,bucket_hour)",
+            # Chek soni — do'kon egasi O'ZI kiritadigan yagona raqam.
+            #
+            # Kassa bilan integratsiya yo'q, shuning uchun konversiyaning
+            # maxraji (kirdi) bizdan, surati (chek) egadan keladi.  Kun
+            # umuman kiritilmagan bo'lsa qator BO'LMAYDI — nol yozib
+            # qo'yish «hech kim sotib olmadi» degan yolg'on bo'lardi.
+            # `source` keyinchalik kassa/ERP ulanganda `"erp"` bo'ladi.
+            """
+            CREATE TABLE IF NOT EXISTS daily_sales (
+                site_id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                receipts INTEGER NOT NULL DEFAULT 0,
+                revenue_uzs INTEGER NOT NULL DEFAULT 0,
+                source TEXT NOT NULL DEFAULT 'owner',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, day)
+            )
+            """,
             """
             CREATE TABLE IF NOT EXISTS heatmap_hourly (
                 site_id TEXT NOT NULL,
@@ -1771,6 +1789,13 @@ class EventStore:
             hour: {"hour": hour, "entered": 0, "exited": 0} for hour in range(24)
         }
         entered = exited = 0
+        # Eshik bo'yicha taqsimot.  Qurilma har o'tishda qaysi chiziq
+        # kesilganini aytadi (`EdgeEvent.line` → `production_events.line_name`),
+        # lekin bu ustun bugungacha hech qayerda O'QILMASDI — ko'p eshikli
+        # do'konda "qaysi eshikdan kirishdi" savoli shuning uchun javobsiz edi.
+        # Kalit (kamera, chiziq) juftligi: bitta kamerada bir nechta chiziq
+        # bo'lishi mumkin, eski qurilmada esa chiziq nomi umuman bo'sh.
+        doors: Dict[Tuple[str, str], Dict[str, Any]] = {}
         queue_lengths: List[Tuple[int, str]] = []
         dwell: Dict[str, List[float]] = {}
         security = {
@@ -1803,6 +1828,21 @@ class EventStore:
                 if self._matches_employee(row, employee_marks):
                     staff_crossings += 1
                     continue
+                door = doors.setdefault(
+                    (str(row.get("camera_id") or ""), str(row.get("line_name") or "")),
+                    {
+                        "camera_id": str(row.get("camera_id") or ""),
+                        # Nom qurilmadan keladi.  Odam o'qiydigan kamera nomi
+                        # SHU YERGA yozilmaydi: bu hisobot `retail_daily` da
+                        # uch yil yashaydi, kamera esa oradan keyin qayta
+                        # nomlanishi mumkin va arxiv eski nom bilan qotib
+                        # qolardi.  Nom ko'rsatish paytida qo'shiladi.
+                        "line": str(row.get("line_name") or "") or None,
+                        "entered": 0,
+                        "exited": 0,
+                    },
+                )
+                door["entered" if direction == "in" else "exited"] += 1
                 if direction == "in":
                     entered += 1
                     hourly[local.hour]["entered"] += 1
@@ -1845,6 +1885,16 @@ class EventStore:
                 #: o'tishlar.  Ko'rsatiladi, chunki "kecha 210 edi, bugun 190"
                 #: degan farq xodim jadvalidan ham kelib chiqishi mumkin.
                 "xodim_chiqarilgan": staff_crossings,
+                #: Eshik bo'yicha kirdi/chiqdi.  Bitta eshikli do'konda ham
+                #: qaytariladi — yashirish qarori ko'rsatuvchi tomonniki.
+                "by_door": sorted(
+                    doors.values(),
+                    key=lambda item: (
+                        -int(item["entered"]),
+                        str(item["camera_id"]),
+                        str(item["line"] or ""),
+                    ),
+                ),
             },
             "queue": {
                 "alerts": len(queue_lengths),
@@ -1974,6 +2024,70 @@ class EventStore:
             written += 1
         return written
 
+    def save_daily_sales(
+        self,
+        site_id: str,
+        day: date,
+        *,
+        receipts: int,
+        revenue_uzs: int = 0,
+        source: str = "owner",
+    ) -> Dict[str, Any]:
+        """Egasi kiritgan chek sonini yozadi (qayta kiritilsa yangilaydi).
+
+        Ustiga yozish ataylab: ega kechqurun taxminiy son kiritib,
+        ertasiga kassadan aniqlashtirishi normal holat.  Ikkinchi qator
+        yaratilsa konversiya ikki xil javob berardi.
+        """
+        record = {
+            "day": day.isoformat(),
+            "receipts": max(0, int(receipts)),
+            "revenue_uzs": max(0, int(revenue_uzs)),
+            "source": source,
+            "updated_at": _now().isoformat(),
+        }
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "INSERT INTO daily_sales"
+                    "(site_id,day,receipts,revenue_uzs,source,updated_at) "
+                    "VALUES(?,?,?,?,?,?) "
+                    "ON CONFLICT(site_id,day) DO UPDATE SET "
+                    "receipts=excluded.receipts,revenue_uzs=excluded.revenue_uzs,"
+                    "source=excluded.source,updated_at=excluded.updated_at"
+                ),
+                (
+                    site_id,
+                    record["day"],
+                    record["receipts"],
+                    record["revenue_uzs"],
+                    record["source"],
+                    record["updated_at"],
+                ),
+            )
+        return record
+
+    def daily_sales(self, site_id: str, day: date) -> Optional[Dict[str, Any]]:
+        """Kiritilgan chek soni yoki `None` — kiritilmagan kun bo'sh qoladi."""
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT day,receipts,revenue_uzs,source,updated_at FROM daily_sales "
+                    "WHERE site_id=? AND day=?"
+                ),
+                (site_id, day.isoformat()),
+            ).fetchone()
+        if row is None:
+            return None
+        item = self._dict(row)
+        return {
+            "day": str(item["day"]),
+            "receipts": int(item["receipts"] or 0),
+            "revenue_uzs": int(item["revenue_uzs"] or 0),
+            "source": str(item["source"] or "owner"),
+            "updated_at": str(item["updated_at"] or ""),
+        }
+
     def purge_retail_rollups(self, site_id: str) -> int:
         cutoff = (
             _now() - timedelta(days=self.RETAIL_ROLLUP_RETENTION_DAYS)
@@ -1986,6 +2100,13 @@ class EventStore:
             removed = int(cursor.rowcount or 0)
             conn.execute(
                 self._sql("DELETE FROM retail_hourly WHERE site_id=? AND bucket_hour<?"),
+                (site_id, cutoff),
+            )
+            # Chek soni raqamli yig'indi bilan BIR XIL muddatda yashaydi:
+            # o'tgan yilning shu oyi bilan solishtirishda konversiyaning
+            # ikkala tomoni ham bo'lishi kerak.
+            conn.execute(
+                self._sql("DELETE FROM daily_sales WHERE site_id=? AND day<?"),
                 (site_id, cutoff),
             )
         return removed

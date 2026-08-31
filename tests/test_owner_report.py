@@ -692,6 +692,104 @@ def employee_mark(hour: int, minute: int, track: int, *, day: date = DAY) -> Edg
     )
 
 
+# ── Eshik bo'yicha taqsimot ──────────────────────────────────────────────
+
+
+def door_crossing(
+    hour: int,
+    direction: str,
+    minute: int = 0,
+    *,
+    camera: str = "eshik-01",
+    line: str | None = "Asosiy eshik",
+    track_id: int | None = None,
+) -> EdgeEvent:
+    return EdgeEvent(
+        event_type="line_crossed",
+        camera_id=camera,
+        direction=direction,
+        line=line,
+        track_id=track_id,
+        occurred_at=moment(hour, minute),
+    )
+
+
+def test_the_report_splits_entries_by_door(tmp_path: Path) -> None:
+    """«Qaysi eshikdan kirishdi» — ko'p eshikli do'konning birinchi savoli.
+
+    Qurilma buni har o'tishda yuborib turardi (`line_name`), lekin hisobot
+    ustunni umuman o'qimasdi: ikki eshikli do'kon bitta yig'indi ko'rardi
+    va yon eshik kunlab yopiq turganini bilmasdi.
+    """
+    store = store_with(
+        [door_crossing(10, "in", index) for index in range(5)]
+        + [door_crossing(11, "out", 0)]
+        + [
+            door_crossing(12, "in", index, camera="eshik-02", line="Yon eshik")
+            for index in range(2)
+        ],
+        tmp_path,
+    )
+
+    doors = store.retail_report("site-1", day=DAY)["traffic"]["by_door"]
+
+    assert [door["line"] for door in doors] == ["Asosiy eshik", "Yon eshik"], (
+        "gavjumroq eshik birinchi tursin"
+    )
+    assert doors[0]["entered"] == 5
+    assert doors[0]["exited"] == 1
+    assert doors[1]["entered"] == 2
+    assert doors[1]["camera_id"] == "eshik-02"
+
+
+def test_a_crossing_without_a_line_name_falls_back_to_the_camera(tmp_path: Path) -> None:
+    """Eski qurilma chiziq nomini yubormaydi — qator baribir yo'qolmasin.
+
+    Nom bo'sh bo'lsa `None` qaytadi va nomni ko'rsatish qatlami kamera
+    nomidan oladi; bu yerda nom YOZILMAYDI, chunki hisobot uch yil
+    yashaydi va kamera qayta nomlanishi mumkin.
+    """
+    store = store_with([door_crossing(10, "in", line=None)], tmp_path)
+
+    doors = store.retail_report("site-1", day=DAY)["traffic"]["by_door"]
+
+    assert len(doors) == 1
+    assert doors[0]["line"] is None
+    assert doors[0]["camera_id"] == "eshik-01"
+    assert doors[0]["entered"] == 1
+
+
+def test_a_staff_crossing_is_missing_from_the_door_split_too(tmp_path: Path) -> None:
+    """Xodim umumiy sanoqdan chiqarilib, eshik taqsimotida qolib ketmasin.
+
+    Aks holda ikki raqam bir-biriga qarshi turardi: «kirdi 1» va
+    «Asosiy eshik: 2».
+    """
+    store = store_with(
+        [
+            door_crossing(9, "in", 0, track_id=7),
+            employee_mark(9, 1, 7),
+            door_crossing(12, "in", 0, track_id=8),
+        ],
+        tmp_path,
+    )
+
+    traffic = store.retail_report("site-1", day=DAY)["traffic"]
+
+    assert traffic["entered"] == 1
+    assert traffic["xodim_chiqarilgan"] == 1
+    assert sum(door["entered"] for door in traffic["by_door"]) == 1, (
+        "eshik taqsimoti umumiy sanoq bilan bir xil qoidaga bo'ysunsin"
+    )
+
+
+def test_a_day_without_crossings_has_an_empty_door_split(tmp_path: Path) -> None:
+    """Bo'sh kun — bo'sh ro'yxat, «0 ta eshik» degan soxta qator emas."""
+    store = store_with([], tmp_path)
+
+    assert store.retail_report("site-1", day=DAY)["traffic"]["by_door"] == []
+
+
 def test_employees_are_excluded_from_footfall_not_just_demography(
     tmp_path: Path,
 ) -> None:

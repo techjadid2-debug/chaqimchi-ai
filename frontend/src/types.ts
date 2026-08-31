@@ -64,6 +64,35 @@ export type Demografiya = {
   yosh?: Record<string, number>;
 };
 
+/** Bitta eshikning kunlik sanog'i.
+ *
+ * `line` — qurilma bergan chiziq nomi (eski qurilmada bo'sh), `label` —
+ * ko'rsatish uchun tayyor nom: chiziq nomi, bo'lmasa kamera nomi.  Nom
+ * hisobotning O'ZIDA saqlanmaydi (yig'indi uch yil yashaydi, kamera esa
+ * qayta nomlanishi mumkin) — server uni har javobda qo'shadi. */
+export type DoorCount = {
+  camera_id: string;
+  line?: string | null;
+  label?: string;
+  entered: number;
+  exited: number;
+};
+
+/** Do'kon egasi kiritgan kunlik chek soni.  Kalit `null` bo'lsa —
+ *  kiritilmagan; nol esa «hech kim sotib olmadi» degan BOSHQA javob. */
+export type DailySales = {
+  day: string;
+  receipts: number;
+  revenue_uzs?: number;
+  source?: string;
+  updated_at?: string;
+};
+
+/** Konversiya serverda hisoblanadi.  `percent === null` — namuna kichik
+ *  yoki sanoq ishonchsiz; bunday kunda panel FOIZ ko'rsatmasligi kerak.
+ *  Qoida `cloud/value.py` da, panelda takrorlanmaydi. */
+export type Conversion = { receipts: number; entered: number; percent: number | null };
+
 export type Dashboard = {
   site: {
     id: string;
@@ -84,7 +113,11 @@ export type Dashboard = {
      `owner.tsx` dagi `value()` uni `Record<string, unknown>` sifatida
      aylanib chiqadi.  Kesishma bilan faqat kerakli tarmoq
      torlashtiriladi — qolgani o'sha-o'shaligicha qoladi. */
-  today: Record<string, unknown> & { demografiya?: Demografiya };
+  today: Record<string, unknown> & {
+    demografiya?: Demografiya;
+    sales?: DailySales | null;
+    conversion?: Conversion | null;
+  };
   /** Do'kon kompyuterining holati.  Hali heartbeat kelmagan bo'lsa
    *  `null`; o'lchanmagan ko'rsatkich esa kalit sifatida ham kelmaydi. */
   device?: {

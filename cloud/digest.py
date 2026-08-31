@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -78,6 +78,14 @@ def _duration(seconds: float) -> str:
     return f"{int(seconds // 60)} daq" if seconds >= 60 else f"{int(seconds)} s"
 
 
+def _is_monday(day: str) -> bool:
+    """Sana matnidan hafta kuni.  Ochib bo'lmasa — eslatma chiqmaydi."""
+    try:
+        return date.fromisoformat(day[:10]).weekday() == 0
+    except ValueError:
+        return False
+
+
 def build_digest(
     site_name: str,
     day: str,
@@ -88,6 +96,7 @@ def build_digest(
     first_movement: Optional[str] = None,
     score: Optional[Dict[str, Any]] = None,
     daily_revenue_uzs: int = 0,
+    receipts: Optional[int] = None,
 ) -> str:
     """Kunlik xabar matni.
 
@@ -131,6 +140,25 @@ def build_digest(
     busiest = traffic.get("busiest_hour")
     if busiest:
         lines.append(f"Gavjum soat: {busiest['hour']:02d}:00 — {busiest['entered']} kishi")
+
+    # Konversiya — «nechta kirdi» ni «nechta sotib oldi» bilan bog'laydigan
+    # yagona qator.  Chek sonini ega O'ZI kiritadi (kassa integratsiyasi
+    # yo'q), shuning uchun kiritilmagan kunda qator o'rniga QANDAY
+    # kiritish ko'rsatiladi: eslatmasiz ega bunday imkoniyat borligini
+    # bilmaydi va raqam hech qachon yig'ilmaydi.
+    entered_today = int(traffic.get("entered") or 0)
+    conversion = value.conversion_line(receipts=receipts, entered=entered_today)
+    if conversion:
+        lines.append(conversion)
+    elif entered_today >= value.MIN_VISITORS_FOR_CONVERSION and _is_monday(day):
+        # Eslatma HAFTASIGA BIR MARTA (dushanba).  Har kuni takrorlansa u
+        # «0 ta buzilish» qatorining taqdirini takrorlaydi — xabar uzayadi
+        # va o'qilmay qoladi.  Dushanba `_quiet_reason` uchun tanlangan
+        # kun bilan bir xil, ya'ni yangi qoida emas.
+        #
+        # Kam odam kirgan kunda umuman so'ralmaydi: 12 kishilik kunning
+        # konversiyasi o'lchov emas, tasodif.
+        lines.append("🧾 Bugun nechta chek bo'ldi? Javob: <code>/chek 100</code>")
 
     # Demografiya — ma'lumot yig'ilgan har kunda chiqadi (xodimlar
     # hisobga kirmaydi, ular davomatda).  Ega bu qatorni kutadi
@@ -511,6 +539,7 @@ class DailyDigestService:
                 first_movement=first_movement,
                 score=score,
                 daily_revenue_uzs=int(site.get("avg_daily_revenue_uzs") or 0),
+                receipts=(self.events.daily_sales(site_id, now.date()) or {}).get("receipts"),
             )
             site_sent = await self._deliver(site_id, members, text)
             if site_sent:

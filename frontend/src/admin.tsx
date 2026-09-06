@@ -1,8 +1,10 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
+import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
+import { t } from "./i18n";
 import { ActionMenu, AppShell, Avatar, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, SearchPalette, Skeleton, type NavItem } from "./components";
 import { AdminHome } from "./AdminHome";
+import type { Lead } from "./types";
 import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
 import { Icon, Logo } from "./icons";
@@ -33,6 +35,7 @@ type AdminDashboard = {
 const NAV:NavItem[] = [
   {id:"overview",label:"Umumiy holat",icon:"home"},
   {id:"customers",label:"Mijozlar",icon:"users"},
+  {id:"leads",label:t("panel.nav.leads"),icon:"invoice"},
   {id:"branches",label:"Filiallar",icon:"branch"},
   {id:"cameras",label:"Kameralar",icon:"camera"},
   {id:"devices",label:"Qurilmalar",icon:"server"},
@@ -215,6 +218,50 @@ function FinancePage() {
   </>;
 }
 
+/** Saytdan kelgan arizalar.
+ *
+ * Eski paneldagi «Arizalar» bo'limi v2 ga ko'chirilmay qolgan edi —
+ * ya'ni eski panel o'chirilsa sotuv quvuri KO'RINMAY qolardi.
+ * (2026-09-07 da rebrending paytida topildi.) */
+function LeadsPage() {
+  const[leads,setLeads]=useState<Lead[]|null>(null);const[error,setError]=useState("");const[busy,setBusy]=useState("");
+  const load=useCallback(()=>{api<Lead[]>("/api/v1/admin/leads","admin").then(setLeads).catch(reason=>setError(reason instanceof Error?reason.message:t("panel.lead.load_failed")));},[]);
+  useEffect(load,[load]);
+
+  async function act(lead:Lead,path:string,body:unknown){
+    setBusy(lead.id);setError("");
+    try{await api(path,"admin",{method:"POST",body:JSON.stringify(body)});load();}
+    catch(reason){setError(reason instanceof Error?reason.message:t("panel.lead.load_failed"));}
+    finally{setBusy("");}
+  }
+  const status=(lead:Lead,to:string)=>act(lead,`/api/v1/admin/leads/${lead.id}/status`,{status:to});
+  const convert=(lead:Lead)=>act(lead,`/api/v1/admin/leads/${lead.id}/convert`,{subscription_months:1});
+
+  return <><PageHeader title={t("panel.lead.title")} subtitle={t("panel.lead.subtitle")}/>
+    {error?<div className="alert-strip alert-warning"><Icon name="bell"/>{error}</div>:null}
+    <Card>{leads===null?<div className="card-body"><Skeleton height={200}/></div>:leads.length?<div className="simple-list">{leads.map(lead=>{
+      const open=lead.status!=="closed"&&!lead.site_id;
+      return <div className="simple-row" key={lead.id}>
+        <div>
+          <b>{lead.full_name||lead.phone}</b>
+          <div className="table-sub"><a href={`tel:${lead.phone}`}>{lead.phone}</a>
+            {" · "}{lead.company||t("panel.lead.no_company")}
+            {" · "}{lead.city||t("panel.lead.no_city")}
+            {" · "}{t("panel.lead.cameras",{count:lead.cameras})}
+            {lead.created_at?` · ${formatDateShort(lead.created_at)}`:""}</div>
+        </div>
+        <div className="page-actions">
+          <Pill state={lead.status==="new"?"pending":lead.status==="closed"?"expired":"active"}>{t(`panel.lead.status.${lead.status}`)}</Pill>
+          {lead.status==="new"?<button className="btn" disabled={busy===lead.id} onClick={()=>void status(lead,"contacted")}>{t("panel.lead.action.contacted")}</button>:null}
+          {["new","contacted"].includes(lead.status)?<button className="btn" disabled={busy===lead.id} onClick={()=>void status(lead,"qualified")}>{t("panel.lead.action.qualified")}</button>:null}
+          {open?<button className="btn btn-primary" disabled={busy===lead.id} onClick={()=>void convert(lead)}>{t("panel.lead.action.convert")}</button>:null}
+          {open?<button className="btn btn-danger" disabled={busy===lead.id} onClick={()=>void status(lead,"closed")}>{t("panel.lead.action.close")}</button>:null}
+        </div>
+      </div>;
+    })}</div>:<EmptyState icon="invoice" title={t("panel.lead.empty.title")} detail={t("panel.lead.empty.detail")}/>}</Card>
+  </>;
+}
+
 function RolesPage() {
   const[accounts,setAccounts]=useState<Account[]|null>(null);const[error,setError]=useState("");
   useEffect(()=>{api<{accounts:Account[]}>("/api/v1/admin/accounts","admin").then(data=>setAccounts(data.accounts)).catch(reason=>setError(reason instanceof Error?reason.message:"Akkauntlar olinmadi"));},[]);
@@ -250,6 +297,7 @@ function GenericAdmin({id,data,onRefresh}:{id:string;data:AdminDashboard;onRefre
   if(id==="finance") return <FinancePage/>;
   if(id==="events") return <EventEvidence kind="admin" sites={data.sites}/>;
   if(id==="agent") return <VisionAgentPage sites={data.sites}/>;
+  if(id==="leads") return <LeadsPage/>;
   if(id==="roles") return <RolesPage/>;
   if(id==="settings") return <SettingsPage/>;
   return <><PageHeader title="Bo‘lim" subtitle="Operatsion boshqaruv."/><Card><EmptyState icon="settings" title="Ma’lumot yo‘q" detail="Haqiqiy ma’lumot kelgach shu yerda ko‘rinadi."/></Card></>;

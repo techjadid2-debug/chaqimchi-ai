@@ -7,8 +7,12 @@
  * fayllar o'zgarganda aynan shu yagona yo'l.
  *
  *   -static-1 → 2026-08-24: yangi dizayn, PWA ikonkalari
+ *   chaqimchi-…-2 → enes-…-1 (2026-09-07): rebrending — manifest,
+ *     ikonka va nom o'zgardi.  Bularning hech birida mazmun xeshi
+ *     yo'q, ya'ni kesh nomi oshirilmasa o'rnatilgan qurilmada eski
+ *     nom va eski ikonka QOLIB KETARDI.
  */
-const CACHE = "chaqimchi-ui-v2-static-2";
+const CACHE = "enes-ui-v2-static-1";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {

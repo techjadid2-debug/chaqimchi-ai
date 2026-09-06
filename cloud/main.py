@@ -2092,7 +2092,7 @@ async def public_site(request: Request) -> Any:
     if section == "partner":
         return _static_page("installer.html")
     if section == "admin":
-        return _static_page("v2/admin.html" if _ui_v2_admin_enabled() else "admin.html")
+        return _static_page("v2/admin.html")
     if section == "dl":
         return _static_page("dl.html")
     if section == "docs":
@@ -2475,41 +2475,16 @@ async def admin_panel(request: Request) -> Any:
     redirect = _apex_redirect(request, "CHAQIMCHI_ADMIN_URL")
     if redirect is not None:
         return redirect
-    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_admin_enabled() else "admin.html")
+    page = STATIC_DIR / "v2/admin.html"
     if not page.is_file():
-        raise HTTPException(404, "Admin paneli topilmadi")
+        raise ApiError("error.admin_panel_missing", 404)
     return FileResponse(page)
 
 
-def _ui_v2_enabled() -> bool:
-    return os.environ.get("CHAQIMCHI_UI_V2", "0").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _ui_v2_owner_enabled() -> bool:
-    """Egalar paneli uchun alohida flag.
-
-    Onboarding (qurilma ulash, kamera qo'shish, chiziq chizish) faqat v2'da
-    bor, support vositalari esa hozircha legacy adminda — shuning uchun ikki
-    panel alohida yoqiladi.  `CHAQIMCHI_UI_V2` eski umumiy flag sifatida
-    fallback bo'lib qoladi.
-    """
-    raw = os.environ.get("CHAQIMCHI_UI_V2_OWNER", "").strip().lower()
-    if raw:
-        return raw in {"1", "true", "yes", "on"}
-    return _ui_v2_enabled()
-
-
-def _ui_v2_admin_enabled() -> bool:
-    raw = os.environ.get("CHAQIMCHI_UI_V2_ADMIN", "").strip().lower()
-    if raw:
-        return raw in {"1", "true", "yes", "on"}
-    return _ui_v2_enabled()
-
-
 def _render_owner() -> HTMLResponse:
-    page = STATIC_DIR / ("v2/owner.html" if _ui_v2_owner_enabled() else "owner.html")
+    page = STATIC_DIR / "v2/owner.html"
     if not page.is_file():
-        raise HTTPException(404, "Owner panel topilmadi")
+        raise ApiError("error.owner_panel_missing", 404)
     # Kirish ekranidagi "Telegram botdan havola oling" tugmasi uchun bot
     # manzili shu yerda qo'yiladi — sahifaga qo'lda yozilmaydi.
     bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
@@ -2544,7 +2519,7 @@ async def owner_panel(request: Request) -> Any:
 
 @app.get("/owner/{panel_path:path}", include_in_schema=False)
 async def owner_panel_route(panel_path: str, request: Request) -> Any:
-    """Owner SPA clean route'lari; legacy flagda eski panelga qaytadi."""
+    """Owner SPA ning ichki yo'llari — hammasi bitta qobiqqa tushadi."""
     redirect = _apex_redirect(request, "CHAQIMCHI_APP_URL", f"/{panel_path}" if panel_path else "/")
     if redirect is not None:
         return redirect
@@ -2558,9 +2533,9 @@ async def admin_panel_route(panel_path: str, request: Request) -> Any:
     )
     if redirect is not None:
         return redirect
-    page = STATIC_DIR / ("v2/admin.html" if _ui_v2_admin_enabled() else "admin.html")
+    page = STATIC_DIR / "v2/admin.html"
     if not page.is_file():
-        raise HTTPException(404, "Admin paneli topilmadi")
+        raise ApiError("error.admin_panel_missing", 404)
     return FileResponse(page)
 
 

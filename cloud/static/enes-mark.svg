@@ -1,0 +1,10 @@
+<!-- ENES Monitoring — "NS" monogrammasi.
+     Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
+     oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
+     shart emas. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 56" fill="none" role="img" aria-label="ENES">
+  <g stroke="currentColor" stroke-width="7" stroke-linejoin="round">
+    <path d="M8 44V12l19 30V12"/>
+    <path d="M60 16H44l-6 10h16l-6 12H31"/>
+  </g>
+</svg>

@@ -181,3 +181,20 @@ export type TelegramMember = {
   digest_muted?: boolean;
   created_at?: string;
 };
+
+/** Saytdagi shakldan kelgan ariza (`/api/v1/admin/leads`).
+ *
+ * `site_id` to'ldirilgan bo'lsa ariza mijozga aylantirilgan — o'shanda
+ * "Mijoz ochish" tugmasi ko'rsatilmaydi. */
+export type Lead = {
+  id: string;
+  full_name: string;
+  phone: string;
+  company?: string | null;
+  city?: string | null;
+  cameras: number;
+  message?: string | null;
+  status: string;
+  site_id?: string | null;
+  created_at?: string;
+};

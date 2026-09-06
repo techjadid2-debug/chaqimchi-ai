@@ -375,12 +375,6 @@ export function formatDateUz(date: Date = new Date(), withWeekday = true) {
 }
 
 /** "24.08.2026" — jadval katakchalari uchun qisqa shakl. */
-export function formatDateShort(value: string | null | undefined) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
-}
 
 /** Toshkent vaqti bo'yicha daqiqa: UTC+5, yozgi vaqt yo'q. */
 const TASHKENT_OFFSET_MIN = 5 * 60;
@@ -415,6 +409,24 @@ function tashkentMoment(value: string | null | undefined): Date | null {
   // Qaytgan obyektning UTC maydonlari MAHALLIY qiymatni beradi — atayin:
   // brauzer mintaqasi hisobga olinmasin.
   return new Date(date.getTime() + TASHKENT_OFFSET_MIN * 60_000);
+}
+
+/** "06.09.2026" — server vaqtidan, HAR DOIM Toshkent bo'yicha.
+ *
+ * Ilgari bu funksiya xom `new Date(value)` ishlatardi va ikkita xato
+ * bor edi:
+ *   1. Server `"2026-09-06 20:14:43"` (mintaqasiz, bo'sh joy bilan)
+ *      yuboradi — Safari buni umuman o'qiy olmaydi va `Invalid Date`
+ *      qaytaradi, ya'ni sana o'rnida "—" turardi;
+ *   2. Chrome uni MAHALLIY vaqt deb o'qiydi, server esa UTC deb
+ *      yozgan — kechqurungi yozuv bir kun oldin ko'rinishi mumkin edi.
+ * `tashkentMoment` ikkalasini ham hal qiladi. */
+export function formatDateShort(value: string | null | undefined) {
+  const shifted = tashkentMoment(value);
+  if (!shifted) return "—";
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  return `${day}.${month}.${shifted.getUTCFullYear()}`;
 }
 
 export function formatTimeUz(value: string | null | undefined) {

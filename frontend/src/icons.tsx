@@ -37,9 +37,23 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.more}</svg>;
 }
 
+/** "NS" monogrammasi.
+ *
+ * `<img>` emas, ICHKI SVG: shunda belgi `currentColor` ni oladi va
+ * yorug' temada to'q, qorong'ida oq bo'ladi.  Rasm bilan ikkita fayl
+ * saqlash va temaga qarab almashtirish kerak bo'lardi. */
+export function Mark({ size = 30 }: { size?: number }) {
+  return <svg className="brand-mark" width={size * 68 / 56} height={size} viewBox="0 0 68 56" fill="none" aria-hidden="true">
+    <g stroke="currentColor" strokeWidth="7" strokeLinejoin="round">
+      <path d="M8 44V12l19 30V12"/>
+      <path d="M60 16H44l-6 10h16l-6 12H31"/>
+    </g>
+  </svg>;
+}
+
 export function Logo({ compact = false }: { compact?: boolean }) {
-  return <div className="brand" aria-label="Chaqimchi AI">
-    <img className="brand-mark" src="/assets/chaqimchi-logo-new.png" alt="" />
-    {compact ? null : <span>Chaqimchi <b>AI</b></span>}
+  return <div className="brand" aria-label="ENES Monitoring">
+    <Mark />
+    {compact ? null : <span className="brand-name"><b>ENES</b><small>Monitoring</small></span>}
   </div>;
 }

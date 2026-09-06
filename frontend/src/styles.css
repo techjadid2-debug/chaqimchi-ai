@@ -25,9 +25,13 @@ button, input, select, a { -webkit-tap-highlight-color: transparent; }
 h1,h2,h3,p { margin-top: 0; }
 
 .icon { flex: 0 0 auto; }
-.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-size: 18px; font-weight: 800; white-space: nowrap; }
-.brand b { color: var(--blue); }
-.brand-mark { width: 34px; height: 34px; display: block; flex: 0 0 auto; border-radius: 8px; object-fit: contain; background: var(--surface); }
+/* Brend lockup'i: monogramma | ENES / Monitoring.
+   Namunadagidek ikki qatorli — nom yirik, tur nomi ostida mayda. */
+.brand { display: inline-flex; align-items: center; gap: 11px; color: var(--fg); white-space: nowrap; }
+.brand-mark { display: block; flex: 0 0 auto; }
+.brand-name { display: grid; gap: 1px; padding-left: 11px; border-left: 1px solid var(--border); line-height: 1.05; }
+.brand-name b { font-size: 17px; font-weight: 800; letter-spacing: .14em; }
+.brand-name small { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: .09em; }
 
 .app-shell { min-height: 100vh; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 244px; display: flex; flex-direction: column; padding: 24px 16px; border-right: 1px solid var(--border); background: var(--surface); }
@@ -465,8 +469,9 @@ tr:last-child td { border-bottom: 0; }
 .login-visual::before { width: 520px; height: 520px; right: -220px; top: 20%; }
 .login-visual::after { width: 340px; height: 340px; right: -70px; top: 35%; }
 .login-visual .brand { position: relative; z-index: 1; color: var(--on-brand); }
-.login-visual .brand b { color: var(--on-brand); }
-.login-visual .brand-mark { background: var(--on-brand); }
+.login-visual .brand, .login-visual .brand-name b { color: var(--on-brand); }
+.login-visual .brand-name { border-color: rgba(255,255,255,.28); }
+.login-visual .brand-name small { color: rgba(255,255,255,.7); }
 .login-visual > div { position: relative; z-index: 1; }
 .login-visual h1 { max-width: 570px; margin: 15px 0 18px; font-size: clamp(34px, 4vw, 57px); line-height: 1.06; letter-spacing: -.055em; }
 .login-visual p { max-width: 520px; margin: 0; color: rgba(255,255,255,.75); line-height: 1.7; }

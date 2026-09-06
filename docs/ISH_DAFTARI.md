@@ -7,7 +7,22 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-09-06
+## HOZIRGI HOLAT · 2026-09-07
+
+- **🎨 REBRENDING: F1 (dizayn tizimi) va F2 (til yadrosi) BAJARILDI.**
+  Shox: `enes-rebrend`.  Deploy qilinmagan — rebrend to'liq tayyor
+  bo'lgach bir marta chiqadi.
+  - **F1:** `cloud/static/tokens.css` — sayt va panel uchun yagona
+    palitra; `styles.css` dagi ~130 qattiq rang tokenga ko'chdi;
+    uch holatli tema (yorug'/qorong'i/tizim), tanlov `localStorage` da,
+    tema birinchi chizishdan oldin qo'yiladi.
+  - **F2:** `i18n/{uz,ru,en}.json` (41 kalit) + `cloud/i18n.py` +
+    `cloud/errors.py` + `scripts/build_i18n.py`.  Til zanjiri:
+    `?lang=` → `X-Lang` → saqlangan → Telegram → `Accept-Language` →
+    `uz`.  Baza: `owner_members.language`, `portal_accounts.language`.
+  - **Keyingi ish:** F3 — sayt (yangi dizayn + uch til + ENES nomi).
+- **⏳ Egadan kutilmoqda:** "NS" logotipi SVG'da; `enes.uz` DNS
+  boshqaruvi; Telegram bot @username; yuridik nom; Payme/Click kabineti.
 
 - **🎨 REBRENDING BOSHLANDI: Chaqimchi AI → ENES Monitoring (enes.uz).**
   Reja tasdiqlangan: `~/.claude/plans/ok-biz-rebrending-*.md`.
@@ -775,6 +790,38 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-07 — F1 dizayn tizimi va F2 til yadrosi (`0fca9e2`, `8a1c1cf`, `ed5b777`)
+
+**F1 — tokenlar va tema.**  Palitra to'rt faylda takrorlangan edi
+(`frontend/src/styles.css`, `site.css`, `owner.css`, `panel.css`);
+endi `cloud/static/tokens.css` — yagona manba, sayt uni `@import` bilan,
+panel esa Vite orqali oladi.  `styles.css` dagi **~130 ta** qattiq
+yozilgan rang tokenga ko'chirildi — ularsiz dark rejim ishlamasdi.
+Tema uch holatli (yorug'/qorong'i/tizim) va **birinchi chizishdan
+oldin** qo'yiladi.
+
+**F2 — til yadrosi.**  Uch qatlamli yechim: yopiq ro'yxatdan kelib
+chiqadigan matn (hodisa nomlari) panelda **koddan** chiziladi; kanal
+serverniki bo'lgan matn (Telegram, CSV) serverda; xato esa
+**matn + kod** bo'lib qaytadi.
+
+Ikkita tuzoq oldindan yopildi:
+1. `HTTPException(detail=dict)` ishlamaydi — FastAPI lug'atni javob
+   ildiziga qo'yadi va `api.ts` dagi `body.detail` obyektga aylanib
+   mijoz `[object Object]` ko'rardi.  Shuning uchun `ApiError`.
+2. `BackgroundTasks` so'rov kontekstini meros oladi — fon rejimidagi
+   Telegram xabari noto'g'ri tilda ketardi.  Telegram/CSV tomonida til
+   **majburiy argument** (`tg(lang, key)`), ya'ni bu xatoni yozib
+   bo'lmaydi.
+
+**Yo'l-yo'lakay tuzatilgan xatolar:**
+- `api.ts` xato matnini `body.detail` dan olardi, `RequestValidationError`
+  esa uni ro'yxat qilib qaytaradi → `[object Object]`.
+- `?v=` kesh tokeni 13 sahifada eskirgan edi (test faqat `site.html` ni
+  qaraardi).  Endi hamma sahifa tekshiriladi.
+- `list_members` ustunlarni aniq sanaydi — `language` unga ham
+  qo'shildi, aks holda digest jimgina `None` olardi.
 
 ### 2026-09-06 — Rebrending rejasi tasdiqlandi va kutib turgan ish deploy qilindi (`b1d13a5`, `6bf4e87`)
 

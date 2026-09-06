@@ -124,3 +124,59 @@ def test_a_high_ticket_shop_still_works_within_reason() -> None:
     """Chegara haqiqiy qimmat do'konni ham o'tkazishi kerak."""
     # 100 tashrif, kuniga 50 mln savdo → har tashrif 500 000 so'm.
     assert revenue_per_visitor(daily_revenue_uzs=50_000_000, visitors=100) == 500_000
+
+
+# ── Avtomatik konversiya (capture rate) — kameradan, cheksiz ─────────────
+#
+# Raqobatchining bosh o'lchovi (visit ÷ traffic).  `passed` — do'kongacha
+# yetgan odam (A1: eshik oldida ko'ringan, A2: oldidan o'tgan).  Bu
+# testlar chekli konversiya bilan bir xil intizomni qo'riqlaydi: `passed`
+# yo'q bo'lsa javob yo'q, kichik namunada foiz yo'q, «100% dan ortiq»
+# chiqmaydi.
+
+from cloud.value import capture_rate, capture_rate_line  # noqa: E402
+
+
+def test_no_capture_rate_until_the_device_reports_passersby() -> None:
+    assert capture_rate(entered=120, passed=None) is None
+    assert capture_rate_line(entered=120, passed=None) is None
+
+
+def test_capture_rate_is_entered_over_passed() -> None:
+    data = capture_rate(entered=35, passed=100)
+    assert data == {"entered": 35, "passed": 100, "percent": 35}
+
+
+def test_capture_rate_hides_percent_on_a_small_sample() -> None:
+    """19 o'tib 10 kirsa «53%» tasodif — faqat sonlar ko'rsatiladi."""
+    data = capture_rate(entered=10, passed=19)
+    assert data["percent"] is None
+    assert "yaqinlashdi" in capture_rate_line(entered=10, passed=19)
+
+
+def test_capture_rate_refuses_more_entered_than_passed() -> None:
+    """Kirgan «o'tgan»dan ko'p — sanoq buzuq, foiz ko'rsatilmaydi."""
+    assert capture_rate(entered=140, passed=100)["percent"] is None
+
+
+def test_capture_rate_line_shows_the_funnel() -> None:
+    assert capture_rate_line(entered=350, passed=1000) == (
+        "🚶 <b>1000</b> yaqinlashdi → 350 kirdi (<b>35%</b>)"
+    )
+
+
+from cloud.value import select_passed  # noqa: E402
+
+
+def test_outer_camera_is_the_denominator_when_present() -> None:
+    """A2: tashqi kamera bo'lsa uning «o'tdi»si ustun."""
+    assert select_passed(entrance_seen=400, outer_seen=1000) == 1000
+
+
+def test_falls_back_to_the_entrance_camera() -> None:
+    """A1: tashqi kamera yo'q — kirish kamerasi «yaqinlashdi»si."""
+    assert select_passed(entrance_seen=400, outer_seen=None) == 400
+
+
+def test_no_denominator_until_the_device_sends_one() -> None:
+    assert select_passed(entrance_seen=None, outer_seen=None) is None

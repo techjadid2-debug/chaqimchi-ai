@@ -150,6 +150,68 @@ def conversion_line(*, receipts: Optional[int], entered: int) -> Optional[str]:
     return line
 
 
+def capture_rate(*, entered: int, passed: Optional[int]) -> Optional[Dict[str, Any]]:
+    """Avtomatik konversiya: chek so'ramay, faqat kameradan.
+
+    Raqobatchining bosh o'lchovi (visit ÷ traffic) aynan shu.  `passed` —
+    nechta odam do'kongacha yetdi:
+
+    * **A1** (qo'shimcha kamerasiz): kirish kamerasida eshik oldida
+      ko'ringan, ya'ni ichkariga kirgan + kirmay ketgan;
+    * **A2** (tashqi kamera): do'kon oldidan o'tgan.
+
+    `entered` nechtasi ichkariga kirdi.  Ikkalasi ham kameradan — ega
+    hech narsa kiritmasa ham konversiya bo'ladi (chekli konversiya esa
+    boshqa savolga javob beradi: kirganning nechtasi SOTIB oldi).
+
+    `None` — `passed` hali yo'q (qurilma bu signalni yubormaydi, masalan
+    eski reliz).  `percent = None` — namuna kichik yoki sanoq ishonchsiz.
+    """
+    if passed is None:
+        return None
+    passed = max(0, int(passed))
+    entered = max(0, int(entered))
+    percent: Optional[int] = None
+    # Kirgan «o'tgan»dan KO'P bo'lishi — sanoq buzuqligi (chiziq noto'g'ri,
+    # yoki eshik oldini ko'rmagan kamera): «130%» butun hisobga ishonchni
+    # yo'q qiladi, xuddi chekdagi kabi.  Shuning uchun bunday holatda foiz
+    # ko'rsatilmaydi, faqat sonlar qoladi.
+    if passed >= MIN_VISITORS_FOR_CONVERSION and entered <= passed:
+        percent = round(entered * 100 / passed)
+    return {"entered": entered, "passed": passed, "percent": percent}
+
+
+def select_passed(*, entrance_seen: Optional[int], outer_seen: Optional[int]) -> Optional[int]:
+    """Adaptiv maxraj (A1/A2): qaysi «yaqinlashdi» sonini olamiz.
+
+    Ega qarori — moslashuvchan: tashqi (ko'cha) kamera bo'lsa uning
+    «o'tdi»si ANIQROQ maxraj (A2 — do'kon oldidan o'tganning nechtasi
+    kirdi), shuning uchun u ustun.  Bo'lmasa kirish kamerasining
+    «yaqinlashdi»si (A1 — eshikkacha kelganning nechtasi kirdi).
+
+    Ikkalasi ham yo'q → `None`: qurilma hali bu signalni yubormaydi
+    (eski reliz), konversiya faqat chekdan chiqadi.
+    """
+    if outer_seen is not None:
+        return max(0, int(outer_seen))
+    if entrance_seen is not None:
+        return max(0, int(entrance_seen))
+    return None
+
+
+def capture_rate_line(*, entered: int, passed: Optional[int]) -> Optional[str]:
+    """Kunlik xabardagi avtomatik konversiya qatori.  `passed` yo'q → `None`."""
+    data = capture_rate(entered=entered, passed=passed)
+    if data is None:
+        return None
+    if data["percent"] is None:
+        return f"🚶 <b>{data['passed']}</b> yaqinlashdi, {data['entered']} kishi kirdi"
+    return (
+        f"🚶 <b>{data['passed']}</b> yaqinlashdi → {data['entered']} kirdi "
+        f"(<b>{data['percent']}%</b>)"
+    )
+
+
 def uzs(amount: int) -> str:
     """So'mni o'qiladigan ko'rinishda: 3 200 000 → «3.2 mln so'm»."""
     if amount >= 1_000_000:

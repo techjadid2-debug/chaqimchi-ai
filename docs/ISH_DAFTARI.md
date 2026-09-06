@@ -758,6 +758,29 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
+### 2026-09-06 — Avtomatik konversiya (capture rate) — algoritmik yadro (`commit qilinmagan`)
+
+Ega qarori: **moslashuvchan (A1+A2)** va **hozir yozib qo'yish** (reliz
+soak tugagach). Sof, testlangan yadro qo'shildi (qurilma pipeline'iga
+HALI ulanmagan — soak):
+
+- `chaqimchi_ai/retail/conversion.py: SeenCounter` — bir kamerada oynada
+  ko'ringan noyob odam soni (capture rate maxraji). Bir kadrlik xato
+  deteksiya odam deb sanalmaydi (`min_frames`, standart 2); bir track
+  oynada bir marta; oynadan keyin qaytsa yangi tashrif (line_crossed
+  re-entry mantiqi).
+- `cloud/value.py: capture_rate` + `capture_rate_line` — «yaqinlashdi →
+  kirdi (foiz)». Chekli konversiya bilan bir xil intizom: `passed` yo'q →
+  javob yo'q, kichik namunada foiz yo'q, «100% dan ortiq» chiqmaydi.
+- `cloud/value.py: select_passed` — adaptiv maxraj: tashqi kamera (A2)
+  ustun, bo'lmasa kirish (A1).
+
+**Qoladi (keyingi qadam):** (1) qurilma — SeenCounter'ni
+`scene_analytics.py` treklariga ulash va per-kamera `seen` ni cloudga
+yuborish (reliz, soak tugagach); (2) cloud — `seen` ni per-kun saqlash,
+`retail_report` ga `capture` bloki + digest qatori + panel. Transport
+qarori ochiq: aggregat event yoki heartbeat maydoni.
+
 ### 2026-09-06 — Davriy (oylik) hisobot eksporti qo'shildi (`commit qilinmagan`, faqat cloud+panel)
 
 `GET /api/v1/owner/report.csv` endi `?start=&end=` ni ham oladi (≤31 kun,

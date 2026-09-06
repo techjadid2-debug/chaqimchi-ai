@@ -2649,3 +2649,53 @@ def test_oversized_diagnostics_is_rejected_before_parsing(production_client) -> 
     big = {"payload": {"blob": "x" * 250_000}}
     response = client.post("/api/v1/edge/diagnostics", headers=headers, json=big)
     assert response.status_code == 413
+
+
+# ── Kunlik hisobotni Excel (CSV) qilib yuklab olish ──────────────────────
+#
+# Raqobatchi (RetailSolution) filial-summary'ni Excelda beradi; bizda shu
+# gap bor edi.  Bu testlar mijoz shu tugmani bosganda TO'G'RI raqamlar,
+# to'g'ri fayl nomi va Excel o'zbekchani buzmaydigan BOM chiqishini
+# qo'riqlaydi.  Manba: docs/RAQOBAT_RETAILSOLUTION.md.
+
+
+def test_report_csv_download_carries_the_days_numbers(production_client) -> None:
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="9201")
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": f"csv-{index}",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": direction,
+                    "line": "Asosiy eshik",
+                }
+                for index, direction in enumerate(["in", "in", "in", "out"])
+            ]
+        },
+    )
+
+    response = client.get("/api/v1/owner/report.csv", headers=owner_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "dokon-hisoboti-" in response.headers["content-disposition"]
+    body = response.content.decode("utf-8")
+    # BOM Excel uchun — usiz o'zbekcha krakozyabra bo'ladi.
+    assert body.startswith("﻿")
+    assert "Kirdi,3" in body
+    assert "Chiqdi,1" in body
+    # Eshik bo'yicha bo'lim: chiziq nomi bilan.
+    assert "Asosiy eshik,3,1" in body
+
+
+def test_report_csv_needs_a_logged_in_owner(production_client) -> None:
+    client, _messages = production_client
+    _site, _device, _headers = _provision(client)
+
+    assert client.get("/api/v1/owner/report.csv").status_code == 401

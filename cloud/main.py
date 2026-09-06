@@ -7122,21 +7122,161 @@ async def owner_save_sales(
     }
 
 
-@app.get("/api/v1/owner/report")
-async def owner_report(
-    date: Optional[str] = None, owner: OwnerPrincipal = Depends(require_active_owner)
-) -> Dict[str, Any]:
-    """Kunlik do'kon hisoboti: kirish, gavjum soat, navbat, dwell."""
-    day = _owner_day(date)
-    report = get_event_store().retail_report(owner.site_id, day=day)
+def _owner_report_dict(site_id: str, day: date_type) -> Dict[str, Any]:
+    """Panel ko'radigan kunlik hisobot — bitta joyda quriladi.
+
+    Endpoint ham, CSV eksport ham SHU funksiyadan oladi.  Demografiya
+    darvozasi va eshik nomlari ikki alohida yo'ldan kelib, panel bilan
+    yuklab olingan fayl bir kun uchun ikki xil raqam ko'rsatib qo'ymasin:
+    ikki chaqiruvchi bitta manbadan o'qisin.
+    """
+    report = get_event_store().retail_report(site_id, day=day)
     # Demografiya hisobotdan CHIQARILADI, qabuldan emas.
     #
     # Ma'lumot yozilib turaveradi — mijoz tarifni ko'targanda tarix
     # o'zidan paydo bo'ladi.  Qabulda to'xtatilsa, o'sha oyning
     # o'rtasidan boshlanadigan doimiy teshik qolardi.
-    if not _panel_feature_open(owner.site_id, "demografiya"):
+    if not _panel_feature_open(site_id, "demografiya"):
         report.pop("demografiya", None)
-    return _with_sales(owner.site_id, _name_doors(owner.site_id, report), day)
+    return _with_sales(site_id, _name_doors(site_id, report), day)
+
+
+@app.get("/api/v1/owner/report")
+async def owner_report(
+    date: Optional[str] = None, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Kunlik do'kon hisoboti: kirish, gavjum soat, navbat, dwell."""
+    return _owner_report_dict(owner.site_id, _owner_day(date))
+
+
+def _retail_report_csv(report: Dict[str, Any], day: date_type) -> str:
+    """Kunlik hisobotni Excelda ochiladigan CSV qilib yig'adi.
+
+    Raqobatchi (RetailSolution) filial-summary Excelida aynan shu
+    raqamlarni beradi — biz esa qo'shimcha konversiya va **xavfsizlik**
+    ni ham shu yerga qo'yamiz (ularda xavfsizlik yo'q,
+    docs/RAQOBAT_RETAILSOLUTION.md).
+
+    Bir do'kon uchun bitta ustunli qatordan ko'ra uch bo'lim
+    foydaliroq: kunlik yakun (kalit/qiymat), soat bo'yicha va eshik
+    bo'yicha.  Excel bo'sh qator bilan ajratilgan bo'limlarni to'g'ri
+    ochadi.
+    """
+    traffic = report.get("traffic") or {}
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # ── Kunlik yakun ──────────────────────────────────────────────────
+    writer.writerow(["Do'kon kunlik hisoboti"])
+    writer.writerow(["Sana", day.isoformat()])
+    writer.writerow([])
+    writer.writerow(["Ko'rsatkich", "Qiymat"])
+    writer.writerow(["Kirdi", int(traffic.get("entered") or 0)])
+    writer.writerow(["Chiqdi", int(traffic.get("exited") or 0)])
+    writer.writerow(["Ichkarida (taxminiy)", int(traffic.get("inside_estimate") or 0)])
+    busiest = traffic.get("busiest_hour")
+    if busiest:
+        writer.writerow(
+            [f"Gavjum soat ({int(busiest['hour']):02d}:00)", int(busiest.get("entered") or 0)]
+        )
+    staff = int(traffic.get("xodim_chiqarilgan") or 0)
+    if staff:
+        writer.writerow(["Xodim (sanoqdan chiqarilgan)", staff])
+
+    # Chek va konversiya — «kichik namunadan foiz chiqarma» qoidasi
+    # `cloud/value.py` da, shuning uchun `percent` None bo'lishi mumkin.
+    sales = report.get("sales") or {}
+    conversion = report.get("conversion") or {}
+    receipts = sales.get("receipts") if sales else None
+    if receipts is not None:
+        writer.writerow(["Chek soni", int(receipts)])
+        percent = conversion.get("percent") if conversion else None
+        if percent is not None:
+            writer.writerow(["Konversiya", f"{int(percent)}%"])
+
+    # Mijoz portreti — faqat tarif ochiq va namuna yetarli bo'lsa keladi
+    # (`_owner_report_dict` ni darvozadan o'tkazadi, `hisoblangan` esa
+    # kichik namunani kesadi).
+    demo = report.get("demografiya")
+    if demo and int(demo.get("hisoblangan") or 0):
+        jins = demo.get("jins") or {}
+        if jins.get("ayol") is not None:
+            writer.writerow(["Ayol %", jins.get("ayol")])
+        if jins.get("erkak") is not None:
+            writer.writerow(["Erkak %", jins.get("erkak")])
+        for label, count in (demo.get("yosh") or {}).items():
+            writer.writerow([f"Yosh {label}", int(count or 0)])
+
+    queue = report.get("queue") or {}
+    if int(queue.get("alerts") or 0):
+        writer.writerow(["Navbat signallari", int(queue.get("alerts") or 0)])
+        writer.writerow(["Eng uzun navbat", int(queue.get("longest") or 0)])
+
+    # Xavfsizlik — bizning farqimiz, raqobatchida umuman yo'q.  Belgi
+    # nomi `cloud/notify.py: event_label` dan (bitta manba), faqat
+    # `restricted_zone` hisobot ichki kaliti bo'lgani uchun alohida.
+    security = report.get("security") or {}
+    security_total = sum(int(count or 0) for count in security.values())
+    if security_total:
+        writer.writerow([])
+        writer.writerow(["Xavfsizlik signali", "Soni"])
+        for kind, count in security.items():
+            if not int(count or 0):
+                continue
+            label = "Taqiqlangan zonaga kirish" if kind == "restricted_zone" else event_label(kind)
+            writer.writerow([label, int(count)])
+
+    # ── Soat bo'yicha ─────────────────────────────────────────────────
+    writer.writerow([])
+    writer.writerow(["Soat", "Kirdi", "Chiqdi"])
+    for hour in traffic.get("hourly") or []:
+        writer.writerow(
+            [
+                f"{int(hour['hour']):02d}:00",
+                int(hour.get("entered") or 0),
+                int(hour.get("exited") or 0),
+            ]
+        )
+
+    # ── Eshik bo'yicha ────────────────────────────────────────────────
+    doors = traffic.get("by_door") or []
+    if doors:
+        writer.writerow([])
+        writer.writerow(["Eshik", "Kirdi", "Chiqdi"])
+        for door in doors:
+            writer.writerow(
+                [
+                    door.get("label") or door.get("camera_id") or "",
+                    int(door.get("entered") or 0),
+                    int(door.get("exited") or 0),
+                ]
+            )
+
+    return output.getvalue()
+
+
+@app.get("/api/v1/owner/report.csv")
+async def owner_report_csv(
+    date: Optional[str] = None, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Response:
+    """Kunlik hisobotni Excelda ochiladigan CSV qilib beradi.
+
+    Nega .xlsx emas: cloud obrazida `openpyxl` yo'q va uni soak/deploy
+    davrida qo'shish og'ir bog'liqlik bo'lardi.  BOM'li UTF-8 CSV
+    Windows'dagi Excelda o'zbekcha harflar bilan to'g'ri ochiladi —
+    mavjud smena va attendance eksporti ham aynan shu yo'l bilan
+    ishlaydi, ya'ni mijoz uchun natija bir xil, yangi xavf yo'q.
+    """
+    day = _owner_day(date)
+    csv_text = _retail_report_csv(_owner_report_dict(owner.site_id, day), day)
+    return Response(
+        # BOM: Excel usiz UTF-8 ni tanimaydi (smena CSV'da ham shu izoh).
+        content="\ufeff" + csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="dokon-hisoboti-{day:%Y-%m-%d}.csv"'
+        },
+    )
 
 
 #: «Mijoz portreti» davri → nechta kun orqaga.

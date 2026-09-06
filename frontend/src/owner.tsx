@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
+import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
 import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, type NavItem } from "./components";
@@ -447,13 +447,25 @@ function downloadTrafficCsv(dashboard:Dashboard) {
   const link=document.createElement("a");link.href=url;link.download=`chaqimchi-${dashboard.site.id}-14-kun.csv`;link.click();URL.revokeObjectURL(url);
 }
 
+/* Kunning to'liq hisobotini serverdan Excelda ochiladigan CSV qilib oladi.
+ * `downloadTrafficCsv` klientda faqat 14 kunlik oqimni beradi; bu esa
+ * bitta kunning YAKUNI \u2014 kirdi/chiqdi, eshik, konversiya, mijoz portreti
+ * va xavfsizlik.  Raqamlar serverda hisoblangani uchun panel bilan bir
+ * xil bo'ladi (docs/RAQOBAT_RETAILSOLUTION.md).  `<a download>` Bearer
+ * yubora olmaydi, shu sabab autentifikatsiyalangan `mediaObjectUrl`. */
+async function downloadDailyReportCsv(siteId:string) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
+  const url = await mediaObjectUrl("/api/v1/owner/report.csv", "owner", siteId);
+  const link=document.createElement("a");link.href=url;link.download=`dokon-hisoboti-${today}.csv`;link.click();URL.revokeObjectURL(url);
+}
+
 function GenericPage({ id, dashboard, sites, siteId, onNavigate, focusEventId = "" }: { id:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:(id:string,focus?:string)=>void; focusEventId?:string }) {
   if (id === "cameras") return <><PageHeader title="Kameralar" subtitle="Jonli kadr, ulanish holati va AI tahlil qatlami."/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>;
   if (id === "traffic") return <TrafficPage dashboard={dashboard}/>;
   if (id === "heatmap") return <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   if (id === "branches") return <><PageHeader title="Filiallar" subtitle="Barcha savdo nuqtalaringizning aloqa va kamera holati."/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? "Aloqada" : "Aloqani tekshiring")} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
   if (id === "alerts") return <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>;
-  if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>CSV yuklash</button>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
+  if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<><button className="btn btn-primary" onClick={()=>void downloadDailyReportCsv(siteId)}><Icon name="download"/>Kunlik hisobot (Excel)</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>14 kunlik CSV</button></>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
   if (id === "billing") return <BillingPage dashboard={dashboard} siteId={siteId}/>;
   if (id === "telegram") return <TelegramPage siteId={siteId}/>;
   if (id === "settings") return <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>;

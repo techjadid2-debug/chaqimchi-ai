@@ -1143,3 +1143,61 @@ def test_digest_without_a_score_keeps_the_old_headline(tmp_path: Path) -> None:
         store.retail_report("site-1", day=DAY),
     )
     assert "kunlik hisobot" in text.splitlines()[0]
+
+
+# ── CSV eksport builderi (sof funksiya) ──────────────────────────────────
+#
+# `_retail_report_csv` unga berilgan hisobotni SHUNDAYICHA chizadi —
+# demografiya darvozasi va konversiya qoidasi undan OLDIN qo'llanadi
+# (`_owner_report_dict`, `cloud/value.py`).  Shuning uchun bu yerda faqat
+# chizishning o'zi tekshiriladi: konversiya foizi bo'lsa qatorga tushadi,
+# mijoz portreti namuna bo'sh bo'lsa umuman chiqmaydi.
+
+
+def test_csv_shows_conversion_only_when_the_owner_entered_receipts() -> None:
+    from cloud.main import _retail_report_csv
+
+    report = {
+        "traffic": {"entered": 200, "exited": 150, "inside_estimate": 50, "hourly": []},
+        "sales": {"receipts": 80},
+        "conversion": {"receipts": 80, "entered": 200, "percent": 40},
+        "security": {},
+    }
+
+    body = _retail_report_csv(report, DAY)
+
+    assert "Chek soni,80" in body
+    assert "Konversiya,40%" in body
+
+
+def test_csv_omits_customer_portrait_when_the_sample_is_empty() -> None:
+    from cloud.main import _retail_report_csv
+
+    report = {
+        "traffic": {"entered": 10, "exited": 10, "inside_estimate": 0, "hourly": []},
+        "demografiya": {"hisoblangan": 0, "jins": {}, "yosh": {}},
+        "security": {},
+    }
+
+    body = _retail_report_csv(report, DAY)
+
+    assert "Ayol %" not in body
+    assert "Yosh" not in body
+
+
+def test_csv_lists_security_signals_the_competitor_never_shows() -> None:
+    """Xavfsizlik bizning farqimiz — CSV'da alohida bo'lim bo'lib chiqadi."""
+    from cloud.main import _retail_report_csv
+
+    report = {
+        "traffic": {"entered": 5, "exited": 5, "inside_estimate": 0, "hourly": []},
+        "security": {"after_hours_presence": 2, "restricted_zone": 1, "loitering": 0},
+    }
+
+    body = _retail_report_csv(report, DAY)
+
+    assert "Xavfsizlik signali" in body
+    assert "Ish vaqtidan tashqari harakat,2" in body
+    assert "Taqiqlangan zonaga kirish,1" in body
+    # Nol signal chiqmaydi — bo'sh qator egani chalg'itadi.
+    assert "Uzoq turish" not in body

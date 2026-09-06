@@ -203,6 +203,17 @@
 
 ## KEYINGI ISH
 
+**RAQOBAT (2026-09-06).** Tahlil va reja:
+[docs/RAQOBAT_RETAILSOLUTION.md](RAQOBAT_RETAILSOLUTION.md) §7 (holat jadvali).
+- ✅ **C bajarildi** — Excel/CSV yuklash (`/api/v1/owner/report.csv` +
+  panel tugmasi). Faqat cloud+panel, deploy qilinsa bo'ladi.
+- ⏸ **A1 (capture rate)** — qurilma sanash logikasi soakka to'qnashadi,
+  **soak tugagach** relizga qo'shiladi. Ochiq sub-qaror: A1 (qo'shimcha
+  kamerasiz, tavsiya) yoki A2 (tashqi kamera) — hujjat §5.A.
+- ⏸ **D (sodiqlik, lokal/rasmsiz)** — huquqiy hujjatlar (oferta/
+  maxfiylik/rozilik) yangilangach + qurilma relizi (§5.D).
+- ℹ️ **B (720p)** mijoz kamerasiga bog'liq; **E** tarmoq mijozi kelganda.
+
 **A) ✅ BAJARILDI — deploy qilindi va tasdiqlandi (2026-08-31).**
 Qolgani — **ega ko'zi bilan tekshirish**: Hodisalar → kun tanlash →
 soatga bosish kartochkalarni o'zgartiradimi; AI yordamchi javobi ostida
@@ -746,6 +757,59 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-06 — Kunlik hisobotni Excelda (CSV) yuklash (`commit qilinmagan`, faqat cloud+panel)
+
+Raqobatchida bor, bizda yo'q edi: hisobotni Excel qilib yuklash
+(RetailSolution «branch-summary export»). Qo'shildi — **faqat cloud +
+panel, soakka to'qnashmaydi**:
+
+- `GET /api/v1/owner/report.csv?date=` — kunlik yakun: kirdi/chiqdi,
+  ichkarida, gavjum soat, chek+konversiya, mijoz portreti (tarif ochiq
+  bo'lsa) va **xavfsizlik** (ularda yo'q) + soat/eshik bo'yicha bo'limlar.
+- Panel bilan bir manba: `_owner_report_dict()` — endpoint ham, CSV ham
+  shundan oladi (demografiya darvozasi va konversiya bir joyda).
+- **Yangi bog'liqliksiz:** `.xlsx` emas, BOM'li UTF-8 CSV — Windows
+  Excelda o'zbekcha bilan to'g'ri ochiladi (smena/attendance eksporti
+  ham shu yo'l). `openpyxl` cloudda yo'q, soak/deploy davrida qo'shilmadi.
+- Panel: Hisobotlar sahifasida «Kunlik hisobot (Excel)» tugmasi
+  (`downloadDailyReportCsv`, `mediaObjectUrl` orqali — `<a download>`
+  Bearer yubora olmaydi). Eski 14-kunlik CSV «14 kunlik CSV» bo'lib qoldi.
+- Testlar: `test_cloud_events_owner.py` (HTTP: 200, content-type, BOM,
+  fayl nomi, raqamlar, auth 401) va `test_owner_report.py` (builder:
+  konversiya, bo'sh portret chiqmaydi, xavfsizlik). `make lint` toza,
+  TS typecheck toza.
+
+Bu **A bosqich (avtomatik konversiya)** ning cloud «plumbing»i ham:
+hisobotda konversiya bor. A1 ning qurilma sanash logikasi — **soak
+tugagach**, qurilma relizi bilan. Batafsil:
+[RAQOBAT_RETAILSOLUTION.md](RAQOBAT_RETAILSOLUTION.md) §7.
+
+### 2026-09-06 — Raqobat tahlili: RetailSolution.ai (`commit qilinmagan`, faqat hujjat)
+
+Raqobatchi to'liq ko'rildi: sayt, `/uz/docs` (Integration API — ochiq
+hujjat) va mijoz paneli (Zar Bazar akkaunti). Tahlil va reja:
+[docs/RAQOBAT_RETAILSOLUTION.md](RAQOBAT_RETAILSOLUTION.md).
+
+**Ular:** faqat marketing analitikasi — avtomatik konversiya (tashqi
+trafik ÷ kirgan), mijozni yuzidan tanish (sodiqlik, 1.2M so'm tarif),
+yosh/jins, ko'p filial, XLSX + integratsiya API. Xavfsizlik ularda YO'Q.
+Zaifligi: xaridor yuz kadri va xodim parol hashi ularning API'sidan
+tashqariga chiqadi ("lokal" desa ham).
+
+**Biz ustun:** video do'kondan chiqmaydi, xavfsizlik signali+klip,
+mijoz O'Z Windows/NVR'ida, ~3-4× arzon, o'zbekcha+Telegram, offline
+outbox, AI yordamchi.
+
+**Ega qarorlari (2026-09-06):** (1) birinchi ish — avtomatik konversiya;
+(2) mijozni yuzidan tanish — QILAMIZ, lekin **lokal, rasmsiz** (yuz
+bulutga ketmaydi); bu `DOKON_MVP.md` "mijoz Face ID yo'q" bandini
+o'zgartiradi va huquqiy hujjatlar (oferta/maxfiylik/rozilik) yangilanishi
+kerak; (3) maqsad — yakka do'kon + arxitekturani tarmoqqa tayyorlash.
+
+**Keyingi qadam:** avtomatik konversiya. Ega A1 (qo'shimcha kamerasiz,
+capture rate — tavsiya) yoki A2 (tashqi kamera) ni tanlaydi — batafsil
+hujjatning §5.A da.
 
 ### 2026-08-31 — Eshik bo'yicha sanoq va konversiya: «200 kirdi → 100 chek» (`0a5c3e3`, deploy qilindi)
 

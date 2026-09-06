@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode }
 import { copyText } from "./api";
 import { Icon, Logo } from "./icons";
 import { Sparkline, Delta } from "./charts";
-import { applyTheme, nextTheme, readTheme, saveTheme, THEME_ICON, THEME_LABEL, type Theme } from "./theme";
+import { applyTheme, nextTheme, readTheme, saveTheme, themeLabel, THEME_ICON, type Theme } from "./theme";
+import { getLang, LANG_SHORT, LANGS, setLang, t, type Lang } from "./i18n";
 
 export type NavItem = { id: string; label: string; icon: string };
 
@@ -34,9 +35,26 @@ export function ThemeToggle() {
   return <button
     className="btn btn-icon"
     onClick={toggle}
-    title={THEME_LABEL[theme]}
-    aria-label={`${THEME_LABEL[theme]} — almashtirish`}
+    title={themeLabel(theme)}
+    aria-label={t("panel.theme.switch", { mode: themeLabel(theme) })}
   ><Icon name={THEME_ICON[theme]}/></button>;
+}
+
+/** Til tanlagich — namunadagidek UZ · RU · EN.
+ *
+ * Tanlangach sahifa qayta yuklanadi (`i18n/index.ts` dagi izohga
+ * qarang): serverdan keladigan matn ham yangi tilda bo'lishi kerak,
+ * aks holda ekranda ikki til aralashardi. */
+export function LangSwitch() {
+  const active = getLang();
+  return <div className="lang-switch" role="group" aria-label={t("panel.lang.choose")}>
+    {LANGS.map((lang: Lang) => <button
+      key={lang}
+      className={lang === active ? "active" : ""}
+      onClick={() => setLang(lang)}
+      aria-current={lang === active}
+    >{LANG_SHORT[lang]}</button>)}
+  </div>;
 }
 
 export function StatusDot({ state }: { state: string }) {
@@ -228,7 +246,7 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
       </div>
     </aside>
     <main className="main-shell">
-      <div className="topbar"><div className="topbar-title"><strong>{title}</strong><span>{subtitle}</span></div><div className="topbar-actions">{headerActions}<ThemeToggle/></div></div>
+      <div className="topbar"><div className="topbar-title"><strong>{title}</strong><span>{subtitle}</span></div><div className="topbar-actions">{headerActions}<LangSwitch/><ThemeToggle/></div></div>
       <div className="content">{children}</div>
     </main>
     <nav className="bottom-nav" aria-label="Mobil menyu">{mobile.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>)}<button onClick={() => onNavigate("more")}><Icon name="more"/><span>Yana</span></button></nav>
@@ -265,7 +283,7 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
       {/* Tema tugmasi kirish ekranida ham kerak: paneldagisi faqat
           kirgandan keyin ko'rinadi, ya'ni kechasi login sahifasini
           ochgan odam yorug' ekranni almashtira olmasdi. */}
-      <div className="login-tools"><ThemeToggle/></div>
+      <div className="login-tools"><LangSwitch/><ThemeToggle/></div>
       <form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onSubmit(String(data.get("username") || ""), String(data.get("password") || "")); }}>
         <div className="login-mobile-logo"><Logo /></div>
         <span className="eyebrow">{kind === "owner" ? "BIZNES PANELI" : "ADMIN PANEL"}</span>

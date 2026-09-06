@@ -1,3 +1,4 @@
+import { getLang, t } from "./i18n";
 import type { Dashboard } from "./types";
 
 export type ApiOptions = RequestInit & { siteId?: string };
@@ -42,19 +43,44 @@ export function clearToken(kind: "owner" | "admin") {
   }
 }
 
+/** Server xatosidan odam o'qiydigan matnni ajratadi.
+ *
+ * `detail` HAR DOIM satr emas: FastAPI'ning `RequestValidationError`i
+ * uni RO'YXAT qilib qaytaradi va ilgari mijoz ekranida `[object Object]`
+ * chiqardi.  Shuning uchun tur tekshiriladi va tushunarsiz shakl
+ * uchun umumiy matn beriladi.
+ */
+function errorText(body: unknown): string {
+  const data = (body ?? {}) as { detail?: unknown; message?: unknown };
+  if (typeof data.detail === "string" && data.detail) return data.detail;
+  if (typeof data.message === "string" && data.message) return data.message;
+  if (Array.isArray(data.detail)) {
+    const first = data.detail[0] as { msg?: unknown } | undefined;
+    if (first && typeof first.msg === "string") return first.msg;
+  }
+  return t("panel.error.request_failed");
+}
+
 export async function api<T>(path: string, kind: "owner" | "admin", options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   const token = tokenFor(kind);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (options.siteId) headers.set("X-Owner-Site-Id", options.siteId);
+  /* Server chizadigan matn (xato izohi, hodisa nomi) so'rovchining
+     tilida qaytsin.  Zanjir `cloud/i18n.py: resolve_lang` da. */
+  headers.set("X-Lang", getLang());
   if (options.body && !headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   const response = await fetch(path, { ...options, headers });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body.detail || body.message || "So‘rov bajarilmadi") as Error & { status?: number };
+    const error = new Error(errorText(body)) as Error & { status?: number; code?: string };
     error.status = response.status;
+    /* Mashina o'qiydigan kod: matn tarjima qilinsa ham o'zgarmaydi,
+       shuning uchun shart tekshiruvi va testlar shunga bog'lanadi. */
+    const code = (body as { code?: unknown }).code;
+    if (typeof code === "string") error.code = code;
     throw error;
   }
   return body as T;

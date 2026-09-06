@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from chaqimchi_ai.event_models import EdgeEvent
+from cloud import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -588,6 +589,13 @@ class EventStore:
                 conn.execute(
                     f"ALTER TABLE owner_members ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
                 )
+        # Til — ODAMNING xossasi, do'konning emas: bitta do'konda
+        # o'zbekcha ega va ruscha menejer bo'lishi mumkin, kunlik
+        # hisobot esa har biriga O'Z tilida ketadi.  Shu sababdan
+        # `sites` jadvaliga ataylab qo'shilmadi — u ikkinchi haqiqat
+        # manbai bo'lib, a'zonikiga zid tushib qolardi.
+        if "language" not in member_columns:
+            conn.execute("ALTER TABLE owner_members ADD COLUMN language TEXT NOT NULL DEFAULT 'uz'")
         vision_job_columns = self._existing_columns(conn, "vision_jobs")
         if "audio_mime" not in vision_job_columns:
             conn.execute("ALTER TABLE vision_jobs ADD COLUMN audio_mime TEXT")
@@ -3783,12 +3791,28 @@ class EventStore:
             rows = conn.execute(
                 self._sql(
                     "SELECT id,site_id,telegram_id,role,display_name,active,"
-                    "digest_muted,notify_failures,created_at "
+                    "digest_muted,notify_failures,language,created_at "
                     "FROM owner_members WHERE site_id=? AND active=1 ORDER BY created_at"
                 ),
                 (site_id,),
             ).fetchall()
         return [self._dict(row) for row in rows]
+
+    def set_member_language(self, site_id: str, member_id: str, language: str) -> bool:
+        """A'zoning tilini saqlaydi.
+
+        Tekshiruv chaqiruvchida emas, SHU YERDA: til bazaga faqat
+        ro'yxatdagi qiymat sifatida tushsin, aks holda bir marta
+        yozilgan `de` abadiy qolib ketardi va har hisobotda katalog
+        zaxira tilga tushardi.
+        """
+        code = i18n.normalize(language) or i18n.DEFAULT_LANG
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("UPDATE owner_members SET language=? WHERE site_id=? AND id=?"),
+                (code, site_id, member_id),
+            )
+            return bool(cursor.rowcount)
 
     def set_digest_muted(self, site_id: str, member_id: str, muted: bool) -> bool:
         with self._connect() as conn:

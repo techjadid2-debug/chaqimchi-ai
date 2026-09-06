@@ -1,3 +1,4 @@
+import { eventLabel, t } from "./i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatTimeUz, hoursSince, mediaObjectUrl, hasFeature, tashkentDay, tashkentToday } from "./api";
 import { Card, EmptyState, PageHeader, PlanLock, Skeleton } from "./components";
@@ -79,7 +80,7 @@ function Evidence({ item, kind, siteId, focused = false, retentionHours = 0, aut
   }, [focused, hasSnapshot, open]);
   const when = item.occurred_at || item.created_at;
   const state = kind === "owner" ? mediaState(item, retentionHours) : "bor";
-  return <article className={`evidence-card${focused ? " is-focused" : ""}`} ref={card}><div className="event-row"><div className="event-name"><div className="metric-icon tone-blue" style={{position:"static",width:34,height:34}}><Icon name="pulse" size={17}/></div><div><b>{item.label || item.event_type}</b><small>{item.site_name ? `${item.site_name} · ` : ""}{item.camera_id || "Tizim"} · {kind === "owner" ? formatTimeUz(when) : when || "—"}</small></div></div><div className="page-actions">{hasSnapshot && !image ? <button className="btn" onClick={() => void open("snapshot")}>Kadr</button> : null}{hasClip ? <button className="btn" onClick={() => void open("clip")}>Klip</button> : null}</div></div>{error ? <p className="media-error">{error}</p> : null}{image ? <img className="event-media" src={image} alt={`${item.label || item.event_type} dalili`} /> : null}{video ? <video className="event-media" src={video} controls playsInline /> : null}{!image && !video && !error ? <MediaNote state={state} retentionHours={retentionHours}/> : null}</article>;
+  return <article className={`evidence-card${focused ? " is-focused" : ""}`} ref={card}><div className="event-row"><div className="event-name"><div className="metric-icon tone-blue" style={{position:"static",width:34,height:34}}><Icon name="pulse" size={17}/></div><div><b>{eventLabel(item.event_type)}</b><small>{item.site_name ? `${item.site_name} · ` : ""}{item.camera_id || "Tizim"} · {kind === "owner" ? formatTimeUz(when) : when || "—"}</small></div></div><div className="page-actions">{hasSnapshot && !image ? <button className="btn" onClick={() => void open("snapshot")}>Kadr</button> : null}{hasClip ? <button className="btn" onClick={() => void open("clip")}>Klip</button> : null}</div></div>{error ? <p className="media-error">{error}</p> : null}{image ? <img className="event-media" src={image} alt={t("panel.event.evidence_alt", { label: eventLabel(item.event_type) })} /> : null}{video ? <video className="event-media" src={video} controls playsInline /> : null}{!image && !video && !error ? <MediaNote state={state} retentionHours={retentionHours}/> : null}</article>;
 }
 
 /** Bir marta ko'rsatiladigan kartochka soni.

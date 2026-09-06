@@ -74,6 +74,7 @@ from cloud import (
     botfmt,
     config_health,
     faces,
+    i18n,
     ratelimit,
     rtsp,
     server_health,
@@ -84,6 +85,7 @@ from cloud import (
 )
 from cloud.alerts import AlertService, test_message
 from cloud.digest import DailyDigestService, build_digest
+from cloud.errors import ApiError, api_error_handler
 from cloud.event_store import EventStore, event_store_from_env
 from cloud.notify import DEFAULT_TELEGRAM_LEVEL as notify_default_level
 from cloud.notify import MEDIA_EVENT_TYPES, event_label, select_alert_events
@@ -1826,6 +1828,37 @@ app = FastAPI(
     redoc_url=None if _cloud_production else "/redoc",
     openapi_url=None if _cloud_production else "/openapi.json",
 )
+
+
+app.add_exception_handler(ApiError, api_error_handler)
+
+
+@app.middleware("http")
+async def _language_middleware(request: Request, call_next: Any) -> Any:
+    """So'rov tilini `ContextVar` ga qo'yadi.
+
+    Nega middleware: 238 ta marshrutning har biriga `lang` parametri
+    qo'shish o'rniga til bitta joyda hisoblanadi va `i18n.t()` uni
+    chuqurdagi modullardan ham ko'radi (`trust_score`, `config_health`).
+
+    Saqlangan tanlov bu yerda O'QILMAYDI: u foydalanuvchi aniqlangandan
+    keyin, `Depends` ichida qo'shiladi — middleware hali kim
+    kirayotganini bilmaydi.
+
+    `finally` shart: `reset` qilinmasa kontekst keyingi so'rovga
+    o'tib ketishi mumkin edi.
+    """
+    token = i18n.set_current(
+        i18n.resolve_lang(
+            query=request.query_params.get("lang"),
+            header=request.headers.get("X-Lang"),
+            accept=request.headers.get("Accept-Language"),
+        )
+    )
+    try:
+        return await call_next(request)
+    finally:
+        i18n.reset_current(token)
 
 
 if STATIC_DIR.is_dir():
@@ -3728,7 +3761,7 @@ async def admin_create_site_login(
     """
     site = get_store().get_site(site_id)
     if not site:
-        raise HTTPException(404, "Do'kon topilmadi")
+        raise ApiError("error.site_not_found", 404)
     existing = get_store().customer_account_for_site(site_id)
     if existing:
         raise HTTPException(409, f"Bu do'konda login allaqachon bor: {existing['username']}")
@@ -9739,7 +9772,7 @@ async def owner_subscription(
     store = get_store()
     site = store.get_site(owner.site_id)
     if not site:
-        raise HTTPException(404, "Do'kon topilmadi")
+        raise ApiError("error.site_not_found", 404)
     status = store.subscription_status(owner.site_id)
     monthly = store.effective_monthly_uzs(owner.site_id)
     charged = YEARLY_MONTHS_CHARGED

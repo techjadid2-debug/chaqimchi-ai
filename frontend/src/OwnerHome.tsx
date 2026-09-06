@@ -1,3 +1,4 @@
+import { eventLabel } from "./i18n";
 import { useEffect, useState } from "react";
 import { api, formatDateShort, formatMoney, formatNumber, formatTimeUz, relativeMinutes, telegramBotUrl } from "./api";
 import { Avatar, Card, EmptyState, Pill, StatCard, StatusDot } from "./components";
@@ -249,7 +250,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
               {dashboard.events.slice(0, 6).map((item, index) => <div className="event-row" key={item.id || index}>
                 <div className="event-name">
                   <StatusDot state={item.event_type?.startsWith("camera") ? "offline" : "online"} />
-                  <div><b>{item.label || item.event_type}</b><small>{item.camera_id || "Tizim"}</small></div>
+                  <div><b>{eventLabel(item.event_type)}</b><small>{item.camera_id || "Tizim"}</small></div>
                 </div>
                 <span className="list-value">{formatTimeUz(item.occurred_at || item.created_at)}</span>
               </div>)}

@@ -1454,6 +1454,17 @@ class CloudStore:
             if name not in site_columns:
                 conn.execute(f"ALTER TABLE sites ADD COLUMN {name} {definition}")
 
+        # Panel tili — parol bilan kiradigan foydalanuvchi uchun.
+        #
+        # Telegram orqali kirganning tili `owner_members.language` da
+        # (`cloud/event_store.py`).  Ikkita jadval kerak, chunki
+        # `require_owner` ikkala yo'lni ham qabul qiladi va parol bilan
+        # kirgan egada `owner_members` yozuvi umuman bo'lmasligi mumkin —
+        # unda tanlov saqlanmay, har kirishda `uz` ga qaytardi.
+        account_columns = columns("portal_accounts")
+        if "language" not in account_columns:
+            conn.execute("ALTER TABLE portal_accounts ADD COLUMN language TEXT NOT NULL DEFAULT 'uz'")
+
         camera_columns = columns("site_cameras")
         camera_additions = {
             "preview_requested": "INTEGER NOT NULL DEFAULT 0",

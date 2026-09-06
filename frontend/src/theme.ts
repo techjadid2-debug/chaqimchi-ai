@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 /* Yorug'/qorong'i tema — bitta joyda.
  *
  * Uch holat: `light`, `dark` va `system`.  Nega uchinchisi kerak:
@@ -74,11 +76,10 @@ export function nextTheme(theme: Theme): Theme {
   return theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
 }
 
-export const THEME_LABEL: Record<Theme, string> = {
-  light: "Yorug' rejim",
-  dark: "Tungi rejim",
-  system: "Tizim bo'yicha",
-};
+/** Tugma yozuvi — katalogdan (uch tilda). */
+export function themeLabel(theme: Theme): string {
+  return t(`panel.theme.${theme}`);
+}
 
 export const THEME_ICON: Record<Theme, string> = {
   light: "sun",

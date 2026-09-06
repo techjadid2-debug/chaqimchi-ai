@@ -446,6 +446,12 @@ tr:last-child td { border-bottom: 0; }
 .skeleton { border-radius: 12px; background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 50%, var(--surface-3) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; }
 @keyframes shimmer { to { background-position-x: -200%; } }
 
+/* Til tanlagich — segmentli tugmalar (namunadagi UZ · RU · EN). */
+.lang-switch { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-inset); }
+.lang-switch button { min-height: 38px; min-width: 38px; border: 0; border-radius: 8px; padding: 0 9px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; }
+.lang-switch button.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+.lang-switch button:hover { color: var(--fg); }
+
 /* Kirish ekranidagi tema tugmasi — forma ustida, o'ng burchakda. */
 .login-tools { position: absolute; top: 18px; right: 18px; z-index: 1; }
 .login-panel { position: relative; }

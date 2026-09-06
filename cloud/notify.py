@@ -23,6 +23,7 @@ import time
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from chaqimchi_ai.event_models import EdgeEvent
+from cloud import i18n
 
 #: Bir xil ogohlantirish shuncha soniyada bir martadan ko'p yuborilmaydi.
 DEFAULT_THROTTLE_SEC = 600
@@ -66,32 +67,16 @@ def severities_for(level: Optional[str]) -> frozenset:
 RECOVERY_EVENTS = frozenset({"camera_recovered"})
 
 #: Mijoz `zone_entered` ni tushunmaydi; xabar odam tilida bo'lishi kerak.
-EVENT_LABELS: Dict[str, str] = {
-    "person_detected": "Odam aniqlandi",
-    "employee_seen": "Xodim ko'rindi",
-    "face_captured": "Yuz kadri (davomat)",
-    "zone_entered": "Taqiqlangan zonaga kirish",
-    "loitering": "Uzoq turish",
-    "occupancy_exceeded": "Bandlik chegarasi oshdi",
-    "line_crossed": "Kirish/chiqish",
-    "dwell_exceeded": "Zonada uzoq turdi",
-    "queue_threshold_exceeded": "Navbat uzun",
-    # Detektor odamni topadi, kassirni emas — matn ham shunga mos:
-    # "kassada hech kim yo'q" o'lchanadigan fakt, "kassir ketdi" taxmin.
-    "checkout_unattended": "Kassada hech kim yo'q",
-    "checkout_second_till": "Ikkinchi kassani oching",
-    # "Bo'sh" emas, "bo'shab qolgan": o'lchanadigan narsa — javondagi
-    # o'zgarish, mahsulotning aniq soni emas.
-    "shelf_empty": "Javon bo'shab qolgan",
-    "after_hours_presence": "Ish vaqtidan tashqari harakat",
-    "camera_tampered": "Kamera yopildi yoki burildi",
-    # Sog'liq hodisalari do'kon egasi uchun aniq tilda: u nima buzilganini
-    # emas, **nima qilish kerakligini** bilishi kerak.
-    "camera_offline": "Kamera javob bermayapti",
-    "camera_recovered": "Kamera tiklandi",
-    "stream_frozen": "Kamera tasviri qotib qoldi",
-    "ai_review": "AI ko'rdi",
-}
+#:
+#: Matnlar 2026-09-07 da `i18n/{uz,ru,en}.json` ga ko'chirildi — kalit
+#: `event.<tur>`.  Nega: bir xil nom panelda ham, Telegramda ham, CSV'da
+#: ham chiqadi va u endi uch tilda kerak.  Ro'yxat shu yerda qolsa,
+#: tarjima ikkinchi nusxaga aylanardi.
+#:
+#: Yangi hodisa turi qo'shsangiz katalogga ham qo'shing:
+#: `tests/test_i18n_catalogue.py` har `EventType` uchun kalit borligini
+#: tekshiradi va unutilgan turni darhol ko'rsatadi.
+
 
 #: Qurilma qaysi hodisaga rasm/klip ILADI.
 #:
@@ -114,8 +99,16 @@ MEDIA_EVENT_TYPES = frozenset(
 MAX_NOTE_CHARS = 160
 
 
-def event_label(event_type: str) -> str:
-    return EVENT_LABELS.get(event_type, event_type)
+def event_label(event_type: str, lang: str = i18n.DEFAULT_LANG) -> str:
+    """Hodisa turining odam o'qiydigan nomi.
+
+    Katalogda kalit bo'lmasa turning O'ZI qaytadi (`ai_review` kabi
+    yangi tur qo'shilib, tarjimasi unutilgan holat): panelda xom kod
+    ko'rinadi, lekin bo'sh joy qolmaydi va hodisa yo'qolmaydi.
+    """
+    key = f"event.{event_type}"
+    label = i18n.tg(lang, key)
+    return event_type if label == key else label
 
 
 def event_note(event: EdgeEvent) -> Optional[str]:

@@ -6,6 +6,7 @@ import { AdminHome } from "./AdminHome";
 import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
 import { Icon, Logo } from "./icons";
+import { initLang } from "./i18n";
 import { applyTheme, readTheme } from "./theme";
 import "./styles.css";
 
@@ -314,6 +315,10 @@ function AdminApp() {
  * qo'yilgan (chizishdan oldin).  Bu yerda yana bir marta chaqiriladi:
  * skript faqat ATRIBUTNI qo'yadi, `theme-color` metasi esa tizim
  * rejimida ham to'g'ri bo'lishi kerak — uni JS hisoblab beradi. */
+/* Til birinchi chizishdan oldin: `document.documentElement.lang`
+ * ham shu yerda qo'yiladi — brauzerning imlo tekshiruvi va
+ * ekran o'quvchisi to'g'ri tilni bilishi uchun. */
+initLang();
 applyTheme(readTheme());
 
 createRoot(document.getElementById("root")!).render(<StrictMode><AdminApp/></StrictMode>);

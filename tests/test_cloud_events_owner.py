@@ -2699,3 +2699,58 @@ def test_report_csv_needs_a_logged_in_owner(production_client) -> None:
     _site, _device, _headers = _provision(client)
 
     assert client.get("/api/v1/owner/report.csv").status_code == 401
+
+
+def test_report_csv_period_export_has_rows_and_a_total(production_client) -> None:
+    """Raqobatchining branch-summary'idek: oraliq → kuniga qator + Jami."""
+    from datetime import datetime as _dt
+    from zoneinfo import ZoneInfo as _ZoneInfo
+
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="9301")
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": f"per-{index}",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                    "line": "Asosiy eshik",
+                }
+                for index in range(5)
+            ]
+        },
+    )
+    today = _dt.now(_ZoneInfo("Asia/Tashkent")).date().isoformat()
+
+    response = client.get(
+        f"/api/v1/owner/report.csv?start={today}&end={today}", headers=owner_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert f"dokon-hisoboti-{today}_{today}.csv" in response.headers["content-disposition"]
+    body = response.content.decode("utf-8")
+    assert body.startswith("﻿")
+    assert "Sana,Kirdi,Chiqdi,Chek,Konversiya %" in body
+    assert f"{today},5,0" in body
+    assert "Jami,5,0" in body
+
+
+def test_report_csv_period_rejects_a_backwards_or_too_long_range(production_client) -> None:
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="9302")
+
+    backwards = client.get(
+        "/api/v1/owner/report.csv?start=2026-08-10&end=2026-08-01", headers=owner_headers
+    )
+    assert backwards.status_code == 422
+
+    too_long = client.get(
+        "/api/v1/owner/report.csv?start=2026-06-01&end=2026-08-01", headers=owner_headers
+    )
+    assert too_long.status_code == 422

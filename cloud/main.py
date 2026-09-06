@@ -7255,11 +7255,106 @@ def _retail_report_csv(report: Dict[str, Any], day: date_type) -> str:
     return output.getvalue()
 
 
+#: Davriy hisobot eng ko'p shuncha kun.  Raqobatchi (RetailSolution)
+#: branch-summary'da ham 31 kun: uzun oraliq har kunga bitta o'qish
+#: qiladi va katta sana so'ragan mijoz serverni sekinlashtirmasin.
+MAX_REPORT_PERIOD_DAYS = 31
+
+
+def _retail_period_csv(
+    rows: List[Tuple[date_type, Dict[str, Any]]], start: date_type, end: date_type
+) -> str:
+    """Davriy hisobot: kuniga bitta qator + oxirida jami.
+
+    Raqobatchi (RetailSolution) filial-summary Exceli aynan shu shaklda —
+    sana bo'yicha qatorlar, oxirida yig'indi.  Farqimiz: xavfsizlik
+    ustuni (ularda yo'q, docs/RAQOBAT_RETAILSOLUTION.md).
+
+    `rows` — (kun, hisobot) juftliklari; hisobot `_owner_report_dict`
+    dan keladi, ya'ni demografiya darvozasi va konversiya qoidasi
+    allaqachon qo'llangan.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Do'kon davriy hisoboti", f"{start.isoformat()} — {end.isoformat()}"])
+    writer.writerow([])
+    writer.writerow(
+        [
+            "Sana", "Kirdi", "Chiqdi", "Chek", "Konversiya %",
+            "Ayol %", "Erkak %",
+            "Yosh <18", "Yosh 18-30", "Yosh 31-45", "Yosh 46-60", "Yosh 60+",
+            "Gavjum soat", "Xavfsizlik",
+        ]
+    )
+
+    total_entered = total_exited = total_receipts = total_security = 0
+    for day, report in rows:
+        traffic = report.get("traffic") or {}
+        entered = int(traffic.get("entered") or 0)
+        exited = int(traffic.get("exited") or 0)
+        total_entered += entered
+        total_exited += exited
+
+        sales = report.get("sales") or {}
+        receipts = sales.get("receipts") if sales else None
+        if receipts is not None:
+            total_receipts += int(receipts)
+        percent = (report.get("conversion") or {}).get("percent")
+
+        # Mijoz portreti faqat namuna yetarli bo'lganda ustunlarga tushadi
+        # (`hisoblangan` kichik namunani kesadi); aks holda bo'sh qoladi.
+        demo = report.get("demografiya") or {}
+        has_demo = int(demo.get("hisoblangan") or 0) > 0
+        jins = (demo.get("jins") or {}) if has_demo else {}
+        yosh = (demo.get("yosh") or {}) if has_demo else {}
+
+        busiest = traffic.get("busiest_hour")
+        busiest_label = f"{int(busiest['hour']):02d}:00" if busiest else ""
+
+        security_total = sum(int(count or 0) for count in (report.get("security") or {}).values())
+        total_security += security_total
+
+        writer.writerow(
+            [
+                day.isoformat(), entered, exited,
+                "" if receipts is None else int(receipts),
+                "" if percent is None else f"{int(percent)}%",
+                jins.get("ayol", ""), jins.get("erkak", ""),
+                int(yosh.get("<18", 0) or 0), int(yosh.get("18-30", 0) or 0),
+                int(yosh.get("31-45", 0) or 0), int(yosh.get("46-60", 0) or 0),
+                int(yosh.get("60+", 0) or 0),
+                busiest_label, security_total,
+            ]
+        )
+
+    # Jami: foizlar YIG'INDIDAN qayta hisoblanadi, o'rtalanmaydi — kunlik
+    # foizlarni teng vaznlash kam kirgan kunni ko'p kirgan kun bilan
+    # tenglashtirib yolg'on javob berardi.  Konversiya `value` qoidasidan
+    # o'tadi (kichik namunada foiz chiqmaydi).
+    total_conversion = value.conversion(receipts=total_receipts or None, entered=total_entered)
+    total_percent = (total_conversion or {}).get("percent")
+    writer.writerow([])
+    writer.writerow(
+        [
+            "Jami", total_entered, total_exited, total_receipts,
+            "" if total_percent is None else f"{int(total_percent)}%",
+            "", "", "", "", "", "", "", "", total_security,
+        ]
+    )
+    return output.getvalue()
+
+
 @app.get("/api/v1/owner/report.csv")
 async def owner_report_csv(
-    date: Optional[str] = None, owner: OwnerPrincipal = Depends(require_active_owner)
+    date: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Response:
-    """Kunlik hisobotni Excelda ochiladigan CSV qilib beradi.
+    """Kunlik yoki davriy hisobotni Excelda ochiladigan CSV qilib beradi.
+
+    `?date=` yoki bo'sh → bitta kun.  `?start=&end=` → oraliq (kuniga
+    bitta qator + jami), raqobatchining branch-summary Excelidek.
 
     Nega .xlsx emas: cloud obrazida `openpyxl` yo'q va uni soak/deploy
     davrida qo'shish og'ir bog'liqlik bo'lardi.  BOM'li UTF-8 CSV
@@ -7267,15 +7362,30 @@ async def owner_report_csv(
     mavjud smena va attendance eksporti ham aynan shu yo'l bilan
     ishlaydi, ya'ni mijoz uchun natija bir xil, yangi xavf yo'q.
     """
-    day = _owner_day(date)
-    csv_text = _retail_report_csv(_owner_report_dict(owner.site_id, day), day)
+    if start or end:
+        first = _owner_day(start)
+        last = _owner_day(end)
+        if last < first:
+            raise HTTPException(422, "start end dan katta bo'lmasligi kerak")
+        if (last - first).days + 1 > MAX_REPORT_PERIOD_DAYS:
+            raise HTTPException(422, f"Oraliq {MAX_REPORT_PERIOD_DAYS} kundan oshmasin")
+        rows = [
+            (day, _owner_report_dict(owner.site_id, day))
+            for day in (
+                first + timedelta(days=offset) for offset in range((last - first).days + 1)
+            )
+        ]
+        csv_text = _retail_period_csv(rows, first, last)
+        filename = f"dokon-hisoboti-{first:%Y-%m-%d}_{last:%Y-%m-%d}.csv"
+    else:
+        day = _owner_day(date)
+        csv_text = _retail_report_csv(_owner_report_dict(owner.site_id, day), day)
+        filename = f"dokon-hisoboti-{day:%Y-%m-%d}.csv"
     return Response(
         # BOM: Excel usiz UTF-8 ni tanimaydi (smena CSV'da ham shu izoh).
         content="\ufeff" + csv_text,
         media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": f'attachment; filename="dokon-hisoboti-{day:%Y-%m-%d}.csv"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

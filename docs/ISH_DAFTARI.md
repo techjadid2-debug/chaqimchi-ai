@@ -758,6 +758,17 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
+### 2026-09-06 — Davriy (oylik) hisobot eksporti qo'shildi (`commit qilinmagan`, faqat cloud+panel)
+
+`GET /api/v1/owner/report.csv` endi `?start=&end=` ni ham oladi (≤31 kun,
+raqobatchining branch-summary'idek): kuniga bitta qator + **Jami**.
+Ustunlar — sana, kirdi/chiqdi, chek, konversiya %, ayol/erkak %, yosh
+guruhlari, gavjum soat, xavfsizlik. Jami qatoridagi konversiya foizi
+**yig'indidan** qayta hisoblanadi (kunlik foizlar o'rtachasi emas — kam
+kirgan kun ko'p kirgan kun bilan teng vaznlansa yolg'on chiqardi).
+Panelda «Oylik (Excel)» tugmasi (oxirgi 30 kun). Testlar: HTTP (oraliq,
+422 teskari/uzun) + builder (jami yig'indidan). `make lint`, TS toza.
+
 ### 2026-09-06 — Kunlik hisobotni Excelda (CSV) yuklash (`commit qilinmagan`, faqat cloud+panel)
 
 Raqobatchida bor, bizda yo'q edi: hisobotni Excel qilib yuklash

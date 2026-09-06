@@ -1201,3 +1201,34 @@ def test_csv_lists_security_signals_the_competitor_never_shows() -> None:
     assert "Taqiqlangan zonaga kirish,1" in body
     # Nol signal chiqmaydi — bo'sh qator egani chalg'itadi.
     assert "Uzoq turish" not in body
+
+
+def test_period_csv_recomputes_totals_from_sums_not_averages() -> None:
+    """Jami konversiya kunlik foizlarning O'RTACHASI emas — yig'indidan.
+
+    Kam kirgan kunning foizini ko'p kirgan kun bilan teng vaznlash
+    egaga yolg'on «o'rtacha» berardi.
+    """
+    from cloud.main import _retail_period_csv
+
+    rows = [
+        (date(2026, 9, 1), {
+            "traffic": {"entered": 100, "exited": 90},
+            "sales": {"receipts": 50},
+            "conversion": {"receipts": 50, "entered": 100, "percent": 50},
+            "security": {"after_hours_presence": 1},
+        }),
+        (date(2026, 9, 2), {
+            "traffic": {"entered": 300, "exited": 280},
+            "sales": {"receipts": 30},
+            "conversion": {"receipts": 30, "entered": 300, "percent": 10},
+            "security": {},
+        }),
+    ]
+
+    body = _retail_period_csv(rows, date(2026, 9, 1), date(2026, 9, 2))
+
+    # 80 chek / 400 kirdi = 20% — kunlik (50% va 10%) o'rtachasi 30% EMAS.
+    assert "Jami,400,370,80,20%" in body
+    assert body.count("after_hours") == 0  # xom kalit emas, jami son
+    assert "Jami,400,370,80,20%,,,,,,,,,1" in body

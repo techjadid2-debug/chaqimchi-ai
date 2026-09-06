@@ -459,13 +459,26 @@ async function downloadDailyReportCsv(siteId:string) {
   const link=document.createElement("a");link.href=url;link.download=`dokon-hisoboti-${today}.csv`;link.click();URL.revokeObjectURL(url);
 }
 
+/* Oxirgi 30 kunning davriy hisoboti — raqobatchining oylik branch-summary
+ * Exceliga to'g'ri keladi (kuniga bitta qator + jami).  Sana hisobi
+ * Toshkent kunida: `en-CA` YYYY-MM-DD beradi, `limits.py: formatTimeUz`
+ * bilan bir xil sabab (Intl'siz UTC+5). */
+async function downloadPeriodReportCsv(siteId:string) {
+  const tz = { timeZone: "Asia/Tashkent" } as const;
+  const end = new Date().toLocaleDateString("en-CA", tz);
+  const startDate = new Date(); startDate.setDate(startDate.getDate() - 29);
+  const start = startDate.toLocaleDateString("en-CA", tz);
+  const url = await mediaObjectUrl(`/api/v1/owner/report.csv?start=${start}&end=${end}`, "owner", siteId);
+  const link=document.createElement("a");link.href=url;link.download=`dokon-hisoboti-${start}_${end}.csv`;link.click();URL.revokeObjectURL(url);
+}
+
 function GenericPage({ id, dashboard, sites, siteId, onNavigate, focusEventId = "" }: { id:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:(id:string,focus?:string)=>void; focusEventId?:string }) {
   if (id === "cameras") return <><PageHeader title="Kameralar" subtitle="Jonli kadr, ulanish holati va AI tahlil qatlami."/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>;
   if (id === "traffic") return <TrafficPage dashboard={dashboard}/>;
   if (id === "heatmap") return <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   if (id === "branches") return <><PageHeader title="Filiallar" subtitle="Barcha savdo nuqtalaringizning aloqa va kamera holati."/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? "Aloqada" : "Aloqani tekshiring")} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
   if (id === "alerts") return <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>;
-  if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<><button className="btn btn-primary" onClick={()=>void downloadDailyReportCsv(siteId)}><Icon name="download"/>Kunlik hisobot (Excel)</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>14 kunlik CSV</button></>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
+  if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<><button className="btn btn-primary" onClick={()=>void downloadDailyReportCsv(siteId)}><Icon name="download"/>Kunlik hisobot (Excel)</button><button className="btn" onClick={()=>void downloadPeriodReportCsv(siteId)}><Icon name="download"/>Oylik (Excel)</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>14 kunlik CSV</button></>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
   if (id === "billing") return <BillingPage dashboard={dashboard} siteId={siteId}/>;
   if (id === "telegram") return <TelegramPage siteId={siteId}/>;
   if (id === "settings") return <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>;

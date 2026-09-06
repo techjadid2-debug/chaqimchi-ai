@@ -185,7 +185,7 @@ to'qnashmaydigan tartibda olib boriladi:
 
 | Bosqich | Holat |
 |---|---|
-| **C — Excel/CSV yuklash** | ✅ **Bajarildi (2026-09-06, faqat cloud+panel).** Kunlik hisobot `GET /api/v1/owner/report.csv` — kirdi/chiqdi, gavjum soat, konversiya, mijoz portreti, **xavfsizlik** va soat/eshik bo'yicha. Panelda «Kunlik hisobot (Excel)» tugmasi. BOM'li CSV, yangi bog'liqliksiz. |
+| **C — Excel/CSV yuklash** | ✅ **Bajarildi (2026-09-06, faqat cloud+panel).** `GET /api/v1/owner/report.csv` — **kunlik** (`?date=`) va **davriy** (`?start=&end=`, ≤31 kun, kuniga qator + Jami — raqobatchining branch-summary'idek). Ustunlar: kirdi/chiqdi, gavjum soat, konversiya, mijoz portreti, **xavfsizlik** (ularda yo'q). Panelda «Kunlik hisobot», «Oylik» va «14 kunlik CSV» tugmalari. BOM'li CSV, yangi bog'liqliksiz. |
 | **A — avtomatik konversiya** | Cloud «plumbing»i C bilan tayyor bo'ldi (hisobotda konversiya bor). A1 sanash logikasi — **qurilma relizi, soak tugagach**. |
 | **B — demografiya 720p** | Mijoz kamerasiga bog'liq (kod bor). |
 | **D — sodiqlik (lokal)** | Huquqiy hujjatlar + qurilma relizi kerak. |

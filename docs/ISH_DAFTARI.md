@@ -7,7 +7,25 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-08-31
+## HOZIRGI HOLAT · 2026-09-06
+
+- **🎨 REBRENDING BOSHLANDI: Chaqimchi AI → ENES Monitoring (enes.uz).**
+  Reja tasdiqlangan: `~/.claude/plans/ok-biz-rebrending-*.md`.
+  Ega qarorlari: nom **to'liq** o'zgaradi (ichki nomlar ham),
+  eski domen **butunlay o'chadi** (bir kunlik cutover), sayt va'dalari
+  faqat rost, **UZ/RU/EN hamma joyda** (Telegram va CSV ham),
+  jonli mijoz **1 ta pilot** (qo'lda qayta o'rnatiladi), server
+  idishlari nomi ham o'zgaradi (ma'lumot ko'chiriladi), eski panellar
+  (`owner.html`, `admin.html`) **o'chiriladi**.  Keyingi qadam — F1:
+  dizayn tizimi va dark/light tema.
+- **✅ DEPLOY QILINDI VA JONLI TASDIQLANDI (2026-09-06, `6bf4e87`).**
+  Excel/CSV eksporti (kunlik + oylik) va capture rate yadrosi jonli.
+  Tekshirildi: `report.csv` 404 → **401** (marshrut bor), panel yangi
+  to'plamni beryapti (`owner-WviT491D.js`), hamma konteyner healthy,
+  deploydan keyingi 5 daqiqada **0 ta** xato.
+  ⚠️ **Tuzoq takrorlandi:** manba o'zgargan, `make ui-build` esa
+  qilinmagan edi — API ishlagan bo'lardi-yu, tugmalar panelda
+  ko'rinmasdi.  Panel manbasiga tegilsa **bundle ham commit qilinsin**.
 
 - **✅ DEPLOY QILINDI VA JONLI TASDIQLANDI (2026-08-31, `0a5c3e3`).**
   Zaxira olindi (760 KB), hamma konteyner healthy, deploydan keyingi
@@ -757,6 +775,29 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-06 — Rebrending rejasi tasdiqlandi va kutib turgan ish deploy qilindi (`b1d13a5`, `6bf4e87`)
+
+**Rebrending.** Mahsulot **ENES Monitoring** ga, domen **enes.uz** ga
+o'tadi; sayt va ikkala panel yangi dark-first dizaynga, hammasi
+UZ/RU/EN va dark/light bilan.  To'liq reja va o'lchovlar:
+`~/.claude/plans/ok-biz-rebrending-qilmoqchimiz-ancient-wilkes.md`.
+
+Tekshiruvda chiqqan asosiy sonlar: `chaqimchi` so'zi **316 faylda**,
+`chaqimchi.uz` **168 marta**, **132 ta** `CHAQIMCHI_*` sozlama;
+tarjima qilinadigan matn **~2 000 kalit** (~4 000 tarjima);
+mehnat **~25-33 ish kuni**.  `enes.uz` ro'yxatdan o'tgan, lekin
+ahost.uz parkovkasida (`185.196.212.52`) — DNS Contabo'ga ko'chiriladi.
+
+**Deploy.** 6-sentabrgacha uchta commit deploy qilinmasdan turgan edi.
+Chiqarildi va jonli tasdiqlandi (yuqoridagi HOZIRGI HOLAT).
+
+**Yo'l-yo'lakay topilgan xato:** `test_energy_is_computed_from_measured_uptime`
+sentabrda qulab tushdi.  `_add_uptime` bucketlarni **UTC** oy boshidan
+yozardi, `/admin/finance` esa oyni **Toshkent** chegarasi bilan kesadi —
+oxirgi 5 soat oynadan chiqib ketardi (720 o'rniga 715).  Avgustda
+(31 kun) oyna 744 soat bo'lgani uchun farq yashirin qolgan; 30 kunlik
+oy boshlanishi bilan ko'rindi.  Mahsulot kodi to'g'ri, test moslandi.
 
 ### 2026-09-06 — Avtomatik konversiya (capture rate) — algoritmik yadro (`commit qilinmagan`)
 

@@ -446,6 +446,9 @@ tr:last-child td { border-bottom: 0; }
 .skeleton { border-radius: 12px; background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 50%, var(--surface-3) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; }
 @keyframes shimmer { to { background-position-x: -200%; } }
 
+/* Kirish ekranidagi tema tugmasi — forma ustida, o'ng burchakda. */
+.login-tools { position: absolute; top: 18px; right: 18px; z-index: 1; }
+.login-panel { position: relative; }
 .login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(380px, .9fr) minmax(420px, 1.1fr); background: var(--surface); }
 .login-visual { min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 44px clamp(38px, 6vw, 86px); color: var(--on-brand); background: linear-gradient(145deg, var(--brand-1) 0%, var(--brand-2) 100%); position: relative; overflow: hidden; }
 /* Quyidagi to'rtta `rgba(255,255,255,…)` ATAYLAB literal: ular ko'k

@@ -262,6 +262,10 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
       <div className="login-proof"><Icon name="shield"/><span>Ma’lumotlar himoyalangan ulanish orqali uzatiladi</span></div>
     </section>
     <section className="login-panel">
+      {/* Tema tugmasi kirish ekranida ham kerak: paneldagisi faqat
+          kirgandan keyin ko'rinadi, ya'ni kechasi login sahifasini
+          ochgan odam yorug' ekranni almashtira olmasdi. */}
+      <div className="login-tools"><ThemeToggle/></div>
       <form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onSubmit(String(data.get("username") || ""), String(data.get("password") || "")); }}>
         <div className="login-mobile-logo"><Logo /></div>
         <span className="eyebrow">{kind === "owner" ? "BIZNES PANELI" : "ADMIN PANEL"}</span>

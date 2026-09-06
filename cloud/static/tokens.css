@@ -1,0 +1,234 @@
+/* ENES Monitoring — rang tizimi.  YAGONA manba.
+ *
+ * Nega bitta fayl: ilgari bir xil palitra TO'RT joyda yozilgan edi
+ * (`frontend/src/styles.css`, `cloud/static/site.css`, `owner.css`,
+ * `panel.css`).  Bittasini o'zgartirgan odam qolganlarini jimgina
+ * eskirtirardi va sayt bilan panel rangi ajralib ketardi.  Endi sayt
+ * ham, panel ham SHU fayldan o'qiydi:
+ *   - panel: `frontend/src/styles.css` boshidagi `@import` (Vite uni
+ *     qurilish paytida ichkariga qo'yadi — brauzer qo'shimcha so'rov
+ *     yubormaydi);
+ *   - sayt: `<link rel="stylesheet" href="/assets/tokens.css">`.
+ *
+ * Nega ranglar TO'G'RIDAN-TO'G'RI qoidaga yozilmaydi: dark rejim
+ * shundagina bitta blokni almashtirish bilan ishlaydi.  Qoidada
+ * `#fff` turgan bo'lsa, u qorong'i temada ham oq bo'lib qolaveradi —
+ * aynan shu sabab bu fayl paydo bo'ldi.
+ *
+ * Nomlash: token NIMA EKANINI emas, QAYERDA ISHLASHINI aytadi
+ * (`--surface`, `--fg`), chunki "ko'k" qorong'i temada boshqa ko'k
+ * bo'ladi, "fon" esa fon bo'lib qolaveradi.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ── Sathlar ─────────────────────────────────────────────────── */
+  --bg: #f5f7fa;              /* sahifa foni */
+  --surface: #ffffff;         /* karta, sidebar, topbar */
+  --surface-2: #f4f7fb;       /* hover, ikkilamchi blok */
+  --surface-3: #edf1f6;       /* progress yo'li, skeleton, chart to'ri */
+  --surface-inset: #f7f9fc;   /* ichkariga botgan blok */
+  /* Yopishqoq topbar/pastki menyu: orqasidagi kontent ko'rinib tursin. */
+  --surface-blur: rgba(255,255,255,.9);
+
+  /* ── Matn ────────────────────────────────────────────────────── */
+  --fg: #0a0e14;
+  /* Oq fonda kontrast ≈ 6.6:1 — WCAG AA dan o'tadi.  40+ yoshdagi
+     do'kon egasi 12px izohni ham o'qiy oladi. */
+  --muted: #5a6675;
+  --dim: #475467;             /* menyu tugmasi, forma yorlig'i */
+  --dim-2: #7b8494;           /* eng past darajali matn */
+  --faint: #98a2b3;           /* nuqta va legendalar */
+
+  /* ── Chiziqlar ───────────────────────────────────────────────── */
+  --border: #e3e8ef;
+  --border-strong: #cbd4e4;   /* hover holatidagi chegara */
+
+  /* ── Brend ───────────────────────────────────────────────────── */
+  --accent: #2f8bff;
+  --accent-strong: #1266e0;
+  --accent-soft: #e8f1ff;     /* ko'k fonli yumshoq blok */
+  --accent-line: #bcd0ff;     /* o'sha blokning chegarasi */
+  --accent-fg: #ffffff;       /* ko'k fon ustidagi matn */
+  --accent-ink: #185abc;      /* yumshoq ko'k fon ustidagi matn */
+  --accent-ink-strong: #174ea6;
+
+  /* ── Ma'no ranglari ──────────────────────────────────────────
+     Bular BREND emas: ular hodisa jiddiyligini aytadi va rebrendda
+     ataylab o'zgarmadi — mijoz qizilni "xato" deb o'qishga o'rgangan. */
+  --green: #34a853;
+  --green-soft: #e6f4ea;
+  --green-ink: #08754d;
+  --yellow: #fbbc05;
+  --yellow-soft: #fef7e0;
+  --yellow-ink: #8a5b00;
+  --yellow-ink-strong: #5d3a00;
+  --yellow-line: #f3d188;
+  --red: #ea4335;
+  --red-soft: #fce8e6;
+  --red-ink: #b42328;
+  --red-ink-strong: #8c0d0d;
+  --red-line: #f4b9b3;
+
+  /* ── Qatlam va soya ─────────────────────────────────────────── */
+  --scrim: rgba(16,24,40,.4);          /* modal orqasidagi qorayish */
+  --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.045);
+  --shadow-md: 0 12px 30px rgba(16,24,40,.14);
+  --shadow-lg: 0 24px 60px rgba(16,24,40,.24);
+  --shadow-accent: 0 6px 15px rgba(47,139,255,.22);
+
+  /* ── Video sathlari ─────────────────────────────────────────
+     Bular ikkala temada ham QORONG'I qoladi: kadr ustidagi oq ramka
+     kechasi ko'zni qamashtiradi, kadrning o'zi esa baribir to'q. */
+  --video-bg: #0d1420;
+  --video-grad-1: #293446;
+  --video-grad-2: #0b111a;
+  --video-ink: #a8b2c2;
+  --video-stamp: rgba(16,24,40,.7);    /* kadr ustidagi vaqt yorlig'i */
+  --video-stamp-stale: rgba(234,67,53,.88);  /* kadr eskirgan */
+  --video-fg: #ffffff;                 /* kadr ustidagi matn — doim oq */
+
+  /* Brend gradiyenti (kirish ekrani) ikkala temada ham KO'K qoladi:
+     u brendning o'zi, sath emas.  Shuning uchun ustidagi matn doim oq. */
+  --brand-1: #2f8bff;
+  --brand-2: #1266e0;
+  --on-brand: #ffffff;
+  /* To'q ma'no rangi (qizil/yashil) ustidagi matn.  Yorug' temada oq,
+     qorong'ida esa rang o'zi yorug'lashgani uchun matn qorayadi. */
+  --on-solid: #ffffff;
+  --focus-ring: rgba(47,139,255,.32);
+  --shadow-drawer: -18px 0 50px rgba(16,24,40,.16);
+
+  /* Issiqlik xaritasi shkalasi — ma'lumot shkalasi, tema emas. */
+  --heat-scale: linear-gradient(90deg,#2563eb,#22d3ee,#22c55e,#facc15,#dc2626);
+
+  --radius: 16px;
+}
+
+/* Tanlov qilinmagan bo'lsa — tizim rejimi.
+   `:not([data-theme="light"])` shart: odam ataylab yorug'ni tanlagan
+   bo'lsa, tizim qorong'i bo'lsa ham yorug' qolsin. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #05070a;
+    --surface: #11161f;
+    --surface-2: #171e29;
+    --surface-3: #1f2836;
+    --surface-inset: #0e131b;
+    --surface-blur: rgba(17,22,31,.88);
+
+    --fg: #e8edf5;
+    --muted: #98a4b8;
+    --dim: #b3c0d1;
+    --dim-2: #8b98ab;
+    --faint: #6b7a90;
+
+    --border: rgba(255,255,255,.09);
+    --border-strong: rgba(255,255,255,.18);
+
+    /* Qora fonda #2f8bff biroz to'q ko'rinadi — yorug'roq oling. */
+    --accent: #3d95ff;
+    --accent-strong: #6fb0ff;
+    --accent-soft: rgba(61,149,255,.14);
+    --accent-line: rgba(61,149,255,.35);
+    --accent-fg: #04080f;
+    --accent-ink: #9cc7ff;
+    --accent-ink-strong: #c4dcff;
+
+    /* Ma'no ranglari ham yorug'lashadi: to'q fonda #34a853 o'qilmaydi. */
+    --green: #3fbf78;
+    --green-soft: rgba(63,191,120,.15);
+    --green-ink: #7fe0ad;
+    --yellow: #f5c033;
+    --yellow-soft: rgba(245,192,51,.15);
+    --yellow-ink: #f5cf6a;
+    --yellow-ink-strong: #ffe3a3;
+    --yellow-line: rgba(245,192,51,.35);
+    --red: #ff6b5e;
+    --red-soft: rgba(255,107,94,.15);
+    --red-ink: #ffa39a;
+    --red-ink-strong: #ffc9c3;
+    --red-line: rgba(255,107,94,.35);
+
+    --scrim: rgba(0,0,0,.65);
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.35);
+    --shadow-md: 0 12px 30px rgba(0,0,0,.5);
+    --shadow-lg: 0 24px 60px rgba(0,0,0,.6);
+    --shadow-accent: 0 6px 15px rgba(61,149,255,.28);
+    --shadow-drawer: -18px 0 50px rgba(0,0,0,.55);
+    --focus-ring: rgba(61,149,255,.45);
+    --on-solid: #0a0e14;
+  }
+}
+
+/* Ataylab tanlangan qorong'i — tizim yorug' bo'lsa ham g'olib.
+   Qiymatlar yuqoridagi blok bilan AYNI: ikkalasi ham kerak, chunki
+   media so'rovi tanlovni bilmaydi, atribut esa tizimni bilmaydi. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #05070a;
+  --surface: #11161f;
+  --surface-2: #171e29;
+  --surface-3: #1f2836;
+  --surface-inset: #0e131b;
+  --surface-blur: rgba(17,22,31,.88);
+
+  --fg: #e8edf5;
+  --muted: #98a4b8;
+  --dim: #b3c0d1;
+  --dim-2: #8b98ab;
+  --faint: #6b7a90;
+
+  --border: rgba(255,255,255,.09);
+  --border-strong: rgba(255,255,255,.18);
+
+  --accent: #3d95ff;
+  --accent-strong: #6fb0ff;
+  --accent-soft: rgba(61,149,255,.14);
+  --accent-line: rgba(61,149,255,.35);
+  --accent-fg: #04080f;
+  --accent-ink: #9cc7ff;
+  --accent-ink-strong: #c4dcff;
+
+  --green: #3fbf78;
+  --green-soft: rgba(63,191,120,.15);
+  --green-ink: #7fe0ad;
+  --yellow: #f5c033;
+  --yellow-soft: rgba(245,192,51,.15);
+  --yellow-ink: #f5cf6a;
+  --yellow-ink-strong: #ffe3a3;
+  --yellow-line: rgba(245,192,51,.35);
+  --red: #ff6b5e;
+  --red-soft: rgba(255,107,94,.15);
+  --red-ink: #ffa39a;
+  --red-ink-strong: #ffc9c3;
+  --red-line: rgba(255,107,94,.35);
+
+  --scrim: rgba(0,0,0,.65);
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.35);
+  --shadow-md: 0 12px 30px rgba(0,0,0,.5);
+  --shadow-lg: 0 24px 60px rgba(0,0,0,.6);
+  --shadow-accent: 0 6px 15px rgba(61,149,255,.28);
+  --shadow-drawer: -18px 0 50px rgba(0,0,0,.55);
+  --focus-ring: rgba(61,149,255,.45);
+  --on-solid: #0a0e14;
+}
+
+/* ── Eski nomlar ────────────────────────────────────────────────
+ * Kodda `var(--blue)` va `var(--text)` yuzlab joyda uchraydi.  Ularni
+ * bir kunda almashtirish o'rniga shu yerda yangi tokenga ulaymiz:
+ * eski qoida ham darhol temaga bo'ysunadi.  Yangi kod yangi nomni
+ * ishlatsin — bu ro'yxat vaqt o'tib qisqaradi. */
+:root {
+  --blue: var(--accent);
+  --blue-dark: var(--accent-strong);
+  --blue-soft: var(--accent-soft);
+  --text: var(--fg);
+  --card: var(--surface);
+  --paper: var(--surface);
+  --paper-2: var(--surface-inset);
+}

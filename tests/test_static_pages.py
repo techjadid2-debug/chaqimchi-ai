@@ -257,15 +257,43 @@ def _content_token(name: str) -> str:
 
 @pytest.mark.parametrize("asset", ["site.js", "site.css"])
 def test_cache_token_matches_the_file_contents(asset: str) -> None:
-    """Fayl o'zgarsa token ham o'zgarishi **shart**.
+    """Fayl o'zgarsa token HAR sahifada o'zgarishi **shart**.
 
     Shu test tufayli uni unutib bo'lmaydi: mazmun o'zgargan zahoti
     test qulaydi va to'g'ri qiymatni aytadi.
+
+    Ilgari bu test faqat `site.html` ni qaraardi va aynan shu sababdan
+    qolgan 13 sahifada token OYLAB eskirib turgan edi (2026-09-06 da
+    topildi: site.html'da `256719bdcf`, boshqalarda `d4e6045b1a`).
+    Ya'ni sayt yangilangan, mijozning brauzeri esa eski uslubni
+    keshdan olib turgan.  Endi ro'yxat sahifalar bo'ylab yuriladi.
     """
-    html = (STATIC / "site.html").read_text(encoding="utf-8")
     expected = _content_token(asset)
-    assert f"/assets/{asset}?v={expected}" in html, (
-        f"{asset} o'zgargan — site.html dagi `?v=` ni `{expected}` ga almashtiring"
+    referring = [p for p in pages() if f"/assets/{asset}?v=" in p.read_text(encoding="utf-8")]
+    assert referring, f"{asset} birorta sahifada ishlatilmayapti — test bekorga o'tayapti"
+
+    stale = [
+        p.name
+        for p in referring
+        if f"/assets/{asset}?v={expected}" not in p.read_text(encoding="utf-8")
+    ]
+    assert not stale, (
+        f"{asset} o'zgargan — bu sahifalardagi `?v=` ni `{expected}` ga almashtiring: "
+        + ", ".join(stale)
+    )
+
+
+def test_shared_tokens_are_imported_with_a_cache_token() -> None:
+    """Rang tokenlari sayt va panel uchun YAGONA fayldan keladi.
+
+    `tokens.css` o'zgarganda mijozning brauzeri eski palitrani keshdan
+    olmasin: `site.css` uni `?v=` bilan chaqiradi va bu test o'sha
+    tokenni fayl mazmuni bilan solishtiradi.
+    """
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    expected = _content_token("tokens.css")
+    assert f'@import "tokens.css?v={expected}";' in css, (
+        f"tokens.css o'zgargan — site.css dagi `@import` tokenini `{expected}` ga almashtiring"
     )
 
 

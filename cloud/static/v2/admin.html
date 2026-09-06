@@ -3,12 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#4285f4" />
+    <meta name="theme-color" content="#ffffff" />
+    <!-- Tema BIRINCHI chizishdan oldin qo'yiladi.  React ichida
+         qilinsa sahifa bir zumga yorug' ochilib, keyin qorayadi —
+         kechasi telefonda bu ko'zni qamashtiradi.  Kalit
+         `frontend/src/theme.ts` dagi `THEME_KEY` bilan bir xil. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("enes_theme");
+          if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+        } catch (e) { /* xususiy oyna — tizim rejimi qoladi */ }
+      })();
+    </script>
     <title>Chaqimchi Cloud — admin</title>
     <link rel="icon" href="/assets/favicon.png" type="image/png" />
-    <script type="module" crossorigin src="/assets/v2/assets/admin-B6-u8ZhW.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/v2/assets/styles-DCvpuLuW.js">
-    <link rel="stylesheet" crossorigin href="/assets/v2/assets/styles-D3SUzlgJ.css">
+    <script type="module" crossorigin src="/assets/v2/assets/admin-BIwTbQqV.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/v2/assets/styles-DRj6Enu0.js">
+    <link rel="stylesheet" crossorigin href="/assets/v2/assets/styles-DDrErhO-.css">
   </head>
   <body>
     <div id="root"></div>

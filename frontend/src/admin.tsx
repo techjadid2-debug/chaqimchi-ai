@@ -6,6 +6,7 @@ import { AdminHome } from "./AdminHome";
 import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
 import { Icon, Logo } from "./icons";
+import { applyTheme, readTheme } from "./theme";
 import "./styles.css";
 
 type Site = { id:string; name:string; address?:string; contact_phone?:string; plan?:string; license_status?:string; connection?:string; devices?:number; cameras_active?:number; cameras_expected?:number; days_left?:number; monthly_price_uzs?:number; last_seen?:string };
@@ -308,5 +309,11 @@ function AdminApp() {
     {drawer?<div className="drawer-backdrop" onClick={()=>setDrawer(false)}><aside className="drawer" onClick={event=>event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={()=>setDrawer(false)}><Icon name="close"/></button></div><nav>{NAV.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav></aside></div>:null}
   </AppShell>;
 }
+
+/* Tema `owner.html`/`admin.html` dagi boot skriptida allaqachon
+ * qo'yilgan (chizishdan oldin).  Bu yerda yana bir marta chaqiriladi:
+ * skript faqat ATRIBUTNI qo'yadi, `theme-color` metasi esa tizim
+ * rejimida ham to'g'ri bo'lishi kerak — uni JS hisoblab beradi. */
+applyTheme(readTheme());
 
 createRoot(document.getElementById("root")!).render(<StrictMode><AdminApp/></StrictMode>);

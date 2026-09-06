@@ -28,6 +28,9 @@ const paths: Record<string, ReactNode> = {
   download: <><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"/></>,
   cpu: <><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></>,
   shapes: <><path d="M3 17 9 5l6 12z"/><circle cx="18" cy="17" r="3.4"/></>,
+  sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
+  moon: <><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></>,
+  display: <><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/></>,
 };
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {

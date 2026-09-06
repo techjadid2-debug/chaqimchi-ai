@@ -1,34 +1,24 @@
-/* Chaqimchi AI — ommaviy sayt uslubi.
+/* Rang tokenlari — panel bilan UMUMIY fayldan (`tokens.css`).
+ * Ilgari shu yerda palitraning ikkinchi nusxasi turardi va sayt bilan
+ * panel rangi ajralib ketishi mumkin edi.  `?v=` — kesh tokeni,
+ * `tests/test_static_pages.py` uni fayl mazmuni bilan solishtiradi. */
+@import "tokens.css?v=145f4be102";
+
+/* ENES Monitoring — ommaviy sayt uslubi.
  *
- * Bitta dizayn tizimi: oq sath, ko'k harakat, kulrang matn.  Rang
- * o'zgaruvchilari nomi v2 panel (`frontend/src/styles.css`) bilan AYNAN
- * bir xil — sayt va panel orasida ko'chirilgan qoida noto'g'ri rangga
- * tushib qolmaydi.
+ * Ranglar yuqoridagi `tokens.css` dan keladi — sayt va panel uchun
+ * YAGONA manba.  Ilgari palitra shu faylda ham, panelda ham alohida
+ * yozilgan edi va bittasini o'zgartirgan odam ikkinchisini jimgina
+ * eskirtirardi.  Bu yerda faqat saytga xos ustki qiymatlar qoladi.
  *
  * 2026-08-24: eski krem/to'q-yashil dizayn va uni ustidan bo'yaydigan
  * "V2 override" qatlami birlashtirildi.  Ilgari bitta rang ikki joyda
  * turardi (asosiy qoida + oxiridagi yamoq) va tahrir qilgan odam
  * qaysinisi g'olib ekanini bilmasdi.  Endi har qoida bitta joyda.
  */
-
 :root {
-  --blue: #4285f4;
-  --blue-dark: #1a73e8;
-  --blue-soft: #e8f0fe;
-  /* Holat ranglari FAQAT ma'no uchun: muvaffaqiyat, ogohlantirish, xato.
-     Brend va harakat — doim ko'k. */
-  --green: #34a853;
-  --yellow: #fbbc05;
-  --red: #ea4335;
-
-  --text: #101828;
-  /* Oq fonda kontrast ≈ 5.6:1 — WCAG AA dan o'tadi.  40+ yoshdagi
-     do'kon egasi 13px matnni ham o'qiy oladi. */
-  --muted: #667085;
-  --paper: #ffffff;
-  --paper-2: #f7f9fc;
-  --border: #e4e9f2;
-  --radius: 16px;
+  /* Saytga xos: bo'lim kartalari panelnikidan kattaroq, shuning uchun
+     soya ham chuqurroq — ular sahifadan "ko'tarilib" turishi kerak. */
   --shadow: 0 1px 2px rgba(16,24,40,.04), 0 18px 55px rgba(16,24,40,.09);
 }
 

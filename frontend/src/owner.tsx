@@ -15,6 +15,7 @@ import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
 import type { Camera, Dashboard, Employee, Invoice, Site, TelegramMember, TrendPoint } from "./types";
 import { Icon, Logo } from "./icons";
+import { applyTheme, readTheme } from "./theme";
 import "./styles.css";
 
 const NAV: NavItem[] = [
@@ -721,5 +722,11 @@ function OwnerApp() {
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label="Yopish"><Icon name="close"/></button></div><nav>{NAV.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>Chiqish</button></nav></aside></div> : null}
   </AppShell>;
 }
+
+/* Tema `owner.html`/`admin.html` dagi boot skriptida allaqachon
+ * qo'yilgan (chizishdan oldin).  Bu yerda yana bir marta chaqiriladi:
+ * skript faqat ATRIBUTNI qo'yadi, `theme-color` metasi esa tizim
+ * rejimida ham to'g'ri bo'lishi kerak — uni JS hisoblab beradi. */
+applyTheme(readTheme());
 
 createRoot(document.getElementById("root")!).render(<StrictMode><OwnerApp/></StrictMode>);

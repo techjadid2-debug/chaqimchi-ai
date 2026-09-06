@@ -2,8 +2,42 @@ import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode }
 import { copyText } from "./api";
 import { Icon, Logo } from "./icons";
 import { Sparkline, Delta } from "./charts";
+import { applyTheme, nextTheme, readTheme, saveTheme, THEME_ICON, THEME_LABEL, type Theme } from "./theme";
 
 export type NavItem = { id: string; label: string; icon: string };
+
+/** Tema tugmasi: yorug' → qorong'i → tizim.
+ *
+ * Nega uchinchi holat ko'rinadi: "tizim bo'yicha" ni yashirsak, odam
+ * bir marta qo'lda tanlagach tizimga qaytolmaydi va kechqurun
+ * kompyuter qorong'iga o'tganda panel yorug' bo'lib qolaveradi. */
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(() => readTheme());
+
+  /* Tizim rejimi tanlangan bo'lsa, foydalanuvchi OS sozlamasini
+     o'zgartirganda sahifa QAYTA YUKLANMASDAN moslashsin. */
+  useEffect(() => {
+    if (theme !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => applyTheme("system");
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, [theme]);
+
+  function toggle() {
+    const next = nextTheme(theme);
+    setTheme(next);
+    saveTheme(next);
+    applyTheme(next);
+  }
+
+  return <button
+    className="btn btn-icon"
+    onClick={toggle}
+    title={THEME_LABEL[theme]}
+    aria-label={`${THEME_LABEL[theme]} — almashtirish`}
+  ><Icon name={THEME_ICON[theme]}/></button>;
+}
 
 export function StatusDot({ state }: { state: string }) {
   return <span className={`status-dot status-${state}`} aria-label={state} />;
@@ -194,7 +228,7 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
       </div>
     </aside>
     <main className="main-shell">
-      <div className="topbar"><div className="topbar-title"><strong>{title}</strong><span>{subtitle}</span></div><div className="topbar-actions">{headerActions}</div></div>
+      <div className="topbar"><div className="topbar-title"><strong>{title}</strong><span>{subtitle}</span></div><div className="topbar-actions">{headerActions}<ThemeToggle/></div></div>
       <div className="content">{children}</div>
     </main>
     <nav className="bottom-nav" aria-label="Mobil menyu">{mobile.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>)}<button onClick={() => onNavigate("more")}><Icon name="more"/><span>Yana</span></button></nav>

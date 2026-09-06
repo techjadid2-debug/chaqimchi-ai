@@ -382,8 +382,18 @@ def test_ui_v2_flag_serves_react_shells(
         assert 'lang="uz"' in page, name
         assert 'charset="UTF-8"' in page or 'charset="utf-8"' in page, name
         assert 'rel="icon"' in page, name
-        # Brend rangi bitta: beshinchi ko'k (#0b5cff) qaytib kelmasin.
-        assert 'content="#4285f4"' in page, name
+        # `theme-color` endi BREND rangi emas, SATH rangi: u telefonda
+        # manzil qatorini bo'yaydi va temaga qarab o'zgaradi (yorug'da
+        # oq, qorong'ida `--surface`).  Ilgari bu yerda ko'k turardi va
+        # qorong'i temada panel tepasida ko'k chiziq qolib ketardi.
+        assert 'name="theme-color"' in page, name
+        assert 'content="#4285f4"' not in page, f"{name}: eski brend ko'ki qaytib kelibdi"
+
+        # Tema BIRINCHI chizishdan oldin qo'yilsin: aks holda sahifa bir
+        # zumga yorug' ochilib keyin qorayadi.  Kalit `theme.ts` dagi
+        # `THEME_KEY` bilan bir xil bo'lishi shart.
+        assert "enes_theme" in page, name
+        assert "data-theme" in page or "dataset.theme" in page, name
 
     # Mijoz paneli Telegram ichida ochiladi: SDK yuklanmasa `initData`
     # hech qachon kelmaydi va bot tugmasi parol so'rab qoladi.

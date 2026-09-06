@@ -6,6 +6,7 @@ summalar.  Bu testlar hisob matematikasi va taqsimotni qulflaydi.
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -191,12 +192,22 @@ def test_completed_job_stores_zero_tokens_as_tracked(tmp_path: Path) -> None:
 
 
 def _add_uptime(site_id: str, minutes: int, *, device_id: str = "dev-1") -> None:
-    """Sayt uchun `minutes` ta daqiqalik bucket yozadi (joriy oyning boshidan)."""
+    """Sayt uchun `minutes` ta daqiqalik bucket yozadi (joriy oyning boshidan).
+
+    Oy boshi TOSHKENT bo'yicha olinadi, UTC bo'yicha emas: `/admin/finance`
+    oyni Toshkent chegarasi bilan kesadi (`cloud/main.py`), ya'ni UTC oy
+    boshidan yozilgan bucketlarning oxirgi 5 soati oynadan chiqib ketardi.
+    30 kunlik oyda 720 soat o'rniga 715 chiqardi va test aynan shu sababdan
+    sentabrda qulab tushdi — avgustda (31 kun) esa zapas yetgani uchun
+    o'tib ketavergan.
+    """
     import json
 
     store = main.get_event_store()
-    now = datetime.now(timezone.utc)
-    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now(ZoneInfo("Asia/Tashkent"))
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).astimezone(
+        timezone.utc
+    )
     payload = json.dumps({"cameras_active": 2})
     with store._connect() as conn:
         for i in range(minutes):

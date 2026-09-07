@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>O‘rnatuvchi paneli — Chaqimchi AI</title>
+  <title>O‘rnatuvchi paneli — ENES Monitoring</title>
   <link rel="icon" href="/assets/favicon.png" type="image/png">
   <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
   <script src="/vendor/zone-editor.js?v=2" defer></script>
@@ -95,7 +95,7 @@
 </head>
 <body>
   <main id="auth" class="auth-shell">
-    <div class="auth-head"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-new.png" alt=""></span><span class="logo">Chaqimchi Cloud <small>O‘rnatuvchi</small></span></a><a class="btn" href="/">Asosiy sayt</a></div>
+    <div class="auth-head"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/enes-mark.svg" alt=""></span><span class="logo">ENES Cloud <small>O‘rnatuvchi</small></span></a><a class="btn" href="/">Asosiy sayt</a></div>
     <div class="guide-banner"><div><b>Yangi o‘rnatuvchimisiz?</b><br><small>Bo‘sh mini-kompyuterni tayyorlashdan mijozga topshirishgacha rasmli qo‘llanma.</small></div><a class="btn btn-primary" href="/installer-guide">Yo‘riqnomani ochish</a></div>
     <div class="auth-grid">
       <form id="loginForm" class="auth-card"><h2>Kirish</h2><p class="muted">Tasdiqlangan login va parolingizni kiriting.</p><label>Login</label><input id="loginUsername" autocomplete="username" required><label>Parol</label><input id="loginPassword" type="password" autocomplete="current-password" required><button class="btn btn-primary" type="submit">Kirish</button><div id="loginMessage" class="toast" hidden></div></form>
@@ -104,7 +104,7 @@
   </main>
 
   <div id="app" class="wrap" hidden>
-    <header class="header"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/chaqimchi-logo-new.png" alt=""></span><span class="logo">Chaqimchi Cloud <small>O‘rnatuvchi paneli</small></span></a><div class="row"><span id="accountName" class="muted"></span><a class="btn" href="/installer-guide">Yo‘riqnoma</a><button id="logout" class="btn">Chiqish</button></div></header>
+    <header class="header"><a class="brand" href="/"><span class="brand-mark"><img src="/assets/enes-mark.svg" alt=""></span><span class="logo">ENES Cloud <small>O‘rnatuvchi paneli</small></span></a><div class="row"><span id="accountName" class="muted"></span><a class="btn" href="/installer-guide">Yo‘riqnoma</a><button id="logout" class="btn">Chiqish</button></div></header>
     <div id="pending" class="pending" hidden><h2>Akkaunt tasdiq kutilmoqda</h2><p>Yo‘riqnoma ochiq. Admin akkauntingizni faollashtirib, obyekt biriktirgandan keyin buyurtmalar shu yerda chiqadi.</p><a class="btn btn-primary" href="/installer-guide">Rasmli yo‘riqnoma</a></div>
     <section id="jobsSection"><div class="card-title"><span>Menga biriktirilgan obyektlar</span><button id="refresh" class="btn">Yangilash</button></div><div id="jobs" class="job-grid"></div></section>
   </div>

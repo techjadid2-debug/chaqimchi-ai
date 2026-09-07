@@ -1,20 +1,12 @@
-/* docs.chaqimchi.uz — yengil, telefonda o'qiladigan hujjat uslubi.
+/* docs.enes.uz — yengil, telefonda o'qiladigan hujjat uslubi.
  *
- * 2026-08-24: brend dizayniga keltirildi.  Ilgari bu yerda krem fon va
- * amber havolalar turardi — hujjatlar sayt va paneldan butunlay boshqa
- * mahsulotday ko'rinardi.  Rang qiymatlari `site.css` bilan bir xil;
- * bu fayl mustaqil (docs subdomeni site.css'ni yuklamaydi), shuning
- * uchun tokenlar shu yerda takrorlanadi. */
-:root {
-  color-scheme: light;
-  --blue: #4285f4;
-  --blue-dark: #1a73e8;
-  --blue-soft: #e8f0fe;
-  --text: #101828;
-  --muted: #667085;
-  --border: #e4e9f2;
-  --paper-2: #f7f9fc;
-}
+ * Ranglar `tokens.css` dan — sayt va panel bilan YAGONA manba.
+ * Ilgari palitra shu yerda takrorlanardi va rebrendda uchinchi nusxa
+ * bo'lib qolardi.  `/assets/` mount'i har hostda bor, ya'ni docs
+ * subdomeni ham o'sha faylni oladi.  `?v=` — kesh tokeni,
+ * `tests/test_static_pages.py` uni fayl mazmuni bilan solishtiradi. */
+@import "/assets/tokens.css?v=145f4be102";
+:root { color-scheme: light; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--paper-2); color: var(--text); line-height: 1.65; }
 a { color: inherit; }
@@ -23,7 +15,7 @@ a { color: inherit; }
 .doc-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 18px; background: #fff; border-bottom: 1px solid var(--border); }
 .doc-nav a { color: var(--muted); text-decoration: none; font-size: .88rem; font-weight: 600; }
 .doc-nav a.brand { display: inline-flex; align-items: center; gap: 9px; color: var(--text); font-size: .95rem; font-weight: 700; }
-.doc-nav a.brand img { width: 28px; height: 28px; object-fit: contain; }
+.doc-nav a.brand img { width: 30px; height: 25px; object-fit: contain; }
 .doc-nav a:hover { color: var(--blue-dark); }
 
 main { max-width: 760px; margin: 0 auto; padding: 28px 18px 60px; }

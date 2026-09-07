@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="{{lang}}" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{{site.status.title}}</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="{{asset:site.css}}">
+</head>
+<body class="utility-page">
+  {{include:partials/nav-sub.html}}
+  <main class="utility-main">
+    <p class="eyebrow"><span></span> {{site.status.eyebrow}}</p><h1>{{site.status.h1}}</h1>
+    <section class="utility-card status-panel"><span id="light" class="status-light"></span><div><h2 id="statusTitle" style="margin-bottom:6px">{{site.status.checking}}</h2><p id="statusText" style="margin:0;color:var(--muted)">{{site.status.waiting}}</p></div></section>
+  </main>
+  {{include:partials/footer.html}}
+  <script>
+    const TEXT = { upTitle: {{json:site.status.up_title}}, upText: {{json:site.status.up_text}}, downTitle: {{json:site.status.down_title}}, downText: {{json:site.status.down_text}} };
+    fetch('/health',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{document.getElementById('light').classList.add('online');document.getElementById('statusTitle').textContent=TEXT.upTitle;document.getElementById('statusText').textContent=TEXT.upText}).catch(()=>{document.getElementById('statusTitle').textContent=TEXT.downTitle;document.getElementById('statusText').textContent=TEXT.downText});
+  </script>
+</body>
+</html>

@@ -295,6 +295,11 @@ def test_shared_tokens_are_imported_with_a_cache_token() -> None:
     assert f'@import "tokens.css?v={expected}";' in css, (
         f"tokens.css o'zgargan — site.css dagi `@import` tokenini `{expected}` ga almashtiring"
     )
+    # Hujjatlar uslubi ham o'sha tokenlardan (2026-09-08).
+    docs = (STATIC / "docs" / "docs.css").read_text(encoding="utf-8")
+    assert f'@import "/assets/tokens.css?v={expected}";' in docs, (
+        f"tokens.css o'zgargan — docs.css dagi `@import` tokenini `{expected}` ga almashtiring"
+    )
 
 
 # ── Havoladan to'g'ridan-to'g'ri kirish ──────────────────────────────────
@@ -341,22 +346,6 @@ def test_the_dark_admin_css_is_gone_for_good() -> None:
     for page in pages():
         links = re.findall(r'<link[^>]+href="([^"]+)"', page.read_text(encoding="utf-8"))
         assert not any("admin.css" in href for href in links), page.name
-
-
-def test_admin_panel_is_responsive() -> None:
-    """Ilgari `admin.css` da bitta ham `@media` yo'q edi va 10 ustunli
-    jadval telefonda yon tomonga cheksiz siljirdi."""
-    css = (STATIC / "panel.css").read_text(encoding="utf-8")
-    assert css.count("@media") >= 2, "telefon va planshet uchun qoidalar bo'lsin"
-    assert ".sidenav.open" in css, "telefonda menyu chiqib chiquvchi bo'lsin"
-
-
-def test_admin_toast_floats_above_the_page() -> None:
-    """Xabarnoma sahifa tepasida turardi: pastdagi tugmani bosgan
-    foydalanuvchi javobni umuman ko'rmasdi."""
-    css = (STATIC / "panel.css").read_text(encoding="utf-8")
-    toast = css[css.index("#toast {") : css.index("}", css.index("#toast {"))]
-    assert "position: fixed" in toast
 
 
 # ── Mijoz yo'li: sotuvni yo'qotadigan joylar ─────────────────────────────
@@ -429,10 +418,12 @@ def test_every_payment_dead_end_offers_a_way_out() -> None:
 
 def test_the_payment_page_is_not_a_dark_developer_screen() -> None:
     """Mijoz yorug' paneldan bosadi va qorong'u sahifaga tushardi —
-    aynan pul to'lash paytida."""
+    aynan pul to'lash paytida.  2026-09-08: sayt bilan bitta uslub
+    (`site.css`); eski `owner.css`/`panel.css` o'chirildi."""
     html = (STATIC / "pay.html").read_text(encoding="utf-8")
     assert "admin.css" not in html
-    assert "owner.css" in html
+    assert "owner.css" not in html and "panel.css" not in html
+    assert "/assets/site.css?v=" in html
 
 
 def test_the_contact_page_has_a_working_channel_not_a_placeholder() -> None:
@@ -488,22 +479,6 @@ def test_the_customer_can_reach_a_human_from_every_dead_end() -> None:
 # Bo'limlar STATIK markup: JS satrlaridan yasalsa quyidagi va yuqoridagi
 # matn-tekshiruvlar (masalan `class="card hidden" id="attendanceCard"`)
 # ishlamay qolardi.
-
-def test_owner_canvas_accepts_touch() -> None:
-    """`touch-action` bo'lmasa kanvasni sudrash o'rniga sahifa siljiydi —
-    ya'ni pol burchaklarini telefondan to'g'irlab bo'lmaydi.  Lokal
-    panelda bu allaqachon to'g'ri qilingan."""
-    css = (STATIC / "owner.css").read_text(encoding="utf-8")
-    assert "touch-action" in css
-
-
-def test_owner_tap_targets_are_big_enough() -> None:
-    """34px barmoq uchun kichik — 40px eng kichik ishonchli o'lcham."""
-    css = (STATIC / "owner.css").read_text(encoding="utf-8")
-    small = css[css.index(".button.small {") : css.index("}", css.index(".button.small {"))]
-    assert "min-height: 40px" in small
-    assert css.count("@media") >= 4, "telefon, planshet va kompyuter uchun qoidalar"
-
 
 def test_the_hero_shows_the_product_frame_as_live_markup() -> None:
     """Hero'dagi panel ramkasi HTML bo'lsin, skrinshot emas.
@@ -589,7 +564,7 @@ def test_the_stylesheet_has_no_unterminated_comment() -> None:
     Buni bitta qator bilan ushlash mumkin edi va ushlanmadi: jonli
     saytda forma bir necha soat buzuq turdi.
     """
-    for name in ("site.css", "owner.css", "admin.css", "docs/docs.css"):
+    for name in ("site.css", "docs/docs.css"):
         path = STATIC / name
         if not path.is_file():
             continue

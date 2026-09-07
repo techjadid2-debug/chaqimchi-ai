@@ -551,10 +551,12 @@ deploy qilinmaydi.  Qulf: `test_the_admin_can_fix_a_shop_remotely`
 | v2 qurilishi | `frontend/vite.config.ts` → `cloud/static/v2` |
 | Panel qoidalari | `tests/test_panel_v2.py` |
 | Eski CSS (faqat `pay.html` uchun, F3 da ketadi) | `cloud/static/owner.css`, `panel.css` |
-| Ommaviy sayt — shablon | `cloud/site/index.html` (`{{kalit}}` o'rinbosarlari) |
-| Ommaviy sayt — matn | `i18n/{uz,ru,en}.json`, `site.*` kalitlari |
-| Ommaviy sayt — qurilish | `scripts/build_site.py` → `cloud/static/site.html`, `site.ru.html`, `site.en.html` (commit qilinadi, `--check` `make test` da) |
-| Ommaviy sayt — qolgan sahifalar (F3.2 gacha qo'lda) | `cloud/static/edu.html`, `oferta.html`, `aloqa.html`… |
+| Ommaviy sayt — shablonlar | `cloud/site/*.html` (`{{kalit}}` o'rinbosarlari), umumiy nav/footer `cloud/site/partials/` |
+| Ommaviy sayt — matn | `i18n/{uz,ru,en}.json`, `site.*` kalitlari (o'zbekcha qoladigan sahifalarda matn shablonning o'zida) |
+| Ommaviy sayt — qurilish | `scripts/build_site.py` (`PAGES` reyestri) → `cloud/static/*.html` (26 fayl, commit qilinadi, `--check` `make test` da) |
+| Ommaviy sayt — marshrutlar | `cloud/main.py`: `_render_public` (o'rinbosarlar), `/ru/{slug}`, `/en/{slug}`, `_localized_landing` |
+| Partner paneli (shablon emas) | `cloud/static/installer.html` |
+| Hujjatlar (docs.) | `cloud/static/docs/*.html`, `docs.css` (`tokens.css` ni import qiladi) |
 | Sayt qulflari | `tests/test_site_build.py`, `tests/test_static_pages.py` |
 | Sayt va'dalari qulfi | `tests/test_static_pages.py` |
 

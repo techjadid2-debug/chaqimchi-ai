@@ -1,0 +1,123 @@
+<!doctype html>
+<!-- AVTOMATIK YASALGAN — QO'LDA TAHRIRLAMANG.
+     Manba: cloud/site/connect.html + i18n/ru.json
+     Yangilash: python scripts/build_site.py -->
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex"><title>Подключение устройства — ENES Monitoring</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
+</head>
+<body class="utility-page">
+  <!-- Ichki sahifa navigatsiyasi — ochiq fon.  Bosh sahifadagi qorong'i
+     navdan farqi faqat `nav-dark` sinfi; qolgan hamma narsa bitta
+     `site.css` qoidasi.  Havolalar `/ru/` dan: ruscha sahifada bosh
+     sahifa `/ru/`, langar esa `/ru/#aloqa`. -->
+<header class="nav-shell">
+  <nav class="nav" aria-label="Главная">
+    <a class="brand brand-lockup" href="/ru/">
+      <!-- ENES Monitoring — "NS" monogrammasi.
+     Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
+     oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
+     shart emas. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 56" fill="none" role="img" aria-label="ENES">
+  <g stroke="currentColor" stroke-width="7" stroke-linejoin="round">
+    <path d="M8 44V12l19 30V12"/>
+    <path d="M60 16H44l-6 10h16l-6 12H31"/>
+  </g>
+</svg>
+      <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+    </a>
+    <div class="nav-links">
+      <a href="/ru/#imkoniyat">Возможности</a>
+      <a href="/ru/#narx">Цены</a>
+      <a href="/ru/aloqa">Контакты</a>
+    </div>
+    <div class="nav-actions">
+      <details class="lang-menu"><summary aria-label="Язык"><span>RU</span></summary><div class="lang-menu-list"><a href="/connect" hreflang="uz" lang="uz">O‘zbekcha</a><a href="/ru/connect" hreflang="ru" lang="ru" aria-current="true">Русский</a><a href="/en/connect" hreflang="en" lang="en">English</a></div></details>
+      <a class="text-link" href="__APP_URL__/owner">Вход для клиентов</a>
+      <a class="nav-cta" href="/ru/#aloqa">Получить демо</a>
+    </div>
+  </nav>
+</header>
+  <main class="utility-main">
+    <p class="eyebrow"><span></span> Подключение устройства</p>
+    <h1>Устройство есть — остальное сделаем мы</h1>
+    <p class="hero-text">Если устройство рядом с вами, оставьте номер телефона. Специалист выдаст код подключения и поможет подключить удалённо.</p>
+    <p><a class="button" href="/ru/#aloqa">Оставить номер телефона</a></p>
+    <section class="utility-card">
+      <h2>Быстрое подключение для специалиста (Linux-устройство)</h2>
+      <p>Этот раздел используется только для <b>Linux-устройства</b> и после того, как сотрудник ENES или технический специалист выдал код подключения. Для компьютера с Windows в магазине есть обычный установщик — <a href="/install">инструкция по установке</a>.</p>
+      <div class="connect-form">
+        <input id="pairCode" maxlength="6" pattern="[A-Fa-f0-9]{6}" placeholder="ABC123" aria-label="6-значный код подключения">
+        <button id="makeCommand" class="button" type="button">Сформировать команду</button>
+      </div>
+      <code id="command" class="command">Введите код подключения.</code>
+      <button id="copyCommand" class="button button-ghost" type="button" hidden style="margin-top:12px">Скопировать</button>
+      <p id="copyStatus" class="form-status" role="status"></p>
+    </section>
+    <section class="utility-card">
+      <h2>После подключения</h2>
+      <ol>
+        <li>Подключите устройство к интернету.</li>
+        <li>Специалист привяжет устройство к облаку.</li>
+        <li>Камеры, NVR, тариф и функции настраиваются удалённо.</li>
+      </ol>
+      <p class="model-note">Этот процесс не устанавливает модель. Сейчас настраиваются только аутентификация устройства, связь с облаком и мониторинг.</p>
+    </section>
+  </main>
+  <!-- Umumiy footer — bosh sahifa bilan bir xil.  Uch tilli sahifalarga
+     havola `page:` o'rinbosari bilan (ruscha sahifadan ruscha aloqaga),
+     faqat o'zbekcha sahifalar (oferta, maxfiylik) to'g'ridan-to'g'ri. -->
+<footer class="band-dark">
+  <a class="brand brand-lockup" href="/ru/">
+    <!-- ENES Monitoring — "NS" monogrammasi.
+     Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
+     oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
+     shart emas. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 56" fill="none" role="img" aria-label="ENES">
+  <g stroke="currentColor" stroke-width="7" stroke-linejoin="round">
+    <path d="M8 44V12l19 30V12"/>
+    <path d="M60 16H44l-6 10h16l-6 12H31"/>
+  </g>
+</svg>
+    <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+  </a>
+  <p>
+    Единая система для магазинов, NVR/IP-камер и AI-аналитики.<br>
+    Контакты: Абдулвосит Зокиржонов · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
+  </p>
+  <div>
+    <a href="/ru/status">Статус системы</a>
+    <a href="/oferta">Публичная оферта</a>
+    <a href="/maxfiylik">Конфиденциальность</a>
+    <a href="/ru/hamkorlik">Партнёрство</a>
+    <a href="/ru/aloqa">Контакты</a>
+    <a href="tel:+998932225070">+998 93 222 50 70</a>
+    <a href="/rozilik-shabloni">Шаблон согласия</a>
+    <a href="__APP_URL__/owner">Панель клиента</a>
+    <a href="__PARTNER_URL__/installer">Панель установщика</a>
+  </div>
+  <p class="footer-powered">Powered by NS camera</p>
+</footer>
+  <script>
+    const TEXT = { badCode: "Введите 6-значный код подключения.", ready: "Команда готова.", copied: "Команда скопирована.", copyFailed: "Скопируйте вручную." };
+    const PLATFORM={api:location.origin,dl:location.origin};
+    fetch('/api/v1/public/urls').then((r)=>r.ok?r.json():null).then((d)=>{if(d)Object.assign(PLATFORM,d)}).catch(()=>{});
+    const code = document.getElementById('pairCode');
+    const output = document.getElementById('command');
+    const copy = document.getElementById('copyCommand');
+    const status = document.getElementById('copyStatus');
+    function make(){
+      const value=code.value.trim().toUpperCase();
+      if(!/^[A-F0-9]{6}$/.test(value)){status.textContent=TEXT.badCode;status.className='form-status error';return}
+      output.textContent=`curl -fsSL ${PLATFORM.dl}/downloads/sotqin-installer.sh | sudo bash -s -- --cloud ${PLATFORM.api} --code ${value}`;
+      copy.hidden=false;status.textContent=TEXT.ready;status.className='form-status ok';
+    }
+    document.getElementById('makeCommand').addEventListener('click',make);
+    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(output.textContent);status.textContent=TEXT.copied;status.className='form-status ok'}catch(_){status.textContent=TEXT.copyFailed;status.className='form-status error'}});
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="{{lang}}" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{site.aloqa.title}}</title>
+  <meta name="description" content="{{site.aloqa.description}}">
+  <link rel="canonical" href="__PUBLIC_ORIGIN__{{path}}">
+  {{hreflang}}
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="{{asset:site.css}}">
+</head>
+<body class="utility-page">
+  {{include:partials/nav-sub.html}}
+  <main class="utility-main">
+    <p class="eyebrow"><span></span> {{site.aloqa.eyebrow}}</p><h1>{{site.aloqa.h1}}</h1>
+    <section class="utility-card">
+      <h2>{{site.aloqa.tg_h2}}</h2>
+      <!-- Bot nomi F7 (cutover) da egadan keladi; hozircha eskisi. -->
+      <p><a href="__TELEGRAM_REGISTER_URL__">@chaqimchi_ai_bot</a> {{site.aloqa.tg_text}}</p>
+      <h2>{{site.aloqa.phone_h2}}</h2>
+      <p><a href="tel:+998932225070">+998 93 222 50 70</a></p>
+      <h2>{{site.aloqa.hours_h2}}</h2>
+      <p>{{site.aloqa.hours_text}}</p>
+      <h2>{{site.aloqa.partners_h2}}</h2>
+      <p>{{site.aloqa.partners_text}} <a href="{{page:hamkorlik}}">{{site.aloqa.partners_link}}</a>.</p>
+    </section>
+  </main>
+  {{include:partials/footer.html}}
+</body>
+</html>

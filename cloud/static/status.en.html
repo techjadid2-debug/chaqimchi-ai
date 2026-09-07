@@ -1,12 +1,12 @@
 <!doctype html>
 <!-- AVTOMATIK YASALGAN — QO'LDA TAHRIRLAMANG.
-     Manba: cloud/site/status.html + i18n/uz.json
+     Manba: cloud/site/status.html + i18n/en.json
      Yangilash: python scripts/build_site.py -->
-<html lang="uz" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Tizim holati — ENES Monitoring</title>
+  <title>System status — ENES Monitoring</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/assets/favicon.png" type="image/png">
   <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
@@ -14,11 +14,11 @@
 <body class="utility-page">
   <!-- Ichki sahifa navigatsiyasi — ochiq fon.  Bosh sahifadagi qorong'i
      navdan farqi faqat `nav-dark` sinfi; qolgan hamma narsa bitta
-     `site.css` qoidasi.  Havolalar `/` dan: ruscha sahifada bosh
+     `site.css` qoidasi.  Havolalar `/en/` dan: ruscha sahifada bosh
      sahifa `/ru/`, langar esa `/ru/#aloqa`. -->
 <header class="nav-shell">
-  <nav class="nav" aria-label="Bosh sahifa">
-    <a class="brand brand-lockup" href="/">
+  <nav class="nav" aria-label="Home">
+    <a class="brand brand-lockup" href="/en/">
       <!-- ENES Monitoring — "NS" monogrammasi.
      Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
      oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
@@ -32,26 +32,26 @@
       <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
     </a>
     <div class="nav-links">
-      <a href="/#imkoniyat">Imkoniyatlar</a>
-      <a href="/#narx">Narxlar</a>
-      <a href="/aloqa">Aloqa</a>
+      <a href="/en/#imkoniyat">Features</a>
+      <a href="/en/#narx">Pricing</a>
+      <a href="/en/aloqa">Contact</a>
     </div>
     <div class="nav-actions">
-      <details class="lang-menu"><summary aria-label="Til"><span>UZ</span></summary><div class="lang-menu-list"><a href="/status" hreflang="uz" lang="uz" aria-current="true">O‘zbekcha</a><a href="/ru/status" hreflang="ru" lang="ru">Русский</a><a href="/en/status" hreflang="en" lang="en">English</a></div></details>
-      <a class="text-link" href="__APP_URL__/owner">Mijoz kirishi</a>
-      <a class="nav-cta" href="/#aloqa">Demo olish</a>
+      <details class="lang-menu"><summary aria-label="Language"><span>EN</span></summary><div class="lang-menu-list"><a href="/status" hreflang="uz" lang="uz">O‘zbekcha</a><a href="/ru/status" hreflang="ru" lang="ru">Русский</a><a href="/en/status" hreflang="en" lang="en" aria-current="true">English</a></div></details>
+      <a class="text-link" href="__APP_URL__/owner">Customer login</a>
+      <a class="nav-cta" href="/en/#aloqa">Get a demo</a>
     </div>
   </nav>
 </header>
   <main class="utility-main">
-    <p class="eyebrow"><span></span> Tizim holati</p><h1>ENES Cloud</h1>
-    <section class="utility-card status-panel"><span id="light" class="status-light"></span><div><h2 id="statusTitle" style="margin-bottom:6px">Tekshirilmoqda…</h2><p id="statusText" style="margin:0;color:var(--muted)">Server javobi kutilmoqda.</p></div></section>
+    <p class="eyebrow"><span></span> System status</p><h1>ENES Cloud</h1>
+    <section class="utility-card status-panel"><span id="light" class="status-light"></span><div><h2 id="statusTitle" style="margin-bottom:6px">Checking…</h2><p id="statusText" style="margin:0;color:var(--muted)">Waiting for the server.</p></div></section>
   </main>
   <!-- Umumiy footer — bosh sahifa bilan bir xil.  Uch tilli sahifalarga
      havola `page:` o'rinbosari bilan (ruscha sahifadan ruscha aloqaga),
      faqat o'zbekcha sahifalar (oferta, maxfiylik) to'g'ridan-to'g'ri. -->
 <footer class="band-dark">
-  <a class="brand brand-lockup" href="/">
+  <a class="brand brand-lockup" href="/en/">
     <!-- ENES Monitoring — "NS" monogrammasi.
      Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
      oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
@@ -65,24 +65,24 @@
     <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
   </a>
   <p>
-    Do‘konlar, NVR/IP kameralar va sun’iy intellekt tahlili uchun yagona tizim.<br>
-    Aloqa: Abdulvosit Zokirjonov · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
+    One system for shops, NVR/IP cameras and AI analytics.<br>
+    Contact: Abdulvosit Zokirjonov · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
   </p>
   <div>
-    <a href="/status">Tizim holati</a>
-    <a href="/oferta">Ommaviy oferta</a>
-    <a href="/maxfiylik">Maxfiylik</a>
-    <a href="/hamkorlik">Hamkorlik</a>
-    <a href="/aloqa">Aloqa</a>
+    <a href="/en/status">System status</a>
+    <a href="/oferta">Public offer</a>
+    <a href="/maxfiylik">Privacy</a>
+    <a href="/en/hamkorlik">Partners</a>
+    <a href="/en/aloqa">Contact</a>
     <a href="tel:+998932225070">+998 93 222 50 70</a>
-    <a href="/rozilik-shabloni">Rozilik shabloni</a>
-    <a href="__APP_URL__/owner">Mijoz paneli</a>
-    <a href="__PARTNER_URL__/installer">O‘rnatuvchi paneli</a>
+    <a href="/rozilik-shabloni">Consent template</a>
+    <a href="__APP_URL__/owner">Customer panel</a>
+    <a href="__PARTNER_URL__/installer">Installer panel</a>
   </div>
   <p class="footer-powered">Powered by NS camera</p>
 </footer>
   <script>
-    const TEXT = { upTitle: "Cloud ishlayapti", upText: "Rasmiy sayt, panel va qurilma ulanish xizmati javob bermoqda.", downTitle: "Cloud bilan aloqa yo‘q", downText: "Servis jamoasi holatni tekshirishi kerak." };
+    const TEXT = { upTitle: "Cloud is up", upText: "The website, the panel and the device service are responding.", downTitle: "Cloud is unreachable", downText: "The service team needs to look into it." };
     fetch('/health',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{document.getElementById('light').classList.add('online');document.getElementById('statusTitle').textContent=TEXT.upTitle;document.getElementById('statusText').textContent=TEXT.upText}).catch(()=>{document.getElementById('statusTitle').textContent=TEXT.downTitle;document.getElementById('statusText').textContent=TEXT.downText});
   </script>
 </body>

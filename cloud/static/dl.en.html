@@ -1,13 +1,13 @@
 <!doctype html>
 <!-- AVTOMATIK YASALGAN — QO'LDA TAHRIRLAMANG.
-     Manba: cloud/site/dl.html + i18n/uz.json
+     Manba: cloud/site/dl.html + i18n/en.json
      Yangilash: python scripts/build_site.py -->
-<html lang="uz" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>ENES Monitoring — yuklab olish</title>
+  <title>ENES Monitoring — download</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/assets/favicon.png" type="image/png">
   <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
@@ -27,7 +27,7 @@
 <body>
   <div class="card">
     <div class="card-head">
-      <a class="brand brand-lockup" href="/">
+      <a class="brand brand-lockup" href="/en/">
         <!-- ENES Monitoring — "NS" monogrammasi.
      Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
      oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
@@ -40,16 +40,16 @@
 </svg>
         <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
       </a>
-      <details class="lang-menu"><summary aria-label="Til"><span>UZ</span></summary><div class="lang-menu-list"><a href="/" hreflang="uz" lang="uz" aria-current="true">O‘zbekcha</a><a href="/ru/" hreflang="ru" lang="ru">Русский</a><a href="/en/" hreflang="en" lang="en">English</a></div></details>
+      <details class="lang-menu"><summary aria-label="Language"><span>EN</span></summary><div class="lang-menu-list"><a href="/" hreflang="uz" lang="uz">O‘zbekcha</a><a href="/ru/" hreflang="ru" lang="ru">Русский</a><a href="/en/" hreflang="en" lang="en" aria-current="true">English</a></div></details>
     </div>
-    <h1>Windows dasturi</h1>
-    <p>Do‘kon kompyuteriga o‘rnatiladi: yuklab oling, «Keyingi → Keyingi → Tayyor», so‘ng brauzerda kamerani ulaysiz.</p>
-    <a class="button button-light" id="dlBtn" href="/api/v1/public/download-installer?os=windows">Yuklab olish</a>
-    <p class="meta hint" id="dlMeta">Versiya aniqlanmoqda…</p>
-    <p class="meta hint">O‘rnatish yo‘riqnomasi: <a class="plain" href="/install">qadam-baqadam</a></p>
+    <h1>Windows app</h1>
+    <p>Installs on the shop PC: download, “Next → Next → Done”, then connect the cameras in the browser.</p>
+    <a class="button button-light" id="dlBtn" href="/api/v1/public/download-installer?os=windows">Download</a>
+    <p class="meta hint" id="dlMeta">Checking the version…</p>
+    <p class="meta hint">Install guide: <a class="plain" href="/install">step by step</a></p>
   </div>
   <script>
-    const TEXT = { version: "Versiya {version} · {size} MB · imzolangan", pending: "Reliz hozircha tayyorlanmoqda." };
+    const TEXT = { version: "Version {version} · {size} MB · signed", pending: "The release is still being prepared." };
     fetch("/api/v1/public/windows-release").then((r) => r.ok ? r.json() : null).then((d) => {
       const meta = document.getElementById("dlMeta");
       if (d && d.available) {

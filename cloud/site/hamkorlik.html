@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="{{lang}}" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{site.hamkorlik.title}}</title>
+  <meta name="description" content="{{site.hamkorlik.description}}">
+  <link rel="canonical" href="__PUBLIC_ORIGIN__{{path}}">
+  {{hreflang}}
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="{{asset:site.css}}">
+</head>
+<body class="utility-page">
+  {{include:partials/nav-sub.html}}
+  <main class="utility-main">
+    <p class="eyebrow"><span></span> {{site.hamkorlik.eyebrow}}</p><h1>{{site.hamkorlik.h1}}</h1>
+    <section class="utility-card">
+      <h2>{{site.hamkorlik.offer_h2}}</h2>
+      <p>{{site.hamkorlik.offer_text}}</p>
+      <h2>{{site.hamkorlik.how_h2}}</h2>
+      <!-- Rost yozilgan: hamkor obyektni o'zi ochib kod ololmaydi (kod
+           hali yo'q — yo'l xaritasi 4.2).  Obyektni biz ochamiz. -->
+      <p>{{site.hamkorlik.how_text}}</p>
+      <h2>{{site.hamkorlik.need_h2}}</h2>
+      <p>{{site.hamkorlik.need_text}}</p>
+      <h2>{{site.hamkorlik.start_h2}}</h2>
+      <p><a class="button button-light" href="__PARTNER_URL__/installer">{{site.hamkorlik.start_button}}</a></p>
+      <p>{{site.hamkorlik.questions}} <a href="{{page:aloqa}}">{{site.hamkorlik.questions_link}}</a>. {{site.hamkorlik.consent_text}} <a href="/rozilik-shabloni">{{site.hamkorlik.consent_link}}</a> {{site.hamkorlik.consent_tail}}</p>
+    </section>
+  </main>
+  {{include:partials/footer.html}}
+</body>
+</html>

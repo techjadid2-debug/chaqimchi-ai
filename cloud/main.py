@@ -2108,18 +2108,48 @@ async def public_site(request: Request) -> Any:
     return _render_landing(request)
 
 
-def _localized_landing(request: Request, lang: str) -> HTMLResponse:
-    """Prefiksli bosh sahifa (`/ru/`, `/en/`) — faqat apex'da.
+def _localized_file(slug: str, lang: str) -> str:
+    """`scripts/build_site.py` nomlash qoidasi: `x.html`, `x.ru.html`, `x.en.html`."""
+    return f"{slug}.html" if lang == "uz" else f"{slug}.{lang}.html"
 
-    Subdomenlar tilga bo'linmaydi: panel tilni o'zi tanlaydi (`X-Lang`),
-    hujjatlar esa hozircha o'zbekcha.  Ikkala ko'rinish (`/ru` va `/ru/`)
-    ro'yxatdan o'tgan: aks holda FastAPI birini ikkinchisiga 307 bilan
-    yo'naltiradi va bu qidiruv tizimi uchun ortiqcha sakrash bo'ladi.
-    Canonical — slash bilan (`__PUBLIC_ORIGIN__/ru/`).
+
+def _localized_landing(request: Request, lang: str) -> HTMLResponse:
+    """Prefiksli bosh sahifa (`/ru/`, `/en/`) — apex'da; `dl.` hostida
+    yuklab olish sahifasining tili.
+
+    Boshqa subdomenlar tilga bo'linmaydi: panel tilni o'zi tanlaydi
+    (`X-Lang`), hujjatlar esa hozircha o'zbekcha.  Ikkala ko'rinish (`/ru`
+    va `/ru/`) ro'yxatdan o'tgan: aks holda FastAPI birini ikkinchisiga
+    307 bilan yo'naltiradi va bu qidiruv tizimi uchun ortiqcha sakrash
+    bo'ladi.  Canonical — slash bilan (`__PUBLIC_ORIGIN__/ru/`).
     """
-    if _host_section(request) != "apex":
+    section = _host_section(request)
+    if section == "dl":
+        return _render_public(_localized_file("dl", lang), request)
+    if section != "apex":
         raise HTTPException(404, "Topilmadi")
     return _render_landing(request, lang)
+
+
+#: Uch tilli ichki sahifalar (`scripts/build_site.py: PAGES`).  Ro'yxat
+#: qat'iy: `/ru/{slug}` boshqa yo'llarni yutib yubormasin.
+LOCALIZED_PAGES = ("aloqa", "hamkorlik", "status", "connect")
+
+
+def _localized_page(request: Request, lang: str, slug: str) -> HTMLResponse:
+    if slug not in LOCALIZED_PAGES or _host_section(request) != "apex":
+        raise HTTPException(404, "Sahifa topilmadi")
+    return _render_public(_localized_file(slug, lang), request)
+
+
+@app.get("/ru/{slug}", include_in_schema=False)
+async def public_page_ru(slug: str, request: Request) -> HTMLResponse:
+    return _localized_page(request, "ru", slug)
+
+
+@app.get("/en/{slug}", include_in_schema=False)
+async def public_page_en(slug: str, request: Request) -> HTMLResponse:
+    return _localized_page(request, "en", slug)
 
 
 @app.get("/ru", include_in_schema=False)
@@ -2159,14 +2189,14 @@ async def password_eye_script() -> FileResponse:
 
 
 @app.get("/connect", include_in_schema=False)
-async def connect_page() -> FileResponse:
-    return _static_page("connect.html")
+async def connect_page(request: Request) -> HTMLResponse:
+    return _render_public("connect.html", request)
 
 
 @app.get("/install", include_in_schema=False)
-async def install_page() -> FileResponse:
+async def install_page(request: Request) -> HTMLResponse:
     """Mijozning mustaqil o'rnatish yo'riqnomasi."""
-    return _static_page("install.html")
+    return _render_public("install.html", request)
 
 
 @app.get("/installer", include_in_schema=False)
@@ -2179,9 +2209,9 @@ async def installer_page(request: Request) -> Any:
 
 
 @app.get("/installer-guide", include_in_schema=False)
-async def installer_guide_page() -> FileResponse:
+async def installer_guide_page(request: Request) -> HTMLResponse:
     """Bo'sh mini-kompyuterdan mijozga topshirishgacha rasmli yo'riqnoma."""
-    return _static_page("installer-guide.html")
+    return _render_public("installer-guide.html", request)
 
 
 # Eslatma: bu yerda `/onboarding` sahifasi va `/api/v1/agent/discovery/scan`
@@ -2391,7 +2421,11 @@ async def sitemap_xml(request: Request) -> Response:
         "/maxfiylik": "privacy.html",
         "/oferta": "oferta.html",
         "/hamkorlik": "hamkorlik.html",
+        "/ru/hamkorlik": "hamkorlik.ru.html",
+        "/en/hamkorlik": "hamkorlik.en.html",
         "/aloqa": "aloqa.html",
+        "/ru/aloqa": "aloqa.ru.html",
+        "/en/aloqa": "aloqa.en.html",
         "/rozilik-shabloni": "rozilik-shabloni.html",
         "/kuzatuv-eslatmasi": "kuzatuv-eslatmasi.html",
     }
@@ -2399,7 +2433,12 @@ async def sitemap_xml(request: Request) -> Response:
     # tillarga ham havola bo'lishini so'raydi (`xhtml:link hreflang`);
     # faqat sahifadagi `<link rel=alternate>` bilan cheklansa, sitemap
     # uchta "bir xil" sahifa e'lon qilgandek ko'rinadi.
-    landing_langs = {"/": "uz", "/ru/": "ru", "/en/": "en"}
+    groups = [
+        {"uz": "/", "ru": "/ru/", "en": "/en/"},
+        {"uz": "/aloqa", "ru": "/ru/aloqa", "en": "/en/aloqa"},
+        {"uz": "/hamkorlik", "ru": "/ru/hamkorlik", "en": "/en/hamkorlik"},
+    ]
+    group_of = {path: group for group in groups for path in group.values()}
     parts = []
     for page, filename in pages.items():
         entry = f"<url><loc>{base}{page}</loc>"
@@ -2410,10 +2449,11 @@ async def sitemap_xml(request: Request) -> Response:
         except OSError:
             # Fayl yo'q bo'lsa sahifa baribir ro'yxatda qoladi — sanasiz.
             pass
-        if page in landing_langs:
-            for alt_path, alt_lang in landing_langs.items():
+        group = group_of.get(page)
+        if group:
+            for alt_lang, alt_path in group.items():
                 entry += f'<xhtml:link rel="alternate" hreflang="{alt_lang}" href="{base}{alt_path}"/>'
-            entry += f'<xhtml:link rel="alternate" hreflang="x-default" href="{base}/"/>'
+            entry += f'<xhtml:link rel="alternate" hreflang="x-default" href="{base}{group["uz"]}"/>'
         parts.append(entry + "</url>")
     body = "".join(parts)
     return Response(
@@ -2426,8 +2466,8 @@ async def sitemap_xml(request: Request) -> Response:
 
 @app.get("/privacy", include_in_schema=False)
 @app.get("/maxfiylik", include_in_schema=False)
-async def privacy_page() -> FileResponse:
-    return _static_page("privacy.html")
+async def privacy_page(request: Request) -> HTMLResponse:
+    return _render_public("privacy.html", request)
 
 
 @app.get("/tariflar", include_in_schema=False)
@@ -2437,7 +2477,13 @@ async def tariffs_redirect() -> RedirectResponse:
 
 
 def _render_public(name: str, request: Request) -> HTMLResponse:
-    """Placeholder'li ochiq sahifa: bo'lim manzillari va bot havolasi qo'yiladi."""
+    """Placeholder'li ochiq sahifa: bo'lim manzillari va bot havolasi qo'yiladi.
+
+    2026-09-08: shablondan qurilgan HAMMA sahifa shu yerdan o'tadi —
+    umumiy nav/footer'da `__APP_URL__` bor, `FileResponse` uni qo'ymasdi
+    va havola sinardi.  `__PUBLIC_ORIGIN__` ham shu yerda: canonical va
+    `hreflang` rasmiy manzildan quriladi (`_render_landing` bilan bir xil).
+    """
     page = STATIC_DIR / name
     if not page.is_file():
         raise HTTPException(404, "Sahifa topilmadi")
@@ -2450,6 +2496,7 @@ def _render_public(name: str, request: Request) -> HTMLResponse:
     )
     content = (
         page.read_text(encoding="utf-8")
+        .replace("__PUBLIC_ORIGIN__", urls.public_url() or origin)
         .replace("__TELEGRAM_REGISTER_URL__", register_url)
         .replace("__APP_URL__", urls.app_url() or origin)
         .replace("__PARTNER_URL__", urls.partner_url() or origin)
@@ -2459,13 +2506,13 @@ def _render_public(name: str, request: Request) -> HTMLResponse:
 
 
 @app.get("/rozilik-shabloni", include_in_schema=False)
-async def consent_template_page() -> FileResponse:
+async def consent_template_page(request: Request) -> HTMLResponse:
     """Xodim biometrik roziligi shabloni — montajchi chop etib olib boradi."""
-    return _static_page("rozilik-shabloni.html")
+    return _render_public("rozilik-shabloni.html", request)
 
 
 @app.get("/oferta", include_in_schema=False)
-async def public_offer_page() -> FileResponse:
+async def public_offer_page(request: Request) -> HTMLResponse:
     """Ommaviy oferta — to'lov qabul qilish uchun huquqiy asos.
 
     2026-08-25 gacha bu sahifa umuman yo'q edi, holbuki sayt
@@ -2473,7 +2520,7 @@ async def public_offer_page() -> FileResponse:
     holatda xizmat doirasi, javobgarlik chegarasi va pul qaytarish
     tartibini ko'rsatadigan hujjat bo'lmasdi.
     """
-    return _static_page("oferta.html")
+    return _render_public("oferta.html", request)
 
 
 @app.get("/hamkorlik", include_in_schema=False)
@@ -2487,7 +2534,7 @@ async def contact_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/kuzatuv-eslatmasi", include_in_schema=False)
-async def surveillance_notice_page() -> FileResponse:
+async def surveillance_notice_page(request: Request) -> HTMLResponse:
     """Do'kon eshigiga osiladigan eslatma.
 
     `rozilik-shabloni.html` ga qo'shilmadi: u IMZOLANADIGAN xodim
@@ -2495,7 +2542,7 @@ async def surveillance_notice_page() -> FileResponse:
     talab qilmaydi — uni o'sha hujjatga kiritish mijozdan imzo talab
     qilinadi degan noto'g'ri ma'no berardi.
     """
-    return _static_page("kuzatuv-eslatmasi.html")
+    return _render_public("kuzatuv-eslatmasi.html", request)
 
 
 @app.get("/edu", include_in_schema=False)
@@ -2511,8 +2558,8 @@ async def edu_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/status", include_in_schema=False)
-async def status_page() -> FileResponse:
-    return _static_page("status.html")
+async def status_page(request: Request) -> HTMLResponse:
+    return _render_public("status.html", request)
 
 
 @app.get("/admin", include_in_schema=False)

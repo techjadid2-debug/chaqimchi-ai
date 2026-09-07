@@ -1,0 +1,22 @@
+<!-- Ichki sahifa navigatsiyasi — ochiq fon.  Bosh sahifadagi qorong'i
+     navdan farqi faqat `nav-dark` sinfi; qolgan hamma narsa bitta
+     `site.css` qoidasi.  Havolalar `{{home}}` dan: ruscha sahifada bosh
+     sahifa `/ru/`, langar esa `/ru/#aloqa`. -->
+<header class="nav-shell">
+  <nav class="nav" aria-label="{{site.nav.home}}">
+    <a class="brand brand-lockup" href="{{home}}">
+      {{inline:enes-mark.svg}}
+      <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+    </a>
+    <div class="nav-links">
+      <a href="{{home}}#imkoniyat">{{site.nav.features}}</a>
+      <a href="{{home}}#narx">{{site.nav.pricing}}</a>
+      <a href="{{page:aloqa}}">{{site.nav.contact}}</a>
+    </div>
+    <div class="nav-actions">
+      {{lang_switch}}
+      <a class="text-link" href="__APP_URL__/owner">{{site.nav.login}}</a>
+      <a class="nav-cta" href="{{home}}#aloqa">{{site.nav.cta}}</a>
+    </div>
+  </nav>
+</header>

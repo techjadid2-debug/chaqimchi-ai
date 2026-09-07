@@ -67,8 +67,8 @@ def test_the_page_opens_by_explaining_the_whole_product() -> None:
     kompaniyani umuman bilmasligi mumkin."""
     html = EDU_HTML.read_text(encoding="utf-8")
 
-    assert "Chaqimchi AI nima" in html
-    assert "Chaqimchi Retail" in html
+    assert "ENES Monitoring nima" in html
+    assert "ENES Retail" in html
 
 
 def test_the_page_never_writes_a_price_into_its_own_script() -> None:

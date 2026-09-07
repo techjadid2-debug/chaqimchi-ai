@@ -1,7 +1,4 @@
 <!doctype html>
-<!-- AVTOMATIK YASALGAN — QO'LDA TAHRIRLAMANG.
-     Manba: cloud/site/pay.html + i18n/uz.json
-     Yangilash: python scripts/build_site.py -->
 <html lang="uz" data-theme="light">
 <head>
   <meta charset="utf-8">
@@ -14,7 +11,7 @@
        bilan bitta dizayn tizimi.  Sahifaga xos
        qoidalar shu yerda: `site.css` ni o'n uch sahifa bo'lishadi va
        to'lov ekrani uchun uni kattalashtirish shart emas. -->
-  <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
+  <link rel="stylesheet" href="{{asset:site.css}}">
   <style>
     .pay-shell { max-width: 480px; margin: 6vh auto 0; padding: 0 16px 60px; }
     .pay-shell .brand { justify-content: center; width: 100%; margin-bottom: 18px; }
@@ -38,16 +35,7 @@
 <body class="utility-page">
   <div class="pay-shell">
     <a class="brand brand-lockup" href="__APP_URL__">
-      <!-- ENES Monitoring — "NS" monogrammasi.
-     Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
-     oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
-     shart emas. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 56" fill="none" role="img" aria-label="ENES">
-  <g stroke="currentColor" stroke-width="7" stroke-linejoin="round">
-    <path d="M8 44V12l19 30V12"/>
-    <path d="M60 16H44l-6 10h16l-6 12H31"/>
-  </g>
-</svg>
+      {{inline:enes-mark.svg}}
       <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
     </a>
     <div class="pay-card" id="box"><p class="hint">Yuklanmoqda…</p></div>

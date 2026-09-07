@@ -121,6 +121,56 @@ def test_cache_tokens_are_computed_not_typed() -> None:
             assert f"/assets/{asset}?v={expected}" in landing(lang), f"{lang}: {asset} tokeni eskirgan"
 
 
+# ── Ichki sahifalar ─────────────────────────────────────────────────────
+
+SUBPAGES = ("aloqa", "hamkorlik", "status", "connect", "dl")
+UZ_ONLY = ("install", "privacy", "oferta", "rozilik-shabloni", "kuzatuv-eslatmasi", "edu", "installer-guide", "pay")
+
+
+@pytest.mark.parametrize("slug", SUBPAGES)
+def test_every_subpage_is_built_in_three_languages(slug: str) -> None:
+    for lang in ("uz", "ru", "en"):
+        name = f"{slug}.html" if lang == "uz" else f"{slug}.{lang}.html"
+        html = (STATIC / name).read_text(encoding="utf-8")
+        assert f'<html lang="{lang}"' in html, name
+        assert "{{" not in html, name
+        assert "AVTOMATIK YASALGAN" in html, f"{name}: shablondan qurilmagan"
+
+
+@pytest.mark.parametrize("slug", UZ_ONLY)
+def test_uzbek_only_pages_still_come_from_the_template(slug: str) -> None:
+    """Yuridik va texnik sahifalar tarjima qilinmaydi, lekin nav, footer
+    va brend umumiy qismdan keladi — ular ham qurilgan bo'lsin."""
+    html = (STATIC / f"{slug}.html").read_text(encoding="utf-8")
+    assert "AVTOMATIK YASALGAN" in html
+    assert "{{" not in html
+    assert f"{slug}.ru.html" not in [p.name for p in STATIC.glob("*.html")], "tarjima qilinmaydigan sahifa"
+
+
+def test_no_generated_page_carries_the_old_brand() -> None:
+    """«Chaqimchi» so'zi mijoz ko'radigan sahifada qolmasin.
+
+    Kichik harfli `chaqimchi` istisno: bot nomi (`@chaqimchi_ai_bot`) va
+    domen egadan keladigan F7 kirishlari — ular cutover'da almashadi.
+    O'rnatuvchi fayl nomi (`Chaqimchi_AI_Setup`) qurilma relizi (F8)
+    gacha haqiqat — u ham istisno.
+    """
+    for page in sorted(STATIC.glob("*.html")):
+        text = visible(page.read_text(encoding="utf-8")).replace("Chaqimchi_AI_Setup", "")
+        assert "Chaqimchi" not in text, f"{page.name}: eski brend nomi qolgan"
+
+
+def test_shared_navigation_reaches_every_templated_page() -> None:
+    """Umumiy nav va footer — bitta partial; sahifa uni chaqirmasa brend
+    o'zgarganda o'sha sahifa eski qolardi."""
+    for page in sorted(STATIC.glob("*.html")):
+        if page.name.startswith(("dl.", "pay.", "installer.html")):
+            continue  # o'z qobig'i bor: karta / to'lov ekrani / partner paneli
+        html = page.read_text(encoding="utf-8")
+        assert 'class="brand brand-lockup"' in html, f"{page.name}: yangi brend belgisi yo'q"
+        assert 'class="footer-powered"' in html, f"{page.name}: umumiy footer yo'q"
+
+
 # ── Marshrutlar ─────────────────────────────────────────────────────────
 
 
@@ -148,6 +198,36 @@ def test_each_language_is_served_at_its_own_path(client: TestClient, path: str, 
     assert "__PUBLIC_ORIGIN__" not in response.text
 
 
+@pytest.mark.parametrize("path,lang", [("/ru/aloqa", "ru"), ("/en/hamkorlik", "en"), ("/ru/status", "ru"), ("/en/connect", "en")])
+def test_localized_subpages_are_served_with_placeholders_filled(client: TestClient, path: str, lang: str) -> None:
+    response = client.get(path)
+    assert response.status_code == 200, path
+    assert f'<html lang="{lang}"' in response.text
+    assert "__APP_URL__" not in response.text, "nav/footer o'rinbosarlari qo'yilmagan"
+    assert "__PUBLIC_ORIGIN__" not in response.text
+
+
+def test_unknown_localized_slug_is_404(client: TestClient) -> None:
+    assert client.get("/ru/yo-q-sahifa").status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/oferta", "/maxfiylik", "/install", "/status", "/connect", "/rozilik-shabloni", "/kuzatuv-eslatmasi"])
+def test_uzbek_pages_get_their_placeholders_filled(client: TestClient, path: str) -> None:
+    """Umumiy footer'da `__APP_URL__` bor — `FileResponse` uni qo'ymasdi."""
+    text = client.get(path).text
+    assert "__APP_URL__" not in text and "__PARTNER_URL__" not in text, path
+
+
+def test_the_download_host_serves_each_language(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://enes.uz")
+    monkeypatch.setenv("CHAQIMCHI_DL_URL", "https://dl.enes.uz")
+    for path, lang in (("/", "uz"), ("/ru/", "ru"), ("/en/", "en")):
+        response = client.get(path, headers={"host": "dl.enes.uz"})
+        assert response.status_code == 200, path
+        assert f'<html lang="{lang}"' in response.text
+        assert "download-installer" in response.text
+
+
 def test_the_localized_landing_is_not_served_on_subdomains(client: TestClient, monkeypatch) -> None:
     monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://enes.uz")
     monkeypatch.setenv("CHAQIMCHI_APP_URL", "https://app.enes.uz")
@@ -161,5 +241,7 @@ def test_the_sitemap_lists_every_language_with_alternates(client: TestClient, mo
         assert f"<loc>https://enes.uz{path}</loc>" in body
     assert 'xmlns:xhtml="http://www.w3.org/1999/xhtml"' in body
     assert 'hreflang="x-default" href="https://enes.uz/"' in body
-    # Har til yozuvida uchala alternativ bo'lsin.
-    assert body.count('hreflang="ru"') == len(PATHS)
+    # Har til yozuvida uchala alternativ bo'lsin — bosh sahifa, aloqa,
+    # hamkorlik: 3 guruh × 3 yozuv.
+    assert body.count('hreflang="ru"') == 3 * len(PATHS)
+    assert "<loc>https://enes.uz/ru/aloqa</loc>" in body

@@ -1,30 +1,42 @@
 #!/usr/bin/env python3
-"""Ommaviy saytni uch tilda quradi: shablon + katalog → statik HTML.
+"""Ommaviy saytni quradi: shablon + katalog → statik HTML, uch tilda.
 
 Nega statik, so'rov paytida emas.  Qidiruv tizimiga har til uchun
 ALOHIDA manzil kerak (`/`, `/ru/`, `/en/`) va sahifa mazmuni doimiy
 bo'lishi kerak.  Server so'rov paytida render qilsa yangi bog'liqlik
 (shablon dvigateli) kerak bo'lardi va har so'rovda ish qilinardi;
-statik fayl esa oddiy `FileResponse`.  Natija repoga commit qilinadi —
-xuddi panel bundle'i kabi — va `--check` u eskirmaganini `make test`
-ichida tekshiradi.
+statik fayl esa oddiy `FileResponse` (+ runtime o'rinbosarlar:
+`__PUBLIC_ORIGIN__`, `__APP_URL__` — ularni server qo'yadi).  Natija
+repoga commit qilinadi — xuddi panel bundle'i kabi — va `--check` u
+eskirmaganini `make test` ichida tekshiradi.
 
 Nega `{{kalit}}` — o'z formatimiz.  Jinja kabi kutubxona faqat shu
-uchun qo'shilmaydi: kerak bo'lgani almashtirish, shart va sikl emas.
-Matn `i18n/{uz,ru,en}.json` dagi `site.*` kalitlaridan keladi — panel
-va Telegram bilan bitta katalog, ya'ni "O‘zbekcha" so'zi bir joyda.
+uchun qo'shilmaydi: kerak bo'lgani almashtirish va `include`, shart va
+sikl emas.  Matn `i18n/{uz,ru,en}.json` dagi `site.*` kalitlaridan
+keladi — panel va Telegram bilan bitta katalog.
 
-Maxsus o'rinbosarlar:
-    {{lang}}              — `uz` / `ru` / `en`
-    {{path}}              — `/` / `/ru/` / `/en/` (canonical va havolalar)
-    {{hreflang}}          — uchala til + `x-default` uchun `<link rel=alternate>`
-    {{lang_switch}}       — til tanlagich (`<details>`, tugmasiz)
-    {{site_json}}         — `site.js.*` kalitlari — `window.__SITE__`
-    {{asset:site.css}}    — `/assets/site.css?v=<sha256 boshi>` (kesh tokeni
-                            mazmundan hisoblanadi, qo'lda yangilanmaydi)
-    {{json:kalit}}        — JSON satr literali (JSON-LD uchun)
-    {{inline:fayl.svg}}   — `cloud/static/` dagi faylni joyiga qo'yadi
-                            (brend belgisi `currentColor` bilan ishlasin)
+Sahifalar ikki xil:
+  - uch tilli (bosh sahifa, aloqa, hamkorlik, holat, yuklab olish,
+    ulash) — matn katalogda, har til alohida fayl;
+  - faqat o'zbekcha (yuridik hujjatlar, o'rnatish yo'riqnomasi, edu,
+    to'lov) — matn shablonning o'zida, umumiy nav/footer va brend
+    katalogdan.  Yuridik matn tarjima qilinmaydi: noto'g'ri tarjima
+    qilingan oferta huquqiy javobgarlik.
+
+O'rinbosarlar:
+    {{lang}}                 — `uz` / `ru` / `en`
+    {{path}}                 — shu sahifaning shu tildagi manzili
+    {{home}}                 — bosh sahifa: `/`, `/ru/`, `/en/`
+    {{page:aloqa}}           — boshqa sahifaning shu tildagi manzili
+                               (tilda yo'q bo'lsa — o'zbekchasi)
+    {{hreflang}}             — `<link rel=alternate>` (uch tilli va
+                               indekslanadigan sahifalarda; boshqasida bo'sh)
+    {{lang_switch}}          — til tanlagich (`<details>`, tugmasiz)
+    {{site_json}}            — `site.js.*` kalitlari — `window.__SITE__`
+    {{asset:site.css}}       — `/assets/site.css?v=<sha256 boshi>`
+    {{json:kalit}}           — JSON satr literali (JSON-LD, inline JS)
+    {{inline:fayl.svg}}      — `cloud/static/` dagi faylning o'zi
+    {{include:partials/x}}   — `cloud/site/` dagi umumiy qism (rekursiv)
 
 Yetishmagan kalit — XATO, jimgina o'zbekchaga tushish emas: sayt oflayn
 quriladi va xato shu yerda ko'rinishi kerak, mijoz ekranida emas.
@@ -41,6 +53,7 @@ import hashlib
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,29 +64,67 @@ CATALOGUE_DIR = ROOT / "i18n"
 LANGS = ("uz", "ru", "en")
 DEFAULT_LANG = "uz"
 
-#: Tilning manzil prefiksi.  O'zbekcha — ildizda: u standart va eski
+#: Bosh sahifa prefiksi.  O'zbekcha — ildizda: u standart va eski
 #: havolalar (`/#aloqa`) o'zgarmasdan ishlayveradi.
 LANG_PATHS = {"uz": "/", "ru": "/ru/", "en": "/en/"}
-
-#: Qisqa belgi til tanlagichda.
 LANG_SHORT = {"uz": "UZ", "ru": "RU", "en": "EN"}
 
-#: Shablon → har til uchun chiqish fayli.  Fayllar `cloud/static/`
-#: ildizida, tekis nomda: `tests/test_static_pages.py` dagi `pages()`
-#: ularni o'zi topadi va sayt qoidalari uchala tilga ham tekshiriladi.
-PAGES = {
-    "index.html": {"uz": "site.html", "ru": "site.ru.html", "en": "site.en.html"},
-}
-
 JS_PREFIX = "site.js."
-
-PLACEHOLDER = re.compile(r"\{\{(?:(asset|json|inline):)?([\w.\-]+)\}\}")
-
+PLACEHOLDER = re.compile(r"\{\{(?:(asset|json|inline|include|page):)?([\w./\-]+)\}\}")
 BANNER = (
     "<!-- AVTOMATIK YASALGAN — QO'LDA TAHRIRLAMANG.\n"
     "     Manba: cloud/site/{template} + i18n/{lang}.json\n"
     "     Yangilash: python scripts/build_site.py -->\n"
 )
+
+
+@dataclass(frozen=True)
+class Page:
+    template: str
+    #: til → manzil.  Faqat `uz` bo'lsa sahifa o'zbekcha.
+    paths: dict[str, str]
+    #: til → `cloud/static/` dagi fayl.
+    outputs: dict[str, str]
+    #: `hreflang` va sitemap uchun.  `noindex` sahifalarda `False`.
+    indexable: bool = True
+
+    @property
+    def slug(self) -> str:
+        return self.template.removesuffix(".html")
+
+
+def _three(slug: str, index: bool = True) -> Page:
+    """Uch tilli oddiy sahifa: `/x`, `/ru/x`, `/en/x` → `x.html`, `x.ru.html`, `x.en.html`."""
+    return Page(
+        f"{slug}.html",
+        {"uz": f"/{slug}", "ru": f"/ru/{slug}", "en": f"/en/{slug}"},
+        {"uz": f"{slug}.html", "ru": f"{slug}.ru.html", "en": f"{slug}.en.html"},
+        indexable=index,
+    )
+
+
+def _uz(slug: str, path: str | None = None, index: bool = True) -> Page:
+    return Page(f"{slug}.html", {"uz": path or f"/{slug}"}, {"uz": f"{slug}.html"}, indexable=index)
+
+
+PAGES: tuple[Page, ...] = (
+    Page("index.html", dict(LANG_PATHS), {"uz": "site.html", "ru": "site.ru.html", "en": "site.en.html"}),
+    _three("aloqa"),
+    _three("hamkorlik"),
+    _three("status", index=False),
+    _three("connect", index=False),
+    # `dl.` subdomenida turadi: manzillar o'sha host ildiziga nisbatan.
+    Page("dl.html", dict(LANG_PATHS), {"uz": "dl.html", "ru": "dl.ru.html", "en": "dl.en.html"}, indexable=False),
+    _uz("install"),
+    _uz("privacy", "/maxfiylik"),
+    _uz("oferta"),
+    _uz("rozilik-shabloni"),
+    _uz("kuzatuv-eslatmasi"),
+    _uz("edu"),
+    _uz("installer-guide", index=False),
+    _uz("pay", index=False),
+)
+PAGE_BY_SLUG = {page.slug: page for page in PAGES}
 
 
 def load_catalogue() -> dict[str, dict]:
@@ -88,28 +139,35 @@ def asset_token(name: str) -> str:
     return hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
 
 
-def hreflang_links() -> str:
+def hreflang_links(page: Page) -> str:
+    if not page.indexable or len(page.paths) < 2:
+        return ""
     lines = [
         f'<link rel="alternate" hreflang="{lang}" href="__PUBLIC_ORIGIN__{path}">'
-        for lang, path in LANG_PATHS.items()
+        for lang, path in page.paths.items()
     ]
     # `x-default` — til aniqlanmaganda qidiruv tizimi qaysi sahifani
     # ko'rsatsin: o'zbekcha, chunki mijozlarning ko'pi shu yerda.
-    lines.append(f'<link rel="alternate" hreflang="x-default" href="__PUBLIC_ORIGIN__{LANG_PATHS[DEFAULT_LANG]}">')
+    lines.append(
+        f'<link rel="alternate" hreflang="x-default" href="__PUBLIC_ORIGIN__{page.paths[DEFAULT_LANG]}">'
+    )
     return "\n  ".join(lines)
 
 
-def lang_switch(lang: str, texts: dict) -> str:
+def lang_switch(page: Page, lang: str, texts: dict) -> str:
     """Til tanlagich — `<details>`, JS'siz va TUGMASIZ.
 
     `<nav>` ichida `<button>` bo'lmasligi kerak (`test_dark_nav_button_is_gone`);
     `<details>` klaviatura va ekran o'quvchisi uchun tekin ishlaydi.
+    Sahifa boshqa tilda yo'q bo'lsa (yuridik hujjat) — o'sha tildagi
+    bosh sahifaga olib boradi.
     """
     items = []
-    for code, path in LANG_PATHS.items():
+    for code in LANGS:
+        target = page.paths.get(code, LANG_PATHS[code])
         current = ' aria-current="true"' if code == lang else ""
         items.append(
-            f'<a href="{path}" hreflang="{code}" lang="{code}"{current}>{texts[f"site.lang.{code}"]}</a>'
+            f'<a href="{target}" hreflang="{code}" lang="{code}"{current}>{texts[f"site.lang.{code}"]}</a>'
         )
     return (
         '<details class="lang-menu">'
@@ -124,8 +182,7 @@ def site_json(lang: str, texts: dict) -> str:
     return json.dumps({"lang": lang, "t": strings}, ensure_ascii=False, sort_keys=True)
 
 
-def render(template_name: str, lang: str, texts: dict) -> str:
-    source = (TEMPLATES / template_name).read_text(encoding="utf-8")
+def render_text(source: str, page: Page, lang: str, texts: dict, *, where: str) -> str:
     missing: list[str] = []
 
     def replace(match: re.Match) -> str:
@@ -134,6 +191,15 @@ def render(template_name: str, lang: str, texts: dict) -> str:
             return f"/assets/{key}?v={asset_token(key)}"
         if kind == "inline":
             return (STATIC / key).read_text(encoding="utf-8").strip()
+        if kind == "include":
+            partial = (TEMPLATES / key).read_text(encoding="utf-8")
+            return render_text(partial, page, lang, texts, where=key).strip()
+        if kind == "page":
+            other = PAGE_BY_SLUG.get(key)
+            if other is None:
+                missing.append(f"page:{key}")
+                return match.group(0)
+            return other.paths.get(lang, other.paths[DEFAULT_LANG])
         if kind == "json":
             value = texts.get(key)
             if value is None:
@@ -143,11 +209,13 @@ def render(template_name: str, lang: str, texts: dict) -> str:
         if key == "lang":
             return lang
         if key == "path":
+            return page.paths.get(lang, page.paths[DEFAULT_LANG])
+        if key == "home":
             return LANG_PATHS[lang]
         if key == "hreflang":
-            return hreflang_links()
+            return hreflang_links(page)
         if key == "lang_switch":
-            return lang_switch(lang, texts)
+            return lang_switch(page, lang, texts)
         if key == "site_json":
             return site_json(lang, texts)
         value = texts.get(key)
@@ -158,20 +226,28 @@ def render(template_name: str, lang: str, texts: dict) -> str:
 
     body = PLACEHOLDER.sub(replace, source)
     if missing:
-        raise SystemExit(f"build_site: {lang}/{template_name} — kalit yo'q: {sorted(set(missing))}")
+        raise SystemExit(f"build_site: {lang}/{where} — kalit yo'q: {sorted(set(missing))}")
+    return body
+
+
+def render(page: Page, lang: str, texts: dict) -> str:
+    source = (TEMPLATES / page.template).read_text(encoding="utf-8")
+    body = render_text(source, page, lang, texts, where=page.template)
     leftover = re.findall(r"\{\{[^}]*\}\}", body)
     if leftover:
-        raise SystemExit(f"build_site: {lang}/{template_name} — noma'lum o'rinbosar: {leftover[:5]}")
-    banner = BANNER.format(template=template_name, lang=lang)
-    return body.replace("<!doctype html>\n", "<!doctype html>\n" + banner, 1)
+        raise SystemExit(f"build_site: {lang}/{page.template} — noma'lum o'rinbosar: {leftover[:5]}")
+    banner = BANNER.format(template=page.template, lang=lang)
+    # `<!doctype html>` katta-kichik harfda farq qilishi mumkin (eski
+    # sahifalar `<!DOCTYPE html>` bilan) — ikkalasi ham qabul qilinadi.
+    return re.sub(r"^(<!doctype html>\n)", lambda m: m.group(1) + banner, body, count=1, flags=re.I)
 
 
 def expected_outputs() -> dict[Path, str]:
     catalogue = load_catalogue()
     outputs: dict[Path, str] = {}
-    for template_name, targets in PAGES.items():
-        for lang, filename in targets.items():
-            outputs[STATIC / filename] = render(template_name, lang, catalogue[lang])
+    for page in PAGES:
+        for lang, filename in page.outputs.items():
+            outputs[STATIC / filename] = render(page, lang, catalogue[lang])
     return outputs
 
 

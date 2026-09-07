@@ -7,8 +7,29 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-09-07
+## HOZIRGI HOLAT · 2026-09-08
 
+- **🧹 ESKI PANELLAR O'CHIRILDI (2026-09-08, `73cc704`).**
+  `cloud/static/owner.html` (2 827 q.) va `admin.html` (2 310 q.) yo'q;
+  `/owner` va `/admin` har doim React.  Eski 47 qulf
+  `tests/test_panel_v2.py` ga ko'chdi (ko'chirilmaganlari va sababi —
+  pastda «PANEL QOIDALARI»).  `make test` endi i18n katalogini ham
+  tekshiradi (`build_i18n.py --check`).  Bundle qayta qurildi va
+  commit qilindi.
+  ⚠️ **React adminda eski adminning 15+ vositasi YO'Q.**  `556d33c`
+  xabari «faqat Arizalar yetishmasdi» degan edi; endpoint ro'yxatini
+  solishtirish boshqacha ko'rsatdi: qurilma topshiriqlari
+  (`clean_chains`, `benchmark`), diagnostika, funksiya biriktirish
+  (`features/draft|quote|approve` — **sotuv darvozasi**), masofaviy
+  kamera/chizma (`camera-inventory`), yuz kadrlari, onboarding,
+  jamoa/installer biriktirish, ogohlantirish sozlamalari va sinovi,
+  biznes shablonlari, to'lov provayderlari, reliz/yangilanish
+  boshqaruvi.  Ikki `xfail(strict)` test kutib turibdi
+  (`test_the_admin_can_fix_a_shop_remotely`,
+  `test_admin_panel_promises_the_same_interval`).  **F4 shu ro'yxatni
+  yopmaguncha shox deploy qilinmaydi** — production `main` da.
+  `owner.css`/`panel.css` diskda qoldi: `pay.html` hali ularni
+  ishlatadi (F3 da ketadi).
 - **🎨 REBRENDING: F1 (dizayn tizimi) va F2 (til yadrosi) BAJARILDI.**
   Shox: `enes-rebrend`.  Deploy qilinmagan — rebrend to'liq tayyor
   bo'lgach bir marta chiqadi.
@@ -235,6 +256,19 @@
   | Klip oqimi | `/Streaming/Channels/101` | **yo'q** |
 
 ## KEYINGI ISH
+
+**REBREND (2026-09-08).** To'liq holat + xatolar + tartib:
+`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  Navbat:
+**F3 sayt** (avval `scripts/build_site.py` qarori — bitta shablon +
+katalog → `cloud/static/site/{uz,ru,en}/`, keyin dizayn; aks holda 15+7
+sahifa ikki marta yoziladi) → **F4 panellar** (namunadagi ko'rinish +
+matn ajratish + yuqoridagi admin vositalari ro'yxati; ikki `xfail`
+belgisi olinadi; `owner.css`/`panel.css` o'chadi) → F5 Telegram/CSV →
+F6 ichki nomlar → F7 cutover (egadan: DNS, bot @username, yuridik nom,
+Payme/Click) → F8 qurilma relizi (soakdan keyin) → F9 tozalash.
+Rebrendga bog'liq bo'lmagan kichik xatolar parallel, cloud-only:
+`/health` halol (O-1), CSP (O-2), server tomonda chiqish (O-8), rate
+limit (O-9), `geometry-panel.js` da `shelf` yo'q, CI'ga `make ui-check`.
 
 **RAQOBAT (2026-09-06).** Tahlil va reja:
 [docs/RAQOBAT_RETAILSOLUTION.md](RAQOBAT_RETAILSOLUTION.md) §7 (holat jadvali).
@@ -478,6 +512,16 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Commit xabari «faqat X yetishmaydi» desa ham endpoint ro'yxatini
+  SOLISHTIRING.**  `556d33c` eski adminni o'chirishga tayyorlashda
+  «Arizalar bo'limi yo'q edi, qo'shildi» deb yozgan;
+  `grep -o '/api/v1/admin/[^"]*'` eski va yangi faylda **15 dan ortiq**
+  farq ko'rsatdi (qurilma topshiriqlari, diagnostika, funksiya
+  biriktirish, masofaviy chizma, reliz boshqaruvi…).  Bir sahifani
+  boshqasi bilan almashtirishdan oldin ikkala faylning endpoint
+  to'plamini ayirib ko'ring — ikki daqiqalik ish, xato esa bir
+  deploydan keyin ko'rinardi.
 
 - **Yozilgan-u hech qachon O'QILMAGAN ustun bo'lishi mumkin.**
   `production_events.line_name` qurilmadan kelib bazaga yozilardi va
@@ -772,6 +816,86 @@ taklif qilish kerak.
   sababdan xato topilma yozdi (`notify.py` dagi standart qiymatni o'qib,
   production `store.py: alert_throttle_allow` ni uzatishini ko'rmadi).
 
+## PANEL QOIDALARI — eski testlardan ko'chirilmaganlari
+
+`tests/test_panel_v2.py` eski `owner.html`/`admin.html` uchun yozilgan
+47 qulfning davomi.  Ko'chirilganlari o'sha faylda; quyidagilar
+ko'chirilmadi va har birining sababi bor.  F4 da bu ro'yxat qayta
+ko'riladi: «hali tekshirilmagan» guruhi yo qulflanadi, yo sababi bilan
+o'chiriladi.
+
+**React'da tuzilma boshqacha — qoida ma'nosini yo'qotgan:**
+- `test_owner_panel_logs_in_from_the_link`, `test_stored_session_wins_over_the_link`
+  — `loginFromLink()`/`showApp()` funksiyalari yo'q; token yo'li
+  `api.ts` da, qulf `test_link_login_uses_the_token_endpoint`.
+- `test_owner_panel_has_one_operational_screen_without_tabs`,
+  `test_owner_tabs_fail_independently` — React panelda bo'limlar `NAV`
+  orqali va har sahifa o'z so'rovini o'zi qiladi.
+- `test_admin_panel_has_a_left_sidebar_with_six_sections`,
+  `test_every_admin_section_can_actually_load_its_data` — `NAV[].deps ⊆
+  LOADERS ⊆ S` zanjiri faqat eski adminda edi.
+- `test_admin_panel_translates_raw_api_codes` — F2 dan server xatoni
+  matn + kod qilib qaytaradi (`cloud/errors.py: ApiError`).
+- `test_the_attendance_camera_can_be_chosen_in_the_panel` — davomat
+  kamerasi endi «kirish» ROLIDAN keladi (`af08057`), alohida tanlagich
+  yo'q; qulf `test_the_camera_role_is_offered_but_never_forced`.
+- `test_owner_panel_does_not_break_binary_uploads` — `api.ts` shu
+  qoidani bajaradi; qulf `test_employee_photos_survive_an_iphone` ichida.
+- `test_owner_panel_is_light_branded_not_admin_dark`,
+  `test_admin_panel_is_light_and_reuses_the_customer_design_system` —
+  ikkala panel bitta `styles.css` dan; qulf
+  `test_both_panels_share_one_design_system`.
+
+**Hali tekshirilmagan — F4 da ko'chiriladi** (React'da bor-yo'qligi
+tekshirilmagan yoki YO'Q):
+- `test_owner_staff_tab_disappears_when_the_feature_is_off` — «Xodimlar»
+  bo'limi funksiya yopiq saytda ham `NAV` da turadi (`owner.tsx:28`);
+  eski qoida: 403 o'rniga tugmaning o'zi chizilmasin.
+- `test_admin_panel_has_no_native_dialogs` — React adminda
+  `window.confirm` QAYTGAN (`admin.tsx:139`, hisobni to'langan deb
+  tasdiqlash).  Eski sabab `prompt()` haqida edi (matn kiritishda
+  bitta harf xato — amal bajarilmasdi); `confirm` uchun sabab
+  yengilroq, F4 da qaror.
+- `test_admin_customer_page_is_deep_linkable` — `router.ts` faqat bo'lim
+  ID'sini o'qiydi, `customers/{id}` yo'q; «diqqat talab qiladi»
+  ro'yxatidan mijozga to'g'ridan-to'g'ri o'tib bo'lmaydi.
+- `test_admin_panel_promises_the_same_interval` — reliz boshqaruvi React
+  adminda yo'q; `tests/test_windows_installer.py` da `xfail(strict)`.
+- `test_owner_panel_shows_camera_previews_and_refreshes`,
+  `test_owner_can_ask_for_a_fresh_camera_frame` — React'da `/preview`
+  va `requestFrame` bor, qulf yozilmagan.
+- `test_owner_drag_does_not_storm_the_server` — `GeometryEditor.tsx`
+  sudrashda so'rov yubormasligi tekshirilmagan (eski panelda har
+  `pointermove` da issiqlik xaritasi qayta so'ralardi).
+- `test_owner_uses_the_shop_day_not_utc` — `api.ts` da `tashkentDay`
+  bor, «Kecha» tugmasi uni ishlatishi qulflanmagan (eski xato: yarim
+  tundan 05:00 gacha ikki kun oldingi hisobot so'ralardi).
+- `test_owner_settings_explain_what_each_number_does` («navbat zonasisiz
+  ishlamaydi» izohi), `test_owner_shows_the_data_it_already_fetches`,
+  `test_owner_hourly_chart_can_show_occupancy` — tekshirilmagan.
+
+**Eski adminning React adminga ko'chirilmagan vositalari** (endpoint
+bo'yicha, `556d33c` dan keyin o'lchandi):
+`sites/{id}` tafsilot sahifasi (config_health: `geometry_problems`,
+`feature_problems`, `role_problems`), `sites/{id}/camera-inventory`
+(masofaviy kamera va chizma — 2026-08-21 qarori),
+`sites/{id}/jobs/clean-chains` va `jobs/benchmark`,
+`sites/{id}/diagnostics`, `sites/{id}/features/draft|quote|approve`
+(**sotuv darvozasi**), `sites/{id}/faces`, `sites/{id}/onboarding`,
+`accounts/{id}` va `installer-assignments` (Jamoa), `alerts` +
+`alerts/test`, `business-templates`, `payments/providers`,
+`updates-paused`, `windows-releases`.  Qulf:
+`test_the_admin_can_fix_a_shop_remotely` (`xfail(strict)`).
+
+**Ega panelida eski `owner.html` ga nisbatan yo'q** (React owner 08-24
+dan production'da — yo'qotish yangi emas, lekin F4 da qaror kerak):
+`announcements`/`speak` (do'kon gapiradi — bot tugmalari orqali
+ishlaydi), `attendance.csv`, `shifts`/`shifts.csv`, `faces/events`
+(hodisadan yuz qo'shish), `faces/photos/{id}` (rasmni o'chirish),
+`digest`, `revenue`, `trust-score`, `trend`, `subscription`, `health`,
+`features` — oxirgi oltitasi `dashboard` ichiga yig'ilgan bo'lishi
+mumkin, tekshirilmagan.
+
 ## YOZUV SHABLONI
 
 Tarix bo'limining **tepasiga** qo'shing:
@@ -790,6 +914,37 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-08 — Eski panellar o'chirildi, qoidalar React manbasiga ko'chdi (`73cc704`)
+
+Nima: `cloud/static/owner.html` va `admin.html` repodan ketdi; `/owner`
+va `/admin` faqat React.  Eski panel uchun yozilgan 47 qulf
+`tests/test_panel_v2.py` ga, uchtasi (`test_plans`, `test_zone_editor`,
+`test_windows_installer`) React manbasiga qaratildi.  `make test` endi
+`build_i18n.py --check` ni ham yuritadi.  Yo'l-yo'lakay: iPhone HEIC →
+JPEG (`api.ts: toJpeg`) eski paneldan ko'chirilmay qolgan edi —
+qaytarildi; sidebar'da aloqa raqami (`SUPPORT_PHONE`, sayt bilan bir
+xil — test qulflaydi).
+
+Nega: ikki avlod har o'zgarishni ikki joyda talab qilardi
+(ARXITEKTURA §10.7).
+
+Qayerda: `tests/test_panel_v2.py`, `tests/test_plans.py`,
+`tests/test_zone_editor.py`, `tests/test_windows_installer.py`,
+`Makefile`, `docs/PRODUCTION_RUNBOOK.md` §5,
+`docs/ARXITEKTURA_XARITASI.md` §9/§10.7,
+`frontend/src/{api.ts,components.tsx,owner.tsx,styles.css}`,
+`cloud/static/v2/` (bundle).
+
+Test: `test_panel_v2.py` (47 ta, shundan bittasi `xfail`), ikki
+`xfail(strict)`: `test_the_admin_can_fix_a_shop_remotely`,
+`test_admin_panel_promises_the_same_interval` — vosita ko'chirilgach
+«kutilmagan o'tish» beradi va belgi olinadi.
+
+Diqqat: **React adminda eski adminning 15+ vositasi yo'q** — `556d33c`
+xabari «faqat Arizalar» degan edi.  Ro'yxat «PANEL QOIDALARI» da; F4
+yopmaguncha shox deploy qilinmaydi.  `owner.css`/`panel.css` diskda
+qoldi — `pay.html` hali ularni ishlatadi (F3 da ketadi).
 
 ### 2026-09-07 — F1 dizayn tizimi va F2 til yadrosi (`0fca9e2`, `8a1c1cf`, `ed5b777`)
 

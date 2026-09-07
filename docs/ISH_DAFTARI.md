@@ -9,6 +9,26 @@
 
 ## HOZIRGI HOLAT · 2026-09-08
 
+- **🎨 F3.1 — BOSH SAHIFA UCH TILDA, YANGI DIZAYNDA (2026-09-08, `4f199ce`).**
+  `cloud/site/index.html` (shablon) + `i18n/*.json` dagi **172 ta
+  `site.*` kaliti** → `scripts/build_site.py` → `cloud/static/site.html`,
+  `site.ru.html`, `site.en.html` (commit qilinadi, `--check` `make test`
+  ichida).  Marshrutlar `/`, `/ru/`, `/en/` (+ slash'siz), canonical va
+  `hreflang` har sahifada, `sitemap.xml` da `xhtml:link` alternativlari.
+  Namunadagi ritm: qorong'i hero → ochiq imkoniyatlar → qorong'i «AI
+  ko'radi» → ochiq qadamlar/kameralar/panel/narx → qorong'i aloqa.
+  Sayt tema tugmasiga bo'ysunmaydi (`data-theme="light"`), bo'lim
+  ranglari `site.css` dagi `--band-*` tokenlaridan.  Kesh tokeni (`?v=`)
+  endi qurish paytida hisoblanadi.  Shior har tilda o'z tilida
+  («Kameralaringiz. Endi aqlli.») — ega inglizchasini xohlasa bitta
+  kalit (`site.hero.title_*`).
+  **Yo'l-yo'lakay topilgan xato:** `Dockerfile.cloud` F2 katalogini
+  (`i18n/`) konteynerga nusxalamasdi — deployda birinchi `t()` 500
+  berardi.  `COPY i18n ./i18n` qo'shildi, test qulflaydi.
+  **F3 dan qolgani (F3.2):** qolgan 14 sahifa + 7 hujjat sahifasi hali
+  eski nav/brend bilan (`aloqa.html`, `edu.html`, `install.html`…);
+  tarif kartalari matni serverdan o'zbekcha keladi (F5 da katalogga);
+  `og-v3.png` eski brend (F9); `edu.html` da «Chaqimchi Edu».
 - **🧹 ESKI PANELLAR O'CHIRILDI (2026-09-08, `73cc704`).**
   `cloud/static/owner.html` (2 827 q.) va `admin.html` (2 310 q.) yo'q;
   `/owner` va `/admin` har doim React.  Eski 47 qulf
@@ -259,9 +279,11 @@
 
 **REBREND (2026-09-08).** To'liq holat + xatolar + tartib:
 `~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  Navbat:
-**F3 sayt** (avval `scripts/build_site.py` qarori — bitta shablon +
-katalog → `cloud/static/site/{uz,ru,en}/`, keyin dizayn; aks holda 15+7
-sahifa ikki marta yoziladi) → **F4 panellar** (namunadagi ko'rinish +
+**F3.2 — qolgan sayt sahifalari** (14 ochiq sahifa + 7 hujjat sahifasi
+`cloud/site/` shabloniga ko'chadi: yagona nav/footer, brend, uch til
+marketing sahifalari uchun; yuridik sahifalar o'zbekcha qoladi; `pay.html`
+`owner.css`/`panel.css` dan `site.css` ga o'tadi va eski CSS o'chadi)
+→ **F4 panellar** (namunadagi ko'rinish +
 matn ajratish + yuqoridagi admin vositalari ro'yxati; ikki `xfail`
 belgisi olinadi; `owner.css`/`panel.css` o'chadi) → F5 Telegram/CSV →
 F6 ichki nomlar → F7 cutover (egadan: DNS, bot @username, yuridik nom,
@@ -512,6 +534,15 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Repo ildiziga yangi papka qo'shsangiz `Dockerfile.cloud` ga ham
+  qo'shing.**  `COPY` ro'yxati aniq sanaladi (`chaqimchi_ai`, `cloud`,
+  `deploy`, `scripts`, `models`); F2 da `i18n/` qo'shildi-yu Dockerfile
+  yangilanmadi — lokalda hamma test o'tardi, konteynerda esa birinchi
+  `t()` `FileNotFoundError` berardi.  Bir kun kechroq topilganda bu
+  deploydan keyingi 500 bo'lardi.  Endi test qulflaydi
+  (`test_the_cloud_image_carries_the_language_catalogue`); yangi papka
+  uchun shunga o'xshash qator qo'shing.
 
 - **Commit xabari «faqat X yetishmaydi» desa ham endpoint ro'yxatini
   SOLISHTIRING.**  `556d33c` eski adminni o'chirishga tayyorlashda
@@ -914,6 +945,45 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-08 — F3.1: bosh sahifa uch tilda, yangi dizaynda (`4f199ce`)
+
+Nima: `/`, `/ru/`, `/en/` — ENES dizaynidagi bosh sahifa, har til o'z
+canonical va `hreflang` bilan; sitemap uchala tilni alternativlari
+bilan e'lon qiladi.  Sahifa `cloud/site/index.html` shablonidan
+`scripts/build_site.py` bilan quriladi, matn `i18n/*.json` dagi
+`site.*` kalitlaridan (172 ta × 3 til).  `site.js` uchala tilda bitta
+fayl: satrlar sahifaga `window.__SITE__` bilan qo'yiladi.
+
+Nega: rebrend F3.  Qidiruv tizimiga har til uchun alohida sahifa kerak,
+yangi bog'liqlik qo'shilmaydi, server so'rov paytida hech narsa render
+qilmaydi — shuning uchun statik qurilish, natija commit qilinadi.
+
+Qayerda: `cloud/site/index.html` (yangi), `scripts/build_site.py`
+(yangi), `cloud/static/site.css` (qayta yozildi — `--band-*` bo'lim
+tokenlari), `cloud/static/site.js`, `cloud/static/site{,.ru,.en}.html`
+(qurilgan), `cloud/main.py` (`LANDING_PAGES`, `/ru`, `/en`, sitemap
+`xhtml:link`), `Dockerfile.cloud` (`COPY i18n`), `Makefile`
+(`build_site.py --check`), `i18n/{uz,ru,en}.json`, 13 sahifada `?v=`.
+
+Test: `tests/test_site_build.py` (yangi, 21 ta) — `--check` eskirmagani,
+har tilda canonical/hreflang, til tanlagichda joriy til, JSON-LD har
+tilda yaroqli va FAQ savoli sahifada, eski brend yo'q, `site.js`
+satrlari katalogdan, kesh tokeni hisoblangan, marshrutlar 200 (307
+emas), subdomenda 404, sitemap alternativlari.  `test_static_pages.py`
+endi uchala tilni ham yuradi; `test_the_cloud_image_carries_the_language_catalogue`.
+Yangilangan: `test_platform_hosts` («ENES»), `test_cloud_api`
+(«2–4 kamera» + «Boshlang‘ich 2, Biznes 4»).
+
+Diqqat: nav ichida «button» SO'ZI ham bo'lmasin — `test_dark_nav_button_is_gone`
+`<nav>…</nav>` ni matn sifatida o'qiydi, izohdagi so'z ham hisob.
+Diqqat: `site.css` qayta yozilganda boshqa 13 sahifa ishlatadigan
+sinflar SAQLANDI (`test_shared_pages_keep_the_styles_they_use`) — ular
+F3.2 da shablonga o'tgach o'lik qoidalar tozalanadi.
+Diqqat: tarif kartalari matni serverdan o'zbekcha keladi (`plans.py`,
+`NETWORK_PLAN_CARD`) — ru/en sahifada ham; F5 da katalogga o'tadi.
+Diqqat: namunadagi «1000+ mijoz», «99.9%», App Store, qurilma surati
+ataylab yo'q — bugun rost emas (`FORBIDDEN_CLAIMS` va sayt qoidasi).
 
 ### 2026-09-08 — Eski panellar o'chirildi, qoidalar React manbasiga ko'chdi (`73cc704`)
 

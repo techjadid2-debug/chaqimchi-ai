@@ -246,7 +246,7 @@ def test_admin_unknown_site_is_404(cloud_client) -> None:
 def test_admin_panel_page_is_served(cloud_client) -> None:
     r = cloud_client.get("/admin")
     assert r.status_code == 200
-    assert "Chaqimchi Cloud" in r.text
+    assert "ENES Monitoring" in r.text
     # Panel qobig'i chaqiradigan bundle haqiqatan beriladi — aks holda
     # sahifa ochiladi-yu, bo'sh qoladi (2026-09-08: eski `owner.css`/
     # `panel.css` o'chirildi, React bundle'i qoldi).

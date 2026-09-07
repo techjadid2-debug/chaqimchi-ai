@@ -1,9 +1,12 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
+import { api, clearToken, copyText, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
 import { t } from "./i18n";
-import { ActionMenu, AppShell, Avatar, Card, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, SearchPalette, Skeleton, type NavItem } from "./components";
+import { ActionMenu, AppShell, Avatar, Card, CopyField, EmptyState, LoginScreen, MetricCard, Modal, PageHeader, Pill, SearchPalette, Skeleton, useConfirm, useToast, type NavItem } from "./components";
 import { AdminHome } from "./AdminHome";
+import { AdminCustomer } from "./AdminCustomer";
+import { AdminTeam } from "./AdminTeam";
+import { AdminSettings } from "./AdminSettings";
 import type { Lead } from "./types";
 import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
@@ -15,7 +18,7 @@ import "./styles.css";
 type Site = { id:string; name:string; address?:string; contact_phone?:string; plan?:string; license_status?:string; connection?:string; devices?:number; cameras_active?:number; cameras_expected?:number; days_left?:number; monthly_price_uzs?:number; last_seen?:string };
 type DeviceMetric = { device_id:string; site_id:string; site_name?:string; label?:string; received_at?:string; cpu_percent?:number|null; ram_percent?:number|null; disk_percent?:number|null; fps?:number|null; inference_latency_ms?:number|null; uptime_sec?:number|null; npu_percent?:number|null; temperature_c?:number|null };
 type CreatedCustomer = {site_id:string;name:string;pairing_code:string;pairing_expires_at?:string;username:string;password:string};
-type AdminInvoice = {id:string;site_name?:string;site_id:string;months:number;amount_uzs:number;state:string;provider?:string;created_at?:string;paid_at?:string};
+type AdminInvoice = {id:string;site_name?:string;site_id:string;months:number;amount_uzs:number;state:string;provider?:string;created_at?:string;paid_at?:string;payme_url?:string;click_url?:string};
 type Feature = {code:string;name:string;category:string;monthly_usd_cents:number;cost_usd_cents:number;active?:boolean};
 type Account = {id:string;username:string;full_name?:string;role:string;status:string;company?:string;site_id?:string};
 type ReadinessItem = {key:string;label:string;ok:boolean;required:boolean;reasons?:string[]};
@@ -45,7 +48,7 @@ const NAV:NavItem[] = [
   {id:"events",label:"AI hodisalar",icon:"pulse"},
   {id:"agent",label:"Vision Agent",icon:"pulse"},
   {id:"monitoring",label:"Monitoring",icon:"chart"},
-  {id:"roles",label:"Rollar",icon:"shield"},
+  {id:"team",label:"Jamoa",icon:"shield"},
   {id:"settings",label:"Sozlamalar",icon:"settings"},
 ];
 
@@ -69,12 +72,15 @@ function exportSites(sites:Site[]) {
   const rows = sites.map(site=>[site.name,site.address||"",site.connection||"",site.cameras_active??"",site.cameras_expected??"",site.plan||"",site.days_left??"",site.monthly_price_uzs??""]);
   const csv = [header, ...rows].map(row=>row.map(cell=>`"${String(cell).replace(/"/g,'""')}"`).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([`﻿${csv}`],{type:"text/csv;charset=utf-8"}));
-  const link = document.createElement("a"); link.href = url; link.download = "chaqimchi-mijozlar.csv"; link.click(); URL.revokeObjectURL(url);
+  const link = document.createElement("a"); link.href = url; link.download = "enes-mijozlar.csv"; link.click(); URL.revokeObjectURL(url);
 }
 
 const CONNECTION_LABEL:Record<string,string> = { online:"Aloqada", stale:"Eskirgan", not_paired:"Ulanmagan", offline:"Oflayn" };
 
 function SiteTable({sites,onCreate,onOpen,searchable=false}:{sites:Site[];onCreate?:()=>void;onOpen?:(site:Site)=>void;searchable?:boolean}) {
+  /* `onOpen` — mijoz tafsilot sahifasi (`/admin/customers/<id>`): qurilma,
+     kamera, diagnostika, funksiya biriktirish, login, hisob.  Eski
+     admindagi «Mijozlar → karta» yo'li. */
   const [query,setQuery] = useState("");
   const [status,setStatus] = useState("");
   const [plan,setPlan] = useState("");
@@ -111,33 +117,66 @@ function SiteTable({sites,onCreate,onOpen,searchable=false}:{sites:Site[];onCrea
     </div> : null}
     {shown.length?<div className="table-wrap"><table>
       <thead><tr><th>Mijoz / filial</th><th>Aloqa</th><th>Kameralar</th><th>Tarif</th><th>To‘lov muddati</th>{onOpen?<th aria-label="Amallar"/>:null}</tr></thead>
-      <tbody>{shown.map(site=><tr key={site.id}>
-        <td><div className="table-name"><Avatar name={site.name}/><div><div className="table-title">{site.name}</div><div className="table-sub">{site.address||site.contact_phone||site.id}</div></div></div></td>
+      <tbody>{shown.map(site=><tr key={site.id} className={onOpen?"row-link":""}>
+        <td><div className="table-name"><Avatar name={site.name}/><div><div className="table-title">{onOpen?<button className="link-button" onClick={()=>onOpen(site)}>{site.name}</button>:site.name}</div><div className="table-sub">{site.address||site.contact_phone||site.id}</div></div></div></td>
         <td><Pill state={site.connection}>{CONNECTION_LABEL[site.connection||""]||"Oflayn"}</Pill></td>
         <td>{formatNumber(site.cameras_active)} / {formatNumber(site.cameras_expected)}
           {site.cameras_expected ? <small className="table-sub">{Math.round(((site.cameras_active||0)*100)/site.cameras_expected)}%</small> : null}</td>
         <td>{site.plan||"—"}</td>
         <td>{site.days_left==null?"—":<Pill state={site.days_left<=7?"failed":"active"}>{site.days_left} kun</Pill>}</td>
-        {onOpen?<td><ActionMenu items={[{label:"Kirish ma’lumoti yaratish",onSelect:()=>onOpen(site)}]}/></td>:null}
+        {onOpen?<td><ActionMenu items={[{label:"Ochish",onSelect:()=>onOpen(site)}]}/></td>:null}
       </tr>)}</tbody>
     </table></div>:<EmptyState icon="branch" title={sites.length?"Filtrga mos mijoz yo‘q":"Mijozlar yo‘q"} detail={sites.length?"Qidiruv yoki filtrlarni bo‘shatib ko‘ring.":"Yangi mijoz qo‘shilgach uning tizim holati shu yerda ko‘rinadi."}/>}
   </Card>;
 }
 
 function Telemetry({items}:{items:DeviceMetric[]}) { return <Card><div className="card-head"><div><h2>Qurilma telemetriyasi</h2><p>Haqiqiy heartbeat ma’lumotlari; mavjud bo‘lmagan ko‘rsatkich yashirilmaydi</p></div><Pill>{items.length} qurilma</Pill></div>{items.length?<div className="telemetry-grid">{items.map(item=><article className="telemetry" key={`${item.site_id}-${item.device_id}`}><div className="health-name" style={{marginBottom:15}}><div className="metric-icon tone-blue" style={{position:"static"}}><Icon name="server" size={18}/></div><div><b>{item.label||item.device_id}</b><small>{item.site_name||item.site_id}</small></div></div><div className="simple-row"><span>CPU</span><b>{item.cpu_percent==null?"—":`${item.cpu_percent.toFixed(1)}%`}</b></div><Percent value={item.cpu_percent}/><div className="simple-row"><span>RAM</span><b>{item.ram_percent==null?"—":`${item.ram_percent.toFixed(1)}%`}</b></div><Percent value={item.ram_percent}/><div className="simple-row"><span>Disk</span><b>{item.disk_percent==null?"—":`${item.disk_percent.toFixed(1)}%`}</b></div><Percent value={item.disk_percent}/><div className="simple-row"><span>FPS</span><b>{item.fps==null?"—":item.fps.toFixed(1)}</b></div><div className="simple-row"><span>Inference</span><b>{item.inference_latency_ms==null?"—":`${item.inference_latency_ms.toFixed(0)} ms`}</b></div>{item.npu_percent==null?null:<div className="simple-row"><span>NPU</span><b>{item.npu_percent.toFixed(1)}%</b></div>}{item.temperature_c==null?null:<div className="simple-row"><span>Harorat</span><b className={item.temperature_c>=85?"is-hot":undefined}>{item.temperature_c.toFixed(0)}°C</b></div>}</article>)}</div>:<EmptyState icon="server" title="Telemetriya yig‘ilmoqda" detail="Yangi agent heartbeat yuborgach CPU, RAM, disk, FPS va inference kechikishi ko‘rinadi."/>}</Card>; }
-function CustomersPage({sites,onRefresh}:{sites:Site[];onRefresh:()=>Promise<void>}) {
+function CustomersPage({sites,onRefresh,selected,onSelect}:{sites:Site[];onRefresh:()=>Promise<void>;selected:string;onSelect:(id:string)=>void}) {
+  if (selected) return <AdminCustomer siteId={selected} onBack={()=>onSelect("")} onChanged={onRefresh}/>;
+  return <CustomersList sites={sites} onRefresh={onRefresh} onSelect={onSelect}/>;
+}
+
+function CustomersList({sites,onRefresh,onSelect}:{sites:Site[];onRefresh:()=>Promise<void>;onSelect:(id:string)=>void}) {
   const[adding,setAdding]=useState(false);const[busy,setBusy]=useState(false);const[error,setError]=useState("");const[created,setCreated]=useState<CreatedCustomer|null>(null);
   const submit=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();const form=event.currentTarget;const values=new FormData(form);setBusy(true);setError("");setCreated(null);try{const site=await api<{site_id:string;name:string;pairing_code:string;pairing_expires_at?:string}>("/api/v1/admin/sites","admin",{method:"POST",body:JSON.stringify({name:String(values.get("name")||""),plan:String(values.get("plan")||"biznes"),subscription_months:Number(values.get("months")||1),contact_phone:String(values.get("phone")||"")||null,address:String(values.get("address")||"")||null})});const loginData=await api<{username:string;password:string}>(`/api/v1/admin/sites/${encodeURIComponent(site.site_id)}/login`,"admin",{method:"POST"});setCreated({...site,...loginData});form.reset();setAdding(false);await onRefresh();}catch(reason){setError(reason instanceof Error?reason.message:"Mijoz yaratilmadi");}finally{setBusy(false);}};
-  const copyCredentials=()=>{if(!created)return;const text=`Chaqimchi AI\nPanel: ${window.location.origin}/owner\nLogin: ${created.username}\nParol: ${created.password}\nQurilma kodi: ${created.pairing_code}`;void navigator.clipboard?.writeText(text);};
-  return <><PageHeader title="Mijozlar" subtitle="Yangi do‘kon, bir martalik kirish ma’lumoti va qurilma ulash kodi." actions={<button className="btn btn-primary" onClick={()=>setAdding(value=>!value)}><Icon name="users"/>{adding?"Bekor qilish":"Yangi mijoz"}</button>}/>{adding?<Card className="employee-form"><form className="card-body" onSubmit={submit}><div className="form-grid"><label>Do‘kon yoki kompaniya nomi<input className="input" name="name" minLength={2} required/></label><label>Tarif<select className="select" name="plan" defaultValue="biznes"><option value="boshlangich">Boshlang‘ich</option><option value="biznes">Biznes</option></select></label><label>Telefon<input className="input" name="phone" inputMode="tel" placeholder="+998…"/></label><label>Manzil<input className="input" name="address"/></label><label>Obuna muddati<select className="select" name="months" defaultValue="1"><option value="1">1 oy</option><option value="3">3 oy</option><option value="6">6 oy</option><option value="12">12 oy</option></select></label></div><button className="btn btn-primary" disabled={busy}>{busy?"Yaratilmoqda…":"Mijoz va login yaratish"}</button></form></Card>:null}{error?<div className="alert-strip"><Icon name="bell"/><div><strong>Amal bajarilmadi:</strong> {error}</div></div>:null}{created?<Card className="credential-card"><div className="card-head"><div><h2>Kirish ma’lumoti tayyor</h2><p>Parol faqat shu safar ko‘rinadi — xavfsiz tarzda mijozga yuboring</p></div><Pill state="active">Yaratildi</Pill></div><div className="credential-grid"><div><span>Panel</span><b>{window.location.origin}/owner</b></div><div><span>Login</span><b>{created.username}</b></div><div><span>Bir martalik parol</span><b>{created.password}</b></div><div><span>Qurilma ulash kodi</span><b>{created.pairing_code}</b></div></div><div className="card-body"><button className="btn btn-primary" onClick={copyCredentials}>Hammasini nusxalash</button></div></Card>:null}<div className="section-gap"><SiteTable sites={sites} onCreate={()=>setAdding(true)} searchable/></div></>;
+  const [copied,setCopied]=useState("");
+  const copyCredentials=()=>{if(!created)return;const text=`ENES Monitoring\nPanel: ${window.location.origin}/owner\nLogin: ${created.username}\nParol: ${created.password}\nQurilma kodi: ${created.pairing_code}`;void copyText(text).then(ok=>setCopied(ok?"Nusxalandi ✓":"Qo‘lda nusxalang"));};
+  return <><PageHeader title="Mijozlar" subtitle="Yangi do‘kon, bir martalik kirish ma’lumoti va qurilma ulash kodi." actions={<button className="btn btn-primary" onClick={()=>setAdding(value=>!value)}><Icon name="users"/>{adding?"Bekor qilish":"Yangi mijoz"}</button>}/>{adding?<Card className="employee-form"><form className="card-body" onSubmit={submit}><div className="form-grid"><label>Do‘kon yoki kompaniya nomi<input className="input" name="name" minLength={2} required/></label><label>Tarif<select className="select" name="plan" defaultValue="biznes"><option value="boshlangich">Boshlang‘ich</option><option value="biznes">Biznes</option></select></label><label>Telefon<input className="input" name="phone" inputMode="tel" placeholder="+998…"/></label><label>Manzil<input className="input" name="address"/></label><label>Obuna muddati<select className="select" name="months" defaultValue="1"><option value="1">1 oy</option><option value="3">3 oy</option><option value="6">6 oy</option><option value="12">12 oy</option></select></label></div><button className="btn btn-primary" disabled={busy}>{busy?"Yaratilmoqda…":"Mijoz va login yaratish"}</button></form></Card>:null}{error?<div className="alert-strip"><Icon name="bell"/><div><strong>Amal bajarilmadi:</strong> {error}</div></div>:null}{created?<Card className="credential-card"><div className="card-head"><div><h2>Kirish ma’lumoti tayyor</h2><p>Parol faqat shu safar ko‘rinadi — xavfsiz tarzda mijozga yuboring</p></div><Pill state="active">Yaratildi</Pill></div><div className="credential-grid"><div><span>Panel</span><b>{window.location.origin}/owner</b></div><div><span>Login</span><b>{created.username}</b></div><div><span>Bir martalik parol</span><b>{created.password}</b></div><div><span>Qurilma ulash kodi</span><b>{created.pairing_code}</b></div></div><div className="card-body"><button className="btn btn-primary" onClick={copyCredentials}>{copied||"Hammasini nusxalash"}</button></div></Card>:null}<div className="section-gap"><SiteTable sites={sites} onCreate={()=>setAdding(true)} onOpen={site=>onSelect(site.id)} searchable/></div></>;
+}
+
+/* To'lovni qayd etish — modal ichida, to'lov USULI bilan (naqd/bank).
+   Ilgari `window.confirm` edi: usul so'ralmasdi va Telegram WebView'da
+   brauzer oynasi ishonchsiz. */
+function PaidModal({invoice,onClose,onDone}:{invoice:AdminInvoice;onClose:()=>void;onDone:()=>void}) {
+  const[provider,setProvider]=useState("naqd");const[busy,setBusy]=useState(false);const[error,setError]=useState("");
+  const submit=async()=>{setBusy(true);setError("");try{await api(`/api/v1/admin/invoices/${encodeURIComponent(invoice.id)}/paid`,"admin",{method:"POST",body:JSON.stringify({provider})});onDone();}catch(reason){setError(reason instanceof Error?reason.message:"To‘lov tasdiqlanmadi");setBusy(false);}};
+  return <Modal title="To‘lovni qayd etish" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Bekor qilish</button><button className="btn btn-primary" disabled={busy} onClick={()=>void submit()}>To‘landi deb belgilash</button></>}>
+    <p className="modal-text">{invoice.site_name||invoice.site_id} · <b>{formatMoney(invoice.amount_uzs,{short:false})}</b> · {invoice.months} oy. Tasdiqlash obunani uzaytiradi.</p>
+    <label className="choice"><input type="radio" name="provider" checked={provider==="naqd"} onChange={()=>setProvider("naqd")}/><span><b>Naqd pul</b><small>Do‘konda qo‘lma-qo‘l olindi</small></span></label>
+    <label className="choice"><input type="radio" name="provider" checked={provider==="bank"} onChange={()=>setProvider("bank")}/><span><b>Bank o‘tkazmasi</b><small>Hisob raqamga tushdi</small></span></label>
+    {error?<div className="form-error">{error}</div>:null}
+  </Modal>;
 }
 
 function PaymentsPage() {
-  const[items,setItems]=useState<AdminInvoice[]|null>(null);const[error,setError]=useState("");const[busy,setBusy]=useState("");
+  const[items,setItems]=useState<AdminInvoice[]|null>(null);const[error,setError]=useState("");const[paying,setPaying]=useState<AdminInvoice|null>(null);const[shown,setShown]=useState<AdminInvoice|null>(null);const[publicUrl,setPublicUrl]=useState("");
+  const[confirm,confirmDialog]=useConfirm();const[toast,toastNode]=useToast();
   const load=useCallback(()=>api<AdminInvoice[]>("/api/v1/admin/invoices","admin").then(data=>{setItems(data);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:"To‘lovlar olinmadi")),[]);
-  useEffect(()=>{void load();},[load]);
-  const approve=async(invoice:AdminInvoice)=>{if(!window.confirm(`#${invoice.id} hisobini qo‘lda to‘langan deb tasdiqlaysizmi? Obuna uzayadi.`))return;setBusy(invoice.id);setError("");try{await api(`/api/v1/admin/invoices/${encodeURIComponent(invoice.id)}/paid`,"admin",{method:"POST",body:JSON.stringify({provider:"manual",reference:null})});await load();}catch(reason){setError(reason instanceof Error?reason.message:"To‘lov tasdiqlanmadi");}finally{setBusy("");}};
-  return <><PageHeader title="To‘lovlar" subtitle="Hisob-faktura va operator tasdig‘idagi real obuna jarayoni."/>{error?<div className="alert-strip"><Icon name="bell"/><div><strong>To‘lov bilan muammo:</strong> {error}</div></div>:null}<Card><div className="card-head"><div><h2>Hisob-fakturalar</h2><p>Tasdiqlash obuna muddatini avtomatik uzaytiradi</p></div></div>{items===null?<div className="card-body"><Skeleton height={180}/></div>:items.length?<div className="table-wrap"><table><thead><tr><th>Mijoz</th><th>Hisob</th><th>Muddat</th><th>Summa</th><th>Holat</th><th>Amal</th></tr></thead><tbody>{items.map(invoice=><tr key={invoice.id}><td><div className="table-title">{invoice.site_name||invoice.site_id}</div></td><td>#{invoice.id}</td><td>{invoice.months} oy</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?"To‘langan":invoice.state==="pending"?"Kutilmoqda":"Bekor"}</Pill></td><td>{invoice.state==="pending"?<button className="btn btn-primary" disabled={busy===invoice.id} onClick={()=>void approve(invoice)}>{busy===invoice.id?"Tasdiqlanmoqda…":"To‘lovni tasdiqlash"}</button>:invoice.provider||"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title="Hisob-faktura yo‘q" detail="Mijoz hisob yaratgach u shu ro‘yxatda ko‘rinadi."/>}</Card></>;
+  useEffect(()=>{void load();api<{public_url?:string}>("/api/v1/admin/payments/providers","admin").then(data=>setPublicUrl(data.public_url||"")).catch(()=>{});},[load]);
+  const cancel=async(invoice:AdminInvoice)=>{
+    if(!(await confirm({title:"Hisobni bekor qilish",text:`«${invoice.site_name||invoice.site_id}» uchun ${formatMoney(invoice.amount_uzs,{short:false})} hisobi bekor qilinadi. Mijoz havoladan to‘lay olmaydi.`,confirmLabel:"Bekor qilish",danger:true})))return;
+    try{await api(`/api/v1/admin/invoices/${encodeURIComponent(invoice.id)}/cancel`,"admin",{method:"POST"});toast("Hisob bekor qilindi");await load();}catch(reason){toast(reason instanceof Error?reason.message:"Bekor qilinmadi",false);}
+  };
+  const payLink=(invoice:AdminInvoice)=>`${(publicUrl||window.location.origin).replace(/\/$/,"")}/pay/${invoice.id}`;
+  return <><PageHeader title="To‘lovlar" subtitle="Hisob-faktura va operator tasdig‘idagi real obuna jarayoni."/>{error?<div className="alert-strip"><Icon name="bell"/><div><strong>To‘lov bilan muammo:</strong> {error}</div></div>:null}<Card><div className="card-head"><div><h2>Hisob-fakturalar</h2><p>Tasdiqlash obuna muddatini avtomatik uzaytiradi</p></div></div>{items===null?<div className="card-body"><Skeleton height={180}/></div>:items.length?<div className="table-wrap"><table><thead><tr><th>Mijoz</th><th>Hisob</th><th>Muddat</th><th>Summa</th><th>Holat</th><th>Amal</th></tr></thead><tbody>{items.map(invoice=><tr key={invoice.id}><td><div className="table-title">{invoice.site_name||invoice.site_id}</div></td><td><button className="link-button mono" onClick={()=>setShown(invoice)}>#{invoice.id.slice(0,8)}</button></td><td>{invoice.months} oy</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?"To‘langan":invoice.state==="pending"?"Kutilmoqda":"Bekor"}</Pill></td><td>{invoice.state==="pending"?<div className="page-actions"><button className="btn btn-primary btn-small" onClick={()=>setPaying(invoice)}>To‘lovni tasdiqlash</button><button className="btn btn-small btn-danger" onClick={()=>void cancel(invoice)}>Bekor</button></div>:invoice.provider||"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title="Hisob-faktura yo‘q" detail="Mijoz hisob yaratgach u shu ro‘yxatda ko‘rinadi."/>}</Card>
+    {paying?<PaidModal invoice={paying} onClose={()=>setPaying(null)} onDone={()=>{setPaying(null);toast("To‘lov qayd etildi, obuna uzaytirildi");void load();}}/>:null}
+    {shown?<Modal title={`${shown.site_name||"Mijoz"} — hisob-faktura`} onClose={()=>setShown(null)}>
+      <div className="simple-list"><div className="simple-row"><span>Summa</span><b>{formatMoney(shown.amount_uzs,{short:false})}</b></div><div className="simple-row"><span>Muddat</span><b>{shown.months} oy</b></div><div className="simple-row"><span>Holat</span><Pill state={shown.state}>{shown.state==="paid"?"To‘langan":shown.state==="pending"?"Kutilmoqda":"Bekor"}</Pill></div></div>
+      <p className="modal-text">Mijozga yuboriladigan havola:</p><CopyField value={payLink(shown)}/>
+      <div className="page-actions wrap">{shown.payme_url?<a className="btn" href={shown.payme_url} target="_blank" rel="noopener noreferrer">Payme</a>:null}{shown.click_url?<a className="btn" href={shown.click_url} target="_blank" rel="noopener noreferrer">Click</a>:null}</div>
+      {publicUrl?null:<p className="metric-note">Rasmiy domen sozlanmagan: havola faqat ichki tarmoqda ochiladi.</p>}
+    </Modal>:null}
+    {confirmDialog}{toastNode}</>;
 }
 
 function PlansPage() {
@@ -262,19 +301,6 @@ function LeadsPage() {
   </>;
 }
 
-function RolesPage() {
-  const[accounts,setAccounts]=useState<Account[]|null>(null);const[error,setError]=useState("");
-  useEffect(()=>{api<{accounts:Account[]}>("/api/v1/admin/accounts","admin").then(data=>setAccounts(data.accounts)).catch(reason=>setError(reason instanceof Error?reason.message:"Akkauntlar olinmadi"));},[]);
-  return <><PageHeader title="Rollar" subtitle="Admin, o‘rnatuvchi va mijoz akkauntlarining haqiqiy ruxsat holati."/>{error?<div className="alert-strip"><Icon name="bell"/>{error}</div>:null}<Card>{accounts===null?<div className="card-body"><Skeleton height={180}/></div>:accounts.length?<div className="table-wrap"><table><thead><tr><th>Foydalanuvchi</th><th>Login</th><th>Rol</th><th>Holat</th><th>Filial</th></tr></thead><tbody>{accounts.map(account=><tr key={account.id}><td><div className="table-title">{account.full_name||account.company||"—"}</div></td><td>{account.username}</td><td>{account.role}</td><td><Pill state={account.status}>{account.status}</Pill></td><td>{account.site_id||"Platforma"}</td></tr>)}</tbody></table></div>:<EmptyState icon="shield" title="Akkaunt yo‘q" detail="Akkaunt yaratilgach rol va holati shu yerda ko‘rinadi."/>}</Card></>;
-}
-
-function SettingsPage() {
-  const[data,setData]=useState<{items?:ReadinessItem[]}|null>(null);const[error,setError]=useState("");
-  useEffect(()=>{api<{items?:ReadinessItem[]}>("/api/v1/admin/readiness","admin").then(setData).catch(reason=>setError(reason instanceof Error?reason.message:"Readiness olinmadi"));},[]);
-  const items=data?.items||[];
-  return <><PageHeader title="Sozlamalar" subtitle="Ishlab chiqarish integratsiyalari va xavfsizlik tayyorligi."/>{error?<div className="alert-strip"><Icon name="bell"/>{error}</div>:null}<Card><div className="card-head"><div><h2>Production readiness</h2><p>Yashirilmagan real muhit tekshiruvlari</p></div></div>{data?<div className="health-list">{items.map(item=><div className="health-row" key={item.key}><div className="health-name"><span className={`status-dot status-${item.ok?"online":item.required?"offline":"stale"}`}/><div><b>{item.label}</b><small>{item.reasons?.join(" · ")|| (item.required?"Majburiy tekshiruv":"Ixtiyoriy tekshiruv")}</small></div></div><Pill state={item.ok?"active":item.required?"failed":"pending"}>{item.ok?"Tayyor":item.required?"Tayyor emas":"Ixtiyoriy"}</Pill></div>)}</div>:<div className="card-body"><Skeleton height={190}/></div>}</Card></>;
-}
-
 function VisionAgentPage({sites}:{sites:Site[]}) {
   const [siteId,setSiteId]=useState(""); const [question,setQuestion]=useState(""); const [settings,setSettings]=useState<{consented:boolean;provider_configured:boolean}|null>(null); const [settingsError,setSettingsError]=useState(""); const [result,setResult]=useState<{status:string;result?:{answer?:string;sources?:Array<{event_id:string;label?:string;occurred_at?:string}>};error?:string}|null>(null); const timer=useRef(0);
   useEffect(()=>{setSiteId(current=>current||sites[0]?.id||"");},[sites]);
@@ -287,8 +313,8 @@ function VisionAgentPage({sites}:{sites:Site[]}) {
   return <><PageHeader title="Vision Agent" subtitle="Tanlangan filialning eventlari bo‘yicha dalilli Uzbek javob."/><Card><div className="card-body agent-composer"><select className="select" value={siteId} onChange={event=>setSiteId(event.target.value)} aria-label="Filial">{sites.map(site=><option key={site.id} value={site.id}>{site.name}</option>)}</select>{settingsError?<div className="alert-strip"><Icon name="bell"/>Sozlama olinmadi: {settingsError}</div>:null}{settings&&!settings.provider_configured?<div className="alert-strip alert-warning"><Icon name="bell"/>Gemini provideri sozlanmagan (CHAQIMCHI_GEMINI_API_KEY / CHAQIMCHI_GEMINI_VISION_MODEL) — savollar ishlamaydi.</div>:null}{settings&&!settings.consented?<div className="alert-strip alert-info"><Icon name="shield"/>Bu filial egasi hali Agent roziligini bermagan.</div>:null}<textarea className="input" rows={4} value={question} onChange={event=>setQuestion(event.target.value)} placeholder="Masalan: kecha kassa yonida navbat bo‘ldimi?"/><button className="btn btn-primary" disabled={!settings?.consented||!settings?.provider_configured||result?.status==="queued"||result?.status==="running"} onClick={()=>void ask()}>{result?.status==="queued"||result?.status==="running"?"Tekshirilmoqda…":"Savol berish"}</button></div></Card>{result?.status==="completed"?<Card className="section-gap"><div className="card-body"><p className="agent-answer">{result.result?.answer}</p>{result.result?.sources?.map(source=><div className="simple-row" key={source.event_id}><b>{source.label||"Hodisa"}</b><span>{source.occurred_at||"—"}</span></div>)}</div></Card>:null}{result?.status==="failed"?<Card className="section-gap"><EmptyState icon="bell" title="Agent xatosi" detail={result.error||"Qayta urinib ko‘ring."}/></Card>:null}</>;
 }
 
-function GenericAdmin({id,data,onRefresh}:{id:string;data:AdminDashboard;onRefresh:()=>Promise<void>}) {
-  if(id==="customers") return <CustomersPage sites={data.sites} onRefresh={onRefresh}/>;
+function GenericAdmin({id,param,data,onRefresh,onSelect}:{id:string;param:string;data:AdminDashboard;onRefresh:()=>Promise<void>;onSelect:(site:string)=>void}) {
+  if(id==="customers") return <CustomersPage sites={data.sites} onRefresh={onRefresh} selected={param} onSelect={onSelect}/>;
   if(id==="branches") return <><PageHeader title="Filiallar" subtitle="Obuna va tizim holatini bitta ro‘yxatdan boshqaring."/><SiteTable sites={data.sites} searchable/></>;
   if(id==="devices"||id==="monitoring") return <><PageHeader title={id==="devices"?"Qurilmalar":"Monitoring"} subtitle="Sotqin agentlari va haqiqiy resurs ko‘rsatkichlari."/><Telemetry items={data.telemetry}/></>;
   if(id==="cameras") return <><PageHeader title="Kameralar" subtitle="Filiallar bo‘yicha ishlayotgan va e’tibor talab qiladigan kameralar."/><div className="metric-grid">{data.sites.map(site=><MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.connection||"—"} icon="camera" tone={(site.cameras_active||0)>=(site.cameras_expected||1)?"green":"red"}/>)}</div></>;
@@ -298,14 +324,14 @@ function GenericAdmin({id,data,onRefresh}:{id:string;data:AdminDashboard;onRefre
   if(id==="events") return <EventEvidence kind="admin" sites={data.sites}/>;
   if(id==="agent") return <VisionAgentPage sites={data.sites}/>;
   if(id==="leads") return <LeadsPage/>;
-  if(id==="roles") return <RolesPage/>;
-  if(id==="settings") return <SettingsPage/>;
+  if(id==="team") return <AdminTeam sites={data.sites}/>;
+  if(id==="settings") return <AdminSettings/>;
   return <><PageHeader title="Bo‘lim" subtitle="Operatsion boshqaruv."/><Card><EmptyState icon="settings" title="Ma’lumot yo‘q" detail="Haqiqiy ma’lumot kelgach shu yerda ko‘rinadi."/></Card></>;
 }
 
 function AdminApp() {
   const [authenticated,setAuthenticated] = useState(()=>Boolean(tokenFor("admin")));
-  const [active,navigateTo] = usePanelRoute("/admin", ROUTE_IDS, "overview");
+  const [active,navigateTo,param] = usePanelRoute("/admin", ROUTE_IDS, "overview");
   const [range,setRange] = useState("7d");
   const [busy,setBusy] = useState(false);
   const [loginError,setLoginError] = useState("");
@@ -314,7 +340,7 @@ function AdminApp() {
 
   const submit = async(username:string,password:string)=>{setBusy(true);setLoginError("");try{await login(username,password,"admin");setAuthenticated(true);}catch(reason){setLoginError(reason instanceof Error?reason.message:"Kirish amalga oshmadi");}finally{setBusy(false);}};
   const logout = ()=>{clearToken("admin");setAuthenticated(false);};
-  const navigate = (id:string)=>{if(id==="more")setDrawer(true);else{navigateTo(id);setDrawer(false);window.scrollTo({top:0,behavior:"smooth"});}};
+  const navigate = (id:string,item="")=>{if(id==="more")setDrawer(true);else{navigateTo(id,item);setDrawer(false);window.scrollTo({top:0,behavior:"smooth"});}};
 
   const offline = data?.stats.offline || 0;
   const notPaired = data?.stats.not_paired || 0;
@@ -325,7 +351,7 @@ function AdminApp() {
      qidiruv maydoni bor. */
   const searchEntries = useMemo(()=>[
     ...NAV.map(item=>({ id:`nav-${item.id}`, label:item.label, hint:"Bo‘lim", onSelect:()=>navigate(item.id) })),
-    ...(data?.sites || []).map(site=>({ id:`site-${site.id}`, label:site.name, hint:site.address||"Mijoz", onSelect:()=>navigate("customers") })),
+    ...(data?.sites || []).map(site=>({ id:`site-${site.id}`, label:site.name, hint:site.address||"Mijoz", onSelect:()=>navigate("customers", site.id) })),
   ],[data?.sites]);
 
   if(!authenticated) return <LoginScreen kind="admin" onSubmit={submit} busy={busy} error={loginError}/>;
@@ -343,7 +369,7 @@ function AdminApp() {
     title="Platforma boshqaruvi"
     subtitle={`Yangilandi: ${new Date(data.updated_at).toLocaleTimeString("uz-UZ",{hour:"2-digit",minute:"2-digit"})}`}
     onLogout={logout}
-    sidebarFooter={<div className="sidebar-user"><Icon name="shield"/><div><b>Chaqimchi Cloud</b><small>Admin panel</small></div></div>}
+    sidebarFooter={<div className="sidebar-user"><Icon name="shield"/><div><b>ENES Cloud</b><small>Admin panel</small></div></div>}
     headerActions={<>
       <SearchPalette entries={searchEntries} placeholder="Mijoz yoki bo‘lim…"/>
       <span className={`status-chip ${attention ? "is-warn" : "is-ok"}`}><i/>{attention ? `${attention} ta e’tibor talab` : "Tizim barqaror"}</span>
@@ -354,7 +380,7 @@ function AdminApp() {
     {error?<div className="alert-strip"><Icon name="bell"/><div><strong>Yangilashda muammo:</strong> {error}. Oxirgi ma’lumot ko‘rsatilmoqda.</div></div>:null}
     {active==="overview"
       ? <><PageHeader title="Platforma boshqaruvi" subtitle={today} actions={<button className="btn btn-primary" onClick={()=>navigate("customers")}><Icon name="users"/>Mijoz qo‘shish</button>}/><AdminHome data={data} onNavigate={navigate}/></>
-      : <GenericAdmin id={active} data={data} onRefresh={refresh}/>}
+      : <GenericAdmin id={active} param={param} data={data} onRefresh={refresh} onSelect={site=>navigate("customers", site)}/>}
     {drawer?<div className="drawer-backdrop" onClick={()=>setDrawer(false)}><aside className="drawer" onClick={event=>event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={()=>setDrawer(false)}><Icon name="close"/></button></div><nav>{NAV.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav></aside></div>:null}
   </AppShell>;
 }

@@ -239,12 +239,11 @@ tashlangan — `.env.production` da qolsa ham hech narsaga ta'sir qilmaydi
 va `admin.html` repoda yo'q; orqaga qaytarish yo'li — faqat git
 tarixi (`556d33c` dan oldingi holat), env bilan emas.
 
-⚠️ **Bu shox deploy qilinmasin — React adminda eski admin vositalari
-hali yo'q** (qurilma topshiriqlari `clean_chains`/`benchmark`,
-diagnostika, funksiya biriktirish, masofaviy chizma, reliz boshqaruvi,
-jamoa, ogohlantirish sozlamalari).  Ular F4 da ko'chiriladi; ro'yxat
-`docs/ISH_DAFTARI.md` «PANEL QOIDALARI» da.  Shungacha production
-`main` dagi kod bilan ishlayveradi.
+React admin eski adminni to'liq qoplaydi (2026-09-08, F4a): mijoz
+tafsiloti `/admin/customers/<id>` — qurilma topshiriqlari, diagnostika,
+funksiya biriktirish, masofaviy chizma, reliz boshqaruvi; Jamoa;
+Sozlamalar.  Portal login uchun `CHAQIMCHI_PORTAL_JWT_SECRET` (≥32
+belgi) shart.
 
 ### Deploy tartibi (panel manbasi o'zgarganda)
 

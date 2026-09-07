@@ -133,7 +133,7 @@ export function Connect({
     <section className="login-visual">
       <Logo />
       <div>
-        <span className="eyebrow">CHAQIMCHI CLOUD</span>
+        <span className="eyebrow">ENES CLOUD</span>
         <h1>Do‘kon kompyuteringiz tayyor.</h1>
         <p>Bir necha qadamdan keyin kameralaringiz raqamlarga aylanadi.</p>
       </div>
@@ -168,7 +168,7 @@ export function Connect({
           <div className="connect-done">
             <h2>Havola eskirgan</h2>
             <p>
-              Do‘kon kompyuteridagi Chaqimchi dasturini qayta ishga tushiring — u yangi
+              Do‘kon kompyuteridagi ENES dasturini qayta ishga tushiring — u yangi
               havola ochadi.
             </p>
           </div>

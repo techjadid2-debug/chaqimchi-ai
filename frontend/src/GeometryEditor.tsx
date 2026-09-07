@@ -43,12 +43,24 @@ type SiteConfig = Record<string, unknown> & { zones?: ZoneShape[]; lines?: LineS
  * uchun kadr `fetch` bilan olinib, blob URL sifatida beriladi —
  * `CameraImage` dagi bilan bir xil yechim.
  */
-async function loadFrame(cameraId: string, siteId: string): Promise<HTMLImageElement | null> {
+type Kind = "owner" | "admin";
+
+/** Bir xil muharrir ikki panel uchun.  Farq faqat manzil va tokenda:
+ *  admin do'konni MASOFADAN tuzatadi (2026-08-21 qarori — jonli
+ *  do'konda `lines: []` bo'lib qolgan va kuniga 5 ta kirish sanalgan),
+ *  ega esa o'zinikini.  Server tomonda tekshiruv va saqlash bitta. */
+function paths(kind: Kind, siteId: string) {
+  const site = encodeURIComponent(siteId);
+  return kind === "admin"
+    ? { config: `/api/v1/admin/sites/${site}/config`, preview: (id: string) => `/api/v1/admin/sites/${site}/cameras/${encodeURIComponent(id)}/preview` }
+    : { config: "/api/v1/owner/config", preview: (id: string) => `/api/v1/owner/cameras/${encodeURIComponent(id)}/preview` };
+}
+
+async function loadFrame(cameraId: string, siteId: string, kind: Kind = "owner"): Promise<HTMLImageElement | null> {
   try {
-    const response = await fetch(
-      `/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview?t=${Date.now()}`,
-      { headers: { Authorization: `Bearer ${tokenFor("owner")}`, "X-Owner-Site-Id": siteId } },
-    );
+    const headers: Record<string, string> = { Authorization: `Bearer ${tokenFor(kind)}` };
+    if (kind === "owner") headers["X-Owner-Site-Id"] = siteId;
+    const response = await fetch(`${paths(kind, siteId).preview(cameraId)}?t=${Date.now()}`, { headers });
     if (!response.ok) return null;
     const url = URL.createObjectURL(await response.blob());
     return await new Promise(resolve => {
@@ -69,8 +81,10 @@ const PRESETS: { type: "entrance" | "queue" | "shelf" | "restricted"; label: str
   { type: "restricted", label: "Taqiqlangan zona" },
 ];
 
-export function GeometryEditor({ siteId, cameras }: { siteId: string; cameras: Camera[] }) {
+export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { siteId: string; cameras: Camera[]; kind?: Kind; onSaved?: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const url = paths(kind, siteId);
+  const siteHeader = kind === "owner" ? { siteId } : {};
   const editor = useRef<ZoneEditorInstance | null>(null);
   const [cameraId, setCameraId] = useState(() => cameras[0]?.camera_id || "");
   const [shapes, setShapes] = useState<{ zones: ZoneShape[]; lines: LineShape[] }>({ zones: [], lines: [] });
@@ -106,11 +120,12 @@ export function GeometryEditor({ siteId, cameras }: { siteId: string; cameras: C
   // Saqlangan konfiguratsiya.
   useEffect(() => {
     let stopped = false;
-    api<{ config: SiteConfig }>("/api/v1/owner/config", "owner", { siteId })
+    api<{ config: SiteConfig }>(url.config, kind, siteHeader)
       .then(result => { if (!stopped) setConfig(result.config || {}); })
       .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : "Sozlama olinmadi"); });
     return () => { stopped = true; };
-  }, [siteId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId, kind]);
 
   // Kamera almashganda: shakllarni yuklaymiz va kadrni tortamiz.
   useEffect(() => {
@@ -127,11 +142,11 @@ export function GeometryEditor({ siteId, cameras }: { siteId: string; cameras: C
     setShapes(instance.serialise());
 
     let stopped = false;
-    void loadFrame(cameraId, siteId).then(image => {
+    void loadFrame(cameraId, siteId, kind).then(image => {
       if (!stopped) instance.setImage(image);
     });
     return () => { stopped = true; };
-  }, [ready, config, cameraId, siteId]);
+  }, [ready, config, cameraId, siteId, kind]);
 
   const addPreset = (type: (typeof PRESETS)[number]["type"], label: string) => {
     if (!editor.current) return;
@@ -144,13 +159,10 @@ export function GeometryEditor({ siteId, cameras }: { siteId: string; cameras: C
     if (!cameraId) return;
     setError("");
     try {
-      await api(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, "owner", {
-        method: "POST",
-        siteId,
-      });
+      await api(url.preview(cameraId), kind, { method: "POST", ...siteHeader });
       // Qurilma kadrni yuborishiga vaqt beramiz.
       window.setTimeout(() => {
-        void loadFrame(cameraId, siteId).then(image => {
+        void loadFrame(cameraId, siteId, kind).then(image => {
           if (image) editor.current?.setImage(image);
         });
       }, 2500);
@@ -168,13 +180,14 @@ export function GeometryEditor({ siteId, cameras }: { siteId: string; cameras: C
       // `...config` SHART: usiz ish vaqti, odam chegarasi va davomat
       // sozlamalari standart qiymatga qaytardi — validator to'liq
       // hujjatni kutadi.
-      await api("/api/v1/owner/config", "owner", {
+      await api(url.config, kind, {
         method: "PUT",
-        siteId,
+        ...siteHeader,
         body: JSON.stringify({ ...config, zones: current.zones, lines: current.lines }),
       });
       setConfig({ ...config, zones: current.zones, lines: current.lines });
       setSaved(true);
+      onSaved?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Saqlanmadi");
     } finally {

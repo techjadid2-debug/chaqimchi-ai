@@ -34,6 +34,8 @@ OWNER_FILES = (
     "Numbers.tsx", "Demography.tsx", "Heatmap.tsx", "VisionAgent.tsx",
     "SetupCameras.tsx", "GeometryEditor.tsx", "Connect.tsx", "EventTimeline.tsx",
 )
+#: Admin paneli fayllari — ichki atamalar mumkin, eski brend esa yo'q.
+ADMIN_FILES = ("admin.tsx", "AdminHome.tsx", "AdminCustomer.tsx", "AdminTeam.tsx", "AdminSettings.tsx")
 
 
 def src(name: str) -> str:
@@ -260,6 +262,15 @@ def test_panel_has_no_inline_event_handlers() -> None:
     assert found is None, f"inline hodisa ishlovchisi: {found.group(0) if found else ''}"
 
 
+def test_the_old_brand_stays_off_the_panels() -> None:
+    """Rebrend (2026-09-08): mijoz va admin ko'radigan matnda «Chaqimchi»
+    qolmasin.  Brauzer kalitlari (`chaqimchi_owner_token_v2`) va env
+    nomlari (`CHAQIMCHI_*`) F6 da o'zgaradi — ular istisno."""
+    for name in OWNER_FILES + ADMIN_FILES + ("Connect.tsx",):
+        found = re.search(r"Chaqimchi(?![_A-Z])", src(name))
+        assert found is None, f"{name}: eski brend matni — {found.group(0) if found else ''}"
+
+
 def test_the_internal_codename_stays_off_the_owner_panel() -> None:
     """Ichki kod nomi mijozga ko'rinmasin."""
     assert "Sotqin" not in owner_src()
@@ -295,16 +306,16 @@ def test_the_customer_can_reach_a_human_from_every_dead_end() -> None:
     assert "tel:+998932225070" in site, "saytdagi raqam bilan bir xil bo'lsin"
 
 
-# ── F4 gacha kutayotgan qulflar ───────────────────────────────────────────
+# ── Admin support vositalari (eski `admin.html` dan ko'chirilgan) ─────────
 #
-# Eski `admin.html` da bor bo'lgan, React adminga HALI ko'chirilmagan
-# vositalar.  `xfail(strict=True)`: vosita ko'chirilishi bilan test
-# «kutilmagan o'tish» beradi va belgi olib tashlanadi — ya'ni ro'yxat
-# o'z-o'zidan eskirmaydi.  To'liq ro'yxat: docs/ISH_DAFTARI.md,
-# «Panel qoidalari».
+# 2026-09-08 (F4a): eski adminning 15+ vositasi `AdminCustomer.tsx`,
+# `AdminTeam.tsx` va `AdminSettings.tsx` ga ko'chdi.  Quyidagi qulflar
+# ular qaytib yo'qolib qolmasligini qo'riqlaydi.
+
+def admin_src() -> str:
+    return "\n".join(src(name) for name in ADMIN_FILES)
 
 
-@pytest.mark.xfail(strict=True, reason="F4: admin support vositalari hali ko'chirilmagan")
 def test_the_admin_can_fix_a_shop_remotely() -> None:
     """Admin do'konni masofadan tuzata olsin (2026-08-21 qarori).
 
@@ -314,10 +325,46 @@ def test_the_admin_can_fix_a_shop_remotely() -> None:
     vaqt mintaqasi tuzatilgandan keyingi yagona masofaviy qayta ishga
     tushirish yo'li; `features/approve` — sotuv darvozasi.
     """
-    admin = src("admin.tsx") + src("AdminHome.tsx")
+    admin = admin_src()
     for endpoint in ("/camera-inventory", "/jobs/clean-chains", "/jobs/benchmark",
-                     "/diagnostics", "/features/approve"):
+                     "/diagnostics", "/features/approve", "/features/quote", "/onboarding",
+                     "/pairing", "/update-policy", "/windows-releases", "/login-link",
+                     "/installer-assignments", "/alerts/test", "/updates-paused",
+                     "/payments/providers", "/faces", "/extend", "/plan"):
         assert endpoint in admin, f"React adminda yo'q: {endpoint}"
+
+
+def test_the_admin_uses_no_native_dialogs() -> None:
+    """`prompt()`/`confirm()` — eski admin qoidasi (2026-08-19).
+
+    Brauzer oynasida "auto" yoki "naqd" deb YOZISH kerak edi — bitta harf
+    xato, amal bajarilmasdi.  React adminda `window.confirm` 2026-09-07 da
+    qaytib kelgan edi (`PaymentsPage`); endi tasdiqlash `ConfirmDialog`,
+    tanlov modal ichida tugma bilan.
+    """
+    admin = admin_src()
+    found = re.search(r"window\.(prompt|confirm|alert)\s*\(", admin)
+    assert found is None, f"brauzer oynasi qaytib kelgan: {found.group(0) if found else ''}"
+    assert "useConfirm(" in admin, "tasdiqlash o'z oynasi bilan bo'lsin"
+
+
+def test_the_customer_page_is_deep_linkable() -> None:
+    """«Diqqat talab qiladi» ro'yxatidan mijozga TO'G'RIDAN-TO'G'RI o'tilsin
+    va brauzerning Orqasi ishlasin — `/admin/customers/<id>`."""
+    router = src("router.ts")
+    assert "param" in router, "ikkinchi segment o'qilmaydi"
+    admin = src("admin.tsx")
+    assert 'navigate("customers", site.id)' in admin, "qidiruvdan mijozga chuqur havola yo'q"
+    assert "<AdminCustomer" in admin
+
+
+def test_the_geometry_editor_serves_both_panels() -> None:
+    """Chizish mantiqi bitta: ega o'zinikini, admin masofadan.  Ikki nusxa
+    bo'lsa ular albatta ajralib ketardi."""
+    editor = src("GeometryEditor.tsx")
+    assert 'kind === "admin"' in editor
+    assert "/api/v1/admin/sites/" in editor and "/api/v1/owner/config" in editor
+    assert 'kind="admin"' in src("AdminCustomer.tsx")
 
 
 # ── Dizayn tizimi ─────────────────────────────────────────────────────────

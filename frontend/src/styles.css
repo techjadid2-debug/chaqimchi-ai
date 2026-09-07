@@ -610,3 +610,75 @@ tr:last-child td { border-bottom: 0; }
 .level-row:hover:not(:disabled) { background: var(--blue-soft); }
 .level-row:disabled { opacity: .6; cursor: default; }
 .level-row.is-active b { color: var(--blue-dark); }
+
+/* ── Modal, tasdiqlash, toast (admin vositalari, 2026-09-08) ────────────
+ * Brauzerning `prompt`/`confirm` o'rniga: matn uslublanadi, tanlov
+ * tugma bilan, Escape va orqa fon yopadi. */
+.modal-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: var(--scrim); }
+.modal { width: min(560px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-lg); }
+.modal-wide { width: min(1040px, 100%); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { margin: 0; font-size: 17px; }
+.modal-body { padding: 18px 20px; overflow: auto; display: grid; gap: 12px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
+.modal-text { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.field-label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }
+.field-label small { color: var(--muted); font-weight: 500; }
+.input-narrow { width: 72px; margin-left: auto; }
+.choice { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.choice input[type="radio"], .choice input[type="checkbox"] { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.choice > span { display: grid; flex: 1; }
+.choice small { color: var(--muted); font-size: 12px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { min-height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--fg); font-weight: 700; font-size: 13px; cursor: pointer; }
+.chip.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.month-picker { display: grid; gap: 10px; }
+.copy-field { display: flex; gap: 8px; min-width: 0; }
+.copy-field input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-inset); color: var(--fg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.code-box { padding: 14px; border-radius: 12px; background: var(--surface-inset); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 26px; letter-spacing: .18em; text-align: center; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: 70; transform: translateX(-50%); max-width: min(520px, calc(100vw - 32px)); padding: 12px 18px; border-radius: 12px; background: var(--fg); color: var(--bg); font-size: 14px; font-weight: 600; box-shadow: var(--shadow-lg); }
+.toast-error { background: var(--red); color: var(--on-solid); }
+
+/* Holat banneri va izoh bloklari (mijoz tafsiloti). */
+.status-banner { display: grid; gap: 2px; padding: 14px 16px; border-radius: 12px; font-weight: 700; }
+.status-banner span { font-weight: 500; font-size: 13px; opacity: .85; }
+.status-banner.ok { background: var(--green-soft); color: var(--green-ink); }
+.status-banner.warn { background: var(--yellow-soft); color: var(--yellow-ink); }
+.status-banner.err { background: var(--red-soft); color: var(--red-ink); }
+.note { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
+.note > b { font-size: 14px; }
+.note.ok { background: var(--green-soft); color: var(--green-ink); }
+.note.warn { background: var(--yellow-soft); color: var(--yellow-ink); }
+.note.err { background: var(--red-soft); color: var(--red-ink); }
+.page-actions.wrap { flex-wrap: wrap; }
+.device-row { display: grid; grid-template-columns: 1fr auto auto; align-items: start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.device-row small { display: block; color: var(--muted); font-size: 12px; }
+.health-lines { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.health-lines .is-bad { color: var(--red-ink); font-weight: 600; }
+.card.quiet > summary { padding: 14px 20px; cursor: pointer; }
+.card-danger { border-color: var(--red-line); }
+.diag-json { max-height: 50vh; margin: 0; padding: 12px; overflow: auto; border-radius: 10px; background: var(--video-bg); color: var(--video-ink); font-size: 12px; white-space: pre-wrap; }
+
+/* Yuz tanish (yopiq pilot). */
+.face-card { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.face-card.off { opacity: .6; }
+.face-card small { display: block; color: var(--muted); font-size: 12px; }
+.face-photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.face-photo { position: relative; }
+.face-thumb, .face-empty { display: block; width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--surface-3); }
+.face-photo .btn-icon { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; min-height: 0; padding: 0; }
+.face-events-title { margin: 18px 0 8px; font-size: 15px; }
+.face-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.face-item { margin: 0; }
+.face-item img, .face-item .face-empty { width: 100%; aspect-ratio: 1; height: auto; border-radius: 10px; object-fit: cover; background: var(--surface-3); }
+.face-item figcaption { margin-top: 4px; font-size: 12px; }
+.face-item figcaption small { display: block; color: var(--muted); }
+.face-unknown img { outline: 2px solid var(--yellow); }
+@media (max-width: 720px) {
+  .device-row, .face-card { grid-template-columns: 1fr; }
+  .modal-foot { flex-wrap: wrap; }
+}
+/* Jadvaldagi nom — havola-tugma: qator ochiladi. */
+.link-button { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; text-align: left; }
+.link-button:hover { color: var(--accent); text-decoration: underline; }

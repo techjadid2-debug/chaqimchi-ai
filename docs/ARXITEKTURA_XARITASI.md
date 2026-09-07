@@ -539,11 +539,10 @@ degan yolg'on ishonch bo'lmasin.
 `tests/test_panel_v2.py`; eski testlardan ko'chirilmaganlari va
 sababi — [ISH_DAFTARI.md](ISH_DAFTARI.md) «PANEL QOIDALARI».
 
-⚠️ **React adminda eski adminning vositalari hali yo'q** (qurilma
-topshiriqlari, diagnostika, funksiya biriktirish, masofaviy chizma,
-reliz boshqaruvi) — F4 da ko'chiriladi, shungacha `enes-rebrend`
-deploy qilinmaydi.  Qulf: `test_the_admin_can_fix_a_shop_remotely`
-(`xfail(strict)`).
+**Admin support vositalari** (2026-09-08, F4a): `AdminCustomer.tsx`
+(mijoz tafsiloti — qurilma, kamera, diagnostika, topshiriqlar, funksiya
+biriktirish, login, hisob, obuna, yuz tanish), `AdminTeam.tsx`,
+`AdminSettings.tsx`.  Qulf: `test_the_admin_can_fix_a_shop_remotely`.
 
 | Qism | Fayl |
 |---|---|
@@ -717,13 +716,10 @@ loglar strukturali emas.
 `/metrics` ga chiqarish. Uchinchisi mijoz 20 dan oshganda kerak
 bo'ladi.
 
-### 10.7 · Panel bitta avlodga kelsin — ✅ qisman (2026-09-07)
+### 10.7 · Panel bitta avlodga kelsin — ✅ (2026-09-08)
 
 Legacy `owner.html`/`admin.html` o'chirildi, bayroqlar olib tashlandi
-(§9).  **Qolgani:** eski adminning support vositalari React adminga
-ko'chirilishi kerak — ro'yxat [ISH_DAFTARI.md](ISH_DAFTARI.md) «PANEL
-QOIDALARI», qulf `tests/test_panel_v2.py::test_the_admin_can_fix_a_shop_remotely`
-(`xfail(strict)` — ko'chirilgach belgi olinadi).
+(§9); eski adminning support vositalari React adminga ko'chdi (F4a).
 
 ---
 

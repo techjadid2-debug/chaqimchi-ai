@@ -107,7 +107,7 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
   };
 
   return <>
-    <PageHeader title="Chaqimchi yordamchisi" subtitle="Savolni Uzbek tilida bering — javob faqat kamera eventlari va dalillariga tayanadi." />
+    <PageHeader title="ENES yordamchisi" subtitle="Savolni Uzbek tilida bering — javob faqat kamera eventlari va dalillariga tayanadi." />
     {error ? <div className="alert-strip alert-info"><Icon name="bell"/><div>{error}</div></div> : null}
     {settings === null ? <Card><div className="card-body"><Skeleton height={190}/></div></Card>
       : !settings.consented ? <Card><EmptyState icon="shield" title="Agent uchun rozilik kerak" detail="Savol matni va zarur snapshotlar Gemini’ga faqat javob tayyorlash uchun yuboriladi. Audio va media nusxalari suhbat tarixiga saqlanmaydi."/><div className="card-body agent-composer"><label className="consent-row"><input type="checkbox" checked={audioReply} onChange={event => setAudioReply(event.target.checked)}/><span>Native audio javobini ham yoqish</span></label><button className="btn btn-primary" onClick={() => void consent()}>Rozilik berib yoqish</button></div></Card>

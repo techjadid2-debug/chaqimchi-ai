@@ -236,7 +236,7 @@ export function AdminHome({ data, onNavigate }: {
             sekinlashadi va hodisalar kechikadi.  Har qator FAQAT
             o'lchov bo'lsa chiziladi: "0%" yozish yolg'on bo'lardi. */}
         {server && Object.keys(server).length ? <Card>
-          <div className="card-head"><div><h2>Server holati</h2><p>Chaqimchi buluti ishlab turgan kompyuter</p></div></div>
+          <div className="card-head"><div><h2>Server holati</h2><p>ENES buluti ishlab turgan kompyuter</p></div></div>
           <div className="telemetry-grid">
             {typeof server.cpu_percent === "number" ? <div className="telemetry"><span>Protsessor</span><Percent value={server.cpu_percent} /></div> : null}
             {typeof server.ram_percent === "number" ? <div className="telemetry"><span>Xotira</span><Percent value={server.ram_percent} /></div> : null}

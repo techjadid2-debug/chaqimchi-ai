@@ -272,6 +272,89 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
  *  Telefon klaviaturasida xato terish oson, xatoni ko'rmasdan tuzatib
  *  bo'lmaydi.  Statik sahifalar uchun xuddi shu naqsh
  *  `chaqimchi_ai/local/static/pw-eye.js` da. */
+/** Modal oyna — brauzerning `prompt`/`confirm` o'rniga.
+ *
+ * Eski admin qoidasi (2026-08-19): brauzer oynasida "auto" yoki "naqd"
+ * deb YOZISH kerak edi — bitta harf xato, amal bajarilmasdi.  Modal
+ * ichida esa tanlov tugma va ro'yxat bilan.  Escape va orqa fon yopadi;
+ * fokus oyna ichida. */
+export function Modal({ title, children, onClose, wide = false, footer }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean; footer?: ReactNode }) {
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", escape);
+    return () => document.removeEventListener("keydown", escape);
+  }, [onClose]);
+  return <div className="modal-backdrop" onClick={onClose}>
+    <div className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} onClick={event => event.stopPropagation()}>
+      <div className="modal-head"><h2>{title}</h2><button className="btn btn-icon" aria-label="Yopish" onClick={onClose}><Icon name="close" /></button></div>
+      <div className="modal-body">{children}</div>
+      {footer ? <div className="modal-foot">{footer}</div> : null}
+    </div>
+  </div>;
+}
+
+export type ConfirmRequest = {
+  title: string;
+  text: string;
+  confirmLabel?: string;
+  danger?: boolean;
+  /** Xavfli amal: foydalanuvchi shu matnni TERIB tasdiqlaydi
+   *  (obunani to'xtatish — do'kon nomi).  Tasodifiy bosishdan himoya. */
+  typed?: string;
+};
+
+/** Tasdiqlash oynasi.  `window.confirm` ATAYLAB ishlatilmaydi: Telegram
+ *  WebView'da u ishonchsiz, matnini esa uslublab bo'lmaydi. */
+export function ConfirmDialog({ request, onResolve }: { request: ConfirmRequest; onResolve: (ok: boolean) => void }) {
+  const [typed, setTyped] = useState("");
+  const blocked = Boolean(request.typed) && typed.trim() !== request.typed;
+  return <Modal title={request.title} onClose={() => onResolve(false)} footer={<>
+    <button className="btn" onClick={() => onResolve(false)}>Bekor qilish</button>
+    <button className={`btn ${request.danger ? "btn-danger" : "btn-primary"}`} disabled={blocked} onClick={() => onResolve(true)}>{request.confirmLabel || "Ha"}</button>
+  </>}>
+    <p className="modal-text">{request.text}</p>
+    {request.typed ? <label className="field-label">Tasdiqlash uchun «{request.typed}» deb yozing<input className="input" value={typed} onChange={event => setTyped(event.target.value)} autoFocus /></label> : null}
+  </Modal>;
+}
+
+/** `const [confirm, dialog] = useConfirm(); if (await confirm({...})) …` */
+export function useConfirm(): [(request: ConfirmRequest) => Promise<boolean>, ReactNode] {
+  const [pending, setPending] = useState<{ request: ConfirmRequest; resolve: (ok: boolean) => void } | null>(null);
+  const ask = (request: ConfirmRequest) => new Promise<boolean>(resolve => setPending({ request, resolve }));
+  const dialog = pending ? <ConfirmDialog request={pending.request} onResolve={ok => { pending.resolve(ok); setPending(null); }} /> : null;
+  return [ask, dialog];
+}
+
+/** Qisqa xabar (toast) — amal natijasi.  Javobsiz tugma buzuq tugmadan
+ *  farq qilmaydi. */
+export function useToast(): [(message: string, ok?: boolean) => void, ReactNode] {
+  const [toast, setToast] = useState<{ message: string; ok: boolean } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+  const show = (message: string, ok = true) => setToast({ message, ok });
+  const node = toast ? <div className={`toast${toast.ok ? "" : " toast-error"}`} role="status">{toast.message}</div> : null;
+  return [show, node];
+}
+
+/** Oy tanlagich: 1/3/6/12 chip + ixtiyoriy son.  Obuna, hisob va
+ *  uzaytirish uchun bitta shakl. */
+export function MonthPicker({ value, onChange, max = 60 }: { value: number; onChange: (months: number) => void; max?: number }) {
+  return <div className="month-picker">
+    <div className="chip-row">
+      {[1, 3, 6, 12].map(months => <button key={months} type="button" className={`chip${value === months ? " active" : ""}`} onClick={() => onChange(months)}>{months} oy</button>)}
+    </div>
+    <label className="field-label">Yoki boshqa son<input className="input" type="number" min={1} max={max} value={value} onChange={event => onChange(Math.max(1, Math.min(max, Number(event.target.value) || 1)))} /></label>
+  </div>;
+}
+
+/** Nusxalanadigan maydon: havola yoki kod + tugma. */
+export function CopyField({ value, label = "Nusxalash" }: { value: string; label?: string }) {
+  return <div className="copy-field"><input readOnly value={value} onFocus={event => event.currentTarget.select()} /><CopyButton value={value} label={label} /></div>;
+}
+
 export function PasswordInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   const [show, setShow] = useState(false);
   return <span className="pw-wrap">
@@ -290,7 +373,7 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
   return <main className="login-page">
     <section className="login-visual">
       <Logo />
-      <div><span className="eyebrow">CHAQIMCHI CLOUD</span><h1>{kind === "owner" ? "Biznesingizni raqamlar orqali boshqaring." : "Tizim holatini bitta joydan boshqaring."}</h1><p>Kameralar, oqim, xavfsizlik va operatsion ko‘rsatkichlar — ortiqcha murakkabliksiz.</p></div>
+      <div><span className="eyebrow">ENES CLOUD</span><h1>{kind === "owner" ? "Biznesingizni raqamlar orqali boshqaring." : "Tizim holatini bitta joydan boshqaring."}</h1><p>Kameralar, oqim, xavfsizlik va operatsion ko‘rsatkichlar — ortiqcha murakkabliksiz.</p></div>
       <div className="login-proof"><Icon name="shield"/><span>Ma’lumotlar himoyalangan ulanish orqali uzatiladi</span></div>
     </section>
     <section className="login-panel">

@@ -9,6 +9,27 @@
 
 ## HOZIRGI HOLAT · 2026-09-08
 
+- **🎨 F4a — ADMIN VOSITALARI REACT'GA KO'CHDI (2026-09-08, `dc60e2c`).**
+  `/admin/customers/{id}` — mijoz tafsiloti: holat banneri, kamera
+  ro'yxati (probe/sifat/rol), qurilma health satrlari (tashlangan
+  hodisalar, klip, zanjir, yuz kadri, demografiya, eski zanjirlar),
+  `feature_problems`/`geometry_problems`/`role_problems`; tugmalar:
+  kamera qo'shish, kamera soni, ulanish havolasi, yangilanish siyosati,
+  chiziq va zona (`GeometryEditor kind="admin"`), diagnostika (+ sig'im
+  o'lchovi natijasi), eski jarayonlarni tozalash, sig'imni o'lchash;
+  login yaratish/parol, Telegram egasi, kirish havolasi; AI imkoniyatlar
+  (katalog, to'plam, narx, qoralama, tasdiq), hisob ochish, to'lovsiz
+  uzaytirish, tarif almashtirish; yuz tanish (xodim, rasm, kadrlar);
+  obunani to'xtatish (nomni terib).  Yangi sahifalar: **Jamoa**
+  (loginlar, holat, parol, yaratish; o'rnatuvchi biriktirish) va
+  **Sozlamalar** (tayyorlik, Telegram sinovi, yangilanishni to'xtatish,
+  provayderlar).  To'lovlar: modal orqali qayd (naqd/bank), bekor
+  qilish, havola.  `window.confirm` yo'q — `ConfirmDialog`/`Modal`
+  (`components.tsx`).  Marshrut ikkinchi segmentni o'qiydi
+  (`router.ts: param`).  Ikkala `xfail` olindi.  Qobiq sarlavhalari va
+  paneldagi ko'rinadigan matn ENES.  **Deploy to'sig'i ochildi** —
+  React admin eski adminni to'liq qoplaydi (yuz tanish va faces
+  hodisalari ham).
 - **🎨 F3 SAYT TUGADI (2026-09-08, `4f199ce` + `99ed0e6`).**  Bosh sahifa va
   qolgan 13 sahifa `cloud/site/` shablonlaridan quriladi; umumiy nav va
   footer `cloud/site/partials/` da.  Uch tilli: bosh sahifa, aloqa,
@@ -293,8 +314,10 @@
 ## KEYINGI ISH
 
 **REBREND (2026-09-08).** To'liq holat + xatolar + tartib:
-`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F3 tugadi.
-Navbat: **F4 panellar** (namunadagi ko'rinish +
+`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F3 va F4a
+tugadi.  Navbat: **F4b — panel dizayni namunaga** (qorong'i sidebar,
+KPI plitkalar, kamera to'ri, hodisa lentasi) va **F4c — ega paneli
+matnini katalogga** (~600 satr, uz/ru/en) (namunadagi ko'rinish +
 matn ajratish + yuqoridagi admin vositalari ro'yxati; ikki `xfail`
 belgisi olinadi; `owner.css`/`panel.css` o'chadi) → F5 Telegram/CSV →
 F6 ichki nomlar → F7 cutover (egadan: DNS, bot @username, yuridik nom,
@@ -893,16 +916,12 @@ tekshirilmagan yoki YO'Q):
 - `test_owner_staff_tab_disappears_when_the_feature_is_off` — «Xodimlar»
   bo'limi funksiya yopiq saytda ham `NAV` da turadi (`owner.tsx:28`);
   eski qoida: 403 o'rniga tugmaning o'zi chizilmasin.
-- `test_admin_panel_has_no_native_dialogs` — React adminda
-  `window.confirm` QAYTGAN (`admin.tsx:139`, hisobni to'langan deb
-  tasdiqlash).  Eski sabab `prompt()` haqida edi (matn kiritishda
-  bitta harf xato — amal bajarilmasdi); `confirm` uchun sabab
-  yengilroq, F4 da qaror.
-- `test_admin_customer_page_is_deep_linkable` — `router.ts` faqat bo'lim
-  ID'sini o'qiydi, `customers/{id}` yo'q; «diqqat talab qiladi»
-  ro'yxatidan mijozga to'g'ridan-to'g'ri o'tib bo'lmaydi.
-- `test_admin_panel_promises_the_same_interval` — reliz boshqaruvi React
-  adminda yo'q; `tests/test_windows_installer.py` da `xfail(strict)`.
+- ✅ `test_admin_panel_has_no_native_dialogs` → `test_the_admin_uses_no_native_dialogs`
+  (F4a: `ConfirmDialog`/`Modal`, `window.confirm` yo'q).
+- ✅ `test_admin_customer_page_is_deep_linkable` → `test_the_customer_page_is_deep_linkable`
+  (F4a: `router.ts` ikkinchi segment, `/admin/customers/{id}`).
+- ✅ `test_admin_panel_promises_the_same_interval` — React adminda
+  (`AdminCustomer.tsx`), `xfail` olindi.
 - `test_owner_panel_shows_camera_previews_and_refreshes`,
   `test_owner_can_ask_for_a_fresh_camera_frame` — React'da `/preview`
   va `requestFrame` bor, qulf yozilmagan.
@@ -916,8 +935,12 @@ tekshirilmagan yoki YO'Q):
   ishlamaydi» izohi), `test_owner_shows_the_data_it_already_fetches`,
   `test_owner_hourly_chart_can_show_occupancy` — tekshirilmagan.
 
-**Eski adminning React adminga ko'chirilmagan vositalari** (endpoint
-bo'yicha, `556d33c` dan keyin o'lchandi):
+**✅ YOPILDI (2026-09-08, F4a) — eski adminning vositalari React adminga
+ko'chdi** (`AdminCustomer.tsx`, `AdminTeam.tsx`, `AdminSettings.tsx`);
+qulf `test_the_admin_can_fix_a_shop_remotely` endi 18 endpointni
+tekshiradi, `test_the_admin_uses_no_native_dialogs` va
+`test_the_customer_page_is_deep_linkable` qo'shildi.  Ro'yxat tarix
+uchun qoldirildi (endpoint bo'yicha, `556d33c` dan keyin o'lchangan):
 `sites/{id}` tafsilot sahifasi (config_health: `geometry_problems`,
 `feature_problems`, `role_problems`), `sites/{id}/camera-inventory`
 (masofaviy kamera va chizma — 2026-08-21 qarori),
@@ -926,8 +949,9 @@ bo'yicha, `556d33c` dan keyin o'lchandi):
 (**sotuv darvozasi**), `sites/{id}/faces`, `sites/{id}/onboarding`,
 `accounts/{id}` va `installer-assignments` (Jamoa), `alerts` +
 `alerts/test`, `business-templates`, `payments/providers`,
-`updates-paused`, `windows-releases`.  Qulf:
-`test_the_admin_can_fix_a_shop_remotely` (`xfail(strict)`).
+`updates-paused`, `windows-releases`.  Ko'chirilmagani: `alerts/check`
+(darhol tekshiruv — fon halqasi baribir 5 daqiqada qiladi),
+`portal-audit` (jurnal ko'rinishi — kerak bo'lsa keyin).
 
 **Ega panelida eski `owner.html` ga nisbatan yo'q** (React owner 08-24
 dan production'da — yo'qotish yangi emas, lekin F4 da qaror kerak):
@@ -956,6 +980,48 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-08 — F4a: admin support vositalari React adminga ko'chdi (`dc60e2c`)
+
+Nima: eski `admin.html` ning 18 ta endpointi endi React adminda —
+mijoz tafsiloti (`/admin/customers/{id}`), Jamoa, Sozlamalar, to'lov
+modallari.  Bitta `window.confirm` ham yo'q: `Modal`, `ConfirmDialog`
+(nomni terib tasdiqlash), `useToast`, `MonthPicker`, `CopyField`
+(`components.tsx`).  `GeometryEditor` ikkala panel uchun bitta
+(`kind="admin"` — admin config/preview yo'llari).  Marshrut ikkinchi
+segmentni o'qiydi (`usePanelRoute` → `[active, navigate, param]`).
+Qobiq sarlavhalari va paneldagi ko'rinadigan matn ENES.
+
+Nega: `556d33c` eski adminni o'chirgan, lekin React adminda faqat
+«Arizalar» qo'shilgan edi — do'konni masofadan tuzatish, funksiya
+biriktirish (sotuv darvozasi), reliz boshqaruvi yo'q edi va shox shu
+sabab deploy qilinmas edi.
+
+Qayerda: `frontend/src/AdminCustomer.tsx` (yangi, 637 q.),
+`AdminTeam.tsx`, `AdminSettings.tsx` (yangi), `admin.tsx`
+(`CustomersPage` → tafsilot, `PaymentsPage` modal, `team`/`settings`),
+`components.tsx` (+Modal/Confirm/Toast/MonthPicker/CopyField),
+`router.ts`, `GeometryEditor.tsx`, `styles.css` (+70 q.),
+`frontend/{owner,admin}.html` sarlavha, `cloud/static/v2/` (bundle).
+
+Test: `test_panel_v2.py` — `test_the_admin_can_fix_a_shop_remotely`
+(18 endpoint), `test_the_admin_uses_no_native_dialogs`,
+`test_the_customer_page_is_deep_linkable`,
+`test_the_geometry_editor_serves_both_panels`,
+`test_the_old_brand_stays_off_the_panels`;
+`test_windows_installer.py::test_admin_panel_promises_the_same_interval`
+(xfail olindi, `AdminCustomer.tsx`); `test_cloud_api` qobiq «ENES».
+Playwright bilan jonli tekshirildi: login → mijoz sahifasi → AI
+imkoniyatlar oynasi → Jamoa → Sozlamalar (skrinshotlar).
+
+Diqqat: lokal serverda portal login uchun `CHAQIMCHI_PORTAL_JWT_SECRET`
+(≥32 belgi) SHART — usiz `/api/v1/auth/login` 503 beradi va bu
+«tugma ishlamayapti» kabi ko'rinadi.  Baza yo'li — `CHAQIMCHI_CLOUD_DB`.
+Diqqat: onboarding bosqich matnlari serverdan («Sotqin cloudga
+juftlandi») — F6 da o'zgaradi.
+Diqqat: skrinshot sinovi lokal `data/cloud/cloud.db` ga «Surat do'koni»
+sayti va `shotadmin` akkauntini qoldirdi (birinchi urinish standart
+bazaga tushgan) — lokal dev bazasi, production'ga aloqasi yo'q.
 
 ### 2026-09-08 — F3.2: qolgan sayt sahifalari shablonga, eski CSS o'chdi (`99ed0e6`)
 

@@ -1,0 +1,466 @@
+<!doctype html>
+<!-- `data-theme="light"`: sayt tizim qorong'i rejimiga BO'YSUNMAYDI.
+     Qorong'i-ochiq bo'limlar almashinuvi brend ritmi (`site.css`
+     `--band-*`), foydalanuvchi tanlovi emas; `tokens.css` esa atributsiz
+     `prefers-color-scheme` ga qarab butun palitrani almashtirardi. -->
+<html lang="{{lang}}" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="{{site.meta.description}}">
+  <meta property="og:title" content="{{site.meta.og_title}}">
+  <meta property="og:description" content="{{site.meta.og_description}}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="__PUBLIC_ORIGIN__{{path}}">
+  <meta property="og:locale" content="{{site.meta.locale}}">
+  <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-v3.png">
+  <meta name="theme-color" content="#05070a">
+  <!-- Sarlavha ATAYLAB mahsulot nomi bilan boshlanmaydi.  Odam "ENES"
+       deb qidirmaydi — u "do'kon uchun kamera analitikasi" yoki
+       "mijozlar oqimini sanash" deb qidiradi.  Brend nomi oxirida
+       turadi va tanigan odam baribir topadi. -->
+  <title>{{site.meta.title}}</title>
+  <!-- Bitta sahifa — bitta manzil, HAR TIL uchun o'ziniki.  Til
+       prefiksi qo'shilmasa uchala til bitta canonical e'lon qiladi va
+       Google faqat bittasini indekslaydi. -->
+  <link rel="canonical" href="__PUBLIC_ORIGIN__{{path}}">
+  {{hreflang}}
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <!-- `?v=` — fayl mazmunining SHA-256 boshi.  Bu sahifa
+       `scripts/build_site.py` bilan quriladi va token o'sha yerda
+       hisoblanadi: qo'lda yangilanadigan narsa qolmadi. -->
+  <link rel="stylesheet" href="{{asset:site.css}}">
+</head>
+<body class="site">
+  <!-- Sahifa ritmi namunadan: qorong'i hero → ochiq imkoniyatlar →
+       qorong'i "AI ko'radi" → ochiq qadamlar va kameralar → ochiq
+       haqiqiy panel va narx → qorong'i yakun (aloqa) → savollar.
+       Har bo'lim `band` yoki `band-dark` — ranglar bo'lim tokenidan
+       keladi (`site.css`), bitta komponent ikkala fonda ishlaydi.
+
+       Namunadagi "1000+ mijoz", "99.9%", App Store tugmalari ATAYLAB
+       yo'q: ular bugun rost emas.  Raqamlar qatori faqat o'lchangan
+       va va'da qilsa bo'ladigan narsalarni aytadi. -->
+  <!-- Nav'da faqat HAVOLALAR (`tests/test_pricing_ui.py`): `<nav>`
+       ichidagi bosiladigan element klaviatura va ekran o'quvchisi uchun
+       boshqa ma'no beradi.  Til tanlagich ham `<details>`. -->
+  <header class="nav-shell nav-dark">
+    <nav class="nav" aria-label="{{site.nav.home}}">
+      <a class="brand brand-lockup" href="{{path}}">
+        {{inline:enes-mark.svg}}
+        <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+      </a>
+      <div class="nav-links">
+        <a href="#imkoniyat">{{site.nav.features}}</a>
+        <a href="#qanday">{{site.nav.how}}</a>
+        <a href="#narx">{{site.nav.pricing}}</a>
+        <a href="/edu">{{site.nav.edu}}</a>
+        <a href="#aloqa">{{site.nav.contact}}</a>
+      </div>
+      <div class="nav-actions">
+        {{lang_switch}}
+        <a class="text-link" href="__APP_URL__/owner">{{site.nav.login}}</a>
+        <a class="nav-cta" href="#aloqa">{{site.nav.cta}}</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ── HERO: bitta asosiy harakat ── -->
+    <section class="band band-dark hero-band">
+      <div class="hero section-pad">
+        <div class="hero-copy">
+          <p class="hero-badge">
+            <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#qalqon"></use></svg>
+            {{site.hero.eyebrow}}
+          </p>
+          <!-- Shior har tilda o'z tilida: mijozga ko'rinadigan matn
+               o'zbekcha (CLAUDE.md).  Inglizcha "Your cameras. Now
+               intelligent." faqat `en` sahifada. -->
+          <h1><span>{{site.hero.title_1}}</span><em>{{site.hero.title_2}}</em></h1>
+          <p class="hero-text">{{site.hero.text}}</p>
+
+          <div class="hero-actions">
+            <!-- Asosiy harakat — DEMO (ariza), yuklab olish emas: mijoz
+                 hali ishonmagan paytda undan eng og'ir qadam so'ralmaydi. -->
+            <a class="button button-light" href="#aloqa" id="demoCta">
+              {{site.hero.cta_primary}}
+              <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"></path></svg>
+            </a>
+            <a class="button button-ghost" href="#imkoniyat">
+              {{site.hero.cta_secondary}}
+              <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 10 7-10 7z"></path></svg>
+            </a>
+
+            <!-- Dastur nashr qilingan bo'lsa havola, aks holda pastdagi
+                 "xabar bering" formasi.  Qaysi biri — serverdan so'raladi
+                 (`/api/v1/public/windows-release`). -->
+            <div id="downloadReady" class="download-action" hidden>
+              <a class="button button-ghost button-small" id="downloadBtn" href="/api/v1/public/download-installer">
+                <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
+                {{site.hero.download}}
+              </a>
+              <!-- Versiya ko'rinib turishi shart: usiz mijoz (va biz)
+                   yangi fayl chiqqanini bilolmaydi. -->
+              <p class="hint" id="downloadVersion" hidden></p>
+              <p class="hint">{{site.hero.install_hint}} <a href="/install">{{site.hero.install_link}}</a></p>
+            </div>
+          </div>
+
+          <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
+          <form id="notifyForm" class="quick-download-form" hidden>
+            <p class="hint">{{site.notify.lead}}</p>
+            <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="{{site.notify.phone_placeholder}}">
+            <label class="consent">
+              <input name="consent" type="checkbox" required>
+              <span>{{site.notify.consent}}</span>
+            </label>
+            <input name="full_name" type="hidden" value="{{site.notify.hidden_name}}">
+            <input name="website" type="hidden" value="">
+            <button class="button button-light" type="submit">{{site.notify.submit}}</button>
+            <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+
+        <!-- Hero'da MAHSULOTNING O'ZI: panel ramkasi ichida jonli kamera
+             ko'rinishi va ustida ikkita karta.  Ramka HTML bilan chizilgan,
+             skrinshot emas: matn har ekranda o'qiladi va tor ekranda
+             kartalar CSS bilan yashirinadi. -->
+        <figure class="hero-panel">
+          <div class="panel-chrome">
+            <span class="panel-brand">{{inline:enes-mark.svg}} ENES</span>
+            <span class="panel-tabs"><b>{{site.frame.tab_live}}</b><i>{{site.frame.tab_analytics}}</i><i>{{site.frame.tab_alerts}}</i><i>{{site.frame.tab_reports}}</i></span>
+            <span class="panel-date">{{site.frame.today}}</span>
+          </div>
+          <div class="panel-body">
+            <img class="panel-shot" src="/assets/design2-retail.webp"
+                 alt="{{site.frame.shot_alt}}"
+                 width="1400" height="788" fetchpriority="high">
+            <span class="panel-live"><i></i> {{site.frame.live}}</span>
+
+            <div class="panel-card panel-stat">
+              <p>{{site.frame.stat_label}}</p>
+              <strong>486</strong>
+              <span class="panel-delta">{{site.frame.stat_delta}}</span>
+              <svg class="panel-spark" viewBox="0 0 220 60" preserveAspectRatio="none" aria-hidden="true">
+                <polyline points="0,48 22,44 44,46 66,34 88,37 110,24 132,27 154,14 176,10 198,18 220,12"
+                          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+
+            <div class="panel-card panel-alerts">
+              <p>{{site.frame.alerts_title}}</p>
+              <ul>
+                <li><i class="bad"></i> {{site.frame.alert_1}} <time>12:45</time></li>
+                <li><i class="warn"></i> {{site.frame.alert_2}} <time>12:30</time></li>
+                <li><i></i> {{site.frame.alert_3}} <time>12:15</time></li>
+              </ul>
+            </div>
+          </div>
+          <figcaption class="hint">{{site.frame.caption}}</figcaption>
+        </figure>
+      </div>
+
+      <!-- Raqamlar qatori — faqat ROST raqamlar. -->
+      <div class="facts section-pad" aria-label="{{site.results.eyebrow}}">
+        <div><strong>{{site.facts.1_value}}</strong><span>{{site.facts.1_label}}</span></div>
+        <div><strong>{{site.facts.2_value}}</strong><span>{{site.facts.2_label}}</span></div>
+        <div><strong>{{site.facts.3_value}}</strong><span>{{site.facts.3_label}}</span></div>
+        <div><strong>{{site.facts.4_value}}</strong><span>{{site.facts.4_label}}</span></div>
+      </div>
+    </section>
+
+    <!-- ── NIMA OLASIZ: to'rtta aniq natija ──
+         Sarlavhalar FUNKSIYA nomi emas, mijozning SAVOLI.  Har kartada
+         bitta o'lchanadigan narsa bor.  Xodim davomati (Face ID) va mijoz
+         portreti (jins/yosh) BU YERDA ATAYLAB YO'Q: ikkalasi yopiq pilot
+         va sotuv sahifasida va'da qilinmaydi (2026-08-26 o'lchovi). -->
+    <section class="band results section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> {{site.results.eyebrow}}</p>
+        <h2>{{site.results.title}}</h2>
+        <p>{{site.results.text}}</p>
+      </div>
+      <div class="results-grid">
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg></span>
+          <h3>{{site.results.1.title}}</h3>
+          <p>{{site.results.1.text}}</p>
+        </article>
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg></span>
+          <h3>{{site.results.2.title}}</h3>
+          <p>{{site.results.2.text}}</p>
+        </article>
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg></span>
+          <h3>{{site.results.3.title}}</h3>
+          <p>{{site.results.3.text}}</p>
+        </article>
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg></span>
+          <h3>{{site.results.4.title}}</h3>
+          <p>{{site.results.4.text}}</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ── AI TAHLIL: qorong'i bo'lim, haqiqiy xarita surati ── -->
+    <section class="band band-dark ai section-pad">
+      <div class="ai-copy">
+        <p class="eyebrow"><span></span> {{site.ai.eyebrow}}</p>
+        <h2>{{site.ai.title}}</h2>
+        <p>{{site.ai.text}}</p>
+        <ul class="check-list">
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg><span>{{site.ai.item_1}}</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg><span>{{site.ai.item_2}}</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg><span>{{site.ai.item_3}}</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg><span>{{site.ai.item_4}}</span></li>
+        </ul>
+        <a class="button button-ghost" href="#imkoniyat">{{site.ai.cta}}</a>
+      </div>
+      <figure class="ai-visual">
+        <img src="/assets/panel-xarita-v4.webp" alt="{{site.ai.alt}}"
+             width="1470" height="1116" loading="lazy" decoding="async">
+        <span class="ai-chip ai-chip-flow"><i></i>{{site.ai.chip_flow}}</span>
+        <span class="ai-chip ai-chip-alert"><i></i>{{site.ai.chip_alert}}</span>
+      </figure>
+    </section>
+
+    <!-- ── QANDAY ISHLAYDI: uch qadam ── -->
+    <section id="qanday" class="band how section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> {{site.how.eyebrow}}</p>
+        <h2>{{site.how.title}}</h2>
+        <p>{{site.how.text}}</p>
+      </div>
+      <ol class="how-steps">
+        <li>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8m-4-4v4"></path></svg>
+          <b>{{site.how.1.title}}</b>
+          <span>{{site.how.1.text}}</span>
+        </li>
+        <li>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="10" rx="2"></rect><path d="m16 10 5-3v10l-5-3z"></path><circle cx="9.5" cy="12" r="2.5"></circle></svg>
+          <b>{{site.how.2.title}}</b>
+          <span>{{site.how.2.text}}</span>
+        </li>
+        <li>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="m9 11 6-3-2 6-2-2-2 1zM11 18h2"></path></svg>
+          <b>{{site.how.3.title}}</b>
+          <span>{{site.how.3.text}}</span>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ── MAVJUD KAMERANGIZ ──
+         Rasmda mini-kompyuter ham bor, lekin matn u haqda GAPIRMAYDI:
+         Box hozir sotilmaydi va sayt uni va'da qilmasligi kerak
+         (`docs/DOKON_MVP.md`).  Namunadagi qurilma surati ham shu sababdan
+         ishlatilmadi — Box sotuvga chiqqanda qaytariladi. -->
+    <section id="kameralar" class="band sales-visual section-pad">
+      <div class="sales-photo">
+        <img src="/assets/design2-aisle.webp" alt="{{site.cameras.alt}}"
+             width="1100" height="620" loading="lazy" decoding="async">
+      </div>
+      <div class="sales-copy">
+        <p class="eyebrow"><span></span> {{site.cameras.eyebrow}}</p>
+        <h2>{{site.cameras.title}}</h2>
+        <p>{{site.cameras.text}}</p>
+        <p class="hint">{{site.cameras.hint}}</p>
+      </div>
+    </section>
+
+    <!-- ── NIMA KO'RASIZ: haqiqiy panel ekrani ──
+         Chizilgan illyustratsiya emas, MAHSULOTNING O'ZI.  Rasmlar
+         `scripts/make_panel_screenshots.py` bilan olinadi: interfeys
+         haqiqiy, raqamlar namunaviy. -->
+    <section id="imkoniyat" class="band proof section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> {{site.proof.eyebrow}}</p>
+        <h2>{{site.proof.title}}</h2>
+        <p>{{site.proof.text}}</p>
+      </div>
+      <div class="proof-grid">
+        <figure>
+          <img src="/assets/panel-bugun-v3.webp" alt="{{site.proof.fig1_alt}}"
+               width="1470" height="2271" loading="lazy" decoding="async">
+          <figcaption>{{site.proof.fig1_caption}}</figcaption>
+        </figure>
+        <figure>
+          <img src="/assets/panel-xarita-v4.webp" alt="{{site.ai.alt}}"
+               width="1470" height="1116" loading="lazy" decoding="async">
+          <figcaption>{{site.proof.fig2_caption}}</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ── NARX: uchta tarif, kartalar serverdan ── -->
+    <section id="narx" class="band configurator section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> {{site.pricing.eyebrow}}</p>
+        <h2>{{site.pricing.title}}</h2>
+        <!-- Narx YOLG'IZ turmasin: mijoz uni nimagadir solishtirishi kerak.
+             Eng tabiiy taqqoslash — qo'shimcha xodim yollash. -->
+        <p>{{site.pricing.text}}</p>
+        <p>{{site.pricing.yearly}}</p>
+      </div>
+
+      <!-- Kartalar JS bilan chiziladi: narx ham, ro'yxat ham serverdan
+           (`/api/v1/public/pricing`).  Sahifaga qo'lda yozilsa katalog
+           o'zgarganda sayt eski narxni ko'rsatib turaverardi. -->
+      <div id="planGrid" class="preset-grid"></div>
+
+      <noscript>
+        <div class="preset-hint" style="text-align:left">
+          <b>{{site.pricing.noscript_1}}</b><br>
+          {{site.pricing.noscript_2}}
+          <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>.<br>
+          {{site.pricing.noscript_plans}}
+        </div>
+      </noscript>
+
+      <p id="featureNote" class="preset-hint" hidden></p>
+
+      <p class="preset-hint">
+        {{site.pricing.edu}}
+        <a href="/edu">{{site.pricing.edu_link}}</a>.
+      </p>
+    </section>
+
+    <!-- ── ALOQA: yagona forma, qorong'i yakun ── -->
+    <section id="aloqa" class="band band-dark pilot section-pad">
+      <div class="pilot-copy">
+        <p class="eyebrow"><span></span> {{site.contact.eyebrow}}</p>
+        <h2>{{site.contact.title}}</h2>
+        <p>{{site.contact.text}}</p>
+        <div class="contact-points">
+          <span><b>{{site.contact.tg_label}}</b> <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> · {{site.contact.tg_person}}</span>
+          <span><b>{{site.contact.bot_label}}</b> <a href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">{{site.contact.bot_link}}</a></span>
+          <span><b>{{site.contact.video_label}}</b> {{site.contact.video_text}}</span>
+        </div>
+      </div>
+
+      <!-- CTA ataylab ikki maydonli: ism va telefon.  Qolgan texnik
+           ma'lumotlarni jamoa qo'ng'iroqda aniqlaydi. -->
+      <form id="leadForm" class="lead-form" novalidate>
+        <div class="field field-half">
+          <label for="full_name">{{site.contact.name_label}}</label>
+          <input id="full_name" name="full_name" autocomplete="name" required maxlength="120" placeholder="{{site.contact.name_label}}">
+        </div>
+        <div class="field field-half">
+          <label for="phone">{{site.contact.phone_label}}</label>
+          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="{{site.contact.phone_placeholder}}">
+        </div>
+        <input id="cameras" name="cameras" type="hidden" value="4">
+        <input id="leadMessage" name="message" type="hidden" value="{{site.contact.hidden_message}}">
+        <input id="consent" name="consent" type="hidden" value="on">
+        <div class="field honey" aria-hidden="true">
+          <label for="website">Website</label>
+          <input id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+        <p class="consent">{{site.contact.consent}}</p>
+        <button class="button form-button button-light" type="submit">{{site.contact.submit}}</button>
+        <p id="formStatus" class="form-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <!-- ── FAQ ── -->
+    <section id="faq" class="band faq section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> {{site.faq.eyebrow}}</p>
+        <h2>{{site.faq.title}}</h2>
+      </div>
+      <div class="faq-grid">
+        <details><summary>{{site.faq.q1}}</summary><p>{{site.faq.a1}}</p></details>
+        <details><summary>{{site.faq.q2}}</summary><p>{{site.faq.a2}}</p></details>
+        <details><summary>{{site.faq.q3}}</summary><p>{{site.faq.a3}}</p></details>
+        <details><summary>{{site.faq.q4}}</summary><p>{{site.faq.a4}}</p></details>
+        <details><summary>{{site.faq.q5}}</summary><p>{{site.faq.a5}}</p></details>
+        <details><summary>{{site.faq.q6}}</summary><p>{{site.faq.a6}}</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="band-dark">
+    <a class="brand brand-lockup" href="{{path}}">
+      {{inline:enes-mark.svg}}
+      <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+    </a>
+    <p>
+      {{site.footer.tagline}}<br>
+      {{site.footer.contact}} {{site.contact.tg_person}} · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
+    </p>
+    <div>
+      <a href="/status">{{site.footer.status}}</a>
+      <a href="/oferta">{{site.footer.offer}}</a>
+      <a href="/maxfiylik">{{site.footer.privacy}}</a>
+      <a href="/hamkorlik">{{site.footer.partners}}</a>
+      <a href="/aloqa">{{site.footer.contact_page}}</a>
+      <a href="tel:+998932225070">+998 93 222 50 70</a>
+      <a href="/rozilik-shabloni">{{site.footer.consent}}</a>
+      <a href="__APP_URL__/owner">{{site.footer.owner_panel}}</a>
+      <a href="__PARTNER_URL__/installer">{{site.footer.installer_panel}}</a>
+    </div>
+    <p class="footer-powered">{{site.footer.powered}}</p>
+  </footer>
+
+  <!-- Mashina o'qiydigan ma'lumot.  Uchala blok ham sahifada BOR narsani
+       takrorlaydi: razmetkada sahifada yo'q va'da bo'lmasligi kerak.
+       Matnlar `json:` orqali qo'yiladi — qochirish qurish paytida. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "__PUBLIC_ORIGIN__/#tashkilot",
+        "name": "ENES Monitoring",
+        "url": "__PUBLIC_ORIGIN__/",
+        "logo": "__PUBLIC_ORIGIN__/assets/enes-mark.svg",
+        "areaServed": { "@type": "Country", "name": {{json:site.ld.country}} },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+998932225070",
+          "contactType": "sales",
+          "availableLanguage": ["uz", "ru", "en"]
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "ENES Monitoring",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Windows 10, Windows 11",
+        "url": "__PUBLIC_ORIGIN__{{path}}",
+        "inLanguage": "{{lang}}",
+        "publisher": { "@id": "__PUBLIC_ORIGIN__/#tashkilot" },
+        "description": {{json:site.ld.description}},
+        "featureList": [
+          {{json:site.ld.feature_1}},
+          {{json:site.ld.feature_2}},
+          {{json:site.ld.feature_3}},
+          {{json:site.ld.feature_4}}
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "inLanguage": "{{lang}}",
+        "mainEntity": [
+          { "@type": "Question", "name": {{json:site.faq.q1}}, "acceptedAnswer": { "@type": "Answer", "text": {{json:site.ld.a1}} } },
+          { "@type": "Question", "name": {{json:site.faq.q3}}, "acceptedAnswer": { "@type": "Answer", "text": {{json:site.ld.a3}} } },
+          { "@type": "Question", "name": {{json:site.faq.q4}}, "acceptedAnswer": { "@type": "Answer", "text": {{json:site.ld.a4}} } },
+          { "@type": "Question", "name": {{json:site.faq.q6}}, "acceptedAnswer": { "@type": "Answer", "text": {{json:site.ld.a6}} } }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- `site.js` satrlari — katalogdan, qurish paytida.  Skript tilni
+       `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
+       manbadan kelgani uchun ajralib ketmaydi. -->
+  <script>window.__SITE__ = {{site_json}};</script>
+  <script src="{{asset:site.js}}" defer></script>
+</body>
+</html>

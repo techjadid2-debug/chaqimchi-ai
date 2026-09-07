@@ -1,0 +1,499 @@
+<!doctype html>
+<!-- AVTOMATIK YASALGAN — QO'LDA TAHRIRLAMANG.
+     Manba: cloud/site/index.html + i18n/ru.json
+     Yangilash: python scripts/build_site.py -->
+<!-- `data-theme="light"`: sayt tizim qorong'i rejimiga BO'YSUNMAYDI.
+     Qorong'i-ochiq bo'limlar almashinuvi brend ritmi (`site.css`
+     `--band-*`), foydalanuvchi tanlovi emas; `tokens.css` esa atributsiz
+     `prefers-color-scheme` ga qarab butun palitrani almashtirardi. -->
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Видеоаналитика для магазина: подсчёт посетителей, очередь на кассе и ночной контроль. Работает на ваших NVR/IP-камерах и компьютере с Windows — видео остаётся в магазине. Узбекистан.">
+  <meta property="og:title" content="Видеоаналитика для магазина — ENES Monitoring">
+  <meta property="og:description" content="Ваши камеры считают посетителей, измеряют очередь и сообщают о ночном движении. Видео остаётся в магазине.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="__PUBLIC_ORIGIN__/ru/">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-v3.png">
+  <meta name="theme-color" content="#05070a">
+  <!-- Sarlavha ATAYLAB mahsulot nomi bilan boshlanmaydi.  Odam "ENES"
+       deb qidirmaydi — u "do'kon uchun kamera analitikasi" yoki
+       "mijozlar oqimini sanash" deb qidiradi.  Brend nomi oxirida
+       turadi va tanigan odam baribir topadi. -->
+  <title>Видеоаналитика для магазина: подсчёт посетителей, очередь на кассе и ночная охрана — ENES Monitoring</title>
+  <!-- Bitta sahifa — bitta manzil, HAR TIL uchun o'ziniki.  Til
+       prefiksi qo'shilmasa uchala til bitta canonical e'lon qiladi va
+       Google faqat bittasini indekslaydi. -->
+  <link rel="canonical" href="__PUBLIC_ORIGIN__/ru/">
+  <link rel="alternate" hreflang="uz" href="__PUBLIC_ORIGIN__/">
+  <link rel="alternate" hreflang="ru" href="__PUBLIC_ORIGIN__/ru/">
+  <link rel="alternate" hreflang="en" href="__PUBLIC_ORIGIN__/en/">
+  <link rel="alternate" hreflang="x-default" href="__PUBLIC_ORIGIN__/">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <!-- `?v=` — fayl mazmunining SHA-256 boshi.  Bu sahifa
+       `scripts/build_site.py` bilan quriladi va token o'sha yerda
+       hisoblanadi: qo'lda yangilanadigan narsa qolmadi. -->
+  <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
+</head>
+<body class="site">
+  <!-- Sahifa ritmi namunadan: qorong'i hero → ochiq imkoniyatlar →
+       qorong'i "AI ko'radi" → ochiq qadamlar va kameralar → ochiq
+       haqiqiy panel va narx → qorong'i yakun (aloqa) → savollar.
+       Har bo'lim `band` yoki `band-dark` — ranglar bo'lim tokenidan
+       keladi (`site.css`), bitta komponent ikkala fonda ishlaydi.
+
+       Namunadagi "1000+ mijoz", "99.9%", App Store tugmalari ATAYLAB
+       yo'q: ular bugun rost emas.  Raqamlar qatori faqat o'lchangan
+       va va'da qilsa bo'ladigan narsalarni aytadi. -->
+  <!-- Nav'da faqat HAVOLALAR (`tests/test_pricing_ui.py`): `<nav>`
+       ichidagi bosiladigan element klaviatura va ekran o'quvchisi uchun
+       boshqa ma'no beradi.  Til tanlagich ham `<details>`. -->
+  <header class="nav-shell nav-dark">
+    <nav class="nav" aria-label="Главная">
+      <a class="brand brand-lockup" href="/ru/">
+        <!-- ENES Monitoring — "NS" monogrammasi.
+     Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
+     oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
+     shart emas. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 56" fill="none" role="img" aria-label="ENES">
+  <g stroke="currentColor" stroke-width="7" stroke-linejoin="round">
+    <path d="M8 44V12l19 30V12"/>
+    <path d="M60 16H44l-6 10h16l-6 12H31"/>
+  </g>
+</svg>
+        <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+      </a>
+      <div class="nav-links">
+        <a href="#imkoniyat">Возможности</a>
+        <a href="#qanday">Как это работает</a>
+        <a href="#narx">Цены</a>
+        <a href="/edu">Для образования</a>
+        <a href="#aloqa">Контакты</a>
+      </div>
+      <div class="nav-actions">
+        <details class="lang-menu"><summary aria-label="Язык"><span>RU</span></summary><div class="lang-menu-list"><a href="/" hreflang="uz" lang="uz">O‘zbekcha</a><a href="/ru/" hreflang="ru" lang="ru" aria-current="true">Русский</a><a href="/en/" hreflang="en" lang="en">English</a></div></details>
+        <a class="text-link" href="__APP_URL__/owner">Вход для клиентов</a>
+        <a class="nav-cta" href="#aloqa">Получить демо</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ── HERO: bitta asosiy harakat ── -->
+    <section class="band band-dark hero-band">
+      <div class="hero section-pad">
+        <div class="hero-copy">
+          <p class="hero-badge">
+            <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#qalqon"></use></svg>
+            Умный контроль для вашего магазина
+          </p>
+          <!-- Shior har tilda o'z tilida: mijozga ko'rinadigan matn
+               o'zbekcha (CLAUDE.md).  Inglizcha "Your cameras. Now
+               intelligent." faqat `en` sahifada. -->
+          <h1><span>Ваши камеры.</span><em>Теперь умные.</em></h1>
+          <p class="hero-text">Ваши камеры больше не просто записывают. Они анонимно считают посетителей, следят за очередью на кассе и сообщают о важном <b>в Telegram</b>. Полное видео остаётся на вашем компьютере и NVR.</p>
+
+          <div class="hero-actions">
+            <!-- Asosiy harakat — DEMO (ariza), yuklab olish emas: mijoz
+                 hali ishonmagan paytda undan eng og'ir qadam so'ralmaydi. -->
+            <a class="button button-light" href="#aloqa" id="demoCta">
+              Получить демо
+              <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"></path></svg>
+            </a>
+            <a class="button button-ghost" href="#imkoniyat">
+              Посмотреть платформу
+              <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 10 7-10 7z"></path></svg>
+            </a>
+
+            <!-- Dastur nashr qilingan bo'lsa havola, aks holda pastdagi
+                 "xabar bering" formasi.  Qaysi biri — serverdan so'raladi
+                 (`/api/v1/public/windows-release`). -->
+            <div id="downloadReady" class="download-action" hidden>
+              <a class="button button-ghost button-small" id="downloadBtn" href="/api/v1/public/download-installer">
+                <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
+                Скачать для Windows
+              </a>
+              <!-- Versiya ko'rinib turishi shart: usiz mijoz (va biz)
+                   yangi fayl chiqqanini bilolmaydi. -->
+              <p class="hint" id="downloadVersion" hidden></p>
+              <p class="hint">Установка: Далее → Далее → Готово. <a href="/install">Пошаговая инструкция</a></p>
+            </div>
+          </div>
+
+          <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
+          <form id="notifyForm" class="quick-download-form" hidden>
+            <p class="hint">Программа для Windows проходит финальное тестирование. Оставьте номер — отправим в день выхода.</p>
+            <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="Ваш телефон: +998 90 000 00 00">
+            <label class="consent">
+              <input name="consent" type="checkbox" required>
+              <span>Согласен на обработку данных для связи. <a href="/privacy">Конфиденциальность</a></span>
+            </label>
+            <input name="full_name" type="hidden" value="Windows dasturi kutmoqda">
+            <input name="website" type="hidden" value="">
+            <button class="button button-light" type="submit">Сообщить, когда будет готово</button>
+            <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+
+        <!-- Hero'da MAHSULOTNING O'ZI: panel ramkasi ichida jonli kamera
+             ko'rinishi va ustida ikkita karta.  Ramka HTML bilan chizilgan,
+             skrinshot emas: matn har ekranda o'qiladi va tor ekranda
+             kartalar CSS bilan yashirinadi. -->
+        <figure class="hero-panel">
+          <div class="panel-chrome">
+            <span class="panel-brand"><!-- ENES Monitoring — "NS" monogrammasi.
+     Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
+     oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
+     shart emas. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 56" fill="none" role="img" aria-label="ENES">
+  <g stroke="currentColor" stroke-width="7" stroke-linejoin="round">
+    <path d="M8 44V12l19 30V12"/>
+    <path d="M60 16H44l-6 10h16l-6 12H31"/>
+  </g>
+</svg> ENES</span>
+            <span class="panel-tabs"><b>Онлайн</b><i>Аналитика</i><i>Уведомления</i><i>Отчёты</i></span>
+            <span class="panel-date">Сегодня</span>
+          </div>
+          <div class="panel-body">
+            <img class="panel-shot" src="/assets/design2-retail.webp"
+                 alt="Пример AI-анализа потока посетителей в магазине"
+                 width="1400" height="788" fetchpriority="high">
+            <span class="panel-live"><i></i> Онлайн · Камера 03 — зона кассы</span>
+
+            <div class="panel-card panel-stat">
+              <p>Посетители сегодня</p>
+              <strong>486</strong>
+              <span class="panel-delta">+12,5% к вчерашнему дню</span>
+              <svg class="panel-spark" viewBox="0 0 220 60" preserveAspectRatio="none" aria-hidden="true">
+                <polyline points="0,48 22,44 44,46 66,34 88,37 110,24 132,27 154,14 176,10 198,18 220,12"
+                          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+
+            <div class="panel-card panel-alerts">
+              <p>AI-уведомления</p>
+              <ul>
+                <li><i class="bad"></i> Длинная очередь на кассе <time>12:45</time></li>
+                <li><i class="warn"></i> Скопление людей у входа <time>12:30</time></li>
+                <li><i></i> Коробки оставлены в зоне <time>12:15</time></li>
+              </ul>
+            </div>
+          </div>
+          <figcaption class="hint">Вид панели · цифры примерные</figcaption>
+        </figure>
+      </div>
+
+      <!-- Raqamlar qatori — faqat ROST raqamlar. -->
+      <div class="facts section-pad" aria-label="Что вы получаете">
+        <div><strong>14 дней</strong><span>Бесплатный пробный период без карты</span></div>
+        <div><strong>2–4 камеры</strong><span>По тарифу: Стартовый 2, Бизнес 4</span></div>
+        <div><strong>2–3 секунды</strong><span>Задержка живого кадра по запросу</span></div>
+        <div><strong>Видео локально</strong><span>Полный архив остаётся на NVR</span></div>
+      </div>
+    </section>
+
+    <!-- ── NIMA OLASIZ: to'rtta aniq natija ──
+         Sarlavhalar FUNKSIYA nomi emas, mijozning SAVOLI.  Har kartada
+         bitta o'lchanadigan narsa bor.  Xodim davomati (Face ID) va mijoz
+         portreti (jins/yosh) BU YERDA ATAYLAB YO'Q: ikkalasi yopiq pilot
+         va sotuv sahifasida va'da qilinmaydi (2026-08-26 o'lchovi). -->
+    <section class="band results section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> Что вы получаете</p>
+        <h2>Понятные результаты для вашего бизнеса</h2>
+        <p>Каждая карточка отвечает на один измеримый вопрос — без общих слов.</p>
+      </div>
+      <div class="results-grid">
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg></span>
+          <h3>Сколько человек зашло сегодня</h3>
+          <p>Вошли и вышли считаются отдельно, с разбивкой по часам. Сравнивайте со вчера и с прошлой неделей.</p>
+        </article>
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg></span>
+          <h3>У какой полки собираются люди</h3>
+          <p>На карте магазина видны горячие и холодные зоны — понятно, куда ставить товар.</p>
+        </article>
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg></span>
+          <h3>Если кто-то зашёл, когда магазин закрыт</h3>
+          <p>Сообщение в Telegram с фото. Если камеру закрыли, повернули или отключили — тоже придёт уведомление.</p>
+        </article>
+        <article class="result-card">
+          <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg></span>
+          <h3>Когда растёт очередь на кассе</h3>
+          <p>Измеряется, сколько человек ждут и сколько в среднем стоят. Так видно, когда открывать вторую кассу.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ── AI TAHLIL: qorong'i bo'lim, haqiqiy xarita surati ── -->
+    <section class="band band-dark ai section-pad">
+      <div class="ai-copy">
+        <p class="eyebrow"><span></span> AI-аналитика</p>
+        <h2>Ваши камеры теперь думают</h2>
+        <p>Искусственный интеллект анализирует кадр на компьютере магазина: считает людей, строит карту движения, измеряет очередь. В облако уходят только события и цифры — не видео.</p>
+        <ul class="check-list">
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg><span>Подсчёт вошедших и вышедших</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg><span>Тепловая карта по часам</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg><span>Очередь на кассе и время ожидания</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg><span>Уведомление в Telegram с фото</span></li>
+        </ul>
+        <a class="button button-ghost" href="#imkoniyat">Подробнее</a>
+      </div>
+      <figure class="ai-visual">
+        <img src="/assets/panel-xarita-v4.webp" alt="Карта магазина: где чаще всего ходят посетители"
+             width="1470" height="1116" loading="lazy" decoding="async">
+        <span class="ai-chip ai-chip-flow"><i></i>Поток посетителей</span>
+        <span class="ai-chip ai-chip-alert"><i></i>Ночное движение</span>
+      </figure>
+    </section>
+
+    <!-- ── QANDAY ISHLAYDI: uch qadam ── -->
+    <section id="qanday" class="band how section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> Как это работает</p>
+        <h2>Три шага, полчаса</h2>
+        <p>Не нужны ни новые камеры, ни новые провода — программа ставится поверх вашей системы.</p>
+      </div>
+      <ol class="how-steps">
+        <li>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8m-4-4v4"></path></svg>
+          <b>Устанавливаете программу</b>
+          <span>На компьютер с Windows в магазине. Далее → Далее → Готово.</span>
+        </li>
+        <li>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="10" rx="2"></rect><path d="m16 10 5-3v10l-5-3z"></path><circle cx="9.5" cy="12" r="2.5"></circle></svg>
+          <b>Подключаете камеры</b>
+          <span>В браузере выбираете NVR — каналы находятся сами.</span>
+        </li>
+        <li>
+          <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="m9 11 6-3-2 6-2-2-2 1zM11 18h2"></path></svg>
+          <b>Следите с телефона</b>
+          <span>Ежедневный отчёт в панели, важные события в Telegram.</span>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ── MAVJUD KAMERANGIZ ──
+         Rasmda mini-kompyuter ham bor, lekin matn u haqda GAPIRMAYDI:
+         Box hozir sotilmaydi va sayt uni va'da qilmasligi kerak
+         (`docs/DOKON_MVP.md`).  Namunadagi qurilma surati ham shu sababdan
+         ishlatilmadi — Box sotuvga chiqqanda qaytariladi. -->
+    <section id="kameralar" class="band sales-visual section-pad">
+      <div class="sales-photo">
+        <img src="/assets/design2-aisle.webp" alt="NVR и камеры наблюдения в магазине"
+             width="1100" height="620" loading="lazy" decoding="async">
+      </div>
+      <div class="sales-copy">
+        <p class="eyebrow"><span></span> Покупать оборудование не нужно</p>
+        <h2>Ваши камеры остаются как есть</h2>
+        <p>ENES подключается не к бренду, а к <b>RTSP-потоку</b>. Если камера или NVR отдаёт поток в локальной сети — система работает с ним. Проверенные устройства: NVR <b>Hikvision, HiLook, Dahua и Uniview</b>.</p>
+        <p class="hint">Другой бренд бесплатно проверим перед подключением. Компьютер на фото — собственный компьютер магазина; оборудование мы не продаём.</p>
+      </div>
+    </section>
+
+    <!-- ── NIMA KO'RASIZ: haqiqiy panel ekrani ──
+         Chizilgan illyustratsiya emas, MAHSULOTNING O'ZI.  Rasmlar
+         `scripts/make_panel_screenshots.py` bilan olinadi: interfeys
+         haqiqiy, raqamlar namunaviy. -->
+    <section id="imkoniyat" class="band proof section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> Что вы увидите</p>
+        <h2>Панель открывается с телефона</h2>
+        <p>Даже когда вас нет в магазине: сколько человек зашло, какой час самый людный, какая была очередь.</p>
+      </div>
+      <div class="proof-grid">
+        <figure>
+          <img src="/assets/panel-bugun-v3.webp" alt="Ежедневный отчёт: вошли, пиковый час и камеры онлайн"
+               width="1470" height="2271" loading="lazy" decoding="async">
+          <figcaption>Ежедневный отчёт: вошли, пиковый час, камеры онлайн</figcaption>
+        </figure>
+        <figure>
+          <img src="/assets/panel-xarita-v4.webp" alt="Карта магазина: где чаще всего ходят посетители"
+               width="1470" height="1116" loading="lazy" decoding="async">
+          <figcaption>Карта магазина: где чаще всего ходят посетители</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ── NARX: uchta tarif, kartalar serverdan ── -->
+    <section id="narx" class="band configurator section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> Три простых тарифа</p>
+        <h2>Выберите тариф для своего магазина</h2>
+        <!-- Narx YOLG'IZ turmasin: mijoz uni nimagadir solishtirishi kerak.
+             Eng tabiiy taqqoslash — qo'shimcha xodim yollash. -->
+        <p>Один продавец получает <b>2–3 миллиона сумов</b> в месяц. ENES стоит <b>в десять раз меньше</b>, не отдыхает и не болеет.</p>
+        <p>Никаких скрытых платежей. При оплате за год — 2 месяца бесплатно.</p>
+      </div>
+
+      <!-- Kartalar JS bilan chiziladi: narx ham, ro'yxat ham serverdan
+           (`/api/v1/public/pricing`).  Sahifaga qo'lda yozilsa katalog
+           o'zgarganda sayt eski narxni ko'rsatib turaverardi. -->
+      <div id="planGrid" class="preset-grid"></div>
+
+      <noscript>
+        <div class="preset-hint" style="text-align:left">
+          <b>Чтобы увидеть цены, включите JavaScript в браузере.</b><br>
+          Если не получается — напишите нам:
+          <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>.<br>
+          Стартовый — 2 камеры, 149 000 сумов в месяц. Бизнес — 4 камеры и полная аналитика, 299 000 сумов в месяц. Сеть (несколько магазинов) — по запросу.
+        </div>
+      </noscript>
+
+      <p id="featureNote" class="preset-hint" hidden></p>
+
+      <p class="preset-hint">
+        Школа, учебный центр или вуз?
+        <a href="/edu">Отдельные цены для образования</a>.
+      </p>
+    </section>
+
+    <!-- ── ALOQA: yagona forma, qorong'i yakun ── -->
+    <section id="aloqa" class="band band-dark pilot section-pad">
+      <div class="pilot-copy">
+        <p class="eyebrow"><span></span> Начать бесплатно</p>
+        <h2>Мы свяжемся с вами</h2>
+        <p>Оставьте имя и телефон. Мы оценим ваше оборудование и свяжемся по установке и <b>бесплатному пробному периоду на 14 дней</b>.</p>
+        <div class="contact-points">
+          <span><b>Telegram:</b> <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> · Абдулвосит Зокиржонов</span>
+          <span><b>Через бота:</b> <a href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">Начать в Telegram</a></span>
+          <span><b>Видео у вас:</b> в облако уходят только события и короткие клипы</span>
+        </div>
+      </div>
+
+      <!-- CTA ataylab ikki maydonli: ism va telefon.  Qolgan texnik
+           ma'lumotlarni jamoa qo'ng'iroqda aniqlaydi. -->
+      <form id="leadForm" class="lead-form" novalidate>
+        <div class="field field-half">
+          <label for="full_name">Ваше имя</label>
+          <input id="full_name" name="full_name" autocomplete="name" required maxlength="120" placeholder="Ваше имя">
+        </div>
+        <div class="field field-half">
+          <label for="phone">Ваш телефон</label>
+          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="+998 90 000 00 00">
+        </div>
+        <input id="cameras" name="cameras" type="hidden" value="4">
+        <input id="leadMessage" name="message" type="hidden" value="Saytdan so'rov">
+        <input id="consent" name="consent" type="hidden" value="on">
+        <div class="field honey" aria-hidden="true">
+          <label for="website">Website</label>
+          <input id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+        <p class="consent">Нажимая кнопку, вы соглашаетесь с <a href="/privacy">условиями конфиденциальности</a>.</p>
+        <button class="button form-button button-light" type="submit">Заказать звонок</button>
+        <p id="formStatus" class="form-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <!-- ── FAQ ── -->
+    <section id="faq" class="band faq section-pad">
+      <div class="section-intro">
+        <p class="eyebrow"><span></span> Частые вопросы</p>
+        <h2>Остались вопросы?</h2>
+      </div>
+      <div class="faq-grid">
+        <details><summary>Можно ли установить на мой компьютер?</summary><p>Да. Достаточно компьютера с Windows 10/11: скачиваете программу, Далее → Далее → Готово, затем подключаете камеры в браузере. Если NVR уже работает в сети, весь процесс обычно занимает <b>до 30 минут</b>. Если NVR тоже нужно настроить — 45–90 минут с мастером. <a href="/install">Пошаговая инструкция</a>.</p></details>
+        <details><summary>А если компьютера нет?</summary><p>Оставьте номер — предложим решение по ситуации: адаптируем вашу технику или установим готовое устройство.</p></details>
+        <details><summary>Нужно ли менять камеры?</summary><p>Обычно нет. Если камера или NVR отдаёт RTSP-поток в локальной сети, система работает с ним. Проверенные устройства: NVR <b>Hikvision, HiLook, Dahua и Uniview</b>. Другие бренды тоже могут работать — бесплатно проверим перед подключением.</p></details>
+        <details><summary>Где хранятся видеозаписи?</summary><p>Полный видеоархив остаётся на вашем NVR или компьютере. В облако в зашифрованном виде уходят только статистика событий и короткие фрагменты.</p></details>
+        <details><summary>Какой тариф выбрать?</summary><p>Если одна касса и один вход — хватит <b>Стартового</b>: вы увидите, сколько человек вошло и вышло. Нужны очередь, охрана и карта магазина — <b>Бизнес</b>. Больше двух магазинов — напишите нам про <b>Сеть</b>. Тариф можно сменить позже.</p></details>
+        <details><summary>Как платить? А если захочу отказаться?</summary><p>Сейчас выставляется счёт, оплату подтверждает оператор. Наличные или банковский перевод. Обязательного долгосрочного договора нет. Когда подключим онлайн-оплату, в панели будет показан только рабочий способ. В течение <b>14 дней после первой оплаты деньги возвращаются полностью</b> — условия в <a href="/oferta">публичной оферте</a>.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="band-dark">
+    <a class="brand brand-lockup" href="/ru/">
+      <!-- ENES Monitoring — "NS" monogrammasi.
+     Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
+     oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
+     shart emas. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 56" fill="none" role="img" aria-label="ENES">
+  <g stroke="currentColor" stroke-width="7" stroke-linejoin="round">
+    <path d="M8 44V12l19 30V12"/>
+    <path d="M60 16H44l-6 10h16l-6 12H31"/>
+  </g>
+</svg>
+      <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+    </a>
+    <p>
+      Единая система для магазинов, NVR/IP-камер и AI-аналитики.<br>
+      Контакты: Абдулвосит Зокиржонов · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
+    </p>
+    <div>
+      <a href="/status">Статус системы</a>
+      <a href="/oferta">Публичная оферта</a>
+      <a href="/maxfiylik">Конфиденциальность</a>
+      <a href="/hamkorlik">Партнёрство</a>
+      <a href="/aloqa">Контакты</a>
+      <a href="tel:+998932225070">+998 93 222 50 70</a>
+      <a href="/rozilik-shabloni">Шаблон согласия</a>
+      <a href="__APP_URL__/owner">Панель клиента</a>
+      <a href="__PARTNER_URL__/installer">Панель установщика</a>
+    </div>
+    <p class="footer-powered">Powered by NS camera</p>
+  </footer>
+
+  <!-- Mashina o'qiydigan ma'lumot.  Uchala blok ham sahifada BOR narsani
+       takrorlaydi: razmetkada sahifada yo'q va'da bo'lmasligi kerak.
+       Matnlar `json:` orqali qo'yiladi — qochirish qurish paytida. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "__PUBLIC_ORIGIN__/#tashkilot",
+        "name": "ENES Monitoring",
+        "url": "__PUBLIC_ORIGIN__/",
+        "logo": "__PUBLIC_ORIGIN__/assets/enes-mark.svg",
+        "areaServed": { "@type": "Country", "name": "Узбекистан" },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+998932225070",
+          "contactType": "sales",
+          "availableLanguage": ["uz", "ru", "en"]
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "ENES Monitoring",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Windows 10, Windows 11",
+        "url": "__PUBLIC_ORIGIN__/ru/",
+        "inLanguage": "ru",
+        "publisher": { "@id": "__PUBLIC_ORIGIN__/#tashkilot" },
+        "description": "Видеоаналитика для магазина: подсчёт посетителей, измерение очереди на кассе и ночной контроль. Работает на существующих NVR/IP-камерах.",
+        "featureList": [
+          "Подсчёт посетителей — вошли и вышли",
+          "Очередь на кассе и время в зоне",
+          "Карта магазина: где собираются люди",
+          "Уведомления в Telegram о движении вне рабочего времени и неполадках камер"
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "inLanguage": "ru",
+        "mainEntity": [
+          { "@type": "Question", "name": "Можно ли установить на мой компьютер?", "acceptedAnswer": { "@type": "Answer", "text": "Да. Достаточно компьютера с Windows 10/11: скачиваете программу, Далее → Далее → Готово, затем подключаете камеры в браузере. Если NVR уже в сети, весь процесс обычно занимает до 30 минут." } },
+          { "@type": "Question", "name": "Нужно ли менять камеры?", "acceptedAnswer": { "@type": "Answer", "text": "Обычно нет. Если камера или NVR отдаёт RTSP-поток в локальной сети, система работает с ним. Проверенные устройства: NVR Hikvision, HiLook, Dahua и Uniview." } },
+          { "@type": "Question", "name": "Где хранятся видеозаписи?", "acceptedAnswer": { "@type": "Answer", "text": "Полный видеоархив остаётся на вашем NVR или компьютере. В облако в зашифрованном виде уходят только статистика событий и короткие фрагменты." } },
+          { "@type": "Question", "name": "Как платить? А если захочу отказаться?", "acceptedAnswer": { "@type": "Answer", "text": "Выставляется счёт, возможны наличные или банковский перевод. Обязательного долгосрочного договора нет. В течение 14 дней после первой оплаты деньги возвращаются полностью." } }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- `site.js` satrlari — katalogdan, qurish paytida.  Skript tilni
+       `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
+       manbadan kelgani uchun ajralib ketmaydi. -->
+  <script>window.__SITE__ = {"lang": "ru", "t": {"choose": "Выбрать", "currency": "сум", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman (ru)", "error_generic": "Произошла ошибка. Попробуйте ещё раз.", "feature_note": "AI-функции сейчас проходят проверку в первых магазинах. Оставьте заявку — подключим вас первыми, как только запустим.", "from_per_month": "от {price}/мес", "lead_ok": "Запрос принят. Скоро свяжемся.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Номер принят. В день выхода отправим вам одним из первых.", "on_request": "По запросу", "per_month": "/мес", "plan_message": "Tarif: {name} | Oyiga {price} (ru)", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman (ru)", "pricing_failed": "Не удалось загрузить цены. Обновите страницу или напишите", "send_failed": "Запрос не отправлен", "sending": "Отправляем запрос…", "version": "Версия {version}", "write_to": "."}};</script>
+  <script src="/assets/site.js?v=7910ae1f42" defer></script>
+</body>
+</html>

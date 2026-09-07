@@ -2049,8 +2049,16 @@ def _host_section(request: Request) -> str:
     return "apex"
 
 
-def _render_landing(request: Request) -> HTMLResponse:
-    page = STATIC_DIR / "site.html"
+#: Bosh sahifa har tilda alohida fayl — `scripts/build_site.py` quradi
+#: (`cloud/site/index.html` + `i18n/*.json`).  O'zbekcha ildizda (`/`),
+#: qolganlari prefiksda (`/ru/`, `/en/`): eski havolalar (`/#aloqa`)
+#: o'zgarmaydi, qidiruv tizimi esa har tilni alohida sahifa deb biladi
+#: (`hreflang` sahifa ichida va sitemap'da).
+LANDING_PAGES = {"uz": "site.html", "ru": "site.ru.html", "en": "site.en.html"}
+
+
+def _render_landing(request: Request, lang: str = "uz") -> HTMLResponse:
+    page = STATIC_DIR / LANDING_PAGES.get(lang, LANDING_PAGES["uz"])
     if not page.is_file():
         raise HTTPException(404, "Sahifa topilmadi")
     # Sozlangan rasmiy manzil so'rov manzilidan USTUN.  `canonical` va
@@ -2098,6 +2106,32 @@ async def public_site(request: Request) -> Any:
     if section == "docs":
         return _docs_page("index")
     return _render_landing(request)
+
+
+def _localized_landing(request: Request, lang: str) -> HTMLResponse:
+    """Prefiksli bosh sahifa (`/ru/`, `/en/`) — faqat apex'da.
+
+    Subdomenlar tilga bo'linmaydi: panel tilni o'zi tanlaydi (`X-Lang`),
+    hujjatlar esa hozircha o'zbekcha.  Ikkala ko'rinish (`/ru` va `/ru/`)
+    ro'yxatdan o'tgan: aks holda FastAPI birini ikkinchisiga 307 bilan
+    yo'naltiradi va bu qidiruv tizimi uchun ortiqcha sakrash bo'ladi.
+    Canonical — slash bilan (`__PUBLIC_ORIGIN__/ru/`).
+    """
+    if _host_section(request) != "apex":
+        raise HTTPException(404, "Topilmadi")
+    return _render_landing(request, lang)
+
+
+@app.get("/ru", include_in_schema=False)
+@app.get("/ru/", include_in_schema=False)
+async def public_site_ru(request: Request) -> HTMLResponse:
+    return _localized_landing(request, "ru")
+
+
+@app.get("/en", include_in_schema=False)
+@app.get("/en/", include_in_schema=False)
+async def public_site_en(request: Request) -> HTMLResponse:
+    return _localized_landing(request, "en")
 
 
 #: Chiziq/zona muharriri **ikkala** panelga kerak: cloud'dagi o'rnatuvchi
@@ -2350,6 +2384,8 @@ async def sitemap_xml(request: Request) -> Response:
     # Fayl `mtime` si esa har deploy'da o'zi yangilanadi.
     pages = {
         "/": "site.html",
+        "/ru/": "site.ru.html",
+        "/en/": "site.en.html",
         "/edu": "edu.html",
         "/install": "install.html",
         "/maxfiylik": "privacy.html",
@@ -2359,6 +2395,11 @@ async def sitemap_xml(request: Request) -> Response:
         "/rozilik-shabloni": "rozilik-shabloni.html",
         "/kuzatuv-eslatmasi": "kuzatuv-eslatmasi.html",
     }
+    # Bosh sahifaning til variantlari.  Google har `<url>` ichida BOSHQA
+    # tillarga ham havola bo'lishini so'raydi (`xhtml:link hreflang`);
+    # faqat sahifadagi `<link rel=alternate>` bilan cheklansa, sitemap
+    # uchta "bir xil" sahifa e'lon qilgandek ko'rinadi.
+    landing_langs = {"/": "uz", "/ru/": "ru", "/en/": "en"}
     parts = []
     for page, filename in pages.items():
         entry = f"<url><loc>{base}{page}</loc>"
@@ -2369,11 +2410,16 @@ async def sitemap_xml(request: Request) -> Response:
         except OSError:
             # Fayl yo'q bo'lsa sahifa baribir ro'yxatda qoladi — sanasiz.
             pass
+        if page in landing_langs:
+            for alt_path, alt_lang in landing_langs.items():
+                entry += f'<xhtml:link rel="alternate" hreflang="{alt_lang}" href="{base}{alt_path}"/>'
+            entry += f'<xhtml:link rel="alternate" hreflang="x-default" href="{base}/"/>'
         parts.append(entry + "</url>")
     body = "".join(parts)
     return Response(
         '<?xml version="1.0" encoding="UTF-8"?>'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</urlset>",
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+        ' xmlns:xhtml="http://www.w3.org/1999/xhtml">' + body + "</urlset>",
         media_type="application/xml",
     )
 

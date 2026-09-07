@@ -1,32 +1,32 @@
 <!doctype html>
 <!-- AVTOMATIK YASALGAN — QO'LDA TAHRIRLAMANG.
-     Manba: cloud/site/index.html + i18n/uz.json
+     Manba: cloud/site/index.html + i18n/en.json
      Yangilash: python scripts/build_site.py -->
 <!-- `data-theme="light"`: sayt tizim qorong'i rejimiga BO'YSUNMAYDI.
      Qorong'i-ochiq bo'limlar almashinuvi brend ritmi (`site.css`
      `--band-*`), foydalanuvchi tanlovi emas; `tokens.css` esa atributsiz
      `prefers-color-scheme` ga qarab butun palitrani almashtirardi. -->
-<html lang="uz" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Do‘kon uchun kamera analitikasi: mijozlar oqimini sanash, kassa navbati va tungi xavfsizlik nazorati. Mavjud NVR/IP kameralaringiz va Windows kompyuteringizda ishlaydi — video do‘konda qoladi. O‘zbekiston.">
-  <meta property="og:title" content="Do‘kon uchun kamera analitikasi — ENES Monitoring">
-  <meta property="og:description" content="Mavjud kameralaringiz mijozlar oqimini sanaydi, navbatni o‘lchaydi va tungi harakatdan xabar beradi. Video do‘konda qoladi.">
+  <meta name="description" content="Camera analytics for shops: visitor counting, checkout queue and after-hours monitoring. Runs on your existing NVR/IP cameras and a Windows PC — video never leaves the shop. Uzbekistan.">
+  <meta property="og:title" content="Camera analytics for shops — ENES Monitoring">
+  <meta property="og:description" content="Your existing cameras count visitors, measure queues and report after-hours movement. Video stays in the shop.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="__PUBLIC_ORIGIN__/">
-  <meta property="og:locale" content="uz_UZ">
+  <meta property="og:url" content="__PUBLIC_ORIGIN__/en/">
+  <meta property="og:locale" content="en_US">
   <meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-v3.png">
   <meta name="theme-color" content="#05070a">
   <!-- Sarlavha ATAYLAB mahsulot nomi bilan boshlanmaydi.  Odam "ENES"
        deb qidirmaydi — u "do'kon uchun kamera analitikasi" yoki
        "mijozlar oqimini sanash" deb qidiradi.  Brend nomi oxirida
        turadi va tanigan odam baribir topadi. -->
-  <title>Do‘kon uchun kamera analitikasi va mijozlar oqimini sanash — ENES Monitoring</title>
+  <title>Camera analytics for shops: visitor counting, checkout queues and after-hours security — ENES Monitoring</title>
   <!-- Bitta sahifa — bitta manzil, HAR TIL uchun o'ziniki.  Til
        prefiksi qo'shilmasa uchala til bitta canonical e'lon qiladi va
        Google faqat bittasini indekslaydi. -->
-  <link rel="canonical" href="__PUBLIC_ORIGIN__/">
+  <link rel="canonical" href="__PUBLIC_ORIGIN__/en/">
   <link rel="alternate" hreflang="uz" href="__PUBLIC_ORIGIN__/">
   <link rel="alternate" hreflang="ru" href="__PUBLIC_ORIGIN__/ru/">
   <link rel="alternate" hreflang="en" href="__PUBLIC_ORIGIN__/en/">
@@ -52,8 +52,8 @@
        ichidagi bosiladigan element klaviatura va ekran o'quvchisi uchun
        boshqa ma'no beradi.  Til tanlagich ham `<details>`. -->
   <header class="nav-shell nav-dark">
-    <nav class="nav" aria-label="Bosh sahifa">
-      <a class="brand brand-lockup" href="/">
+    <nav class="nav" aria-label="Home">
+      <a class="brand brand-lockup" href="/en/">
         <!-- ENES Monitoring — "NS" monogrammasi.
      Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
      oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
@@ -67,16 +67,16 @@
         <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
       </a>
       <div class="nav-links">
-        <a href="#imkoniyat">Imkoniyatlar</a>
-        <a href="#qanday">Qanday ishlaydi</a>
-        <a href="#narx">Narxlar</a>
-        <a href="/edu">Ta’lim uchun</a>
-        <a href="#aloqa">Aloqa</a>
+        <a href="#imkoniyat">Features</a>
+        <a href="#qanday">How it works</a>
+        <a href="#narx">Pricing</a>
+        <a href="/edu">For education</a>
+        <a href="#aloqa">Contact</a>
       </div>
       <div class="nav-actions">
-        <details class="lang-menu"><summary aria-label="Til"><span>UZ</span></summary><div class="lang-menu-list"><a href="/" hreflang="uz" lang="uz" aria-current="true">O‘zbekcha</a><a href="/ru/" hreflang="ru" lang="ru">Русский</a><a href="/en/" hreflang="en" lang="en">English</a></div></details>
-        <a class="text-link" href="__APP_URL__/owner">Mijoz kirishi</a>
-        <a class="nav-cta" href="#aloqa">Demo olish</a>
+        <details class="lang-menu"><summary aria-label="Language"><span>EN</span></summary><div class="lang-menu-list"><a href="/" hreflang="uz" lang="uz">O‘zbekcha</a><a href="/ru/" hreflang="ru" lang="ru">Русский</a><a href="/en/" hreflang="en" lang="en" aria-current="true">English</a></div></details>
+        <a class="text-link" href="__APP_URL__/owner">Customer login</a>
+        <a class="nav-cta" href="#aloqa">Get a demo</a>
       </div>
     </nav>
   </header>
@@ -88,23 +88,23 @@
         <div class="hero-copy">
           <p class="hero-badge">
             <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#qalqon"></use></svg>
-            Do‘kon uchun sun’iy intellektli nazorat
+            AI-powered monitoring for your shop
           </p>
           <!-- Shior har tilda o'z tilida: mijozga ko'rinadigan matn
                o'zbekcha (CLAUDE.md).  Inglizcha "Your cameras. Now
                intelligent." faqat `en` sahifada. -->
-          <h1><span>Kameralaringiz.</span><em>Endi aqlli.</em></h1>
-          <p class="hero-text">Kameralaringiz endi shunchaki yozib olmaydi. Ular anonim mijozlar oqimini sanaydi, kassa navbatini kuzatadi va muhim holatlarni <b>Telegram orqali</b> yetkazadi. To‘liq video kompyuteringiz va NVR’da qoladi.</p>
+          <h1><span>Your cameras.</span><em>Now intelligent.</em></h1>
+          <p class="hero-text">Your cameras no longer just record. They count visitors anonymously, watch the checkout queue and send what matters <b>to Telegram</b>. Full video stays on your PC and NVR.</p>
 
           <div class="hero-actions">
             <!-- Asosiy harakat — DEMO (ariza), yuklab olish emas: mijoz
                  hali ishonmagan paytda undan eng og'ir qadam so'ralmaydi. -->
             <a class="button button-light" href="#aloqa" id="demoCta">
-              Demo olish
+              Get a demo
               <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"></path></svg>
             </a>
             <a class="button button-ghost" href="#imkoniyat">
-              Platformani ko‘rish
+              See the platform
               <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 10 7-10 7z"></path></svg>
             </a>
 
@@ -114,26 +114,26 @@
             <div id="downloadReady" class="download-action" hidden>
               <a class="button button-ghost button-small" id="downloadBtn" href="/api/v1/public/download-installer">
                 <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
-                Windows uchun yuklab olish
+                Download for Windows
               </a>
               <!-- Versiya ko'rinib turishi shart: usiz mijoz (va biz)
                    yangi fayl chiqqanini bilolmaydi. -->
               <p class="hint" id="downloadVersion" hidden></p>
-              <p class="hint">O‘rnatish: Keyingi → Keyingi → Tayyor. <a href="/install">Qadam-baqadam yo‘riqnoma</a></p>
+              <p class="hint">Install: Next → Next → Done. <a href="/install">Step-by-step guide</a></p>
             </div>
           </div>
 
           <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
           <form id="notifyForm" class="quick-download-form" hidden>
-            <p class="hint">Windows dasturi hozir yakuniy sinovdan o‘tmoqda. Raqamingizni qoldiring — tayyor bo‘lgan kuni yuboramiz.</p>
-            <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="Telefoningiz: +998 90 000 00 00">
+            <p class="hint">The Windows app is in final testing. Leave your number and we will send it the day it ships.</p>
+            <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="Your phone: +998 90 000 00 00">
             <label class="consent">
               <input name="consent" type="checkbox" required>
-              <span>Bog‘lanish uchun ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
+              <span>I agree to my details being processed so you can contact me. <a href="/privacy">Privacy</a></span>
             </label>
             <input name="full_name" type="hidden" value="Windows dasturi kutmoqda">
             <input name="website" type="hidden" value="">
-            <button class="button button-light" type="submit">Tayyor bo‘lganda xabar bering</button>
+            <button class="button button-light" type="submit">Notify me when it is ready</button>
             <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
           </form>
         </div>
@@ -154,19 +154,19 @@
     <path d="M60 16H44l-6 10h16l-6 12H31"/>
   </g>
 </svg> ENES</span>
-            <span class="panel-tabs"><b>Jonli ko‘rinish</b><i>Analitika</i><i>Ogohlantirishlar</i><i>Hisobotlar</i></span>
-            <span class="panel-date">Bugun</span>
+            <span class="panel-tabs"><b>Live view</b><i>Analytics</i><i>Alerts</i><i>Reports</i></span>
+            <span class="panel-date">Today</span>
           </div>
           <div class="panel-body">
             <img class="panel-shot" src="/assets/design2-retail.webp"
-                 alt="Savdo do‘konida odam oqimini AI orqali tahlil qilish namunasi"
+                 alt="Example of AI analysis of visitor flow in a shop"
                  width="1400" height="788" fetchpriority="high">
-            <span class="panel-live"><i></i> Jonli · Kamera 03 — Kassa zonasi</span>
+            <span class="panel-live"><i></i> Live · Camera 03 — checkout zone</span>
 
             <div class="panel-card panel-stat">
-              <p>Bugungi mijozlar</p>
+              <p>Visitors today</p>
               <strong>486</strong>
-              <span class="panel-delta">+12,5% kecha bilan solishtirganda</span>
+              <span class="panel-delta">+12.5% vs yesterday</span>
               <svg class="panel-spark" viewBox="0 0 220 60" preserveAspectRatio="none" aria-hidden="true">
                 <polyline points="0,48 22,44 44,46 66,34 88,37 110,24 132,27 154,14 176,10 198,18 220,12"
                           fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -174,24 +174,24 @@
             </div>
 
             <div class="panel-card panel-alerts">
-              <p>AI ogohlantirish</p>
+              <p>AI alerts</p>
               <ul>
-                <li><i class="bad"></i> Kassa oldida navbat uzun <time>12:45</time></li>
-                <li><i class="warn"></i> Kirishda odam to‘planmoqda <time>12:30</time></li>
-                <li><i></i> Tovar qutilari zonada qoldi <time>12:15</time></li>
+                <li><i class="bad"></i> Long queue at the checkout <time>12:45</time></li>
+                <li><i class="warn"></i> Crowd forming at the entrance <time>12:30</time></li>
+                <li><i></i> Boxes left in the zone <time>12:15</time></li>
               </ul>
             </div>
           </div>
-          <figcaption class="hint">Panel ko‘rinishi · raqamlar namunaviy</figcaption>
+          <figcaption class="hint">Panel view · sample numbers</figcaption>
         </figure>
       </div>
 
       <!-- Raqamlar qatori — faqat ROST raqamlar. -->
-      <div class="facts section-pad" aria-label="Nima olasiz">
-        <div><strong>14 kun</strong><span>Kartasiz bepul sinov</span></div>
-        <div><strong>2–4 kamera</strong><span>Tarifga qarab: Boshlang‘ich 2, Biznes 4</span></div>
-        <div><strong>2–3 soniya</strong><span>So‘ralganda jonli kadr oralig‘i</span></div>
-        <div><strong>Video lokal</strong><span>To‘liq arxiv NVR’da qoladi</span></div>
+      <div class="facts section-pad" aria-label="What you get">
+        <div><strong>14 days</strong><span>Free trial, no card</span></div>
+        <div><strong>2–4 cameras</strong><span>By plan: Starter 2, Business 4</span></div>
+        <div><strong>2–3 seconds</strong><span>Live frame delay on request</span></div>
+        <div><strong>Video stays local</strong><span>Full archive stays on the NVR</span></div>
       </div>
     </section>
 
@@ -202,30 +202,30 @@
          va sotuv sahifasida va'da qilinmaydi (2026-08-26 o'lchovi). -->
     <section class="band results section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> Nima olasiz</p>
-        <h2>Biznesingiz uchun aniq natijalar</h2>
-        <p>Har karta bitta o‘lchanadigan javob beradi — umumiy gap emas.</p>
+        <p class="eyebrow"><span></span> What you get</p>
+        <h2>Clear results for your business</h2>
+        <p>Each card answers one measurable question — no vague promises.</p>
       </div>
       <div class="results-grid">
         <article class="result-card">
           <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg></span>
-          <h3>Bugun nechta odam kirdi</h3>
-          <p>Kirdi va chiqdi — alohida sanaladi, soat bo‘yicha bo‘linadi. Kecha bilan va o‘tgan hafta bilan solishtirasiz.</p>
+          <h3>How many people came in today</h3>
+          <p>Entries and exits are counted separately, by hour. Compare with yesterday and last week.</p>
         </article>
         <article class="result-card">
           <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg></span>
-          <h3>Qaysi javon oldida odam to‘planadi</h3>
-          <p>Do‘kon xaritasida issiq va sovuq joylar ko‘rinadi — tovarni qayerga qo‘yish kerakligi shundan bilinadi.</p>
+          <h3>Which shelf draws the crowd</h3>
+          <p>The shop heat map shows hot and cold spots — so you know where to place products.</p>
         </article>
         <article class="result-card">
           <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg></span>
-          <h3>Do‘kon yopiq payt kimdir kirsa</h3>
-          <p>Telefoningizga Telegram xabari — rasm bilan. Kamera yopilsa, burilsa yoki o‘chsa ham xabar keladi.</p>
+          <h3>If someone enters while the shop is closed</h3>
+          <p>A Telegram message with a photo. You are also told if a camera is covered, turned or goes offline.</p>
         </article>
         <article class="result-card">
           <span class="result-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg></span>
-          <h3>Kassada navbat uzayganda</h3>
-          <p>Necha kishi kutayotgani va o‘rtacha qancha turgani o‘lchanadi. Ikkinchi kassani qachon ochish kerakligi shundan ko‘rinadi.</p>
+          <h3>When the checkout queue grows</h3>
+          <p>How many people are waiting and for how long. That tells you when to open a second till.</p>
         </article>
       </div>
     </section>
@@ -233,47 +233,47 @@
     <!-- ── AI TAHLIL: qorong'i bo'lim, haqiqiy xarita surati ── -->
     <section class="band band-dark ai section-pad">
       <div class="ai-copy">
-        <p class="eyebrow"><span></span> AI tahlil</p>
-        <h2>Kameralaringiz endi fikrlaydi</h2>
-        <p>Sun’iy intellekt kadrni do‘kon kompyuterida tahlil qiladi: odamni sanaydi, harakat xaritasini chizadi, navbatni o‘lchaydi. Bulutga faqat hodisa va raqam boradi — video emas.</p>
+        <p class="eyebrow"><span></span> AI analysis</p>
+        <h2>Your cameras now think</h2>
+        <p>AI analyses the frame on the shop PC: counts people, draws the movement map, measures the queue. Only events and numbers go to the cloud — never video.</p>
         <ul class="check-list">
-          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg><span>Kirdi va chiqdi sanog‘i</span></li>
-          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg><span>Issiqlik xaritasi — soat bo‘yicha</span></li>
-          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg><span>Kassa navbati va kutish vaqti</span></li>
-          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg><span>Telegram xabari — rasm bilan</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#odamlar"></use></svg><span>Entry and exit counting</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#xarita"></use></svg><span>Hourly heat map</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg><span>Checkout queue and waiting time</span></li>
+          <li><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#telegram"></use></svg><span>Telegram alert with a photo</span></li>
         </ul>
-        <a class="button button-ghost" href="#imkoniyat">Batafsil</a>
+        <a class="button button-ghost" href="#imkoniyat">Learn more</a>
       </div>
       <figure class="ai-visual">
-        <img src="/assets/panel-xarita-v4.webp" alt="Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar"
+        <img src="/assets/panel-xarita-v4.webp" alt="Shop map: where visitors walk most"
              width="1470" height="1116" loading="lazy" decoding="async">
-        <span class="ai-chip ai-chip-flow"><i></i>Mijozlar oqimi</span>
-        <span class="ai-chip ai-chip-alert"><i></i>Tungi harakat</span>
+        <span class="ai-chip ai-chip-flow"><i></i>Visitor flow</span>
+        <span class="ai-chip ai-chip-alert"><i></i>After-hours movement</span>
       </figure>
     </section>
 
     <!-- ── QANDAY ISHLAYDI: uch qadam ── -->
     <section id="qanday" class="band how section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> Qanday ishlaydi</p>
-        <h2>Uch qadam, yarim soat</h2>
-        <p>Yangi kamera ham, yangi sim ham kerak emas — bor tizimingiz ustiga dastur qo‘yiladi.</p>
+        <p class="eyebrow"><span></span> How it works</p>
+        <h2>Three steps, half an hour</h2>
+        <p>No new cameras and no new cables — the software sits on top of what you have.</p>
       </div>
       <ol class="how-steps">
         <li>
           <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8m-4-4v4"></path></svg>
-          <b>Dasturni o‘rnatasiz</b>
-          <span>Do‘kondagi Windows kompyuterga. Keyingi → Keyingi → Tayyor.</span>
+          <b>Install the app</b>
+          <span>On the Windows PC in the shop. Next → Next → Done.</span>
         </li>
         <li>
           <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="10" rx="2"></rect><path d="m16 10 5-3v10l-5-3z"></path><circle cx="9.5" cy="12" r="2.5"></circle></svg>
-          <b>Kamerani ulaysiz</b>
-          <span>Brauzerda NVR’ni tanlaysiz — kanallar o‘zi topiladi.</span>
+          <b>Connect the cameras</b>
+          <span>Pick your NVR in the browser — channels are found automatically.</span>
         </li>
         <li>
           <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="m9 11 6-3-2 6-2-2-2 1zM11 18h2"></path></svg>
-          <b>Telefoningizda kuzatasiz</b>
-          <span>Kundalik hisobot panelda, muhim hodisa Telegramda.</span>
+          <b>Watch from your phone</b>
+          <span>Daily report in the panel, important events in Telegram.</span>
         </li>
       </ol>
     </section>
@@ -285,14 +285,14 @@
          ishlatilmadi — Box sotuvga chiqqanda qaytariladi. -->
     <section id="kameralar" class="band sales-visual section-pad">
       <div class="sales-photo">
-        <img src="/assets/design2-aisle.webp" alt="Do‘kondagi NVR va xavfsizlik kameralari"
+        <img src="/assets/design2-aisle.webp" alt="NVR and security cameras in a shop"
              width="1100" height="620" loading="lazy" decoding="async">
       </div>
       <div class="sales-copy">
-        <p class="eyebrow"><span></span> Uskuna sotib olish shart emas</p>
-        <h2>Mavjud kameralaringiz shundoq qoladi</h2>
-        <p>ENES brendga emas, <b>RTSP oqimiga</b> ulanadi. Kamerangiz yoki NVR’ingiz lokal tarmoqda oqim bersa — tizim shu oqim bilan ishlaydi. Sinovdan o‘tgan qurilmalar: <b>Hikvision, HiLook, Dahua va Uniview</b> NVR’lari.</p>
-        <p class="hint">Boshqa brendni ulashdan oldin bepul tekshirib beramiz. Rasmdagi kompyuter — do‘konning o‘z kompyuteri; biz uskuna sotmaymiz.</p>
+        <p class="eyebrow"><span></span> No new hardware needed</p>
+        <h2>Your existing cameras stay as they are</h2>
+        <p>ENES connects to the <b>RTSP stream</b>, not to a brand. If your camera or NVR streams on the local network, the system works with it. Tested devices: <b>Hikvision, HiLook, Dahua and Uniview</b> NVRs.</p>
+        <p class="hint">We check other brands for free before connecting. The PC in the photo is the shop's own; we do not sell hardware.</p>
       </div>
     </section>
 
@@ -302,20 +302,20 @@
          haqiqiy, raqamlar namunaviy. -->
     <section id="imkoniyat" class="band proof section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> Nima ko‘rasiz</p>
-        <h2>Panelni telefoningizdan ochasiz</h2>
-        <p>Do‘konda bo‘lmasangiz ham: nechta odam kirdi, qaysi soat gavjum, kassada navbat qancha bo‘ldi.</p>
+        <p class="eyebrow"><span></span> What you will see</p>
+        <h2>Open the panel from your phone</h2>
+        <p>Even when you are away: how many came in, which hour was busiest, how long the queue got.</p>
       </div>
       <div class="proof-grid">
         <figure>
-          <img src="/assets/panel-bugun-v3.webp" alt="Kunlik hisobot: kirdi, gavjum soat va jonli kameralar"
+          <img src="/assets/panel-bugun-v3.webp" alt="Daily report: entries, peak hour and live cameras"
                width="1470" height="2271" loading="lazy" decoding="async">
-          <figcaption>Kunlik hisobot: kirdi, gavjum soat, jonli kameralar</figcaption>
+          <figcaption>Daily report: entries, peak hour, live cameras</figcaption>
         </figure>
         <figure>
-          <img src="/assets/panel-xarita-v4.webp" alt="Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar"
+          <img src="/assets/panel-xarita-v4.webp" alt="Shop map: where visitors walk most"
                width="1470" height="1116" loading="lazy" decoding="async">
-          <figcaption>Do‘kon xaritasi: mijozlar eng ko‘p yurgan joylar</figcaption>
+          <figcaption>Shop map: where visitors walk most</figcaption>
         </figure>
       </div>
     </section>
@@ -323,12 +323,12 @@
     <!-- ── NARX: uchta tarif, kartalar serverdan ── -->
     <section id="narx" class="band configurator section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> Uchta oddiy tarif</p>
-        <h2>Do‘koningizga mos tarifni tanlang</h2>
+        <p class="eyebrow"><span></span> Three simple plans</p>
+        <h2>Pick the plan that fits your shop</h2>
         <!-- Narx YOLG'IZ turmasin: mijoz uni nimagadir solishtirishi kerak.
              Eng tabiiy taqqoslash — qo'shimcha xodim yollash. -->
-        <p>Bitta sotuvchi oyiga <b>2–3 million so‘m</b> oladi. ENES uning <b>o‘ndan bir qismi</b>ga turadi, dam olmaydi va kasal bo‘lmaydi.</p>
-        <p>Yashirin qo‘shimcha to‘lovlar yo‘q. Yillik to‘lovda 2 oy bepul.</p>
+        <p>One shop assistant costs <b>2–3 million UZS</b> a month. ENES costs <b>a tenth of that</b>, never takes a day off and never gets sick.</p>
+        <p>No hidden fees. Pay yearly and get 2 months free.</p>
       </div>
 
       <!-- Kartalar JS bilan chiziladi: narx ham, ro'yxat ham serverdan
@@ -338,31 +338,31 @@
 
       <noscript>
         <div class="preset-hint" style="text-align:left">
-          <b>Narxni ko‘rish uchun brauzerda JavaScript yoqilgan bo‘lishi kerak.</b><br>
-          Yoqa olmasangiz bizga yozing:
+          <b>Enable JavaScript in your browser to see prices.</b><br>
+          If you cannot, write to us:
           <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>.<br>
-          Boshlang‘ich — 2 kamera, oyiga 149 000 so‘m. Biznes — 4 kamera va to‘liq tahlil, oyiga 299 000 so‘m. Tarmoq (bir nechta do‘kon) — so‘rov bo‘yicha.
+          Starter — 2 cameras, 149,000 UZS a month. Business — 4 cameras and full analytics, 299,000 UZS a month. Network (several shops) — on request.
         </div>
       </noscript>
 
       <p id="featureNote" class="preset-hint" hidden></p>
 
       <p class="preset-hint">
-        Maktab, o‘quv markazi yoki oliygohmi?
-        <a href="/edu">Ta’lim muassasalari uchun alohida narxlar</a>.
+        A school, learning centre or university?
+        <a href="/edu">Separate pricing for education</a>.
       </p>
     </section>
 
     <!-- ── ALOQA: yagona forma, qorong'i yakun ── -->
     <section id="aloqa" class="band band-dark pilot section-pad">
       <div class="pilot-copy">
-        <p class="eyebrow"><span></span> Bepul boshlash</p>
-        <h2>Biz siz bilan bog‘lanamiz</h2>
-        <p>Ism va telefon raqamingizni qoldiring. Jamoamiz qurilmangizni baholab, o‘rnatish va <b>14 kunlik bepul sinov</b> bo‘yicha siz bilan bog‘lanadi.</p>
+        <p class="eyebrow"><span></span> Start for free</p>
+        <h2>We will get in touch</h2>
+        <p>Leave your name and phone number. We will assess your equipment and get back to you about installation and the <b>14-day free trial</b>.</p>
         <div class="contact-points">
           <span><b>Telegram:</b> <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> · Abdulvosit Zokirjonov</span>
-          <span><b>Bot orqali:</b> <a href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">Telegramda boshlash</a></span>
-          <span><b>Video sizda:</b> cloudga faqat hodisa va qisqa kliplar boradi</span>
+          <span><b>Via the bot:</b> <a href="__TELEGRAM_REGISTER_URL__" target="_blank" rel="noopener noreferrer">Start in Telegram</a></span>
+          <span><b>Video stays with you:</b> only events and short clips reach the cloud</span>
         </div>
       </div>
 
@@ -370,11 +370,11 @@
            ma'lumotlarni jamoa qo'ng'iroqda aniqlaydi. -->
       <form id="leadForm" class="lead-form" novalidate>
         <div class="field field-half">
-          <label for="full_name">Ismingiz</label>
-          <input id="full_name" name="full_name" autocomplete="name" required maxlength="120" placeholder="Ismingiz">
+          <label for="full_name">Your name</label>
+          <input id="full_name" name="full_name" autocomplete="name" required maxlength="120" placeholder="Your name">
         </div>
         <div class="field field-half">
-          <label for="phone">Telefon raqamingiz</label>
+          <label for="phone">Your phone number</label>
           <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="+998 90 000 00 00">
         </div>
         <input id="cameras" name="cameras" type="hidden" value="4">
@@ -384,8 +384,8 @@
           <label for="website">Website</label>
           <input id="website" name="website" tabindex="-1" autocomplete="off">
         </div>
-        <p class="consent">Tugmani bosib, <a href="/privacy">maxfiylik shartlari</a>ga rozilik bildirasiz.</p>
-        <button class="button form-button button-light" type="submit">Qo‘ng‘iroq so‘rash</button>
+        <p class="consent">By pressing the button you agree to the <a href="/privacy">privacy terms</a>.</p>
+        <button class="button form-button button-light" type="submit">Request a call</button>
         <p id="formStatus" class="form-status" role="status" aria-live="polite"></p>
       </form>
     </section>
@@ -393,22 +393,22 @@
     <!-- ── FAQ ── -->
     <section id="faq" class="band faq section-pad">
       <div class="section-intro">
-        <p class="eyebrow"><span></span> Ko‘p beriladigan savollar</p>
-        <h2>Savollaringiz bormi?</h2>
+        <p class="eyebrow"><span></span> Frequently asked questions</p>
+        <h2>Have questions?</h2>
       </div>
       <div class="faq-grid">
-        <details><summary>Mavjud kompyuterimga o‘rnatsam bo‘ladimi?</summary><p>Ha. Windows 10/11 ishlayotgan kompyuter bo‘lsa yetarli: dasturni yuklab olasiz, Keyingi → Keyingi → Tayyor, so‘ng brauzerda kamerani ulaysiz. NVR’ingiz tarmoqda ishlab tursa, butun jarayon odatda <b>30 daqiqagacha</b> oladi. NVR’ni ham sozlash kerak bo‘lsa — usta bilan 45–90 daqiqa. <a href="/install">Qadam-baqadam yo‘riqnoma</a>.</p></details>
-        <details><summary>Agar kompyuterim bo‘lmasa-chi?</summary><p>Raqamingizni qoldiring — vaziyatingizga qarab yechim taklif qilamiz: mavjud texnikangizni moslash yoki tayyor qurilma bilan o‘rnatib berish.</p></details>
-        <details><summary>Kameralarni almashtirish shartmi?</summary><p>Odatda yo‘q. Kamerangiz yoki NVR’ingiz lokal tarmoqda RTSP oqim bersa, tizim shu oqim bilan ishlaydi. Sinovdan o‘tgan qurilmalar: <b>Hikvision, HiLook, Dahua va Uniview</b> NVR’lari. Boshqa brendlar ham ishlashi mumkin — ulanishdan oldin bepul tekshirib beramiz.</p></details>
-        <details><summary>Video yozuvlar qayerda saqlanadi?</summary><p>To‘liq video arxiv sizning shaxsiy NVR yoki kompyuteringizda qoladi. Cloudga faqat aniqlangan hodisalar statistikasi va qisqa video parchalar xavfsiz shifrlangan holda yuboriladi.</p></details>
-        <details><summary>Qaysi tarifni tanlay?</summary><p>Bitta kassa va bitta kirish eshigi bo‘lsa <b>Boshlang‘ich</b> yetadi: nechta odam kirdi va chiqdi — shuni ko‘rasiz. Navbat, xavfsizlik va do‘kon xaritasi kerak bo‘lsa — <b>Biznes</b>. Ikkitadan ko‘p do‘koningiz bo‘lsa <b>Tarmoq</b> bo‘yicha bog‘laning. Tarifni keyin ham o‘zgartirsa bo‘ladi.</p></details>
-        <details><summary>Qanday to‘layman? Keyin bekor qilsam-chi?</summary><p>Hozir hisob-faktura olinadi va to‘lov operator tomonidan tasdiqlanadi. Naqd yoki bank o‘tkazmasi mumkin. Majburiy uzoq muddatli shartnoma yo‘q. Onlayn provayderlar sozlangach panelda faqat ishlaydigan to‘lov usuli ko‘rsatiladi. Birinchi to‘lovdan keyingi <b>14 kun ichida pul to‘liq qaytariladi</b> — shartlar <a href="/oferta">ommaviy ofertada</a>.</p></details>
+        <details><summary>Can I install it on my existing PC?</summary><p>Yes. A PC running Windows 10/11 is enough: download the app, Next → Next → Done, then connect the cameras in the browser. If your NVR is already on the network, the whole process usually takes <b>up to 30 minutes</b>. If the NVR needs setting up too — 45–90 minutes with a technician. <a href="/install">Step-by-step guide</a>.</p></details>
+        <details><summary>What if I do not have a PC?</summary><p>Leave your number — we will suggest an option for your case: adapt what you have or install a ready device.</p></details>
+        <details><summary>Do I have to replace my cameras?</summary><p>Usually not. If your camera or NVR provides an RTSP stream on the local network, the system works with it. Tested devices: <b>Hikvision, HiLook, Dahua and Uniview</b> NVRs. Other brands may work too — we check for free before connecting.</p></details>
+        <details><summary>Where is the video stored?</summary><p>The full video archive stays on your own NVR or PC. Only event statistics and short clips are sent to the cloud, encrypted.</p></details>
+        <details><summary>Which plan should I choose?</summary><p>One till and one entrance — <b>Starter</b> is enough: you see how many people came in and out. Need queues, security and the shop map — <b>Business</b>. More than two shops — ask about <b>Network</b>. You can change plans later.</p></details>
+        <details><summary>How do I pay? What if I cancel?</summary><p>Right now you receive an invoice and an operator confirms the payment. Cash or bank transfer. No long-term contract. Once online providers are connected, the panel shows only the working method. <b>Full refund within 14 days</b> of the first payment — terms in the <a href="/oferta">public offer</a>.</p></details>
       </div>
     </section>
   </main>
 
   <footer class="band-dark">
-    <a class="brand brand-lockup" href="/">
+    <a class="brand brand-lockup" href="/en/">
       <!-- ENES Monitoring — "NS" monogrammasi.
      Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
      oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
@@ -422,19 +422,19 @@
       <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
     </a>
     <p>
-      Do‘konlar, NVR/IP kameralar va sun’iy intellekt tahlili uchun yagona tizim.<br>
-      Aloqa: Abdulvosit Zokirjonov · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
+      One system for shops, NVR/IP cameras and AI analytics.<br>
+      Contact: Abdulvosit Zokirjonov · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
     </p>
     <div>
-      <a href="/status">Tizim holati</a>
-      <a href="/oferta">Ommaviy oferta</a>
-      <a href="/maxfiylik">Maxfiylik</a>
-      <a href="/hamkorlik">Hamkorlik</a>
-      <a href="/aloqa">Aloqa</a>
+      <a href="/status">System status</a>
+      <a href="/oferta">Public offer</a>
+      <a href="/maxfiylik">Privacy</a>
+      <a href="/hamkorlik">Partners</a>
+      <a href="/aloqa">Contact</a>
       <a href="tel:+998932225070">+998 93 222 50 70</a>
-      <a href="/rozilik-shabloni">Rozilik shabloni</a>
-      <a href="__APP_URL__/owner">Mijoz paneli</a>
-      <a href="__PARTNER_URL__/installer">O‘rnatuvchi paneli</a>
+      <a href="/rozilik-shabloni">Consent template</a>
+      <a href="__APP_URL__/owner">Customer panel</a>
+      <a href="__PARTNER_URL__/installer">Installer panel</a>
     </div>
     <p class="footer-powered">Powered by NS camera</p>
   </footer>
@@ -452,7 +452,7 @@
         "name": "ENES Monitoring",
         "url": "__PUBLIC_ORIGIN__/",
         "logo": "__PUBLIC_ORIGIN__/assets/enes-mark.svg",
-        "areaServed": { "@type": "Country", "name": "O‘zbekiston" },
+        "areaServed": { "@type": "Country", "name": "Uzbekistan" },
         "contactPoint": {
           "@type": "ContactPoint",
           "telephone": "+998932225070",
@@ -465,25 +465,25 @@
         "name": "ENES Monitoring",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Windows 10, Windows 11",
-        "url": "__PUBLIC_ORIGIN__/",
-        "inLanguage": "uz",
+        "url": "__PUBLIC_ORIGIN__/en/",
+        "inLanguage": "en",
         "publisher": { "@id": "__PUBLIC_ORIGIN__/#tashkilot" },
-        "description": "Do‘kon uchun kamera analitikasi: mijozlar oqimini sanash, kassa navbatini o‘lchash va tungi xavfsizlik nazorati. Mavjud NVR/IP kameralarda ishlaydi.",
+        "description": "Camera analytics for shops: visitor counting, checkout queue measurement and after-hours monitoring. Works on existing NVR/IP cameras.",
         "featureList": [
-          "Mijozlar oqimini sanash — kirdi va chiqdi",
-          "Kassa navbati va zonada turish tahlili",
-          "Do‘kon xaritasi: qayerda odam ko‘p to‘planadi",
-          "Ish vaqtidan tashqari harakat va kamera buzilishi haqida Telegram xabar"
+          "Visitor counting — entries and exits",
+          "Checkout queue and dwell analysis",
+          "Shop map: where people gather",
+          "Telegram alerts for after-hours movement and camera tampering"
         ]
       },
       {
         "@type": "FAQPage",
-        "inLanguage": "uz",
+        "inLanguage": "en",
         "mainEntity": [
-          { "@type": "Question", "name": "Mavjud kompyuterimga o‘rnatsam bo‘ladimi?", "acceptedAnswer": { "@type": "Answer", "text": "Ha. Windows 10/11 ishlayotgan kompyuter bo‘lsa yetarli: dasturni yuklab olasiz, Keyingi → Keyingi → Tayyor, so‘ng brauzerda kamerani ulaysiz. NVR tarmoqda ishlab tursa, butun jarayon odatda 30 daqiqagacha oladi." } },
-          { "@type": "Question", "name": "Kameralarni almashtirish shartmi?", "acceptedAnswer": { "@type": "Answer", "text": "Odatda yo‘q. Kamerangiz yoki NVR lokal tarmoqda RTSP oqim bersa, tizim shu oqim bilan ishlaydi. Sinovdan o‘tgan qurilmalar: Hikvision, HiLook, Dahua va Uniview NVR‘lari." } },
-          { "@type": "Question", "name": "Video yozuvlar qayerda saqlanadi?", "acceptedAnswer": { "@type": "Answer", "text": "To‘liq video arxiv sizning shaxsiy NVR yoki kompyuteringizda qoladi. Cloudga faqat aniqlangan hodisalar statistikasi va qisqa video parchalar shifrlangan holda yuboriladi." } },
-          { "@type": "Question", "name": "Qanday to‘layman? Keyin bekor qilsam-chi?", "acceptedAnswer": { "@type": "Answer", "text": "Hisob-faktura olinadi, naqd yoki bank o‘tkazmasi mumkin. Majburiy uzoq muddatli shartnoma yo‘q. Birinchi to‘lovdan keyingi 14 kun ichida pul to‘liq qaytariladi." } }
+          { "@type": "Question", "name": "Can I install it on my existing PC?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. A PC running Windows 10/11 is enough: download the app, Next → Next → Done, then connect the cameras in the browser. If the NVR is already on the network, it usually takes up to 30 minutes." } },
+          { "@type": "Question", "name": "Do I have to replace my cameras?", "acceptedAnswer": { "@type": "Answer", "text": "Usually not. If your camera or NVR provides an RTSP stream on the local network, the system works with it. Tested devices: Hikvision, HiLook, Dahua and Uniview NVRs." } },
+          { "@type": "Question", "name": "Where is the video stored?", "acceptedAnswer": { "@type": "Answer", "text": "The full video archive stays on your own NVR or PC. Only event statistics and short clips are sent to the cloud, encrypted." } },
+          { "@type": "Question", "name": "How do I pay? What if I cancel?", "acceptedAnswer": { "@type": "Answer", "text": "You receive an invoice; cash or bank transfer. No long-term contract. Full refund within 14 days of the first payment." } }
         ]
       }
     ]
@@ -493,7 +493,7 @@
   <!-- `site.js` satrlari — katalogdan, qurish paytida.  Skript tilni
        `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
        manbadan kelgani uchun ajralib ketmaydi. -->
-  <script>window.__SITE__ = {"lang": "uz", "t": {"choose": "Tanlash", "currency": "so‘m", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman", "error_generic": "Xatolik yuz berdi. Qayta urinib ko‘ring.", "feature_note": "AI funksiyalari hozir birinchi do‘konlarda sinovdan o‘tmoqda. Hozir so‘rov qoldirsangiz — ishga tushganda birinchi bo‘lib sizga ulanadi.", "from_per_month": "{price}/oydan", "lead_ok": "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Raqamingiz qabul qilindi. Dastur tayyor bo‘lgan kuni birinchilardan bo‘lib sizga yuboramiz.", "on_request": "So‘rov bo‘yicha", "per_month": "/oy", "plan_message": "Tarif: {name} | Oyiga {price}", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman", "pricing_failed": "Narxni yuklab bo‘lmadi. Sahifani yangilang yoki", "send_failed": "So‘rov yuborilmadi", "sending": "So‘rov yuborilmoqda…", "version": "Versiya {version}", "write_to": "ga yozing."}};</script>
+  <script>window.__SITE__ = {"lang": "en", "t": {"choose": "Choose", "currency": "UZS", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman (en)", "error_generic": "Something went wrong. Please try again.", "feature_note": "AI features are being tested in the first shops. Leave a request now and you will be connected first when they go live.", "from_per_month": "from {price}/mo", "lead_ok": "Request received. We will be in touch soon.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Number received. You will be among the first to get it the day it ships.", "on_request": "On request", "per_month": "/mo", "plan_message": "Tarif: {name} | Oyiga {price} (en)", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman (en)", "pricing_failed": "Could not load prices. Refresh the page or write to", "send_failed": "Request was not sent", "sending": "Sending…", "version": "Version {version}", "write_to": "."}};</script>
   <script src="/assets/site.js?v=7910ae1f42" defer></script>
 </body>
 </html>

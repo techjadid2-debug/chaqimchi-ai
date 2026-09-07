@@ -22,6 +22,11 @@ RUN groupadd --gid 10001 chaqimchi && useradd --uid 10001 --gid 10001 --no-creat
 COPY --from=builder /install /usr/local
 COPY chaqimchi_ai ./chaqimchi_ai
 COPY cloud ./cloud
+# Til katalogi — `cloud/i18n.py` uni repo ILDIZIDAN o'qiydi.  Usiz
+# konteynerdagi birinchi `t()` chaqiruvi FileNotFoundError beradi va
+# har xato javobi 500 ga aylanadi.  F2 (2026-09-07) da katalog qo'shilgan,
+# bu qator esa 2026-09-08 da sayt qurilishida topilib qo'shildi.
+COPY i18n ./i18n
 COPY --from=frontend-builder /build/v2 ./cloud/static/v2
 COPY deploy ./deploy
 COPY scripts ./scripts

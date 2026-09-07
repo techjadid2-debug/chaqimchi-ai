@@ -1,15 +1,31 @@
 (() => {
   // Sahifa mantig'i ataylab kichik: bitta lead forma, yuklab olish tugmasi
-  // holati va tayyor paketlar.  Ilgari bu fayl to'liq tarif konfiguratorini
-  // (checkbox, stepper, valyuta, sticky panel) olib yurardi — mijozlar uni
-  // to'ldirmasdi, faqat chalg'irdi.  Chuqur minimalizm qarori: paket bosildi
-  // → forma to'ldiriladi → biz qo'ng'iroq qilamiz.
+  // holati va tarif kartalari.  Ilgari bu fayl to'liq tarif konfiguratorini
+  // olib yurardi — mijozlar uni to'ldirmasdi, faqat chalg'irdi.
+
+  // ── Til ────────────────────────────────────────────────────────────────
+  //
+  // Satrlar sahifaga QURISH paytida qo'yilgan `window.__SITE__` dan keladi
+  // (`scripts/build_site.py`, `i18n/*.json` dagi `site.js.*` kalitlari).
+  // Skript uchala tilda BITTA fayl: brauzer keshi uchun ham, kesh tokeni
+  // uchun ham.  Kalit yo'q bo'lsa kalitning o'zi qaytadi — bo'sh joy emas:
+  // yetishmagan tarjima ekranda darrov ko'rinadi (`cloud/i18n.py` qoidasi).
+  const SITE = window.__SITE__ || {};
+  const LANG = SITE.lang || document.documentElement.lang || "uz";
+  const STRINGS = SITE.t || {};
+  function T(key, params) {
+    let text = Object.prototype.hasOwnProperty.call(STRINGS, key) ? STRINGS[key] : key;
+    if (params) {
+      for (const name of Object.keys(params)) text = text.split(`{${name}}`).join(String(params[name]));
+    }
+    return text;
+  }
 
   async function submitLead(form, status, button, message, successText, cameras = 4) {
     if (!form.reportValidity()) return;
     button.disabled = true;
     status.className = "form-status";
-    status.textContent = "So‘rov yuborilmoqda…";
+    status.textContent = T("sending");
     const data = new FormData(form);
     const payload = {
       // Asosiy CTA faqat ism va telefonni so'raydi; qolgan tafsilotlar
@@ -25,16 +41,18 @@
     };
     try {
       const response = await fetch("/api/v1/public/leads", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Lang": LANG },
+        body: JSON.stringify(payload),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.detail || "So‘rov yuborilmadi");
+      if (!response.ok) throw new Error(body.detail || T("send_failed"));
       status.className = "form-status ok";
       status.textContent = successText || body.message;
       form.reset();
     } catch (error) {
       status.className = "form-status error";
-      status.textContent = error.message || "Xatolik yuz berdi. Qayta urinib ko‘ring.";
+      status.textContent = error.message || T("error_generic");
     } finally { button.disabled = false; }
   }
 
@@ -47,8 +65,7 @@
       event.preventDefault();
       const status = document.getElementById("formStatus");
       const button = leadForm.querySelector("button[type=submit]");
-      submitLead(leadForm, status, button, leadMessage ? leadMessage.value : null,
-        "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.");
+      submitLead(leadForm, status, button, leadMessage ? leadMessage.value : null, T("lead_ok"));
     });
   }
 
@@ -61,10 +78,14 @@
     if (phone) setTimeout(() => phone.focus({ preventScroll: true }), 400);
   }
 
-  const turnkeyLink = document.getElementById("turnkeyLink");
-  if (turnkeyLink) {
-    turnkeyLink.addEventListener("click", () => {
-      goToForm("Chaqimchi AI biznes paneli bo'yicha demo so'rayman");
+  // "Demo olish" — formaga olib boradi va operator uchun izoh yozadi.
+  // Izoh o'zbekcha va til belgisi bilan ("(ru)"): operator mijozga qaysi
+  // tilda qo'ng'iroq qilishni shundan biladi.
+  const demoCta = document.getElementById("demoCta");
+  if (demoCta) {
+    demoCta.addEventListener("click", (event) => {
+      event.preventDefault();
+      goToForm(T("demo_message"));
     });
   }
 
@@ -83,8 +104,8 @@
         notifyForm,
         document.getElementById("notifyStatus"),
         notifyForm.querySelector("button[type=submit]"),
-        "Windows dasturi tayyor bo‘lganda xabar berilsin",
-        "Raqamingiz qabul qilindi. Dastur tayyor bo‘lgan kuni birinchilardan bo‘lib sizga yuboramiz.",
+        T("notify_message"),
+        T("notify_ok"),
       );
     });
   }
@@ -99,7 +120,7 @@
         const label = document.getElementById("downloadVersion");
         if (label && release.version) {
           const size = release.size_mb ? ` · ${release.size_mb} MB` : "";
-          label.textContent = `Versiya ${release.version}${size}`;
+          label.textContent = T("version", { version: release.version }) + size;
           label.hidden = false;
         }
         downloadReady.hidden = false;
@@ -114,24 +135,18 @@
   // ── Tariflar: uchta karta ─────────────────────────────────────────────
   //
   // Qaror (2026-08-21): bitta tarif o'rniga uchta — Boshlang'ich, Biznes,
-  // Tarmoq.  Bitta tarif ikki tomondan zarar keltirardi: kichik do'kon
-  // uchun kirish nuqtasi yo'q edi, katta mijozdan ko'proq pul olishning
-  // yo'li ham yo'q edi.
-  //
-  // Uchta TENG ustun qaror qabul qilishni qiyinlashtiradi, shuning uchun
-  // o'rtadagisi ajratilgan ("Eng ommabop") va ko'z birinchi o'shanga
-  // tushadi.
+  // Tarmoq.  Uchta TENG ustun qaror qabul qilishni qiyinlashtiradi, shuning
+  // uchun o'rtadagisi ajratilgan ("Eng ommabop") — ajratish serverdan.
   //
   // So'm summasi bu yerda HISOBLANMAYDI — serverdan tayyor keladi.  Ilgari
-  // formula (`cents * rate + 99) / 100`) shu faylda qaytadan yozilgan edi
-  // va u hisob-faktura formulasidan uzoqlashib ketishi mumkin edi: sayt
-  // bir narxni, hisob boshqasini ko'rsatardi.
+  // formula shu faylda qaytadan yozilgan edi va u hisob-faktura formulasidan
+  // uzoqlashib ketishi mumkin edi: sayt bir narxni, hisob boshqasini
+  // ko'rsatardi.
   let pricing = null;
 
   const groups = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  const money = (uzs) => `${groups(uzs)} so‘m`;
+  const money = (uzs) => `${groups(uzs)} ${T("currency")}`;
   // Serverdan kelgan nom, izoh va tariflar HTML sifatida talqin qilinmasin.
-  // Bu funksiya CTA oqimidan ajratilgan: narx kartalari ham unga tayanadi.
   function esc(value) {
     return String(value).replace(/[&<>"']/g, (char) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
@@ -144,20 +159,14 @@
       ? `<span class="preset-badge">${esc(plan.badge)}</span>`
       : "";
     const price = plan.price_kind === "on_request"
-      ? `<p class="preset-price"><b>${esc(plan.price_label || "So‘rov bo‘yicha")}</b></p>`
-      : `<p class="preset-price"><b>${esc(money(plan.monthly_uzs))}</b><span>/oy</span></p>`;
+      ? `<p class="preset-price"><b>${esc(plan.price_label || T("on_request"))}</b></p>`
+      : `<p class="preset-price"><b>${esc(money(plan.monthly_uzs))}</b><span>${esc(T("per_month"))}</span></p>`;
     const note = plan.note
       ? `<p class="preset-note">${esc(plan.note)}</p>`
       : "";
     // Punkt = ikonka + 2-3 so'z; batafsili BOSILGANDA o'sha joyda
-    // ochiladi.  Ilgari har kartada oltita uzun jumla turardi va do'kon
-    // egasi ularni o'qimay, faqat narxga qarab qaror qilardi.
-    //
-    // `<details>` ataylab: klaviatura (Enter/Bo'sh joy), ekran o'quvchi
-    // va telefon xatti-harakati brauzerdan tekin keladi — `aria-expanded`
-    // ni qo'lda boshqarish shart emas.  `name` bir kartada bittasi ochiq
-    // turishini ta'minlaydi (qo'llab-quvvatlamagan brauzerda bir nechtasi
-    // ochiladi — bu ham yomon emas).
+    // ochiladi.  `<details>` ataylab: klaviatura, ekran o'quvchi va
+    // telefon xatti-harakati brauzerdan tekin keladi.
     const bullets = (plan.bullets || [])
       .map(
         (line) => `
@@ -175,8 +184,7 @@
       .join("");
 
     // Zaxira: keshdagi eski javobda `bullets` bo'lmasligi mumkin —
-    // `?v=` faqat KEYINGI yuklashga ta'sir qiladi, hozirgi mijozda esa
-    // eski JS ishlab turadi.  Bunday holatda karta bo'sh qolmasin.
+    // bunday holatda karta bo'sh qolmasin.
     const items = bullets || (plan.includes || [])
       .map((item) => `<li><span>${esc(item)}</span></li>`)
       .join("");
@@ -188,7 +196,7 @@
         <ul class="preset-items">${items}</ul>
         ${note}
         <button class="button ${plan.highlight ? "button-light" : "button-ghost"}" type="button"
-                data-plan-cta="${esc(plan.code)}">${esc(plan.cta || "Tanlash")}</button>
+                data-plan-cta="${esc(plan.code)}">${esc(plan.cta || T("choose"))}</button>
       </article>`;
   }
 
@@ -198,7 +206,7 @@
     const plans = pricing.plans || [];
     grid.innerHTML = plans.map(planCard).join("");
 
-    // Uchala tugma ham bitta qisqa formaga olib boradi. Tanlangan tarif
+    // Uchala tugma ham bitta qisqa formaga olib boradi.  Tanlangan tarif
     // faqat operator uchun xabardagi izohga yoziladi.
     grid.querySelectorAll("[data-plan-cta]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -207,23 +215,26 @@
         if (!plan) return;
         if (plan.price_kind === "on_request") {
           // Tarmoqda narx yo'q — bu ariza, ro'yxatdan o'tish emas.
-          goToForm(`Tarif: ${plan.name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman`);
+          goToForm(T("plan_network_message", { name: plan.name }));
           return;
         }
-        goToForm(`Tarif: ${plan.name} | Oyiga ${money(plan.monthly_uzs)}`);
+        goToForm(T("plan_message", { name: plan.name, price: money(plan.monthly_uzs) }));
       });
     });
 
-    // Hero'dagi narx ilgagi — eng arzon tarifdan.
+    // Hero'dagi narx ilgagi — eng arzon tarifdan (element bo'lsa).
     const cheapest = plans.find((item) => item.price_kind === "fixed");
     const heroPrice = document.getElementById("heroPrice");
     if (heroPrice && cheapest) {
-      heroPrice.textContent = `${money(cheapest.monthly_uzs)}/oydan`;
+      heroPrice.textContent = T("from_per_month", { price: money(cheapest.monthly_uzs) });
       heroPrice.hidden = false;
     }
   }
 
-  fetch("/api/v1/public/pricing")
+  // Tarif matni serverda chiziladi va so'rov tilini `?lang=` dan oladi
+  // (`cloud/i18n.py: resolve_lang`).  Katalogga ko'chirilguncha (F5)
+  // server o'zbekcha qaytaradi — bu kutilgan oraliq holat.
+  fetch(`/api/v1/public/pricing?lang=${encodeURIComponent(LANG)}`)
     .then((response) => response.json())
     .then((data) => {
       pricing = data;
@@ -232,9 +243,7 @@
       // yashirmaymiz — bitta halol izoh.
       const note = document.getElementById("featureNote");
       if (note && pricing.features.length && pricing.features.every((item) => !item.available)) {
-        note.textContent =
-          "AI funksiyalari hozir birinchi do‘konlarda sinovdan o‘tmoqda. " +
-          "Hozir so‘rov qoldirsangiz — ishga tushganda birinchi bo‘lib sizga ulanadi.";
+        note.textContent = T("feature_note");
         note.hidden = false;
       }
 
@@ -244,8 +253,9 @@
       const grid = document.getElementById("planGrid");
       if (grid) {
         grid.innerHTML =
-          '<p class="preset-hint">Narxni yuklab bo\u2018lmadi. Sahifani yangilang yoki ' +
-          '<a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a> ga yozing.</p>';
+          `<p class="preset-hint">${esc(T("pricing_failed"))} ` +
+          '<a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>' +
+          `${esc(T("write_to"))}</p>`;
       }
     });
 })();

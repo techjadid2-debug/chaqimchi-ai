@@ -12,6 +12,7 @@ install-dev:
 # qurilmasa panel eski matnni ko'rsatadi va buni hech narsa aytmaydi.
 test: ui-check
 	$(PY) scripts/build_i18n.py --check
+	$(PY) scripts/build_site.py --check
 	$(PY) -m pytest -q
 
 lint:

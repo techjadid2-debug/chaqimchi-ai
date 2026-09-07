@@ -50,7 +50,7 @@ def test_every_page_has_a_language_and_charset() -> None:
     """Kirillcha/lotincha o'zbek matni charset'siz buziladi."""
     for page in pages():
         content = page.read_text(encoding="utf-8").lower()
-        assert 'lang="uz"' in content or 'lang="en"' in content, page.name
+        assert any(f'lang="{code}"' in content for code in ("uz", "ru", "en")), page.name
         assert 'charset="utf-8"' in content, page.name
 
 
@@ -663,6 +663,20 @@ def test_the_cloud_image_carries_the_model_manifests() -> None:
     manifest = json.loads((root / "models" / "faces_manifest.json").read_text(encoding="utf-8"))
     assert manifest["license"] == "Apache-2.0"
     assert len(manifest["files"]) == 6, "har model uchun .xml va .bin"
+
+
+def test_the_cloud_image_carries_the_language_catalogue() -> None:
+    """`i18n/` konteynerga nusxalanmasa sayt va panel matnsiz qoladi.
+
+    `cloud/i18n.py` katalogni repo ildizidan o'qiydi.  F2 (2026-09-07)
+    katalogni qo'shdi, `Dockerfile.cloud` esa yangilanmagan edi —
+    konteynerdagi birinchi `t()` chaqiruvi `FileNotFoundError` bilan
+    yiqilib, har xato javobi 500 bo'lardi.  2026-09-08 da sayt
+    qurilishida topildi; bu test o'sha sinf xatoni qulflaydi.
+    """
+    root = STATIC.parents[1]
+    dockerfile = (root / "Dockerfile.cloud").read_text(encoding="utf-8")
+    assert "COPY i18n ./i18n" in dockerfile
 
 
 # ── Ikonka sprayti ──────────────────────────────────────────────────────

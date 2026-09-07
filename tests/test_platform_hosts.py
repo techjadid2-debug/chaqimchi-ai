@@ -74,7 +74,8 @@ def test_url_helpers_prefer_their_own_env(monkeypatch) -> None:
 def test_each_subdomain_serves_its_own_section(client: TestClient) -> None:
     """app. — mijoz paneli, partner. — montajchi, dl. — yuklab olish."""
     landing = client.get("/", headers={"host": "chaqimchi.uz"})
-    assert "Chaqimchi" in landing.text and "narx" in landing.text.lower()
+    # 2026-09-08 (rebrend F3): bosh sahifa endi ENES nomi bilan.
+    assert "ENES" in landing.text and "narx" in landing.text.lower()
 
     app_page = client.get("/", headers={"host": "app.chaqimchi.uz"})
     assert "owner" in app_page.text.lower() or "panel" in app_page.text.lower()

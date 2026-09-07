@@ -268,10 +268,13 @@ def test_sotqin_bootstrap_is_only_served_for_a_published_hashed_release(
 
 def test_official_site_and_public_lead_to_customer_flow(cloud_client) -> None:
     assert cloud_client.get("/").status_code == 200
-    assert "Do‘koningiz" in cloud_client.get("/").text
-    # "4 kameragacha", "4 kamera" EMAS: arzon tarifda ikkita kamera va
-    # hero shuni yashirmasligi kerak (`plans.py: boshlangich.max_cameras`).
-    assert "4 kameragacha qabul profili" in cloud_client.get("/").text
+    assert "Do‘kon" in cloud_client.get("/").text
+    # "2–4 kamera" va tarif bo'yicha taqsimot, "4 kamera" EMAS: arzon
+    # tarifda ikkita kamera va hero shuni yashirmasligi kerak
+    # (`plans.py: boshlangich.max_cameras`).  2026-09-08 rebrend: matn
+    # `i18n/uz.json` dagi `site.facts.2_*` kalitlaridan keladi.
+    assert "2–4 kamera" in cloud_client.get("/").text
+    assert "Boshlang‘ich 2, Biznes 4" in cloud_client.get("/").text
     assert cloud_client.get("/connect").status_code == 200
     assert cloud_client.get("/privacy").status_code == 200
     assert cloud_client.get("/status").status_code == 200

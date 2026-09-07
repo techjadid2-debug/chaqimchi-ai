@@ -5,6 +5,14 @@ import { Sparkline, Delta } from "./charts";
 import { applyTheme, nextTheme, readTheme, saveTheme, themeLabel, THEME_ICON, type Theme } from "./theme";
 import { getLang, LANG_SHORT, LANGS, setLang, t, type Lang } from "./i18n";
 
+/** Qo'llab-quvvatlash raqami.
+ *
+ * Sayt sahifalarida ham shu raqam turadi (`cloud/static/*.html`) va
+ * `tests/test_panel_v2.py` ikkalasi bir xilligini tekshiradi: mijozga
+ * ikki xil raqam ko'rsatilishi eng bilinmaydigan xatolardan biri. */
+export const SUPPORT_PHONE = "+998932225070";
+export const SUPPORT_PHONE_LABEL = "+998 93 222 50 70";
+
 export type NavItem = { id: string; label: string; icon: string };
 
 /** Tema tugmasi: yorug' → qorong'i → tizim.
@@ -242,6 +250,12 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
       <nav aria-label="Asosiy menyu">{nav.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-foot">
         {sidebarFooter}
+        {/* Aloqa panel ICHIDA bo'lsin.  Ilgari u faqat kirish ekranida
+            edi: panel to'rt joyda "bizga yozing" deydi-yu, kirgandan
+            keyin qayerga yozishni ko'rsatmasdi. */}
+        <a className="sidebar-support" href={`tel:${SUPPORT_PHONE}`}>
+          <Icon name="bell"/><span>{t("panel.support")}<b>{SUPPORT_PHONE_LABEL}</b></span>
+        </a>
         <button className="sidebar-logout" onClick={onLogout}><Icon name="logout"/><span>Chiqish</span></button>
       </div>
     </aside>

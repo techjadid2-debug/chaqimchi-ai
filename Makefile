@@ -7,8 +7,11 @@ install-dev:
 	$(PY) -m pip install -r requirements.txt -r requirements-dev.txt
 
 # Python testlaridan oldin TS typecheck ham yuradi — v2 panel buzilgan
-# holda "test o'tdi" degan yolg'on ishonch bo'lmasin.
+# holda "test o'tdi" degan yolg'on ishonch bo'lmasin.  Keyin i18n
+# katalogi: `i18n/*.json` o'zgarib `catalogue.generated.ts` qayta
+# qurilmasa panel eski matnni ko'rsatadi va buni hech narsa aytmaydi.
 test: ui-check
+	$(PY) scripts/build_i18n.py --check
 	$(PY) -m pytest -q
 
 lint:

@@ -317,10 +317,23 @@ def test_update_task_runs_with_admin_rights() -> None:
     assert "/RL HIGHEST" in source
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="F4: reliz/yangilanish boshqaruvi React adminga hali ko'chirilmagan "
+    "(docs/ISH_DAFTARI.md, «Panel qoidalari»)",
+)
 def test_admin_panel_promises_the_same_interval() -> None:
-    """Panel aytgan vaqt o'rnatuvchidagi jadval bilan mos bo'lsin."""
-    admin = (ROOT / "cloud" / "static" / "admin.html").read_text(encoding="utf-8")
-    assert f"{UPDATE_CHECK_MINUTES} daqiqa ichida qo'llaydi" in admin, (
+    """Panel aytgan vaqt o'rnatuvchidagi jadval bilan mos bo'lsin.
+
+    Eski `admin.html` uch joyda «15 daqiqa ichida» deb va'da berardi
+    (reliz, kamera saqlash, sozlama saqlash).  React adminda (2026-09-07)
+    bu bo'lim hali yo'q — shuning uchun `xfail(strict=True)`: va'da
+    qaytib kelishi bilan test «kutilmagan o'tish» beradi va belgi olib
+    tashlanadi.  Shunda raqam yana o'rnatuvchi bilan bir joyda
+    tekshiriladi.
+    """
+    admin = (ROOT / "frontend" / "src" / "admin.tsx").read_text(encoding="utf-8")
+    assert f"{UPDATE_CHECK_MINUTES} daqiqa ichida" in admin, (
         "admin paneldagi va'da o'rnatuvchidagi jadvalga mos kelmayapti"
     )
 

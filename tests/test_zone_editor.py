@@ -159,15 +159,18 @@ def test_loading_an_empty_config_does_not_crash() -> None:
     assert payload == {"zones": [], "lines": []}
 
 
-def test_panels_load_the_editor_and_owner_cannot_edit_raw_json() -> None:
+def test_the_installer_tool_loads_the_editor() -> None:
     """O'rnatuvchi chizadi, ega esa faqat ko'radi.
 
     Chiziq kadr ustida, kamera o'rnatilgan joydan turib chiziladi — bu ish
-    do'kon egasiga tushmasligi kerak.
+    do'kon egasiga tushmasligi kerak.  Ega paneli uchun bu qoida
+    `tests/test_panel_v2.py::test_panel_has_no_raw_json_editors` da.
+    Adminning masofadan sozlashi (2026-08-21 qarori: jonli do'konda
+    `lines: []` bo'lib qolgan va kirish soni kuniga 5 ta ko'rsatilgan)
+    React adminga hali ko'chirilmagan — o'sha fayldagi
+    `test_the_admin_can_fix_a_shop_remotely` buni kutib turibdi.
     """
     installer = (ROOT / "cloud" / "static" / "installer.html").read_text(encoding="utf-8")
-    owner = (ROOT / "cloud" / "static" / "owner.html").read_text(encoding="utf-8")
-    admin = (ROOT / "cloud" / "static" / "admin.html").read_text(encoding="utf-8")
     panel = (ROOT / "cloud" / "static" / "geometry-panel.js").read_text(encoding="utf-8")
 
     # Chizish vositasi va uning atrofidagi panel — ikkalasi ham ulangan.
@@ -180,28 +183,11 @@ def test_panels_load_the_editor_and_owner_cannot_edit_raw_json() -> None:
     assert "/api/v1/installer/sites/${activeSite}" in installer
     assert "config:`${base}/config`" in installer.replace(" ", "")
 
-    # 2026-08-21: admin ham sozlay oladi.  Bungacha do'kon sozlanmagan
-    # bo'lsa uni masofadan tuzatishning yo'li yo'q edi — jonli do'konda
-    # `lines: []` va `zones: []` bo'lib qolgan va kirish soni kuniga
-    # 5 ta ko'rsatilgan.
-    assert "geometry-panel.js" in admin
-    assert "zone-editor.js" in admin
-    assert "/api/v1/admin/sites/${siteId}" in admin
-
     # Mantiq bitta joyda: ikki nusxa bo'lsa ular uzoqlashardi.
     assert "GeometryPanel" in panel
     # `onclick=` ATRIBUTI bo'lmasin.  Izohda so'zning o'zi uchrashi
     # mumkin — shu sabab tenglik belgisi bilan qidiriladi.
     assert "onclick=" not in panel, "admin panelida inline ishlov beruvchi taqiqlangan"
-
-    # Yangi panelda (2026-08-17) ega geometriyani UMUMAN ko'rmaydi: JSON
-    # textarealar oddiy mijozni cho'chitardi.  Chiziq/zona faqat o'rnatuvchi
-    # vositasida; ega sozlamalarni saqlaganda mavjud geometriya o'zgarmasdan
-    # qaytariladi (`...currentConfig` spread).
-    assert "linesJson" not in owner
-    assert "zonesJson" not in owner
-    assert "<textarea" not in owner
-    assert "...currentConfig" in owner, "saqlashda geometriya yo'qolmasin"
 
 
 def test_wizard_offers_one_click_presets_and_camera_roles() -> None:

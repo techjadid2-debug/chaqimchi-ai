@@ -516,3 +516,43 @@ export function hasFeature(dashboard: Dashboard, name: string): boolean {
   const list = dashboard.site.plan?.panel_features;
   return !Array.isArray(list) || list.includes(name);
 }
+
+/** Telefondagi rasmni JPEG ga aylantiradi.
+ *
+ * Nega kerak: iPhone galereyadan **HEIC** beradi, server esa faqat
+ * JPEG/PNG qabul qiladi (`cloud/main.py`: 415 "Faqat JPEG yoki PNG
+ * rasm qabul qilinadi").  Konvertatsiyasiz do'kon egasi xodim rasmini
+ * telefonidan umuman yuklay olmasdi — funksiya jimgina ishlamasdi.
+ * Eski panelda bu `toJpeg` bilan hal qilingan edi, v2 ga ko'chirilmay
+ * qolgan (2026-09-07 da topildi).
+ *
+ * Yo'l-yo'lakay rasm kichraytiriladi: telefon kamerasi 4000px beradi,
+ * yuz shabloni uchun 1600px yetarli va yuklash sezilarli tezlashadi.
+ */
+export async function toJpeg(file: File, maxSide = 1600, quality = 0.9): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      /* Safari HEIC'ni tizim kodeki bilan ocha oladi; ocholmasa xato
+         mijozga ko'rinadi va u boshqa rasm tanlaydi. */
+      element.onerror = () => reject(new Error("Rasm ochilmadi"));
+      element.src = url;
+    });
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Rasm o‘qilmadi");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, "image/jpeg", quality),
+    );
+    if (!blob) throw new Error("Rasm saqlanmadi");
+    return blob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

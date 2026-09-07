@@ -450,6 +450,12 @@ tr:last-child td { border-bottom: 0; }
 .skeleton { border-radius: 12px; background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 50%, var(--surface-3) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; }
 @keyframes shimmer { to { background-position-x: -200%; } }
 
+/* Sidebar oyog'idagi qo'llab-quvvatlash havolasi. */
+.sidebar-support { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 13px; border-radius: 11px; color: var(--muted); text-decoration: none; font-size: 12px; }
+.sidebar-support:hover { background: var(--surface-2); color: var(--fg); }
+.sidebar-support span { display: grid; line-height: 1.25; }
+.sidebar-support b { color: var(--fg); font-size: 13px; }
+
 /* Til tanlagich — segmentli tugmalar (namunadagi UZ · RU · EN). */
 .lang-switch { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-inset); }
 .lang-switch button { min-height: 38px; min-width: 38px; border: 0; border-radius: 8px; padding: 0 9px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; }

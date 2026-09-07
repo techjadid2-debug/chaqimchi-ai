@@ -229,36 +229,38 @@ AI funksiyalari katalogda “tez orada” bo‘lib qoladi:
 Payme/Click credentiallari bo‘lmasa onlayn checkout ochilmaydi; pilotda admin
 qo‘lda invoice’ni to‘langan deb belgilashi mumkin.
 
-## 5. Yangi panelni yoqish (`CHAQIMCHI_UI_V2_OWNER` / `CHAQIMCHI_UI_V2_ADMIN`)
+## 5. Panel — bitta avlod (React, `cloud/static/v2/`)
 
-Mijoz va admin panellarining ikkita nusxasi bor: eski (`cloud/static/owner.html`,
-`admin.html`) va yangi React panel (`cloud/static/v2/`). Endi ular ALOHIDA
-yoqiladi:
+2026-09-07 dan (`enes-rebrend`, `556d33c`) panel **bitta**: `/owner` va
+`/admin` har doim React panelini beradi.  `CHAQIMCHI_UI_V2_OWNER`,
+`CHAQIMCHI_UI_V2_ADMIN` va `CHAQIMCHI_UI_V2` bayroqlari koddan olib
+tashlangan — `.env.production` da qolsa ham hech narsaga ta'sir qilmaydi
+(deploydan keyin o'chirib qo'ying, chalg'itmasin).  Eski `owner.html`
+va `admin.html` repoda yo'q; orqaga qaytarish yo'li — faqat git
+tarixi (`556d33c` dan oldingi holat), env bilan emas.
 
-- **`CHAQIMCHI_UI_V2_OWNER=1` — production uchun MAJBURIY.**  O'rnatish oqimi
-  (qurilma ulash `?connect=`, kamera qo'shish, chiziq chizish, AI yordamchi,
-  rasm/klip galereyasi) FAQAT yangi owner panelida bor.  Eski owner paneli
-  `?connect=` havolasini umuman tushunmaydi — flag o'chiq holda yangi mijoz
-  o'rnatishni O'ZI yakunlay olmaydi.
-- **`CHAQIMCHI_UI_V2_ADMIN=0` — hozircha shunday qoldiring.**  Support
-  vositalari (masofadan chiziq chizish «Chiziq va zona», diagnostika,
-  pairing havolasi) hali eski admin panelida; yangi admin ularni
-  ko'chirib bo'lmaguncha o'chirilmasin.
-- Eski umumiy `CHAQIMCHI_UI_V2` fallback sifatida ishlashda davom etadi
-  (ikkalasiga birdek ta'sir qiladi).
+⚠️ **Bu shox deploy qilinmasin — React adminda eski admin vositalari
+hali yo'q** (qurilma topshiriqlari `clean_chains`/`benchmark`,
+diagnostika, funksiya biriktirish, masofaviy chizma, reliz boshqaruvi,
+jamoa, ogohlantirish sozlamalari).  Ular F4 da ko'chiriladi; ro'yxat
+`docs/ISH_DAFTARI.md` «PANEL QOIDALARI» da.  Shungacha production
+`main` dagi kod bilan ishlayveradi.
 
-### Yoqish tartibi
+### Deploy tartibi (panel manbasi o'zgarganda)
 
-1. Image yig'ing — `Dockerfile.cloud` panelni har build'da qaytadan quradi,
-   ya'ni repodagi `cloud/static/v2/` eskirgan bo'lsa ham prodga yangisi boradi.
-2. `deploy/Caddyfile.chaqimchi` ni yangilang va Caddy'ni qayta yuklang:
-   `/assets/v2/assets/*` uchun `immutable` qoidasi kerak. Usiz panel bundlelari
-   5 daqiqada eskirib, har ochilishda ~250 KB qayta yuklanadi.
-3. `.env.production` da `CHAQIMCHI_UI_V2_OWNER=1` qo'ying va cloud'ni restart
-   qiling (admin flagi hozircha 0 qoladi).
-4. Quyidagi beshta tekshiruvni bajaring.
+1. `make ui-build` va `cloud/static/v2/` ni **commit qiling** — image
+   panelni qayta qursa ham, repo bilan diskdagi bundle ajralib ketsa
+   tashxis qiyinlashadi (2026-09-06 tuzog'i: API ishlagan, tugma
+   ko'rinmagan).
+2. `deploy/Caddyfile.chaqimchi` da `/assets/v2/assets/*` uchun
+   `immutable` qoidasi bor — Caddyfile o'zgargan bo'lsa konteynerni
+   qayta yarating (oddiy restart eski faylni saqlaydi).
+3. PWA: manifest, ikonka yoki nom o'zgarsa `owner-sw.js` dagi kesh
+   nomi **majburiy** oshiriladi — aks holda o'rnatilgan telefonda eski
+   nom va ikonka qoladi.
+4. Quyidagi tekshiruvni bajaring.
 
-### Yoqishdan oldingi tekshiruv
+### Deploydan keyingi tekshiruv
 
 | Nima | Qanday | Kutilgan natija |
 |---|---|---|
@@ -266,18 +268,10 @@ yoqiladi:
 | Telegram Mini App | Botdagi «📊 Panelda ochish» tugmasi | Parolsiz kiradi |
 | To'g'ridan-to'g'ri manzil | `/owner/cameras` ni brauzerga yozing | Kameralar bo'limi ochiladi (bosh sahifa emas) |
 | Bundle keshi | `curl -I https://app…/assets/v2/assets/<xesh>.js` | `Cache-Control: …immutable` |
-| PWA | Telefonda «Bosh ekranga qo'shish» | Ikonka qirqilmagan, nomi «Chaqimchi» |
+| PWA | Telefonda «Bosh ekranga qo'shish» | Ikonka qirqilmagan, nomi «ENES» |
 
-### Orqaga qaytarish
-
-`CHAQIMCHI_UI_V2_OWNER=0` qo'yib restart qiling — eski panel darhol qaytadi.
-Unda `?key=` va Mini App orqali kirish ham ishlaydi, ya'ni mijoz kirishdan
-mahrum bo'lmaydi.  DIQQAT: eski panelda qurilma ulash oqimi yo'q — rollback
-paytida yangi mijoz o'rnatishlari to'xtab turadi.
-
-Eslatma: `/owner-sw.js` flag holatidan qat'i nazar v2 service worker'ini
-beradi. U faqat `/assets/v2/*` ni keshlaydi va sahifa qobig'iga tegmaydi,
-shuning uchun flag o'chirilganda eski panel keshdan eskisini olmaydi.
+Eslatma: `/owner-sw.js` faqat `/assets/v2/*` ni keshlaydi va sahifa
+qobig'iga tegmaydi.
 
 ## 6. Vision Agent (Gemini)
 

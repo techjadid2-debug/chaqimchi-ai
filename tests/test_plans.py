@@ -104,14 +104,22 @@ def test_tarmoq_is_not_a_billable_tier() -> None:
 
 
 def test_admin_panel_offers_exactly_the_sellable_plans() -> None:
-    """HTML va kod bir-biridan ajralib ketmasin."""
+    """Panel va kod bir-biridan ajralib ketmasin.
+
+    2026-09-07 dan admin paneli React (`frontend/src/admin.tsx`): mijoz
+    yaratish shaklidagi «Tarif» ro'yxati `SELLABLE_PLANS` bilan aynan
+    teng bo'lsin — `lite` sotilmaydi, lekin `PLANS` da qoladi.
+    """
     import re
     from pathlib import Path
 
     from chaqimchi_ai.licensing.plans import SELLABLE_PLANS
 
-    html = (Path(__file__).resolve().parents[1] / "cloud" / "static" / "admin.html").read_text()
-    form = html[html.index('id="cPlan"') : html.index("</select>", html.index('id="cPlan"'))]
+    tsx = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "admin.tsx").read_text(
+        encoding="utf-8"
+    )
+    start = tsx.index('name="plan"')
+    form = tsx[start : tsx.index("</select>", start)]
     offered = set(re.findall(r'<option value="([^"]+)"', form))
 
     assert offered == set(SELLABLE_PLANS)

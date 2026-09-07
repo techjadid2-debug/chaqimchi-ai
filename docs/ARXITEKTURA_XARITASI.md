@@ -511,38 +511,46 @@ ichki hujjatlarda **to'g'ri**. `publish_windows_release.sh` uni nashrda
 
 ---
 
-## 9. Panelning ikki avlodi
+## 9. Panel — bitta avlod (React)
 
-Hozir **ikkalasi ham repoda** va env bilan almashtiriladi.
+2026-09-07 gacha ikki avlod yonma-yon edi (`owner.html`/`admin.html` +
+React `v2`) va env bayrog'i bilan almashardi.  Endi **faqat React**:
+`/owner` va `/admin` har doim `cloud/static/v2/` ni beradi, bayroqlar
+koddan olib tashlangan.
 
 ```mermaid
 flowchart TB
-  REQ(["Brauzer so'rovi"])
-  FLAG{{"CHAQIMCHI_UI_V2_OWNER<br/>CHAQIMCHI_UI_V2_ADMIN"}}
+  REQ(["Brauzer so'rovi<br/>/owner/* · /admin/*"])
+  NEW["cloud/static/v2/<br/>React + TypeScript"]
+  SRC["frontend/src/<br/>owner.tsx · admin.tsx · OwnerHome · AdminHome<br/>Connect · GeometryEditor · VisionAgent"]
 
-  REQ --> FLAG
-  FLAG -->|"o'chiq"| OLD["Legacy<br/>cloud/static/owner.html · admin.html<br/>admin.html = 116 KB bitta fayl"]
-  FLAG -->|"yoqiq"| NEW["v2<br/>cloud/static/v2/<br/>React + TypeScript"]
-
-  SRC["frontend/src/<br/>OwnerHome · AdminHome · Connect<br/>GeometryEditor · VisionAgent"]
-  SRC -->|"vite build<br/>Dockerfile 1-bosqich"| NEW
+  REQ --> NEW
+  SRC -->|"vite build (make ui-build)<br/>Dockerfile 1-bosqich"| NEW
 ```
 
-**Legacy `admin.html` da yangi sahifa qo'shsangiz:** `NAV[].deps ⊆
-LOADERS ⊆ S` zanjiri buzilmasin. Moliya paneli aynan shundan
-ochilmagan edi — `S` da kalit yo'q edi, `need()` esa faqat `=== null`
-ni yuklaydi, ya'ni so'rov umuman yuborilmasdi. Struktura testi bor.
+**Panel manbasiga tegilsa bundle ham commit qilinsin** (`make ui-build`)
+— 2026-09-06 da API ishlagan-u tugma panelda ko'rinmagan.
 
-**`make test` TS typecheck'ni ham yuritadi** — v2 buzilgan holda
-"test o'tdi" degan yolg'on ishonch bo'lmasin.
+**`make test` TS typecheck va i18n katalog tekshiruvini ham yuritadi**
+— v2 buzilgan yoki `catalogue.generated.ts` eskirgan holda "test o'tdi"
+degan yolg'on ishonch bo'lmasin.
 
-Yoqish/qaytarish tartibi: [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md) §5.
+**Panel xulq qoidalari** (jonli do'konda yeyilgan xatolardan) —
+`tests/test_panel_v2.py`; eski testlardan ko'chirilmaganlari va
+sababi — [ISH_DAFTARI.md](ISH_DAFTARI.md) «PANEL QOIDALARI».
+
+⚠️ **React adminda eski adminning vositalari hali yo'q** (qurilma
+topshiriqlari, diagnostika, funksiya biriktirish, masofaviy chizma,
+reliz boshqaruvi) — F4 da ko'chiriladi, shungacha `enes-rebrend`
+deploy qilinmaydi.  Qulf: `test_the_admin_can_fix_a_shop_remotely`
+(`xfail(strict)`).
 
 | Qism | Fayl |
 |---|---|
-| Legacy panel | `cloud/static/admin.html`, `owner.html`, `panel.css` |
 | v2 manba | `frontend/src/` |
 | v2 qurilishi | `frontend/vite.config.ts` → `cloud/static/v2` |
+| Panel qoidalari | `tests/test_panel_v2.py` |
+| Eski CSS (faqat `pay.html` uchun, F3 da ketadi) | `cloud/static/owner.css`, `panel.css` |
 | Ommaviy sayt | `cloud/static/site.html`, `edu.html`, `oferta.html` |
 | Sayt va'dalari qulfi | `tests/test_static_pages.py` |
 
@@ -703,15 +711,13 @@ loglar strukturali emas.
 `/metrics` ga chiqarish. Uchinchisi mijoz 20 dan oshganda kerak
 bo'ladi.
 
-### 10.7 · Panel bitta avlodga kelsin
+### 10.7 · Panel bitta avlodga kelsin — ✅ qisman (2026-09-07)
 
-**Hozir:** `admin.html` (116 KB, bitta fayl) va React `v2` yonma-yon.
-Har o'zgarish **ikki joyda** qilinishi kerak yoki ikkisi ajralib
-ketadi.
-
-**Qanday:** v2 to'liq tenglashgach `CHAQIMCHI_UI_V2_*` doimiy yoqiladi,
-bir reliz kutiladi, keyin legacy fayllar o'chiriladi. Qaytarish yo'li
-[PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md) §5 da.
+Legacy `owner.html`/`admin.html` o'chirildi, bayroqlar olib tashlandi
+(§9).  **Qolgani:** eski adminning support vositalari React adminga
+ko'chirilishi kerak — ro'yxat [ISH_DAFTARI.md](ISH_DAFTARI.md) «PANEL
+QOIDALARI», qulf `tests/test_panel_v2.py::test_the_admin_can_fix_a_shop_remotely`
+(`xfail(strict)` — ko'chirilgach belgi olinadi).
 
 ---
 

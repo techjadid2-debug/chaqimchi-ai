@@ -9,6 +9,21 @@
 
 ## HOZIRGI HOLAT · 2026-09-08
 
+- **🎨 F3 SAYT TUGADI (2026-09-08, `4f199ce` + `99ed0e6`).**  Bosh sahifa va
+  qolgan 13 sahifa `cloud/site/` shablonlaridan quriladi; umumiy nav va
+  footer `cloud/site/partials/` da.  Uch tilli: bosh sahifa, aloqa,
+  hamkorlik, holat, ulash, yuklab olish (`/ru/aloqa`, `dl.` hostida
+  `/ru/`).  O'zbekcha qoladi (yuridik va texnik): oferta, maxfiylik,
+  rozilik, kuzatuv eslatmasi, o'rnatish yo'riqnomasi, edu, to'lov,
+  o'rnatuvchi qo'llanmasi.  Hujjat sahifalari (`docs/`) brend va
+  tokenlarga o'tdi.  `owner.css`/`panel.css` O'CHIRILDI (`pay.html`
+  `site.css` ga o'tdi).  Hamma shablonli sahifa `_render_public` orqali
+  (nav/footer'dagi `__APP_URL__` uchun).  `hamkorlik` matnidagi yolg'on
+  va'da («obyekt ochib kod olasiz») rostiga almashdi.
+  **Qoldi (F5/F7/F8/F9):** tarif kartalari matni, `@chaqimchi_ai_bot`
+  va `chaqimchi.uz` havolalari (docs sahifalarida, eslatmada) — cutover
+  kuni; `Chaqimchi_AI_Setup` fayl nomi — qurilma relizi; `og-v3.png`;
+  install/edu tarjimasi (ega xohlasa).
 - **🎨 F3.1 — BOSH SAHIFA UCH TILDA, YANGI DIZAYNDA (2026-09-08, `4f199ce`).**
   `cloud/site/index.html` (shablon) + `i18n/*.json` dagi **172 ta
   `site.*` kaliti** → `scripts/build_site.py` → `cloud/static/site.html`,
@@ -278,12 +293,8 @@
 ## KEYINGI ISH
 
 **REBREND (2026-09-08).** To'liq holat + xatolar + tartib:
-`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  Navbat:
-**F3.2 — qolgan sayt sahifalari** (14 ochiq sahifa + 7 hujjat sahifasi
-`cloud/site/` shabloniga ko'chadi: yagona nav/footer, brend, uch til
-marketing sahifalari uchun; yuridik sahifalar o'zbekcha qoladi; `pay.html`
-`owner.css`/`panel.css` dan `site.css` ga o'tadi va eski CSS o'chadi)
-→ **F4 panellar** (namunadagi ko'rinish +
+`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F3 tugadi.
+Navbat: **F4 panellar** (namunadagi ko'rinish +
 matn ajratish + yuqoridagi admin vositalari ro'yxati; ikki `xfail`
 belgisi olinadi; `owner.css`/`panel.css` o'chadi) → F5 Telegram/CSV →
 F6 ichki nomlar → F7 cutover (egadan: DNS, bot @username, yuridik nom,
@@ -945,6 +956,42 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-08 — F3.2: qolgan sayt sahifalari shablonga, eski CSS o'chdi (`99ed0e6`)
+
+Nima: 13 sahifa `cloud/site/` shablonlariga ko'chdi (jami 26 qurilgan
+fayl).  Umumiy nav va footer — `cloud/site/partials/`.  Aloqa, hamkorlik,
+holat, ulash, yuklab olish uch tilda (`/ru/aloqa`, `/en/status`; `dl.`
+hostida `/ru/`); sitemap aloqa va hamkorlikni alternativlari bilan
+sanaydi.  `pay.html` `site.css` ga o'tdi, `owner.css`/`panel.css`
+o'chirildi.  Hujjat sahifalari brendga va `tokens.css` ga o'tdi.
+`installer.html` (partner paneli) faqat brend matni.
+
+Nega: rebrend F3 — bitta nav/footer, bitta brend, uch til.
+
+Qayerda: `scripts/build_site.py` (`Page` reyestri, `include:`, `page:`),
+`cloud/site/*.html`, `cloud/site/partials/{nav-sub,footer}.html`,
+`cloud/main.py` (`_render_public` endi `__PUBLIC_ORIGIN__` ni ham qo'yadi;
+statik sahifalar `_render_public` ga; `/ru/{slug}`, `/en/{slug}`;
+`dl.` hostida til; sitemap guruhlari), `i18n/*.json` (+131 kalit),
+`cloud/static/docs/*`, `tests/test_site_build.py` (+14).
+
+Test: `test_every_subpage_is_built_in_three_languages`,
+`test_uzbek_only_pages_still_come_from_the_template`,
+`test_no_generated_page_carries_the_old_brand`,
+`test_shared_navigation_reaches_every_templated_page`,
+`test_localized_subpages_are_served_with_placeholders_filled`,
+`test_uzbek_pages_get_their_placeholders_filled` (footer'dagi
+`__APP_URL__` — `FileResponse` uni qo'ymasdi),
+`test_the_download_host_serves_each_language`.  Eski CSS testlari
+o'chdi (React'dagi qulflar `test_panel_v2.py` da).
+
+Diqqat: shablon IZOHIDA ham `{{` yozmang — `build_site.py` uni
+o'rinbosar deb o'qiydi (footer izohi shu bilan yiqildi).
+Diqqat: `test_the_payment_page_is_not_a_dark_developer_screen` xom
+HTML'ni o'qiydi — izohda eski fayl nomi ham «bor» hisoblanadi.
+Diqqat: `installer.html` shablon EMAS (o'z JS/CSS qobig'i, partner
+paneli) — brend matni qo'lda; F4 da React'ga ko'chsa o'chadi.
 
 ### 2026-09-08 — F3.1: bosh sahifa uch tilda, yangi dizaynda (`4f199ce`)
 

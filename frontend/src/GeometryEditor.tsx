@@ -16,7 +16,7 @@ import type { LineShape, ZoneEditorInstance, ZoneShape } from "./zone-editor";
 //: Muharrir ish vaqtida yuklanadi va bundle'ga kirmaydi — manba
 //: qurilmadagi bilan bitta bo'lib qolishi uchun (`zone-editor.d.ts`
 //: izohiga qarang).  `?v=` — kesh uchun.
-const EDITOR_URL = "/vendor/zone-editor.js?v=3";
+const EDITOR_URL = "/vendor/zone-editor.js?v=4";
 let loader: Promise<void> | null = null;
 
 function loadEditor(): Promise<void> {

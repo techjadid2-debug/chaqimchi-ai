@@ -211,3 +211,56 @@ def test_wizard_offers_one_click_presets_and_camera_roles() -> None:
         "rol -> priority mapping saqlansin"
     )
     assert 'id="hoursHint"' in setup_html, "ish soatlari bo'sh qolsa ogohlantirish joyi"
+
+
+def test_the_shelf_flag_survives_a_save() -> None:
+    """«Javon» belgisi saqlashda yo'qolmasin.
+
+    `serialise()` `restricted` va `queue` ni yozardi, `shelf` ni esa
+    yozmasdi.  Natijada muharrirdagi «javon» andozasi ishlamasdi va —
+    yomoni — serverdagi mavjud sozlama kimdir chizmani qayta saqlagan
+    zahoti jimgina o'chardi.  Ya'ni `enes/retail/shelf.py` (`shelf_empty`
+    hodisasi) hech qachon yoqilmagan bo'lishi mumkin.
+    """
+    payload = _node(
+        """
+        const editor = Object.create(ZoneEditor.prototype);
+        editor.zones = [];
+        editor.lines = [];
+        editor.cameraId = 'camera-01';
+        editor.draw = function () {};
+        editor.onChange = function () {};
+        editor.addPreset('shelf');
+        console.log(JSON.stringify(editor.serialise()));
+        """
+    )
+
+    zone = SceneZoneSettings.model_validate(payload["zones"][0])
+    assert zone.shelf is True, "«javon» belgisi saqlashdan omon chiqsin"
+    # Javon oldida uzoq turgan mijoz qoidabuzar emas — u mahsulot tanlayapti.
+    assert zone.dwell_sec is None
+
+
+def test_both_editors_offer_the_same_zone_flags() -> None:
+    """O'rnatuvchi paneli va lokal usta bir xil belgilarni ko'rsatsin.
+
+    Ikkalasi bitta `zone-editor.js` ni ishlatadi, lekin belgilar
+    ro'yxati ikki joyda alohida yozilgan: lokal ustada andoza tugmasi
+    (`addPreset`), o'rnatuvchida esa ro'yxatdagi checkbox
+    (`data-act`).  `shelf` aynan shu yerda ajralib qolgan edi —
+    andozasi bor, checkboxi yo'q.  Ro'yxatni RUXSAT emas, TENGLIK
+    qilib tekshiramiz: yangi belgi qo'shilsa test o'zi aytadi.
+    """
+    panel = (ROOT / "cloud" / "static" / "geometry-panel.js").read_text(encoding="utf-8")
+
+    # `SceneZoneSettings` dagi mantiqiy belgilar — yagona manba.
+    flags = {
+        name
+        for name, field in SceneZoneSettings.model_fields.items()
+        if field.annotation is bool
+    }
+    assert flags == {"restricted", "queue", "shelf"}, "yangi belgi: panelga ham qo'shing"
+
+    for flag in flags:
+        assert f'data-act="{flag}"' in panel, f"o'rnatuvchi panelida «{flag}» belgisi yo'q"
+        assert f'act === "{flag}"' in panel, f"«{flag}» belgisi saqlanmaydi"

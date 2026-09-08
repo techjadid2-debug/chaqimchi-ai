@@ -608,6 +608,11 @@
           }),
           restricted: !!zone.restricted,
           queue: !!zone.queue,
+          // `shelf` shu ro'yxatdan TUSHIB QOLGAN edi: muharrir uni
+          // yuklardi va «javon» andozasi qo'yardi, saqlashda esa
+          // jimgina yo'qotardi — ya'ni `retail/shelf.py` hech qachon
+          // yoqilmasdi va mavjud sozlama har saqlashda o'chardi.
+          shelf: !!zone.shelf,
           dwell_sec: zone.dwell_sec || null,
         };
       }),

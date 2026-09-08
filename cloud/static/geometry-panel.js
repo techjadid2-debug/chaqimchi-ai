@@ -129,6 +129,9 @@
             `<label><input type="checkbox" data-act="queue" data-i="${i}"${
               zone.queue ? " checked" : ""
             }> navbat</label>` +
+            `<label><input type="checkbox" data-act="shelf" data-i="${i}"${
+              zone.shelf ? " checked" : ""
+            }> javon</label>` +
             `<label>uzoq turish (s) <input type="number" min="5" max="86400" data-act="dwell" data-i="${i}" value="${
               zone.dwell_sec || ""
             }"></label>` +
@@ -198,7 +201,7 @@
         if (!input || input.tagName !== "INPUT") return;
         const i = Number(input.dataset.i);
         const act = input.dataset.act;
-        if (act === "restricted" || act === "queue") {
+        if (act === "restricted" || act === "queue" || act === "shelf") {
           editor.zones[i][act] = input.checked;
         } else if (act === "dwell") {
           editor.zones[i].dwell_sec = input.value ? Number(input.value) : null;

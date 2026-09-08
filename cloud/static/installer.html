@@ -7,7 +7,7 @@
   <title>O‘rnatuvchi paneli — ENES Monitoring</title>
   <link rel="icon" href="/assets/favicon.png" type="image/png">
   <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
-  <script src="/vendor/zone-editor.js?v=2" defer></script>
+  <script src="/vendor/zone-editor.js?v=4" defer></script>
   <script src="/assets/geometry-panel.js" defer></script>
   <!-- O'rnatuvchi paneli uslubi.
        2026-08-24: qorong'i `admin.css` dan yorug' dizaynga o'tdi.
@@ -167,9 +167,11 @@
     async function copyCommand(button){const code=button.previousElementSibling.textContent;await navigator.clipboard.writeText(code);button.textContent='Nusxalandi'}
 
     // ── Chiziq va zona ─────────────────────────────────────────────────
-    // Mantiq `geometry-panel.js` da va u ADMIN paneli bilan UMUMIY.
-    // Ilgari bu yerda o'z nusxasi turardi; admin paneliga ham kerak
-    // bo'lgach ikki nusxa bir-biridan uzoqlashishi muqarrar edi.
+    // Mantiq `geometry-panel.js` da.  Ilgari bu yerda o'z nusxasi
+    // turardi va admin paneli ham o'shani ishlatardi; admin React'ga
+    // (`GeometryEditor.tsx`) ko'chgach bu fayl faqat o'rnatuvchiga
+    // qoldi — va aynan shuning uchun undan «javon» belgisi tushib
+    // qolgani uzoq vaqt sezilmadi.
     function setupGeometry(){
       if(typeof GeometryPanel==='undefined')return;
       const base=`/api/v1/installer/sites/${activeSite}`;

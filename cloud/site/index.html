@@ -312,6 +312,29 @@
            o'zgarganda sayt eski narxni ko'rsatib turaverardi. -->
       <div id="planGrid" class="preset-grid"></div>
 
+      <!-- ── Tarmoq kalkulyatori ──────────────────────────────────────
+           "Tarmoq" kartasidagi tugma bosilganda ochiladi.  Bungacha u
+           tugma to'g'ridan-to'g'ri formaga olib borardi va mijoz narx
+           haqida HECH NARSA bilmay ketardi: kartada "so'rov bo'yicha"
+           deb yozilgan, javob esa faqat qo'ng'iroqdan keyin kelardi.
+           Endi u taxminiy summani o'zi ko'radi va ariza shu hisob
+           bilan boradi — operator nolda emas, raqamdan boshlaydi.
+
+           Summani SERVER hisoblaydi (`/api/v1/public/quote`): sayt
+           qo'shishni o'zi qilsa, katalog o'zgarganda u eski qoidada
+           qolib ketardi. -->
+      <div id="networkCalc" class="calc" hidden>
+        <h3>{{site.calc.title}}</h3>
+        <p class="calc-note">{{site.calc.text}}</p>
+        <div class="calc-shops">
+          <label for="calcShops">{{site.calc.shops}}</label>
+          <input id="calcShops" type="number" min="1" max="100" value="5" inputmode="numeric">
+        </div>
+        <div id="calcFeatures" class="calc-features"></div>
+        <p id="calcTotal" class="calc-total" role="status" aria-live="polite"></p>
+        <button id="calcCta" class="button button-light" type="button">{{site.calc.cta}}</button>
+      </div>
+
       <noscript>
         <div class="preset-hint" style="text-align:left">
           <b>{{site.pricing.noscript_1}}</b><br>

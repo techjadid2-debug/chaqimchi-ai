@@ -36,7 +36,7 @@
   <!-- `?v=` — fayl mazmunining SHA-256 boshi.  Bu sahifa
        `scripts/build_site.py` bilan quriladi va token o'sha yerda
        hisoblanadi: qo'lda yangilanadigan narsa qolmadi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=c63ef40f91">
+  <link rel="stylesheet" href="/assets/site.css?v=9dc2bbb4df">
 </head>
 <body class="site">
   <!-- Sahifa ritmi namunadan: qorong'i hero → ochiq imkoniyatlar →
@@ -336,6 +336,29 @@
            o'zgarganda sayt eski narxni ko'rsatib turaverardi. -->
       <div id="planGrid" class="preset-grid"></div>
 
+      <!-- ── Tarmoq kalkulyatori ──────────────────────────────────────
+           "Tarmoq" kartasidagi tugma bosilganda ochiladi.  Bungacha u
+           tugma to'g'ridan-to'g'ri formaga olib borardi va mijoz narx
+           haqida HECH NARSA bilmay ketardi: kartada "so'rov bo'yicha"
+           deb yozilgan, javob esa faqat qo'ng'iroqdan keyin kelardi.
+           Endi u taxminiy summani o'zi ko'radi va ariza shu hisob
+           bilan boradi — operator nolda emas, raqamdan boshlaydi.
+
+           Summani SERVER hisoblaydi (`/api/v1/public/quote`): sayt
+           qo'shishni o'zi qilsa, katalog o'zgarganda u eski qoidada
+           qolib ketardi. -->
+      <div id="networkCalc" class="calc" hidden>
+        <h3>Tarmoq uchun taxminiy hisob</h3>
+        <p class="calc-note">Do‘kon sonini va kerakli funksiyalarni tanlang — taxminiy oylik summani ko‘rasiz. Aniq shartlar suhbatda kelishiladi.</p>
+        <div class="calc-shops">
+          <label for="calcShops">Do‘konlar soni</label>
+          <input id="calcShops" type="number" min="1" max="100" value="5" inputmode="numeric">
+        </div>
+        <div id="calcFeatures" class="calc-features"></div>
+        <p id="calcTotal" class="calc-total" role="status" aria-live="polite"></p>
+        <button id="calcCta" class="button button-light" type="button">Shu hisob bilan ariza qoldirish</button>
+      </div>
+
       <noscript>
         <div class="preset-hint" style="text-align:left">
           <b>Narxni ko‘rish uchun brauzerda JavaScript yoqilgan bo‘lishi kerak.</b><br>
@@ -493,7 +516,7 @@
   <!-- `site.js` satrlari — katalogdan, qurish paytida.  Skript tilni
        `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
        manbadan kelgani uchun ajralib ketmaydi. -->
-  <script type="application/json" id="site-data">{"lang": "uz", "t": {"choose": "Tanlash", "currency": "so‘m", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman", "error_generic": "Xatolik yuz berdi. Qayta urinib ko‘ring.", "feature_note": "AI funksiyalari hozir birinchi do‘konlarda sinovdan o‘tmoqda. Hozir so‘rov qoldirsangiz — ishga tushganda birinchi bo‘lib sizga ulanadi.", "from_per_month": "{price}/oydan", "lead_ok": "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Raqamingiz qabul qilindi. Dastur tayyor bo‘lgan kuni birinchilardan bo‘lib sizga yuboramiz.", "on_request": "So‘rov bo‘yicha", "per_month": "/oy", "plan_message": "Tarif: {name} | Oyiga {price}", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman", "pricing_failed": "Narxni yuklab bo‘lmadi. Sahifani yangilang yoki", "send_failed": "So‘rov yuborilmadi", "sending": "So‘rov yuborilmoqda…", "version": "Versiya {version}", "write_to": "ga yozing."}}</script>
-  <script src="/assets/site.js?v=ea18955629" defer></script>
+  <script type="application/json" id="site-data">{"lang": "uz", "t": {"calc_cameras": "kamera", "calc_empty": "Kamida bitta funksiyani tanlang.", "calc_failed": "Hisobni olishning iloji bo‘lmadi. Bizga yozing — qo‘lda hisoblab beramiz.", "calc_lead": "Tarmoq: {shops} ta do‘kon, {features}. Taxminiy {monthly} / oy", "calc_total": "Taxminiy: <b>{monthly}</b> / oy · har do‘kon {per_shop}", "calc_yearly": "Yillik to‘lasangiz: {yearly} ({months} oy hisobidan)", "choose": "Tanlash", "currency": "so‘m", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman", "error_generic": "Xatolik yuz berdi. Qayta urinib ko‘ring.", "feature_note": "AI funksiyalari hozir birinchi do‘konlarda sinovdan o‘tmoqda. Hozir so‘rov qoldirsangiz — ishga tushganda birinchi bo‘lib sizga ulanadi.", "from_per_month": "{price}/oydan", "lead_ok": "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Raqamingiz qabul qilindi. Dastur tayyor bo‘lgan kuni birinchilardan bo‘lib sizga yuboramiz.", "on_request": "So‘rov bo‘yicha", "per_month": "/oy", "plan_message": "Tarif: {name} | Oyiga {price}", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman", "pricing_failed": "Narxni yuklab bo‘lmadi. Sahifani yangilang yoki", "send_failed": "So‘rov yuborilmadi", "sending": "So‘rov yuborilmoqda…", "version": "Versiya {version}", "write_to": "ga yozing."}}</script>
+  <script src="/assets/site.js?v=5122a424e9" defer></script>
 </body>
 </html>

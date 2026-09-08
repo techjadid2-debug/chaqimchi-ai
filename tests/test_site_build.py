@@ -248,3 +248,45 @@ def test_the_sitemap_lists_every_language_with_alternates(client: TestClient, mo
     # hamkorlik: 3 guruh × 3 yozuv.
     assert body.count('hreflang="ru"') == 3 * len(PATHS)
     assert "<loc>https://enes.uz/ru/aloqa</loc>" in body
+
+
+def test_the_network_card_opens_a_calculator() -> None:
+    """«Tarmoq» tugmasi kalkulyatorni ochsin, formaga sakramasin.
+
+    Ilgari u to'g'ridan-to'g'ri arizaga olib borardi: kartada "so'rov
+    bo'yicha" deb yozilgan, javob esa faqat qo'ng'iroqdan keyin
+    kelardi — mijoz kattalik haqida hech qanday tasavvursiz ketardi.
+    """
+    js = (STATIC / "site.js").read_text(encoding="utf-8")
+
+    assert "openCalculator()" in js
+    assert "/api/v1/public/quote" in js
+    # Summani server hisoblaydi: saytda qo'shish bo'lmasin.
+    assert "per_shop_monthly_uzs * " not in js
+    assert "monthly_uzs *" not in js
+
+    for lang in LANDINGS:
+        html = landing(lang)
+        assert 'id="networkCalc"' in html, f"{lang}: kalkulyator bloki yo'q"
+        assert 'id="calcFeatures"' in html
+        assert 'id="calcCta"' in html
+
+
+def test_the_calculator_speaks_every_language() -> None:
+    """Kalkulyator matni ikki joyda: HTML'da (`site.calc.*`) va JS
+    to'plamida (`site.js.calc_*`).  Ikkalasi ham uch tilda bo'lsin —
+    yarmi tarjima qilinsa sahifa aralash tilda chiqardi."""
+    import json
+    import re
+
+    for lang in LANDINGS:
+        html = landing(lang)
+        data = json.loads(
+            re.search(
+                r'<script type="application/json" id="site-data">(.*?)</script>', html, re.S
+            ).group(1)
+        )
+        for key in ("calc_total", "calc_yearly", "calc_empty", "calc_failed", "calc_lead", "calc_cameras"):
+            assert key in data["t"], f"{lang}: `{key}` JS to'plamida yo'q"
+        # HTML tomoni: sarlavha va tugma matni sahifada chizilgan.
+        assert 'id="calcShops"' in html

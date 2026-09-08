@@ -743,6 +743,23 @@ class FeatureDraftBody(BaseModel):
     selections: List[FeatureSelectionBody] = Field(default_factory=list, max_length=24)
 
 
+#: Kalkulyatorda kiritsa bo'ladigan eng ko'p do'kon soni.
+#:
+#: Bu mahsulot chegarasi EMAS (`enes/limits.py` dagi kamera soni kabi) —
+#: forma chegarasi: yuzdan ortiq obyektli tarmoq baribir alohida
+#: suhbat, va u yerda narx ham, o'rnatish grafigi ham qo'lda
+#: kelishiladi.  Chegara kalkulyatorni halol ushlab turadi: u javob
+#: bera olmaydigan hajmni so'ramaydi.
+NETWORK_QUOTE_MAX_SHOPS = 100
+
+
+class PublicQuoteBody(BaseModel):
+    """Tarmoq kalkulyatori: do'kon soni × funksiya × kamera."""
+
+    shops: int = Field(default=1, ge=1, le=NETWORK_QUOTE_MAX_SHOPS)
+    selections: List[FeatureSelectionBody] = Field(default_factory=list, max_length=24)
+
+
 class PublicLeadBody(BaseModel):
     #: Landing CTA ism va telefonni so'raydi; bu bog'lanishda to'g'ri
     #: murojaat qilish uchun yetarli. Eski forma va bot yo'li ismsiz
@@ -2931,6 +2948,57 @@ async def public_pricing() -> Dict[str, Any]:
         # lekin public sotuv va'dasi 72 soatlik soak-test tugamaguncha
         # faqat 4 kamera.
         "max_cameras": GUARANTEED_CAMERAS,
+    }
+
+
+@app.post("/api/v1/public/quote")
+async def public_quote(body: PublicQuoteBody, request: Request) -> Dict[str, Any]:
+    """Tarmoq uchun taxminiy oylik summa.
+
+    Narx SERVERDA hisoblanadi.  Sayt summani o'zi yig'sa, katalog
+    o'zgarganda u eski qoidada qolib ketardi — `renderPlans` dagi
+    "sayt so'm summasini o'zi hisoblamaydi" qoidasi shu sababdan.
+    Hisob-kitob `feature_quote` bilan AYNAN bir xil: bitta do'kon =
+    platforma bazasi + tanlangan funksiyalar × kamera.
+
+    Tannarx va marja javobga CHIQMAYDI.  `feature_quote` ularni
+    qaytaradi (u admin uchun), shuning uchun bu yerda maydonlar
+    ro'yxati aniq sanaladi — "keraksizini olib tashlash" naqshi yangi
+    maydon qo'shilganda uni jimgina sizdirardi.
+    """
+    ratelimit.check(
+        "public-quote",
+        request.client.host if request.client else "unknown",
+        limit=60,
+        window_sec=600,
+        message="Juda ko'p so'rov. Bir necha daqiqadan keyin urinib ko'ring.",
+    )
+    try:
+        quote = get_store().feature_quote([item.model_dump() for item in body.selections])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    shops = int(body.shops)
+    per_shop_uzs = int(quote["monthly_uzs"])
+    return {
+        "shops": shops,
+        "per_shop_monthly_uzs": per_shop_uzs,
+        "monthly_uzs": per_shop_uzs * shops,
+        # Yillik chegirma tarif kartalari bilan bitta qoidadan
+        # (`YEARLY_MONTHS_CHARGED`): sayt ikki joyda ikki xil
+        # "2 oy bepul" aytmasin.
+        "yearly_uzs": per_shop_uzs * shops * YEARLY_MONTHS_CHARGED,
+        "yearly_months_charged": YEARLY_MONTHS_CHARGED,
+        "base_monthly_uzs": uzs_from_cents(int(quote["base_fee_usd_cents"])),
+        "features": [
+            {
+                "code": item["feature_code"],
+                "name": item["feature_name"],
+                "camera_count": item["camera_count"],
+                "monthly_uzs": uzs_from_cents(item["monthly_total_usd_cents"]),
+            }
+            for item in quote["features"]
+        ],
     }
 
 

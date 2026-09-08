@@ -220,8 +220,11 @@
         const plan = plans.find((item) => item.code === code);
         if (!plan) return;
         if (plan.price_kind === "on_request") {
-          // Tarmoqda narx yo'q — bu ariza, ro'yxatdan o'tish emas.
-          goToForm(T("plan_network_message", { name: plan.name }));
+          // Tarmoqda qat'iy narx yo'q, lekin "so'rov bo'yicha" degan
+          // javob bilan ketish ham yaxshi emas edi: mijoz kattaligi
+          // haqida hech qanday tasavvursiz qolardi.  Avval kalkulyator,
+          // ariza esa undan keyin — allaqachon raqam bilan.
+          openCalculator();
           return;
         }
         goToForm(T("plan_message", { name: plan.name, price: money(plan.monthly_uzs) }));
@@ -235,6 +238,130 @@
       heroPrice.textContent = T("from_per_month", { price: money(cheapest.monthly_uzs) });
       heroPrice.hidden = false;
     }
+  }
+
+  // ── Tarmoq kalkulyatori ───────────────────────────────────────────────
+  //
+  // Summani SERVER hisoblaydi (`/api/v1/public/quote`).  Bu yerda
+  // qo'shish qilinmaydi: narx qoidasi katalogda va u o'zgarganda sayt
+  // eski formulada qolib ketardi — `renderPlans` dagi "sayt so'm
+  // summasini o'zi hisoblamaydi" qoidasi shu sababdan.
+
+  const calc = document.getElementById("networkCalc");
+  let calcTimer = 0;
+  let lastQuote = null;
+
+  function calcSelections() {
+    return Array.from(calc.querySelectorAll(".calc-feature")).flatMap((row) => {
+      const box = row.querySelector("input[type=checkbox]");
+      if (!box.checked) return [];
+      return [{ feature_code: box.value, camera_count: Number(row.querySelector("select").value) }];
+    });
+  }
+
+  function renderQuote(quote) {
+    lastQuote = quote;
+    const total = document.getElementById("calcTotal");
+    total.innerHTML =
+      T("calc_total", {
+        monthly: esc(money(quote.monthly_uzs)),
+        per_shop: esc(money(quote.per_shop_monthly_uzs)),
+      }) +
+      `<small>${esc(
+        T("calc_yearly", {
+          yearly: money(quote.yearly_uzs),
+          months: quote.yearly_months_charged,
+        }),
+      )}</small>`;
+  }
+
+  function requestQuote() {
+    const total = document.getElementById("calcTotal");
+    const selections = calcSelections();
+    if (!selections.length) {
+      lastQuote = null;
+      total.textContent = T("calc_empty");
+      return;
+    }
+    const shops = Math.max(1, Math.min(100, Number(document.getElementById("calcShops").value) || 1));
+    fetch("/api/v1/public/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shops, selections }),
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error())))
+      .then(renderQuote)
+      .catch(() => {
+        lastQuote = null;
+        total.textContent = T("calc_failed");
+      });
+  }
+
+  // Har bosishda so'rov yubormaymiz: mijoz kamera sonini ketma-ket
+  // bosib chiqadi va bu chegaraga (`public-quote`) tez urardi.
+  function scheduleQuote() {
+    clearTimeout(calcTimer);
+    calcTimer = setTimeout(requestQuote, 350);
+  }
+
+  function buildCalculator() {
+    const box = document.getElementById("calcFeatures");
+    if (!box) return;
+    const maxCameras = pricing.max_cameras || 4;
+    box.innerHTML = (pricing.features || [])
+      .map((feature, index) => {
+        const options = Array.from({ length: maxCameras }, (_, i) => i + 1)
+          .map((n) => `<option value="${n}">${n} ${esc(T("calc_cameras"))}</option>`)
+          .join("");
+        // Birinchi ikkitasi belgilangan holda ochiladi: bo'sh
+        // kalkulyator "nima tanlashim kerak?" degan savol bilan
+        // boshlanardi va ko'pchilik shu yerda to'xtardi.
+        const checked = index < 2 ? " checked" : "";
+        return `<label class="calc-feature">
+          <input type="checkbox" value="${esc(feature.code)}"${checked}>
+          <span>${esc(feature.name)}</span>
+          <select${checked ? "" : " disabled"}>${options}</select>
+        </label>`;
+      })
+      .join("");
+
+    box.addEventListener("change", (event) => {
+      const row = event.target.closest(".calc-feature");
+      if (!row) return;
+      if (event.target.type === "checkbox") {
+        row.querySelector("select").disabled = !event.target.checked;
+      }
+      scheduleQuote();
+    });
+    document.getElementById("calcShops").addEventListener("input", scheduleQuote);
+
+    document.getElementById("calcCta").addEventListener("click", () => {
+      const names = calcSelections()
+        .map((item) => {
+          const feature = pricing.features.find((f) => f.code === item.feature_code);
+          return `${feature ? feature.name : item.feature_code} (${item.camera_count})`;
+        })
+        .join(", ");
+      // Hisob olinmagan bo'lsa ham ariza ketaveradi — operator uni
+      // qo'lda hisoblaydi.  Arizasiz qoldirish eng yomon variant.
+      goToForm(
+        T("calc_lead", {
+          shops: document.getElementById("calcShops").value,
+          features: names || "—",
+          monthly: lastQuote ? money(lastQuote.monthly_uzs) : "—",
+        }),
+      );
+    });
+  }
+
+  function openCalculator() {
+    if (!calc) return;
+    if (calc.hidden) {
+      calc.hidden = false;
+      buildCalculator();
+      requestQuote();
+    }
+    calc.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   // Tarif matni serverda chiziladi va so'rov tilini `?lang=` dan oladi

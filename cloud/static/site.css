@@ -264,6 +264,33 @@ h1 em { color: var(--accent); font-style: normal; }
 .preset-items li { list-style: none; }
 .preset .button { width: 100%; margin-top: auto; }
 .preset-hint { margin: 0 0 32px; color: var(--band-muted); font-size: 14px; text-align: center; }
+
+/* Tarmoq kalkulyatori.  Kartalar bilan bir xil yuzada turadi (`.preset`
+   naqshi), lekin kengroq: ichida forma bor va uni uch ustunga siqish
+   telefonda o'qib bo'lmaydigan qilardi. */
+.calc { max-width: 720px; margin: 0 auto 32px; padding: 26px 24px; border: 1px solid var(--band-border); border-radius: 18px; background: var(--band-surface); }
+.calc h3 { margin: 0 0 8px; font-size: 22px; }
+.calc-note { margin: 0 0 20px; color: var(--band-muted); font-size: 14px; line-height: 1.6; }
+.calc-shops { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.calc-shops label { font-weight: 650; }
+.calc-shops input { width: 96px; padding: 10px 12px; border: 1px solid var(--band-border); border-radius: 10px; background: var(--band-bg); color: var(--band-fg); font: inherit; }
+.calc-features { display: grid; gap: 10px; margin-bottom: 18px; }
+/* Funksiya qatori: belgi + nom chapda, kamera soni o'ngda.  Nom uzun
+   bo'lishi mumkin, shuning uchun u cho'ziladi va tanlov qotib turadi. */
+.calc-feature { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--band-border); border-radius: 12px; }
+.calc-feature span { flex: 1; min-width: 0; font-size: 14px; }
+.calc-feature select { padding: 7px 8px; border: 1px solid var(--band-border); border-radius: 8px; background: var(--band-bg); color: var(--band-fg); font: inherit; font-size: 13px; }
+/* Tanlanmagan funksiyaning kamera tanlovi ma'nosiz — o'chiriladi, lekin
+   YO'QOLMAYDI: qator balandligi sakrab ketardi. */
+.calc-feature select:disabled { opacity: .45; }
+.calc-total { margin: 0 0 18px; min-height: 44px; font-size: 15px; line-height: 1.6; }
+.calc-total b { font-size: 24px; letter-spacing: -.02em; }
+.calc-total small { display: block; color: var(--band-muted); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .calc-feature { flex-wrap: wrap; }
+  .calc-feature span { flex-basis: 100%; order: -1; }
+}
 /* Tarif punkti: ikonka + qisqa nom, batafsili bosilganda ochiladi.
    Modal EMAS — telefonda modal butun ekranni yopadi. */
 .bullet summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; }

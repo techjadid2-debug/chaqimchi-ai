@@ -1246,3 +1246,81 @@ def test_multi_version_alert_reaches_the_admin_once_a_day(cloud_client, monkeypa
     # Takrorlanmaydi — har tekshiruvda xabar yuborilsa bu spam bo'lardi.
     asyncio.run(main._notify_multi_version_sites())
     assert len(sent) == 1
+
+
+# ── Tarmoq kalkulyatori ──────────────────────────────────────────────────
+#
+# "Tarmoq" kartasi ilgari faqat "so'rov bo'yicha" derdi va tugma
+# to'g'ridan-to'g'ri formaga olib borardi: mijoz kattalik haqida hech
+# qanday tasavvursiz ketardi, operator esa noldan boshlardi.
+
+
+def test_the_network_quote_multiplies_one_shop_by_the_chain_size(cloud_client) -> None:
+    """Narx SERVERDA hisoblanadi: sayt qo'shishni o'zi qilsa, katalog
+    o'zgarganda u eski formulada qolib ketardi."""
+    one = cloud_client.post(
+        "/api/v1/public/quote",
+        json={"shops": 1, "selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    ).json()
+    ten = cloud_client.post(
+        "/api/v1/public/quote",
+        json={"shops": 10, "selections": [{"feature_code": "person_count", "camera_count": 2}]},
+    ).json()
+
+    assert ten["per_shop_monthly_uzs"] == one["monthly_uzs"]
+    assert ten["monthly_uzs"] == one["monthly_uzs"] * 10
+    # Yillik chegirma tarif kartalari bilan bitta qoidadan.
+    assert ten["yearly_uzs"] == ten["monthly_uzs"] * ten["yearly_months_charged"]
+
+
+def test_the_public_quote_never_leaks_cost_or_margin(cloud_client) -> None:
+    """`feature_quote` tannarx va marjani qaytaradi — u ADMIN uchun.
+
+    2026-08-25 auditi shu sinf xatoni ushlagan edi (`/health/deep`
+    mijozlar sonini aytardi).  Shuning uchun bu yerda maydonlar aniq
+    sanaladi: "keraksizini olib tashlash" naqshi yangi maydon
+    qo'shilganda uni jimgina sizdirardi.
+    """
+    body = cloud_client.post(
+        "/api/v1/public/quote",
+        json={"shops": 3, "selections": [{"feature_code": "person_count", "camera_count": 1}]},
+    ).json()
+
+    assert set(body) == {
+        "shops",
+        "per_shop_monthly_uzs",
+        "monthly_uzs",
+        "yearly_uzs",
+        "yearly_months_charged",
+        "base_monthly_uzs",
+        "features",
+    }
+    for item in body["features"]:
+        assert set(item) == {"code", "name", "camera_count", "monthly_uzs"}
+    text = str(body)
+    for leak in ("cost", "margin", "price_book", "usd_cents"):
+        assert leak not in text, leak
+
+
+def test_the_quote_refuses_a_chain_it_cannot_price(cloud_client) -> None:
+    """Yuzdan ortiq obyekt alohida suhbat — kalkulyator javob bera
+    olmaydigan hajmni so'ramasin."""
+    selections = [{"feature_code": "person_count", "camera_count": 1}]
+
+    assert cloud_client.post(
+        "/api/v1/public/quote", json={"shops": 100, "selections": selections}
+    ).status_code == 200
+    for shops in (0, 101):
+        assert cloud_client.post(
+            "/api/v1/public/quote", json={"shops": shops, "selections": selections}
+        ).status_code == 422
+
+
+def test_the_quote_rejects_an_unknown_feature(cloud_client) -> None:
+    """Noma'lum kod 500 emas, 422 bersin — sayt sababni ko'rsata olsin."""
+    response = cloud_client.post(
+        "/api/v1/public/quote",
+        json={"shops": 1, "selections": [{"feature_code": "yolgon_kod", "camera_count": 1}]},
+    )
+
+    assert response.status_code == 422

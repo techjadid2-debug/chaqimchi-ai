@@ -1,4 +1,17 @@
-"""Cloud litsenziya bazasi (SQLite)."""
+"""Cloud litsenziya bazasi: SQLite yoki PostgreSQL.
+
+Production `--workers 1` da ishlab kelgan edi va sababi shu fayl:
+SQLite bitta faylga ko'p jarayondan yozishga yaramaydi.  Ya'ni butun
+cloud bitta CPU yadrosi bilan cheklangan edi.
+
+`event_store.py` allaqachon ikki dialektli va naqsh o'sha yerdan
+olingan.  Bitta farq bor: u har so'rovni qo'lda `self._sql(...)` bilan
+o'raydi, bu yerda esa **ulanishning o'zi** o'ralgan
+(`_PostgresConnection`).  Sabab: shu faylda 200 dan ortiq so'rov bor va
+bitta unutilgan `_sql()` faqat PostgreSQL'da, ya'ni FAQAT
+productionda ko'rinardi.  O'ram bu xato sinfini butunlay yo'q qiladi —
+so'rovlar hamma joyda `?` bilan yoziladi va tarjima bir joyda bo'ladi.
+"""
 
 from __future__ import annotations
 
@@ -184,17 +197,180 @@ def _compute_status(site: Dict[str, Any], now: Optional[datetime] = None) -> Dic
     return {"status": "active", "days_left": days_left, "message": "Faol."}
 
 
+#: SQLite'da bor, PostgreSQL'da boshqacha yoziladigan konstruksiyalar.
+_SQLITE_ONLY = (
+    # `AUTOINCREMENT` faqat INTEGER PRIMARY KEY da; PostgreSQL'da
+    # o'rniga ketma-ketlik ustuni.
+    ("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY"),
+)
+
+
+def _to_postgres(query: str) -> str:
+    """`?` uslubidagi so'rovni psycopg tushunadigan shaklga o'giradi.
+
+    Tartib MUHIM: avval literal foizlar himoyalanadi, keyin o'rin
+    egalari qo'yiladi.  Teskarisi bo'lsa `LIKE 'ENES Windows%'` dagi
+    foiz `%s` ning bir qismiga aylanib, psycopg "o'rin egasi
+    yetishmayapti" deb yiqilardi — va bu faqat productionda
+    ko'rinardi.
+    """
+    for sqlite_form, postgres_form in _SQLITE_ONLY:
+        query = query.replace(sqlite_form, postgres_form)
+    # `INSERT OR IGNORE` — SQLite sintaksisi.  PostgreSQL'da xuddi shu
+    # ma'no `ON CONFLICT DO NOTHING` bilan beriladi va u so'rov OXIRIDA
+    # turishi kerak, shuning uchun prefiks almashtirish yetarli emas.
+    stripped = query.strip()
+    if stripped.upper().startswith("INSERT OR IGNORE"):
+        query = stripped.replace("INSERT OR IGNORE", "INSERT", 1) + " ON CONFLICT DO NOTHING"
+    return query.replace("%", "%%").replace("?", "%s")
+
+
+def _split_statements(script: str) -> List[str]:
+    """DDL skriptini alohida so'rovlarga ajratadi.
+
+    Oddiy `script.split(";")` YARAMAYDI va buni haqiqiy baza darhol
+    ko'rsatdi: shu fayldagi izohlarning birida nuqta-vergul bor
+    (`... yoziladi; haqiqiy qurilma yozuvi ...`) va bo'linish o'sha
+    yerdan ketib, izoh matni "so'rov" bo'lib qolardi.  Shuning uchun
+    `--` izohlari va satr literallari hisobga olinadi.
+    """
+    statements: List[str] = []
+    current: List[str] = []
+    in_string = False
+    in_comment = False
+    index = 0
+    while index < len(script):
+        char = script[index]
+        if in_comment:
+            if char == "\n":
+                in_comment = False
+            index += 1
+            continue
+        if in_string:
+            current.append(char)
+            # SQL'da qo'shtirnoq ikki marta yozib qochiriladi (`''`) —
+            # bu holda satr davom etadi.
+            if char == "'":
+                if index + 1 < len(script) and script[index + 1] == "'":
+                    current.append("'")
+                    index += 2
+                    continue
+                in_string = False
+            index += 1
+            continue
+        if char == "-" and script[index : index + 2] == "--":
+            in_comment = True
+            index += 2
+            continue
+        if char == "'":
+            in_string = True
+            current.append(char)
+            index += 1
+            continue
+        if char == ";":
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    tail = "".join(current).strip()
+    if tail:
+        statements.append(tail)
+    return statements
+
+
+class _PostgresConnection:
+    """psycopg ulanishi, lekin `?` o'rin egalari bilan.
+
+    `sqlite3.Connection` ning shu faylda ishlatiladigan yuzasini
+    takrorlaydi: `execute`, `executemany`, `commit`, `close` va
+    kontekst menejeri.  Qatorlar `dict_row` bilan keladi, ya'ni
+    `dict(row)` ham, ustun nomi bilan o'qish ham ishlaydi; RAQAMLI
+    indeks esa ishlamaydi va bu ataylab — u SQLite'da ishlagani
+    uchun 2026-08-27 da jonli marshrutni 48 soatga o'ldirgan
+    (`tests/test_owner_notifications.py` naqshni qulflaydi).
+    """
+
+    def __init__(self, conn: Any) -> None:
+        self._conn = conn
+
+    def execute(self, query: str, params: Any = ()) -> Any:
+        return self._conn.execute(_to_postgres(query), params)
+
+    def executemany(self, query: str, params: Any) -> Any:
+        with self._conn.cursor() as cursor:
+            cursor.executemany(_to_postgres(query), params)
+        return cursor
+
+    def executescript(self, script: str) -> None:
+        """psycopg'da `executescript` yo'q — bo'laklab bajariladi."""
+        for statement in _split_statements(script):
+            self._conn.execute(_to_postgres(statement))
+
+    def commit(self) -> None:
+        self._conn.commit()
+
+    def rollback(self) -> None:
+        self._conn.rollback()
+
+    def close(self) -> None:
+        self._conn.close()
+
+    def __enter__(self) -> "_PostgresConnection":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        # `sqlite3` da `with conn:` tranzaksiyani yopadi, ulanishni
+        # EMAS.  Shu semantika takrorlanadi: yopishni chaqiruvchi
+        # `close()` bilan qiladi.
+        if exc_type is None:
+            self._conn.commit()
+        else:
+            self._conn.rollback()
+
+
+def _integrity_errors() -> tuple:
+    """Yagonalik cheklovi buzilganda chiqadigan istisnolar.
+
+    `sqlite3.IntegrityError` ni ushlash YETARLI EMAS: PostgreSQL'da
+    psycopg `UniqueViolation` beradi va u tutilmasa "Bu login band"
+    o'rniga mijoz 500 xatosini ko'rardi.  psycopg o'rnatilmagan
+    bo'lishi ham mumkin (Windows paketi), shuning uchun import
+    yumshoq.
+    """
+    errors: list = [sqlite3.IntegrityError]
+    try:
+        import psycopg
+
+        errors.append(psycopg.errors.IntegrityError)
+    except Exception:  # pragma: no cover - psycopg yo'q muhit
+        pass
+    return tuple(errors)
+
+
+#: Modul yuklanganda bir marta hisoblanadi — har `except` da emas.
+INTEGRITY_ERRORS = _integrity_errors()
+
+
 class CloudStore:
-    def __init__(self, db_path: Path, *, migrate: bool = True) -> None:
+    def __init__(
+        self, db_path: Path, *, migrate: bool = True, database_url: str = ""
+    ) -> None:
         self.db_path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Lead, pairing tokeni va shifrlangan kamera credentiallari shu yerda.
-        # Fayl 0600 bo'lsa ham parent katalog ochiq qolsa SQLite WAL/SHM fayllari
-        # boshqa lokal userlarga ko'rinishi mumkin.
-        try:
-            self.db_path.parent.chmod(0o700)
-        except OSError:
-            pass
+        self.database_url = (database_url or "").strip()
+        self.postgres = self.database_url.startswith(("postgres://", "postgresql://"))
+        if not self.postgres:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            # Lead, pairing tokeni va shifrlangan kamera credentiallari shu yerda.
+            # Fayl 0600 bo'lsa ham parent katalog ochiq qolsa SQLite WAL/SHM fayllari
+            # boshqa lokal userlarga ko'rinishi mumkin.
+            try:
+                self.db_path.parent.chmod(0o700)
+            except OSError:
+                pass
         # `migrate=False` — vision-worker kabi FAQAT O'QIYDIGAN qo'shni
         # jarayonlar uchun: ular API bilan bitta SQLite faylni bo'lishadi
         # va har restart'da jadval qayta qurilishini (RENAME/DROP)
@@ -203,12 +379,20 @@ class CloudStore:
         # API (bitta yozuvchi) bajaradi.
         if migrate:
             self._init_db()
-        try:
-            self.db_path.chmod(0o600)
-        except OSError:
-            pass
+        if not self.postgres:
+            try:
+                self.db_path.chmod(0o600)
+            except OSError:
+                pass
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self) -> Any:
+        if self.postgres:
+            try:
+                import psycopg
+                from psycopg.rows import dict_row
+            except ImportError as exc:  # pragma: no cover - production bog'liqligi
+                raise RuntimeError("PostgreSQL uchun psycopg[binary] kerak") from exc
+            return _PostgresConnection(psycopg.connect(self.database_url, row_factory=dict_row))
         conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         try:
@@ -340,6 +524,11 @@ class CloudStore:
                 taken_at TEXT,
                 updated_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
+                -- Yozuv tartibi.  `created_at` bir soniya aniqligida va
+                -- bir kunda ikki marta o'lchansa tartib tasodifiy
+                -- bo'lardi.  Ilgari buni SQLite `rowid` hal qilardi,
+                -- lekin PostgreSQL'da u YO'Q — shuning uchun aniq ustun.
+                seq INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (site_id) REFERENCES sites(id)
             );
             CREATE INDEX IF NOT EXISTS idx_device_jobs_site
@@ -1404,6 +1593,14 @@ class CloudStore:
         """
 
         def columns(table: str) -> set:
+            if self.postgres:
+                # `PRAGMA` yo'q; ustun nomi bo'yicha o'qiladi, raqamli
+                # indeks bilan emas (`dict_row` uni bermaydi).
+                rows = conn.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name=?",
+                    (table,),
+                ).fetchall()
+                return {str(dict(row)["column_name"]) for row in rows}
             return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 
         if "active_cameras" not in columns("devices"):
@@ -1506,10 +1703,18 @@ class CloudStore:
         if "billable_persons" not in columns("sites"):
             conn.execute("ALTER TABLE sites ADD COLUMN billable_persons INTEGER NOT NULL DEFAULT 0")
 
+        # ── Jadvalni QAYTA QURADIGAN migratsiyalar: faqat SQLite ──────
+        #
+        # Ular SQLite'ning cheklovi tufayli bor: `CHECK` ni `ALTER` bilan
+        # o'zgartirib bo'lmaydi.  PostgreSQL'da bunday cheklov yo'q va,
+        # muhimi, ko'chiriladigan ESKI PostgreSQL bazasi ham yo'q —
+        # u yerda `_init_db` darhol to'g'ri sxemani yaratadi.  Sxemani
+        # `sqlite_master` dan o'qish esa PostgreSQL'da umuman ishlamaydi.
+        if self.postgres:
+            return
+
         # Ishlab turgan bazada `lead_notification_deliveries` eski `CHECK`
         # bilan yaratilgan bo'lishi mumkin — u `abandoned` ni rad etadi.
-        # SQLite'da `CHECK` ni `ALTER` bilan o'zgartirib bo'lmaydi, shuning
-        # uchun jadval qayta quriladi.
         delivery_sql = str(
             conn.execute(
                 "SELECT sql FROM sqlite_master WHERE type='table' "
@@ -1554,7 +1759,7 @@ class CloudStore:
         jobs_sql = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='device_jobs'"
         ).fetchone()
-        if jobs_sql and "clean_chains" not in str(jobs_sql[0]):
+        if jobs_sql and "clean_chains" not in str(dict(jobs_sql)["sql"]):
             conn.executescript(
                 """
                 ALTER TABLE device_jobs RENAME TO device_jobs_old;
@@ -1578,7 +1783,18 @@ class CloudStore:
                     expires_at TEXT NOT NULL,
                     FOREIGN KEY (site_id) REFERENCES sites(id)
                 );
-                INSERT INTO device_jobs SELECT * FROM device_jobs_old;
+                -- Ustunlar ANIQ sanaladi.  `SELECT *` ikki jadval
+                -- ustunlari bir xil bo'lishiga tayanadi va keyinroq
+                -- yangi ustun qo'shilganda ("device_jobs has 15
+                -- columns but 16 values") jimgina qulardi.
+                INSERT INTO device_jobs
+                    (id, site_id, kind, params_enc, status, progress, note,
+                     result_enc, error, frame_key, requested_by, created_at,
+                     taken_at, updated_at, expires_at)
+                SELECT id, site_id, kind, params_enc, status, progress, note,
+                       result_enc, error, frame_key, requested_by, created_at,
+                       taken_at, updated_at, expires_at
+                FROM device_jobs_old;
                 DROP TABLE device_jobs_old;
                 CREATE INDEX IF NOT EXISTS idx_device_jobs_site
                     ON device_jobs(site_id, status, created_at DESC);
@@ -1620,12 +1836,30 @@ class CloudStore:
                     expires_at TEXT NOT NULL,
                     FOREIGN KEY (site_id) REFERENCES sites(id)
                 );
-                INSERT INTO device_jobs SELECT * FROM device_jobs_old;
+                -- Ustunlar ANIQ sanaladi.  `SELECT *` ikki jadval
+                -- ustunlari bir xil bo'lishiga tayanadi va keyinroq
+                -- yangi ustun qo'shilganda ("device_jobs has 15
+                -- columns but 16 values") jimgina qulardi.
+                INSERT INTO device_jobs
+                    (id, site_id, kind, params_enc, status, progress, note,
+                     result_enc, error, frame_key, requested_by, created_at,
+                     taken_at, updated_at, expires_at)
+                SELECT id, site_id, kind, params_enc, status, progress, note,
+                       result_enc, error, frame_key, requested_by, created_at,
+                       taken_at, updated_at, expires_at
+                FROM device_jobs_old;
                 DROP TABLE device_jobs_old;
                 CREATE INDEX IF NOT EXISTS idx_device_jobs_site
                     ON device_jobs(site_id, status, created_at DESC);
                 """
             )
+
+        # `device_jobs.seq` — yozuv tartibi.  Bungacha tartib SQLite
+        # `rowid` iga tayanardi; PostgreSQL'da u yo'q, ya'ni "oxirgi
+        # o'lchov" javobi tasodifiy bo'lib qolardi.  Eski qatorlarga
+        # 0 tushadi — ular baribir `created_at` bo'yicha oldinda.
+        if "seq" not in columns("device_jobs"):
+            conn.execute("ALTER TABLE device_jobs ADD COLUMN seq INTEGER NOT NULL DEFAULT 0")
 
         # `alert_state` bir turdan (connection) ikki turga (kind) o'tdi.
         if "kind" not in columns("alert_state"):
@@ -1720,7 +1954,7 @@ class CloudStore:
                         "VALUES(?,?,'owner',?)",
                         (account_id, site_id, now),
                     )
-        except sqlite3.IntegrityError as exc:
+        except INTEGRITY_ERRORS as exc:
             if "username" in str(exc).lower() or "unique" in str(exc).lower():
                 raise ValueError("Bu login band") from exc
             raise ValueError("Akkaunt yaratilmadi") from exc
@@ -3354,8 +3588,12 @@ class CloudStore:
                 return {**self._job_row(live), "reused": True}
             job_id = str(uuid.uuid4())[:12]
             conn.execute(
+                # `seq` ikkala dialektda bir xil yo'l bilan to'ldiriladi:
+                # PostgreSQL ketma-ketligi va SQLite `rowid` i boshqacha
+                # ishlaydi, `MAX(seq)+1` esa ikkalasida ham bir xil.
                 "INSERT INTO device_jobs (id, site_id, kind, params_enc, requested_by, "
-                "created_at, updated_at, expires_at) VALUES (?,?,?,?,?,?,?,?)",
+                "created_at, updated_at, expires_at, seq) "
+                "VALUES (?,?,?,?,?,?,?,?,(SELECT COALESCE(MAX(seq),0)+1 FROM device_jobs))",
                 (
                     job_id,
                     site_id,
@@ -3503,10 +3741,16 @@ class CloudStore:
                 # `created_at` bir soniya aniqligida: bir kunda ikki marta
                 # o'lchansa ikkalasi bir xil vaqt bilan yozilishi mumkin va
                 # tartib TASODIFIY bo'lib qolardi — admin eski natijani
-                # yangisi deb o'qishi mumkin edi.  `rowid` yozuv tartibini
-                # saqlaydi, ya'ni javob doim oxirgi o'lchov.
+                # yangisi deb o'qishi mumkin edi.  Ikkinchi mezon yozuv
+                # tartibini saqlaydi, ya'ni javob doim oxirgi o'lchov.
+                #
+                # PostgreSQL'da `rowid` YO'Q.  `ctid` uning o'rnini
+                # bosmaydi: u jismoniy joy va `UPDATE` dan keyin
+                # o'zgaradi, `device_jobs` esa natija kelganda
+                # yangilanadi — ya'ni tartib jimgina buzilardi.  Shuning
+                # uchun `seq` ustuni (ikkala dialektda ham o'suvchi).
                 "SELECT * FROM device_jobs WHERE site_id=? AND kind=? "
-                "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                "ORDER BY created_at DESC, seq DESC LIMIT 1",
                 (site_id, kind),
             ).fetchone()
         if not row:

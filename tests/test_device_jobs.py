@@ -417,7 +417,16 @@ def test_an_old_database_learns_the_new_job_kind(tmp_path) -> None:
             expires_at TEXT NOT NULL,
             FOREIGN KEY (site_id) REFERENCES sites(id)
         );
-        INSERT INTO device_jobs SELECT * FROM device_jobs_old;
+        -- Ustunlar aniq sanaladi: eski sxemada `seq` yo'q va `SELECT *`
+        -- ustun soni farq qilishi bilan qulardi.
+        INSERT INTO device_jobs
+            (id, site_id, kind, params_enc, status, progress, note,
+             result_enc, error, frame_key, requested_by, created_at,
+             taken_at, updated_at, expires_at)
+        SELECT id, site_id, kind, params_enc, status, progress, note,
+               result_enc, error, frame_key, requested_by, created_at,
+               taken_at, updated_at, expires_at
+        FROM device_jobs_old;
         DROP TABLE device_jobs_old;
         """
     )

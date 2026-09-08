@@ -2754,3 +2754,23 @@ def test_report_csv_period_rejects_a_backwards_or_too_long_range(production_clie
         "/api/v1/owner/report.csv?start=2026-06-01&end=2026-08-01", headers=owner_headers
     )
     assert too_long.status_code == 422
+
+
+def test_an_orphan_membership_does_not_hide_the_owners_other_shops(production_client) -> None:
+    """A'zolik bor, sayt yo'q — ro'yxat 500 emas, yetim yozuvsiz qaytadi.
+
+    Skrinshot muhitida topildi: `events.db` eski yugurishdan qolgan a'zo
+    yozuvi bilan `owner/sites` butunlay ochilmasdi va ega panelga
+    kira olmasdi.  Jonli serverda sayt o'chirilganda ham xuddi shu
+    holat bo'lardi.
+    """
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner_headers = _login_owner(client, site["site_id"], telegram_id="9401")
+    # O'sha odamni endi mavjud bo'lmagan saytga ham a'zo qilamiz.
+    main.get_event_store().add_member("yoq-sayt", "9401", role="manager")
+
+    response = client.get("/api/v1/owner/sites", headers=owner_headers)
+
+    assert response.status_code == 200, response.text
+    assert [row["id"] for row in response.json()["sites"]] == [site["site_id"]]

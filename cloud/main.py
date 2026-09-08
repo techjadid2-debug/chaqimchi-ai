@@ -6694,7 +6694,16 @@ async def owner_sites(owner: OwnerPrincipal = Depends(require_active_owner)) -> 
         members = get_event_store().members_for_telegram(owner.telegram_id)
         sites = []
         for member in members:
-            detail = get_store().site_detail(str(member["site_id"]))
+            try:
+                detail = get_store().site_detail(str(member["site_id"]))
+            except ValueError:
+                # A'zolik bor, sayt yo'q (sayt o'chirilgan yoki baza
+                # almashgan).  Bitta yetim yozuv butun ro'yxatni 500 qilib,
+                # egani panelga umuman kiritmasdi — o'tkazib yuboriladi.
+                logger.warning(
+                    "Yetim a'zolik: telegram=%s site=%s", owner.telegram_id, member["site_id"]
+                )
+                continue
             sites.append(
                 {
                     "id": detail["id"],

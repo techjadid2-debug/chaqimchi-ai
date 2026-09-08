@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi import HTTPException
 
 from cloud import ratelimit
 from cloud.ratelimit import RateLimiter
+
+DATABASE_URL = os.environ.get("ENES_TEST_DATABASE_URL", "").strip()
+needs_postgres = pytest.mark.skipif(
+    not DATABASE_URL, reason="ENES_TEST_DATABASE_URL qo'yilmagan"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -33,8 +40,8 @@ def test_keys_and_buckets_are_independent() -> None:
 
 def test_window_expiry_restores_quota(monkeypatch) -> None:
     limiter = RateLimiter()
-    clock = {"now": 1_000.0}
-    monkeypatch.setattr("cloud.ratelimit.time.monotonic", lambda: clock["now"])
+    clock = {"now": 1_000}
+    monkeypatch.setattr("cloud.ratelimit._now", lambda: clock["now"])
 
     assert limiter.hit("events", "dev-1", limit=1, window_sec=60)
     assert not limiter.hit("events", "dev-1", limit=1, window_sec=60)
@@ -55,8 +62,8 @@ def test_a_long_window_survives_the_memory_sweep(monkeypatch) -> None:
     HAQIQIY soatdan olinadi, monkeypatch esa undan keyin qo'yiladi — eski
     test aynan shu sabab tozalashni umuman ishga tushira olmasdi.
     """
-    clock = {"now": 1_000.0}
-    monkeypatch.setattr("cloud.ratelimit.time.monotonic", lambda: clock["now"])
+    clock = {"now": 1_000}
+    monkeypatch.setattr("cloud.ratelimit._now", lambda: clock["now"])
     limiter = RateLimiter()
 
     day = 86_400
@@ -78,8 +85,8 @@ def test_a_long_window_survives_the_memory_sweep(monkeypatch) -> None:
 def test_the_sweep_still_frees_memory_for_finished_windows(monkeypatch) -> None:
     """Tozalashning maqsadi saqlanib qolsin: tugagan oynalar o'chirilsin,
     aks holda har IP uchun yozuv abadiy yig'ilardi."""
-    clock = {"now": 1_000.0}
-    monkeypatch.setattr("cloud.ratelimit.time.monotonic", lambda: clock["now"])
+    clock = {"now": 1_000}
+    monkeypatch.setattr("cloud.ratelimit._now", lambda: clock["now"])
     limiter = RateLimiter()
 
     limiter.hit("leads", "1.2.3.4", limit=3, window_sec=60)
@@ -140,3 +147,161 @@ def test_used_forgets_an_expired_window() -> None:
     limiter = RateLimiter()
     limiter.hit("snapshots", "site-1", limit=10, window_sec=0)
     assert limiter.used("snapshots", "site-1") == 0
+
+
+# ── Umumiy hisob: bir nechta worker ──────────────────────────────────────
+#
+# Xotiradagi hisob har jarayonda alohida yuradi.  `--workers 2` bilan bu
+# chegarani jimgina IKKI BAROBAR ochardi: "kuniga 500 ta rasm" amalda
+# 1000 ta bo'lardi va buni na log, na panel aytardi.  Shu sabab hisob
+# bazaga ko'chdi; quyidagi testlar aynan "ikki jarayon" holatini
+# takrorlaydi — bitta bazaga bog'langan IKKITA limiter.
+
+
+@pytest.fixture
+def shared_pair(tmp_path):
+    """Bitta bazani bo'lishadigan ikkita limiter — ikki worker modeli."""
+    from cloud.event_store import EventStore
+
+    store = EventStore(sqlite_path=tmp_path / "events.db")
+    first, second = RateLimiter(), RateLimiter()
+    first.bind(store)
+    second.bind(store)
+    return first, second
+
+
+def test_two_workers_share_one_quota(shared_pair) -> None:
+    first, second = shared_pair
+
+    assert first.hit("snapshots", "site-1", limit=3, window_sec=3600)
+    assert second.hit("snapshots", "site-1", limit=3, window_sec=3600)
+    assert first.hit("snapshots", "site-1", limit=3, window_sec=3600)
+    # To'rtinchi so'rov — qaysi worker'ga tushishidan qat'i nazar rad etilsin.
+    assert not second.hit("snapshots", "site-1", limit=3, window_sec=3600)
+
+
+def test_shared_keys_and_buckets_stay_independent(shared_pair) -> None:
+    first, second = shared_pair
+    for _ in range(3):
+        first.hit("leads", "1.2.3.4", limit=3, window_sec=60)
+
+    assert second.hit("leads", "9.9.9.9", limit=3, window_sec=60)
+    assert second.hit("otp", "1.2.3.4", limit=3, window_sec=60)
+
+
+def test_shared_window_expiry_restores_quota(shared_pair, monkeypatch) -> None:
+    first, second = shared_pair
+    clock = {"now": 1_000}
+    monkeypatch.setattr("cloud.ratelimit._now", lambda: clock["now"])
+
+    assert first.hit("events", "dev-1", limit=1, window_sec=60)
+    assert not second.hit("events", "dev-1", limit=1, window_sec=60)
+
+    clock["now"] += 61
+    assert second.hit("events", "dev-1", limit=1, window_sec=60)
+
+
+def test_a_shared_long_window_is_not_reopened_early(shared_pair, monkeypatch) -> None:
+    """Sutkalik chegara sutka bo'yi ushlab tursin — xotira yo'lidagidek."""
+    first, second = shared_pair
+    clock = {"now": 1_000}
+    monkeypatch.setattr("cloud.ratelimit._now", lambda: clock["now"])
+    day = 86_400
+
+    assert first.hit("snapshots", "dev-1", limit=2, window_sec=day)
+    assert second.hit("snapshots", "dev-1", limit=2, window_sec=day)
+    assert not first.hit("snapshots", "dev-1", limit=2, window_sec=day)
+
+    clock["now"] += ratelimit._SWEEP_EVERY_SEC * 3
+    assert not second.hit("snapshots", "dev-1", limit=2, window_sec=day)
+
+    clock["now"] += day
+    assert first.hit("snapshots", "dev-1", limit=2, window_sec=day)
+
+
+def test_rejections_are_visible_to_the_other_worker(shared_pair) -> None:
+    """Panel qaysi worker'ga tushsa ham bir xil raqamni ko'rsatsin.
+
+    Ilgari `/health/deep` javob bergan worker'ning O'Z hisobini
+    ko'rsatardi: ikki worker bilan admin rad etishlarning yarmini
+    ko'rar va "hammasi joyida" deb xulosa qilardi.
+    """
+    first, second = shared_pair
+    for _ in range(5):
+        first.hit("snapshots", "site-1", limit=3, window_sec=3600)
+
+    assert second.rejections("site-1") == {"snapshots": 2}
+    assert second.rejections() == {"snapshots": 2}
+    assert second.used("snapshots", "site-1") == 5
+
+
+def test_the_sweep_frees_finished_windows_in_the_table(shared_pair, monkeypatch) -> None:
+    """Jadval o'smasin: qaytib so'ralmagan kalit abadiy qolib ketmasin."""
+    first, second = shared_pair
+    clock = {"now": 1_000}
+    monkeypatch.setattr("cloud.ratelimit._now", lambda: clock["now"])
+
+    first.hit("leads", "1.2.3.4", limit=3, window_sec=60)
+    assert second.size() == 1
+
+    clock["now"] += 61
+    assert first.sweep() == 1
+    assert second.size() == 0
+
+
+def test_a_broken_database_lets_the_request_through(shared_pair) -> None:
+    """Cheklov himoya, xizmatni to'xtatuvchi emas.
+
+    Baza tushganda mijozni QO'SHIMCHA ravishda bloklash foyda bermaydi —
+    hodisa baribir kelmayapti, 429 esa qurilmani qayta urinishdan
+    to'xtatadi va ma'lumot yo'qoladi.
+    """
+
+    class _Sinmoq:
+        def rate_limit_hit(self, *args, **kwargs):
+            raise RuntimeError("baza yo'q")
+
+        def rate_limit_rejections(self, *args, **kwargs):
+            raise RuntimeError("baza yo'q")
+
+    limiter = RateLimiter()
+    limiter.bind(_Sinmoq())
+
+    assert all(limiter.hit("otp", "555", limit=1, window_sec=600) for _ in range(5))
+    assert limiter.rejections() == {}
+
+
+def test_unbind_returns_to_the_memory_counter(shared_pair) -> None:
+    first, _ = shared_pair
+    assert first.shared
+
+    first.unbind()
+
+    assert not first.shared
+    assert first.hit("otp", "555", limit=1, window_sec=600)
+    assert not first.hit("otp", "555", limit=1, window_sec=600)
+
+
+@needs_postgres
+def test_two_workers_share_one_quota_on_postgres() -> None:
+    """Haqiqiy PostgreSQL: `RETURNING` va `ON CONFLICT` shu yerda sinaladi.
+
+    SQLite bilan sintaksis mos kelishi YETARLI EMAS — 5B da haqiqiy baza
+    beshta xatoni ko'rsatgan edi va ularning hech biri rejada yo'q edi.
+    """
+    from cloud.event_store import EventStore
+
+    store = EventStore(database_url=DATABASE_URL)
+    store.rate_limit_reset()
+    first, second = RateLimiter(), RateLimiter()
+    first.bind(store)
+    second.bind(store)
+
+    assert first.hit("snapshots", "pg-site", limit=2, window_sec=3600)
+    assert second.hit("snapshots", "pg-site", limit=2, window_sec=3600)
+    assert not first.hit("snapshots", "pg-site", limit=2, window_sec=3600)
+    assert second.rejections("pg-site") == {"snapshots": 1}
+    assert second.used("snapshots", "pg-site") == 3
+
+    store.rate_limit_reset()
+    assert second.size() == 0

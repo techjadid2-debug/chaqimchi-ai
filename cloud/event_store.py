@@ -515,6 +515,27 @@ class EventStore:
                 PRIMARY KEY(site_id, principal_id)
             )
             """,
+            # Tezlik cheklovining oynasi.  Nega hodisa bazasida: cheklov
+            # HAMMA worker uchun bitta bo'lishi kerak, bu baza esa
+            # production'da allaqachon PostgreSQL.  Boshqaruv bazasi
+            # (`ENES_CONTROL_DATABASE_URL`) ixtiyoriy va jonli serverda
+            # hali ko'chirilmagan — undan boshlab bo'lmasdi.
+            #
+            # `started_at` — BIGINT (unix soniya), REAL emas: PostgreSQL'da
+            # `REAL` bu float4 va 1.7e9 kattalikdagi vaqt tamg'asi unda
+            # ~128 soniyagacha yaxlitlanadi, ya'ni oyna chegarasi
+            # taxminiy bo'lib qolardi.
+            """
+            CREATE TABLE IF NOT EXISTS rate_limit_windows (
+                bucket TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                started_at BIGINT NOT NULL,
+                hits INTEGER NOT NULL DEFAULT 0,
+                window_sec INTEGER NOT NULL,
+                rejected INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(bucket, subject)
+            )
+            """,
             "CREATE INDEX IF NOT EXISTS idx_prod_events_site_time "
             "ON production_events(site_id,occurred_at)",
             # Qo'ng'iroq ikki xil so'rov qiladi va ular IKKI XIL ustun
@@ -4102,6 +4123,111 @@ class EventStore:
         with self._connect() as conn:
             cursor = conn.execute(self._sql(query), tuple(params))
             return int(cursor.rowcount or 0)
+
+    # ── Tezlik cheklovi (`cloud/ratelimit.py` uchun) ──────────────────
+    #
+    # Hisob bazada turadi, chunki uvicorn bir nechta worker bilan
+    # ishlaganda har jarayon o'z lug'atini yuritsa chegara worker soniga
+    # ko'payadi — ya'ni "500 ta rasm/kun" amalda 1000 ta bo'lardi.
+    #
+    # Vaqtni PYTHON beradi, baza emas: hamma worker bitta konteynerda,
+    # ya'ni bitta yadro soatida ishlaydi va `now()` ni har dialekt uchun
+    # alohida yozish shart emas.
+
+    def rate_limit_hit(
+        self, bucket: str, subject: str, *, limit: int, window_sec: int, now: int
+    ) -> Tuple[int, bool]:
+        """Bitta so'rovni sanaydi.  `(hits, ruxsat)` qaytaradi.
+
+        Ikki statement bitta tranzaksiyada: avval MUDDATI TUGAGAN oyna
+        o'chiriladi, keyin upsert sanaydi.  Bitta `UPDATE` ichida
+        "tugagan bo'lsa noldan boshla" ni yozish ham mumkin edi, lekin
+        u `now` ni beshta `CASE` da takrorlashni talab qilardi va aynan
+        shu takrorlanish o'qishga qiyin bo'lgani uchun xato manbai.
+
+        Poyga xavfi yo'q: ikkinchi worker'ning `DELETE` i faqat
+        MUDDATI TUGAGAN qatorni oladi (yangi qator mikrosoniya oldin
+        yozilgan, ya'ni tugamagan), `INSERT` esa qator qulfida
+        navbatga turadi.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                self._sql(
+                    "DELETE FROM rate_limit_windows WHERE bucket=? AND subject=? "
+                    "AND ? - started_at >= window_sec"
+                ),
+                (bucket, subject, int(now)),
+            )
+            row = conn.execute(
+                self._sql(
+                    "INSERT INTO rate_limit_windows"
+                    "(bucket,subject,started_at,hits,window_sec,rejected) "
+                    "VALUES(?,?,?,1,?,0) "
+                    "ON CONFLICT(bucket,subject) DO UPDATE SET "
+                    "hits = rate_limit_windows.hits + 1, "
+                    "rejected = rate_limit_windows.rejected + "
+                    "(CASE WHEN rate_limit_windows.hits + 1 > ? THEN 1 ELSE 0 END) "
+                    "RETURNING hits"
+                ),
+                (bucket, subject, int(now), int(window_sec), int(limit)),
+            ).fetchone()
+        hits = int(self._dict(row)["hits"])
+        return hits, hits <= limit
+
+    def rate_limit_used(self, bucket: str, subject: str, *, now: int) -> int:
+        """Joriy oynada nechta so'rov sanalgan (oyna tugagan bo'lsa 0)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql(
+                    "SELECT hits FROM rate_limit_windows "
+                    "WHERE bucket=? AND subject=? AND ? - started_at < window_sec"
+                ),
+                (bucket, subject, int(now)),
+            ).fetchone()
+        return int(self._dict(row)["hits"]) if row else 0
+
+    def rate_limit_rejections(
+        self, *, now: int, subject: Optional[str] = None
+    ) -> Dict[str, int]:
+        """Rad etilgan so'rovlar — bucket bo'yicha, faqat TIRIK oynalardan."""
+        query = (
+            "SELECT bucket, SUM(rejected) AS total FROM rate_limit_windows "
+            "WHERE rejected > 0 AND ? - started_at < window_sec"
+        )
+        params: List[Any] = [int(now)]
+        if subject is not None:
+            query += " AND subject=?"
+            params.append(subject)
+        query += " GROUP BY bucket"
+        with self._connect() as conn:
+            rows = conn.execute(self._sql(query), tuple(params)).fetchall()
+        summary: Dict[str, int] = {}
+        for row in rows:
+            data = self._dict(row)
+            total = int(data["total"] or 0)
+            if total:
+                summary[str(data["bucket"])] = total
+        return summary
+
+    def rate_limit_sweep(self, *, now: int) -> int:
+        """Muddati tugagan oynalarni o'chiradi — jadval cheksiz o'smasin."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                self._sql("DELETE FROM rate_limit_windows WHERE ? - started_at >= window_sec"),
+                (int(now),),
+            )
+            return int(cursor.rowcount or 0)
+
+    def rate_limit_reset(self) -> None:
+        """Hamma oynani tashlaydi — testlar orasida va qo'lda tiklashda."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM rate_limit_windows")
+
+    def rate_limit_size(self) -> int:
+        """Kuzatilayotgan kalitlar soni — jadval o'smayotganini tekshirish uchun."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS n FROM rate_limit_windows").fetchone()
+        return int(self._dict(row)["n"])
 
     def mark_digest_sent(self, site_id: str, digest_date: str) -> bool:
         with self._connect() as conn:

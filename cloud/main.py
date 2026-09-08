@@ -204,6 +204,27 @@ def get_event_store() -> EventStore:
     return _event_store
 
 
+#: Tezlik cheklovi umumiy bazada yuritilsinmi.  Standart qoida: hodisa
+#: bazasi PostgreSQL bo'lsa — ha.  Sabab ikkita: (1) faqat o'sha yerda
+#: bir nechta worker bo'lishi mumkin; (2) SQLite'da (lokal ish va
+#: testlar) xulq bugungidek qoladi, ya'ni 2 300 ta test o'zgarmaydi.
+#: Env bilan majburan yoqish yoki O'CHIRISH mumkin — bu issiq yo'l
+#: (har so'rovga bitta so'rov), orqaga qaytish tugmasi bo'lishi shart.
+RATE_LIMIT_SHARED_ENV = "ENES_RATELIMIT_SHARED"
+
+
+def _bind_shared_rate_limit() -> None:
+    store = get_event_store()
+    choice = os.environ.get(RATE_LIMIT_SHARED_ENV, "").strip().lower()
+    if choice in {"0", "false", "no"}:
+        ratelimit.limiter().unbind()
+        return
+    if choice in {"1", "true", "yes"} or store.postgres:
+        ratelimit.limiter().bind(store)
+        return
+    ratelimit.limiter().unbind()
+
+
 def get_snapshot_store() -> SnapshotStore:
     global _snapshots
     if _snapshots is None:
@@ -1736,6 +1757,10 @@ async def _maintenance_loop() -> None:
         try:
             if step % _PURGE_EVERY_STEPS == 0:
                 await asyncio.to_thread(_purge_expired_events)
+            # Umumiy bazadagi tugagan oynalar: xotira yo'li o'zini o'zi
+            # tozalaydi, jadvalda esa qaytib so'ralmagan kalit abadiy
+            # qolib ketardi (har qurilma, har IP uchun bitta qator).
+            await asyncio.to_thread(ratelimit.limiter().sweep)
             await _notify_rate_limited_sites()
             await _notify_multi_version_sites()
         except asyncio.CancelledError:
@@ -1824,6 +1849,7 @@ async def lifespan(app: FastAPI):
     get_event_store()
     get_snapshot_store()
     get_payments()
+    _bind_shared_rate_limit()
     bootstrap_username = os.environ.get("ENES_BOOTSTRAP_ADMIN_USERNAME", "").strip()
     bootstrap_password = os.environ.get("ENES_BOOTSTRAP_ADMIN_PASSWORD", "")
     if bool(bootstrap_username) != bool(bootstrap_password):
@@ -1865,6 +1891,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        ratelimit.limiter().unbind()
         if _digest_task is not None:
             _digest_task.cancel()
             _digest_task = None

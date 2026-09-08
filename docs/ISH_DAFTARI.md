@@ -20,6 +20,20 @@
   fast-forward (148 commit, `101befd` → `a807983`), `origin/main`
   yangilandi.  Shox tarix uchun QOLDIRILDI, keyingi ish `main` da.
 
+- **💳 5A BOSHLANDI — obuna eslatmasi to'lov sahifasiga ulandi
+  (2026-09-09, `e713a7d`).**  Eslatma «To'lovni panelda ochasiz» deb
+  tugardi va zanjir shu yerda uzilardi.  Endi xabarda to'lov
+  sahifasining o'zi (uch tilda, yangi kalit `digest.renewal.pay_link`);
+  to'langach obuna `mark_paid` → `extend_subscription` orqali o'zi
+  uzayadi.  Hisob DAVR bo'yicha ochiladi (bosqich bo'yicha emas):
+  bitta davr uchun uchta eslatma ketadi va uchalasi AYNAN bir hisobga
+  ishora qiladi; admin qo'lda ochgani ham chetlab o'tilmaydi.
+  `DailyDigestService` to'lov qatlamini import qilmaydi — chaqiruv
+  orqali oladi (`renewal_invoice`), aks holda aylanma bog'liqlik
+  chiqardi.  `ENES_PUBLIC_URL` yo'q bo'lsa havola ham, hisob ham
+  ochilmaydi.  **Qoldi (5A):** Payme/Click merchant kalitlari (egadan),
+  «Moslashtirilgan» tarif kalkulyatori, karta tokeni bilan avto-yechish.
+
 - **🔒 CSP MAJBURIY REJIMGA TAYYOR (2026-09-09, `e068cf9`, `701ec62`).**
   Sahifalarda ijro etiladigan inline `<script>` ham, `onclick="…"`
   atributi ham QOLMADI: sakkiz sahifadan 691 qator JS
@@ -1232,6 +1246,25 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-09 — 5A: obuna eslatmasi to'lov sahifasiga ulandi (`e713a7d`)
+Nima: obuna tugashi haqidagi Telegram eslatmasida endi to'lov
+sahifasining havolasi turadi; hisob-faktura o'zi ochiladi va davr
+davomida qayta ishlatiladi.
+Nega: eslatma «panelda ochasiz» deb tugardi — ega hisobni qidirishi
+kerak edi va ko'pchilik shu joyda to'xtardi.  To'lov zanjirining
+qolgan qismi (`mark_paid` → `extend_subscription`) allaqachon bor edi,
+yetishmagani aynan shu havola edi.
+Qayerda: `cloud/digest.py` (`build_renewal(pay_url=…)`,
+`DailyDigestService(renewal_invoice=…)`, `_renewal_once`),
+`cloud/main.py` (`_renewal_pay_url`, xizmat qurilishi),
+`i18n/*.json` (`digest.renewal.pay_link`).
+Test: `test_owner_report.py` da to'rtta, `test_payments_api.py` da
+to'rtta.  To'liq: 2 165 passed, 1 skipped.
+Diqqat: Payme/Click merchant kalitlari hali yo'q — to'lov sahifasi
+ularsiz «Onlayn to'lov hozircha ulanmagan» deb aloqa yo'lini
+ko'rsatadi, ya'ni havola baribir foydali (summa va hisob raqami
+ko'rinadi).  Kalitlar kelgach tugmalar o'zi paydo bo'ladi.
 
 ### 2026-09-09 — Inline skriptlar tashqi faylga: CSP majburiy rejimga tayyor (`701ec62`, `e068cf9`)
 Nima: sakkiz sahifadan 691 qator JS `cloud/static/*.js` ga chiqdi,

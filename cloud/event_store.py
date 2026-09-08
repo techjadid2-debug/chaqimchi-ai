@@ -199,6 +199,7 @@ class EventStore:
                 active INTEGER NOT NULL DEFAULT 1,
                 digest_muted INTEGER NOT NULL DEFAULT 0,
                 notify_failures INTEGER NOT NULL DEFAULT 0,
+                auth_version INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 UNIQUE(site_id, telegram_id)
             )
@@ -596,6 +597,14 @@ class EventStore:
         # manbai bo'lib, a'zonikiga zid tushib qolardi.
         if "language" not in member_columns:
             conn.execute("ALTER TABLE owner_members ADD COLUMN language TEXT NOT NULL DEFAULT 'uz'")
+        # Chiqish (`logout`) shu raqamni oshiradi va tokendagi eski qiymat
+        # bilan mos kelmagan har so'rov 401 oladi.  Usiz «Chiqish» faqat
+        # brauzerdagi kalitni o'chirardi: o'g'irlangan token 12 soat
+        # davomida ishlayverardi va uni bekor qilishning yo'li yo'q edi.
+        if "auth_version" not in member_columns:
+            conn.execute(
+                "ALTER TABLE owner_members ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 1"
+            )
         vision_job_columns = self._existing_columns(conn, "vision_jobs")
         if "audio_mime" not in vision_job_columns:
             conn.execute("ALTER TABLE vision_jobs ADD COLUMN audio_mime TEXT")
@@ -3774,6 +3783,33 @@ class EventStore:
                 (site_id, str(telegram_id)),
             ).fetchone()
         return self._dict(row) if row else None
+
+    def member_by_id(self, member_id: str) -> Optional[Dict[str, Any]]:
+        """Token AYNAN shu a'zolik uchun berilgan.
+
+        `member_for_site` emas: ko'p filialli egada tanlangan filial
+        boshqa a'zolik qatoriga tushadi va uning `auth_version` i
+        boshqacha bo'ladi — tekshiruv esa tokenni bergan qatorga
+        nisbatan bo'lishi kerak.  `active` bo'yicha filtrlamaymiz:
+        o'chirilgan a'zolikni `require_active_owner` allaqachon rad
+        etadi, bu yerda esa faqat versiya solishtiriladi.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT * FROM owner_members WHERE id=?"),
+                (str(member_id),),
+            ).fetchone()
+        return self._dict(row) if row else None
+
+    def revoke_member_sessions(self, member_id: str) -> int:
+        """A'zoning hamma tokenini bekor qiladi; yangi versiyani qaytaradi."""
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("UPDATE owner_members SET auth_version=auth_version+1 WHERE id=?"),
+                (str(member_id),),
+            )
+        member = self.member_by_id(member_id)
+        return int(member.get("auth_version") or 1) if member else 1
 
     def members_for_telegram(self, telegram_id: str) -> List[Dict[str, Any]]:
         with self._connect() as conn:

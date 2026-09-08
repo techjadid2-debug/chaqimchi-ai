@@ -394,3 +394,23 @@ def test_shells_carry_the_new_brand(shell: str) -> None:
     text = (SHELLS / shell).read_text(encoding="utf-8")
     assert "chaqimchi-logo" not in text, "eski logotip havolasi qoldi"
     assert 'content="#4285f4"' not in text, "eski brend ko'ki qoldi"
+
+
+def test_logging_out_asks_the_server_too() -> None:
+    """«Chiqish» faqat brauzerdagi kalitni o'chirmasin.
+
+    Ilgari ikkala panelda ham tugma `clearToken` dan iborat edi:
+    tokenni nusxa olgan odam uchun hech narsa o'zgarmasdi, u 12 soat
+    davomida ishlayverardi.  Endi `api.ts: logout()` avval serverga
+    boradi (`auth_version` oshadi), keyin kalitni o'chiradi.
+    """
+    helper = src("api.ts")
+    assert "/api/v1/owner/auth/logout" in helper
+    assert "/api/v1/auth/logout" in helper
+
+    for name in ("owner.tsx", "admin.tsx"):
+        text = src(name)
+        assert "serverLogout" in text, f"{name}: chiqish serverga bormayapti"
+        # Faqat `clearToken` bilan tugaydigan chiqish qaytib kelmasin.
+        assert 'clearToken("owner");setAuthenticated' not in text
+        assert 'clearToken("admin");setAuthenticated' not in text

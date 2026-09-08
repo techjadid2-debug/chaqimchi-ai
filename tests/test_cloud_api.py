@@ -470,6 +470,34 @@ def test_the_customer_can_log_in_with_the_password_they_chose(cloud_client, monk
     assert login.json()["account"]["site_id"] == created["site_id"]
 
 
+def test_logging_out_kills_the_portal_token_on_the_server(cloud_client, monkeypatch) -> None:
+    """Chiqish `portal_accounts.auth_version` ni oshirsin.
+
+    Admin va o'rnatuvchi paneli ham shu token bilan ishlaydi, ya'ni
+    ilgari begona kompyuterda «Chiqish» bosilgach ham token 12 soat
+    yaroqli qolardi.
+    """
+    monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
+    cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL)
+    login = cloud_client.post(
+        "/api/v1/auth/login",
+        json={"username": "testmarket", "password": "mening-parolim1"},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert cloud_client.get("/api/v1/auth/me", headers=headers).status_code == 200
+
+    assert cloud_client.post("/api/v1/auth/logout", headers=headers).status_code == 200
+
+    assert cloud_client.get("/api/v1/auth/me", headers=headers).status_code == 401
+    # Qaytadan kirish ishlaydi — bekor qilish faqat eski tokenga tegdi.
+    again = cloud_client.post(
+        "/api/v1/auth/login",
+        json={"username": "testmarket", "password": "mening-parolim1"},
+    )
+    fresh = {"Authorization": f"Bearer {again.json()['access_token']}"}
+    assert cloud_client.get("/api/v1/auth/me", headers=fresh).status_code == 200
+
+
 def test_the_password_never_comes_back_in_the_response(cloud_client) -> None:
     body = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).text
 

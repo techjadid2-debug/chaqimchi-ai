@@ -43,6 +43,24 @@ export function clearToken(kind: "owner" | "admin") {
   }
 }
 
+/** Chiqish: avval SERVERDA sessionni bekor qiladi, keyin kalitni o'chiradi.
+ *
+ * Ilgari «Chiqish» faqat brauzerdagi kalitni o'chirardi — nusxa
+ * olingan token 12 soat davomida ishlayverardi.  Tartib muhim: so'rov
+ * token o'chirilishidan OLDIN ketishi kerak.  Server javob bermasa
+ * ham kalit baribir o'chadi: odam «chiqdim» deb turganda ekranda
+ * qolib ketmasin.
+ */
+export async function logout(kind: "owner" | "admin") {
+  const path = kind === "owner" ? "/api/v1/owner/auth/logout" : "/api/v1/auth/logout";
+  try {
+    await api(path, kind, { method: "POST" });
+  } catch {
+    /* Tarmoq yo'q yoki token allaqachon yaroqsiz. */
+  }
+  clearToken(kind);
+}
+
 /** Server xatosidan odam o'qiydigan matnni ajratadi.
  *
  * `detail` HAR DOIM satr emas: FastAPI'ning `RequestValidationError`i

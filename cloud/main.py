@@ -804,6 +804,12 @@ def require_active_owner(
         return owner.model_copy(
             update={"site_id": selected_site, "role": str(site.get("access_role") or "owner")}
         )
+    # Tokenni BERGAN a'zolik qatori: chiqish o'shaning `auth_version` ini
+    # oshiradi.  Tanlangan filial boshqa qator bo'lishi mumkin (ko'p
+    # filialli ega), shuning uchun versiya aynan shu yerda tekshiriladi.
+    issued_for = get_event_store().member_by_id(owner.member_id)
+    if not issued_for or int(issued_for.get("auth_version") or 1) != owner.auth_version:
+        raise HTTPException(401, "Owner session bekor qilingan")
     member = get_event_store().member_for_site(selected_site, owner.telegram_id)
     if not member:
         raise HTTPException(401, "Owner session bekor qilingan")
@@ -3531,6 +3537,28 @@ async def portal_me(
     principal: PortalPrincipal = Depends(require_portal_account),
 ) -> Dict[str, Any]:
     return {"account": get_store().account_by_id(principal.account_id)}
+
+
+@app.post("/api/v1/auth/logout")
+async def portal_logout(
+    principal: PortalPrincipal = Depends(require_portal_account),
+) -> Dict[str, Any]:
+    """Chiqish serverda ham amalga oshsin.
+
+    Ilgari «Chiqish» faqat brauzerdagi kalitni o'chirardi: nusxa
+    olingan token 12 soat davomida ishlayverardi va uni bekor
+    qilishning hech qanday yo'li yo'q edi.  Endi `auth_version`
+    oshadi va shu akkauntning HAMMA tokeni (boshqa qurilmadagisi ham)
+    darhol 401 oladi.
+    """
+    get_store().revoke_account_sessions(principal.account_id)
+    get_store().audit_portal_action(
+        "account.logout",
+        actor_id=principal.account_id,
+        target_type="account",
+        target_id=principal.account_id,
+    )
+    return {"ok": True}
 
 
 @app.post("/api/v1/auth/password")
@@ -6685,6 +6713,26 @@ async def owner_login_with_telegram_webapp(
     if str(member.get("role")) != "owner":
         raise HTTPException(403, "Mini App faqat do'kon egasi uchun ochilgan")
     return {"ok": True, **_owner_session(member)}
+
+
+@app.post("/api/v1/owner/auth/logout")
+async def owner_logout(owner: OwnerPrincipal = Depends(require_owner)) -> Dict[str, Any]:
+    """Ega/menejer sessionini serverda bekor qiladi.
+
+    `require_active_owner` emas, `require_owner`: chiqish tanlangan
+    filialga bog'liq emas va allaqachon bekor qilingan token bilan
+    ham xatosiz tugashi kerak (tugma har doim ishlasin).  Ikkala
+    kirish yo'li bir joyda: Telegram a'zoligi `owner_members` da,
+    login/parol bilan kirgan mijoz esa `portal_accounts` da.
+    """
+    if owner.auth_kind == "password":
+        try:
+            get_store().revoke_account_sessions(owner.member_id)
+        except ValueError:
+            pass
+    else:
+        get_event_store().revoke_member_sessions(owner.member_id)
+    return {"ok": True}
 
 
 @app.get("/api/v1/owner/sites")

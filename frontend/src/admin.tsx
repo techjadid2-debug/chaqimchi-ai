@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, copyText, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
+import { api, logout as serverLogout, copyText, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
 import { t } from "./i18n";
 import { ActionMenu, AppShell, Avatar, Card, CopyField, EmptyState, LoginScreen, MetricCard, Modal, PageHeader, Pill, SearchPalette, Skeleton, useConfirm, useToast, type NavItem } from "./components";
 import { AdminHome } from "./AdminHome";
@@ -339,7 +339,7 @@ function AdminApp() {
   const {data,loading,error,refresh} = useAdminDashboard(authenticated,range);
 
   const submit = async(username:string,password:string)=>{setBusy(true);setLoginError("");try{await login(username,password,"admin");setAuthenticated(true);}catch(reason){setLoginError(reason instanceof Error?reason.message:"Kirish amalga oshmadi");}finally{setBusy(false);}};
-  const logout = ()=>{clearToken("admin");setAuthenticated(false);};
+  const logout = ()=>{void serverLogout("admin");setAuthenticated(false);};
   const navigate = (id:string,item="")=>{if(id==="more")setDrawer(true);else{navigateTo(id,item);setDrawer(false);window.scrollTo({top:0,behavior:"smooth"});}};
 
   const offline = data?.stats.offline || 0;

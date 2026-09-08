@@ -35,6 +35,9 @@ def issue_owner_token(member: dict) -> str:
             "site_id": str(member["site_id"]),
             "telegram_id": str(member["telegram_id"]),
             "role": str(member["role"]),
+            # Chiqishda bazadagi raqam oshadi va bu token darhol
+            # yaroqsiz bo'ladi (`require_active_owner` solishtiradi).
+            "auth_version": int(member.get("auth_version") or 1),
             "kind": "enes-owner",
         },
     )
@@ -55,6 +58,9 @@ def require_owner(authorization: str | None = Header(None)) -> OwnerPrincipal:
             telegram_id=str(payload["telegram_id"]),
             role=str(payload["role"]),
             auth_kind="telegram",
+            # Da'vosi yo'q eski token — 1, ya'ni hali chiqilmagan
+            # a'zolik bilan mos keladi va kutilmaganda tushib qolmaydi.
+            auth_version=int(payload.get("auth_version") or 1),
         )
     except (JwtError, KeyError, ValueError):
         # Xarid qilgan mijoz login/parol bilan ham ayni owner API'larini

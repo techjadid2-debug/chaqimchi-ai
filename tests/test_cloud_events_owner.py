@@ -2774,3 +2774,42 @@ def test_an_orphan_membership_does_not_hide_the_owners_other_shops(production_cl
 
     assert response.status_code == 200, response.text
     assert [row["id"] for row in response.json()["sites"]] == [site["site_id"]]
+
+
+def test_logging_out_kills_the_owner_token_on_the_server(production_client) -> None:
+    """«Chiqish» brauzerdagi kalitni emas, SESSIONNI o'chirsin.
+
+    Ilgari tugma faqat `localStorage` ni tozalardi: nusxa olingan token
+    12 soat davomida ishlayverardi va uni bekor qilishning yo'li yo'q
+    edi.  Endi `owner_members.auth_version` oshadi va shu a'zoning
+    hamma tokeni (boshqa qurilmadagisi ham) darhol 401 oladi.
+    """
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    client.post(
+        f"/api/v1/admin/sites/{site['site_id']}/members",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"telegram_id": "808", "role": "owner"},
+    )
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "808"})
+    verified = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "808", "site_id": site["site_id"], "code": "123456"},
+    )
+    owner_headers = {"Authorization": f"Bearer {verified.json()['access_token']}"}
+    assert client.get("/api/v1/owner/events", headers=owner_headers).status_code == 200
+
+    assert client.post("/api/v1/owner/auth/logout", headers=owner_headers).status_code == 200
+
+    assert client.get("/api/v1/owner/events", headers=owner_headers).status_code == 401
+    # Chiqish tugmasi ikkinchi bosilganda ham xato bermasin.
+    assert client.post("/api/v1/owner/auth/logout", headers=owner_headers).status_code == 200
+
+    # Qaytadan kirgan odam ishlayveradi — bekor qilish faqat ESKI tokenga.
+    client.post("/api/v1/owner/auth/request", json={"telegram_id": "808"})
+    again = client.post(
+        "/api/v1/owner/auth/verify",
+        json={"telegram_id": "808", "site_id": site["site_id"], "code": "123456"},
+    )
+    fresh = {"Authorization": f"Bearer {again.json()['access_token']}"}
+    assert client.get("/api/v1/owner/events", headers=fresh).status_code == 200

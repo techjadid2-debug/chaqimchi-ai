@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
+import { api, clearToken, logout as serverLogout, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
 import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, useConfirm, type NavItem } from "./components";
@@ -669,7 +669,7 @@ function OwnerApp() {
   }, [authenticated,loadSites]);
 
   const submit = async (username:string,password:string) => { setBusy(true);setLoginError("");try { await login(username,password,"owner");setAuthenticated(true); } catch(reason) { setLoginError(reason instanceof Error ? reason.message : t("panel.owner.login_failed")); } finally { setBusy(false); } };
-  const logout = () => { clearToken("owner");setAuthenticated(false);setSites([]);setSiteId(""); };
+  const logout = () => { void serverLogout("owner");setAuthenticated(false);setSites([]);setSiteId(""); };
   /* Ikkinchi argument — ochilishi kerak bo'lgan aniq hodisa.
      "Dalilni ochish" tugmasi shuni uzatadi. */
   const navigate = (id:string, focus?:string) => {

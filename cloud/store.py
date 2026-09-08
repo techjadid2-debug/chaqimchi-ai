@@ -1967,6 +1967,25 @@ class CloudStore:
             raise RuntimeError("Akkaunt yangilanmadi")
         return account
 
+    def revoke_account_sessions(self, account_id: str) -> Dict[str, Any]:
+        """Chiqish: akkauntning hamma tokenini bekor qiladi.
+
+        Parol o'zgarishi bilan bir xil mexanizm (`auth_version`), lekin
+        parolga tegmasdan — «Chiqish» tugmasi ilgari faqat brauzerdagi
+        kalitni o'chirardi va o'g'irlangan token 12 soat ishlayverardi.
+        """
+        if not self.account_by_id(account_id):
+            raise ValueError("Akkaunt topilmadi")
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE portal_accounts SET auth_version=auth_version+1,updated_at=? WHERE id=?",
+                (_iso(_utc_now()), account_id),
+            )
+        account = self.account_by_id(account_id)
+        if account is None:  # pragma: no cover
+            raise RuntimeError("Akkaunt yangilanmadi")
+        return account
+
     def assign_installer(
         self,
         installer_id: str,

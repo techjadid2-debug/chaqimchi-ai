@@ -10,6 +10,10 @@ Qoidalar:
 - Vaqt: Toshkent vaqti, "17:32" yoki "17:32, 17-avg" (mijoz UTC bilmaydi).
 - Kamera: `camera-03` emas — konfigdagi odam o'qiydigan nom.
 - Grafik: blok belgilar (▁▂▃▄▅▆▇█) — matnli mini-diagramma, rasmsiz.
+
+Til: matn chiqaradigan har yordamchi `lang` oladi va `i18n` katalogidan
+o'qiydi.  Oy va hafta kunlari nomi ham shu yerda emas, katalogda —
+panel bilan bitta manba, ya'ni "avg" bilan "авг" ajralib ketmaydi.
 """
 
 from __future__ import annotations
@@ -18,14 +22,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
+from cloud import i18n
+from cloud.i18n import tg
+
 TASHKENT = ZoneInfo("Asia/Tashkent")
 
 #: Blok-grafik pog'onalari (bo'sh joy — nol uchun).
 _BARS = " ▁▂▃▄▅▆▇█"
-
-_MONTHS = ("yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avg", "sen", "okt", "noy", "dek")
-
-_WEEKDAYS = ("Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba")
 
 
 def escape(value: Any) -> str:
@@ -58,28 +61,83 @@ def clock(value: Any) -> str:
     return moment.strftime("%H:%M") if moment else ""
 
 
-def stamp(value: Any) -> str:
+def short_date(moment: datetime, lang: str = i18n.DEFAULT_LANG) -> str:
+    """ "17-avg" / "17 авг" / "Aug 17" — shakl ham, oy nomi ham katalogdan."""
+    months = i18n.t_list(lang, "format.months_short")
+    month = months[moment.month - 1] if len(months) >= moment.month else str(moment.month)
+    return tg(lang, "format.date.short", day=moment.day, month_short=month)
+
+
+def weekday_name(index: int, lang: str = i18n.DEFAULT_LANG) -> str:
+    """Hafta kuni nomi; 0 = dushanba (Python `weekday()` bilan bir xil)."""
+    names = i18n.t_list(lang, "format.weekdays_title")
+    return names[index % 7] if names else ""
+
+
+def stamp(value: Any, lang: str = i18n.DEFAULT_LANG) -> str:
     """ "17:32, 17-avg" — soat va sana."""
     moment = to_tashkent(value)
     if not moment:
         return ""
-    return f"{moment:%H:%M}, {moment.day}-{_MONTHS[moment.month - 1]}"
+    return tg(lang, "botfmt.stamp", time=f"{moment:%H:%M}", date=short_date(moment, lang))
 
 
-def day_title(value: Any) -> str:
+def day_title(value: Any, lang: str = i18n.DEFAULT_LANG) -> str:
     """ "17-avg, Yakshanba" — hisobot sarlavhasi uchun."""
     moment = to_tashkent(value)
     if not moment:
         return str(value)
-    return f"{moment.day}-{_MONTHS[moment.month - 1]}, {_WEEKDAYS[moment.weekday()]}"
+    return tg(
+        lang,
+        "botfmt.day_title",
+        date=short_date(moment, lang),
+        weekday=weekday_name(moment.weekday(), lang),
+    )
 
 
-def number(value: Any) -> str:
-    """1234567 → "1 234 567" — katta raqam o'qiladigan bo'lsin."""
+def number(value: Any, lang: str = i18n.DEFAULT_LANG) -> str:
+    """1234567 → "1 234 567" — katta raqam o'qiladigan bo'lsin.
+
+    Minglik ajratgich tildan: o'zbek va rus yozuvida probel, inglizchada
+    vergul.  Vergul o'zbekchada kasr belgisi — "1,234" boshqa son.
+    """
     try:
-        return f"{int(value):,}".replace(",", " ")
+        grouped = f"{int(value):,}"
     except (TypeError, ValueError):
         return str(value)
+    return grouped.replace(",", tg(lang, "format.number.group"))
+
+
+def decimal(value: Any, lang: str = i18n.DEFAULT_LANG, *, digits: int = 1) -> str:
+    """3.2 → "3,2", 2.0 → "2" — kasr belgisi tildan, ortiqcha nol yo'q.
+
+    Panelning `formatNumber` bilan bir xil yozuv: ilgari bot "3.2",
+    panel "3,2" deb yozardi va bitta mijoz ikki xil sonni ko'rardi.
+    """
+    try:
+        text = f"{float(value):.{digits}f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(value)
+    whole, _, fraction = text.partition(".")
+    result = number(whole, lang)
+    if fraction:
+        result += tg(lang, "format.number.decimal") + fraction
+    return result
+
+
+def duration(seconds: float, lang: str = i18n.DEFAULT_LANG) -> str:
+    """ "5 daq" yoki "40 s" — qisqa davomiylik (dwell uchun)."""
+    if seconds >= 60:
+        return tg(lang, "botfmt.unit.min", count=int(seconds // 60))
+    return tg(lang, "botfmt.unit.sec", count=int(seconds))
+
+
+def minutes_label(total_minutes: int, lang: str = i18n.DEFAULT_LANG) -> str:
+    """154 → "2 soat 34 daq", 40 → "40 daq" — jami kechikish uchun."""
+    hours, minutes = divmod(int(total_minutes), 60)
+    if hours:
+        return tg(lang, "botfmt.unit.hours_minutes", hours=hours, minutes=minutes)
+    return tg(lang, "botfmt.unit.min", count=minutes)
 
 
 def sparkline(values: Sequence[float]) -> str:
@@ -112,7 +170,9 @@ def header(site_name: Any, *, icon: str = "") -> str:
     return f"{prefix}<b>{escape(site_name)}</b>"
 
 
-def alert_buttons(base_url: str, *, speak_phrase: str = "") -> Dict[str, Any]:
+def alert_buttons(
+    base_url: str, *, speak_phrase: str = "", lang: str = i18n.DEFAULT_LANG
+) -> Dict[str, Any]:
     """Ogohlantirish ostidagi tugmalar.
 
     `speak_phrase` berilsa — «Ovoz bering»: do'kon karnayi darhol
@@ -128,18 +188,28 @@ def alert_buttons(base_url: str, *, speak_phrase: str = "") -> Dict[str, Any]:
     item = announcements.BY_CODE.get(speak_phrase)
     if item:
         rows.append([{"text": item.button, "callback_data": f"speak:{item.code}"}])
-    rows.append([{"text": "✅ Ko'rdim", "callback_data": "ack"}])
+    rows.append([{"text": tg(lang, "botfmt.button.ack"), "callback_data": "ack"}])
     if base_url:
         rows.append(
-            [{"text": "📊 Panelda ochish", "web_app": {"url": f"{base_url.rstrip('/')}/owner"}}]
+            [
+                {
+                    "text": tg(lang, "botfmt.button.panel"),
+                    "web_app": {"url": f"{base_url.rstrip('/')}/owner"},
+                }
+            ]
         )
     return {"inline_keyboard": rows}
 
 
-def panel_button(base_url: str) -> Dict[str, Any]:
+def panel_button(base_url: str, lang: str = i18n.DEFAULT_LANG) -> Dict[str, Any]:
     """Telegram ichida haqiqiy Mini App sifatida owner panelini ochadi."""
     return {
         "inline_keyboard": [
-            [{"text": "📊 Panelda ochish", "web_app": {"url": f"{base_url.rstrip('/')}/owner"}}]
+            [
+                {
+                    "text": tg(lang, "botfmt.button.panel"),
+                    "web_app": {"url": f"{base_url.rstrip('/')}/owner"},
+                }
+            ]
         ]
     }

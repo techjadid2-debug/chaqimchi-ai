@@ -24,7 +24,7 @@ from contextlib import asynccontextmanager
 from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from urllib.parse import parse_qsl
 from zoneinfo import ZoneInfo
 
@@ -83,10 +83,11 @@ from cloud import (
     value,
     vision_agent,
 )
-from cloud.alerts import AlertService, test_message
+from cloud.alerts import AlertService, OwnerMessage, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.errors import ApiError, api_error_handler
 from cloud.event_store import EventStore, event_store_from_env
+from cloud.i18n import tg
 from cloud.notify import DEFAULT_TELEGRAM_LEVEL as notify_default_level
 from cloud.notify import MEDIA_EVENT_TYPES, event_label, select_alert_events
 from cloud.notify import summarize as notify_summarize
@@ -1222,13 +1223,25 @@ NOTIFY_FAILURE_LIMIT = 3
 OWNER_ALERTS_PER_HOUR = 10
 
 
+#: Tugma yozuvi ham tilga bog'liq — shuning uchun markup tayyor lug'at
+#: emas, tildan lug'at yasaydigan funksiya bo'lishi mumkin.
+MarkupFactory = Callable[[str], Dict[str, Any]]
+
+
 async def _notify_site_members(
     site_id: str,
-    text: str,
+    text: Union[str, OwnerMessage],
     *,
     photo: Optional[bytes] = None,
-    reply_markup: Optional[Dict[str, Any]] = None,
+    reply_markup: Union[None, Dict[str, Any], MarkupFactory] = None,
 ) -> None:
+    """Sayt a'zolariga Telegram xabari — har biriga O'Z tilida.
+
+    `text` satr bo'lsa hammaga bir xil ketadi (tilga bog'liq bo'lmagan
+    matn); `OwnerMessage` bo'lsa a'zoning `language` ustuniga qarab
+    yasaladi.  Bu fon vazifasi: so'rov konteksti yo'q, ya'ni `i18n.t()`
+    bu yerda hech kimning tilini bermaydi — til a'zodan olinadi.
+    """
     # Tarifda Telegram yo'q bo'lsa — yuborilmaydi (masalan starter).
     site = get_store().get_site(site_id)
     if site is not None:
@@ -1248,12 +1261,15 @@ async def _notify_site_members(
             window_sec=3600,
         ):
             continue
+        lang = i18n.normalize(member.get("language")) or i18n.DEFAULT_LANG
+        body = text.for_lang(lang) if isinstance(text, OwnerMessage) else text
+        markup = reply_markup(lang) if callable(reply_markup) else reply_markup
         try:
             chat_id = str(member["telegram_id"])
             if photo is not None:
-                await _send_owner_photo(chat_id, photo, text, reply_markup=reply_markup)
+                await _send_owner_photo(chat_id, photo, body, reply_markup=markup)
             else:
-                await _send_owner_telegram(chat_id, text, reply_markup=reply_markup)
+                await _send_owner_telegram(chat_id, body, reply_markup=markup)
             if int(member.get("notify_failures") or 0):
                 store.reset_notify_failures(site_id, str(member["id"]))
         except TelegramSendError as exc:
@@ -1363,7 +1379,11 @@ async def _notify_alert_once(site_id: str, events: List[EdgeEvent]) -> None:
     except Exception:
         labels = {}
 
-    text = notify_summarize(events, site_name=site_name, camera_labels=labels)
+    # Matn qabul qiluvchi tilida yasaladi — `_notify_site_members` har
+    # a'zo uchun `for_lang` deb so'raydi, bir til uchun bir marta.
+    text = OwnerMessage(
+        lambda lang: notify_summarize(events, site_name=site_name, camera_labels=labels, lang=lang)
+    )
 
     photo: Optional[bytes] = None
     candidate = next(
@@ -1392,7 +1412,10 @@ async def _notify_alert_once(site_id: str, events: List[EdgeEvent]) -> None:
     # paytida e'tiborni tortmay qoladi.  Navbat yoki bo'sh javon
     # xabariga karnay kerak emas.
     speak_phrase = "deter" if any(e.event_type in SPEAK_WORTHY_EVENTS for e in events) else ""
-    markup = botfmt.alert_buttons(base, speak_phrase=speak_phrase)
+
+    def markup(lang: str) -> Dict[str, Any]:
+        return botfmt.alert_buttons(base, speak_phrase=speak_phrase, lang=lang)
+
     await _notify_site_members(site_id, text, photo=photo, reply_markup=markup)
 
 
@@ -2677,6 +2700,9 @@ PUBLIC_PLAN_ORDER = ("boshlangich", "biznes")
 #: `biznes` obyekti sifatida ochiladi, shartlar qo'lda kelishiladi.
 #: Narxsiz tarif `PLANS` ga qo'shilsa `create_invoice` unga 0 so'mlik
 #: hisob-faktura yozib qo'yardi.
+#: Tarmoq kartasi.  Matnlar (`name`, `price_label`, `note`, `cta`) — uz
+#: manba; javobda `_localized_network_card` ularni so'rov tilida
+#: katalogdan oladi.
 NETWORK_PLAN_CARD = {
     "code": "tarmoq",
     "name": "Tarmoq",
@@ -2691,27 +2717,34 @@ NETWORK_PLAN_CARD = {
     "badge": None,
     "bullets": (
         PlanBullet(
+            key="plan.bullet.multi_shop",
             icon="dokon",
             label="Bir nechta do'kon",
             detail="Har do'kon alohida ulanadi, shartlar birga kelishiladi.",
         ),
         PlanBullet(
+            key="plan.bullet.cameras_network",
             icon="kamera",
-            label="Har do'konda 4 kamera",
+            label=f"Har do'konda {GUARANTEED_CAMERAS} kamera",
             detail="Har obyekt uchun to'rttagacha kamera.",
+            params={"count": GUARANTEED_CAMERAS},
         ),
         PlanBullet(
+            key="plan.bullet.everything_in_business",
             icon="qalqon",
             label="Biznesdagi hammasi",
             detail="Navbat, xavfsizlik, xarita, mijoz portreti va xodim davomati.",
         ),
         PlanBullet(
+            key="plan.bullet.archive_network",
             icon="quti",
             label="Arxiv 90 kun",
             detail="Hodisalar va hisobotlar uch oy saqlanadi.",
             example="Mavsumiy taqqoslash uchun yetadi.",
+            params={"days": 90},
         ),
         PlanBullet(
+            key="plan.bullet.onboarding_help",
             icon="kompyuter",
             label="Ulashda yordam",
             detail="Kamera sozlash va ulashni biz bilan birga qilasiz.",
@@ -2727,8 +2760,30 @@ NETWORK_PLAN_CARD = {
 }
 
 
+def _bullet_text(bullet: PlanBullet, part: str, fallback: str) -> str:
+    """Punkt matni so'rov tilida.
+
+    Matnning uz manbasi `PlanBullet` ichida (qurilma paketi `cloud` ga
+    bog'lanmasin), tarjimasi katalogda `plan.bullet.<slug>.<qism>` da.
+    Bo'sh qism (masalan misolsiz punkt) katalogdan so'ralmaydi — aks
+    holda har so'rovda «kalit yo'q» ogohlantirishi yozilardi.
+    """
+    if not bullet.key or not fallback:
+        return fallback
+    key = f"{bullet.key}.{part}"
+    text = i18n.t(key, **bullet.params)
+    return fallback if text == key else text
+
+
+def _bullet_summary(bullet: PlanBullet) -> str:
+    """`PlanBullet.summary` ning tilli varianti — `includes` uchun."""
+    label = _bullet_text(bullet, "label", bullet.label)
+    detail = _bullet_text(bullet, "detail", bullet.detail)
+    return f"{label} — {detail}" if detail else label
+
+
 def _bullet_payload(bullets: Any) -> List[Dict[str, str]]:
-    """`PlanBullet` -> JSON.
+    """`PlanBullet` -> JSON, so'rov tilida.
 
     `icon` `cloud/static/icons.svg` dagi symbol id bo'lishi shart:
     xato yozilsa kartada shunchaki bo'sh joy qoladi va buni ko'z bilan
@@ -2737,12 +2792,33 @@ def _bullet_payload(bullets: Any) -> List[Dict[str, str]]:
     return [
         {
             "icon": bullet.icon,
-            "label": bullet.label,
-            "detail": bullet.detail,
-            "example": bullet.example,
+            "label": _bullet_text(bullet, "label", bullet.label),
+            "detail": _bullet_text(bullet, "detail", bullet.detail),
+            "example": _bullet_text(bullet, "example", bullet.example),
         }
         for bullet in bullets
     ]
+
+
+def _plan_name(code: str, fallback: str) -> str:
+    """Tarif nomi so'rov tilida; katalogda bo'lmasa `display_name`."""
+    key = f"plan.name.{code}"
+    text = i18n.t(key)
+    return fallback if text == key else text
+
+
+def _localized_network_card() -> Dict[str, Any]:
+    """Tarmoq kartasi so'rov tilida."""
+    name = _plan_name("tarmoq", str(NETWORK_PLAN_CARD["name"]))
+    return dict(
+        NETWORK_PLAN_CARD,
+        name=name,
+        price_label=i18n.t("plan.price.on_request"),
+        bullets=_bullet_payload(NETWORK_PLAN_CARD["bullets"]),
+        includes=[_bullet_summary(b) for b in NETWORK_PLAN_CARD["bullets"]],
+        note=i18n.t("plan.network.note"),
+        cta=i18n.t("plan.cta.contact"),
+    )
 
 
 def _public_plan_card(code: str) -> Dict[str, Any]:
@@ -2753,9 +2829,10 @@ def _public_plan_card(code: str) -> Dict[str, Any]:
     mumkin edi va sayt hisob-fakturadan boshqa narx ko'rsatardi.
     """
     limits = PLANS[code]  # type: ignore[index]
+    name = _plan_name(code, limits.display_name or code)
     return {
         "code": code,
-        "name": limits.display_name or code,
+        "name": name,
         "price_kind": "fixed",
         "price_label": None,
         "monthly_usd_cents": limits.monthly_price_usd_cents,
@@ -2764,14 +2841,14 @@ def _public_plan_card(code: str) -> Dict[str, Any]:
         "max_shops": 1,
         "retention_days": limits.retention_days,
         "highlight": code == "biznes",
-        "badge": "Eng ommabop" if code == "biznes" else None,
+        "badge": i18n.t("plan.badge.popular") if code == "biznes" else None,
         # `bullets` — kartada ikonka + qisqa nom, bosilganda izoh.
         "bullets": _bullet_payload(limits.bullets),
         # `includes` — tekis matn.  Saqlanadi: keshdagi eski `site.js`
         # hali shuni o'qiydi, va `<noscript>` uchun ham kerak.
-        "includes": list(limits.includes),
+        "includes": [_bullet_summary(b) for b in limits.bullets],
         "note": None,
-        "cta": f"{limits.display_name or code}ni tanlash",
+        "cta": i18n.t("plan.cta.choose", name=name),
     }
 
 
@@ -2812,13 +2889,7 @@ async def public_pricing() -> Dict[str, Any]:
         # Uchta tarif kartasi.  Sayt shu ro'yxatni chizadi va so'm
         # summasini o'zi hisoblamaydi.
         "plans": [_public_plan_card(code) for code in PUBLIC_PLAN_ORDER]
-        + [
-            dict(
-                NETWORK_PLAN_CARD,
-                bullets=_bullet_payload(NETWORK_PLAN_CARD["bullets"]),
-                includes=[b.summary for b in NETWORK_PLAN_CARD["bullets"]],
-            )
-        ],
+        + [_localized_network_card()],
         # `base` — alohida funksiya shartnomalari (`feature_quote`) uchun
         # platforma bazasi.  Tarif narxi endi `plans` dan olinadi.
         "base": {
@@ -3734,7 +3805,7 @@ async def admin_events(
                 {
                     **item,
                     "site_name": site.get("name"),
-                    "label": event_label(str(item.get("event_type", ""))),
+                    "label": event_label(str(item.get("event_type", "")), i18n.current_lang()),
                 }
             )
     events.sort(key=lambda item: str(item.get("occurred_at") or ""), reverse=True)
@@ -6660,7 +6731,7 @@ async def owner_dashboard(
     _with_sales(owner.site_id, report, None)
     event_rows = events_store.list_events(owner.site_id, limit=12)
     for item in event_rows:
-        item["label"] = event_label(str(item.get("event_type", "")))
+        item["label"] = event_label(str(item.get("event_type", "")), i18n.current_lang())
     subscription = await owner_subscription(owner)
     updated_at = datetime.now(timezone.utc).isoformat()
     config_revision = events_store.config_revision(owner.site_id)
@@ -6842,7 +6913,7 @@ async def owner_events_timeline(
     )
     # Tarjima serverda va BITTA joyda — `owner_events` bilan bir xil manba.
     for item in timeline.get("types", []):
-        item["label"] = event_label(str(item.get("type", "")))
+        item["label"] = event_label(str(item.get("type", "")), i18n.current_lang())
     return timeline
 
 
@@ -6872,7 +6943,7 @@ async def owner_events(
     # ega uchun bu jimgina yolg'on bo'lardi.
     for item in events:
         kind = str(item.get("event_type", ""))
-        item["label"] = event_label(kind)
+        item["label"] = event_label(kind, i18n.current_lang())
         item["media_expected"] = kind in MEDIA_EVENT_TYPES
     return {"events": events}
 
@@ -6895,7 +6966,7 @@ async def owner_notifications(
     """
     result = get_event_store().notifications(owner.site_id, owner.member_id, limit=limit)
     for item in result["events"]:
-        item["label"] = event_label(str(item.get("event_type", "")))
+        item["label"] = event_label(str(item.get("event_type", "")), i18n.current_lang())
     return result
 
 
@@ -7268,21 +7339,26 @@ def _retail_report_csv(report: Dict[str, Any], day: date_type) -> str:
     writer = csv.writer(output)
 
     # ── Kunlik yakun ──────────────────────────────────────────────────
-    writer.writerow(["Do'kon kunlik hisoboti"])
-    writer.writerow(["Sana", day.isoformat()])
+    # Sarlavhalar so'rov tilida (`i18n.t`): CSV faqat HTTP javobida
+    # yasaladi, fon vazifasida emas.
+    writer.writerow([i18n.t("csv.report.title")])
+    writer.writerow([i18n.t("csv.report.date"), day.isoformat()])
     writer.writerow([])
-    writer.writerow(["Ko'rsatkich", "Qiymat"])
-    writer.writerow(["Kirdi", int(traffic.get("entered") or 0)])
-    writer.writerow(["Chiqdi", int(traffic.get("exited") or 0)])
-    writer.writerow(["Ichkarida (taxminiy)", int(traffic.get("inside_estimate") or 0)])
+    writer.writerow([i18n.t("csv.report.metric"), i18n.t("csv.report.value")])
+    writer.writerow([i18n.t("csv.report.entered"), int(traffic.get("entered") or 0)])
+    writer.writerow([i18n.t("csv.report.exited"), int(traffic.get("exited") or 0)])
+    writer.writerow([i18n.t("csv.report.inside"), int(traffic.get("inside_estimate") or 0)])
     busiest = traffic.get("busiest_hour")
     if busiest:
         writer.writerow(
-            [f"Gavjum soat ({int(busiest['hour']):02d}:00)", int(busiest.get("entered") or 0)]
+            [
+                i18n.t("csv.report.busiest_hour", time=f"{int(busiest['hour']):02d}:00"),
+                int(busiest.get("entered") or 0),
+            ]
         )
     staff = int(traffic.get("xodim_chiqarilgan") or 0)
     if staff:
-        writer.writerow(["Xodim (sanoqdan chiqarilgan)", staff])
+        writer.writerow([i18n.t("csv.report.staff_excluded"), staff])
 
     # Chek va konversiya — «kichik namunadan foiz chiqarma» qoidasi
     # `cloud/value.py` da, shuning uchun `percent` None bo'lishi mumkin.
@@ -7290,10 +7366,10 @@ def _retail_report_csv(report: Dict[str, Any], day: date_type) -> str:
     conversion = report.get("conversion") or {}
     receipts = sales.get("receipts") if sales else None
     if receipts is not None:
-        writer.writerow(["Chek soni", int(receipts)])
+        writer.writerow([i18n.t("csv.report.receipts"), int(receipts)])
         percent = conversion.get("percent") if conversion else None
         if percent is not None:
-            writer.writerow(["Konversiya", f"{int(percent)}%"])
+            writer.writerow([i18n.t("csv.report.conversion"), f"{int(percent)}%"])
 
     # Mijoz portreti — faqat tarif ochiq va namuna yetarli bo'lsa keladi
     # (`_owner_report_dict` ni darvozadan o'tkazadi, `hisoblangan` esa
@@ -7302,34 +7378,35 @@ def _retail_report_csv(report: Dict[str, Any], day: date_type) -> str:
     if demo and int(demo.get("hisoblangan") or 0):
         jins = demo.get("jins") or {}
         if jins.get("ayol") is not None:
-            writer.writerow(["Ayol %", jins.get("ayol")])
+            writer.writerow([i18n.t("csv.report.female_percent"), jins.get("ayol")])
         if jins.get("erkak") is not None:
-            writer.writerow(["Erkak %", jins.get("erkak")])
+            writer.writerow([i18n.t("csv.report.male_percent"), jins.get("erkak")])
         for label, count in (demo.get("yosh") or {}).items():
-            writer.writerow([f"Yosh {label}", int(count or 0)])
+            writer.writerow([i18n.t("csv.report.age", label=label), int(count or 0)])
 
     queue = report.get("queue") or {}
     if int(queue.get("alerts") or 0):
-        writer.writerow(["Navbat signallari", int(queue.get("alerts") or 0)])
-        writer.writerow(["Eng uzun navbat", int(queue.get("longest") or 0)])
+        writer.writerow([i18n.t("csv.report.queue_alerts"), int(queue.get("alerts") or 0)])
+        writer.writerow([i18n.t("csv.report.longest_queue"), int(queue.get("longest") or 0)])
 
     # Xavfsizlik — bizning farqimiz, raqobatchida umuman yo'q.  Belgi
     # nomi `cloud/notify.py: event_label` dan (bitta manba), faqat
-    # `restricted_zone` hisobot ichki kaliti bo'lgani uchun alohida.
+    # `restricted_zone` hisobot ichki kaliti bo'lgani uchun hodisa
+    # turiga (`zone_entered`) o'giriladi.
     security = report.get("security") or {}
     security_total = sum(int(count or 0) for count in security.values())
     if security_total:
         writer.writerow([])
-        writer.writerow(["Xavfsizlik signali", "Soni"])
+        writer.writerow([i18n.t("csv.report.security_signal"), i18n.t("csv.report.count")])
         for kind, count in security.items():
             if not int(count or 0):
                 continue
-            label = "Taqiqlangan zonaga kirish" if kind == "restricted_zone" else event_label(kind)
-            writer.writerow([label, int(count)])
+            event_type = "zone_entered" if kind == "restricted_zone" else kind
+            writer.writerow([event_label(event_type, i18n.current_lang()), int(count)])
 
     # ── Soat bo'yicha ─────────────────────────────────────────────────
     writer.writerow([])
-    writer.writerow(["Soat", "Kirdi", "Chiqdi"])
+    writer.writerow([i18n.t("csv.report.hour"), i18n.t("csv.report.entered"), i18n.t("csv.report.exited")])
     for hour in traffic.get("hourly") or []:
         writer.writerow(
             [
@@ -7343,7 +7420,7 @@ def _retail_report_csv(report: Dict[str, Any], day: date_type) -> str:
     doors = traffic.get("by_door") or []
     if doors:
         writer.writerow([])
-        writer.writerow(["Eshik", "Kirdi", "Chiqdi"])
+        writer.writerow([i18n.t("csv.report.door"), i18n.t("csv.report.entered"), i18n.t("csv.report.exited")])
         for door in doors:
             writer.writerow(
                 [
@@ -7377,14 +7454,17 @@ def _retail_period_csv(
     """
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Do'kon davriy hisoboti", f"{start.isoformat()} — {end.isoformat()}"])
+    writer.writerow([i18n.t("csv.period.title"), f"{start.isoformat()} — {end.isoformat()}"])
     writer.writerow([])
     writer.writerow(
         [
-            "Sana", "Kirdi", "Chiqdi", "Chek", "Konversiya %",
-            "Ayol %", "Erkak %",
-            "Yosh <18", "Yosh 18-30", "Yosh 31-45", "Yosh 46-60", "Yosh 60+",
-            "Gavjum soat", "Xavfsizlik",
+            i18n.t("csv.report.date"), i18n.t("csv.report.entered"), i18n.t("csv.report.exited"),
+            i18n.t("csv.period.receipts"), i18n.t("csv.period.conversion_percent"),
+            i18n.t("csv.report.female_percent"), i18n.t("csv.report.male_percent"),
+            i18n.t("csv.report.age", label="<18"), i18n.t("csv.report.age", label="18-30"),
+            i18n.t("csv.report.age", label="31-45"), i18n.t("csv.report.age", label="46-60"),
+            i18n.t("csv.report.age", label="60+"),
+            i18n.t("csv.period.busiest_hour"), i18n.t("csv.period.security"),
         ]
     )
 
@@ -7437,7 +7517,7 @@ def _retail_period_csv(
     writer.writerow([])
     writer.writerow(
         [
-            "Jami", total_entered, total_exited, total_receipts,
+            i18n.t("csv.period.total"), total_entered, total_exited, total_receipts,
             "" if total_percent is None else f"{int(total_percent)}%",
             "", "", "", "", "", "", "", "", total_security,
         ]
@@ -7477,11 +7557,14 @@ async def owner_report_csv(
             )
         ]
         csv_text = _retail_period_csv(rows, first, last)
-        filename = f"dokon-hisoboti-{first:%Y-%m-%d}_{last:%Y-%m-%d}.csv"
+        filename = f"{i18n.t('csv.report.filename')}-{first:%Y-%m-%d}_{last:%Y-%m-%d}.csv"
     else:
         day = _owner_day(date)
         csv_text = _retail_report_csv(_owner_report_dict(owner.site_id, day), day)
-        filename = f"dokon-hisoboti-{day:%Y-%m-%d}.csv"
+        # Fayl nomi ham tilda: ruscha Excel foydalanuvchisi «dokon» so'zini
+        # tushunmaydi.  Lotin harflari ataylab — brauzerlar kirill fayl
+        # nomini har xil kodlaydi.
+        filename = f"{i18n.t('csv.report.filename')}-{day:%Y-%m-%d}.csv"
     return Response(
         # BOM: Excel usiz UTF-8 ni tanimaydi (smena CSV'da ham shu izoh).
         content="\ufeff" + csv_text,
@@ -7558,6 +7641,7 @@ def _trust_score_for(site_id: str, day: Optional[date_type] = None) -> Dict[str,
         cameras_active=int(detail.get("cameras_active") or 0),
         cameras_expected=expected,
         queue_configured=queue_configured,
+        lang=i18n.current_lang(),
     )
 
 
@@ -7570,7 +7654,7 @@ def owner_trust_score(owner: OwnerPrincipal = Depends(require_active_owner)) -> 
     qo'yilsa, bu endpoint yagona hodisa halqasini ushlab turardi.
     """
     today = _trust_score_for(owner.site_id)
-    result = {**today, "label": trust_score.label(today["total"])}
+    result = {**today, "label": trust_score.label(today["total"], lang=i18n.current_lang())}
 
     # Kechagi ball — raqamning yo'nalishi raqamning o'zicha muhim.
     # Kecha ma'lumot bo'lmasa jimgina tashlab ketiladi.
@@ -8417,17 +8501,17 @@ async def owner_shifts_csv(
     writer = csv.writer(output)
     writer.writerow(
         [
-            "xodim",
-            "tashqi_id",
-            "ish_kunlari",
-            "kelgan_kunlar",
-            "kelmagan_kunlar",
-            "kechikkan_kunlar",
-            "jami_kechikish_daq",
-            "ortacha_kechikish_daq",
-            "erta_ketgan_kunlar",
-            "jami_erta_ketish_daq",
-            "chiqish_aniqlanmadi",
+            i18n.t("csv.shifts.employee"),
+            i18n.t("csv.shifts.external_id"),
+            i18n.t("csv.shifts.work_days"),
+            i18n.t("csv.shifts.present_days"),
+            i18n.t("csv.shifts.absent_days"),
+            i18n.t("csv.shifts.late_days"),
+            i18n.t("csv.shifts.late_total_min"),
+            i18n.t("csv.shifts.late_avg_min"),
+            i18n.t("csv.shifts.left_early_days"),
+            i18n.t("csv.shifts.left_early_total_min"),
+            i18n.t("csv.shifts.exit_unknown"),
         ]
     )
     for row in report["rows"]:
@@ -8452,7 +8536,9 @@ async def owner_shifts_csv(
         content="\ufeff" + output.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="smena-hisoboti-{first:%Y-%m}.csv"'
+            "Content-Disposition": (
+                f'attachment; filename="{i18n.t("csv.shifts.filename")}-{first:%Y-%m}.csv"'
+            )
         },
     )
 
@@ -9286,7 +9372,9 @@ def _spawn_background(coro: Any) -> None:
     task.add_done_callback(_background_tasks.discard)
 
 
-async def _telegram_vision_result(chat_id: str, site_id: str, job_id: str) -> None:
+async def _telegram_vision_result(
+    chat_id: str, site_id: str, job_id: str, lang: str = i18n.DEFAULT_LANG
+) -> None:
     """Webhookni ushlab turmasdan Agent natijasini keyin yuboradi."""
     for _ in range(90):
         await asyncio.sleep(2)
@@ -9296,16 +9384,19 @@ async def _telegram_vision_result(chat_id: str, site_id: str, job_id: str) -> No
         if not job or job.get("status") in {"queued", "running"}:
             continue
         if job.get("status") == "failed":
-            await _send_owner_telegram(chat_id, "❌ Agent javob bera olmadi. Keyinroq qayta urinib ko'ring.")
+            await _send_owner_telegram(chat_id, tg(lang, "bot.agent.result_failed"))
             return
         result = job.get("result") or {}
-        await _send_owner_telegram(chat_id, f"🤖 <b>Chaqimchi yordamchisi</b>\n\n{botfmt.escape(str(result.get('answer') or 'Javob tayyor.'))}")
+        answer = str(result.get("answer") or tg(lang, "bot.agent.result_ready"))
+        await _send_owner_telegram(
+            chat_id, tg(lang, "bot.agent.result", answer=botfmt.escape(answer))
+        )
         if job.get("audio_reply_key"):
             try:
                 await _send_owner_voice(
                     chat_id,
                     await media_get(str(job["audio_reply_key"])),
-                    "Chaqimchi yordamchisi javobi",
+                    tg(lang, "bot.agent.result_voice"),
                     mime=str(result.get("audio_reply_mime") or "audio/wav"),
                 )
             except Exception:
@@ -9323,11 +9414,14 @@ async def _telegram_vision_result(chat_id: str, site_id: str, job_id: str) -> No
             ):
                 try:
                     photo = await media_get(str(event["snapshot_key"]))
-                    await _send_owner_photo(chat_id, photo, "Dalil: " + botfmt.escape(str(sources[0].get("label") or "Hodisa")))
+                    label = str(sources[0].get("label") or tg(lang, "bot.agent.result_event"))
+                    await _send_owner_photo(
+                        chat_id, photo, tg(lang, "bot.agent.result_proof", label=botfmt.escape(label))
+                    )
                 except Exception:
                     logger.warning("Agent dalil rasmi Telegramga yuborilmadi", exc_info=True)
         return
-    await _send_owner_telegram(chat_id, "⌛ Agent javobi cho'zildi. Paneldan keyinroq natijani ko'ring.")
+    await _send_owner_telegram(chat_id, tg(lang, "bot.agent.result_slow"))
 
 
 async def _telegram_voice_bytes(file_id: str) -> tuple[bytes, str]:
@@ -9389,6 +9483,8 @@ async def owner_telegram_webhook(
     command = BOT_COMMAND_ALIASES.get(command, command)
     members = get_event_store().members_for_telegram(telegram_id)
     base = public_url().rstrip("/") or str(request.base_url).rstrip("/")
+    telegram_lang = str((message.get("from") or {}).get("language_code") or "")
+    lang = _bot_lang(members, telegram_lang)
 
     # `/start <token>` — panelda yaratilgan taklif havolasi.  Do'kon egasi
     # o'z Telegramini ulaydi yoki xodimini qo'shadi, RAQAM YOZMASDAN.
@@ -9407,18 +9503,19 @@ async def owner_telegram_webhook(
             payload, telegram_id, secret=_owner_secret()
         )
         members = get_event_store().members_for_telegram(telegram_id)
+        # Yangi a'zo — tilini shu yerda, birinchi aloqada o'rganamiz.
+        lang = _adopt_telegram_language(members, telegram_lang)
         # Havola ISHLATILGAN, lekin a'zolik allaqachon bor — bu odam
         # ikkinchi marta bosgan yoki Telegram xabarni qayta yuborgan.
         # Unga "eskirgan" deyish yolg'on bo'lardi: u ulangan.
         if redeemed or members:
             site = get_store().get_site(redeemed["site_id"]) if redeemed else {}
-            name = str((site or {}).get("name") or "Do‘kon")
+            name = str((site or {}).get("name") or tg(lang, "bot.shop_fallback_name"))
             try:
                 await _send_owner_telegram(
                     telegram_id,
-                    f"✅ <b>{botfmt.escape(name)}</b> ulandi.\n"
-                    "Endi kunlik hisobot va muhim ogohlantirishlar shu yerga keladi.",
-                    reply_markup=botfmt.panel_button(base),
+                    tg(lang, "bot.invite.connected", name=botfmt.escape(name)),
+                    reply_markup=botfmt.panel_button(base, lang),
                 )
             except Exception:
                 # Xabar ketmasa ham a'zolik saqlanib qoldi.  Bu yerda
@@ -9427,11 +9524,7 @@ async def owner_telegram_webhook(
                 logger.warning("taklif tasdig'i yuborilmadi", extra={"telegram_id": telegram_id})
             return {"ok": True}
         try:
-            await _send_owner_telegram(
-                telegram_id,
-                "Havola eskirgan yoki allaqachon ishlatilgan.\n"
-                "Do‘kon panelidan yangi havola oling.",
-            )
+            await _send_owner_telegram(telegram_id, tg(lang, "bot.invite.expired"))
         except Exception:
             logger.warning("taklif rad javobi yuborilmadi", extra={"telegram_id": telegram_id})
         return {"ok": True}
@@ -9447,7 +9540,8 @@ async def owner_telegram_webhook(
         # undaydi.
         if not ratelimit.limiter().hit("tg-start", telegram_id, limit=5, window_sec=600):
             return {"ok": True}
-        text_out, markup = _bot_welcome(base, telegram_id, members)
+        lang = _adopt_telegram_language(members, telegram_lang)
+        text_out, markup = _bot_welcome(base, telegram_id, members, lang)
         await _send_owner_telegram(telegram_id, text_out, reply_markup=markup)
         return {"ok": True}
     if not telegram_id or not members:
@@ -9469,25 +9563,18 @@ async def owner_telegram_webhook(
             if ratelimit.limiter().hit("tg-agent-consent", telegram_id, limit=2, window_sec=3600):
                 await _send_owner_telegram(
                     telegram_id,
-                    "Savolga kamera dalillari bilan javob beradigan <b>AI yordamchi</b> "
-                    "bu filialda hali yoqilmagan.\n"
-                    "Panel → <b>AI yordamchi</b> bo‘limida rozilik berilsa, shu yerga "
-                    "oddiy matn yoki ovozli xabar bilan savol bera olasiz.",
-                    reply_markup=botfmt.panel_button(urls.app_url() or base),
+                    tg(lang, "bot.agent.consent_needed"),
+                    reply_markup=botfmt.panel_button(urls.app_url() or base, lang),
                 )
             return {"ok": True}
         if not vision_agent.configured():
-            await _send_owner_telegram(
-                telegram_id,
-                "AI yordamchi hali texnik sozlanmoqda — tayyor bo'lishi bilan xabar "
-                "beramiz. Hozircha /hisobot va /kamera ishlayveradi.",
-            )
+            await _send_owner_telegram(telegram_id, tg(lang, "bot.agent.not_ready"))
             return {"ok": True}
         try:
             _check_vision_daily_limit(site_id)
             if voice:
                 if int(voice.get("file_size") or 0) > 10 * 1024 * 1024:
-                    raise HTTPException(413, "Ovoz 10 MB dan kichik bo'lishi kerak")
+                    raise HTTPException(413, tg(lang, "bot.agent.voice_too_large", mb=10))
                 payload, mime = await _telegram_voice_bytes(str(voice.get("file_id") or ""))
                 key = f"agent/audio/{site_id}/{uuid.uuid4()}.ogg"
                 await media_put(key, payload, content_type=mime)
@@ -9505,60 +9592,80 @@ async def owner_telegram_webhook(
             branch_note = ""
             if len({str(m["site_id"]) for m in members}) > 1:
                 site_row = get_store().get_site(site_id) or {}
-                branch_note = f" ({botfmt.escape(str(site_row.get('name') or site_id))} bo'yicha)"
+                branch_note = tg(
+                    lang,
+                    "bot.agent.branch_note",
+                    name=botfmt.escape(str(site_row.get("name") or site_id)),
+                )
             await _send_owner_telegram(
-                telegram_id,
-                f"⏳ Savol qabul qilindi{branch_note}. Kamera dalillari tekshirilmoqda…",
+                telegram_id, tg(lang, "bot.agent.accepted", branch=branch_note)
             )
-            _spawn_background(_telegram_vision_result(telegram_id, site_id, str(job["id"])))
+            _spawn_background(_telegram_vision_result(telegram_id, site_id, str(job["id"]), lang))
         except HTTPException as exc:
             # Kvota/o'lcham xatosi mijozga TUSHUNARLI aytiladi — "keyinroq
             # urinib ko'ring" hammasini yashirardi.
             await _send_owner_telegram(telegram_id, str(exc.detail))
         except Exception:
             logger.warning("Telegram Vision Agent so'rovi qabul qilinmadi", exc_info=True)
-            await _send_owner_telegram(telegram_id, "Savol qabul qilinmadi. Keyinroq qayta urinib ko'ring.")
+            await _send_owner_telegram(telegram_id, tg(lang, "bot.agent.failed"))
         return {"ok": True}
 
     if command == "/yordam":
-        await _send_owner_telegram(
-            telegram_id,
-            "<b>Chaqimchi AI bot buyruqlari</b>\n\n"
-            "/hisobot — bugungi hisobot: kirdi-chiqdi, navbat, gavjum soat\n"
-            "/chek 100 — bugun nechta chek bo'lgani (konversiya shundan)\n"
-            "/kamera — har kameradan oxirgi rasm\n"
-            "/panel — mijoz paneliga kirish havolasi\n"
-            "/yordam — shu ro'yxat\n"
-            "Oddiy matn yoki voice xabar — Vision Agentga savol\n\n"
-            "Har kuni kechqurun kunlik, dushanba ertalab haftalik hisobot "
-            "avtomatik keladi. Muhim ogohlantirishlar (kamera o'chdi va h.k.) "
-            "darhol yuboriladi.",
-        )
+        await _send_owner_telegram(telegram_id, tg(lang, "bot.help"))
     elif command == "/panel":
         if not ratelimit.limiter().hit("tg-start", telegram_id, limit=5, window_sec=600):
             return {"ok": True}
         await _send_owner_telegram(
             telegram_id,
-            "📊 <b>Mijoz paneli</b> — quyidagi tugma orqali kiring.",
-            reply_markup=botfmt.panel_button(urls.app_url() or base),
+            tg(lang, "bot.panel.open"),
+            reply_markup=botfmt.panel_button(urls.app_url() or base, lang),
         )
     elif command == "/kamera":
         # Har bosishda kamera boshiga bitta rasm ketadi — spam bo'lmasin.
         if not ratelimit.limiter().hit("tg-kamera", telegram_id, limit=5, window_sec=600):
             return {"ok": True}
-        await _bot_send_camera_photos(telegram_id, members)
+        await _bot_send_camera_photos(telegram_id, members, lang)
     elif command == "/hisobot":
-        await _bot_send_report(telegram_id, members, base)
+        await _bot_send_report(telegram_id, members, base, lang)
     elif command == "/chek":
         if not ratelimit.limiter().hit("tg-chek", telegram_id, limit=10, window_sec=600):
             return {"ok": True}
-        await _bot_save_receipts(telegram_id, members, text)
+        await _bot_save_receipts(telegram_id, members, text, lang)
     else:
-        await _send_owner_telegram(
-            telegram_id,
-            "Buyruqlar: /hisobot, /chek, /kamera, /panel, /yordam",
-        )
+        await _send_owner_telegram(telegram_id, tg(lang, "bot.unknown_command"))
     return {"ok": True}
+
+
+def _bot_lang(members: List[Dict[str, Any]], telegram_lang: str) -> str:
+    """Bot javobining tili: saqlangan tanlov, bo'lmasa Telegram profili.
+
+    A'zo bo'lsa — `owner_members.language` (panelda tanlagani ham shu
+    yerga tushadi).  Notanish odam uchun Telegram `language_code` dan
+    boshqa manba yo'q.
+    """
+    stored = members[0].get("language") if members else None
+    return i18n.resolve_lang(stored=stored, telegram=telegram_lang)
+
+
+def _adopt_telegram_language(members: List[Dict[str, Any]], telegram_lang: str) -> str:
+    """Birinchi aloqada Telegram profilidagi tilni a'zoga yozib qo'yadi.
+
+    Nega aynan shu yerda: bu odamning tilini so'ramasdan bilishning
+    yagona payti — u hali panelga kirmagan, hech narsa tanlamagan.
+    Faqat standart (`uz`) turgan a'zoga yoziladi: kimdir panelda tilni
+    ataylab tanlagan bo'lsa, `/start` ni qayta bosgani uni o'zgartirmasin.
+    """
+    code = i18n.normalize(telegram_lang)
+    if not code or code == i18n.DEFAULT_LANG or not members:
+        return _bot_lang(members, telegram_lang)
+    store = get_event_store()
+    for member in members:
+        if (i18n.normalize(member.get("language")) or i18n.DEFAULT_LANG) != i18n.DEFAULT_LANG:
+            return _bot_lang(members, telegram_lang)
+    for member in members:
+        store.set_member_language(str(member["site_id"]), str(member["id"]), code)
+        member["language"] = code
+    return code
 
 
 #: Eski buyruqlar → yangi nomlar (foydalanuvchiga sinish yo'q).
@@ -9581,38 +9688,40 @@ def _bot_panel_url(base: str, telegram_id: str, members: List[Dict[str, Any]]) -
 
 
 def _bot_welcome(
-    base: str, telegram_id: str, members: List[Dict[str, Any]]
+    base: str, telegram_id: str, members: List[Dict[str, Any]], lang: str = i18n.DEFAULT_LANG
 ) -> Tuple[str, Dict[str, Any]]:
     if members:
-        text = (
-            "👋 <b>Chaqimchi AI</b> — do'koningiz nazorati.\n\n"
-            "Panelga quyidagi tugma orqali kiring.\n\n"
-            "Foydali buyruqlar:\n"
-            "/hisobot — bugungi hisobot\n"
-            "/kamera — kameralardan jonli rasm\n"
-            "/yordam — to'liq ro'yxat"
-        )
-        markup = botfmt.panel_button(urls.app_url() or base)
-        return text, markup
-    text = (
-        "👋 <b>Chaqimchi AI</b> — do'kon uchun aqlli kamera-nazorat.\n\n"
-        "Kameralaringiz do'konni o'zi kuzatadi: kirdi-chiqdi hisobi, navbat, "
-        "xavfsizlik ogohlantirishlari — hammasi shu botda va panelda. "
-        "Tarif bitta: oyiga $20 (so'mda kurs bo'yicha), hammasi ichida.\n\n"
-        "Tizim o'rnatilgan bo'lsa, mijoz panelini oching. O'rnatish uchun "
-        "kelgan bo'lsangiz — o'rnatuvchi bo'limi."
-    )
+        return tg(lang, "bot.welcome.member"), botfmt.panel_button(urls.app_url() or base, lang)
+    # Sayt manzili tilga qarab: ruscha odam ruscha sahifaga tushsin.
+    site_prefix = "" if lang == i18n.DEFAULT_LANG else f"/{lang}"
     markup = {
         "inline_keyboard": [
-            [{"text": "🏪 Mijoz paneli", "web_app": {"url": f"{urls.app_url() or base}/owner"}}],
-            [{"text": "🛠 O'rnatuvchi bo'limi", "url": f"{urls.partner_url() or base}/installer"}],
-            [{"text": "💰 Tarif va narx", "url": f"{urls.public_url() or base}/#narx"}],
+            [
+                {
+                    "text": tg(lang, "bot.welcome.button.panel"),
+                    "web_app": {"url": f"{urls.app_url() or base}/owner"},
+                }
+            ],
+            [
+                {
+                    "text": tg(lang, "bot.welcome.button.installer"),
+                    "url": f"{urls.partner_url() or base}/installer",
+                }
+            ],
+            [
+                {
+                    "text": tg(lang, "bot.welcome.button.pricing"),
+                    "url": f"{urls.public_url() or base}{site_prefix}/#narx",
+                }
+            ],
         ]
     }
-    return text, markup
+    return tg(lang, "bot.welcome.guest"), markup
 
 
-async def _bot_send_report(telegram_id: str, members: List[Dict[str, Any]], base: str) -> None:
+async def _bot_send_report(
+    telegram_id: str, members: List[Dict[str, Any]], base: str, lang: str = i18n.DEFAULT_LANG
+) -> None:
     """/hisobot — bugungi holat, kunlik digest formatida."""
     store_events = get_event_store()
     for member in members:
@@ -9626,7 +9735,7 @@ async def _bot_send_report(telegram_id: str, members: List[Dict[str, Any]], base
         if not stats.get("total") and not traffic.get("entered"):
             await _send_owner_telegram(
                 telegram_id,
-                f"{botfmt.header(site['name'])}\nBugun hali hodisa yo'q.",
+                f"{botfmt.header(site['name'])}\n{tg(lang, 'bot.report.empty')}",
             )
             continue
         try:
@@ -9646,19 +9755,23 @@ async def _bot_send_report(telegram_id: str, members: List[Dict[str, Any]], base
                 store_events.daily_sales(site_id, date_type.fromisoformat(str(report["date"])))
                 or {}
             ).get("receipts"),
+            lang=lang,
         )
         detail = get_store().site_detail(site_id)
-        text_out += (
-            f"\n📷 Kamera: {detail['cameras_active']}/{detail['cameras_expected']} "
-            f"ishlayapti · aloqa {detail['connection']}"
+        text_out += "\n" + tg(
+            lang,
+            "bot.report.cameras",
+            active=detail["cameras_active"],
+            expected=detail["cameras_expected"],
+            connection=detail["connection"],
         )
         await _send_owner_telegram(
-            telegram_id, text_out, reply_markup=botfmt.panel_button(urls.app_url() or base)
+            telegram_id, text_out, reply_markup=botfmt.panel_button(urls.app_url() or base, lang)
         )
 
 
 async def _bot_save_receipts(
-    telegram_id: str, members: List[Dict[str, Any]], text: str
+    telegram_id: str, members: List[Dict[str, Any]], text: str, lang: str = i18n.DEFAULT_LANG
 ) -> None:
     """`/chek 100` — egasi kunlik chek sonini bitta xabar bilan kiritadi.
 
@@ -9673,21 +9786,17 @@ async def _bot_save_receipts(
     """
     member = members[0]
     if str(member.get("role")) not in {"owner", "service_admin"}:
-        await _send_owner_telegram(telegram_id, "Chek sonini faqat do'kon egasi kiritadi.")
+        await _send_owner_telegram(telegram_id, tg(lang, "bot.receipts.owner_only"))
         return
     parts = text.split()
     raw = parts[1] if len(parts) > 1 else ""
     if not raw.isdigit():
-        await _send_owner_telegram(
-            telegram_id,
-            "Chek sonini shunday yozing: <code>/chek 100</code>\n"
-            "Kecha uchun: <code>/chek 100 kecha</code>",
-        )
+        await _send_owner_telegram(telegram_id, tg(lang, "bot.receipts.usage"))
         return
     receipts = int(raw)
     if receipts > MAX_DAILY_RECEIPTS:
         await _send_owner_telegram(
-            telegram_id, f"Chek soni {MAX_DAILY_RECEIPTS} tadan oshmasin."
+            telegram_id, tg(lang, "bot.receipts.too_many", max=MAX_DAILY_RECEIPTS)
         )
         return
     day = datetime.now(ZoneInfo("Asia/Tashkent")).date()
@@ -9698,30 +9807,32 @@ async def _bot_save_receipts(
         try:
             day = date_type.fromisoformat(when)
         except ValueError:
-            await _send_owner_telegram(
-                telegram_id, "Sanani <code>/chek 100 2026-08-30</code> ko'rinishida yozing."
-            )
+            await _send_owner_telegram(telegram_id, tg(lang, "bot.receipts.date_format"))
             return
     site_id = str(member["site_id"])
     get_event_store().save_daily_sales(site_id, day, receipts=receipts)
     report = get_event_store().retail_report(site_id, day=day)
     entered = int((report.get("traffic") or {}).get("entered") or 0)
-    title = botfmt.day_title(f"{day.isoformat()}T12:00:00+05:00") or day.isoformat()
+    title = botfmt.day_title(f"{day.isoformat()}T12:00:00+05:00", lang) or day.isoformat()
     # Ko'p filialli egaga QAYSI filialga yozilgani aytiladi.  Raqam
     # jimgina birinchi filialga tushib ketsa, buni oylab payqamaslik
     # mumkin — konversiya esa ikkala do'kon uchun ham yolg'on bo'lardi.
     branch = ""
     if len({str(item["site_id"]) for item in members}) > 1:
         site_row = get_store().get_site(site_id) or {}
-        branch = f" ({botfmt.escape(str(site_row.get('name') or site_id))})"
-    lines = [f"✅ {title}{branch} uchun <b>{receipts}</b> chek yozildi."]
-    conversion = value.conversion_line(receipts=receipts, entered=entered)
+        branch = tg(
+            lang, "bot.receipts.branch", name=botfmt.escape(str(site_row.get("name") or site_id))
+        )
+    lines = [tg(lang, "bot.receipts.saved", title=title, branch=branch, count=receipts)]
+    conversion = value.conversion_line(receipts=receipts, entered=entered, lang=lang)
     if conversion:
         lines.append(conversion)
     await _send_owner_telegram(telegram_id, "\n".join(lines))
 
 
-async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]]) -> None:
+async def _bot_send_camera_photos(
+    telegram_id: str, members: List[Dict[str, Any]], lang: str = i18n.DEFAULT_LANG
+) -> None:
     """/kamera — har kameradan oxirgi kadr + yangi kadr so'rovi.
 
     Qurilma jonli strim bermaydi (zaif kompyuter, cloud orqali o'tkazish
@@ -9735,10 +9846,7 @@ async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]
         except ValueError:
             continue
         if not cameras:
-            await _send_owner_telegram(
-                telegram_id,
-                "Kameralar hali ulanmagan — o'rnatuvchingiz bilan bog'laning.",
-            )
+            await _send_owner_telegram(telegram_id, tg(lang, "bot.camera.none"))
             continue
         missing: List[str] = []
         for camera in cameras:
@@ -9754,7 +9862,7 @@ async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]
                 missing.append(label)
             else:
                 caption = f"📷 <b>{botfmt.escape(label)}</b>"
-                taken = botfmt.stamp(camera.get("preview_at"))
+                taken = botfmt.stamp(camera.get("preview_at"), lang)
                 if taken:
                     caption += f" · {taken}"
                 try:
@@ -9770,11 +9878,10 @@ async def _bot_send_camera_photos(telegram_id: str, members: List[Dict[str, Any]
                 get_store().request_camera_preview(site_id, str(camera["camera_id"]))
             except ValueError:
                 pass
-        tail = "🔄 Yangi rasm so'raldi — 1 daqiqadan keyin /kamera ni qayta bosing."
+        tail = tg(lang, "bot.camera.refresh_requested")
         if missing:
-            tail = (
-                "Hali rasm kelmagan: " + ", ".join(botfmt.escape(m) for m in missing) + "\n" + tail
-            )
+            names = ", ".join(botfmt.escape(m) for m in missing)
+            tail = tg(lang, "bot.camera.missing", names=names) + "\n" + tail
         await _send_owner_telegram(telegram_id, tail)
 
 

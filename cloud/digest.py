@@ -8,6 +8,12 @@ Uch xil hisobot:
   kechikdi va necha kun kelmadi.  Faqat davomat yoqilgan do'konda.
 
 Uslub `cloud/botfmt.py`da — bot xabarlari bir xil ko'rinishda bo'lsin.
+
+Til: har builder `lang` oladi va matnni `i18n` katalogidan (`digest.*`)
+chizadi.  Xabar a'zoning O'Z tilida ketadi — `_deliver` uni tilga
+qarab bir marta yasaydi.  `i18n.t()` bu yerda ISHLATILMAYDI: fon
+vazifasi so'rov kontekstini meros oladi va xabar so'rov yuborganning
+tilida ketib qolardi (batafsil `cloud/i18n.py`).
 """
 
 from __future__ import annotations
@@ -18,8 +24,9 @@ from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from cloud import botfmt, trust_score, value
+from cloud import botfmt, i18n, trust_score, value
 from cloud.event_store import EventStore
+from cloud.i18n import tg
 from cloud.payments.store import billable_months
 from cloud.store import GRACE_DAYS
 
@@ -60,6 +67,9 @@ DEMOGRAPHY_MIN_SAMPLE = 20
 #: ham shu intizomda bo'lsin).
 DEMOGRAPHY_MIN_COVERAGE = 0.30
 
+#: Tilga qarab matn yasaydigan funksiya — `_deliver` shuni oladi.
+TextBuilder = Callable[[str], str]
+
 
 def _demography_is_representative(
     demografiya: Dict[str, Any], traffic: Dict[str, Any]
@@ -72,10 +82,6 @@ def _demography_is_representative(
     # Har o'lchov kirish kesishmasidan chiqadi, ya'ni `entered` noldan
     # katta bo'lishi shart; nolga bo'lishdan himoya baribir arzon.
     return bool(entered) and counted >= entered * DEMOGRAPHY_MIN_COVERAGE
-
-
-def _duration(seconds: float) -> str:
-    return f"{int(seconds // 60)} daq" if seconds >= 60 else f"{int(seconds)} s"
 
 
 def _is_monday(day: str) -> bool:
@@ -97,6 +103,7 @@ def build_digest(
     score: Optional[Dict[str, Any]] = None,
     daily_revenue_uzs: int = 0,
     receipts: Optional[int] = None,
+    lang: str = i18n.DEFAULT_LANG,
 ) -> str:
     """Kunlik xabar matni.
 
@@ -109,6 +116,7 @@ def build_digest(
     "0 ta buzilish" deb yozish xabarni uzaytiradi va o'qilmay qoladi.
     """
     traffic = report["traffic"]
+    site = botfmt.header(site_name)
 
     # Birinchi qator — KUNNING HOLATI, hisobot sarlavhasi emas.
     #
@@ -117,29 +125,45 @@ def build_digest(
     # aytmaydi; "Bugun: 94 — A'lo kun" esa xabarni ochmasdan ham javob
     # beradi.  Ball yo'q bo'lsa eski sarlavha qoladi.
     if score and score.get("available"):
-        headline = f"🏪 {botfmt.header(site_name)} — Bugun: <b>{score['total']}</b>"
-        subtitle = trust_score.label(score["total"])
+        headline = tg(lang, "digest.daily.headline_score", site=site, score=score["total"])
+        subtitle = trust_score.label(score["total"], lang=lang)
     elif score:
-        headline = f"🏪 {botfmt.header(site_name)}"
+        headline = tg(lang, "digest.daily.headline_plain", site=site)
         subtitle = str(score.get("reason") or "")
     else:
-        headline = f"📊 {botfmt.header(site_name)} — kunlik hisobot"
+        headline = tg(lang, "digest.daily.headline_report", site=site)
         subtitle = ""
 
-    lines = [headline, botfmt.day_title(day + "T12:00:00+05:00") or day]
+    lines = [headline, botfmt.day_title(day + "T12:00:00+05:00", lang) or day]
     if subtitle:
         lines.append(subtitle)
-    lines += ["", f"👥 Kirdi: <b>{botfmt.number(traffic['entered'])}</b> kishi"]
+    lines += [
+        "",
+        tg(lang, "digest.daily.entered", count=botfmt.number(traffic["entered"], lang)),
+    ]
 
     change = traffic.get("change_percent")
     if change is not None:
         arrow = "▲" if change >= 0 else "▼"
         lines.append(
-            f"Kechagiga nisbatan: {arrow} {abs(change)}% (kecha {traffic['entered_yesterday']})"
+            tg(
+                lang,
+                "digest.daily.vs_yesterday",
+                arrow=arrow,
+                percent=abs(change),
+                yesterday=traffic["entered_yesterday"],
+            )
         )
     busiest = traffic.get("busiest_hour")
     if busiest:
-        lines.append(f"Gavjum soat: {busiest['hour']:02d}:00 — {busiest['entered']} kishi")
+        lines.append(
+            tg(
+                lang,
+                "digest.daily.busiest_hour",
+                hour=f"{busiest['hour']:02d}",
+                count=busiest["entered"],
+            )
+        )
 
     # Konversiya — «nechta kirdi» ni «nechta sotib oldi» bilan bog'laydigan
     # yagona qator.  Chek sonini ega O'ZI kiritadi (kassa integratsiyasi
@@ -147,7 +171,7 @@ def build_digest(
     # kiritish ko'rsatiladi: eslatmasiz ega bunday imkoniyat borligini
     # bilmaydi va raqam hech qachon yig'ilmaydi.
     entered_today = int(traffic.get("entered") or 0)
-    conversion = value.conversion_line(receipts=receipts, entered=entered_today)
+    conversion = value.conversion_line(receipts=receipts, entered=entered_today, lang=lang)
     if conversion:
         lines.append(conversion)
     elif entered_today >= value.MIN_VISITORS_FOR_CONVERSION and _is_monday(day):
@@ -158,7 +182,7 @@ def build_digest(
         #
         # Kam odam kirgan kunda umuman so'ralmaydi: 12 kishilik kunning
         # konversiyasi o'lchov emas, tasodif.
-        lines.append("🧾 Bugun nechta chek bo'ldi? Javob: <code>/chek 100</code>")
+        lines.append(tg(lang, "digest.daily.ask_receipts"))
 
     # Demografiya — ma'lumot yig'ilgan har kunda chiqadi (xodimlar
     # hisobga kirmaydi, ular davomatda).  Ega bu qatorni kutadi
@@ -171,16 +195,22 @@ def build_digest(
     if _demography_is_representative(demografiya, traffic):
         jins = demografiya.get("jins") or {}
         yosh = demografiya.get("yosh") or {}
-        line = f"🚻 {jins.get('ayol', 0)}% ayol · {jins.get('erkak', 0)}% erkak"
+        params = {"female": jins.get("ayol", 0), "male": jins.get("erkak", 0)}
         if any(yosh.values()):
             top_age = max(yosh, key=lambda key: yosh[key])
-            line += f" · asosan {top_age} yosh"
-        lines.append(line)
+            lines.append(tg(lang, "digest.daily.demography_percent_age", age=top_age, **params))
+        else:
+            lines.append(tg(lang, "digest.daily.demography_percent", **params))
     elif counted:
         soni = demografiya.get("jins_soni") or {}
         lines.append(
-            f"🚻 O'lchangani {counted} kishi: "
-            f"{int(soni.get('ayol') or 0)} ayol · {int(soni.get('erkak') or 0)} erkak"
+            tg(
+                lang,
+                "digest.daily.demography_counts",
+                count=counted,
+                female=int(soni.get("ayol") or 0),
+                male=int(soni.get("erkak") or 0),
+            )
         )
 
     # Soatlik oqim mini-grafigi (08:00–23:00 oralig'i — tungi nol
@@ -197,44 +227,55 @@ def build_digest(
         opened = botfmt.clock(first_movement)
         if opened:
             late = _minutes(opened) - _minutes(open_from) > 20
-            mark = " ⚠️ kechikish" if late else ""
-            lines.append(f"🕘 Ochilish: {opened} (jadval: {open_from}){mark}")
+            key = "digest.daily.opening_late" if late else "digest.daily.opening"
+            lines.append(tg(lang, key, opened=opened, scheduled=open_from))
 
     queue = report["queue"]
     if queue["alerts"]:
-        parts = [f"{queue['alerts']} marta chegaradan oshdi"]
+        parts = [tg(lang, "digest.daily.queue_exceeded", count=queue["alerts"])]
         if queue.get("average"):
-            parts.append(f"o'rtacha {queue['average']} kishi")
-        parts.append(f"eng uzuni {queue['longest']} kishi ({queue['longest_at']})")
-        lines.append("🧾 Navbat: " + ", ".join(parts))
+            parts.append(tg(lang, "digest.daily.queue_average", count=queue["average"]))
+        parts.append(
+            tg(
+                lang,
+                "digest.daily.queue_longest",
+                count=queue["longest"],
+                time=queue["longest_at"],
+            )
+        )
+        lines.append(tg(lang, "digest.daily.queue", details=", ".join(parts)))
         # Navbat raqami o'z-o'zidan hech narsa aytmaydi — "5 marta uzun
         # bo'ldi" do'kon egasiga NIMA turishini bildirmaydi.  Mijoz
         # kunlik savdosini aytgan bo'lsa, o'sha raqam so'mga aylanadi.
         # Aytmagan bo'lsa qator umuman chiqmaydi (`daily_line` -> None).
-        money = value.daily_line(report, daily_revenue_uzs)
+        money = value.daily_line(report, daily_revenue_uzs, lang)
         if money:
             lines.append(money)
     if report["dwell"]:
         top = report["dwell"][0]
         lines.append(
-            f"📍 Ko'p to'xtalgan zona: {botfmt.escape(top['zone'])} — {top['count']} marta, "
-            f"o'rtacha {_duration(top['average_sec'])}"
+            tg(
+                lang,
+                "digest.daily.dwell",
+                zone=botfmt.escape(top["zone"]),
+                count=top["count"],
+                duration=botfmt.duration(top["average_sec"], lang),
+            )
         )
 
     security = report["security"]
     alarms = []
-    if security["camera_tampered"]:
-        alarms.append(f"{security['camera_tampered']} marta kamera buzilgan")
-    if security["after_hours_presence"]:
-        alarms.append(f"{security['after_hours_presence']} marta ish vaqtidan tashqari harakat")
-    if security["restricted_zone"]:
-        alarms.append(f"{security['restricted_zone']} marta taqiqlangan zona")
-    if security.get("loitering"):
-        alarms.append(f"{security['loitering']} marta uzoq turish")
-    if security.get("checkout_unattended"):
-        alarms.append(f"{security['checkout_unattended']} marta kassada hech kim yo'q")
+    for field, key in (
+        ("camera_tampered", "digest.daily.alarm.camera_tampered"),
+        ("after_hours_presence", "digest.daily.alarm.after_hours"),
+        ("restricted_zone", "digest.daily.alarm.restricted_zone"),
+        ("loitering", "digest.daily.alarm.loitering"),
+        ("checkout_unattended", "digest.daily.alarm.checkout_unattended"),
+    ):
+        if security.get(field):
+            alarms.append(tg(lang, key, count=security[field]))
     if alarms:
-        lines.append("⚠️ " + ", ".join(alarms))
+        lines.append(tg(lang, "digest.daily.alarms", details=", ".join(alarms)))
 
     return "\n".join(lines)
 
@@ -247,7 +288,12 @@ def _minutes(clock_value: str) -> int:
         return 0
 
 
-def build_shifts(site_name: str, month_label: str, summary: Dict[str, Any]) -> str:
+def build_shifts(
+    site_name: str,
+    month_label: str,
+    summary: Dict[str, Any],
+    lang: str = i18n.DEFAULT_LANG,
+) -> str:
     """Oylik smena xulosasi.
 
     Kunlik davomat jadvalini hech kim oxirigacha o'qimaydi.  Oy yakunida
@@ -260,29 +306,43 @@ def build_shifts(site_name: str, month_label: str, summary: Dict[str, Any]) -> s
     total = summary.get("jami") or {}
     late_minutes = int(total.get("kechikish_daq") or 0)
     lines = [
-        f"🗓 {botfmt.header(site_name)} — {botfmt.escape(month_label)} smena hisoboti",
+        tg(
+            lang,
+            "digest.shifts.title",
+            site=botfmt.header(site_name),
+            month=botfmt.escape(month_label),
+        ),
         "",
     ]
     if not late_minutes and not total.get("kelmagan_kunlar"):
-        lines.append("✅ Kechikish ham, kelmagan kun ham yo'q.")
+        lines.append(tg(lang, "digest.shifts.clean"))
         return "\n".join(lines)
 
-    hours, minutes = divmod(late_minutes, 60)
-    total_label = f"{hours} soat {minutes} daq" if hours else f"{minutes} daq"
-    lines.append(f"⏰ Jami kechikish: <b>{botfmt.escape(total_label)}</b>")
+    lines.append(
+        tg(
+            lang,
+            "digest.shifts.total_late",
+            duration=botfmt.escape(botfmt.minutes_label(late_minutes, lang)),
+        )
+    )
     if total.get("kelmagan_kunlar"):
-        lines.append(f"🚫 Kelmagan kunlar: <b>{total['kelmagan_kunlar']}</b>")
+        lines.append(tg(lang, "digest.shifts.absent_days", count=total["kelmagan_kunlar"]))
 
     top = [row for row in (summary.get("rows") or []) if row.get("jami_kechikish_daq")][:3]
     if top:
         lines.append("")
         for row in top:
             lines.append(
-                f"• {botfmt.escape(row['employee_name'])} — "
-                f"{row['kechikkan_kunlar']} kun, {row['jami_kechikish_daq']} daq"
+                tg(
+                    lang,
+                    "digest.shifts.row",
+                    name=botfmt.escape(row["employee_name"]),
+                    days=row["kechikkan_kunlar"],
+                    minutes=row["jami_kechikish_daq"],
+                )
             )
     lines.append("")
-    lines.append("To'liq jadval va CSV — mijoz panelidagi «Xodimlar» bo'limida.")
+    lines.append(tg(lang, "digest.shifts.footer"))
     return "\n".join(lines)
 
 
@@ -293,6 +353,7 @@ def build_renewal(
     days_left: int,
     monthly_uzs: int,
     grace_days: int,
+    lang: str = i18n.DEFAULT_LANG,
 ) -> str:
     """Obuna tugashi haqida mijozga eslatma va yillik taklif.
 
@@ -308,37 +369,54 @@ def build_renewal(
     charged = billable_months(12)
     annual = monthly_uzs * charged
     saving = monthly_uzs * (12 - charged)
+    site = botfmt.header(site_name)
 
     if stage == "grace":
         lines = [
-            f"⏳ {botfmt.header(site_name)} — obuna muddati tugadi",
+            tg(lang, "digest.renewal.grace_title", site=site),
             "",
-            f"Tizim yana <b>{grace_days} kun</b> ishlaydi. Shu vaqt ichida "
-            f"to'lov qilinmasa, tahlil va ogohlantirishlar to'xtaydi.",
+            tg(lang, "digest.renewal.grace_body", days=grace_days),
         ]
     elif stage == "1":
         lines = [
-            f"⚠️ {botfmt.header(site_name)} — obuna ertaga tugaydi",
+            tg(lang, "digest.renewal.tomorrow_title", site=site),
             "",
-            f"To'lovdan keyin ham <b>{grace_days} kun</b> muhlat bor — "
-            f"tizim darrov o'chmaydi.",
+            tg(lang, "digest.renewal.tomorrow_body", days=grace_days),
         ]
     else:
         lines = [
-            f"🔔 {botfmt.header(site_name)} — obuna tugashiga {days_left} kun qoldi",
+            tg(lang, "digest.renewal.soon_title", site=site, days=days_left),
             "",
-            f"Oylik to'lov: <b>{botfmt.number(monthly_uzs)}</b> so'm",
+            tg(lang, "digest.renewal.monthly", amount=botfmt.number(monthly_uzs, lang)),
         ]
 
     lines += [
         "",
-        f"💡 Yillik to'lasangiz <b>{12 - charged} oy bepul</b>: "
-        f"{botfmt.number(annual)} so'm "
-        f"(<b>{botfmt.number(saving)}</b> so'm tejaysiz)",
+        tg(
+            lang,
+            "digest.renewal.annual",
+            free_months=12 - charged,
+            annual=botfmt.number(annual, lang),
+            saving=botfmt.number(saving, lang),
+        ),
         "",
-        "To'lovni panelda ochasiz.",
+        tg(lang, "digest.renewal.footer"),
     ]
     return "\n".join(lines)
+
+
+def _trend_weekday(item: Dict[str, Any], lang: str) -> str:
+    """Kun nomi qabul qiluvchi tilida.
+
+    `traffic_trend` nomni o'zbekcha beradi (panel va CSV shuni
+    ishlatadi); qatorda sana ham bor — undan indeks olinadi va nom
+    katalogdan chiqadi.  Sana o'qilmasa tayyor nom qoladi.
+    """
+    try:
+        index = date.fromisoformat(str(item.get("date") or "")[:10]).weekday()
+    except ValueError:
+        return str(item.get("weekday") or "")
+    return botfmt.weekday_name(index, lang)
 
 
 def build_weekly(
@@ -348,6 +426,7 @@ def build_weekly(
     queue_alerts: int,
     queue_longest: int,
     uptime_percent: Optional[float],
+    lang: str = i18n.DEFAULT_LANG,
 ) -> str:
     """Haftalik xulosa — dushanba ertalab.
 
@@ -355,33 +434,46 @@ def build_weekly(
     savoliga javob beradi va o'tgan hafta bilan taqqoslaydi.
     """
     lines = [
-        f"🗓 {botfmt.header(site_name)} — haftalik hisobot",
+        tg(lang, "digest.weekly.title", site=botfmt.header(site_name)),
         "",
-        f"👥 Hafta davomida kirdi: <b>{botfmt.number(trend.get('total', 0))}</b> kishi "
-        f"(kuniga o'rtacha {trend.get('average', 0)})",
+        tg(
+            lang,
+            "digest.weekly.entered",
+            count=botfmt.number(trend.get("total", 0), lang),
+            average=trend.get("average", 0),
+        ),
     ]
     change = trend.get("change_percent")
     if change is not None:
         arrow = "▲" if change >= 0 else "▼"
-        lines.append(f"O'tgan haftaga nisbatan: {arrow} {abs(change)}%")
+        lines.append(tg(lang, "digest.weekly.vs_previous", arrow=arrow, percent=abs(change)))
 
     daily = trend.get("daily") or []
     chart = botfmt.sparkline([float(item.get("entered", 0)) for item in daily])
     if chart.strip():
-        labels = " ".join(str(item.get("weekday", ""))[:2] for item in daily)
+        labels = " ".join(_trend_weekday(item, lang)[:2] for item in daily)
         lines.append(f"<code>{chart}</code>")
         lines.append(f"<code>{labels}</code>")
 
     busiest = trend.get("busiest_day")
     if busiest:
-        lines.append(f"Eng gavjum kun: {busiest['weekday']} — {busiest['entered']} kishi")
+        lines.append(
+            tg(
+                lang,
+                "digest.weekly.busiest_day",
+                weekday=_trend_weekday(busiest, lang),
+                count=busiest["entered"],
+            )
+        )
 
     if queue_alerts:
-        lines.append(f"🧾 Navbat: {queue_alerts} marta chegaradan oshdi, eng uzuni {queue_longest}")
+        lines.append(
+            tg(lang, "digest.weekly.queue", count=queue_alerts, longest=queue_longest)
+        )
 
     if uptime_percent is not None:
         icon = "✅" if uptime_percent >= 99 else "⚠️"
-        lines.append(f"{icon} Kameralar ishlashi: {uptime_percent}%")
+        lines.append(tg(lang, "digest.weekly.uptime", icon=icon, percent=uptime_percent))
 
     return "\n".join(lines)
 
@@ -402,14 +494,31 @@ class DailyDigestService:
         self.hour = hour
         self.panel_url = panel_url.rstrip("/")
 
-    async def _deliver(self, site_id: str, members: List[Dict[str, Any]], text: str) -> int:
-        markup = botfmt.panel_button(self.panel_url) if self.panel_url else None
+    async def _deliver(
+        self, site_id: str, members: List[Dict[str, Any]], build: TextBuilder
+    ) -> int:
+        """Har a'zoga O'Z tilida yuboradi.
+
+        Matn tilga qarab BIR MARTA yasaladi va shu sayt doirasida
+        keshlanadi: uchta o'zbek a'zoli do'kon uchun `build` uch marta
+        emas, bir marta chaqiriladi.  Til a'zo qatoridan (`language`)
+        keladi — so'rov kontekstidan emas, chunki bu fon vazifasi.
+        """
         sent = 0
+        texts: Dict[str, str] = {}
+        markups: Dict[str, Dict[str, Any]] = {}
         for member in members:
             # A'zo hisobotni o'chirib qo'ygan bo'lishi mumkin (panel
             # sozlamasi) — hurmat qilamiz.
             if member.get("digest_muted"):
                 continue
+            lang = i18n.normalize(member.get("language")) or i18n.DEFAULT_LANG
+            if lang not in texts:
+                texts[lang] = build(lang)
+                if self.panel_url:
+                    markups[lang] = botfmt.panel_button(self.panel_url, lang)
+            text = texts[lang]
+            markup = markups.get(lang)
             try:
                 if markup:
                     await self.sender(str(member["telegram_id"]), text, reply_markup=markup)
@@ -426,7 +535,10 @@ class DailyDigestService:
         return sent
 
     def _quiet_reason(self, site: Dict[str, Any]) -> Optional[str]:
-        """Ma'lumotsiz sayt uchun ANIQ sabab matni; sabab noma'lum — None.
+        """Ma'lumotsiz sayt uchun ANIQ sabab KALITI; sabab noma'lum — None.
+
+        Kalit qaytadi, matn emas: matn a'zoning tilida `_deliver` ichida
+        yasaladi.
 
         Do'kon shunchaki yopiq bo'lishi ham mumkin — bunda jim qolamiz.
         Faqat tuzatsa bo'ladigan holat aytiladi: qurilma ulanmagan/oflayn
@@ -435,16 +547,9 @@ class DailyDigestService:
         site_id = str(site["id"])
         connection = str(site.get("connection") or "")
         if connection == "not_paired":
-            return (
-                "ℹ️ <b>Hisobot kelmayapti — qurilma hali ulanmagan.</b>\n"
-                "Do'kon kompyuterida Chaqimchi AI o'rnatilib bulutga ulansa, "
-                "kunlik hisobot shu yerga kela boshlaydi."
-            )
+            return "digest.quiet.not_paired"
         if connection == "offline":
-            return (
-                "ℹ️ <b>Hisobot kelmayapti — do'kon kompyuteri ko'rinmayapti.</b>\n"
-                "Kompyuter yoqilganini va internet borligini tekshiring."
-            )
+            return "digest.quiet.offline"
         try:
             config = self.events.get_site_config(site_id)["config"]
         except Exception:
@@ -452,11 +557,7 @@ class DailyDigestService:
         # Lokal sehrgarda chizilgan chiziq cloud config'da ko'rinmaydi —
         # yaqinda sanash bo'lgan saytga "chizilmagan" deyish yolg'on.
         if not (config.get("lines") or []) and not self.events.has_recent_line_crossings(site_id):
-            return (
-                "ℹ️ <b>Kirish-chiqish hali sanalmayapti — kirish chizig'i chizilmagan.</b>\n"
-                "Paneldagi «Chiziq va zonalar» bo'limida eshik ustiga chiziq "
-                "qo'yilsa, o'sha kundan boshlab mijozlar sanaladi."
-            )
+            return "digest.quiet.no_line"
         return None
 
     async def check_once(self, now: datetime | None = None) -> int:
@@ -493,7 +594,9 @@ class DailyDigestService:
                 if now.weekday() == 0:
                     reason = self._quiet_reason(site)
                     if reason:
-                        sent += await self._deliver(site_id, members, reason)
+                        sent += await self._deliver(
+                            site_id, members, lambda lang, key=reason: tg(lang, key)
+                        )
                 self.events.mark_digest_sent(site_id, digest_date)
                 continue
             open_from = None
@@ -530,18 +633,23 @@ class DailyDigestService:
             except Exception:  # noqa: BLE001 — ball xabarni yiqitmasin
                 logger.exception("Ishonch ballini hisoblab bo'lmadi: %s", site_id)
                 score = None
-            text = build_digest(
-                str(site["name"]),
-                digest_date,
-                stats,
-                report,
-                open_from=open_from,
-                first_movement=first_movement,
-                score=score,
-                daily_revenue_uzs=int(site.get("avg_daily_revenue_uzs") or 0),
-                receipts=(self.events.daily_sales(site_id, now.date()) or {}).get("receipts"),
-            )
-            site_sent = await self._deliver(site_id, members, text)
+            receipts = (self.events.daily_sales(site_id, now.date()) or {}).get("receipts")
+
+            def build(lang: str, *, site=site, stats=stats, report=report) -> str:
+                return build_digest(
+                    str(site["name"]),
+                    digest_date,
+                    stats,
+                    report,
+                    open_from=open_from,
+                    first_movement=first_movement,
+                    score=score,
+                    daily_revenue_uzs=int(site.get("avg_daily_revenue_uzs") or 0),
+                    receipts=receipts,
+                    lang=lang,
+                )
+
+            site_sent = await self._deliver(site_id, members, build)
             if site_sent:
                 self.events.mark_digest_sent(site_id, digest_date)
                 sent += site_sent
@@ -592,14 +700,18 @@ class DailyDigestService:
             owners = [m for m in self.events.list_members(site_id) if m.get("role") == "owner"]
             if not owners:
                 continue
-            text = build_renewal(
-                str(site["name"]),
-                stage=stage,
-                days_left=max(0, int(days_left or 0)),
-                monthly_uzs=int(site.get("monthly_price_uzs") or 0),
-                grace_days=GRACE_DAYS,
-            )
-            site_sent = await self._deliver(site_id, owners, text)
+
+            def build(lang: str, *, site=site, stage=stage, days_left=days_left) -> str:
+                return build_renewal(
+                    str(site["name"]),
+                    stage=stage,
+                    days_left=max(0, int(days_left or 0)),
+                    monthly_uzs=int(site.get("monthly_price_uzs") or 0),
+                    grace_days=GRACE_DAYS,
+                    lang=lang,
+                )
+
+            site_sent = await self._deliver(site_id, owners, build)
             if site_sent:
                 self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
@@ -637,14 +749,26 @@ class DailyDigestService:
                 queue_alerts += int(queue.get("alerts") or 0)
                 queue_longest = max(queue_longest, int(queue.get("longest") or 0))
             uptime = self.events.camera_uptime_percent(site_id, start=week_start, end=week_end)
-            text = build_weekly(
-                str(site["name"]),
+
+            def build(
+                lang: str,
+                *,
+                site=site,
                 trend=trend,
                 queue_alerts=queue_alerts,
                 queue_longest=queue_longest,
-                uptime_percent=uptime,
-            )
-            site_sent = await self._deliver(site_id, members, text)
+                uptime=uptime,
+            ) -> str:
+                return build_weekly(
+                    str(site["name"]),
+                    trend=trend,
+                    queue_alerts=queue_alerts,
+                    queue_longest=queue_longest,
+                    uptime_percent=uptime,
+                    lang=lang,
+                )
+
+            site_sent = await self._deliver(site_id, members, build)
             if site_sent:
                 self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
@@ -680,8 +804,11 @@ class DailyDigestService:
             if not summary.get("employees"):
                 self.events.mark_digest_sent(site_id, marker)
                 continue
-            text = build_shifts(str(site["name"]), f"{first_day:%Y-%m}", summary)
-            site_sent = await self._deliver(site_id, members, text)
+
+            def build(lang: str, *, site=site, summary=summary) -> str:
+                return build_shifts(str(site["name"]), f"{first_day:%Y-%m}", summary, lang=lang)
+
+            site_sent = await self._deliver(site_id, members, build)
             if site_sent:
                 self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
@@ -731,13 +858,17 @@ class DailyDigestService:
                 # turamiz va belgini qo'yamiz (qayta urinmaslik uchun).
                 self.events.mark_digest_sent(site_id, marker)
                 continue
-            text = value.monthly_receipt(
-                site_name=str(site["name"]),
-                month_label=f"{first_day:%Y-%m}",
-                lost_uzs=cost["lost_uzs"],
-                monthly_price_uzs=int(site.get("monthly_price_uzs") or 0),
-            )
-            site_sent = await self._deliver(site_id, members, text)
+
+            def build(lang: str, *, site=site, cost=cost) -> str:
+                return value.monthly_receipt(
+                    site_name=str(site["name"]),
+                    month_label=f"{first_day:%Y-%m}",
+                    lost_uzs=cost["lost_uzs"],
+                    monthly_price_uzs=int(site.get("monthly_price_uzs") or 0),
+                    lang=lang,
+                )
+
+            site_sent = await self._deliver(site_id, members, build)
             if site_sent:
                 self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent

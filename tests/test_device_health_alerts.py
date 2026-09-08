@@ -321,7 +321,9 @@ def test_the_owner_is_told_about_heat_in_plain_words() -> None:
 
     owner_text = alerts[0].owner_text
     assert owner_text
-    assert "chang" in owner_text.lower()
+    assert "chang" in owner_text.for_lang("uz").lower()
+    # Ruscha a'zo ham xuddi shu maslahatni o'z tilida oladi.
+    assert "пыл" in owner_text.for_lang("ru").lower()
 
 
 def test_technical_problems_stay_out_of_the_owners_chat() -> None:
@@ -386,7 +388,7 @@ def test_a_drifted_clock_is_reported_because_night_watch_depends_on_it() -> None
     assert "soati" in alerts[0].text.lower()
     # Egaga texnik atama emas, aniq harakat aytiladi.
     assert alerts[0].owner_text is not None
-    assert "batareyka" in alerts[0].owner_text.lower()
+    assert "batareyka" in alerts[0].owner_text.for_lang("uz").lower()
 
 
 def test_the_message_says_which_way_the_clock_is_wrong() -> None:
@@ -428,7 +430,8 @@ def test_the_owner_hears_when_the_clock_is_fixed() -> None:
 
     assert len(alerts) == 1
     assert alerts[0].state == "ok"
-    assert "soati" in (alerts[0].owner_text or "").lower()
+    assert alerts[0].owner_text is not None
+    assert "soati" in alerts[0].owner_text.for_lang("uz").lower()
 
 
 # ── Hodisa butunlay yo'qolgan ────────────────────────────────────────────

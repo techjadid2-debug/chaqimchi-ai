@@ -171,6 +171,7 @@ def summarize(
     *,
     site_name: Optional[str] = None,
     camera_labels: Optional[Dict[str, str]] = None,
+    lang: str = i18n.DEFAULT_LANG,
 ) -> str:
     """Ruxsat berilgan eventlardan bitta o'qiladigan xabar.
 
@@ -178,6 +179,12 @@ def summarize(
     ko'p takrorlangan muammo birinchi turadi.  Uslub `cloud/botfmt.py`da:
     do'kon nomi sarlavhada, kamera odam o'qiydigan nomi bilan, vaqt
     Toshkentcha.
+
+    `lang` — QABUL QILUVCHINING tili, aniq uzatiladi.  Xabar fon
+    vazifasida yasaladi (`BackgroundTasks`), u so'rov kontekstini meros
+    oladi — ya'ni `i18n.t()` bu yerda qurilmaning emas, hech kimning
+    tilini berardi.  Bir batch bir necha a'zoga ketadi: chaqiruvchi har
+    til uchun alohida chaqiradi.
     """
     from cloud import botfmt
 
@@ -204,21 +211,24 @@ def summarize(
     if site_name:
         title = botfmt.header(site_name, icon=head)
         if total > 1:
-            title += f" — {total} ta ogohlantirish"
+            title = i18n.tg(lang, "notify.title.site", header=title, count=total)
     else:
-        title = f"{head} {total} ta ogohlantirish"
+        title = i18n.tg(lang, "notify.title.plain", icon=head, count=total)
     lines = [title]
     ordered = sorted(groups.items(), key=lambda item: (-item[1], item[0]))
     for (event_type, camera_id), count in ordered[:MAX_LINES]:
         suffix = f" ×{count}" if count > 1 else ""
         camera = botfmt.escape(botfmt.camera_name(camera_id, camera_labels))
         when = f" · {latest[(event_type, camera_id)]}" if (event_type, camera_id) in latest else ""
-        lines.append(f"• {event_label(event_type)} — {camera}{suffix}{when}")
+        # Qator shakli katalogda emas: undagi yagona so'zlar hodisa nomi
+        # (`event.*`) va kamera nomi, qolgani belgi — tarjima qiladigan
+        # narsa yo'q.
+        lines.append(f"• {event_label(event_type, lang)} — {camera}{suffix}{when}")
         note = notes.get((event_type, camera_id))
         if note:
             lines.append(f"   ↳ {note}")
     if len(ordered) > MAX_LINES:
-        lines.append(f"• va yana {len(ordered) - MAX_LINES} ta turdagi hodisa")
+        lines.append(i18n.tg(lang, "notify.more_types", count=len(ordered) - MAX_LINES))
     return "\n".join(lines)
 
 
@@ -285,6 +295,7 @@ def build_alert(
     *,
     throttle_service: Optional[AlertThrottle] = None,
     level: Optional[str] = None,
+    lang: str = i18n.DEFAULT_LANG,
 ) -> Optional[str]:
     """Batchdan yuboriladigan bitta xabar — yoki hech narsa.
 
@@ -294,4 +305,4 @@ def build_alert(
     allowed = select_alert_events(site_id, events, throttle_service=throttle_service, level=level)
     if not allowed:
         return None
-    return summarize(allowed)
+    return summarize(allowed, lang=lang)

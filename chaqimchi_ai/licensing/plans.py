@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Literal
 
 from chaqimchi_ai.sotqin_profile import GUARANTEED_CAMERAS, MAX_CAMERAS
@@ -104,6 +104,12 @@ class PlanBullet:
 
     `example` alohida maydon: umumiy ta'rifdan ko'ra aniq misol tez
     tushuniladi ("kassa oldida 3 barobar ko'p turishadi").
+
+    Matn shu yerda — O'ZBEKCHA MANBA.  Tarjimasi katalogda
+    (`i18n/*.json`, `plan.bullet.<slug>.{label,detail,example}`), uni
+    `cloud/main.py` so'rov tilida oladi.  Bu paket qurilmada ham
+    ishlaydi va `cloud` ga bog'lanmasligi kerak — shuning uchun katalog
+    bu yerda o'qilmaydi, faqat `key` ko'rsatiladi.
     """
 
     #: `cloud/static/icons.svg` dagi symbol id.
@@ -114,6 +120,11 @@ class PlanBullet:
     detail: str = ""
     #: Aniq misol.  Bo'sh bo'lishi mumkin.
     example: str = ""
+    #: Katalog kaliti (`plan.bullet.<slug>`); bo'sh — tarjimasiz punkt.
+    key: str = ""
+    #: Katalog matnidagi o'rinbosarlar (`{count}`, `{days}`) — son matnga
+    #: qotirilmasin: kamera soni `limits` dan keladi.
+    params: Dict[str, int] = field(default_factory=dict)
 
     @property
     def summary(self) -> str:
@@ -234,14 +245,23 @@ BOSHLANGICH_PANEL_FEATURES = ("bugun", "hisobot", "telegram")
 #: ochiladigan izoh va ANIQ MISOL.  Misol ataylab: "kirish-chiqish
 #: sanog'i" degan ta'rif do'kon egasiga hech narsa aytmaydi, "shanba
 #: 18:00 da 41 kishi kirgan" esa darrov tushunarli.
+#: Boshlang'ich tarifida shuncha kamera.  Punkt matni va `PLANS` bitta
+#: sondan o'qiydi — ilgari "2 kameragacha" satrda qotirilgan edi.
+BOSHLANGICH_MAX_CAMERAS = 2
+#: Ikkala sotiladigan tarifda arxiv shuncha kun.
+RETENTION_DAYS = 30
+
 BOSHLANGICH_BULLETS = (
     PlanBullet(
+        key="plan.bullet.cameras_starter",
         icon="kamera",
-        label="2 kameragacha",
+        label=f"{BOSHLANGICH_MAX_CAMERAS} kameragacha",
         detail="Bitta do'konda ikkita kamera ulanadi.",
         example="Odatda: kirish eshigi va savdo zali.",
+        params={"count": BOSHLANGICH_MAX_CAMERAS},
     ),
     PlanBullet(
+        key="plan.bullet.footfall",
         icon="odamlar",
         label="Kirish-chiqish sanog'i",
         detail="Nechta odam kirdi va chiqdi — soat bo'yicha. Do'konda hozir "
@@ -249,24 +269,29 @@ BOSHLANGICH_BULLETS = (
         example="Masalan: shanba kuni 18:00 da 41 kishi kirgan.",
     ),
     PlanBullet(
+        key="plan.bullet.daily_report",
         icon="soat",
         label="Kunlik hisobot",
         detail="Har kuni kechqurun Telegramga o'sha kunning xulosasi keladi.",
         example="\u00abBugun 268 kishi kirdi, eng gavjum soat 18:00\u00bb.",
     ),
     PlanBullet(
+        key="plan.bullet.camera_watch",
         icon="qalqon",
         label="Kamera nazorati",
         detail="Kamera o'chsa yoki tasvir qotib qolsa darhol xabar beriladi.",
         example="Tunda kabel uzilsa — ertalab emas, o'sha zahoti bilasiz.",
     ),
     PlanBullet(
+        key="plan.bullet.archive",
         icon="quti",
-        label="Arxiv 30 kun",
+        label=f"Arxiv {RETENTION_DAYS} kun",
         detail="Aniqlangan hodisalar va kunlik raqamlar 30 kun saqlanadi.",
         example="O'tgan oyning eng gavjum kunini solishtira olasiz.",
+        params={"days": RETENTION_DAYS},
     ),
     PlanBullet(
+        key="plan.bullet.auto_update",
         icon="yuklash",
         label="Avtomatik yangilanish",
         detail="Dastur imzolangan yangilanishni o'zi oladi — siz hech narsa "
@@ -276,17 +301,21 @@ BOSHLANGICH_BULLETS = (
 
 BIZNES_BULLETS = (
     PlanBullet(
+        key="plan.bullet.cameras_business",
         icon="kamera",
-        label="4 kameragacha",
+        label=f"{GUARANTEED_CAMERAS} kameragacha",
         detail="Bitta do'konda to'rtta kamera.",
         example="Kirish, kassa, savdo zali va ombor.",
+        params={"count": GUARANTEED_CAMERAS},
     ),
     PlanBullet(
+        key="plan.bullet.everything_in_starter",
         icon="dokon",
         label="Boshlang'ichdagi hammasi",
         detail="Sanoq, kunlik hisobot, kamera nazorati va Telegram xabarlari.",
     ),
     PlanBullet(
+        key="plan.bullet.queue",
         icon="navbat",
         label="Kassa navbati",
         detail="Kassada nechta odam turgani o'lchanadi; navbat uzayganda "
@@ -294,6 +323,7 @@ BIZNES_BULLETS = (
         example="\u00abNavbatda 7 kishi \u2014 ikkinchi kassani oching\u00bb.",
     ),
     PlanBullet(
+        key="plan.bullet.security",
         icon="qalqon",
         label="Xavfsizlik signallari",
         detail="Ish vaqtidan tashqari harakat, taqiqlangan zonaga kirish va "
@@ -301,6 +331,7 @@ BIZNES_BULLETS = (
         example="Do'kon yopiq, kamera esa odamni ko'rdi — telefon jiringlaydi.",
     ),
     PlanBullet(
+        key="plan.bullet.heatmap",
         icon="xarita",
         label="Do'kon issiqlik xaritasi",
         detail="Mijozlar do'konning qaysi joyida ko'p turishini ko'rasiz — "
@@ -308,6 +339,7 @@ BIZNES_BULLETS = (
         example="Kirish yo'lagida ko'p, burchakda deyarli hech kim yo'q.",
     ),
     PlanBullet(
+        key="plan.bullet.portrait",
         icon="portret",
         label="Mijoz portreti",
         detail="Mijozlarning taxminiy yoshi va jinsi. Anonim baho: rasm "
@@ -315,6 +347,7 @@ BIZNES_BULLETS = (
         example="Xaridorlarning 58% ayol, asosiy yosh guruhi 18-30.",
     ),
     PlanBullet(
+        key="plan.bullet.auto_update_brief",
         icon="yuklash",
         label="Avtomatik yangilanish",
         detail="Dastur imzolangan yangilanishni o'zi oladi.",
@@ -324,11 +357,11 @@ BIZNES_BULLETS = (
 PLANS: Dict[PlanTier, PlanLimits] = {
     "boshlangich": PlanLimits(
         # Kichik do'kon uchun kirish nuqtasi: kirish eshigi + savdo zali.
-        max_cameras=2,
+        max_cameras=BOSHLANGICH_MAX_CAMERAS,
         # Xodim davomati bu tarifda yo'q.  Nol — "cheksiz" emas, "umuman
         # yo'q": `_check_employee_limit` xodim qo'shishga yo'l bermaydi.
         max_persons=0,
-        retention_days=30,
+        retention_days=RETENTION_DAYS,
         telegram_allowed=True,
         monthly_price_uzs=BOSHLANGICH_MONTHLY_PRICE_USD_CENTS * DEFAULT_USD_RATE_UZS // 100,
         install_price_uzs=0,
@@ -342,7 +375,7 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         # Asosiy tarif — `lite` ning aynan cheklovlari, narxi $20 → $23.
         max_cameras=GUARANTEED_CAMERAS,
         max_persons=10,
-        retention_days=30,
+        retention_days=RETENTION_DAYS,
         telegram_allowed=True,
         monthly_price_uzs=BIZNES_MONTHLY_PRICE_USD_CENTS * DEFAULT_USD_RATE_UZS // 100,
         install_price_uzs=0,

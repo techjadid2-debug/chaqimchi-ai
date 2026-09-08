@@ -71,9 +71,10 @@ def test_monthly_receipt_compares_the_loss_with_the_price() -> None:
         lost_uzs=3_200_000,
         monthly_price_uzs=299_000,
     )
-    assert "3.2 mln so'm" in text
+    # Panel bilan bitta yozuv: vergul kasr belgisi, katalogdagi «so'm».
+    assert "3,2 mln so'm" in text
     assert "299 000 so'm" in text
-    assert "10.7×" in text
+    assert "10,7×" in text
     assert "taxminiy" in text
 
 
@@ -94,7 +95,7 @@ def test_monthly_receipt_does_not_boast_when_the_loss_is_small() -> None:
 
 def test_large_sums_are_readable() -> None:
     """«3200000 so'm» o'qilmaydi — do'kon egasi nolni sanab o'tirmasin."""
-    assert uzs(3_200_000) == "3.2 mln so'm"
+    assert uzs(3_200_000) == "3,2 mln so'm"
     assert uzs(2_000_000) == "2 mln so'm"
     assert uzs(299_000) == "299 000 so'm"
 

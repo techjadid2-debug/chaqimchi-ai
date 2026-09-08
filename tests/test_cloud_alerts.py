@@ -10,6 +10,7 @@ from cloud.alerts import (
     SILENT_ALERT_HOURS,
     AlertConfig,
     AlertService,
+    OwnerMessage,
     TelegramSender,
     plan_alerts,
     plan_camera_alerts,
@@ -311,28 +312,31 @@ def test_owner_is_told_when_the_system_stops(store: CloudStore) -> None:
     """
     site_id = _make_silent_site(store, hours=10)
     sender = FakeSender()
-    to_owner: list[tuple[str, str]] = []
+    to_owner: list[tuple[str, OwnerMessage]] = []
 
-    async def owner_notify(sid: str, text: str) -> None:
-        to_owner.append((sid, text))
+    async def owner_notify(sid: str, message: OwnerMessage) -> None:
+        to_owner.append((sid, message))
 
     run = asyncio.run(run_check(store, sender, owner_notify))
 
     assert run.sent == 1
     assert len(to_owner) == 1
     assert to_owner[0][0] == site_id
-    assert "Kuzatuv to'xtadi" in to_owner[0][1]
+    text = to_owner[0][1].for_lang("uz")
+    assert "Kuzatuv to'xtadi" in text
     # Egasiga tarif, telefon yoki ichki atamalar yozilmaydi.
-    assert "tarif" not in to_owner[0][1].lower()
+    assert "tarif" not in text.lower()
+    # Ruscha a'zo o'z tilida o'qiydi — matn tayyor satr emas, yasovchi.
+    assert "Kuzatuv" not in to_owner[0][1].for_member({"language": "ru"})
 
 
 def test_owner_is_told_when_it_comes_back(store: CloudStore) -> None:
     site_id = _make_silent_site(store, hours=10)
     sender = FakeSender()
-    to_owner: list[tuple[str, str]] = []
+    to_owner: list[tuple[str, OwnerMessage]] = []
 
-    async def owner_notify(sid: str, text: str) -> None:
-        to_owner.append((sid, text))
+    async def owner_notify(sid: str, message: OwnerMessage) -> None:
+        to_owner.append((sid, message))
 
     asyncio.run(run_check(store, sender, owner_notify))
     conn = store._connect()
@@ -343,7 +347,7 @@ def test_owner_is_told_when_it_comes_back(store: CloudStore) -> None:
     asyncio.run(run_check(store, sender, owner_notify))
 
     assert len(to_owner) == 2
-    assert "tiklandi" in to_owner[1][1]
+    assert "tiklandi" in to_owner[1][1].for_lang("uz")
 
 
 def test_owner_send_failure_does_not_replay_the_internal_alert(store: CloudStore) -> None:

@@ -37,6 +37,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from cloud import botfmt, i18n
+from cloud.i18n import tg
+
 #: Hisob ishonchli bo'lishi uchun oraliqda kamida shuncha tashrif kerak.
 #:
 #: Kam sonda o'rtacha ma'nosini yo'qotadi va bitta chetlanish butun
@@ -134,20 +137,30 @@ def conversion(*, receipts: Optional[int], entered: int) -> Optional[Dict[str, A
     return {"receipts": receipts, "entered": entered, "percent": percent}
 
 
-def conversion_line(*, receipts: Optional[int], entered: int) -> Optional[str]:
+def conversion_line(
+    *, receipts: Optional[int], entered: int, lang: str = i18n.DEFAULT_LANG
+) -> Optional[str]:
     """Kunlik xabardagi chek qatori.  Egasi kiritmagan bo'lsa — `None`."""
     data = conversion(receipts=receipts, entered=entered)
     if data is None:
         return None
     if data["percent"] is None:
         # Foizsiz halol javob: son o'zi ham savolga javob beradi.
-        return f"🧾 <b>{data['receipts']}</b> chek, {data['entered']} kishi kirgan"
-    line = f"🧾 <b>{data['receipts']}</b> chek / {data['entered']} kirgan"
+        return tg(
+            lang, "value.conversion.counts", receipts=data["receipts"], entered=data["entered"]
+        )
     if data["receipts"]:
         every = round(data["entered"] / data["receipts"])
+        # «har 1-mijoz sotib oldi» — ma'nosiz jumla; 2 dan boshlab.
         if every >= 2:
-            line += f" — har {every}-mijoz sotib oldi"
-    return line
+            return tg(
+                lang,
+                "value.conversion.ratio_every",
+                receipts=data["receipts"],
+                entered=data["entered"],
+                every=every,
+            )
+    return tg(lang, "value.conversion.ratio", receipts=data["receipts"], entered=data["entered"])
 
 
 def capture_rate(*, entered: int, passed: Optional[int]) -> Optional[Dict[str, Any]]:
@@ -199,29 +212,39 @@ def select_passed(*, entrance_seen: Optional[int], outer_seen: Optional[int]) ->
     return None
 
 
-def capture_rate_line(*, entered: int, passed: Optional[int]) -> Optional[str]:
+def capture_rate_line(
+    *, entered: int, passed: Optional[int], lang: str = i18n.DEFAULT_LANG
+) -> Optional[str]:
     """Kunlik xabardagi avtomatik konversiya qatori.  `passed` yo'q → `None`."""
     data = capture_rate(entered=entered, passed=passed)
     if data is None:
         return None
     if data["percent"] is None:
-        return f"🚶 <b>{data['passed']}</b> yaqinlashdi, {data['entered']} kishi kirdi"
-    return (
-        f"🚶 <b>{data['passed']}</b> yaqinlashdi → {data['entered']} kirdi "
-        f"(<b>{data['percent']}%</b>)"
+        return tg(lang, "value.capture.counts", passed=data["passed"], entered=data["entered"])
+    return tg(
+        lang,
+        "value.capture.percent",
+        passed=data["passed"],
+        entered=data["entered"],
+        percent=data["percent"],
     )
 
 
-def uzs(amount: int) -> str:
-    """So'mni o'qiladigan ko'rinishda: 3 200 000 → «3.2 mln so'm»."""
+def uzs(amount: int, lang: str = i18n.DEFAULT_LANG) -> str:
+    """So'mni o'qiladigan ko'rinishda: 3 200 000 → «3,2 mln so‘m».
+
+    Birlik ham, kasr belgisi ham katalogdan (`money.*`, `format.number.*`)
+    — panelning `formatMoney` bilan bitta yozuv.  Ilgari bu yerda
+    «3.2 mln so'm» chiqardi va mijoz bir kunda ikki xil yozuvni ko'rardi.
+    """
     if amount >= 1_000_000:
-        millions = amount / 1_000_000
-        text = f"{millions:.1f}".rstrip("0").rstrip(".")
-        return f"{text} mln so'm"
-    return f"{amount:,}".replace(",", " ") + " so'm"
+        return tg(lang, "money.mln", value=botfmt.decimal(amount / 1_000_000, lang))
+    return tg(lang, "money.plain", value=botfmt.number(amount, lang))
 
 
-def daily_line(report: Dict[str, Any], daily_revenue_uzs: int) -> Optional[str]:
+def daily_line(
+    report: Dict[str, Any], daily_revenue_uzs: int, lang: str = i18n.DEFAULT_LANG
+) -> Optional[str]:
     """Kunlik xabarga qo'shiladigan bitta qator.  Yo'q bo'lsa `None`."""
     traffic = report.get("traffic") or {}
     cost = queue_cost(
@@ -231,10 +254,12 @@ def daily_line(report: Dict[str, Any], daily_revenue_uzs: int) -> Optional[str]:
     )
     if not cost:
         return None
-    return (
-        f"💸 Uzun navbat {cost['episodes']} marta bo'ldi. Taxminan "
-        f"<b>{cost['lost_customers']}</b> mijoz kutmasdan ketgan bo'lishi mumkin "
-        f"≈ <b>{uzs(cost['lost_uzs'])}</b>"
+    return tg(
+        lang,
+        "value.daily.queue_loss",
+        episodes=cost["episodes"],
+        lost_customers=cost["lost_customers"],
+        amount=uzs(cost["lost_uzs"], lang),
     )
 
 
@@ -244,6 +269,7 @@ def monthly_receipt(
     month_label: str,
     lost_uzs: int,
     monthly_price_uzs: int,
+    lang: str = i18n.DEFAULT_LANG,
 ) -> str:
     """Oylik hisob-kitob cheki — «Chaqimchi o'zini qopladimi».
 
@@ -252,17 +278,20 @@ def monthly_receipt(
     HAQIQATGA xizmat qilishi kerak — shuning uchun taxmin ehtiyotkor.
     """
     lines = [
-        f"🧾 <b>{site_name}</b> — {month_label} hisob-kitobi",
+        tg(lang, "value.receipt.title", site=site_name, month=month_label),
         "",
-        f"Chaqimchi ko'rsatgan yo'qotish: <b>{uzs(lost_uzs)}</b>",
-        f"Obuna: {uzs(monthly_price_uzs)}",
+        tg(lang, "value.receipt.loss", amount=uzs(lost_uzs, lang)),
+        tg(lang, "value.receipt.subscription", amount=uzs(monthly_price_uzs, lang)),
     ]
     if lost_uzs > monthly_price_uzs:
-        times = lost_uzs / monthly_price_uzs
-        lines.append(f"\nYa'ni obuna narxidan <b>{times:.1f}×</b> ko'p.")
-    lines.append(
-        "\nBu <i>taxminiy</i> hisob: uzun navbat har safar bitta mijozni "
-        "yo'qotadi deb olindi va o'rtacha chek sizning kunlik savdongizdan "
-        "hisoblandi."
-    )
+        # Bo'sh qator — bu jumla alohida xulosa, ro'yxat davomi emas.
+        lines += [
+            "",
+            tg(
+                lang,
+                "value.receipt.times",
+                times=botfmt.decimal(lost_uzs / monthly_price_uzs, lang),
+            ),
+        ]
+    lines += ["", tg(lang, "value.receipt.disclaimer")]
     return "\n".join(lines)

@@ -32,11 +32,12 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tuple
 
 import httpx
 
 from chaqimchi_ai.limits import STORE_UTC_OFFSET_HOURS
+from cloud import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,49 @@ class AlertConfig:
         )
 
 
+class OwnerMessage:
+    """Do'kon egasiga boradigan xabar — tayyor matn emas, MATN YASOVCHI.
+
+    Nega matn emas: bitta do'konda bir necha a'zo bor va har biri o'z
+    tilida o'qiydi (`owner_members.language`).  Matn shu yerda bir marta
+    yasab yuborilsa, u KIMNINGDIR tilida ketardi — fon vazifasida esa
+    "kimdir" degani hech kim emas, standart `uz`.  Shuning uchun
+    yuboruvchi har a'zo uchun `for_member(member)` deb so'raydi.
+
+    Til bo'yicha kesh: do'konda beshta a'zo bo'lsa ham matn ko'pi bilan
+    uch marta yasaladi (uchta til bor), qolganlari keshdan oladi.
+    """
+
+    def __init__(self, build: Callable[[str], str]) -> None:
+        self._build = build
+        self._cache: Dict[str, str] = {}
+
+    @classmethod
+    def from_key(cls, key: str, **params: Any) -> "OwnerMessage":
+        """Katalog kalitidan — o'rinbosarlari oldindan ma'lum bo'lsa."""
+        return cls(lambda lang: i18n.tg(lang, key, **params))
+
+    def for_lang(self, lang: Optional[str]) -> str:
+        code = i18n.normalize(lang) or i18n.DEFAULT_LANG
+        text = self._cache.get(code)
+        if text is None:
+            text = self._cache[code] = self._build(code)
+        return text
+
+    def for_member(self, member: Mapping[str, Any]) -> str:
+        """A'zo yozuvidan tilni o'zi oladi — chaqiruvchi ustunni bilmasin."""
+        return self.for_lang(member.get("language"))
+
+    def __repr__(self) -> str:
+        return f"OwnerMessage({self.for_lang(i18n.DEFAULT_LANG)!r})"
+
+
+#: `owner_notify(site_id, message)` — egaga yuboruvchi.  Matn emas,
+#: `OwnerMessage` oladi: qabul qiluvchilar va ularning tili faqat
+#: yuboruvchiga ma'lum (`cloud/main.py: _notify_site_members`).
+OwnerNotify = Callable[[str, OwnerMessage], Awaitable[None]]
+
+
 @dataclass
 class Alert:
     """Bitta yuboriladigan xabar."""
@@ -161,12 +205,13 @@ class Alert:
     remember: Optional[str]
     #: Ogohlantirish turi — har biri mustaqil kuzatiladi.
     kind: str = "connection"
-    #: To'ldirilgan bo'lsa do'kon EGASIGA ham shu matn yuboriladi.
+    #: To'ldirilgan bo'lsa do'kon EGASIGA ham xabar yuboriladi.
     #:
     #: Ichki chatdagi xabar texnik ("temperature_c 91"), egaga esa u
     #: hech narsa aytmaydi.  Shuning uchun ikkinchi, sodda matn —
-    #: va faqat egasi O'ZI hal qila oladigan muammolar uchun.
-    owner_text: Optional[str] = None
+    #: va faqat egasi O'ZI hal qila oladigan muammolar uchun.  A'zo
+    #: tilida yasaladi, shuning uchun satr emas, `OwnerMessage`.
+    owner_text: Optional[OwnerMessage] = None
 
 
 @dataclass
@@ -189,31 +234,37 @@ class AlertRun:
         }
 
 
-def _since_label(minutes: Optional[int]) -> str:
+def _since_label(minutes: Optional[int], lang: str = i18n.DEFAULT_LANG) -> str:
+    """«3 soat oldin» — voqea nuqtasi.
+
+    Davomiylik so'zlari katalogda, chunki ular egaga boradigan matnga
+    ham kiradi.  Ichki (ops) matn ularni standart tilda oladi — natija
+    avvalgidek o'zbekcha.
+    """
     if minutes is None:
-        return "hech qachon"
+        return i18n.tg(lang, "alert.since.never")
     if minutes < 60:
-        return f"{minutes} daqiqa oldin"
+        return i18n.tg(lang, "alert.since.minutes", minutes=minutes)
     hours = minutes // 60
     if hours < 24:
-        return f"{hours} soat oldin"
-    return f"{hours // 24} kun oldin"
+        return i18n.tg(lang, "alert.since.hours", hours=hours)
+    return i18n.tg(lang, "alert.since.days", days=hours // 24)
 
 
-def _silent_label(minutes: Optional[int]) -> str:
+def _silent_label(minutes: Optional[int], lang: str = i18n.DEFAULT_LANG) -> str:
     """«10 soatdan beri» — davomiylik, «oldin» emas.
 
     `_since_label` voqea nuqtasini bildiradi ("oxirgi aloqa 10 soat
     oldin"); jim qolish esa davom etayotgan holat.
     """
     if minutes is None:
-        return "boshidan beri"
+        return i18n.tg(lang, "alert.silent.start")
     if minutes < 60:
-        return f"{minutes} daqiqadan beri"
+        return i18n.tg(lang, "alert.silent.minutes", minutes=minutes)
     hours = minutes // 60
     if hours < 24:
-        return f"{hours} soatdan beri"
-    return f"{hours // 24} kundan beri"
+        return i18n.tg(lang, "alert.silent.hours", hours=hours)
+    return i18n.tg(lang, "alert.silent.days", days=hours // 24)
 
 
 def _site_age_hours(created_at: Optional[str], now: datetime) -> Optional[float]:
@@ -224,6 +275,17 @@ def _site_age_hours(created_at: Optional[str], now: datetime) -> Optional[float]
     except ValueError:
         return None
     return (now - created).total_seconds() / 3600
+
+
+# ── Ichki (ops) matnlar — ATAYLAB o'zbekcha va katalogsiz ───────────────
+#
+# `_problem_text`, `_camera_text`, `_device_text`, disk/server matnlari
+# va ularning "tiklandi" juftlari faqat sotuv boti chatiga boradi — uni
+# jamoa o'qiydi, mijoz emas.  O'quvchi bitta va tili ma'lum: bu
+# satrlarni katalogga ko'chirish tarjimonga ikki tilda ortiqcha ish
+# qo'shadi-yu, hech kimga foyda bermaydi.  Chegara aniq: egaga
+# boradigan HAMMA matn `owner_*` funksiyalarida va `_OWNER_*` kalitlarida,
+# u yerda til majburiy (`OwnerMessage`).
 
 
 def _problem_text(site: Dict[str, Any]) -> str:
@@ -254,7 +316,7 @@ def _problem_text(site: Dict[str, Any]) -> str:
     )
 
 
-def owner_down_text(site: Dict[str, Any]) -> Optional[str]:
+def owner_down_text(site: Dict[str, Any], lang: str = i18n.DEFAULT_LANG) -> Optional[str]:
     """Do'kon egasiga: kuzatuv to'xtaganini FAQAT bulut ayta oladi.
 
     `camera_offline` xabarini qurilmaning o'zi yuboradi.  Kompyuter
@@ -264,26 +326,21 @@ def owner_down_text(site: Dict[str, Any]) -> Optional[str]:
 
     `None` — bu holat egasiga tegishli emas (masalan juftlanmagan yangi
     sayt: bu bizning o'rnatish ishimiz, mijozniki emas).
+
+    `lang` — qabul qiluvchi a'zoning tili.  Bu fon vazifasi: so'rov
+    konteksti yo'q, ya'ni `i18n.t()` bu yerda ishlamaydi — til aniq
+    uzatilishi shart.
     """
+    minutes = site.get("minutes_since_seen")
     if site.get("connection") == "stale":
-        return (
-            f"🔴 <b>Kuzatuv to'xtadi</b>\n"
-            f"Do'kon kompyuteri {_silent_label(site.get('minutes_since_seen'))} "
-            f"javob bermayapti — kameralar yozilmayapti.\n"
-            f"Kompyuter yoqilganini va internet borligini tekshiring."
-        )
+        return i18n.tg(lang, "alert.owner.down_silent", since=_silent_label(minutes, lang))
     if site.get("connection") == "offline":
-        return (
-            f"🔴 <b>Kuzatuv to'xtadi</b>\n"
-            f"Tizimdan {_since_label(site.get('minutes_since_seen'))} xabar yo'q — "
-            f"kameralar yozilmayapti.\n"
-            f"Kompyuter yoqilganini va internet borligini tekshiring."
-        )
+        return i18n.tg(lang, "alert.owner.down_offline", since=_since_label(minutes, lang))
     return None
 
 
-def owner_recovery_text() -> str:
-    return "✅ <b>Kuzatuv tiklandi</b>\nKameralar yana yozmoqda."
+def owner_recovery_text(lang: str = i18n.DEFAULT_LANG) -> str:
+    return i18n.tg(lang, "alert.owner.recovered")
 
 
 def _update_stuck_text(site: Dict[str, Any], version: str, latest: str, days: int) -> str:
@@ -771,55 +828,36 @@ def _device_recovery_text(site: Dict[str, Any]) -> str:
 #: Egaga yuboriladigan matn — texnik atamasiz.
 #:
 #: "temperature_c 91" degan xabar do'kon egasiga hech narsa aytmaydi.
-#: Bu yerda esa u aynan nima qilishi kerakligi yozilgan.
-_OWNER_TEMP_ALERT = (
-    "🌡 <b>Kompyuter qizib ketyapti</b>\n"
-    "Nazorat hozircha ishlayapti, lekin kompyuter o'zini himoya qilib "
-    "sekinlashishi yoki o'chib qolishi mumkin.\n\n"
-    "Nima qilish kerak:\n"
-    "• kompyuter yonidagi havo yo'lini bo'shating;\n"
-    "• changini tozalang (ayniqsa ventilyatorni);\n"
-    "• quyosh tushmaydigan, salqinroq joyga qo'ying."
-)
-
-_OWNER_TEMP_OK = "✅ Kompyuter sovidi — harorat me'yorga qaytdi."
-
+#: Katalogdagi matnda esa u aynan nima qilishi kerakligi yozilgan
+#: (`alert.owner.temp_alert`: shamollatish, chang, salqin joy).
+#:
 #: Soat — haroratdan keyingi ikkinchi "egasi o'zi hal qiladigan" muammo,
 #: lekin oqibati ko'rinmas: hech narsa buzilmaydi, shunchaki tungi
-#: nazorat noto'g'ri vaqtda ishlaydi.  Shuning uchun xabar nima
-#: bo'layotganini AVVAL tushuntiradi, keyin yechim beradi.
-_OWNER_CLOCK_ALERT = (
-    "🕐 <b>Kompyuter soati noto'g'ri</b>\n"
-    "Do'kon kompyuteringizdagi vaqt haqiqiy vaqtdan ancha farq qilyapti.\n\n"
-    "Bu nimaga ta'sir qiladi: «ish vaqtidan tashqari odam» ogohlantirishi "
-    "noto'g'ri soatda ishlaydi — kunduzi bekorga xabar kelishi yoki "
-    "kechasi umuman kelmasligi mumkin.\n\n"
-    "Nima qilish kerak:\n"
-    "• soat va sanani to'g'rilang (Windows: soat ustiga o'ng tugma → "
-    "«Sana va vaqtni sozlash»);\n"
-    "• «Vaqtni avtomatik o'rnatish» yoqilgan bo'lsin;\n"
-    "• vaqt yana adashaverса — kompyuterdagi batareyka o'lgan, "
-    "ustaga ko'rsating (arzon detal)."
-)
-
-_OWNER_CLOCK_OK = "✅ Kompyuter soati to'g'rilandi — tungi nazorat yana joyida."
-
-#: Holat → egaga ko'rinadigan matn.  Ro'yxatda yo'q holat (navbat,
-#: tahlil, disk) egaga UMUMAN bormaydi: u bunga ta'sir qila olmaydi va
-#: xabar faqat qo'rquv uyg'otardi.
+#: nazorat noto'g'ri vaqtda ishlaydi.  Shuning uchun uning matni
+#: (`alert.owner.clock_alert`) nima bo'layotganini AVVAL tushuntiradi,
+#: keyin yechim beradi.
+#:
+#: Holat → egaga ko'rinadigan matn kaliti.  Ro'yxatda yo'q holat
+#: (navbat, tahlil, disk) egaga UMUMAN bormaydi: u bunga ta'sir qila
+#: olmaydi va xabar faqat qo'rquv uyg'otardi.
 #:
 #: Lug'at sifatida ataylab: ilgari bu `if state == "temp"` shartlari
 #: bilan ikki joyda yozilgan edi va uchinchi holat (soat) qo'shilganda
 #: ikkalasini ham tuzatish kerak bo'ldi.
-_OWNER_ALERT_TEXT = {
-    "temp": _OWNER_TEMP_ALERT,
-    "clock": _OWNER_CLOCK_ALERT,
+_OWNER_ALERT_KEY = {
+    "temp": "alert.owner.temp_alert",
+    "clock": "alert.owner.clock_alert",
 }
 
-_OWNER_RECOVERY_TEXT = {
-    "temp": _OWNER_TEMP_OK,
-    "clock": _OWNER_CLOCK_OK,
+_OWNER_RECOVERY_KEY = {
+    "temp": "alert.owner.temp_ok",
+    "clock": "alert.owner.clock_ok",
 }
+
+
+def _owner_message(keys: Dict[str, str], state: Optional[str]) -> Optional[OwnerMessage]:
+    key = keys.get(state or "")
+    return OwnerMessage.from_key(key) if key else None
 
 
 def plan_device_health_alerts(
@@ -863,7 +901,7 @@ def plan_device_health_alerts(
                         kind="device",
                         # Egaga faqat u xabar olgan muammo bo'yicha
                         # tiklanish aytiladi.
-                        owner_text=_OWNER_RECOVERY_TEXT.get(prev or ""),
+                        owner_text=_owner_message(_OWNER_RECOVERY_KEY, prev),
                     )
                 )
             continue
@@ -880,7 +918,7 @@ def plan_device_health_alerts(
                     # qizish (chang, shamollatish) va soat (sozlash yoki
                     # batareyka).  Qolganlari — navbat, tahlil, disk —
                     # biz uchun texnik signal va egaga shovqin bo'lardi.
-                    owner_text=_OWNER_ALERT_TEXT.get(state),
+                    owner_text=_owner_message(_OWNER_ALERT_KEY, state),
                 )
             )
 
@@ -1025,13 +1063,14 @@ def _latest_release_version() -> Optional[str]:
 async def run_check(
     store: Any,
     sender: TelegramSender,
-    owner_notify: Optional[Callable[[str, str], Awaitable[None]]] = None,
+    owner_notify: Optional[OwnerNotify] = None,
 ) -> AlertRun:
     """Bir marta tekshirish: holatlarni solishtirib, o‘zgarganlarini yuboradi.
 
-    `owner_notify(site_id, text)` berilsa, tizim to'xtagani/tiklangani
+    `owner_notify(site_id, message)` berilsa, tizim to'xtagani/tiklangani
     haqida **do'kon egasiga** ham xabar ketadi.  Berilmasa (masalan
-    testlarda) faqat ichki chatga yoziladi.
+    testlarda) faqat ichki chatga yoziladi.  `message` — `OwnerMessage`:
+    matnni har a'zo o'z tilida oladi, ichki chat esa avvalgidek o'zbekcha.
     """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     run = AlertRun(ran_at=now.strftime("%Y-%m-%d %H:%M:%S"))
@@ -1130,7 +1169,7 @@ async def run_check(
 
 
 async def _notify_owner(
-    owner_notify: Callable[[str, str], Awaitable[None]],
+    owner_notify: OwnerNotify,
     alert: Alert,
     site: Optional[Dict[str, Any]],
 ) -> None:
@@ -1142,11 +1181,15 @@ async def _notify_owner(
     """
     if site is None:
         return
-    text = owner_recovery_text() if alert.remember is None else owner_down_text(site)
-    if not text:
+    if alert.remember is None:
+        message = OwnerMessage(owner_recovery_text)
+    elif owner_down_text(site) is None:
+        # Holat egaga tegishli emas — til qanday bo'lmasin.
         return
+    else:
+        message = OwnerMessage(lambda lang: owner_down_text(site, lang) or "")
     try:
-        await owner_notify(alert.site_id, text)
+        await owner_notify(alert.site_id, message)
     except Exception:  # noqa: BLE001
         logger.warning("Egaga uzilish xabari yuborilmadi: %s", alert.site_id, exc_info=True)
 
@@ -1158,7 +1201,7 @@ class AlertService:
         self,
         store: Any,
         config: Optional[AlertConfig] = None,
-        owner_notify: Optional[Callable[[str, str], Awaitable[None]]] = None,
+        owner_notify: Optional[OwnerNotify] = None,
     ) -> None:
         self.store = store
         self.config = config or AlertConfig.from_env()
@@ -1224,6 +1267,8 @@ __all__ = [
     "AlertConfig",
     "AlertRun",
     "AlertService",
+    "OwnerMessage",
+    "OwnerNotify",
     "DEVICE_POISONED_EVENTS",
     "STORE_TZ_OFFSET_MIN",
     "DEVICE_TEMP_ALERT_C",
@@ -1237,6 +1282,8 @@ __all__ = [
     "TelegramSender",
     "disk_usage_percent",
     "disk_watch_path",
+    "owner_down_text",
+    "owner_recovery_text",
     "plan_alerts",
     "plan_camera_alerts",
     "plan_disk_alert",

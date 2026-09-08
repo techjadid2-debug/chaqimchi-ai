@@ -1,4 +1,4 @@
-# Sotqin R1 (Chaqimchi Box) — lokal qurilma va edge AI
+# Sotqin R1 (ENES Box) — lokal qurilma va edge AI
 
 > **Holat (2026-08-16): keyingi bosqich mahsuloti.** Asosiy yo‘l hozir
 > mijozning mavjud Windows kompyuteri (`docs/DOKON_MVP.md`). Box kodi
@@ -6,7 +6,7 @@
 
 **Sotqin** — kompyuteri yo‘q mijozlar uchun tayyor mini-PC yechimi. Mijoz
 NVR va kameralar bilan birga Sotqinni buyurtma qiladi; dastur oldindan
-o‘rnatiladi va pairing orqali Chaqimchi Cloud’ga bog‘lanadi.
+o‘rnatiladi va pairing orqali ENES Cloud’ga bog‘lanadi.
 
 ## R1 apparat profili
 
@@ -41,7 +41,7 @@ Ichki profil kodi: `SOTQIN-N100-8-128-R1`. Mijoz uchun nom doim **Sotqin**.
   config sifatida keladi;
 - hodisa klipi (`-c copy`, dekodlashsiz) va 3 kun/40 GB event buffer.
 
-Ixtiyoriy yopiq attendance pilotida (`chaqimchi-attendance.service`) yozma
+Ixtiyoriy yopiq attendance pilotida (`enes-attendance.service`) yozma
 rozilikli xodim enrollmenti va yuz matching lokal ishlaydi. Foto/embedding
 cloudga chiqmaydi; cloud faqat profil, jadval va first/last seen oladi.
 
@@ -86,7 +86,7 @@ sudo /opt/enes/venv/bin/python \
 sudo systemctl start enes-sotqin
 sudo systemctl start enes-retail
 # faqat tasdiqlangan yopiq attendance pilotida:
-sudo systemctl start chaqimchi-attendance
+sudo systemctl start enes-attendance
 ```
 
 Pairingdan so'ng `/etc/enes/sotqin.env` ichida device token, Intel modeli,

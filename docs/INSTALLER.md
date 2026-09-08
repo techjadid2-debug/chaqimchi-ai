@@ -1,4 +1,4 @@
-# Chaqimchi o‘rnatuvchi qo‘llanmasi
+# ENES o‘rnatuvchi qo‘llanmasi
 
 Ikkita yo‘l bor va ular bir-biridan mustaqil:
 
@@ -140,7 +140,7 @@ export ENES_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
 export ENES_CLOUD_TELEGRAM_TOKEN="123456:ABC..."   # @BotFather dan
 export ENES_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
 # Public deep-link uchun BotFather bergan username:
-export ENES_TELEGRAM_BOT_USERNAME="chaqimchi_bot"
+export ENES_TELEGRAM_BOT_USERNAME="enes_bot"
 # Maslahat arizasini faqat shaxsiy akkauntga yuborish:
 export ENES_TELEGRAM_LEAD_CHAT_IDS="5476913898"
 
@@ -185,7 +185,7 @@ Attendance faqat yozma rozilikli yopiq pilot bo‘lsa
 `ENES_ATTENDANCE_PILOT=true` qilinadi va lokal xizmat yoqiladi:
 
 ```bash
-sudo systemctl enable --now chaqimchi-attendance
+sudo systemctl enable --now enes-attendance
 # enrollment paneliga servis SSH tunnel orqali ulanadi:
 ssh -L 8743:127.0.0.1:8743 installer@SOTQIN_IP
 ```

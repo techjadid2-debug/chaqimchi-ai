@@ -10,7 +10,7 @@ kamera (ko'pi bilan **4 ta**) + bizning cloud. Uzluksiz video NVR'da
 qoladi, tahlil do'kon kompyuterida lokal ketadi, cloudga faqat hodisa,
 ruxsat etilgan media, hisobot va health boradi.
 
-**Chaqimchi Box** (Intel N100 mini-PC) — keyingi bosqich mahsuloti:
+**ENES Box** (Intel N100 mini-PC) — keyingi bosqich mahsuloti:
 kodi repoda ishlaydi, lekin sotuv fokusi hozir Windows yo'lida.
 
 Tizim o'g'rilik, jinoyat yoki niyatni **taxmin qilmaydi**.
@@ -60,7 +60,7 @@ Tizim o'g'rilik, jinoyat yoki niyatni **taxmin qilmaydi**.
 
 ```bash
 make lint                 # ruff: enes cloud tests scripts
-make test                 # TS typecheck + pytest (~1 724 test)
+make test                 # TS typecheck + i18n/sayt --check + pytest (~2 330 test)
 make ui-install           # frontend/node_modules yo'q bo'lsa
 
 make run-cloud            # cloud API      → :8750
@@ -73,13 +73,15 @@ qadam yiqiladi):
 
 ```bash
 # 1) versiyani enes/__init__.py va pyproject.toml da ko'taring
+# (cloud manzili F7 cutovergacha api.chaqimchi.uz, keyin api.enes.uz)
 PYTHONPATH="$PWD" ENES_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
   python scripts/build_windows_payload.py
 makensis -V2 scripts/windows_installer.nsi
 PYTHONPATH="$PWD" ENES_RELEASE_HOST=root@169.58.198.111 \
   ./scripts/publish_windows_release.sh --exe releases/ENES_Setup.exe
 ```
-Imzo kaliti: `~/.enes/sotqin-release-signing.pem`.
+Imzo kaliti: `~/.enes/sotqin-release-signing.pem` (hali `~/.chaqimchi/` da
+bo'lsa skript o'sha yerdan oladi — `mv ~/.chaqimchi ~/.enes` qilib qo'ying).
 
 **Cloud deploy:**
 
@@ -91,6 +93,19 @@ ssh root@169.58.198.111 'cd /home/deploy/enes && \
 ```
 To'liq `--exclude` ro'yxati: [docs/DEPLOY_TARIFLAR.md](docs/DEPLOY_TARIFLAR.md) §3.
 Zaxira kalitlari serverdagi `/etc/enes/backup.env` da (repoda emas).
+
+## Rebrend holati (2026-09, `enes-rebrend` shoxi)
+
+Chaqimchi AI → **ENES Monitoring**.  Kod, sayt, panel (UZ/RU/EN),
+Telegram, env nomlari, paket (`chaqimchi_ai` → `enes`) almashdi.
+**Ataylab qolgan ko'priklar** — o'chirish alohida qaror (`tests/test_brand.py`
+ro'yxati): `chaqimchi_ai/` (eski paket nomi — pilot kompyuteridagi
+yangilanish vazifasi), `enes/envcompat.py` (`CHAQIMCHI_*` env),
+eski reliz prefiksi (`chaqimchi-windows-*`), eski Windows vazifa/papka
+nomlari (`paths.py`, `autostart.py`, NSI).  **Egadan kutilmoqda (F7):**
+`enes.uz` DNS, bot @username, yuridik nom/rekvizit, Payme/Click;
+shundan keyin domen (`chaqimchi.uz`) va `@chaqimchi_ai_bot` almashadi.
+Cutover ro'yxati `docs/ISH_DAFTARI.md` da.
 
 ## Uslub
 

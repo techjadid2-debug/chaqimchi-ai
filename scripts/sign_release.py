@@ -43,7 +43,22 @@ from enes.signed_update import (
     verify_release_manifest,
 )
 
-DEFAULT_PRIVATE = Path.home() / ".enes" / "sotqin-release-signing.pem"
+
+def _default_private_key() -> Path:
+    """`~/.enes/…` — lekin kalit hali eski `~/.chaqimchi/` papkada bo'lsa o'sha.
+
+    Rebrend kalitni ko'chirmaydi: imzo kaliti bitta va uni yo'qotib
+    qo'yish relizlarni butunlay to'xtatardi.  Yangi papka paydo bo'lgach
+    (`mv ~/.chaqimchi ~/.enes`) eski yo'l o'z-o'zidan ishlatilmay qoladi.
+    """
+    current = Path.home() / ".enes" / "sotqin-release-signing.pem"
+    legacy = Path.home() / ".chaqimchi" / "sotqin-release-signing.pem"
+    if not current.exists() and legacy.exists():
+        return legacy
+    return current
+
+
+DEFAULT_PRIVATE = _default_private_key()
 DEFAULT_PUBLIC = BASE_DIR / "deploy" / "update-public.pem"
 
 #: `signed_update.verify_release_manifest` qabul qiladigan belgilar.

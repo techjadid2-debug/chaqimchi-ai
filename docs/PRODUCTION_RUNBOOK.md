@@ -1,4 +1,4 @@
-# Chaqimchi Cloud production runbook
+# ENES Cloud production runbook
 
 Bu hujjat rasmiy sayt → lead API → SQLite → Telegram, admin/owner API,
 PostgreSQL va MinIO bilan ishlaydigan cloud deployi uchun canonical tartibdir.

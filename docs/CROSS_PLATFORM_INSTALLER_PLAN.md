@@ -1,4 +1,4 @@
-# Chaqimchi kamera mosligi va kross-platform o‘rnatish rejasi
+# ENES kamera mosligi va kross-platform o‘rnatish rejasi
 
 ## Hozirgi holat
 
@@ -24,12 +24,12 @@ IP kamera(lar) -- Cat5e/6 PoE --> NVR/PoE switch -- LAN --> Router/switch -- Int
                                                        |             +-- LAN --> Sotqin N100
                                                        +-- HDMI --> Monitor (ixtiyoriy)
 
-Sotqin N100 -- HTTPS 443, chiqish aloqasi --> Chaqimchi Cloud
+Sotqin N100 -- HTTPS 443, chiqish aloqasi --> ENES Cloud
 Sotqin N100 -- RTSP 554, faqat lokal LAN --> NVR/kamera
 ```
 
 NVR uchun public port-forwarding ochilmaydi. Sotqin NVR bilan bir LAN’da turadi va
-cloud’ga faqat tashqariga HTTPS ulanish qiladi. NVR’da Chaqimchi uchun alohida,
+cloud’ga faqat tashqariga HTTPS ulanish qiladi. NVR’da ENES uchun alohida,
 faqat live-view huquqiga ega foydalanuvchi yaratiladi.
 
 ## 1-bosqich — kamera protokoli
@@ -59,8 +59,8 @@ Linux va Windows bitta foydalanuvchi oqimidan foydalanadi:
 - Code-signed MSI yoki EXE bootstrapper: **Next → Next → Finish**.
 - Python runtime, OpenVINO modeli, FFmpeg va kerakli Microsoft runtime’larni bundle
   qilish; internetdan tasodifiy paket yuklamaslik.
-- Dastur: `%ProgramFiles%\Chaqimchi\Sotqin`.
-- Konfiguratsiya va log: `%ProgramData%\Chaqimchi\Sotqin`.
+- Dastur: `%ProgramFiles%\ENES\Sotqin`.
+- Konfiguratsiya va log: `%ProgramData%\ENES\Sotqin`.
 - AI agentlarini alohida Windows Service sifatida o‘rnatish va avtomatik start.
 - Localhost setup wizard; firewall’da faqat kerakli lokal qoida.
 - Signed update, rollback, repair va toza uninstall.

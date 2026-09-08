@@ -127,7 +127,7 @@ graph TD
 ### 5.2. Kamchiliklar va Yaxshilash Tavsiyalari
 1. **Brend Nomi ("ENES Monitoring"):**
    * O'zbek tilida "Chaqimchi" so'zi biroz salbiy ma'noga ega (xodimlar orasida norozilik uyg'otishi mumkin: "boshliq bizga chaqimchi qo'ydi").
-   * *Tavsiya:* Brendni ommaga taqdim etganda "Aqlli Do'kon Yordamchisi", "Chaqimchi Retail AI" yoki B2B darajasidagi jiddiy shiorlar bilan muvozanatlash.
+   * *Tavsiya:* Brendni ommaga taqdim etganda "Aqlli Do'kon Yordamchisi", "ENES Retail AI" yoki B2B darajasidagi jiddiy shiorlar bilan muvozanatlash.
 2. **Interaktiv Dashboard Grafiklari:**
    * Hozirgi grafiklar statik CSS barlari. Interaktivlik uchun engil Canvas/SVG grafiklar (masalan, Chart.js yoki micro-charts) qo'shish kerak.
 3. **Telegram Mini-App (TMA) Interfeysi:**
@@ -231,7 +231,7 @@ Oy 4: Telegram Mini App & Mobil UX
   └── Barcha bildirishnoma va boshqaruvni Telegramga o'tkazish
 
 Oy 5-6: Masshtablash va Xalqaro Bozor
-  ├── Plug & Play mini-qurilma (Chaqimchi Box) taqdimoti
+  ├── Plug & Play mini-qurilma (ENES Box) taqdimoti
   ├── Ko'p tillilik (UZ, RU, EN) va xalqaro to'lovlar
   └── Qozog'iston va Markaziy Osiyo bozorlariga chiqish
 ```

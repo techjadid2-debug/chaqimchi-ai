@@ -7,7 +7,7 @@ bitta do‘kon va ko‘pi bilan **4 kamera** (yagona manba:
 kompyuterida lokal ishlaydi, cloudga esa hodisa, ruxsat etilgan media,
 hisobot va health yuboriladi.
 
-**Chaqimchi Box** (Intel N100 mini-PC, usta bilan o‘rnatiladi) — keyingi
+**ENES Box** (Intel N100 mini-PC, usta bilan o‘rnatiladi) — keyingi
 bosqich mahsuloti: kodi repoda saqlanadi va ishlaydi, lekin faol sotuv va
 rivojlantirish fokusi hozir Windows yo‘lida.
 

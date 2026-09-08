@@ -46,7 +46,7 @@ Skript parol va papkani `/etc/enes/backup.env` dan oladi — uni
 to'xtaydi:
 
 ```bash
-ssh -i .deploy_keys/chaqimchi_prod root@169.58.198.111
+ssh -i .deploy_keys/enes_prod root@169.58.198.111
 cd /home/deploy/enes
 set -a && . /etc/enes/backup.env && set +a
 ./scripts/backup_production.sh
@@ -57,7 +57,7 @@ So'ng arxiv haqiqatan butunligini tekshiring — "backup bor" degani
 
 ```bash
 ./scripts/restore_production.sh --check \
-  /home/deploy/enes-backups/chaqimchi-<SANA>.tar.gz.enc
+  /home/deploy/enes-backups/enes-<SANA>.tar.gz.enc
 ```
 
 Kutiladigan javob: `✓ Arxiv butun.` va jadval sanog'i (`sites=…`).
@@ -76,7 +76,7 @@ rsync -az --delete \
   --exclude 'node_modules' --exclude 'Yangi dizayn-2' \
   --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.ruff_cache' \
   --exclude '.DS_Store' \
-  -e "ssh -i .deploy_keys/chaqimchi_prod" \
+  -e "ssh -i .deploy_keys/enes_prod" \
   ./ root@169.58.198.111:/home/deploy/enes/
 ```
 
@@ -123,7 +123,7 @@ docker compose --env-file .env.production -f docker-compose.enes.yml \
   up -d --no-deps --force-recreate caddy
 
 # Tasdiqlash — HOST fayli emas, KONTEYNER ichidagisi o'qilsin:
-docker exec chaqimchi-caddy-1 sh -c "grep -n 'allowed path' /etc/caddy/Caddyfile"
+docker exec enes-caddy-1 sh -c "grep -n 'allowed path' /etc/caddy/Caddyfile"
 ```
 
 ---
@@ -131,7 +131,7 @@ docker exec chaqimchi-caddy-1 sh -c "grep -n 'allowed path' /etc/caddy/Caddyfile
 ## 4. Yuz modellarini o'rnatish (YANGI qadam)
 
 ```bash
-ssh -i .deploy_keys/chaqimchi_prod root@169.58.198.111
+ssh -i .deploy_keys/enes_prod root@169.58.198.111
 cd /home/deploy/enes
 
 docker compose -f docker-compose.enes.yml --env-file .env.production \

@@ -12,7 +12,7 @@ lokal Face ID davomat to‘plami ham arxivlandi
 | Mijoz | Do‘kon |
 | Pilot | 1 do‘kon, 4 kamera (yagona manba: `enes/limits.py`) |
 | Asosiy qurilma | **Mijozning mavjud Windows 10/11 kompyuteri** (`ENES_Setup.exe`) |
-| Keyingi bosqich | Chaqimchi Box — Sotqin R1: Intel N100, 8 GB, 128 GB NVMe (kod tayyor, sotuv fokusda emas) |
+| Keyingi bosqich | ENES Box — Sotqin R1: Intel N100, 8 GB, 128 GB NVMe (kod tayyor, sotuv fokusda emas) |
 | Video | To‘liq arxiv NVR’da; qurilma faqat event buffer/klip |
 | Kamera ulash | Sozlash ustasi: ONVIF qidiruv, NVR kanal skaneri yoki qo‘lda RTSP; admin panelda masofadan ham kiritish mumkin |
 | AI | Odam deteksiyasi/tracking lokal (OpenVINO, CPU; yaroqli iGPU bo‘lsa GPU); event/hisobot/alert cloud |
@@ -136,7 +136,7 @@ python scripts/accept_n100_pilot.py --platform windows \
   --approved-by "Ism" --output acceptance-windows.json
 ```
 
-Windows profili (`CHAQIMCHI-WINDOWS-W1`) N100 dan **faqat ikki joyda**
+Windows profili (`ENES-WINDOWS-W1`) N100 dan **faqat ikki joyda**
 farq qiladi: benchmark CPU'da bo'lishi mumkin (do'kon kompyuterlarining
 iGPU'si odatda OpenVINO uchun yaroqsiz) va harorat o'lchanmasligi mumkin
 (Windows uni bermaydi).  Qolgan hamma mezon bir xil, chunki mijozga

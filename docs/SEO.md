@@ -52,7 +52,7 @@ Shundan keyin Google sahifalarni o'zi aylanib chiqadi.
 | Vaqt | Nima bo'ladi |
 |---|---|
 | 1-3 kun | `site:chaqimchi.uz` bo'yicha birinchi sahifalar chiqadi |
-| 1-2 hafta | "chaqimchi" degan brend so'rovda birinchi o'rin |
+| 1-2 hafta | "enes" degan brend so'rovda birinchi o'rin |
 | 1-3 oy | "do'kon uchun kamera analitikasi" kabi so'rovlarda ko'rina boshlaydi |
 
 Oxirgi qatorga **kafolat yo'q**: u raqobat va kontentga bog'liq.

@@ -9,6 +9,28 @@
 
 ## HOZIRGI HOLAT · 2026-09-08
 
+- **🏷 F6 + F9 — ICHKI NOMLAR VA TOZALASH TUGADI (2026-09-08, `b8883d8`,
+  `ef558cd`, `c0c8cbb` + hujjat commiti).**  Paket `chaqimchi_ai` →
+  `enes` (184 fayl); 134 ta `CHAQIMCHI_*` → `ENES_*`; reliz
+  `enes-windows-<v>.exe` / `ENES_Setup.exe`; xizmatlar `enes-*.service`;
+  yo'llar `/opt/enes`, `/etc/enes`, `/home/deploy/enes`,
+  `ProgramData\ENES`; Docker `enes-cloud`, `docker-compose.enes.yml`,
+  `Caddyfile.enes`; `product_name` «ENES Windows»; brauzer kalitlari
+  `enes_owner_token`/`enes_admin_token`; JWT `kind` yangi (hamma
+  qaytadan kiradi).  **Ko'priklar** (ataylab, `tests/test_brand.py`
+  ro'yxatida): `chaqimchi_ai/__init__.py` (eski paket nomi — pilot
+  kompyuteridagi `-m chaqimchi_ai.local.updater` vazifasi uchun,
+  payloadga kiradi), `enes/envcompat.py` (eski env nomlari yangisiga
+  ko'chiriladi), cloud eski `chaqimchi-windows-*` relizlarni ham
+  tarqatadi, `paths.py` eski ma'lumot papkasini ishlatadi, `autostart`
+  va NSI eski vazifa/registrni topib o'chiradi, `sign_release` eski kalit
+  yo'lini ham ko'radi.  Hujjatlar (CLAUDE.md, docs/*, README) yangi
+  nomda; ISH_DAFTARI/AUDIT_TAHLIL/STRATEGIK tarix sifatida eski nomni
+  saqlaydi.  `og-enes.png` (PIL bilan yasalgan vaqtinchalik OG rasm —
+  egadan NS SVG kelgach almashtiriladi), `og-v3.png` va
+  `chaqimchi-logo-new.png` o'chdi.  `releases/` 2.2 GB → 294 MB (0.6.24,
+  0.6.25 va `Chaqimchi_AI_Setup.exe` qoldi).  **Qolgani egadan (F7):**
+  domen `chaqimchi.uz` va `@chaqimchi_ai_bot` kodda shu turadi.
 - **🌐 F5 — TELEGRAM, HISOBOT, CSV, TARIF UCH TILDA (2026-09-08, `28e2c8b`).**
   Server chizadigan matn katalogga o'tdi va til ANIQ uzatiladi
   (`tg(lang, key)`).  `digest.py` builder'lari `lang` oladi; `_deliver`
@@ -346,15 +368,48 @@
 ## KEYINGI ISH
 
 **REBREND (2026-09-08).** To'liq holat + xatolar + tartib:
-`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F3, F4a,
-F4c va F5 tugadi.  Navbat: **F4b — panel ko'rinishini namunaga
-solishtirish** (ikki tema × uch til skrinshot, farq bo'lsa tuzatish;
-panel allaqachon yaqin) → **F6 ichki nomlar** (`enes`→`enes`,
-132 `ENES_*` env, xizmat/yo'l nomlari, reliz naqshlari
-`main.py` da ikkala joy bitta commitda, `product_name`, brauzer
-kalitlari) → **F9 tozalash** (CLAUDE.md, docs, og-rasm, favicon,
-`releases/`) → F7 cutover (egadan: DNS, bot @username, yuridik nom,
-Payme/Click) → F8 qurilma relizi (soakdan keyin).
+`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F0–F6 va F9
+tugadi (F4b: panel ikki tema × uch tilda skrinshot bilan tekshirildi,
+namunaga mos).  **Qoldi — egaga va soakka bog'liq:**
+
+**F7 — cutover (egadan kirishlar kelgach, bir kunda, tartib bilan):**
+1. Egadan: `enes.uz` DNS boshqaruvi (TTL 300 ga tushirish), bot
+   @username (BotFather'da yangi nom yoki yangi bot), yuridik nom va
+   rekvizit (oferta, `site.*` kalitlari), Payme/Click kabineti, NS SVG
+   belgi (`enes-mark.svg`, `og-enes.png` o'rniga).
+2. Serverda: zaxira → `/home/deploy/chaqimchi-ai` → `/home/deploy/enes`
+   (`mv`), `/etc/chaqimchi` → `/etc/enes`, env fayllarida `CHAQIMCHI_*` →
+   `ENES_*` (`sed`; ko'prik tufayli Python uchun shoshilinch emas, lekin
+   compose `${ENES_*}` almashtirishlari Python'dan o'tmaydi — shu sabab
+   SHART), `ENES_COMPOSE_FILE=docker-compose.enes.yml`, MinIO bucket va
+   Postgres nomlari eski qolsa env'da aniq yozilsin
+   (`ENES_S3_BUCKET=chaqimchi-snapshots` yoki ko'chirish), compose
+   `name:` o'zgargani uchun konteyner/volume nomlari yangi —
+   **volume'larni ko'chirish** (`docker volume` nusxa) yoki compose'da
+   eski nomni `external` deb ko'rsatish.
+3. Kodda (bitta commit): `chaqimchi.uz` → `enes.uz` (Caddyfile, env
+   example, CI default `ENES_DEFAULT_CLOUD_URL`, sayt/hujjat havolalari),
+   `@chaqimchi_ai_bot` → yangi nom (`i18n/*.json`, `cloud/site/*`,
+   `docs/`), `tests/test_brand.py` dagi `ALLOWED_TOKENS` bo'shatiladi.
+4. GitHub: `vars.ENES_DEFAULT_CLOUD_URL` o'rnatish; lokal `.deploy_keys/enes_prod`
+   (kalit faylini qayta nomlash), `~/.chaqimchi` → `~/.enes`.
+5. Caddy sertifikat → `/health` → hodisa/media soni ko'chirishdan
+   oldingi bilan teng → heartbeat → `getWebhookInfo` (Telegram webhook
+   yangi domenga) → Payme/Click callback → UptimeRobot, Search Console →
+   shundan keyin eski domen 301.
+
+**F8 — qurilma relizi (soak tugagach):** versiya ko'tarish, `make
+windows-release`, `enes-windows-<v>.exe` nashr.  **Pilotda tekshirish
+SHART** (kodda bor, lekin Windows'da sinalmagan): yangi o'rnatuvchi eski
+`Software\ChaqimchiAI` o'rnatishni topib olib tashlaydimi; «Chaqimchi
+AI» vazifalari o'chib, «ENES Monitoring» yaratildimi (bitta nusxa);
+`ProgramData\Chaqimchi` papkasi ishlatilyaptimi (juftlik saqlanganmi);
+eski `-m chaqimchi_ai.local.updater` vazifasi ko'prik orqali
+ishlayaptimi.  0.6.26 rollar va capture rate (A1) o'zgarishlari ham shu
+relizga kiradi.
+
+**Ega ko'rigi:** `i18n/ru.json`, `i18n/en.json` tarjimalari (ayniqsa
+`panel.agent.*`, `bot.*`, `digest.*`) — tarjimon ko'rmagan.
 Rebrendga bog'liq bo'lmagan kichik xatolar parallel, cloud-only:
 `/health` halol (O-1), CSP (O-2), server tomonda chiqish (O-8), rate
 limit (O-9), `geometry-panel.js` da `shelf` yo'q, CI'ga `make ui-check`.
@@ -601,6 +656,23 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Brendni ommaviy almashtirishda QO'RIQCHI testlar ham almashadi.**
+  `Chaqimchi` → `ENES` perl o'tishi `tests/test_panel_v2.py` dagi
+  `re.search(r"Chaqimchi(?![_A-Z])")` ni `ENES(...)` ga aylantirdi va
+  test o'z brendini «eski» deb yiqildi; `test_site_build` ham.  Bot nomi
+  `@chaqimchi_ai_bot` ham `enes_bot` bo'lib ketdi (egadan kelmagan nom).
+  Ommaviy almashtirishdan keyin `git diff -- tests | grep "not in"` va
+  tashqi identifikatorlar (bot, domen, GitHub repo) ro'yxatini alohida
+  tekshiring.  `tests/test_brand.py` endi ruxsat ro'yxatini ushlab
+  turadi.
+
+- **Parallel agentlar bitta JSON'ga yozmasin.**  F4c/F5 da yetti agent
+  bir vaqtda ishladi; har biri o'z `i18n_<X>.json` ga yozdi, birlashtirish
+  `merge_i18n` (to'qnashuv → xato).  Sessiya limiti agentlarni yarim
+  yo'lda uzdi — qolgan ishni ularning diffidan tiklab qo'lda tugatish
+  kerak bo'ldi.  Katta parallel ishni 3-4 agentdan oshirmang va har agent
+  natijasini kichik bo'laklarda commit qiling.
 
 - **Panelda `t()` ni modul yuklanganda chaqirmang.**  `initLang()`
   `owner.tsx`/`admin.tsx` ichida, modullar importidan KEYIN ishlaydi;
@@ -1033,6 +1105,25 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-08 — F6/F9: ichki nomlar ENES, ko'priklar, hujjat va tozalash (`b8883d8`, `ef558cd`, `c0c8cbb`)
+Nima: paket, env, reliz, xizmat, yo'l, Docker va Windows nomlari ENES;
+eski o'rnatilgan qurilma va jonli server ko'priklar orqali ishlayveradi.
+Nega: rebrend rejasi F6; ko'priklarsiz deploy kuni har unutilgan nom
+alohida nosozlik bo'lardi, pilot kompyuteri esa yangilanmay qolardi.
+Qayerda: `chaqimchi_ai/__init__.py` (ko'prik), `enes/envcompat.py`,
+`enes/paths.py` (`_windows_dir`, `_linux_dir`), `enes/local/autostart.py`
+(`_drop_legacy_tasks`), `enes/local/chain_processes.py`
+(`LEGACY_CHAIN_MODULE`), `scripts/windows_installer.nsi` (`.onInit`
+eski o'rnatish), `cloud/main.py` (`WINDOWS_RELEASE_PREFIXES`,
+`_windows_release_files`), `cloud/store.py` (moliya SQL),
+`scripts/sign_release.py`/`generate_update_key.py` (eski kalit yo'li),
+`scripts/build_windows_payload.py` (`CODE_DIRS` ko'prik bilan).
+Test: `tests/test_brand.py` (qo'riqchi + ko'priklar), `tests/test_envcompat.py`,
+`test_windows_installer.py`, to'liq `make test` yashil.
+Diqqat: Windows tomoni (NSI, avtostart, papka ko'priki) real mashinada
+SINALMAGAN — F8 relizidan oldin pilotda tekshiriladi (KEYINGI ISH
+ro'yxati).  `releases/` dan 42 eski fayl o'chirildi (lokal).
 
 ### 2026-09-08 — F5: Telegram, hisobot, CSV va tarif matni a'zo tilida (`28e2c8b`)
 Nima: ruscha a'zo kunlik/haftalik hisobotni, ogohlantirishni, bot

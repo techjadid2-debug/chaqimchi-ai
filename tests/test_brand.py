@@ -34,7 +34,8 @@ ALLOWED_FILES = {
     "enes/local/chain_processes.py",   # eski nomdagi zanjir ham o'ldiriladi
     "scripts/windows_installer.nsi",   # eski o'rnatishni topib olib tashlaydi
     "scripts/build_windows_payload.py",  # ko'prik papkasi payloadga kiradi
-    "scripts/sign_release.py",         # eski arxivni qayta imzolash
+    "scripts/sign_release.py",         # eski arxivni qayta imzolash, eski kalit yo'li
+    "scripts/generate_update_key.py",  # eski kalit yo'li
     "cloud/main.py",                   # eski reliz nomi va product_name
     "cloud/store.py",                  # bazadagi eski product_name qatorlari
     "tests/test_brand.py",
@@ -44,17 +45,19 @@ ALLOWED_FILES = {
     "tests/test_site_build.py",        # eski brend qo'riqchisi
     "tests/test_sign_release.py",      # repo papkasi nomi
     "cloud/static/v2/owner-sw.js",     # kesh nomi tarixi (izoh)
+    "CLAUDE.md",                       # ko'priklar va eski kalit yo'li hujjatlangan
 }
 
 #: Cutovergacha qoladigan belgilar (F7): domen va bot nomi.
-ALLOWED_TOKENS = re.compile(r"chaqimchi\.uz|chaqimchi_ai_bot|CHAQIMCHI_")
+ALLOWED_TOKENS = re.compile(r"chaqimchi\.uz|chaqimchi_ai_bot|chaqimchi-ai\.git|CHAQIMCHI_")
 
 #: Butunlay tekshirilmaydigan yo'llar.
-SKIPPED_PREFIXES = ("releases/", "docs/", "cloud/static/v2/assets/", "chaqimchi_ai/")
-SKIPPED_FILES = {"CLAUDE.md", "README.md", "STRATEGIK_AUDIT_VA_REJA.md"}
+#: Tarix hujjatlari — ular o'sha paytdagi nomni saqlaydi.
+SKIPPED_PREFIXES = ("releases/", "docs/archive/", "cloud/static/v2/assets/", "chaqimchi_ai/")
+SKIPPED_FILES = {"STRATEGIK_AUDIT_VA_REJA.md", "ISH_DAFTARI.md", "AUDIT_TAHLIL.md"}
 TEXT_SUFFIXES = {
     ".py", ".ts", ".tsx", ".html", ".css", ".js", ".json", ".yml", ".yaml", ".toml",
-    ".sh", ".nsi", ".service", ".timer", ".example", ".txt", ".cfg", ".ini", ".svg",
+    ".sh", ".nsi", ".service", ".timer", ".example", ".txt", ".cfg", ".ini", ".svg", ".md",
 }
 
 

@@ -257,7 +257,7 @@ kelgan va u imzoni har safar tekshiradi.
 
 Hozir yangilanish har bir qurilmada qo'lda ishga tushiriladi. Cloud'dan
 "barcha qurilmalarni 0.6.1 ga o't" deyish uchun **huquqlarni ajratish**
-kerak: `enes-sotqin` xizmati `User=chaqimchi`, `NoNewPrivileges=true`
+kerak: `enes-sotqin` xizmati `User=enes`, `NoNewPrivileges=true`
 va `ProtectSystem=strict` bilan ishlaydi, ya'ni agent na
 `/opt/enes/releases` ga yoza oladi, na `systemctl` chaqira oladi.
 

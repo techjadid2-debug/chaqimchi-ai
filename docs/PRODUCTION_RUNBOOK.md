@@ -96,12 +96,33 @@ Tartib:
    Manba `cloud.db` tegilmagan — lekin ko'chishdan keyin yozilgan
    ma'lumot faqat PostgreSQL'da qoladi.
 
-**`--workers` ni HOZIRCHA ko'tarmang.**  `Dockerfile.cloud` dagi
-`--workers 1` ikki sababdan: (a) SQLite — bu ko'chish bilan hal
-bo'ladi; (b) `cloud/ratelimit.py` cheklovni XOTIRADA saqlaydi, ya'ni
-har worker o'z hisobini yuritadi va chegara worker soniga ko'payadi.
-Ikkinchisi hal bo'lmaguncha `--workers 2+` kirish urinishlari va
-ariza cheklovlarini jimgina zaiflashtiradi.
+### 1.2 · `--workers` ni ko'tarish
+
+Worker soni endi env'dan: `ENES_CLOUD_WORKERS` (standart **1**).
+`Dockerfile.cloud` uni CMD'ga uzatadi.
+
+Ko'tarishdan oldin **uchta shart** bajarilishi kerak va ularni server
+o'zi tekshiradi — bajarilmasa umuman ko'tarilmaydi (`cloud/main.py:
+multi_worker_problems`):
+
+1. `ENES_CONTROL_DATABASE_URL` — PostgreSQL (§1.1 dagi ko'chish).
+   SQLite bitta faylga ikki jarayondan yozishga yaramaydi.
+2. `DATABASE_URL` — PostgreSQL.  Tezlik cheklovi
+   (`rate_limit_windows`) va yetakchi ijarasi (`cloud_leases`) shu
+   bazada yashaydi.
+3. `ENES_RATELIMIT_SHARED` **o'chirilmagan** bo'lsin (`0` emas) — aks
+   holda har worker o'z hisobini yuritadi va chegara worker soniga
+   ko'payadi.
+
+Fon vazifalari (kunlik hisobot, tozalash, rollup, lead eslatmasi, aloqa
+nazorati) faqat **yetakchi** worker'da yuradi (`cloud/leader.py`) —
+ijarani kim ushlab tursa, o'sha.  Yetakchi qulasa 90 soniyada navbat
+o'zi almashadi.
+
+**Ko'targandan keyin tekshiring:** kunlik hisobot Telegramda **bir
+marta** kelsin (21:00 Toshkent); `select count(*) from daily_digests
+where digest_date = '<bugun>'` — har sayt uchun bitta qator;
+`/health/deep` da `rate_limited` raqami worker soniga ko'paymasin.
 
 ## 2. Backup va deploy
 

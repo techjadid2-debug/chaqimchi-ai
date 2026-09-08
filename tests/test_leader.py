@@ -268,3 +268,74 @@ def test_a_failed_delivery_is_retried_next_time(tmp_path: Path) -> None:
 
     assert attempts["count"] == 2
     assert store.digest_was_sent("site-1", DAY.isoformat())
+
+
+# ── `--workers 2+` shartlari ─────────────────────────────────────────────
+#
+# Ko'p worker shartlarsiz JIMGINA buzadi: SQLite bitta faylga ikki
+# jarayondan yozganda "database is locked" beradi, tezlik cheklovi esa
+# worker soniga ko'payadi.  Ikkalasi ham faqat productionda, faqat yuk
+# ostida ko'rinadi — shuning uchun server ko'tarilishdayoq to'xtaydi.
+
+
+def test_one_worker_needs_nothing(monkeypatch) -> None:
+    import cloud.main as main
+
+    monkeypatch.delenv(main.WORKERS_ENV, raising=False)
+
+    assert main.configured_workers() == 1
+    assert main.multi_worker_problems() == []
+
+
+def test_two_workers_need_a_shared_control_database(monkeypatch) -> None:
+    import cloud.main as main
+
+    monkeypatch.setenv(main.WORKERS_ENV, "2")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/enes")
+    monkeypatch.delenv(main.CONTROL_DATABASE_URL_ENV, raising=False)
+
+    problems = main.multi_worker_problems()
+
+    assert any(main.CONTROL_DATABASE_URL_ENV in problem for problem in problems)
+
+
+def test_two_workers_need_a_shared_event_database(monkeypatch) -> None:
+    import cloud.main as main
+
+    monkeypatch.setenv(main.WORKERS_ENV, "2")
+    monkeypatch.setenv(main.CONTROL_DATABASE_URL_ENV, "postgresql://localhost/enes")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    assert any("DATABASE_URL" in problem for problem in main.multi_worker_problems())
+
+
+def test_two_workers_may_not_switch_the_shared_counter_off(monkeypatch) -> None:
+    """Orqaga qaytish tugmasi va ko'p worker birga bo'lmasin."""
+    import cloud.main as main
+
+    monkeypatch.setenv(main.WORKERS_ENV, "2")
+    monkeypatch.setenv(main.CONTROL_DATABASE_URL_ENV, "postgresql://localhost/enes")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/enes")
+    monkeypatch.setenv(main.RATE_LIMIT_SHARED_ENV, "0")
+
+    assert any(main.RATE_LIMIT_SHARED_ENV in problem for problem in main.multi_worker_problems())
+
+
+def test_a_correct_multi_worker_setup_passes(monkeypatch) -> None:
+    import cloud.main as main
+
+    monkeypatch.setenv(main.WORKERS_ENV, "2")
+    monkeypatch.setenv(main.CONTROL_DATABASE_URL_ENV, "postgresql://localhost/enes")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/enes")
+    monkeypatch.delenv(main.RATE_LIMIT_SHARED_ENV, raising=False)
+
+    assert main.multi_worker_problems() == []
+
+
+def test_a_broken_worker_count_falls_back_to_one(monkeypatch) -> None:
+    """Env'da xato yozuv serverni yiqitmasin — bitta worker eng xavfsizi."""
+    import cloud.main as main
+
+    monkeypatch.setenv(main.WORKERS_ENV, "ikkita")
+
+    assert main.configured_workers() == 1

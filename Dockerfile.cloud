@@ -43,4 +43,11 @@ USER 10001:10001
 EXPOSE 8750
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8750/health',timeout=4)"
-CMD ["uvicorn", "cloud.main:app", "--host", "0.0.0.0", "--port", "8750", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Worker soni env'dan.  Standart — BITTA: ko'p worker faqat boshqaruv
+# bazasi PostgreSQL'ga ko'chgandan keyin ma'noga ega (SQLite bitta faylga
+# ko'p jarayondan yozishga yaramaydi) va `cloud/main.py` buni startupda
+# tekshirib, shart bajarilmasa umuman ko'tarilmaydi.
+#
+# `sh -c` shakli ataylab: exec ro'yxatida `${...}` almashtirilmaydi va
+# uvicorn "1" o'rniga so'zma-so'z `${ENES_CLOUD_WORKERS}` ni ko'rardi.
+CMD ["sh", "-c", "exec uvicorn cloud.main:app --host 0.0.0.0 --port 8750 --workers ${ENES_CLOUD_WORKERS:-1} --proxy-headers --forwarded-allow-ips '*'"]

@@ -327,7 +327,7 @@ flowchart LR
     P1["invoices · to'lov tranzaksiyalari"]
   end
 
-  SQ -.->|"NEGA MUAMMO"| W["uvicorn --workers 1<br/>ko'paytirib bo'lmaydi"]
+  SQ -.->|"SHART"| W["ENES_CLOUD_WORKERS>1 uchun<br/>PostgreSQL'ga ko'chsin"]
   PAYX -.-> W
 ```
 
@@ -411,7 +411,7 @@ flowchart TB
   subgraph VPS["Contabo VPS · 169.58.198.111"]
     subgraph FE["tarmoq: frontend"]
       CAD["caddy:2.10<br/>80, 443, 443/udp"]
-      CLD["cloud<br/>uvicorn --workers 1"]
+      CLD["cloud<br/>uvicorn --workers ${ENES_CLOUD_WORKERS:-1}"]
       VWK["vision-worker<br/>Gemini uchun chiqadi"]
     end
 
@@ -633,13 +633,23 @@ Bu testsiz bo'lishni **boshlamang**: bitta unutilgan dekorator jimgina
 
 ### 10.2 · `store.py` ni PostgreSQL'ga
 
-**Hozir:** 23 jadval, 3 376 qator, faqat SQLite. Ichida litsenziya,
-tarif, narx kitobi, portal parollari va audit jurnali.
+**Hozir:** 23 jadval, ~3 900 qator; ikki dialektli, lekin jonli
+serverda hali SQLite. Ichida litsenziya, tarif, narx kitobi, portal
+parollari va audit jurnali.
 
-**Nega to'siq:** `Dockerfile.cloud` da `--workers 1` aynan shu sabab —
-SQLite bir faylga ko'p jarayondan yozishga yaramaydi. Ya'ni cloud
-**gorizontal kengaya olmaydi** va bitta CPU yadrosi bilan cheklangan.
-Zaxira ham ikki xil: PostgreSQL dump va SQLite fayl nusxasi.
+**Nega to'siq edi:** SQLite bir faylga ko'p jarayondan yozishga
+yaramaydi. Ya'ni cloud **gorizontal kengaya olmasdi** va bitta CPU
+yadrosi bilan cheklangan edi. Zaxira ham ikki xil: PostgreSQL dump va
+SQLite fayl nusxasi.
+
+**Holat (2026-09-09):** kod tomoni TAYYOR — `store.py` va
+`payments/store.py` ikki dialektli, ko'chirish skripti bor
+(`scripts/migrate_control_db.py`), tezlik cheklovi umumiy jadvalga
+(`rate_limit_windows`) ko'chdi va fon vazifalari yetakchi ijarasi
+ostida (`cloud/leader.py`, `cloud_leases`). Worker soni endi env'dan
+(`ENES_CLOUD_WORKERS`, standart 1) va server shartlar bajarilmasa
+ko'tarilmaydi (`cloud/main.py: multi_worker_problems`). **Qolgani —
+jonli bazani ko'chirish** (zaxira bilan, deploy kuni).
 
 **Qanday:** g'ildirak qaytadan ixtiro qilinmaydi — `event_store.py`
 dagi naqsh allaqachon ishlaydi va sinovdan o'tgan:
@@ -649,11 +659,11 @@ self.postgres = self.database_url.startswith(("postgres://", "postgresql://"))
 def _q(self, query): return query.replace("?", "%s") if self.postgres else query
 ```
 
-Tartib: (a) `store.py` ga shu ikki narsani qo'shish, (b) `CREATE TABLE`
-larni ikkala dialektga moslash, (c) mavjud SQLite ma'lumotini
-ko'chiruvchi bir martalik skript, (d) **zaxira va restore mashqi**
-([PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md) §2.2), (e) shundan
-keyingina `--workers` ni ko'tarish.
+Tartib: (a) ✅ `store.py` ga shu ikki narsani qo'shish, (b) ✅
+`CREATE TABLE` larni ikkala dialektga moslash, (c) ✅ mavjud SQLite
+ma'lumotini ko'chiruvchi bir martalik skript, (d) **zaxira va restore
+mashqi** ([PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md) §2.2),
+(e) shundan keyingina `ENES_CLOUD_WORKERS` ni ko'tarish (§1.2).
 
 **Diqqat:** `payments/store.py` ham xuddi shunday — u pul bilan
 ishlaydi, ya'ni ko'chirishda eng ehtiyot bo'linadigan qism.

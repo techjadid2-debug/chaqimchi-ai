@@ -218,6 +218,51 @@ def get_event_store() -> EventStore:
 RATE_LIMIT_SHARED_ENV = "ENES_RATELIMIT_SHARED"
 
 
+#: Nechta uvicorn worker ishlayapti (`Dockerfile.cloud` CMD shu env'ni
+#: uzatadi).  Kod uchun bu SON emas, SHART: birdan katta bo'lsa umumiy
+#: holat (boshqaruv bazasi, tezlik cheklovi, yetakchi) majburiy bo'ladi.
+WORKERS_ENV = "ENES_CLOUD_WORKERS"
+
+
+def configured_workers() -> int:
+    raw = os.environ.get(WORKERS_ENV, "").strip()
+    try:
+        return max(1, int(raw)) if raw else 1
+    except ValueError:
+        return 1
+
+
+def multi_worker_problems() -> List[str]:
+    """`--workers 2+` uchun bajarilishi SHART bo'lgan shartlar.
+
+    Ro'yxat bo'sh bo'lmasa server umuman ko'tarilmaydi.  Sabab: bu
+    shartlarsiz ko'p worker JIMGINA buzadi — SQLite bitta faylga ikki
+    jarayondan yozganda "database is locked" yoki yarim yozilgan qator
+    beradi, tezlik cheklovi esa worker soniga ko'payadi.  Ikkalasi ham
+    faqat productionda, faqat yuk ostida ko'rinadi.
+    """
+    if configured_workers() <= 1:
+        return []
+    problems: List[str] = []
+    if not control_database_url().startswith(("postgres://", "postgresql://")):
+        problems.append(
+            f"{CONTROL_DATABASE_URL_ENV} PostgreSQL bo'lishi shart "
+            "(SQLite'ga ikki jarayondan yozib bo'lmaydi) — "
+            "avval `scripts/migrate_control_db.py`"
+        )
+    if not os.environ.get("DATABASE_URL", "").startswith(("postgres://", "postgresql://")):
+        problems.append(
+            "DATABASE_URL PostgreSQL bo'lishi shart: tezlik cheklovi va "
+            "yetakchi ijarasi shu bazada yashaydi"
+        )
+    if os.environ.get(RATE_LIMIT_SHARED_ENV, "").strip().lower() in {"0", "false", "no"}:
+        problems.append(
+            f"{RATE_LIMIT_SHARED_ENV}=0 va {WORKERS_ENV}>1 birga bo'lmaydi: "
+            "har worker o'z hisobini yuritsa chegara worker soniga ko'payadi"
+        )
+    return problems
+
+
 def _is_leader() -> bool:
     """Shu jarayon fon ishini bajaradimi.
 
@@ -1841,6 +1886,12 @@ def get_alerts() -> AlertService:
 async def lifespan(app: FastAPI):
     global _digest, _digest_task, _maintenance_task, _lead_notification_task
     global _leader_task
+    worker_problems = multi_worker_problems()
+    if worker_problems:
+        raise RuntimeError(
+            f"{WORKERS_ENV}={configured_workers()} uchun sozlama tayyor emas: "
+            + "; ".join(worker_problems)
+        )
     global _vision_worker_stop, _vision_worker_task
     if os.environ.get("ENES_ENV", "development") == "production":
         errors = []

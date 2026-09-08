@@ -975,13 +975,15 @@ def test_quiet_day_digest_has_no_demography_line(tmp_path: Path) -> None:
 # ── Obuna eslatmasi ──────────────────────────────────────────────────────
 
 
-def _renewal_service(store, sent, sites):
+def _renewal_service(store, sent, sites, renewal_invoice=None):
     from cloud.digest import DailyDigestService
 
     async def sender(chat_id, text, **kwargs):
         sent.append((chat_id, text))
 
-    return DailyDigestService(store, lambda: sites, sender)
+    return DailyDigestService(
+        store, lambda: sites, sender, renewal_invoice=renewal_invoice
+    )
 
 
 def _renewal_noon():
@@ -1232,3 +1234,91 @@ def test_period_csv_recomputes_totals_from_sums_not_averages() -> None:
     assert "Jami,400,370,80,20%" in body
     assert body.count("after_hours") == 0  # xom kalit emas, jami son
     assert "Jami,400,370,80,20%,,,,,,,,,1" in body
+
+
+# ── Eslatmadagi to'lov havolasi ──────────────────────────────────────────
+#
+# Ilgari eslatma "To'lovni panelda ochasiz" deb tugardi va zanjir shu
+# yerda uzilardi: ega panelga kirib hisob-fakturani QIDIRISHI kerak edi.
+# Endi xabarda to'lov sahifasining o'zi turadi.
+
+
+def test_the_renewal_reminder_carries_a_payment_link(tmp_path: Path) -> None:
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _renewal_service(
+        store, sent, [_site(5)], renewal_invoice=lambda site_id, period: "https://enes.test/pay/abc"
+    )
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+    assert "https://enes.test/pay/abc" in sent[0][1]
+    # Havola eski "panelda ochasiz" matnining O'RNIGA keladi, yoniga emas.
+    assert "panelda" not in sent[0][1]
+
+
+def test_one_invoice_serves_the_whole_period(tmp_path: Path) -> None:
+    """Bitta obuna davri uchun uchta eslatma ketadi (7 kun, 1 kun, grace).
+
+    Uchalasi ham AYNAN bir hisobga ishora qilishi kerak — aks holda ega
+    uchta boshqa-boshqa raqam ko'rib, qaysi birini to'lashni bilmasdi.
+    Shu sabab chaqiruvga BOSQICH emas, DAVR uzatiladi.
+    """
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    seen: List = []
+
+    def invoice(site_id, period):
+        seen.append((site_id, period))
+        return f"https://enes.test/pay/{period}"
+
+    for site in (_site(5), _site(1), _site(0, status="grace")):
+        service = _renewal_service(store, sent, [site], renewal_invoice=invoice)
+        asyncio.run(service._renewal_once(_renewal_noon()))
+
+    assert len(sent) == 3, "har bosqich uchun bitta eslatma"
+    assert {period for _site_id, period in seen} == {"2026-09-20"}, "davr bitta"
+    for _chat, message in sent:
+        assert "https://enes.test/pay/2026-09-20" in message
+
+
+def test_a_broken_payment_layer_does_not_silence_the_reminder(tmp_path: Path) -> None:
+    """Havolasiz xabar — xabarsizdan yaxshiroq.
+
+    Obuna tugayotganini aytish to'lov havolasidan MUHIMROQ: havola
+    bo'lmasa ega qo'ng'iroq qila oladi, xabar bo'lmasa u tizim
+    o'chgandan keyin biladi.
+    """
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+
+    def broken(site_id, period):
+        raise RuntimeError("to'lov bazasi javob bermadi")
+
+    service = _renewal_service(store, sent, [_site(5)], renewal_invoice=broken)
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+    assert "5 kun qoldi" in sent[0][1]
+    # Havola yo'q — eski matn qaytadi, ya'ni ega baribir nima qilishni biladi.
+    assert "panelda" in sent[0][1]
+
+
+def test_without_the_hook_the_reminder_is_unchanged(tmp_path: Path) -> None:
+    """Chaqiruv ulanmagan bo'lsa (test, eski sozlama) xabar avvalgidek."""
+    import asyncio
+
+    store = store_with([], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    service = _renewal_service(store, sent, [_site(5)])
+
+    assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
+    assert "panelda" in sent[0][1]

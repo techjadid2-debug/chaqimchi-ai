@@ -353,6 +353,7 @@ def build_renewal(
     days_left: int,
     monthly_uzs: int,
     grace_days: int,
+    pay_url: str = "",
     lang: str = i18n.DEFAULT_LANG,
 ) -> str:
     """Obuna tugashi haqida mijozga eslatma va yillik taklif.
@@ -365,6 +366,12 @@ def build_renewal(
     Yillik summa `billable_months()` dan hisoblanadi — saytdagi
     "2 oy bepul" va'dasi, hisob-faktura va bu xabar bitta qoidadan
     chiqishi shart.
+
+    `pay_url` — hisob-fakturaning to'lov sahifasi.  Bo'sh bo'lsa eski
+    matn qoladi ("To'lovni panelda ochasiz").  Havola BERILGANDA u
+    o'sha o'rinni egallaydi: ega uchun eslatma bilan to'lov orasida
+    endi qidiruv yo'q — ilgari unga "panelni oching" deyilardi va
+    to'lov shu yerda uzilardi.
     """
     charged = billable_months(12)
     annual = monthly_uzs * charged
@@ -400,7 +407,9 @@ def build_renewal(
             saving=botfmt.number(saving, lang),
         ),
         "",
-        tg(lang, "digest.renewal.footer"),
+        tg(lang, "digest.renewal.pay_link", url=pay_url)
+        if pay_url
+        else tg(lang, "digest.renewal.footer"),
     ]
     return "\n".join(lines)
 
@@ -487,12 +496,18 @@ class DailyDigestService:
         *,
         hour: int = 21,
         panel_url: str = "",
+        renewal_invoice: Optional[Callable[[str, str], str]] = None,
     ) -> None:
         self.events = events
         self.sites = sites
         self.sender = sender
         self.hour = hour
         self.panel_url = panel_url.rstrip("/")
+        # `(site_id, davr) -> to'lov sahifasi manzili`.  Chaqiruv orqali,
+        # chunki hisob-faktura `cloud/payments/` da va uni bu yerdan
+        # import qilish aylanma bog'liqlik bo'lardi (`main` → `digest`).
+        # Sozlanmagan bo'lsa eslatma avvalgidek, havolasiz ketadi.
+        self.renewal_invoice = renewal_invoice
 
     async def _deliver(
         self, site_id: str, members: List[Dict[str, Any]], build: TextBuilder
@@ -701,13 +716,30 @@ class DailyDigestService:
             if not owners:
                 continue
 
-            def build(lang: str, *, site=site, stage=stage, days_left=days_left) -> str:
+            # Hisob-faktura DAVR bo'yicha ochiladi (`until`), bosqich
+            # bo'yicha emas: bitta obuna davri uchun uchta eslatma
+            # ketadi (7 kun, 1 kun, grace) va uchalasi ham AYNAN bir
+            # hisobga ishora qilishi kerak — aks holda ega uchta
+            # boshqa-boshqa raqam ko'rib, qaysi birini to'lashni
+            # bilmasdi.
+            pay_url = ""
+            if self.renewal_invoice is not None:
+                try:
+                    pay_url = self.renewal_invoice(site_id, until) or ""
+                except Exception:
+                    # To'lov qatlamidagi nosozlik eslatmani to'xtatmasin:
+                    # havolasiz xabar havolasiz xabardan yaxshiroq emas,
+                    # lekin xabarsizdan yaxshiroq.
+                    logger.warning("Eslatma uchun hisob ochilmadi: site=%s", site_id, exc_info=True)
+
+            def build(lang: str, *, site=site, stage=stage, days_left=days_left, pay_url=pay_url) -> str:
                 return build_renewal(
                     str(site["name"]),
                     stage=stage,
                     days_left=max(0, int(days_left or 0)),
                     monthly_uzs=int(site.get("monthly_price_uzs") or 0),
                     grace_days=GRACE_DAYS,
+                    pay_url=pay_url,
                     lang=lang,
                 )
 

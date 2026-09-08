@@ -129,6 +129,7 @@
   "digest.renewal.grace_body": "The system keeps working for <b>{days} more days</b>. If no payment arrives by then, analytics and alerts stop.",
   "digest.renewal.grace_title": "⏳ {site} — subscription has ended",
   "digest.renewal.monthly": "Monthly payment: <b>{amount}</b> UZS",
+  "digest.renewal.pay_link": "🧾 Payment page: {url}",
   "digest.renewal.soon_title": "🔔 {site} — {days} days until the subscription ends",
   "digest.renewal.tomorrow_body": "There is a <b>{days}-day</b> grace period after the due date — the system does not switch off at once.",
   "digest.renewal.tomorrow_title": "⚠️ {site} — subscription ends tomorrow",

@@ -129,6 +129,7 @@
   "digest.renewal.grace_body": "Tizim yana <b>{days} kun</b> ishlaydi. Shu vaqt ichida to'lov qilinmasa, tahlil va ogohlantirishlar to'xtaydi.",
   "digest.renewal.grace_title": "⏳ {site} — obuna muddati tugadi",
   "digest.renewal.monthly": "Oylik to'lov: <b>{amount}</b> so'm",
+  "digest.renewal.pay_link": "🧾 To'lov sahifasi: {url}",
   "digest.renewal.soon_title": "🔔 {site} — obuna tugashiga {days} kun qoldi",
   "digest.renewal.tomorrow_body": "To'lovdan keyin ham <b>{days} kun</b> muhlat bor — tizim darrov o'chmaydi.",
   "digest.renewal.tomorrow_title": "⚠️ {site} — obuna ertaga tugaydi",

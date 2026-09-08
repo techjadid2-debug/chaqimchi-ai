@@ -1801,6 +1801,7 @@ async def lifespan(app: FastAPI):
         get_store().list_sites,
         _send_owner_telegram,
         panel_url=urls.app_url(),
+        renewal_invoice=_renewal_pay_url,
     )
     _digest_task = asyncio.create_task(_digest.run())
     _maintenance_task = asyncio.create_task(_maintenance_loop())
@@ -9982,6 +9983,34 @@ def _with_links(invoice: Dict[str, Any]) -> Dict[str, Any]:
         "payme_url": payme_api.checkout_link(payme_config(), invoice, pay_page if base else ""),
         "click_url": click_api.checkout_link(click_config(), invoice, pay_page if base else ""),
     }
+
+
+def _renewal_pay_url(site_id: str, period: str) -> str:
+    """Obuna eslatmasi uchun to'lov sahifasi manzili.
+
+    Ilgari eslatmada "To'lovni panelda ochasiz" deyilardi va zanjir shu
+    yerda uzilardi: ega panelga kirib, hisob-fakturani qidirishi kerak
+    edi — ko'pchilik shu joyda to'xtardi.  Endi eslatma bilan to'lov
+    sahifasi orasida bitta bosish qoladi.
+
+    Takroriy chaqiruv XAVFSIZ va shu SHART: bitta obuna davri uchun
+    uchta eslatma ketadi (7 kun, 1 kun, grace).  Mavjud `pending`
+    hisob qayta ishlatiladi — admin qo'lda ochgani ham (uni chetlab
+    ikkinchi hisob ochish egaga ikkita boshqa raqam ko'rsatardi).
+
+    Bo'sh satr qaytishi mumkin: rasmiy manzil sozlanmagan bo'lsa
+    (`ENES_PUBLIC_URL`) havola nisbiy bo'lardi va Telegramda ochilmasdi.
+    """
+    if not public_url():
+        return ""
+    payments = get_payments()
+    pending = [
+        item for item in payments.list_invoices(site_id, limit=20) if item["state"] == "pending"
+    ]
+    invoice = pending[0] if pending else payments.create_invoice(
+        site_id, 1, note=f"avto-eslatma {period}"
+    )
+    return str(_with_links(invoice)["pay_url"])
 
 
 @app.get("/api/v1/admin/payments/providers")

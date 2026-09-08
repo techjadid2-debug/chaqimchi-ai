@@ -129,6 +129,7 @@
   "digest.renewal.grace_body": "Система будет работать ещё <b>{days} дн.</b> Если за это время не поступит оплата, аналитика и уведомления остановятся.",
   "digest.renewal.grace_title": "⏳ {site} — подписка закончилась",
   "digest.renewal.monthly": "Ежемесячный платёж: <b>{amount}</b> сум",
+  "digest.renewal.pay_link": "🧾 Страница оплаты: {url}",
   "digest.renewal.soon_title": "🔔 {site} — до конца подписки {days} дн.",
   "digest.renewal.tomorrow_body": "После срока есть ещё <b>{days} дн.</b> отсрочки — система не отключится сразу.",
   "digest.renewal.tomorrow_title": "⚠️ {site} — подписка заканчивается завтра",

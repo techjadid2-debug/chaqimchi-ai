@@ -304,3 +304,83 @@ def test_click_error_flag_cancels_invoice(client) -> None:
     r = _complete(client, inv, prepare_id, error="-5001", error_note="Ошибка")
     assert r.json()["error"] == -9
     assert client.get(f"/api/v1/invoices/{inv['id']}").json()["state"] == "cancelled"
+
+
+# ── Obuna eslatmasidagi to'lov havolasi ──────────────────────────────────
+#
+# Eslatma "To'lovni panelda ochasiz" deb tugardi va zanjir shu yerda
+# uzilardi.  `_renewal_pay_url` uni to'g'ridan-to'g'ri to'lov sahifasiga
+# ulaydi.  Muhimi — u TAKRORIY chaqiriladi (bitta davr uchun uchta
+# eslatma), ya'ni har chaqiruvda yangi hisob ochmasligi shart.
+
+
+def test_the_renewal_link_reuses_one_invoice_for_the_whole_period(client, monkeypatch) -> None:
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.test")
+    from cloud.main import _renewal_pay_url, get_payments
+
+    site = client.post(
+        "/api/v1/admin/sites",
+        headers=ADMIN,
+        json={"name": "Eslatma testi", "plan": "starter", "subscription_months": 1},
+    ).json()
+    site_id = site["site_id"]
+
+    first = _renewal_pay_url(site_id, "2026-09-20")
+    second = _renewal_pay_url(site_id, "2026-09-20")
+
+    assert first.startswith("https://enes.test/pay/")
+    assert first == second, "uchta eslatma bitta hisobga ishora qilsin"
+    assert len(get_payments().list_invoices(site_id)) == 1
+
+
+def test_the_renewal_link_does_not_shadow_an_invoice_the_admin_made(client, monkeypatch) -> None:
+    """Admin qo'lda hisob ochgan bo'lsa, o'sha ishlatiladi.
+
+    Chetlab ikkinchisini ochish egaga ikkita boshqa raqam ko'rsatardi va
+    u qaysi birini to'lashni bilmasdi.
+    """
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.test")
+    from cloud.main import _renewal_pay_url, get_payments
+
+    manual = _invoice(client, months=12)
+
+    link = _renewal_pay_url(manual["site_id"], "2026-09-20")
+
+    assert link.endswith(f"/pay/{manual['id']}")
+    assert len(get_payments().list_invoices(manual["site_id"])) == 1
+
+
+def test_a_paid_invoice_does_not_block_the_next_period(client, monkeypatch) -> None:
+    """To'langan hisob qayta ishlatilmasin — u obunani allaqachon uzaytirgan."""
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.test")
+    from cloud.main import _renewal_pay_url, get_payments
+
+    paid = _invoice(client, months=1)
+    marked = client.post(
+        f"/api/v1/admin/invoices/{paid['id']}/paid", headers=ADMIN, json={"provider": "naqd"}
+    )
+    assert marked.status_code == 200, marked.text
+
+    link = _renewal_pay_url(paid["site_id"], "2026-10-20")
+
+    assert not link.endswith(f"/pay/{paid['id']}"), "to'langan hisob qayta ishlatilmasin"
+    assert len(get_payments().list_invoices(paid["site_id"])) == 2
+
+
+def test_without_a_public_address_no_link_is_offered(client, monkeypatch) -> None:
+    """Nisbiy manzil Telegramda ochilmaydi — havolasiz xabar yaxshiroq.
+
+    Hisob ham ochilmaydi: ega ko'ra olmaydigan hisob faqat adminni
+    chalg'itardi.
+    """
+    monkeypatch.delenv("ENES_PUBLIC_URL", raising=False)
+    from cloud.main import _renewal_pay_url, get_payments
+
+    site = client.post(
+        "/api/v1/admin/sites",
+        headers=ADMIN,
+        json={"name": "Manzilsiz", "plan": "starter", "subscription_months": 1},
+    ).json()
+
+    assert _renewal_pay_url(site["site_id"], "2026-09-20") == ""
+    assert get_payments().list_invoices(site["site_id"]) == []

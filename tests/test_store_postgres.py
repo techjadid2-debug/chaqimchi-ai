@@ -160,3 +160,68 @@ def test_the_latest_job_is_the_last_one_written(pg_store) -> None:
     latest = pg_store.latest_job_of_kind(sid, "benchmark")
 
     assert latest["job_id"] == second["job_id"]
+
+
+# ── Pul jadvallari ───────────────────────────────────────────────────────
+#
+# Bu qism eng ehtiyot bo'linadigani: `payments/store.py` ilgari O'Z
+# `sqlite3.connect` iga ega edi.  Cloud PostgreSQL'ga o'tganda u
+# jimgina eski SQLite fayliga yozib turaverardi — obuna bir bazada,
+# hisob-faktura boshqasida, ya'ni to'lov obunani UZAYTIRMAY qolardi.
+
+
+@needs_postgres
+def test_the_payment_store_follows_the_cloud_database(pg_store) -> None:
+    from cloud.payments.store import PaymentStore
+
+    payments = PaymentStore(pg_store)
+    site = pg_store.create_site("PG do'kon", plan="lite")
+    invoice = payments.create_invoice(site["site_id"], 1)
+
+    assert invoice["state"] == "pending"
+    # Hisob-faktura CLOUD bazasidagi saytga bog'landi — ya'ni ikkalasi
+    # bitta bazada.
+    assert invoice["site_name"] == "PG do'kon"
+
+
+@needs_postgres
+def test_paying_extends_the_subscription_exactly_once(pg_store) -> None:
+    """Takroriy `mark_paid` obunani ikki marta surmasin.
+
+    Darvoza — `UPDATE ... WHERE state='pending'` ning `rowcount` i.
+    Payme va Click bir vaqtda javob qaytarsa (yoki provayder qayta
+    urinsa) ikkalasi ham `pending` ni o'qiydi.
+    """
+    from cloud.payments.store import PaymentStore
+
+    payments = PaymentStore(pg_store)
+    site = pg_store.create_site("PG do'kon", plan="lite")
+    sid = site["site_id"]
+    invoice = payments.create_invoice(sid, 1)
+    before = pg_store.get_site(sid)["subscription_until"]
+
+    payments.mark_paid(invoice["id"], "naqd")
+    after = pg_store.get_site(sid)["subscription_until"]
+    payments.mark_paid(invoice["id"], "naqd")
+
+    assert after > before, "to'lov obunani uzaytirsin"
+    assert pg_store.get_site(sid)["subscription_until"] == after, "ikkinchi marta surmasin"
+
+
+@needs_postgres
+def test_click_gets_an_integer_prepare_id(pg_store) -> None:
+    """Click `merchant_prepare_id` ni BUTUN SON deb talab qiladi.
+
+    SQLite'da uni `AUTOINCREMENT` berardi; PostgreSQL'da o'rnini
+    `BIGSERIAL` bosadi.  Tarjima ishlamasa bu yerda matn qaytardi va
+    Click callback'i rad etilardi.
+    """
+    from cloud.payments.store import PaymentStore
+
+    payments = PaymentStore(pg_store)
+    site = pg_store.create_site("PG do'kon", plan="lite")
+    invoice = payments.create_invoice(site["site_id"], 1)
+
+    prepared = payments.click_prepare("clk-1", invoice["id"], invoice["amount_uzs"])
+
+    assert isinstance(prepared["merchant_prepare_id"], int)

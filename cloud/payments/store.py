@@ -6,7 +6,6 @@ Payme ham, Click ham, "naqd" ham shu bitta yo'ldan o'tadi — `mark_paid()`.
 
 from __future__ import annotations
 
-import sqlite3
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -35,15 +34,16 @@ class PaymentStore:
         self.db_path = cloud.db_path
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=5000")
-        except Exception:
-            pass
-        return conn
+    def _connect(self) -> Any:
+        """Ulanish `CloudStore` niki bilan BIR XIL bazaga.
+
+        Ilgari bu yerda o'z `sqlite3.connect` i turardi.  Cloud
+        PostgreSQL'ga o'tganda u jimgina eski SQLite fayliga yozib
+        turaverardi: obuna bir bazada, hisob-faktura boshqasida —
+        ya'ni to'lov obunani uzaytirmay qolardi.  Dialekt bitta
+        joydan olinishi shu sababdan.
+        """
+        return self.cloud._connect()
 
     def _init_db(self) -> None:
         conn = self._connect()

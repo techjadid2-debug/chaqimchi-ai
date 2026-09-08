@@ -13,14 +13,14 @@ from urllib.parse import urlparse
 import httpx
 
 MANAGED_KEYS = (
-    "CHAQIMCHI_CONFIG",
-    "CHAQIMCHI_CLOUD_URL",
-    "CHAQIMCHI_SITE_ID",
-    "CHAQIMCHI_DEVICE_ID",
-    "CHAQIMCHI_DEVICE_TOKEN",
-    "CHAQIMCHI_SOTQIN_MODEL",
-    "CHAQIMCHI_SOTQIN_REVISION",
-    "CHAQIMCHI_SOTQIN_SERIAL",
+    "ENES_CONFIG",
+    "ENES_CLOUD_URL",
+    "ENES_SITE_ID",
+    "ENES_DEVICE_ID",
+    "ENES_DEVICE_TOKEN",
+    "ENES_SOTQIN_MODEL",
+    "ENES_SOTQIN_REVISION",
+    "ENES_SOTQIN_SERIAL",
 )
 
 
@@ -65,7 +65,7 @@ def hardware_id() -> str:
 
 
 def hardware_model() -> str:
-    configured = os.environ.get("CHAQIMCHI_SOTQIN_MODEL", "").strip()
+    configured = os.environ.get("ENES_SOTQIN_MODEL", "").strip()
     if configured:
         return configured
     cpuinfo = Path("/proc/cpuinfo")
@@ -79,7 +79,7 @@ def hardware_model() -> str:
 
 
 def serial_number() -> str:
-    configured = os.environ.get("CHAQIMCHI_SOTQIN_SERIAL", "").strip()
+    configured = os.environ.get("ENES_SOTQIN_SERIAL", "").strip()
     if configured:
         return configured
     for path in (
@@ -199,14 +199,14 @@ def main() -> int:
     content = render_env(
         existing,
         {
-            "CHAQIMCHI_CONFIG": default_config_path(),
-            "CHAQIMCHI_CLOUD_URL": cloud,
-            "CHAQIMCHI_SITE_ID": str(device["site_id"]),
-            "CHAQIMCHI_DEVICE_ID": str(device["device_id"]),
-            "CHAQIMCHI_DEVICE_TOKEN": str(device["device_token"]),
-            "CHAQIMCHI_SOTQIN_MODEL": args.model,
-            "CHAQIMCHI_SOTQIN_REVISION": args.revision,
-            "CHAQIMCHI_SOTQIN_SERIAL": args.serial,
+            "ENES_CONFIG": default_config_path(),
+            "ENES_CLOUD_URL": cloud,
+            "ENES_SITE_ID": str(device["site_id"]),
+            "ENES_DEVICE_ID": str(device["device_id"]),
+            "ENES_DEVICE_TOKEN": str(device["device_token"]),
+            "ENES_SOTQIN_MODEL": args.model,
+            "ENES_SOTQIN_REVISION": args.revision,
+            "ENES_SOTQIN_SERIAL": args.serial,
         },
     )
     atomic_write_env(args.env_file, content)

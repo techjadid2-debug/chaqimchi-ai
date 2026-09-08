@@ -277,12 +277,12 @@ flowchart TB
 kunlik digest, tozalash halqasi (`_maintenance_loop` — muddati o'tgan
 hodisa va klip), demografiya rollup, lead xabarlari, va ixtiyoriy
 in-app vision worker. Production'da vision worker **alohida
-konteyner** (`CHAQIMCHI_VISION_WORKER_IN_APP=0`).
+konteyner** (`ENES_VISION_WORKER_IN_APP=0`).
 
 **Ishga tushishda production tekshiruvi** (`cloud/main.py:1495`
 atrofida): `DATABASE_URL` PostgreSQL bo'lishi, S3, shifrlash kalitlari
 va uchta JWT/admin kaliti kamida 32 belgi bo'lishi shart. Sinov
-eshiklari (`CHAQIMCHI_OTP_TEST_CODE`, `CHAQIMCHI_OTP_BYPASS_IDS`)
+eshiklari (`ENES_OTP_TEST_CODE`, `ENES_OTP_BYPASS_IDS`)
 production'da server **ataylab yonmaydi**.
 
 | Vazifa | Fayl |
@@ -346,7 +346,7 @@ kodni o'qimasdan bilinmaydi.
 | SQLite/PG almashtirish naqshi | `cloud/event_store.py:95` va `:121` |
 | Qo'lda migratsiya | `cloud/store.py:1268` |
 | Media (rasm, klip) | `cloud/snapshots.py` → MinIO |
-| Kamera parollari | shifrlangan — `CHAQIMCHI_CAMERA_SECRET_KEY` |
+| Kamera parollari | shifrlangan — `ENES_CAMERA_SECRET_KEY` |
 
 ---
 
@@ -383,14 +383,14 @@ flowchart TB
 ```
 
 **Uchta alohida sir** — aralashtirilmasin:
-`CHAQIMCHI_OWNER_JWT_SECRET`, `CHAQIMCHI_PORTAL_JWT_SECRET`,
-`CHAQIMCHI_CLOUD_ADMIN_KEY`. Umumiy `CHAQIMCHI_JWT_SECRET` qo'yilsa
+`ENES_OWNER_JWT_SECRET`, `ENES_PORTAL_JWT_SECRET`,
+`ENES_CLOUD_ADMIN_KEY`. Umumiy `ENES_JWT_SECRET` qo'yilsa
 owner va portal ajratilishi **bekor bo'ladi** — serverda u yo'q va
 shunday qolsin (audit O'RTA-7).
 
 **Egaga kirish yo'li:** admin paneldagi "Kirish havolasi" tugmasi yoki
 Telegram bot `/start` beradigan `?key=<token>`. Eski `?tg=` va
-`CHAQIMCHI_OTP_BYPASS_IDS` olib tashlangan.
+`ENES_OTP_BYPASS_IDS` olib tashlangan.
 
 | Qism | Fayl |
 |---|---|
@@ -688,7 +688,7 @@ Owner sessiyalari ham shunday.
 
 ### 10.5 · Env tartibga solish
 
-**Hozir:** 96 ta `CHAQIMCHI_*` o'zgaruvchisi, kod bo'ylab
+**Hozir:** 96 ta `ENES_*` o'zgaruvchisi, kod bo'ylab
 `os.environ.get(...)` bilan tarqoq. Standart qiymatlar chaqiruv
 joyida yozilgan.
 

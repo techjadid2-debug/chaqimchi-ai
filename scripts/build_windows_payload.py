@@ -287,14 +287,14 @@ def step_code() -> None:
 #: Paket qaysi cloudga ulanishini bilishi kerak: mijoz server manzilini
 #: yodda tutmaydi va sehrgarda uni qo'lda yozishi ham kerak emas.
 #: Qurish paytida beriladi:
-#:   CHAQIMCHI_DEFAULT_CLOUD_URL=https://... python scripts/build_windows_payload.py
+#:   ENES_DEFAULT_CLOUD_URL=https://... python scripts/build_windows_payload.py
 #:
 #: Bo'sh qolsa qurish **to'xtaydi** (`--lokal-qurish` bundan mustasno).
 #: Sabab: CI bir marta bu o'zgaruvchisiz ishlagan va GitHub Releases'ga
 #: cloud manzili bo'sh `.exe` chiqib ketgan — bunday paket auto-pair qila
 #: olmaydi va sehrgar do'kon egasidan server manzilini so'raydi, u esa uni
 #: bilmaydi.  Ogohlantirish yetarli emas ekan: CI logini hech kim o'qimaydi.
-DEFAULT_CLOUD_URL = os.environ.get("CHAQIMCHI_DEFAULT_CLOUD_URL", "").strip().rstrip("/")
+DEFAULT_CLOUD_URL = os.environ.get("ENES_DEFAULT_CLOUD_URL", "").strip().rstrip("/")
 
 LAUNCHER = """@echo off
 chcp 65001 > nul
@@ -305,7 +305,7 @@ cd /d "%~dp0"
 REM Paket qaysi cloudga ulanishini shu yerdan biladi (qurish paytida
 REM qo'yiladi).  Bo'sh bo'lsa dastur lokal rejimda ishlaydi va sehrgar
 REM cloud manzilini so'raydi.
-set CHAQIMCHI_DEFAULT_CLOUD_URL=__CLOUD_URL__
+set ENES_DEFAULT_CLOUD_URL=__CLOUD_URL__
 
 if not exist "python\\python.exe" (
     echo [XATO] Dastur fayllari topilmadi.
@@ -346,8 +346,8 @@ SERVICE_LAUNCHER = """@echo off
 chcp 65001 > nul
 cd /d "%~dp0"
 
-set CHAQIMCHI_DEFAULT_CLOUD_URL=__CLOUD_URL__
-set CHAQIMCHI_LOCAL_NO_BROWSER=1
+set ENES_DEFAULT_CLOUD_URL=__CLOUD_URL__
+set ENES_LOCAL_NO_BROWSER=1
 
 "python\\python.exe" -m enes.local.app
 """
@@ -405,11 +405,11 @@ def check_cloud_url(*, allow_no_cloud: bool = False) -> None:
     if not DEFAULT_CLOUD_URL:
         if not allow_no_cloud:
             raise SystemExit(
-                "CHAQIMCHI_DEFAULT_CLOUD_URL berilmadi.\n"
+                "ENES_DEFAULT_CLOUD_URL berilmadi.\n"
                 "Bunday paket cloudga o'zi ulana olmaydi: mijozdan server "
                 "manzili so'raladi va u javob bera olmaydi.\n"
                 "Reliz qurishda:\n"
-                "  CHAQIMCHI_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \\\n"
+                "  ENES_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \\\n"
                 "    python scripts/build_windows_payload.py\n"
                 "Ataylab cloudsiz (faqat lokal sinov) paket kerak bo'lsa: "
                 "--lokal-qurish"
@@ -420,7 +420,7 @@ def check_cloud_url(*, allow_no_cloud: bool = False) -> None:
         # http:// bilan qurilgan paket mijoz tarmog'ida jimgina ishlamaydi:
         # pairing tokeni ochiq kanaldan o'tadi va cloud uni rad etadi.
         raise SystemExit(
-            f"CHAQIMCHI_DEFAULT_CLOUD_URL https:// bilan boshlanishi kerak: {DEFAULT_CLOUD_URL}"
+            f"ENES_DEFAULT_CLOUD_URL https:// bilan boshlanishi kerak: {DEFAULT_CLOUD_URL}"
         )
 
 

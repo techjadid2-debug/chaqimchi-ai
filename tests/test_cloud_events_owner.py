@@ -17,12 +17,12 @@ from cloud.snapshots import LocalSnapshotStore
 def production_client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
-    monkeypatch.setenv("CHAQIMCHI_OTP_TEST_CODE", "123456")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
+    monkeypatch.setenv("ENES_OTP_TEST_CODE", "123456")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("ENES_S3_ENDPOINT", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)
@@ -134,7 +134,7 @@ def test_media_quota_evicts_oldest_media_but_keeps_events(production_client, mon
         assert upload.status_code == 200
 
     # Kvota: 2 ta snapshot sig'adi, 3-chisi eng eskisini siqib chiqaradi.
-    monkeypatch.setenv("CHAQIMCHI_SITE_MEDIA_MAX_BYTES", "2000")
+    monkeypatch.setenv("ENES_SITE_MEDIA_MAX_BYTES", "2000")
     main._purge_expired_events()
 
     store = main.get_event_store()
@@ -631,7 +631,7 @@ def test_owner_trend_returns_a_full_week(production_client) -> None:
 # ── Kirish havolasi: `/owner?key=<token>` ────────────────────────────────
 #
 # Kodsiz kirishning xavfsiz ko'rinishi.  Ilgari bu o'rinda Telegram ID
-# ro'yxati (`CHAQIMCHI_OTP_BYPASS_IDS`) bor edi — ID sir emasligi uchun
+# ro'yxati (`ENES_OTP_BYPASS_IDS`) bor edi — ID sir emasligi uchun
 # olib tashlandi.  Endi credential — uzun tasodifiy token: faqat admin
 # yaratadi, yangi havola eskisini bekor qiladi, a'zolik har kirishda
 # qayta tekshiriladi.
@@ -673,7 +673,7 @@ def _webapp_init_data(token: str, telegram_id: str, *, auth_date: int | None = N
 def test_telegram_webapp_auth_issues_owner_session(production_client, monkeypatch) -> None:
     client, _messages = production_client
     token = "123456:telegram-webapp-test-token-abcdefghijklmnopqrstuvwxyz"
-    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", token)
+    monkeypatch.setenv("ENES_OWNER_TELEGRAM_TOKEN", token)
     site, _device, _headers = _provision(client)
     _member(client, site["site_id"], "5476000099", role="owner")
 
@@ -691,7 +691,7 @@ def test_telegram_webapp_auth_issues_owner_session(production_client, monkeypatc
 def test_telegram_webapp_rejects_tampered_or_expired_data(production_client, monkeypatch) -> None:
     client, _messages = production_client
     token = "123456:telegram-webapp-test-token-abcdefghijklmnopqrstuvwxyz"
-    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", token)
+    monkeypatch.setenv("ENES_OWNER_TELEGRAM_TOKEN", token)
     site, _device, _headers = _provision(client)
     _member(client, site["site_id"], "5476000100", role="owner")
 
@@ -815,7 +815,7 @@ def test_otp_test_code_is_ignored_in_production(production_client, monkeypatch) 
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     _member(client, site["site_id"], "5476000016")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
+    monkeypatch.setenv("ENES_ENV", "production")
 
     client.post("/api/v1/owner/auth/request", json={"telegram_id": "5476000016"})
     verified = client.post(
@@ -830,9 +830,9 @@ def test_production_startup_refuses_test_doors(tmp_path, monkeypatch) -> None:
     """Sinov eshiklari qolgan production server umuman yonmaydi."""
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
-    monkeypatch.setenv("CHAQIMCHI_OTP_TEST_CODE", "123456")
-    monkeypatch.setenv("CHAQIMCHI_OTP_BYPASS_IDS", "42")
+    monkeypatch.setenv("ENES_ENV", "production")
+    monkeypatch.setenv("ENES_OTP_TEST_CODE", "123456")
+    monkeypatch.setenv("ENES_OTP_BYPASS_IDS", "42")
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)
@@ -842,8 +842,8 @@ def test_production_startup_refuses_test_doors(tmp_path, monkeypatch) -> None:
         with TestClient(main.app):
             pass
 
-    assert "CHAQIMCHI_OTP_TEST_CODE" in str(excinfo.value)
-    assert "CHAQIMCHI_OTP_BYPASS_IDS" in str(excinfo.value)
+    assert "ENES_OTP_TEST_CODE" in str(excinfo.value)
+    assert "ENES_OTP_BYPASS_IDS" in str(excinfo.value)
 
 
 def test_code_login_still_works(production_client) -> None:
@@ -1084,7 +1084,7 @@ def _webhook(client, text: str, chat_id: int = 900111):
 def bot_member_client(production_client, monkeypatch):
     """Webhook + saytga ulangan a'zo bilan tayyor muhit."""
     client, messages = production_client
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
     site, device, headers = _provision(client)
     client.post(
         f"/api/v1/admin/sites/{site['site_id']}/members",
@@ -1250,7 +1250,7 @@ def test_kamera_sends_the_last_preview_and_requests_a_new_one(
     import cloud.main as main
 
     client, messages, site, _headers = bot_member_client
-    monkeypatch.setenv("CHAQIMCHI_CAMERA_SECRET_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("ENES_CAMERA_SECRET_KEY", Fernet.generate_key().decode())
     store = main.get_store()
     store.upsert_camera(site["site_id"], "camera-01", label="Kirish", rtsp_url="rtsp://demo/1")
     main.get_snapshot_store().put("previews/p1.jpg", b"preview-bytes")
@@ -1378,8 +1378,8 @@ def _bot_start(client, telegram_id: str, payload: str = ""):
 def test_a_customer_connects_telegram_without_typing_any_id(
     production_client, monkeypatch
 ) -> None:
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="900")
@@ -1403,8 +1403,8 @@ def test_a_customer_connects_telegram_without_typing_any_id(
 def test_an_invite_works_only_once(production_client, monkeypatch) -> None:
     """Havola credential: uni bosgan odam panelga kiradi.  Bir marta
     ishlatilgach boshqa hech kimni ichkariga kiritmasin."""
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="910")
@@ -1423,8 +1423,8 @@ def test_an_invite_works_only_once(production_client, monkeypatch) -> None:
 def test_an_expired_invite_is_refused(production_client, monkeypatch) -> None:
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="920")
@@ -1451,8 +1451,8 @@ def test_a_random_start_payload_does_not_grant_access(
 ) -> None:
     """Botga tasodifiy matn bilan `/start` bosgan odam a'zo bo'lib
     qolmasin."""
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="930")
@@ -1471,8 +1471,8 @@ def test_a_second_tap_does_not_say_the_link_expired(
     o'sha odam allaqachon ulangan edi.
 
     Ayni holat mijoz havolani ikki marta bosganda ham yuz beradi."""
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, messages = production_client
     site, _device, _headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="960")
@@ -1496,8 +1496,8 @@ def test_a_failed_telegram_reply_does_not_undo_the_invite(
     qaytarsin — aks holda Telegram cheksiz qayta urinadi."""
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="970")
@@ -1522,8 +1522,8 @@ def test_the_register_button_still_works(production_client, monkeypatch) -> None
     yuborardi — saytdagi "Ro'yxatdan o'tish" tugmasi javob bermay qolgandi.
 
     Taklif tokeni har doim 32 belgi; `register` esa emas."""
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, messages = production_client
 
     before = len(messages)
@@ -1537,8 +1537,8 @@ def test_the_register_button_still_works(production_client, monkeypatch) -> None
 def test_a_manager_cannot_invite_more_people(production_client, monkeypatch) -> None:
     """Xodim yangi odam taklif qila olmasin — aks holda bitta taklif
     butun do'konni ochib yuborardi."""
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     owner_headers = _login_owner(client, site["site_id"], telegram_id="940")
@@ -1629,9 +1629,9 @@ def test_a_paying_site_keeps_its_plan_features_without_acceptance(
     from cryptography.fernet import Fernet
 
     client, _messages = production_client
-    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
-    monkeypatch.setenv("CHAQIMCHI_CAMERA_SECRET_KEY", Fernet.generate_key().decode())
-    monkeypatch.delenv("CHAQIMCHI_AVAILABLE_FEATURES", raising=False)
+    monkeypatch.setenv("ENES_ENV", "production")
+    monkeypatch.setenv("ENES_CAMERA_SECRET_KEY", Fernet.generate_key().decode())
+    monkeypatch.delenv("ENES_AVAILABLE_FEATURES", raising=False)
     _site, headers = _site_on(client, "biznes")
 
     config = client.get("/api/v1/sotqin/config", headers=headers).json()
@@ -2446,7 +2446,7 @@ def _callback(client, telegram_id: str, data: str):
 
 def test_pressing_the_button_makes_the_shop_speak(production_client, monkeypatch) -> None:
     """Bungacha `callback_query` UMUMAN ushlanmasdi — tugma bosish hech narsa qilmasdi."""
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, headers = _provision(client)
     _login_owner(client, site["site_id"], telegram_id="931")
@@ -2467,7 +2467,7 @@ def test_a_stranger_cannot_make_someone_elses_shop_speak(production_client, monk
     Aks holda istalgan odam o'z botiga tugma yasab, begona do'kon
     karnayini yangratardi.
     """
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, headers = _provision(client)
 
@@ -2483,7 +2483,7 @@ def test_a_stranger_cannot_make_someone_elses_shop_speak(production_client, monk
 
 
 def test_an_unknown_button_does_not_crash_the_bot(production_client, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
     _login_owner(client, site["site_id"], telegram_id="932")

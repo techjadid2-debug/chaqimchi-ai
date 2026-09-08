@@ -12,26 +12,26 @@
 # yetmadi" degan jim holatga olib kelardi.
 #
 # Ishlatish:
-#   CHAQIMCHI_RELEASE_HOST=deploy@169.58.198.111 \
+#   ENES_RELEASE_HOST=deploy@169.58.198.111 \
 #     scripts/publish_windows_release.sh
 #
 #   # CI qurgan faylni chiqarish (GitHub Releases'dan yuklab olingan):
-#   CHAQIMCHI_RELEASE_HOST=deploy@169.58.198.111 \
+#   ENES_RELEASE_HOST=deploy@169.58.198.111 \
 #     scripts/publish_windows_release.sh --exe ~/Downloads/Chaqimchi_AI_Setup.exe
 #
 # Muhitdan o'qiladi:
-#   CHAQIMCHI_RELEASE_HOST      majburiy — `deploy@IP`
-#   CHAQIMCHI_RELEASE_DIR       serverdagi papka (standart quyida)
-#   CHAQIMCHI_RELEASE_SSH_KEY   SSH kaliti (standart `.deploy_keys/chaqimchi_prod`)
-#   CHAQIMCHI_DL_URL            tashqi tekshiruv manzili (standart dl.chaqimchi.uz)
+#   ENES_RELEASE_HOST      majburiy — `deploy@IP`
+#   ENES_RELEASE_DIR       serverdagi papka (standart quyida)
+#   ENES_RELEASE_SSH_KEY   SSH kaliti (standart `.deploy_keys/chaqimchi_prod`)
+#   ENES_DL_URL            tashqi tekshiruv manzili (standart dl.chaqimchi.uz)
 #
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-remote_dir="${CHAQIMCHI_RELEASE_DIR:-/home/deploy/chaqimchi-ai/releases}"
-ssh_key="${CHAQIMCHI_RELEASE_SSH_KEY:-.deploy_keys/chaqimchi_prod}"
-dl_url="${CHAQIMCHI_DL_URL:-https://dl.chaqimchi.uz}"
+remote_dir="${ENES_RELEASE_DIR:-/home/deploy/chaqimchi-ai/releases}"
+ssh_key="${ENES_RELEASE_SSH_KEY:-.deploy_keys/chaqimchi_prod}"
+dl_url="${ENES_DL_URL:-https://dl.chaqimchi.uz}"
 py="${PY:-python3}"
 
 source_exe=""
@@ -42,8 +42,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${CHAQIMCHI_RELEASE_HOST:-}" ]]; then
-  echo "CHAQIMCHI_RELEASE_HOST berilishi shart (masalan deploy@169.58.198.111)" >&2
+if [[ -z "${ENES_RELEASE_HOST:-}" ]]; then
+  echo "ENES_RELEASE_HOST berilishi shart (masalan deploy@169.58.198.111)" >&2
   exit 1
 fi
 
@@ -102,8 +102,8 @@ if [[ -f "$ssh_key" ]]; then
   scp_opts+=(-i "$ssh_key")
 fi
 
-echo "→ Serverga yuborilmoqda: $CHAQIMCHI_RELEASE_HOST:$remote_dir"
-scp "${scp_opts[@]}" "$exe" "$manifest" "$CHAQIMCHI_RELEASE_HOST:$remote_dir/"
+echo "→ Serverga yuborilmoqda: $ENES_RELEASE_HOST:$remote_dir"
+scp "${scp_opts[@]}" "$exe" "$manifest" "$ENES_RELEASE_HOST:$remote_dir/"
 
 # ── Tashqaridan tekshiruv ───────────────────────────────────────────────
 #

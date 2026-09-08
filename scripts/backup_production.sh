@@ -16,7 +16,7 @@
 set -euo pipefail
 umask 077
 
-# Media rejimi: `--media` argumenti yoki CHAQIMCHI_BACKUP_MEDIA=1
+# Media rejimi: `--media` argumenti yoki ENES_BACKUP_MEDIA=1
 with_media=0
 for arg in "$@"; do
   case "$arg" in
@@ -24,22 +24,22 @@ for arg in "$@"; do
     *) echo "Noma'lum argument: $arg (faqat --media)" >&2; exit 2 ;;
   esac
 done
-if [[ "${CHAQIMCHI_BACKUP_MEDIA:-0}" == "1" ]]; then
+if [[ "${ENES_BACKUP_MEDIA:-0}" == "1" ]]; then
   with_media=1
 fi
 
-if [[ -z "${CHAQIMCHI_BACKUP_DIR:-}" || "${CHAQIMCHI_BACKUP_DIR}" == "/" ]]; then
-  echo "CHAQIMCHI_BACKUP_DIR xavfsiz, aniq katalog bo'lishi shart" >&2
+if [[ -z "${ENES_BACKUP_DIR:-}" || "${ENES_BACKUP_DIR}" == "/" ]]; then
+  echo "ENES_BACKUP_DIR xavfsiz, aniq katalog bo'lishi shart" >&2
   exit 1
 fi
-if [[ -z "${CHAQIMCHI_BACKUP_PASSWORD:-}" ]]; then
-  echo "CHAQIMCHI_BACKUP_PASSWORD berilishi shart" >&2
+if [[ -z "${ENES_BACKUP_PASSWORD:-}" ]]; then
+  echo "ENES_BACKUP_PASSWORD berilishi shart" >&2
   exit 1
 fi
 
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
-env_file="${CHAQIMCHI_ENV_FILE:-.env.production}"
-compose_file="${CHAQIMCHI_COMPOSE_FILE:-docker-compose.prod.yml}"
+env_file="${ENES_ENV_FILE:-.env.production}"
+compose_file="${ENES_COMPOSE_FILE:-docker-compose.prod.yml}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 stage="$(mktemp -d)"
 # Tozalash HECH QACHON xato bilan tugamasin: `mc mirror` konteyner ichida
@@ -50,14 +50,14 @@ stage="$(mktemp -d)"
 # qolganini oddiy rm oladi; ikkalasi ham yiqilsa ham backup natijasiga
 # ta'sir qilmaydi.
 cleanup_stage() {
-  docker compose --env-file "${CHAQIMCHI_ENV_FILE:-.env.production}" \
-    -f "${CHAQIMCHI_COMPOSE_FILE:-docker-compose.prod.yml}" \
+  docker compose --env-file "${ENES_ENV_FILE:-.env.production}" \
+    -f "${ENES_COMPOSE_FILE:-docker-compose.prod.yml}" \
     run --rm --no-deps --entrypoint sh -v "$stage:/stage" minio-init \
     -c 'rm -rf /stage/minio' >/dev/null 2>&1 || true
   rm -rf -- "$stage" 2>/dev/null || true
 }
 trap cleanup_stage EXIT
-mkdir -p -- "$CHAQIMCHI_BACKUP_DIR"
+mkdir -p -- "$ENES_BACKUP_DIR"
 if [[ "$with_media" == "1" ]]; then
   mkdir -p -- "$stage/minio"
 else
@@ -121,12 +121,12 @@ fi   # ← baza rejimi tugadi
 if [[ "$with_media" == "1" ]]; then
   "${compose[@]}" run --rm --no-deps --entrypoint sh \
     -v "$stage/minio:/backup" minio-init -c \
-    'mc alias set src http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mirror src/"$CHAQIMCHI_S3_BUCKET" /backup'
+    'mc alias set src http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mirror src/"$ENES_S3_BUCKET" /backup'
 fi
 
 # Sirlar arxivga KIRADI.  Ularsiz tiklash yarim bo'ladi: kamera RTSP
-# parollari `CHAQIMCHI_CAMERA_SECRET_KEY` bilan, MinIO'dagi har bir rasm
-# va klip esa `CHAQIMCHI_SNAPSHOT_KEY` bilan shifrlangan — kalitsiz ular
+# parollari `ENES_CAMERA_SECRET_KEY` bilan, MinIO'dagi har bir rasm
+# va klip esa `ENES_SNAPSHOT_KEY` bilan shifrlangan — kalitsiz ular
 # o'qib bo'lmaydigan axlat.  Arxivning o'zi AES-256 bilan yopilgan,
 # backup paroli esa boshqa joyda (`/etc/chaqimchi/backup.env`) turadi va
 # bu faylga KIRMAYDI, ya'ni aylanma bog'liqlik yo'q.
@@ -138,17 +138,17 @@ chmod 600 "$stage/env.production"
 #   chaqimchi-<sana>.tar.gz.enc         — baza (har kuni, 14 kun saqlanadi)
 #   chaqimchi-media-<sana>.tar.gz.enc   — media (haftada bir, 2 nusxa)
 if [[ "$with_media" == "1" ]]; then
-  archive="$CHAQIMCHI_BACKUP_DIR/chaqimchi-media-$stamp.tar.gz.enc"
+  archive="$ENES_BACKUP_DIR/chaqimchi-media-$stamp.tar.gz.enc"
   # Kalitlar media arxiviga ham kiradi: MinIO'dagi har bir fayl
-  # `CHAQIMCHI_SNAPSHOT_KEY` bilan shifrlangan, kalitsiz ular axlat.
+  # `ENES_SNAPSHOT_KEY` bilan shifrlangan, kalitsiz ular axlat.
   contents=(minio env.production)
 else
-  archive="$CHAQIMCHI_BACKUP_DIR/chaqimchi-$stamp.tar.gz.enc"
+  archive="$ENES_BACKUP_DIR/chaqimchi-$stamp.tar.gz.enc"
   contents=(postgres.dump cloud-state env.production)
 fi
 
 tar -C "$stage" -czf - "${contents[@]}" | \
-  openssl enc -aes-256-cbc -salt -pbkdf2 -pass env:CHAQIMCHI_BACKUP_PASSWORD \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -pass env:ENES_BACKUP_PASSWORD \
   -out "$archive"
 chmod 600 "$archive"
 
@@ -171,9 +171,9 @@ fi
 # Telegram hujjatlari chatni tez to'ldiradi. Xato ogohlantirishi alohida
 # `chaqimchi-backup-failed.service` orqali ishlaydi, shuning uchun muvaffaqiyatli
 # arxiv yuborishni o'chirish uni o'chirmaydi.
-telegram_send_document="${CHAQIMCHI_BACKUP_TELEGRAM_SEND_DOCUMENT:-1}"
-telegram_token="${CHAQIMCHI_BACKUP_TELEGRAM_TOKEN:-}"
-telegram_chat="${CHAQIMCHI_BACKUP_TELEGRAM_CHAT_ID:-}"
+telegram_send_document="${ENES_BACKUP_TELEGRAM_SEND_DOCUMENT:-1}"
+telegram_token="${ENES_BACKUP_TELEGRAM_TOKEN:-}"
+telegram_chat="${ENES_BACKUP_TELEGRAM_CHAT_ID:-}"
 if [[ "$with_media" != "1" && "$telegram_send_document" == "1" && -n "$telegram_token" && -n "$telegram_chat" ]]; then
   bytes="$(wc -c < "$archive" | tr -d ' ')"
   if (( bytes > 45 * 1024 * 1024 )); then

@@ -20,7 +20,7 @@ import pytest
 
 @pytest.fixture
 def supervisor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import config_store, counters, paths
     from enes.local import supervisor as module
 

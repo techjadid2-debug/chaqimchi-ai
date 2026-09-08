@@ -48,22 +48,22 @@ class ClickConfig:
 
 def payme_config() -> PaymeConfig:
     return PaymeConfig(
-        merchant_id=_env("CHAQIMCHI_PAYME_MERCHANT_ID"),
-        key=_env("CHAQIMCHI_PAYME_KEY"),
-        checkout_url=_env("CHAQIMCHI_PAYME_CHECKOUT_URL", "https://checkout.paycom.uz"),
-        account_field=_env("CHAQIMCHI_PAYME_ACCOUNT_FIELD", "invoice_id"),
+        merchant_id=_env("ENES_PAYME_MERCHANT_ID"),
+        key=_env("ENES_PAYME_KEY"),
+        checkout_url=_env("ENES_PAYME_CHECKOUT_URL", "https://checkout.paycom.uz"),
+        account_field=_env("ENES_PAYME_ACCOUNT_FIELD", "invoice_id"),
     )
 
 
 def click_config() -> ClickConfig:
     return ClickConfig(
-        service_id=_env("CHAQIMCHI_CLICK_SERVICE_ID"),
-        merchant_id=_env("CHAQIMCHI_CLICK_MERCHANT_ID"),
-        secret_key=_env("CHAQIMCHI_CLICK_SECRET"),
-        checkout_url=_env("CHAQIMCHI_CLICK_CHECKOUT_URL", "https://my.click.uz/services/pay"),
+        service_id=_env("ENES_CLICK_SERVICE_ID"),
+        merchant_id=_env("ENES_CLICK_MERCHANT_ID"),
+        secret_key=_env("ENES_CLICK_SECRET"),
+        checkout_url=_env("ENES_CLICK_CHECKOUT_URL", "https://my.click.uz/services/pay"),
     )
 
 
 def public_url() -> str:
     """To'lovdan keyin mijoz qaytadigan tashqi manzil (`https://cloud.example.uz`)."""
-    return _env("CHAQIMCHI_PUBLIC_URL").rstrip("/")
+    return _env("ENES_PUBLIC_URL").rstrip("/")

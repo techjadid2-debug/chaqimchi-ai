@@ -222,7 +222,7 @@ def test_camera_plan_invoice_unchanged(store: CloudStore) -> None:
 
 @pytest.fixture
 def cloud_client(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
     import cloud.main as cm
 
     monkeypatch.setattr(cm, "DB_PATH", tmp_path / "c.db")

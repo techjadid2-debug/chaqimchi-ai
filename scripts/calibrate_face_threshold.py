@@ -136,7 +136,7 @@ def main() -> int:
         return 1
 
     recommended = round((floor + ceiling) / 2, 2)
-    print(f"TAVSIYA: {recommended:.2f}  (CHAQIMCHI_FACE_MATCH_THRESHOLD)")
+    print(f"TAVSIYA: {recommended:.2f}  (ENES_FACE_MATCH_THRESHOLD)")
     print(f"  bo'shliq: {ceiling:.3f} … {floor:.3f}")
     return 0
 

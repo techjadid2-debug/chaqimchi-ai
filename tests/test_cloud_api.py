@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def cloud_client(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
     db = tmp_path / "c.db"
     monkeypatch.setattr("cloud.main.DB_PATH", db)
     monkeypatch.setattr("cloud.main._store", None)
@@ -262,8 +262,8 @@ def test_sotqin_bootstrap_is_only_served_for_a_published_hashed_release(
     cloud_client, monkeypatch
 ) -> None:
     assert cloud_client.get("/downloads/sotqin-installer.sh").status_code == 503
-    monkeypatch.setenv("CHAQIMCHI_SOTQIN_RELEASE_URL", "https://releases.example.uz/sotqin.tar.gz")
-    monkeypatch.setenv("CHAQIMCHI_SOTQIN_RELEASE_SHA256", "a" * 64)
+    monkeypatch.setenv("ENES_SOTQIN_RELEASE_URL", "https://releases.example.uz/sotqin.tar.gz")
+    monkeypatch.setenv("ENES_SOTQIN_RELEASE_SHA256", "a" * 64)
     response = cloud_client.get("/downloads/sotqin-installer.sh")
     assert response.status_code == 200
     assert "https://releases.example.uz/sotqin.tar.gz" in response.text
@@ -352,7 +352,7 @@ def test_lead_notification_reaches_only_explicit_personal_ids_once(
         sender = Sender()
 
     monkeypatch.setenv(
-        "CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS",
+        "ENES_TELEGRAM_LEAD_CHAT_IDS",
         "5476913898,5476913898",
     )
     monkeypatch.setattr(cm, "get_alerts", lambda: Alerts())
@@ -382,9 +382,9 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
 ) -> None:
     import cloud.main as cm
 
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "chaqimchi_bot")
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.example")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.example")
     sent = []
 
     async def fake_send(chat_id, text, *, reply_markup=None):
@@ -456,7 +456,7 @@ def test_quick_trial_creates_a_site(cloud_client) -> None:
 
 def test_the_customer_can_log_in_with_the_password_they_chose(cloud_client, monkeypatch) -> None:
     """Butun ma'no shu: ro'yxatdan o'tdi — darrov panelga kira oladi."""
-    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
+    monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
     created = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).json()
     assert created["username"] == "testmarket"
     assert created["login_error"] is None
@@ -510,7 +510,7 @@ def test_the_trial_seats_are_limited(cloud_client, monkeypatch) -> None:
     from cloud import ratelimit
 
     ratelimit.limiter().reset()
-    monkeypatch.setenv("CHAQIMCHI_SELF_SERVICE_LIMIT", "1")
+    monkeypatch.setenv("ENES_SELF_SERVICE_LIMIT", "1")
 
     first = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL)
     second = cloud_client.post(
@@ -538,7 +538,7 @@ def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch)
     esa fayl yo'qligi uchun 503 qaytarardi.  Endi mavjudlik bitta joydan
     o'qiladi va hajm o'lchanadi.
     """
-    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.delenv("ENES_WINDOWS_INSTALLER_URL", raising=False)
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
     monkeypatch.setattr("cloud.main._release_dirs", list)
 
@@ -551,7 +551,7 @@ def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch)
 def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_path) -> None:
     installer = tmp_path / "Chaqimchi_AI_Setup.exe"
     installer.write_bytes(b"MZ" + b"\0" * 2_000_000)
-    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.delenv("ENES_WINDOWS_INSTALLER_URL", raising=False)
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
     monkeypatch.setattr("cloud.main._release_dirs", list)
 
@@ -580,7 +580,7 @@ def test_download_filename_carries_version_and_pairing_code(
     """
     installer = tmp_path / "Chaqimchi_AI_Setup.exe"
     installer.write_bytes(b"MZ")
-    monkeypatch.delenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", raising=False)
+    monkeypatch.delenv("ENES_WINDOWS_INSTALLER_URL", raising=False)
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
     monkeypatch.setattr("cloud.main._release_dirs", list)
 
@@ -594,10 +594,10 @@ def test_windows_installer_redirects_when_published_externally(cloud_client, mon
     """~70 MB binarni Docker image ichida tashish shart emas — u GitHub
     Releases'da turadi va cloud faqat yo'naltiradi."""
     monkeypatch.setenv(
-        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "ENES_WINDOWS_INSTALLER_URL",
         "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
     )
-    monkeypatch.setenv("CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB", "71")
+    monkeypatch.setenv("ENES_WINDOWS_INSTALLER_SIZE_MB", "71")
 
     body = cloud_client.get("/api/v1/public/windows-release").json()
     assert body["available"] is True
@@ -610,7 +610,7 @@ def test_windows_installer_redirects_when_published_externally(cloud_client, mon
 
 def test_windows_installer_url_must_be_https(cloud_client, monkeypatch) -> None:
     """HTTP havola o'rnatuvchini yo'lda almashtirishga imkon berardi."""
-    monkeypatch.setenv("CHAQIMCHI_WINDOWS_INSTALLER_URL", "http://example.com/setup.exe")
+    monkeypatch.setenv("ENES_WINDOWS_INSTALLER_URL", "http://example.com/setup.exe")
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
     monkeypatch.setattr("cloud.main._release_dirs", list)
     assert cloud_client.get("/api/v1/public/windows-release").json()["available"] is False
@@ -737,7 +737,7 @@ def test_the_lead_cta_has_no_self_service_trial_flow(cloud_client) -> None:
 def test_approving_an_application_hands_over_a_working_login(
     cloud_client, monkeypatch
 ) -> None:
-    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
+    monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "portal-secret-with-more-than-32-chars")
     lead_id = cloud_client.post(
         "/api/v1/public/leads", json={"phone": "+998901112233", "consent": True}
     ).json()["lead_id"]
@@ -820,7 +820,7 @@ def test_a_lead_without_a_name_still_gets_a_readable_shop_name(cloud_client) -> 
 def test_a_coded_link_keeps_the_code_even_when_a_public_url_is_set(
     cloud_client, tmp_path, monkeypatch
 ) -> None:
-    """Serverga `CHAQIMCHI_WINDOWS_INSTALLER_URL` qo'yilgach kodli havola
+    """Serverga `ENES_WINDOWS_INSTALLER_URL` qo'yilgach kodli havola
     JIMGINA buzilgan edi.
 
     Redirect brauzerga manzildagi nomni saqlatadi
@@ -831,7 +831,7 @@ def test_a_coded_link_keeps_the_code_even_when_a_public_url_is_set(
     installer = tmp_path / "Chaqimchi_AI_Setup.exe"
     installer.write_bytes(b"MZ")
     monkeypatch.setenv(
-        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "ENES_WINDOWS_INSTALLER_URL",
         "https://dl.example.uz/releases/chaqimchi-windows-0.6.8.exe",
     )
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
@@ -851,7 +851,7 @@ def test_a_coded_link_still_works_when_the_file_is_only_remote(
     """Fayl faqat tashqarida bo'lsa kodni saqlab qololmaymiz — lekin
     yuklab olish baribir ishlashi kerak (sehrgar kodni so'raydi)."""
     monkeypatch.setenv(
-        "CHAQIMCHI_WINDOWS_INSTALLER_URL",
+        "ENES_WINDOWS_INSTALLER_URL",
         "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
     )
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
@@ -963,7 +963,7 @@ def _audit_actions(client) -> dict:
 def test_money_and_access_changes_leave_a_trace(cloud_client, monkeypatch) -> None:
     """Pul va kirish huquqiga tegadigan har bir amal yozilsin."""
     # Kirish havolasi owner tokenini imzolaydi — kalitsiz 503 qaytaradi.
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-chars")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-chars")
     site = _make_site(cloud_client, "Audit", "biznes")
     site_id = site["site_id"]
 
@@ -995,7 +995,7 @@ def test_money_and_access_changes_leave_a_trace(cloud_client, monkeypatch) -> No
 def test_the_login_link_token_never_reaches_the_log(cloud_client, monkeypatch) -> None:
     """Havolaning o'zi parol.  Jurnal uni saqlab qolsa, jurnalni o'qiy
     oladigan har kim mijoz paneliga kira olardi."""
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-chars")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-chars")
     site = _make_site(cloud_client, "Audit token", "biznes")
     site_id = site["site_id"]
     cloud_client.post(
@@ -1044,7 +1044,7 @@ def test_rate_limited_site_notifies_the_platform_admin(cloud_client, monkeypatch
     import cloud.main as main
     from cloud import ratelimit
 
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "555")
+    monkeypatch.setenv("ENES_TELEGRAM_LEAD_CHAT_IDS", "555")
     site = cloud_client.post(
         "/api/v1/admin/sites",
         headers={"X-Cloud-Admin-Key": "test-admin"},
@@ -1152,7 +1152,7 @@ def test_multi_version_alert_reaches_the_admin_once_a_day(cloud_client, monkeypa
 
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "555")
+    monkeypatch.setenv("ENES_TELEGRAM_LEAD_CHAT_IDS", "555")
     site, headers = _site_with_device(cloud_client, name="Besh zanjir")
     _send_event(cloud_client, headers, "evt-1", "0.6.13")
     _send_event(cloud_client, headers, "evt-2", "0.6.19")

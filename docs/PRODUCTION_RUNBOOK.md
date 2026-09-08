@@ -32,16 +32,16 @@ akkaunti obyektga bog‘lanadi va `/owner` panelida Sotqin/kamera holatini ko‘
 Public leadlar uchun kamida quyidagilar bo‘lsin:
 
 ```env
-CHAQIMCHI_OWNER_TELEGRAM_TOKEN=BOTFATHER_TOKEN
-CHAQIMCHI_TELEGRAM_BOT_USERNAME=BOT_USERNAME
-CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET=UZUN_RANDOM_SECRET
-CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID=-1003319785064
-CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS=5476913898
+ENES_OWNER_TELEGRAM_TOKEN=BOTFATHER_TOKEN
+ENES_TELEGRAM_BOT_USERNAME=BOT_USERNAME
+ENES_TELEGRAM_WEBHOOK_SECRET=UZUN_RANDOM_SECRET
+ENES_CLOUD_TELEGRAM_CHAT_ID=-1003319785064
+ENES_TELEGRAM_LEAD_CHAT_IDS=5476913898
 ```
 
 Public ro'yxatdan o'tish havolasi botni `start=register` bilan ochadi. `/start`
 ichida Sotqin o'rnatuvchi va harid qilgan mijoz paneli tugmalari chiqadi.
-Leadlar faqat `CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS` dagi shaxsiy ID'larga boradi.
+Leadlar faqat `ENES_TELEGRAM_LEAD_CHAT_IDS` dagi shaxsiy ID'larga boradi.
 Webhook:
 
 ```text
@@ -62,17 +62,17 @@ history o‘chirilgan shell yoki secret manager orqali bajaring.
 Dedicated server:
 
 ```bash
-export CHAQIMCHI_BACKUP_DIR=/srv/chaqimchi-backups
-export CHAQIMCHI_BACKUP_PASSWORD='UZUN_BACKUP_SECRET'
+export ENES_BACKUP_DIR=/srv/chaqimchi-backups
+export ENES_BACKUP_PASSWORD='UZUN_BACKUP_SECRET'
 ./scripts/deploy_cloud.sh
 ```
 
 Bandlik/Vizora/Robosinf bilan bitta Caddy ishlatadigan test server:
 
 ```bash
-export CHAQIMCHI_COMPOSE_FILE=docker-compose.contabo.yml
-export CHAQIMCHI_BACKUP_DIR=/home/deploy/chaqimchi-backups
-export CHAQIMCHI_BACKUP_PASSWORD='UZUN_BACKUP_SECRET'
+export ENES_COMPOSE_FILE=docker-compose.contabo.yml
+export ENES_BACKUP_DIR=/home/deploy/chaqimchi-backups
+export ENES_BACKUP_PASSWORD='UZUN_BACKUP_SECRET'
 ./scripts/deploy_cloud.sh
 ```
 
@@ -145,8 +145,8 @@ Mashq **production'ga tegmaydi**: arxiv ochiladi va mazmuni tekshiriladi.
 
 ```bash
 cd /home/deploy/chaqimchi-ai
-export CHAQIMCHI_BACKUP_PASSWORD='...'          # parol menejeridan
-export CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml
+export ENES_BACKUP_PASSWORD='...'          # parol menejeridan
+export ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml
 ./scripts/restore_production.sh --check \
   /home/deploy/chaqimchi-backups/chaqimchi-<sana>.tar.gz.enc
 ```
@@ -158,7 +158,7 @@ Skript to'rt narsani tekshiradi va bittasi ham yetishmasa xato beradi:
 | PostgreSQL dump ochiladimi, nechta jadval bor | bo'sh dump ham "sog'lom" ko'rinadi |
 | `cloud.db` yaxlitmi, ichida sayt/hisob/login bormi | hisob-faktura va obunalar shu yerda |
 | MinIO obyektlari soni | rasm va kliplar |
-| **Shifrlash kalitlari** (`CHAQIMCHI_CAMERA_SECRET_KEY`, `CHAQIMCHI_SNAPSHOT_KEY`) | ularsiz kamera parollari va barcha media o'qib bo'lmaydi |
+| **Shifrlash kalitlari** (`ENES_CAMERA_SECRET_KEY`, `ENES_SNAPSHOT_KEY`) | ularsiz kamera parollari va barcha media o'qib bo'lmaydi |
 
 Skript arxiv turini mazmunidan aniqlaydi: baza arxivida MinIO tekshiruvi
 o‘tkazilmaydi (u yerda media ataylab yo‘q), media arxivida esa faqat
@@ -232,8 +232,8 @@ qo‘lda invoice’ni to‘langan deb belgilashi mumkin.
 ## 5. Panel — bitta avlod (React, `cloud/static/v2/`)
 
 2026-09-07 dan (`enes-rebrend`, `556d33c`) panel **bitta**: `/owner` va
-`/admin` har doim React panelini beradi.  `CHAQIMCHI_UI_V2_OWNER`,
-`CHAQIMCHI_UI_V2_ADMIN` va `CHAQIMCHI_UI_V2` bayroqlari koddan olib
+`/admin` har doim React panelini beradi.  `ENES_UI_V2_OWNER`,
+`ENES_UI_V2_ADMIN` va `ENES_UI_V2` bayroqlari koddan olib
 tashlangan — `.env.production` da qolsa ham hech narsaga ta'sir qilmaydi
 (deploydan keyin o'chirib qo'ying, chalg'itmasin).  Eski `owner.html`
 va `admin.html` repoda yo'q; orqaga qaytarish yo'li — faqat git
@@ -242,7 +242,7 @@ tarixi (`556d33c` dan oldingi holat), env bilan emas.
 React admin eski adminni to'liq qoplaydi (2026-09-08, F4a): mijoz
 tafsiloti `/admin/customers/<id>` — qurilma topshiriqlari, diagnostika,
 funksiya biriktirish, masofaviy chizma, reliz boshqaruvi; Jamoa;
-Sozlamalar.  Portal login uchun `CHAQIMCHI_PORTAL_JWT_SECRET` (≥32
+Sozlamalar.  Portal login uchun `ENES_PORTAL_JWT_SECRET` (≥32
 belgi) shart.
 
 ### Deploy tartibi (panel manbasi o'zgarganda)
@@ -275,8 +275,8 @@ qobig'iga tegmaydi.
 ## 6. Vision Agent (Gemini)
 
 AI yordamchining kalitlari, worker servisi, kvota va rotatsiya tartibi —
-alohida hujjatda: `docs/VISION_AGENT.md`.  Qisqasi: `CHAQIMCHI_GEMINI_API_KEY`
-va `CHAQIMCHI_GEMINI_VISION_MODEL` IKKALASI ham `.env.production`da bo'lishi
+alohida hujjatda: `docs/VISION_AGENT.md`.  Qisqasi: `ENES_GEMINI_API_KEY`
+va `ENES_GEMINI_VISION_MODEL` IKKALASI ham `.env.production`da bo'lishi
 shart (preflight tekshiradi); worker `docker-compose.chaqimchi.yml`dagi
 `vision-worker` servisida ishlaydi va `frontend` tarmog'ida bo'lishi kerak.
 
@@ -285,9 +285,9 @@ shart (preflight tekshiradi); worker `docker-compose.chaqimchi.yml`dagi
 Admin panelidagi **Moliya** bo'limi (`/api/v1/admin/finance`) platforma va
 har mijoz xarajatini ko'rsatadi:
 
-- **Server**: `.env.production` dagi `CHAQIMCHI_COST_SERVER_MONTHLY_USD`
-  (Contabo hisobidagi haqiqiy summa) × `CHAQIMCHI_USD_RATE_UZS`.
-- **Domen**: `CHAQIMCHI_COST_DOMAIN_YEARLY_UZS` (standart 27 000 so'm/yil),
+- **Server**: `.env.production` dagi `ENES_COST_SERVER_MONTHLY_USD`
+  (Contabo hisobidagi haqiqiy summa) × `ENES_USD_RATE_UZS`.
+- **Domen**: `ENES_COST_DOMAIN_YEARLY_UZS` (standart 27 000 so'm/yil),
   oyiga bo'lib ko'rsatiladi.
 - **Gemini**: har savolning HAQIQIY token sarfi (Google `usageMetadata`)
   × env'dagi narx tarifi.

@@ -84,7 +84,7 @@ sudo ./scripts/install_sotqin.sh
 
 Public AI funksiyalarini ochish uchun faqat environment flag yetmaydi —
 haqiqiy do‘konda o‘tkazilgan qabul sinovi fayli kerak
-(`CHAQIMCHI_N100_ACCEPTANCE_FILE` + `CHAQIMCHI_AVAILABLE_FEATURES`).
+(`ENES_N100_ACCEPTANCE_FILE` + `ENES_AVAILABLE_FEATURES`).
 
 Windows yo‘li uchun mezon: **real do‘kon kompyuterida 4 kamera bilan 72
 soat uzluksiz, restartsiz ishlash** va kunlik hisobotning qo‘lda sanash

@@ -12,7 +12,7 @@ bor edi.  Amalda uning narxi ko'rindi:
 * do'kon kompyuteri o'lsa yoki qayta o'rnatilsa sozlama butunlay
   yo'qolardi.
 
-Manzil `CHAQIMCHI_CAMERA_SECRET_KEY` bilan shifrlanadi va panelga
+Manzil `ENES_CAMERA_SECRET_KEY` bilan shifrlanadi va panelga
 qaytarilmaydi.  Bu testlar aynan shu ikkisini va eng xavfli holatni —
 eski qurilma bulutdagi yagona nusxani o'chirib yuborishini — qulflaydi.
 """

@@ -174,7 +174,7 @@ def pilot_acceptance_status(path: Optional[Path] = None) -> Dict[str, Any]:
     raw_path = (
         str(path)
         if path is not None
-        else os.environ.get("CHAQIMCHI_N100_ACCEPTANCE_FILE", "").strip()
+        else os.environ.get("ENES_N100_ACCEPTANCE_FILE", "").strip()
     )
     if not raw_path:
         return {"ok": False, "path": None, "reasons": ["qabul fayli sozlanmagan"]}

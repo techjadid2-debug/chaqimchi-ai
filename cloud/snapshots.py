@@ -48,18 +48,18 @@ class S3SnapshotStore:
             from minio import Minio
         except ImportError as exc:  # pragma: no cover - production dependency
             raise RuntimeError("MinIO Python klienti o'rnatilishi kerak") from exc
-        self.bucket = os.environ.get("CHAQIMCHI_S3_BUCKET", "chaqimchi-snapshots")
-        encryption_key = os.environ.get("CHAQIMCHI_SNAPSHOT_KEY", "").strip()
+        self.bucket = os.environ.get("ENES_S3_BUCKET", "chaqimchi-snapshots")
+        encryption_key = os.environ.get("ENES_SNAPSHOT_KEY", "").strip()
         self.cipher = Fernet(encryption_key.encode()) if encryption_key else None
-        raw_endpoint = os.environ.get("CHAQIMCHI_S3_ENDPOINT", "")
+        raw_endpoint = os.environ.get("ENES_S3_ENDPOINT", "")
         parsed = urlparse(raw_endpoint)
         endpoint = parsed.netloc or parsed.path
         self.client = Minio(
             endpoint,
-            access_key=os.environ.get("CHAQIMCHI_S3_ACCESS_KEY"),
-            secret_key=os.environ.get("CHAQIMCHI_S3_SECRET_KEY"),
+            access_key=os.environ.get("ENES_S3_ACCESS_KEY"),
+            secret_key=os.environ.get("ENES_S3_SECRET_KEY"),
             secure=parsed.scheme == "https",
-            region=os.environ.get("CHAQIMCHI_S3_REGION", "us-east-1"),
+            region=os.environ.get("ENES_S3_REGION", "us-east-1"),
         )
         if not self.client.bucket_exists(self.bucket):
             self.client.make_bucket(self.bucket)
@@ -88,6 +88,6 @@ class S3SnapshotStore:
 
 
 def snapshot_store_from_env(base_dir: Path) -> SnapshotStore:
-    if os.environ.get("CHAQIMCHI_S3_ENDPOINT", "").strip():
+    if os.environ.get("ENES_S3_ENDPOINT", "").strip():
         return S3SnapshotStore()
     return LocalSnapshotStore(base_dir / "data" / "cloud" / "snapshots")

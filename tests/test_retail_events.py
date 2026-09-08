@@ -162,11 +162,11 @@ def test_migration_is_idempotent(tmp_path: Path) -> None:
 def cloud(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("ENES_S3_ENDPOINT", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)

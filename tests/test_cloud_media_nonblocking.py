@@ -48,7 +48,7 @@ def test_no_async_endpoint_touches_the_blocking_store_directly() -> None:
 
 @pytest.fixture
 def cloud_app(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "c.db")
     monkeypatch.setattr("cloud.main._store", None)
     from cloud.main import app

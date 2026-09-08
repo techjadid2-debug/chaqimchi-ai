@@ -15,8 +15,8 @@ aralashib ketadi va ikkalasi ham e'tibordan qoladi.
 Yoqish:
 
 ```bash
-export CHAQIMCHI_SALES_TELEGRAM_TOKEN="123456:ABC..."   # sotuv boti
-export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
+export ENES_SALES_TELEGRAM_TOKEN="123456:ABC..."   # sotuv boti
+export ENES_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
 make run-cloud
 ```
 
@@ -129,11 +129,11 @@ class AlertConfig:
 
     @staticmethod
     def from_env() -> "AlertConfig":
-        raw_interval = os.environ.get("CHAQIMCHI_CLOUD_ALERT_INTERVAL_SEC", "").strip()
+        raw_interval = os.environ.get("ENES_CLOUD_ALERT_INTERVAL_SEC", "").strip()
         try:
             interval = int(raw_interval) if raw_interval else DEFAULT_INTERVAL_SEC
         except ValueError:
-            logger.warning("CHAQIMCHI_CLOUD_ALERT_INTERVAL_SEC son emas — standart qiymat")
+            logger.warning("ENES_CLOUD_ALERT_INTERVAL_SEC son emas — standart qiymat")
             interval = DEFAULT_INTERVAL_SEC
         return AlertConfig(
             # Ichki xabarlar (arizalar va qurilma aloqasi) **sotuv boti**dan
@@ -141,12 +141,12 @@ class AlertConfig:
             # chatda aralashib, ikkalasi ham o'qilmay qolardi.  Sotuv boti
             # sozlanmagan bo'lsa eski xatti-harakat saqlanadi.
             token=(
-                os.environ.get("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "").strip()
-                or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
-                or os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
+                os.environ.get("ENES_SALES_TELEGRAM_TOKEN", "").strip()
+                or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip()
+                or os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip()
                 or None
             ),
-            chat_id=os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "").strip() or None,
+            chat_id=os.environ.get("ENES_CLOUD_TELEGRAM_CHAT_ID", "").strip() or None,
             interval_sec=max(60, interval),
         )
 
@@ -530,7 +530,7 @@ def disk_watch_path() -> Path:
     (statvfs bind mount orqali hostnikini qaytaradi).  Konteynersiz ishga
     tushirishda ham shu papka ishlaydi, bo'lmasa ildiz.
     """
-    override = os.environ.get("CHAQIMCHI_DISK_WATCH_PATH", "").strip()
+    override = os.environ.get("ENES_DISK_WATCH_PATH", "").strip()
     if override:
         return Path(override)
     default = Path("/app/data")
@@ -1228,7 +1228,7 @@ class AlertService:
         if not self.config.enabled:
             logger.info(
                 "Telegram ogohlantirishi o‘chiq "
-                "(CHAQIMCHI_CLOUD_TELEGRAM_TOKEN yoki OWNER token / _CHAT_ID berilmagan)"
+                "(ENES_CLOUD_TELEGRAM_TOKEN yoki OWNER token / _CHAT_ID berilmagan)"
             )
             return
         if self._task is None:

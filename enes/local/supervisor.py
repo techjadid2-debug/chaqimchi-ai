@@ -199,8 +199,8 @@ class RetailSupervisor:
         # kamerani ochilmaydigan qilib qo'ygan edi.  Zanjir o'z qiymatini
         # o'zi belgilaydi (`retail/runner.py`).
         env.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
-        env["CHAQIMCHI_CONFIG"] = str(config_store.config_file())
-        env["CHAQIMCHI_RETAIL_STATUS"] = str(paths.status_path())
+        env["ENES_CONFIG"] = str(config_store.config_file())
+        env["ENES_RETAIL_STATUS"] = str(paths.status_path())
         # Bolaning stdout'i buferlanmasin: yiqilganda oxirgi qatorlar
         # logda qolishi kerak, aks holda eng muhim xabar yo'qoladi.
         env["PYTHONUNBUFFERED"] = "1"

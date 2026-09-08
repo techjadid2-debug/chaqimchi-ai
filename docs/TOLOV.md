@@ -26,7 +26,7 @@ chiqadi; ular ajralib qolsa mijoz saytda ko‘rgan summadan boshqasini to‘layd
 
 **Sotqin Base** canonical narxi `$20/oy`; aktiv AI funksiyalar kamera bo‘yicha
 qo‘shiladi. Shartnoma **dollar narxini** muzlatadi, kursni emas: invoice
-ochilgan paytdagi `CHAQIMCHI_USD_RATE_UZS` bo‘yicha UZS ga aylantiriladi va
+ochilgan paytdagi `ENES_USD_RATE_UZS` bo‘yicha UZS ga aylantiriladi va
 `invoices.amount_uzs` da o‘zgarmas qolib ketadi. Kurs ko‘tarilsa keyingi hisob
 yangi kursda ochiladi — eskisi tegilmaydi.
 
@@ -45,18 +45,18 @@ Standart namuna kurs 13 000 bo‘lsa Sotqin Base 1 oy — **260 000 so‘m**,
 `.env` (kalitlar konfig faylda emas — ular maxfiy):
 
 ```bash
-CHAQIMCHI_CLOUD_ADMIN_KEY=maxfiy-admin-kalit
+ENES_CLOUD_ADMIN_KEY=maxfiy-admin-kalit
 # To'lov havolalari tashqaridan ochilishi uchun — HTTPS domen
-CHAQIMCHI_PUBLIC_URL=https://cloud.chaqimchi.uz
+ENES_PUBLIC_URL=https://cloud.chaqimchi.uz
 
 # Payme (merchant kabinetidan)
-CHAQIMCHI_PAYME_MERCHANT_ID=xxxxxxxxxxxxxxxxxxxxxxxx
-CHAQIMCHI_PAYME_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+ENES_PAYME_MERCHANT_ID=xxxxxxxxxxxxxxxxxxxxxxxx
+ENES_PAYME_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
 
 # Click (SHOP-API)
-CHAQIMCHI_CLICK_SERVICE_ID=12345
-CHAQIMCHI_CLICK_MERCHANT_ID=54321
-CHAQIMCHI_CLICK_SECRET=xxxxxxxxxxxxxxxx
+ENES_CLICK_SERVICE_ID=12345
+ENES_CLICK_MERCHANT_ID=54321
+ENES_CLICK_SECRET=xxxxxxxxxxxxxxxx
 ```
 
 Sozlanmagan provayder shunchaki ko'rinmaydi — server baribir ishlayveradi.
@@ -103,7 +103,7 @@ Misol:
 ```bash
 # Hisob ochish
 curl -X POST https://cloud.chaqimchi.uz/api/v1/admin/sites/<site-id>/invoices \
-  -H "X-Cloud-Admin-Key: $CHAQIMCHI_CLOUD_ADMIN_KEY" \
+  -H "X-Cloud-Admin-Key: $ENES_CLOUD_ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{"months": 12}'
 # → {"id": "a1b2c3...", "amount_uzs": 14900000, "pay_url": "...", "payme_url": "...", "click_url": "..."}
@@ -119,7 +119,7 @@ Bu ataylab shunday: aks holda pul qaytarilgan mijoz tekinga ishlab yurardi.
 
 - Callback endpointlari **HTTPS** ostida bo'lishi shart — imzo va kalitlar ochiq
   kanaldan o'tmasin.
-- `CHAQIMCHI_PAYME_KEY` va `CHAQIMCHI_CLICK_SECRET` faqat serverda; git ga tushmasin.
+- `ENES_PAYME_KEY` va `ENES_CLICK_SECRET` faqat serverda; git ga tushmasin.
 - Summa har doim serverda hisoblanadi — provayder yuborgan summa faqat
   **tekshiriladi**, ishonchli manba sifatida qabul qilinmaydi.
 - Takroriy callback (retry) xavfsiz: bir hisob ikki marta to'langan deb

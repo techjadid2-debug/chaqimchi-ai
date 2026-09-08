@@ -16,11 +16,11 @@ PLACEHOLDER_MARKERS = ("GENERATE", "FROM_", "CHANGE_ME", "EXAMPLE", "YOUR_")
 SECRET_MIN_LENGTHS = {
     "POSTGRES_PASSWORD": 32,
     "MINIO_ROOT_PASSWORD": 32,
-    "CHAQIMCHI_S3_SECRET_KEY": 32,
-    "CHAQIMCHI_CLOUD_ADMIN_KEY": 32,
-    "CHAQIMCHI_OWNER_JWT_SECRET": 32,
-    "CHAQIMCHI_PORTAL_JWT_SECRET": 32,
-    "CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET": 32,
+    "ENES_S3_SECRET_KEY": 32,
+    "ENES_CLOUD_ADMIN_KEY": 32,
+    "ENES_OWNER_JWT_SECRET": 32,
+    "ENES_PORTAL_JWT_SECRET": 32,
+    "ENES_TELEGRAM_WEBHOOK_SECRET": 32,
 }
 
 
@@ -59,21 +59,21 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
             errors.append(f"{key} placeholder bo'lib qolgan")
         return value
 
-    if require("CHAQIMCHI_ENV") != "production":
-        errors.append("CHAQIMCHI_ENV aynan production bo'lishi shart")
-    domain = require("CHAQIMCHI_DOMAIN")
+    if require("ENES_ENV") != "production":
+        errors.append("ENES_ENV aynan production bo'lishi shart")
+    domain = require("ENES_DOMAIN")
     if domain.startswith(("http://", "https://")):
-        errors.append("CHAQIMCHI_DOMAIN sxemasiz hostname bo'lishi kerak")
-    public_url = require("CHAQIMCHI_PUBLIC_URL")
+        errors.append("ENES_DOMAIN sxemasiz hostname bo'lishi kerak")
+    public_url = require("ENES_PUBLIC_URL")
     if public_url and not _https(public_url):
-        errors.append("CHAQIMCHI_PUBLIC_URL haqiqiy HTTPS manzil bo'lishi kerak")
+        errors.append("ENES_PUBLIC_URL haqiqiy HTTPS manzil bo'lishi kerak")
     # Subdomen manzillari ixtiyoriy, lekin berilsa HTTPS bo'lishi shart.
     for key in (
-        "CHAQIMCHI_APP_URL",
-        "CHAQIMCHI_API_URL",
-        "CHAQIMCHI_DL_URL",
-        "CHAQIMCHI_PARTNER_URL",
-        "CHAQIMCHI_ADMIN_URL",
+        "ENES_APP_URL",
+        "ENES_API_URL",
+        "ENES_DL_URL",
+        "ENES_PARTNER_URL",
+        "ENES_ADMIN_URL",
     ):
         value = values.get(key, "").strip()
         if value and not _https(value):
@@ -83,11 +83,11 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
         "POSTGRES_DB",
         "POSTGRES_USER",
         "MINIO_ROOT_USER",
-        "CHAQIMCHI_S3_ACCESS_KEY",
-        "CHAQIMCHI_S3_BUCKET",
-        "CHAQIMCHI_S3_ENDPOINT",
-        "CHAQIMCHI_OWNER_TELEGRAM_TOKEN",
-        "CHAQIMCHI_TELEGRAM_BOT_USERNAME",
+        "ENES_S3_ACCESS_KEY",
+        "ENES_S3_BUCKET",
+        "ENES_S3_ENDPOINT",
+        "ENES_OWNER_TELEGRAM_TOKEN",
+        "ENES_TELEGRAM_BOT_USERNAME",
     ):
         require(key)
     database_url = require("DATABASE_URL")
@@ -99,7 +99,7 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
         if value and len(value) < minimum:
             errors.append(f"{key} kamida {minimum} belgi bo'lishi shart")
 
-    for key in ("CHAQIMCHI_SNAPSHOT_KEY", "CHAQIMCHI_CAMERA_SECRET_KEY"):
+    for key in ("ENES_SNAPSHOT_KEY", "ENES_CAMERA_SECRET_KEY"):
         value = require(key)
         if value:
             try:
@@ -107,15 +107,15 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
             except (TypeError, ValueError):
                 errors.append(f"{key} haqiqiy Fernet kaliti emas")
 
-    token = values.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "") or values.get(
-        "CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", ""
+    token = values.get("ENES_OWNER_TELEGRAM_TOKEN", "") or values.get(
+        "ENES_CLOUD_TELEGRAM_TOKEN", ""
     )
     if token and not re.fullmatch(r"\d+:[A-Za-z0-9_-]{20,}", token):
         errors.append("Telegram bot tokeni noto'g'ri formatda")
-    bot_username = values.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").lstrip("@")
+    bot_username = values.get("ENES_TELEGRAM_BOT_USERNAME", "").lstrip("@")
     if bot_username and not re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username):
-        errors.append("CHAQIMCHI_TELEGRAM_BOT_USERNAME noto'g'ri formatda")
-    recipients = values.get("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "").strip()
+        errors.append("ENES_TELEGRAM_BOT_USERNAME noto'g'ri formatda")
+    recipients = values.get("ENES_TELEGRAM_LEAD_CHAT_IDS", "").strip()
     if not recipients:
         errors.append("Lead uchun kamida bitta statik Telegram chat ID berilishi shart")
     elif any(not re.fullmatch(r"-?\d+", item.strip()) for item in recipients.split(",")):
@@ -125,59 +125,59 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     # orqali yoqilgani uchun eng real xavf — "demo paytida qo'yib,
     # o'chirishni unutish".  Cloud lifespan ham xuddi shu tekshiruvni
     # qiladi, lekin preflight muammoni deploy'dan OLDIN ushlaydi.
-    if values.get("CHAQIMCHI_OTP_TEST_CODE", "").strip():
+    if values.get("ENES_OTP_TEST_CODE", "").strip():
         errors.append(
-            "CHAQIMCHI_OTP_TEST_CODE production'da taqiqlanadi — hamma "
+            "ENES_OTP_TEST_CODE production'da taqiqlanadi — hamma "
             "mijozning OTP kodi bitta doimiy qiymat bo'lib qoladi"
         )
-    if values.get("CHAQIMCHI_OTP_BYPASS_IDS", "").strip():
+    if values.get("ENES_OTP_BYPASS_IDS", "").strip():
         errors.append(
-            "CHAQIMCHI_OTP_BYPASS_IDS olib tashlangan — o'rniga admin "
+            "ENES_OTP_BYPASS_IDS olib tashlangan — o'rniga admin "
             "panel yoki Telegram bot beradigan kirish havolasini ishlating"
         )
 
     # Yuz tanish piloti: embedding shifrlash kalitisiz yoqib bo'lmaydi —
     # aks holda biometrik vektorlar bazada ochiq yotadi.
-    if values.get("CHAQIMCHI_ATTENDANCE_PILOT", "").strip().lower() in {"1", "true", "yes"}:
-        pilot_key = values.get("CHAQIMCHI_EMBEDDING_KEY", "").strip()
+    if values.get("ENES_ATTENDANCE_PILOT", "").strip().lower() in {"1", "true", "yes"}:
+        pilot_key = values.get("ENES_EMBEDDING_KEY", "").strip()
         if not pilot_key:
-            errors.append("CHAQIMCHI_ATTENDANCE_PILOT yoqiq, lekin CHAQIMCHI_EMBEDDING_KEY yo'q")
+            errors.append("ENES_ATTENDANCE_PILOT yoqiq, lekin ENES_EMBEDDING_KEY yo'q")
         else:
             try:
                 Fernet(pilot_key.encode("utf-8"))
             except (TypeError, ValueError):
-                errors.append("CHAQIMCHI_EMBEDDING_KEY haqiqiy Fernet kaliti emas")
+                errors.append("ENES_EMBEDDING_KEY haqiqiy Fernet kaliti emas")
 
-    release_url = require("CHAQIMCHI_SOTQIN_RELEASE_URL")
-    release_sha = require("CHAQIMCHI_SOTQIN_RELEASE_SHA256")
+    release_url = require("ENES_SOTQIN_RELEASE_URL")
+    release_sha = require("ENES_SOTQIN_RELEASE_SHA256")
     if release_url and not _https(release_url):
-        errors.append("CHAQIMCHI_SOTQIN_RELEASE_URL HTTPS bo'lishi shart")
+        errors.append("ENES_SOTQIN_RELEASE_URL HTTPS bo'lishi shart")
     if release_sha and not re.fullmatch(r"[0-9a-fA-F]{64}", release_sha):
-        errors.append("CHAQIMCHI_SOTQIN_RELEASE_SHA256 64 xonali SHA-256 bo'lishi shart")
+        errors.append("ENES_SOTQIN_RELEASE_SHA256 64 xonali SHA-256 bo'lishi shart")
 
-    if not values.get("CHAQIMCHI_N100_ACCEPTANCE_FILE", "").strip():
+    if not values.get("ENES_N100_ACCEPTANCE_FILE", "").strip():
         warnings.append("N100 qabul fayli yo'q: public AI funksiyalari sotuvga ochilmaydi")
-    if not values.get("CHAQIMCHI_AVAILABLE_FEATURES", "").strip():
+    if not values.get("ENES_AVAILABLE_FEATURES", "").strip():
         warnings.append("Public AI funksiyalari environmentda yoqilmagan")
     if not any(
-        values.get(key, "").strip() for key in ("CHAQIMCHI_PAYME_KEY", "CHAQIMCHI_CLICK_SECRET")
+        values.get(key, "").strip() for key in ("ENES_PAYME_KEY", "ENES_CLICK_SECRET")
     ):
         warnings.append("Payme/Click ulanmagan: faqat qo'lda to'lov ishlaydi")
 
     # Vision Agent: kalit va model JUFT bo'lishi shart.  Faqat kalit
     # berilsa readiness o'tadi-yu, har bir job "modeli sozlanmagan"
     # xatosi bilan yiqilib kunlik kvotani yeb qo'yadi.
-    gemini_key = values.get("CHAQIMCHI_GEMINI_API_KEY", "").strip()
-    gemini_model = values.get("CHAQIMCHI_GEMINI_VISION_MODEL", "").strip()
+    gemini_key = values.get("ENES_GEMINI_API_KEY", "").strip()
+    gemini_model = values.get("ENES_GEMINI_VISION_MODEL", "").strip()
     if gemini_key and not gemini_model:
         errors.append(
-            "CHAQIMCHI_GEMINI_API_KEY berilgan, lekin CHAQIMCHI_GEMINI_VISION_MODEL "
+            "ENES_GEMINI_API_KEY berilgan, lekin ENES_GEMINI_VISION_MODEL "
             "yo'q — Vision Agent har savolda yiqiladi"
         )
     if gemini_model and not gemini_key:
-        errors.append("CHAQIMCHI_GEMINI_VISION_MODEL berilgan, lekin API kaliti yo'q")
+        errors.append("ENES_GEMINI_VISION_MODEL berilgan, lekin API kaliti yo'q")
     if not gemini_key:
-        warnings.append("Vision Agent o'chiq: CHAQIMCHI_GEMINI_API_KEY berilmagan")
+        warnings.append("Vision Agent o'chiq: ENES_GEMINI_API_KEY berilmagan")
     return errors, warnings
 
 
@@ -203,8 +203,8 @@ def check_backup(path: Path) -> List[str]:
     warnings: List[str] = []
     restic = bool(values.get("RESTIC_REPOSITORY", "").strip())
     telegram = bool(
-        values.get("CHAQIMCHI_BACKUP_TELEGRAM_TOKEN", "").strip()
-        and values.get("CHAQIMCHI_BACKUP_TELEGRAM_CHAT_ID", "").strip()
+        values.get("ENES_BACKUP_TELEGRAM_TOKEN", "").strip()
+        and values.get("ENES_BACKUP_TELEGRAM_CHAT_ID", "").strip()
     )
     if not restic and not telegram:
         warnings.append(

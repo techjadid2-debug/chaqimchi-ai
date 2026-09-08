@@ -2347,7 +2347,7 @@ class EventStore:
     #: (Avval 10 kun edi — o'n kundan ortiq o'chib turish yig'ilmagan
     #: kunlarni butunlay yo'qotardi.)  Env orqali sozlanadi.
     ROLLUP_LOOKBACK_DAYS = max(
-        1, int(os.environ.get("CHAQIMCHI_DEMOGRAPHY_LOOKBACK_DAYS", "40") or "40")
+        1, int(os.environ.get("ENES_DEMOGRAPHY_LOOKBACK_DAYS", "40") or "40")
     )
 
     #: Kunlik yig'indi shuncha kun saqlanadi.
@@ -3242,7 +3242,7 @@ class EventStore:
     # ── Yuz namunalari (cloud enrollment) ────────────────────────────────
     #
     # Embedding hech qachon ochiq saqlanmaydi: `embedding_b64` — Fernet
-    # bilan shifrlangan vektor.  Kalit (`CHAQIMCHI_EMBEDDING_KEY`) faqat
+    # bilan shifrlangan vektor.  Kalit (`ENES_EMBEDDING_KEY`) faqat
     # environmentda, bazada emas — baza nusxasi o'g'irlansa ham biometrik
     # ma'lumot ochilmaydi.
 

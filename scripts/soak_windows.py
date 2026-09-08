@@ -42,7 +42,7 @@ CRITICAL_PRIORITY = 30
 
 def default_data_dir() -> Path:
     """Sozlama va navbat qayerda (`enes/local/paths.py` bilan bir xil)."""
-    override = os.environ.get("CHAQIMCHI_LOCAL_DIR", "").strip()
+    override = os.environ.get("ENES_LOCAL_DIR", "").strip()
     if override:
         return Path(override).expanduser()
     if os.name == "nt":

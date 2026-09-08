@@ -18,7 +18,7 @@ import yaml
 
 @pytest.fixture()
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import config_store, paths
 
     importlib.reload(paths)

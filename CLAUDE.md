@@ -36,7 +36,7 @@ Tizim o'g'rilik, jinoyat yoki niyatni **taxmin qilmaydi**.
    mosligini qulflaydi. (`importlib.metadata` ishlatilmaydi: paket
    qurilmada pip bilan o'rnatilmaydi.)
 
-3. **`CHAQIMCHI_WINDOWS_INSTALLER_URL` pinini qayta qo'ymang.** Bu pin
+3. **`ENES_WINDOWS_INSTALLER_URL` pinini qayta qo'ymang.** Bu pin
    tufayli mijozlar 3 versiya orqada qolgan edi. Endi manzil
    `latest_windows_release()` dan keladi — eng yangi imzolangan reliz
    o'zi tanlanadi.
@@ -73,10 +73,10 @@ qadam yiqiladi):
 
 ```bash
 # 1) versiyani enes/__init__.py va pyproject.toml da ko'taring
-PYTHONPATH="$PWD" CHAQIMCHI_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
+PYTHONPATH="$PWD" ENES_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
   python scripts/build_windows_payload.py
 makensis -V2 scripts/windows_installer.nsi
-PYTHONPATH="$PWD" CHAQIMCHI_RELEASE_HOST=root@169.58.198.111 \
+PYTHONPATH="$PWD" ENES_RELEASE_HOST=root@169.58.198.111 \
   ./scripts/publish_windows_release.sh --exe releases/Chaqimchi_AI_Setup.exe
 ```
 Imzo kaliti: `~/.chaqimchi/sotqin-release-signing.pem`.
@@ -87,7 +87,7 @@ Imzo kaliti: `~/.chaqimchi/sotqin-release-signing.pem`.
 rsync -az --delete ... root@169.58.198.111:/home/deploy/chaqimchi-ai/
 ssh root@169.58.198.111 'cd /home/deploy/chaqimchi-ai && \
   set -a && . /etc/chaqimchi/backup.env && set +a && \
-  CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh'
+  ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh'
 ```
 To'liq `--exclude` ro'yxati: [docs/DEPLOY_TARIFLAR.md](docs/DEPLOY_TARIFLAR.md) §3.
 Zaxira kalitlari serverdagi `/etc/chaqimchi/backup.env` da (repoda emas).

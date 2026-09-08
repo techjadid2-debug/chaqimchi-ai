@@ -46,7 +46,7 @@ def default_ffmpeg_binary() -> str:
     (`scripts/build_windows_payload.py step_ffmpeg`).  Linux Sotqin'da
     esa hostdagi ffmpeg ishlatiladi (PATH).
     """
-    override = os.environ.get("CHAQIMCHI_FFMPEG", "").strip()
+    override = os.environ.get("ENES_FFMPEG", "").strip()
     if override:
         return override
     bundled = (

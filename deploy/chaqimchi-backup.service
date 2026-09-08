@@ -35,6 +35,6 @@ ExecStart=/home/deploy/chaqimchi-ai/scripts/backup_production.sh
 # o'z unitida, boshqa muddat bilan tozalanadi.
 # Muhim nusxalarni restic/tashqi joyga ko'chirish backup skriptining o'zida
 # (RESTIC_REPOSITORY berilsa) bajariladi.
-ExecStartPost=/usr/bin/find ${CHAQIMCHI_BACKUP_DIR} -name chaqimchi-[0-9]*.tar.gz.enc -mtime +14 -delete
+ExecStartPost=/usr/bin/find ${ENES_BACKUP_DIR} -name chaqimchi-[0-9]*.tar.gz.enc -mtime +14 -delete
 Nice=10
 IOSchedulingClass=idle

@@ -24,11 +24,11 @@ OTHER_FINGERPRINT = "ff99ee88dd77cc66"
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "o" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "p" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.test")
-    monkeypatch.setenv("CHAQIMCHI_APP_URL", "https://app.chaqimchi.test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "o" * 64)
+    monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "p" * 64)
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.test")
+    monkeypatch.setenv("ENES_APP_URL", "https://app.chaqimchi.test")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._event_store", None)
@@ -291,7 +291,7 @@ def test_the_flow_can_be_switched_off_without_an_update(
 ) -> None:
     """Yangi reliz tarqab bo'lgach nosozlik chiqsa, bayroq butun parkni
     eski, sinalgan yo'lga qaytaradi — OTA kutish shart emas."""
-    monkeypatch.setenv("CHAQIMCHI_DEVICE_HELLO", "0")
+    monkeypatch.setenv("ENES_DEVICE_HELLO", "0")
 
     blocked = client.post(
         "/api/v1/public/device-hello", json={"fingerprint": FINGERPRINT, "label": "PC"}
@@ -303,7 +303,7 @@ def test_the_flow_can_be_switched_off_without_an_update(
 def test_a_flood_of_new_devices_is_capped(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CHAQIMCHI_PENDING_DEVICE_LIMIT", "1")
+    monkeypatch.setenv("ENES_PENDING_DEVICE_LIMIT", "1")
     hello(client)
 
     second = client.post(

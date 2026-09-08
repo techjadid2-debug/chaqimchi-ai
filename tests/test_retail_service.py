@@ -517,7 +517,7 @@ def test_checkout_alerts_ride_the_queue_feature(tmp_path: Path) -> None:
 
 
 def test_ownership_is_claimed_and_recognised(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     import importlib
 
     from enes.local import paths as local_paths
@@ -535,7 +535,7 @@ def test_a_newer_process_takes_ownership_away(tmp_path, monkeypatch) -> None:
     import json
     import os
 
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import paths as local_paths
     from enes.retail import service
 
@@ -555,7 +555,7 @@ def test_a_broken_owner_file_never_stops_a_working_chain(tmp_path, monkeypatch) 
     """
     import importlib
 
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import paths as local_paths
     from enes.retail import service
 

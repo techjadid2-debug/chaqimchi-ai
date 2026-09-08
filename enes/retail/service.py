@@ -22,7 +22,7 @@ Ishga tushirish:
 
     python -m enes.retail.service --config config/config.yaml
 
-Qurilmada `--config` berilmaydi: yo'l `CHAQIMCHI_CONFIG` da turadi va yuz
+Qurilmada `--config` berilmaydi: yo'l `ENES_CONFIG` da turadi va yuz
 tanish xizmati bilan **bitta** fayl bo'ladi — kamera ikki joyda ta'riflanmasin.
 """
 
@@ -211,7 +211,7 @@ def sotqin_cache_path(settings: AppSettings, base_dir: Path) -> Path:
         return _resolve(base_dir, settings.retail.sotqin_config_path)
     return Path(
         os.environ.get(
-            "CHAQIMCHI_SOTQIN_CONFIG_CACHE",
+            "ENES_SOTQIN_CONFIG_CACHE",
             "/opt/chaqimchi/shared/data/sotqin-config.json",
         )
     )
@@ -525,7 +525,7 @@ def retail_status_path(settings: AppSettings, base_dir: Path) -> Path:
         return _resolve(base_dir, settings.retail.status_path)
     return Path(
         os.environ.get(
-            "CHAQIMCHI_RETAIL_STATUS",
+            "ENES_RETAIL_STATUS",
             "/opt/chaqimchi/shared/data/retail-status.json",
         )
     )
@@ -838,7 +838,7 @@ def _live_frame_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threadin
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Chaqimchi Retail AI xizmati")
-    parser.add_argument("--config", default=None, help="config yo'li (standart: $CHAQIMCHI_CONFIG)")
+    parser.add_argument("--config", default=None, help="config yo'li (standart: $ENES_CONFIG)")
     parser.add_argument("--base-dir", default=".", help="loyiha ildizi")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args(argv)
@@ -848,7 +848,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     base_dir = Path(args.base_dir).resolve()
-    # Qurilmada konfig yo'li `CHAQIMCHI_CONFIG` da turadi (sotqin.env) — xizmat
+    # Qurilmada konfig yo'li `ENES_CONFIG` da turadi (sotqin.env) — xizmat
     # yuz tanish bilan **bitta** faylni o'qishi kerak, aks holda kamera ikki
     # joyda ta'riflanardi.
     config_path = _resolve(base_dir, args.config) if args.config else default_config_path(base_dir)

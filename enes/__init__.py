@@ -15,3 +15,8 @@ git tegida turadi.  Yuz tanish keyinchalik **cloud** tomonda quriladi
 #: Ikkalasining mosligini `tests/test_sotqin_release_contract.py` ushlab turadi.
 __version__ = "0.6.29"
 __all__ = ["__version__"]
+
+# Eski `CHAQIMCHI_*` muhit nomlari birinchi importdayoq `ENES_*` ga
+# ko'chiriladi — modul darajasida env o'qiydigan kod ham yangi nomni
+# topsin (`enes/envcompat.py` izohi).
+from enes import envcompat as _envcompat  # noqa: E402,F401

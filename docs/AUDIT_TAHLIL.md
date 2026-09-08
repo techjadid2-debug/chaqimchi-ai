@@ -411,7 +411,7 @@ qaytarsin — test yozilsin.
 > | Shart | Savol | Yetarlimi |
 > |---|---|---|
 > | `MODELS_LICENSED_FOR_COMMERCIAL_USE` | Modelni tijoratda ishlatish mumkinmi? | SHART, lekin yetarli emas |
-> | `CHAQIMCHI_ATTENDANCE_PILOT` | Shu server biometrika bilan ishlashga tayyormi? | Production'da MAJBURIY |
+> | `ENES_ATTENDANCE_PILOT` | Shu server biometrika bilan ishlashga tayyormi? | Production'da MAJBURIY |
 >
 > Ilgari litsenziya rost bo'lgani uchun ikkinchi shart hech qachon
 > tekshirilmasdi — ya'ni davomat production'da hammaga ochiq edi,
@@ -455,13 +455,13 @@ Ya'ni kod ham saytga moslashadi, teskarisi emas. Bajariladigan ish:
 
 1. `cloud/main.py:811-830` `_attendance_enabled()` dan
    `faces.MODELS_LICENSED_FOR_COMMERCIAL_USE` shartini olib tashlash —
-   faqat `CHAQIMCHI_ATTENDANCE_PILOT` env bayrog'i (va development
+   faqat `ENES_ATTENDANCE_PILOT` env bayrog'i (va development
    muhiti) ochsin. Litsenziya endi *ruxsat*, lekin *sabab* emas.
 2. `enes/licensing/plans.py:306-311` — Biznes kartasidan
    "Xodim davomati" bulletini olib tashlash.
 3. `plans.py:199-202` izohini yangilash: `buffalo_l` yo'q, sabab endi
    litsenziya emas — **hosting hududi va qabul sinovi**.
-4. Pilot obyektlarni `CHAQIMCHI_ATTENDANCE_PILOT` bilan alohida
+4. Pilot obyektlarni `ENES_ATTENDANCE_PILOT` bilan alohida
    yoqish; yozma rozilik hujjati olinganini admin panelda belgilash.
 
 **Bu qaror KRITIK-2 bilan birga ishlaydi:** davomat yopiq pilot bo'lgani
@@ -482,7 +482,7 @@ huquqiy savol yuristga beriladi (B2).
 > joyida. Muammo build'da emas — `.env.production` da:
 >
 > ```
-> CHAQIMCHI_WINDOWS_INSTALLER_URL=...chaqimchi-windows-0.6.13.exe
+> ENES_WINDOWS_INSTALLER_URL=...chaqimchi-windows-0.6.13.exe
 > ```
 >
 > Qotirilgan URL 0.6.13 da qolib ketgan va ikkita reliz hech kimga
@@ -773,8 +773,8 @@ backup chastotasini oshirish va bitta yozuvchi jarayonni kafolatlash.
 ### O'RTA-7 · Tekshirilishi kerak: JWT kalitlari ajratilgani
 
 `enes/jwt_auth.py:21-26` — `resolve_jwt_secret()` avval global
-`CHAQIMCHI_JWT_SECRET` ni o'qiydi va u bor bo'lsa
-`CHAQIMCHI_OWNER_JWT_SECRET` / `CHAQIMCHI_PORTAL_JWT_SECRET` ni
+`ENES_JWT_SECRET` ni o'qiydi va u bor bo'lsa
+`ENES_OWNER_JWT_SECRET` / `ENES_PORTAL_JWT_SECRET` ni
 **butunlay e'tiborsiz qoldiradi**.
 
 Bu holatda owner va admin tokenlari bir xil kalit bilan imzolanadi
@@ -782,13 +782,13 @@ Bu holatda owner va admin tokenlari bir xil kalit bilan imzolanadi
 "kamida 32 belgi" tekshiruvi haqiqatda ishlatilayotgan kalitni
 tekshirmaydi.
 
-**Holat: TASDIQLANMAGAN.** `CHAQIMCHI_JWT_SECRET` repoda faqat Box/Linux
+**Holat: TASDIQLANMAGAN.** `ENES_JWT_SECRET` repoda faqat Box/Linux
 profilida uchraydi (`deploy/sotqin.env.example:19`), cloud misolida
 izohga olingan (`.env.example:22`). Serverdagi `.env.production` fayli
 o'qilmadi.
 
 **Qilinadigan ish:** Serverda bitta buyruq —
-`grep CHAQIMCHI_JWT_SECRET .env.production`. Agar qo'yilgan bo'lsa:
+`grep ENES_JWT_SECRET .env.production`. Agar qo'yilgan bo'lsa:
 o'chirish va owner/portal kalitlarini alohida yaratish.
 **Egasi:** DevOps · **Hajmi:** S (10 daqiqa tekshirish)
 
@@ -1036,7 +1036,7 @@ paydo bo'ladigan, hali aniqlanmagan holat sizishi. Yiqilish chastotasi
 **Keyingi qadam:** yiqilgan lahzada `_purge_expired_events()` ichida
 qaysi purge kalitni qaytarganini loglash (uchta nomzod:
 `purge_site`, `purge_clips_older_than`, `purge_site_media_over_quota`)
-va `CHAQIMCHI_SITE_MEDIA_MAX_BYTES` qiymatini o'sha yerda chop etish.
+va `ENES_SITE_MEDIA_MAX_BYTES` qiymatini o'sha yerda chop etish.
 Bir marta ushlansa sabab darhol ko'rinadi.
 
 **Egasi:** Backend · **Hajmi:** S–M · **Ustuvorlik:** C bosqichidan
@@ -1147,7 +1147,7 @@ hostlaydigan Umami) + `/maxfiylik` ga bir qator.
 ### O'RTA-5 · Narx dollarga bog'langan — kurs oshsa mijoz to'lovi jimgina oshadi
 
 `plans.py:49-50` narxni **sentda** saqlaydi (1140¢ va 2300¢),
-`plans.py:66-93` uni `CHAQIMCHI_USD_RATE_UZS` (default 13 000) bilan
+`plans.py:66-93` uni `ENES_USD_RATE_UZS` (default 13 000) bilan
 so'mga o'giradi. Hozir mos: 149 000 va 299 000 so'm.
 
 Lekin sayt yozadi: *"Yashirin qo'shimcha to'lovlar yo'q"* (`site.html:366`).
@@ -1213,8 +1213,8 @@ Audit davomida tasdiqlangan kuchli tomonlar — bularni saqlash kerak:
   imzosi `compare_digest` bilan tekshiriladi.
 - **Cookie umuman ishlatilmaydi** → CSRF amalda imkonsiz.
 - **Production preflight** xavfli sozlamalar bilan serverni ataylab
-  yoqmaydi (`cloud/main.py:1444-1490`) — `CHAQIMCHI_OTP_BYPASS_IDS` va
-  `CHAQIMCHI_OTP_TEST_CODE` qolib ketsa deploy to'xtaydi.
+  yoqmaydi (`cloud/main.py:1444-1490`) — `ENES_OTP_BYPASS_IDS` va
+  `ENES_OTP_TEST_CODE` qolib ketsa deploy to'xtaydi.
 - **Backup infratuzilmasi tayyor:** kunlik shifrlangan zaxira, systemd
   timer, muvaffaqiyatsizlikda Telegram xabari
   (`scripts/backup_production.sh`, `deploy/chaqimchi-backup*.service`).
@@ -1245,7 +1245,7 @@ Bekor qilinganlar (audit xatosi): **O-0, O-6**.
 **K-3** yozildi, lekin yurist ko'rigi va rekvizit kutilmoqda.
 
 Qolgan yagona A ishi — **A9**: serverda
-`grep CHAQIMCHI_JWT_SECRET .env.production`. Buni faqat server
+`grep ENES_JWT_SECRET .env.production`. Buni faqat server
 egasi bajara oladi (10 daqiqa).
 
 **DEPLOY QILINDI (2026-08-26).** Cloud 0.6.15 jonli, hamma konteyner
@@ -1276,7 +1276,7 @@ yuborilmasin**.
 | ~~A7~~ | ✅ **BAJARILDI** — ikkita halol raqam: mijoz 30 daqiqagacha, usta 45–90 daqiqa | 5 ta sahifa | Product | — |
 | ~~**A0**~~ | ✅ **BAJARILDI** — biometrik marshrutlarga rol tekshiruvi (KRITIK-4) | `cloud/main.py:842` + 7 ta marshrut | Security | — |
 | ~~A8~~ | ✅ **BAJARILDI va DEPLOY QILINDI** — raqamlar admin kaliti ostida, monitoring uchun 503 ochiq qoldi | `cloud/main.py` | DevOps | — |
-| ~~A9~~ | ✅ **TEKSHIRILDI** — `CHAQIMCHI_JWT_SECRET` serverda qo'yilmagan, kalit ajratilishi buzilmagan | server | DevOps | — |
+| ~~A9~~ | ✅ **TEKSHIRILDI** — `ENES_JWT_SECRET` serverda qo'yilmagan, kalit ajratilishi buzilmagan | server | DevOps | — |
 
 **A0 birinchi bajarilsin** — u eng arzon (30 daqiqa) va eng qimmat
 xatoni yopadi: biometrik ma'lumot xodimga berilgan yozma va'da
@@ -1340,7 +1340,7 @@ Bu **eng muhim** bosqich va uni hech narsa almashtira olmaydi.
    kutilmagan restart 0, yo'qolgan critical event 0, kamera uptime ≥ 99%.
 3. Qo'lda sanash bilan solishtirish — kunlik kirish soni ±10% ichida.
 4. `scripts/accept_n100_pilot.py` → `acceptance-windows.json` →
-   `CHAQIMCHI_N100_ACCEPTANCE_FILE`.
+   `ENES_N100_ACCEPTANCE_FILE`.
 
 **Nega bu shart:** `cloud/store.py:52-68` `available_feature_codes()`
 production'da qabul fayli bo'lmasa bo'sh to'plam qaytaradi. Ya'ni bu

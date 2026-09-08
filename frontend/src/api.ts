@@ -356,7 +356,7 @@ export async function copyText(value: string): Promise<boolean> {
 }
 
 export function telegramBotUrl(): string {
-  const raw = (window as Window & { __CHAQIMCHI_BOT_URL__?: string }).__CHAQIMCHI_BOT_URL__ || "";
+  const raw = (window as Window & { __ENES_BOT_URL__?: string }).__ENES_BOT_URL__ || "";
   return raw.startsWith("http") ? raw : "";
 }
 

@@ -16,8 +16,8 @@ Shu protsedura shu yerda, bitta buyruqda:
     python3 scripts/rollout.py --toxtat            # favqulodda: hammasini to'xtatish
 
 Muhitdan o'qiladi:
-    CHAQIMCHI_ADMIN_URL        standart https://api.chaqimchi.uz
-    CHAQIMCHI_CLOUD_ADMIN_KEY  admin kaliti (majburiy)
+    ENES_ADMIN_URL        standart https://api.chaqimchi.uz
+    ENES_CLOUD_ADMIN_KEY  admin kaliti (majburiy)
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def _client(base_url: str, admin_key: str) -> httpx.Client:
 def _sites(client: httpx.Client) -> List[Dict[str, Any]]:
     response = client.get("/api/v1/admin/sites")
     if response.status_code == 401 or response.status_code == 403:
-        raise RolloutError("Admin kaliti qabul qilinmadi (CHAQIMCHI_CLOUD_ADMIN_KEY)")
+        raise RolloutError("Admin kaliti qabul qilinmadi (ENES_CLOUD_ADMIN_KEY)")
     response.raise_for_status()
     data = response.json()
     if not isinstance(data, list):
@@ -160,12 +160,12 @@ def main(argv: List[str] | None = None) -> int:
     group.add_argument("--hammaga", action="store_true", help="hammasini 'auto' ga qaytarish")
     group.add_argument("--toxtat", action="store_true", help="tarqatishni butunlay to'xtatish")
     group.add_argument("--davom", action="store_true", help="tarqatishni qayta yoqish")
-    parser.add_argument("--url", default=os.environ.get("CHAQIMCHI_ADMIN_URL", DEFAULT_URL))
+    parser.add_argument("--url", default=os.environ.get("ENES_ADMIN_URL", DEFAULT_URL))
     args = parser.parse_args(argv)
 
-    admin_key = os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "").strip()
+    admin_key = os.environ.get("ENES_CLOUD_ADMIN_KEY", "").strip()
     if not admin_key:
-        print("CHAQIMCHI_CLOUD_ADMIN_KEY berilishi shart", file=sys.stderr)
+        print("ENES_CLOUD_ADMIN_KEY berilishi shart", file=sys.stderr)
         return 1
 
     try:

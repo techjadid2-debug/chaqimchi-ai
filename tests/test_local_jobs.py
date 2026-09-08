@@ -22,7 +22,7 @@ from enes.local import cloud_jobs, cloud_link
 @pytest.fixture(autouse=True)
 def _isolated_data_dir(tmp_path, monkeypatch):
     """Har test o'z papkasida ishlaydi — `connect.json` sizib ketmasin."""
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     cloud_link._hello_attempt["at"] = -cloud_link.HELLO_RETRY_SEC
     # Navbat modul darajasida — oldingi testdan qolgan topshiriq
     # keyingisini chalg'itmasin.
@@ -180,7 +180,7 @@ def test_a_connected_device_never_asks_to_be_connected_again(tmp_path, monkeypat
 
 
 def test_the_device_stops_asking_when_the_cloud_says_no(tmp_path, monkeypatch) -> None:
-    """`CHAQIMCHI_DEVICE_HELLO=0` yoqilgan (yoki bulut eski) bo'lsa
+    """`ENES_DEVICE_HELLO=0` yoqilgan (yoki bulut eski) bo'lsa
     har 20 soniyada 404 olishning ma'nosi yo'q — dastur sehrgar bilan
     ishlayveradi."""
     tries: list = []

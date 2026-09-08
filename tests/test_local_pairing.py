@@ -27,7 +27,7 @@ CLOUD = "https://cloud.example.uz"
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import app as app_module
     from enes.local import cloud_link, config_store, paths, supervisor
 
@@ -240,7 +240,7 @@ def test_installer_handoff_pairs_without_the_customer_typing_anything(
 ) -> None:
     from enes.local import cloud_link
 
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
         "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(
@@ -263,7 +263,7 @@ def test_handoff_is_kept_when_the_shop_has_no_internet_yet(
     va keyingi ishga tushishda qayta urinilsin."""
     from enes.local import cloud_link
 
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
 
     def _boom(*args, **kwargs):
         raise httpx.ConnectError("tarmoq yo'q")
@@ -283,7 +283,7 @@ def test_handoff_is_dropped_when_the_code_is_already_used(
     ma'nosi yo'q — lekin dastur yiqilmasligi ham kerak."""
     from enes.local import cloud_link
 
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
         "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(400, {"detail": "Pairing kod topilmadi"}),
@@ -307,7 +307,7 @@ def test_auto_pairing_is_skipped_without_a_default_cloud(
     """Paket qaysi cloudga ulanishini bilmasa, taxmin qilmasligi kerak."""
     from enes.local import cloud_link
 
-    monkeypatch.delenv("CHAQIMCHI_DEFAULT_CLOUD_URL", raising=False)
+    monkeypatch.delenv("ENES_DEFAULT_CLOUD_URL", raising=False)
     handoff = _handoff(tmp_path, "A1B2C3")
 
     assert cloud_link.auto_pair() is None
@@ -321,7 +321,7 @@ def test_already_connected_device_ignores_a_stale_handoff(
     ulanishni buzmasligi kerak."""
     from enes.local import cloud_link
 
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
         "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(
@@ -344,7 +344,7 @@ def test_default_cloud_url_prefills_the_wizard(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Mijoz server manzilini yodda tutmaydi va yozmasligi kerak."""
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
     assert client.get("/api/setup/cloud-status").json()["default_cloud_url"] == CLOUD
 
 
@@ -361,7 +361,7 @@ def test_expired_code_is_reported_to_the_customer(
 ) -> None:
     from enes.local import cloud_link
 
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
         "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(400, {"detail": "Pairing kod topilmadi"}),
@@ -383,7 +383,7 @@ def test_a_network_outage_is_marked_as_temporary(
     mijoz hech narsa qilmasligi kerak."""
     from enes.local import cloud_link
 
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
 
     def _boom(*args, **kwargs):
         raise httpx.ConnectError("tarmoq yo'q")
@@ -401,7 +401,7 @@ def test_the_error_disappears_after_a_successful_pairing(
 ) -> None:
     from enes.local import cloud_link
 
-    monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
+    monkeypatch.setenv("ENES_DEFAULT_CLOUD_URL", CLOUD)
     cloud_link.record_auto_pair_error("eski xato", retryable=False)
     monkeypatch.setattr(
         "enes.local.cloud_link.httpx.post",
@@ -423,7 +423,7 @@ def test_a_package_without_a_cloud_address_says_so(
     tushgan mijoz hech bo'lmasa sababini bilsin."""
     from enes.local import cloud_link
 
-    monkeypatch.delenv("CHAQIMCHI_DEFAULT_CLOUD_URL", raising=False)
+    monkeypatch.delenv("ENES_DEFAULT_CLOUD_URL", raising=False)
     _handoff(tmp_path, "A1B2C3")
 
     assert cloud_link.auto_pair() is None

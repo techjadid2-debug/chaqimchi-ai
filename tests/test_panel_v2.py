@@ -268,7 +268,7 @@ def test_panel_has_no_inline_event_handlers() -> None:
 def test_the_old_brand_stays_off_the_panels() -> None:
     """Rebrend (2026-09-08): mijoz va admin ko'radigan matnda «Chaqimchi»
     qolmasin.  Brauzer kalitlari (`chaqimchi_owner_token_v2`) va env
-    nomlari (`CHAQIMCHI_*`) F6 da o'zgaradi — ular istisno."""
+    nomlari (`ENES_*`) F6 da o'zgaradi — ular istisno."""
     for name in OWNER_FILES + ADMIN_FILES + ("Connect.tsx",):
         found = re.search(r"Chaqimchi(?![_A-Z])", src(name))
         assert found is None, f"{name}: eski brend matni — {found.group(0) if found else ''}"
@@ -290,7 +290,7 @@ def test_panel_speaks_plain_uzbek() -> None:
     """Ichki jargon ekranga chiqmasin."""
     text = owner_src()
     for word in ("Production tayyorligi", "Draftni", "Biznes preset",
-                 "Onboarding", "Legacy", "CHAQIMCHI_PUBLIC_URL", "poll'da"):
+                 "Onboarding", "Legacy", "ENES_PUBLIC_URL", "poll'da"):
         assert word not in text, f"jargon qaytib kelgan: «{word}»"
 
 

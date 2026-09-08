@@ -51,7 +51,7 @@ from enes.local.supervisor import RetailSupervisor
 
 logger = logging.getLogger(__name__)
 
-PORT = int(os.environ.get("CHAQIMCHI_LOCAL_PORT", "8760"))
+PORT = int(os.environ.get("ENES_LOCAL_PORT", "8760"))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 #: ONVIF oqimini sinashda bitta kadr uchun shuncha kutamiz.  Uchta oqim
@@ -1364,9 +1364,9 @@ async def events(limit: int = 50) -> Dict[str, Any]:
 def _browser_enabled() -> bool:
     """Avtomatik ishga tushirish vazifasi SYSTEM nomidan ishlaydi — u
     yerda ochilgan brauzerni hech kim ko'rmaydi, jarayon esa osilib
-    qoladi.  Xizmat launcheri shu sababli `CHAQIMCHI_LOCAL_NO_BROWSER=1`
+    qoladi.  Xizmat launcheri shu sababli `ENES_LOCAL_NO_BROWSER=1`
     qo'yadi."""
-    return os.environ.get("CHAQIMCHI_LOCAL_NO_BROWSER", "").lower() not in {
+    return os.environ.get("ENES_LOCAL_NO_BROWSER", "").lower() not in {
         "1",
         "true",
         "yes",

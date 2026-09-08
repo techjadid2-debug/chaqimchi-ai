@@ -11,29 +11,29 @@ from scripts.pair_sotqin import (
 
 
 def test_render_env_preserves_local_secrets_and_replaces_pairing() -> None:
-    existing = """CHAQIMCHI_API_KEY=secret
-CHAQIMCHI_SITE_ID=old-site
-CHAQIMCHI_DEVICE_TOKEN=old-token
+    existing = """ENES_API_KEY=secret
+ENES_SITE_ID=old-site
+ENES_DEVICE_TOKEN=old-token
 CAMERA_01_RTSP=rtsp://camera/sub
 """
     rendered = render_env(
         existing,
         {
-            "CHAQIMCHI_CONFIG": "/opt/chaqimchi/current/config/sotqin.yaml",
-            "CHAQIMCHI_CLOUD_URL": "https://cloud.example.uz",
-            "CHAQIMCHI_SITE_ID": "new-site",
-            "CHAQIMCHI_DEVICE_ID": "device-1",
-            "CHAQIMCHI_DEVICE_TOKEN": "new-token",
-            "CHAQIMCHI_SOTQIN_MODEL": "Intel N100",
-            "CHAQIMCHI_SOTQIN_REVISION": "R1",
-            "CHAQIMCHI_SOTQIN_SERIAL": "SQN-R1-1",
+            "ENES_CONFIG": "/opt/chaqimchi/current/config/sotqin.yaml",
+            "ENES_CLOUD_URL": "https://cloud.example.uz",
+            "ENES_SITE_ID": "new-site",
+            "ENES_DEVICE_ID": "device-1",
+            "ENES_DEVICE_TOKEN": "new-token",
+            "ENES_SOTQIN_MODEL": "Intel N100",
+            "ENES_SOTQIN_REVISION": "R1",
+            "ENES_SOTQIN_SERIAL": "SQN-R1-1",
         },
     )
-    assert "CHAQIMCHI_API_KEY=secret" in rendered
+    assert "ENES_API_KEY=secret" in rendered
     assert "CAMERA_01_RTSP=rtsp://camera/sub" in rendered
-    assert rendered.count("CHAQIMCHI_SITE_ID=") == 1
-    assert "CHAQIMCHI_SITE_ID=new-site" in rendered
-    assert "CHAQIMCHI_DEVICE_TOKEN=new-token" in rendered
+    assert rendered.count("ENES_SITE_ID=") == 1
+    assert "ENES_SITE_ID=new-site" in rendered
+    assert "ENES_DEVICE_TOKEN=new-token" in rendered
 
 
 def test_cloud_url_requires_https_except_local() -> None:

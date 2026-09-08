@@ -41,7 +41,7 @@ from pathlib import Path
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "models" / "faces_manifest.json"
 
-DEFAULT_TARGET = os.environ.get("CHAQIMCHI_FACE_MODEL_ROOT", "data/cloud/models/faces")
+DEFAULT_TARGET = os.environ.get("ENES_FACE_MODEL_ROOT", "data/cloud/models/faces")
 
 
 def sha256_file(path: Path) -> str:

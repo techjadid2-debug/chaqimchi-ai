@@ -2,8 +2,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-env_file="${CHAQIMCHI_ENV_FILE:-.env.production}"
-compose_file="${CHAQIMCHI_COMPOSE_FILE:-docker-compose.prod.yml}"
+env_file="${ENES_ENV_FILE:-.env.production}"
+compose_file="${ENES_COMPOSE_FILE:-docker-compose.prod.yml}"
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
 previous_container="$("${compose[@]}" ps -q cloud 2>/dev/null || true)"
 previous_image=""
@@ -39,12 +39,12 @@ python3 scripts/production_preflight.py --env-file "$env_file"
 "${compose[@]}" config --quiet
 
 if [[ -n "$previous_container" ]]; then
-  if [[ "${CHAQIMCHI_SKIP_DEPLOY_BACKUP:-false}" == "true" ]]; then
+  if [[ "${ENES_SKIP_DEPLOY_BACKUP:-false}" == "true" ]]; then
     echo "OGOHLANTIRISH: deploy oldi backup ataylab o'tkazib yuborildi" >&2
   else
-    : "${CHAQIMCHI_BACKUP_DIR:?Mavjud production uchun CHAQIMCHI_BACKUP_DIR shart}"
-    : "${CHAQIMCHI_BACKUP_PASSWORD:?Mavjud production uchun CHAQIMCHI_BACKUP_PASSWORD shart}"
-    CHAQIMCHI_ENV_FILE="$env_file" CHAQIMCHI_COMPOSE_FILE="$compose_file" \
+    : "${ENES_BACKUP_DIR:?Mavjud production uchun ENES_BACKUP_DIR shart}"
+    : "${ENES_BACKUP_PASSWORD:?Mavjud production uchun ENES_BACKUP_PASSWORD shart}"
+    ENES_ENV_FILE="$env_file" ENES_COMPOSE_FILE="$compose_file" \
       scripts/backup_production.sh
   fi
 fi

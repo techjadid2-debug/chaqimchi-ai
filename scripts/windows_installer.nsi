@@ -50,7 +50,7 @@ Unicode True
 !define APP_URL      "http://localhost:${APP_PORT}"
 
 ; Bulut paneli — mijozning ASOSIY yo'li.  `build_windows_payload.py` uni
-; `version.nsh` ga yozadi (`CHAQIMCHI_DEFAULT_CLOUD_URL` dan).  Cloudsiz
+; `version.nsh` ga yozadi (`ENES_DEFAULT_CLOUD_URL` dan).  Cloudsiz
 ; sinov paketida yo'q, o'shanda lokal sahifa qoladi.
 !ifndef APP_PANEL_URL
   !define APP_PANEL_URL "${APP_URL}"

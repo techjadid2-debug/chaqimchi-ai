@@ -11,10 +11,10 @@ ADMIN_KEY = {"X-Cloud-Admin-Key": "test-admin"}
 
 @pytest.fixture
 def portal_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "o" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "p" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "o" * 64)
+    monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "p" * 64)
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.test")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._event_store", None)
@@ -370,7 +370,7 @@ def test_live_overlay_flag_reaches_edge_request(portal_client: TestClient) -> No
 def test_ui_v2_flag_serves_react_shells(
     portal_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CHAQIMCHI_UI_V2", "1")
+    monkeypatch.setenv("ENES_UI_V2", "1")
     owner = portal_client.get("/owner")
     admin = portal_client.get("/admin")
     assert owner.status_code == admin.status_code == 200
@@ -401,5 +401,5 @@ def test_ui_v2_flag_serves_react_shells(
     # Bot manzili server tomonda almashtiriladi — qobiqda o'rin bo'lishi
     # SHART, aks holda login ekranida "botdan havola oling" yo'li
     # jimgina yo'qoladi.
-    assert "__CHAQIMCHI_BOT_URL__" in owner.text
+    assert "__ENES_BOT_URL__" in owner.text
     assert "__TELEGRAM_BOT_URL__" not in owner.text, "almashtirish ishlamadi"

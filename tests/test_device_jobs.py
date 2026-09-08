@@ -21,10 +21,10 @@ RTSP_WITH_PASSWORD = f"rtsp://admin:{SECRET}@192.168.1.64:554/Streaming/Channels
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "o" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "p" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "o" * 64)
+    monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "p" * 64)
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.test")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._event_store", None)

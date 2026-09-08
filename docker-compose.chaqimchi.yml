@@ -1,7 +1,7 @@
 # chaqimchi.uz subdomen platformasi uchun compose — prod.yml'ning
 # nusxasi, farqi bitta: Caddy subdomenli Caddyfile.chaqimchi bilan
-# ishlaydi (hostlar faylda qat'iy, CHAQIMCHI_DOMAIN kerak emas).
-# Ishlatish: CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh
+# ishlaydi (hostlar faylda qat'iy, ENES_DOMAIN kerak emas).
+# Ishlatish: ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh
 name: chaqimchi
 
 services:
@@ -32,12 +32,12 @@ services:
       dockerfile: Dockerfile.cloud
     restart: unless-stopped
     stop_grace_period: 30s
-    env_file: ${CHAQIMCHI_ENV_FILE:-.env.production}
+    env_file: ${ENES_ENV_FILE:-.env.production}
     environment:
-      CHAQIMCHI_ENV: production
-      CHAQIMCHI_VISION_WORKER_IN_APP: "0"
+      ENES_ENV: production
+      ENES_VISION_WORKER_IN_APP: "0"
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CHAQIMCHI_S3_ENDPOINT: http://minio:9000
+      ENES_S3_ENDPOINT: http://minio:9000
     volumes:
       - cloud_state:/app/data/cloud
       # Reliz arxivlari va imzolangan manifestlar. Bind mount, image ichida
@@ -68,11 +68,11 @@ services:
       dockerfile: Dockerfile.cloud
     restart: unless-stopped
     command: ["python", "-m", "cloud.vision_worker"]
-    env_file: ${CHAQIMCHI_ENV_FILE:-.env.production}
+    env_file: ${ENES_ENV_FILE:-.env.production}
     environment:
-      CHAQIMCHI_ENV: production
+      ENES_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CHAQIMCHI_S3_ENDPOINT: http://minio:9000
+      ENES_S3_ENDPOINT: http://minio:9000
     volumes:
       - cloud_state:/app/data/cloud
     depends_on:
@@ -105,7 +105,7 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
-    env_file: ${CHAQIMCHI_ENV_FILE:-.env.production}
+    env_file: ${ENES_ENV_FILE:-.env.production}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -123,7 +123,7 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z
     restart: unless-stopped
-    env_file: ${CHAQIMCHI_ENV_FILE:-.env.production}
+    env_file: ${ENES_ENV_FILE:-.env.production}
     command: server /data --console-address :9001
     volumes:
       - minio_data:/data
@@ -141,13 +141,13 @@ services:
 
   minio-init:
     image: minio/mc:RELEASE.2025-07-21T05-28-08Z
-    env_file: ${CHAQIMCHI_ENV_FILE:-.env.production}
+    env_file: ${ENES_ENV_FILE:-.env.production}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
         until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
-        mc mb --ignore-existing "local/$${CHAQIMCHI_S3_BUCKET}";
-        mc anonymous set none "local/$${CHAQIMCHI_S3_BUCKET}"
+        mc mb --ignore-existing "local/$${ENES_S3_BUCKET}";
+        mc anonymous set none "local/$${ENES_S3_BUCKET}"
     depends_on:
       minio:
         condition: service_healthy

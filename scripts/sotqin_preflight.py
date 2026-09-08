@@ -34,10 +34,10 @@ PLACEHOLDERS = ("GENERATE", "FROM_PAIRING", "FROM_DEVICE", "CHANGE_ME", "example
 
 #: Bularsiz qurilma umuman ishlamaydi.
 REQUIRED_ENV = (
-    "CHAQIMCHI_CLOUD_URL",
-    "CHAQIMCHI_SITE_ID",
-    "CHAQIMCHI_DEVICE_ID",
-    "CHAQIMCHI_DEVICE_TOKEN",
+    "ENES_CLOUD_URL",
+    "ENES_SITE_ID",
+    "ENES_DEVICE_ID",
+    "ENES_DEVICE_TOKEN",
 )
 
 SERVICES = ("chaqimchi-sotqin", "chaqimchi-retail")
@@ -190,7 +190,7 @@ class Preflight:
                 "Panel bergan kod bilan: pair_sotqin.py --cloud <manzil> --code <kod>",
             )
         else:
-            self.add("Pairing", OK, f"obyekt {values['CHAQIMCHI_SITE_ID']}")
+            self.add("Pairing", OK, f"obyekt {values['ENES_SITE_ID']}")
 
     def _read_env(self) -> Dict[str, str]:
         values: Dict[str, str] = {}
@@ -382,7 +382,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--env",
         type=Path,
-        default=Path(os.environ.get("CHAQIMCHI_ENV_FILE", "/etc/chaqimchi/sotqin.env")),
+        default=Path(os.environ.get("ENES_ENV_FILE", "/etc/chaqimchi/sotqin.env")),
     )
     args = parser.parse_args(argv)
 

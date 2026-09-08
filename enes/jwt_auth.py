@@ -19,7 +19,7 @@ class JwtError(Exception):
 
 
 def resolve_jwt_secret(cfg: JwtSettings) -> Optional[str]:
-    env = os.environ.get("CHAQIMCHI_JWT_SECRET", "").strip()
+    env = os.environ.get("ENES_JWT_SECRET", "").strip()
     if env:
         return env
     if cfg.secret:
@@ -37,7 +37,7 @@ def create_access_token(
         raise JwtError("PyJWT o‘rnatilmagan: pip install PyJWT")
     secret = resolve_jwt_secret(cfg)
     if not secret:
-        raise JwtError("CHAQIMCHI_JWT_SECRET yoki config.security.jwt_secret kerak")
+        raise JwtError("ENES_JWT_SECRET yoki config.security.jwt_secret kerak")
 
     now = int(time.time())
     payload: Dict[str, Any] = {

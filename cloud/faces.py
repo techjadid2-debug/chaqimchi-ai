@@ -32,7 +32,7 @@ Modellar `scripts/fetch_face_models.py` bilan sha256 tekshiruvidan o'tib
 o'rnatiladi.
 
 Embedding diskda hech qachon ochiq yotmaydi: saqlashdan oldin Fernet
-(`CHAQIMCHI_EMBEDDING_KEY`) bilan shifrlanadi.  Kalit yo'q — xizmat
+(`ENES_EMBEDDING_KEY`) bilan shifrlanadi.  Kalit yo'q — xizmat
 ishlamaydi (fail-closed).
 """
 
@@ -94,7 +94,7 @@ LEGACY_EMBEDDING_DIM = 512
 #:
 #: Bu env sozlamasi EMAS va ataylab: litsenziya — kodda qaysi model
 #: yuklanishiga bog'liq fakt, sozlamaga bog'liq tanlov emas.  Ilgari
-#: `CHAQIMCHI_FACE_MODEL_LICENSED` degan bayroq bor edi va uni
+#: `ENES_FACE_MODEL_LICENSED` degan bayroq bor edi va uni
 #: production'da qo'yib qo'yish tadqiqot litsenziyasidagi modelni
 #: "tijoriy" qilib ko'rsatib qo'yardi.
 #:
@@ -127,13 +127,13 @@ def match_threshold() -> float:
     o'lchanishi kerak: `scripts/calibrate_face_threshold.py`.
     """
     try:
-        return float(os.environ.get("CHAQIMCHI_FACE_MATCH_THRESHOLD", "0.6"))
+        return float(os.environ.get("ENES_FACE_MATCH_THRESHOLD", "0.6"))
     except ValueError:
         return 0.6
 
 
 def model_root() -> Path:
-    return Path(os.environ.get("CHAQIMCHI_FACE_MODEL_ROOT", DEFAULT_MODEL_ROOT))
+    return Path(os.environ.get("ENES_FACE_MODEL_ROOT", DEFAULT_MODEL_ROOT))
 
 
 #: Tekislangan 128×128 kadrdagi tayanch nuqtalar (ko'zlar, burun, og'iz
@@ -163,14 +163,14 @@ class FaceEmbedding:
 
 
 def resolve_embedding_key() -> Optional[bytes]:
-    raw = os.environ.get("CHAQIMCHI_EMBEDDING_KEY", "").strip()
+    raw = os.environ.get("ENES_EMBEDDING_KEY", "").strip()
     return raw.encode("utf-8") if raw else None
 
 
 def encrypt_embedding(vector: Any) -> str:
     key = resolve_embedding_key()
     if key is None:
-        raise RuntimeError("CHAQIMCHI_EMBEDDING_KEY sozlanmagan")
+        raise RuntimeError("ENES_EMBEDDING_KEY sozlanmagan")
     payload = np.asarray(vector, dtype=np.float32).tobytes()
     token = Fernet(key).encrypt(payload)
     return base64.b64encode(token).decode("ascii")
@@ -179,7 +179,7 @@ def encrypt_embedding(vector: Any) -> str:
 def decrypt_embedding(encoded: str) -> Any:
     key = resolve_embedding_key()
     if key is None:
-        raise RuntimeError("CHAQIMCHI_EMBEDDING_KEY sozlanmagan")
+        raise RuntimeError("ENES_EMBEDDING_KEY sozlanmagan")
     token = base64.b64decode(encoded.encode("ascii"))
     plain = Fernet(key).decrypt(token)
     return np.frombuffer(plain, dtype=np.float32)
@@ -398,7 +398,7 @@ def available() -> Tuple[bool, str]:
     if ov is None:
         return False, "openvino o'rnatilmagan"
     if resolve_embedding_key() is None:
-        return False, "CHAQIMCHI_EMBEDDING_KEY sozlanmagan"
+        return False, "ENES_EMBEDDING_KEY sozlanmagan"
     root = model_root()
     for filename in MODEL_FILES:
         if not (root / filename).is_file():

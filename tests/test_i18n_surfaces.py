@@ -206,7 +206,7 @@ def test_the_bot_learns_the_language_on_first_contact_and_keeps_it(
     yozib qo'yadi: keyingi buyruq profil tilisiz kelsa ham ruscha.
     """
     client, messages = production_client
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
     site, _device, _headers = _provision(client)
     client.post(
         f"/api/v1/admin/sites/{site['site_id']}/members",
@@ -228,7 +228,7 @@ def test_the_bot_learns_the_language_on_first_contact_and_keeps_it(
 def test_a_stranger_is_answered_in_their_telegram_language(production_client, monkeypatch) -> None:  # noqa: F811
     """A'zo bo'lmagan odam uchun tilning yagona manbasi — Telegram profili."""
     client, messages = production_client
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
+    monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
     messages.clear()
 
     assert _webhook_from(client, "/start", chat_id=900333, language_code="en").status_code == 200

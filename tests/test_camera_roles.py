@@ -165,7 +165,7 @@ def test_an_explicit_none_clears_the_role(store: CloudStore) -> None:
 
 
 def test_an_invalid_role_is_rejected_loudly(store: CloudStore) -> None:
-    """Yaroqsiz qiymat JIM yutilmaydi (`CHAQIMCHI_AVAILABLE_FEATURES` saboqi)."""
+    """Yaroqsiz qiymat JIM yutilmaydi (`ENES_AVAILABLE_FEATURES` saboqi)."""
     site_id = _site(store)
     with pytest.raises(ValueError):
         store.register_device_cameras(
@@ -247,10 +247,10 @@ def test_the_cache_reader_parses_the_role(tmp_path: Path) -> None:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "o" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PORTAL_JWT_SECRET", "p" * 64)
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "o" * 64)
+    monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "p" * 64)
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.test")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._event_store", None)
@@ -444,7 +444,7 @@ def test_role_problems_report_a_low_res_entrance() -> None:
 
 @pytest.fixture
 def local_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     import importlib
 
     from enes.local import app as app_module

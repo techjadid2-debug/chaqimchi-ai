@@ -29,11 +29,11 @@ def store(tmp_path: Path) -> CloudStore:
 def client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("ENES_S3_ENDPOINT", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)
@@ -524,13 +524,13 @@ def _owner(client: TestClient, site_id: str) -> dict:
     ).raise_for_status()
     import os
 
-    os.environ["CHAQIMCHI_OTP_TEST_CODE"] = "123456"
+    os.environ["ENES_OTP_TEST_CODE"] = "123456"
     client.post("/api/v1/owner/auth/request", json={"telegram_id": "701"})
     verified = client.post(
         "/api/v1/owner/auth/verify",
         json={"telegram_id": "701", "site_id": site_id, "code": "123456"},
     )
-    os.environ.pop("CHAQIMCHI_OTP_TEST_CODE", None)
+    os.environ.pop("ENES_OTP_TEST_CODE", None)
     return {"Authorization": f"Bearer {verified.json()['access_token']}"}
 
 

@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 
 #: Testlar va ishlab chiqish uchun: hamma yo'llarni bitta papkaga ko'chiradi.
-ENV_DATA_DIR = "CHAQIMCHI_LOCAL_DIR"
+ENV_DATA_DIR = "ENES_LOCAL_DIR"
 
 
 def data_dir() -> Path:
@@ -95,7 +95,7 @@ def model_path() -> Path:
     O'rnatuvchi uni dastur papkasiga qo'yadi.  Ishlab chiqish mashinasida esa
     repo ildizidagi `models/retail/` ishlatiladi — ikkalasi bir xil nom.
     """
-    override = os.environ.get("CHAQIMCHI_RETAIL_MODEL", "").strip()
+    override = os.environ.get("ENES_RETAIL_MODEL", "").strip()
     if override:
         return Path(override)
     return app_root() / "models" / "retail" / "person-detection-retail-0013.xml"

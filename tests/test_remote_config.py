@@ -32,7 +32,7 @@ CLOUD_SYNC = {
 
 @pytest.fixture
 def local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import cloud_config, config_store, paths
 
     for module in (paths, config_store, cloud_config):

@@ -25,8 +25,8 @@ MANIFEST = "chaqimchi-sotqin-0.6.0.json"
 def client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
@@ -118,15 +118,15 @@ def test_releases_stay_out_of_the_docker_image() -> None:
 
 
 def test_the_installer_endpoint_needs_a_published_release() -> None:
-    """`CHAQIMCHI_SOTQIN_RELEASE_URL`/`_SHA256` to'ldirilmasa 503.
+    """`ENES_SOTQIN_RELEASE_URL`/`_SHA256` to'ldirilmasa 503.
 
     Bu to'g'ri xatti-harakat: yarim sozlangan cloud ishlamaydigan
     o'rnatish buyrug'ini bermasligi kerak.
     """
     example = (ROOT / ".env.production.example").read_text(encoding="utf-8")
 
-    assert "CHAQIMCHI_SOTQIN_RELEASE_URL=" in example
-    assert "CHAQIMCHI_SOTQIN_RELEASE_SHA256=" in example
+    assert "ENES_SOTQIN_RELEASE_URL=" in example
+    assert "ENES_SOTQIN_RELEASE_SHA256=" in example
 
 
 # ── Global to'xtatuvchi: qurilmaga yetib bormasin ────────────────────────

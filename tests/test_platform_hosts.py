@@ -19,17 +19,17 @@ from cloud import urls
 def client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("ENES_S3_ENDPOINT", raising=False)
     for key in (
-        "CHAQIMCHI_PUBLIC_URL",
-        "CHAQIMCHI_APP_URL",
-        "CHAQIMCHI_API_URL",
-        "CHAQIMCHI_DL_URL",
-        "CHAQIMCHI_PARTNER_URL",
-        "CHAQIMCHI_ADMIN_URL",
+        "ENES_PUBLIC_URL",
+        "ENES_APP_URL",
+        "ENES_API_URL",
+        "ENES_DL_URL",
+        "ENES_PARTNER_URL",
+        "ENES_ADMIN_URL",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
@@ -38,12 +38,12 @@ def client(tmp_path: Path, monkeypatch):
 
 
 def _subdomains(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.uz")
-    monkeypatch.setenv("CHAQIMCHI_APP_URL", "https://app.chaqimchi.uz")
-    monkeypatch.setenv("CHAQIMCHI_API_URL", "https://api.chaqimchi.uz")
-    monkeypatch.setenv("CHAQIMCHI_DL_URL", "https://dl.chaqimchi.uz")
-    monkeypatch.setenv("CHAQIMCHI_PARTNER_URL", "https://partner.chaqimchi.uz")
-    monkeypatch.setenv("CHAQIMCHI_ADMIN_URL", "https://admin.chaqimchi.uz")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.uz")
+    monkeypatch.setenv("ENES_APP_URL", "https://app.chaqimchi.uz")
+    monkeypatch.setenv("ENES_API_URL", "https://api.chaqimchi.uz")
+    monkeypatch.setenv("ENES_DL_URL", "https://dl.chaqimchi.uz")
+    monkeypatch.setenv("ENES_PARTNER_URL", "https://partner.chaqimchi.uz")
+    monkeypatch.setenv("ENES_ADMIN_URL", "https://admin.chaqimchi.uz")
 
 
 # ── URL qatlami ──────────────────────────────────────────────────────────
@@ -51,8 +51,8 @@ def _subdomains(monkeypatch) -> None:
 
 def test_url_helpers_fall_back_to_the_apex(monkeypatch) -> None:
     """Subdomen berilmagan — hammasi bitta domen (eski rejim)."""
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://bitta.example")
-    for key in ("CHAQIMCHI_APP_URL", "CHAQIMCHI_API_URL", "CHAQIMCHI_DL_URL"):
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://bitta.example")
+    for key in ("ENES_APP_URL", "ENES_API_URL", "ENES_DL_URL"):
         monkeypatch.delenv(key, raising=False)
 
     assert urls.app_url() == "https://bitta.example"
@@ -174,7 +174,7 @@ def test_public_urls_endpoint_reports_sections(client: TestClient, monkeypatch) 
 def test_quick_trial_commands_use_the_right_sections(client: TestClient, monkeypatch) -> None:
     """Yuklab olish dl'dan, `--cloud` api'dan — bo'limlar aralashmasin."""
     _subdomains(monkeypatch)
-    monkeypatch.setenv("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "")
 
     response = client.post(
         "/api/v1/public/quick-trial",

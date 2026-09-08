@@ -14,7 +14,7 @@
 #   --restore  haqiqiy tiklash.  Barcha joriy ma'lumot O'CHADI.
 #
 # Ishlatish:
-#   CHAQIMCHI_BACKUP_PASSWORD=... ./scripts/restore_production.sh --check arxiv.tar.gz.enc
+#   ENES_BACKUP_PASSWORD=... ./scripts/restore_production.sh --check arxiv.tar.gz.enc
 #
 set -euo pipefail
 umask 077
@@ -37,21 +37,21 @@ if [[ ! -f "$archive" ]]; then
   echo "Arxiv topilmadi: $archive" >&2
   exit 1
 fi
-if [[ -z "${CHAQIMCHI_BACKUP_PASSWORD:-}" ]]; then
-  echo "CHAQIMCHI_BACKUP_PASSWORD berilishi shart" >&2
+if [[ -z "${ENES_BACKUP_PASSWORD:-}" ]]; then
+  echo "ENES_BACKUP_PASSWORD berilishi shart" >&2
   exit 1
 fi
 
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
-env_file="${CHAQIMCHI_ENV_FILE:-.env.production}"
-compose_file="${CHAQIMCHI_COMPOSE_FILE:-docker-compose.prod.yml}"
+env_file="${ENES_ENV_FILE:-.env.production}"
+compose_file="${ENES_COMPOSE_FILE:-docker-compose.prod.yml}"
 stage="$(mktemp -d)"
 cleanup() { rm -rf -- "$stage" 2>/dev/null || true; }
 trap cleanup EXIT
 cd "$repo_dir"
 
 echo "→ Arxiv ochilmoqda…"
-openssl enc -d -aes-256-cbc -pbkdf2 -pass env:CHAQIMCHI_BACKUP_PASSWORD \
+openssl enc -d -aes-256-cbc -pbkdf2 -pass env:ENES_BACKUP_PASSWORD \
   -in "$archive" | tar -C "$stage" -xzf -
 
 # Ikki xil arxiv bor (`backup_production.sh` ga qarang):
@@ -164,8 +164,8 @@ fi
 # parollari va barcha media aynan shu ikki kalit bilan shifrlangan.
 if [[ -s "$stage/env.production" ]]; then
   missing=""
-  for key in CHAQIMCHI_CAMERA_SECRET_KEY CHAQIMCHI_SNAPSHOT_KEY \
-             CHAQIMCHI_PORTAL_JWT_SECRET CHAQIMCHI_OWNER_JWT_SECRET; do
+  for key in ENES_CAMERA_SECRET_KEY ENES_SNAPSHOT_KEY \
+             ENES_PORTAL_JWT_SECRET ENES_OWNER_JWT_SECRET; do
     grep -q "^${key}=" "$stage/env.production" || missing="$missing $key"
   done
   if [[ -n "$missing" ]]; then
@@ -211,7 +211,7 @@ if [[ "$kind" == "media" ]]; then
   echo "→ MinIO tiklanmoqda…"
   "${compose[@]}" run --rm --no-deps --entrypoint sh \
     -v "$stage/minio:/backup" minio-init -c \
-    'mc alias set dst http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing dst/"$CHAQIMCHI_S3_BUCKET" && mc mirror --overwrite /backup dst/"$CHAQIMCHI_S3_BUCKET"'
+    'mc alias set dst http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing dst/"$ENES_S3_BUCKET" && mc mirror --overwrite /backup dst/"$ENES_S3_BUCKET"'
   echo
   echo "✓ Media tiklandi."
   exit 0

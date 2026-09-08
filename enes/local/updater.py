@@ -70,7 +70,7 @@ def public_key_path() -> Path:
     yangilanish **umuman bajarilmaydi** — imzosiz o'rnatishdan ko'ra
     eski versiyada qolgan yaxshiroq.
     """
-    override = os.environ.get("CHAQIMCHI_UPDATE_PUBLIC_KEY", "").strip()
+    override = os.environ.get("ENES_UPDATE_PUBLIC_KEY", "").strip()
     if override:
         return Path(override)
     return paths.app_root() / "deploy" / "update-public.pem"

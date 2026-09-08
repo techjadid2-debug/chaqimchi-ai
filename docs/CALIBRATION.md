@@ -54,7 +54,7 @@ security:
 Muhit:
 
 ```bash
-export CHAQIMCHI_API_KEY="maxfiy-kalit"
+export ENES_API_KEY="maxfiy-kalit"
 ```
 
 So‘rovlar:

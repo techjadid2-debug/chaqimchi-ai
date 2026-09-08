@@ -35,7 +35,7 @@ from enes.paths import data_dir  # noqa: E402
 
 
 def _outbox_path() -> Path:
-    override = os.environ.get("CHAQIMCHI_RETAIL_OUTBOX", "").strip()
+    override = os.environ.get("ENES_RETAIL_OUTBOX", "").strip()
     return Path(override) if override else data_dir() / "outbox.db"
 
 

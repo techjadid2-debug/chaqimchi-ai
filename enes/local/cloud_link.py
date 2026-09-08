@@ -544,7 +544,7 @@ def default_cloud_url() -> str:
     Qurish paytida qo'yiladi (`build_windows_payload.py`).  Mijoz uni
     qo'lda yozmasligi kerak — u qaysi serverga ulanishini bilmaydi ham.
     """
-    return os.environ.get("CHAQIMCHI_DEFAULT_CLOUD_URL", "").strip()
+    return os.environ.get("ENES_DEFAULT_CLOUD_URL", "").strip()
 
 
 def auto_pair() -> Optional[PairedSite]:

@@ -184,9 +184,9 @@ def test_bundled_ffmpeg_is_preferred(tmp_path, monkeypatch) -> None:
     """Do'kon kompyuterida PATH'da ffmpeg yo'q — birga kelgani ishlatiladi."""
     from enes.retail.ringbuffer import default_ffmpeg_binary
 
-    monkeypatch.setenv("CHAQIMCHI_FFMPEG", str(tmp_path / "maxsus-ffmpeg"))
+    monkeypatch.setenv("ENES_FFMPEG", str(tmp_path / "maxsus-ffmpeg"))
     assert default_ffmpeg_binary() == str(tmp_path / "maxsus-ffmpeg")
 
-    monkeypatch.delenv("CHAQIMCHI_FFMPEG", raising=False)
+    monkeypatch.delenv("ENES_FFMPEG", raising=False)
     # Birga kelgan fayl yo'q (dev muhit) — PATH'dagi "ffmpeg" ga tushadi.
     assert default_ffmpeg_binary() in ("ffmpeg",) or default_ffmpeg_binary().endswith("ffmpeg")

@@ -220,7 +220,7 @@ def test_the_update_key_ships_and_is_never_silently_replaced() -> None:
     assert '"$root/deploy/update-public.pem"' in builder
     assert "/etc/chaqimchi/update-public.pem" in installer
     # Mavjud kalit faqat ataylab almashtiriladi.
-    assert "CHAQIMCHI_ROTATE_UPDATE_KEY" in installer
+    assert "ENES_ROTATE_UPDATE_KEY" in installer
     assert "cmp -s" in installer
 
 

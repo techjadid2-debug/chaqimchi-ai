@@ -204,7 +204,7 @@ flowchart LR
 
 #### 3-Zaiflik: Development JWT Fallback Kalitlari
 * **Tavsifi:** `jwt_auth.py` va `store.py` da agar maxfiy muhit o'zgaruvchisi o'rnatilmagan bo'lsa, development kalitiga tushadi.
-* **Xavf:** Productionda adashib `CHAQIMCHI_ENV=development` qolib ketsa, hujumchi o'zi mustaqil admin JWT tokenini yasab olishi mumkin.
+* **Xavf:** Productionda adashib `ENES_ENV=development` qolib ketsa, hujumchi o'zi mustaqil admin JWT tokenini yasab olishi mumkin.
 * **Tuzatish:** Tizim ishga tushganda `production_preflight.py` orqali barcha kalitlarning minimal 32 baytli entropiyasini majburiy tekshirish.
 
 ---

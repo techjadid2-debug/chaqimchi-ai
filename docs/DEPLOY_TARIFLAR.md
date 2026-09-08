@@ -42,7 +42,7 @@ Ikkalasi ham toza bo'lishi shart. Toza bo'lmasa — deploy qilinmaydi.
 bo'lsa orqaga qaytishning yagona yo'li — zaxira.
 
 Skript parol va papkani `/etc/chaqimchi/backup.env` dan oladi — uni
-**qo'lda yuklash shart**, aks holda "CHAQIMCHI_BACKUP_DIR shart" deb
+**qo'lda yuklash shart**, aks holda "ENES_BACKUP_DIR shart" deb
 to'xtaydi:
 
 ```bash
@@ -165,7 +165,7 @@ to'g'ri xatti-harakat, qayta ishga tushiring.
 ```bash
 cd /home/deploy/chaqimchi-ai
 set -a && . /etc/chaqimchi/backup.env && set +a
-export CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml
+export ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml
 ./scripts/deploy_cloud.sh
 ```
 
@@ -231,7 +231,7 @@ docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
 
 Har xodimda kamida **2 ta rasm** bo'lishi kerak, aks holda "bir xil
 odam" juftligi chiqmaydi. Skript raqam tavsiya qilsa —
-`CHAQIMCHI_FACE_MATCH_THRESHOLD` ga qo'ying va konteynerni qayta
+`ENES_FACE_MATCH_THRESHOLD` ga qo'ying va konteynerni qayta
 ishga tushiring.
 
 Ikki taqsimot kesishsa skript raqam **taklif qilmaydi**: bu chegara

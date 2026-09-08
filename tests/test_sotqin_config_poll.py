@@ -59,11 +59,11 @@ def config_payload(revision: int) -> Dict[str, Any]:
 
 @pytest.fixture
 def agent(tmp_path: Path, monkeypatch) -> SotqinAgent:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_URL", "https://cloud.example.uz")
-    monkeypatch.setenv("CHAQIMCHI_SITE_ID", "site-1")
-    monkeypatch.setenv("CHAQIMCHI_DEVICE_ID", "device-1")
-    monkeypatch.setenv("CHAQIMCHI_DEVICE_TOKEN", "token-1")
-    monkeypatch.setenv("CHAQIMCHI_SOTQIN_CONFIG_CACHE", str(tmp_path / "sotqin-config.json"))
+    monkeypatch.setenv("ENES_CLOUD_URL", "https://cloud.example.uz")
+    monkeypatch.setenv("ENES_SITE_ID", "site-1")
+    monkeypatch.setenv("ENES_DEVICE_ID", "device-1")
+    monkeypatch.setenv("ENES_DEVICE_TOKEN", "token-1")
+    monkeypatch.setenv("ENES_SOTQIN_CONFIG_CACHE", str(tmp_path / "sotqin-config.json"))
     return SotqinAgent()
 
 

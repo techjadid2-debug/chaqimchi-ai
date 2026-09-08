@@ -25,7 +25,7 @@ bir marta yoziladi va keyin **almashtirilmaydi**. Sababi: birinchi
 o'rnatishda ishonch cloudga tayanadi (HTTPS + SHA-256), lekin kalit
 qotirilgach — cloud buzilsa ham hujumchi imzo yasay olmaydi va qurilma
 eski kodda qolaveradi. Ataylab almashtirish uchun
-`CHAQIMCHI_ROTATE_UPDATE_KEY=true`.
+`ENES_ROTATE_UPDATE_KEY=true`.
 
 ---
 
@@ -61,7 +61,7 @@ Versiya ko'tarilib commit qilingandan keyin hammasi bitta buyruq:
 make windows-release CLOUD_URL=https://api.chaqimchi.uz
 
 # 2. Serverga chiqaring — shundan keyingina do'konlar ko'radi
-CHAQIMCHI_RELEASE_HOST=deploy@169.58.198.111 \
+ENES_RELEASE_HOST=deploy@169.58.198.111 \
   scripts/publish_windows_release.sh
 ```
 
@@ -75,7 +75,7 @@ lekin hech kimga yetmadi" degan jim holatga olib kelardi.
 CI qurgan faylni chiqarish (GitHub Releases'dan yuklab olingan):
 
 ```bash
-CHAQIMCHI_RELEASE_HOST=deploy@169.58.198.111 \
+ENES_RELEASE_HOST=deploy@169.58.198.111 \
   scripts/publish_windows_release.sh --exe ~/Downloads/Chaqimchi_AI_Setup.exe
 ```
 
@@ -96,8 +96,8 @@ Tarqatish tartibi — pastdagi "Bosqichli tarqatish" bo'limi.
 qayta ishlating:
 
 ```
-CHAQIMCHI_SOTQIN_RELEASE_URL=https://<domen>/releases/chaqimchi-sotqin-0.6.1.tar.gz
-CHAQIMCHI_SOTQIN_RELEASE_SHA256=<sign_release.py chop etgan sha256>
+ENES_SOTQIN_RELEASE_URL=https://<domen>/releases/chaqimchi-sotqin-0.6.1.tar.gz
+ENES_SOTQIN_RELEASE_SHA256=<sign_release.py chop etgan sha256>
 ```
 
 Busiz `/downloads/sotqin-installer.sh` **503** qaytaradi — bu ataylab:
@@ -200,7 +200,7 @@ endi bitta buyruqda (`scripts/rollout.py`), admin panelda har do'konni
 alohida bosish emas:
 
 ```bash
-export CHAQIMCHI_CLOUD_ADMIN_KEY=...        # parol menejeridan
+export ENES_CLOUD_ADMIN_KEY=...        # parol menejeridan
 
 # 1. Relizdan OLDIN: faqat sinov do'koni yangilansin
 python3 scripts/rollout.py --sinov <sinov_site_id>

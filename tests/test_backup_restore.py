@@ -4,8 +4,8 @@ Sinalmagan zaxira — zaxira emas.  Bu testlar ikkita aniq xatoni qaytib
 kelishidan qo'riqlaydi:
 
 1. Arxivda shifrlash kalitlari yo'q edi.  Kamera RTSP parollari
-   `CHAQIMCHI_CAMERA_SECRET_KEY`, MinIO'dagi har bir rasm va klip esa
-   `CHAQIMCHI_SNAPSHOT_KEY` bilan shifrlangan.  Server yo'qolsa arxivdan
+   `ENES_CAMERA_SECRET_KEY`, MinIO'dagi har bir rasm va klip esa
+   `ENES_SNAPSHOT_KEY` bilan shifrlangan.  Server yo'qolsa arxivdan
    qatorlar va bloblar chiqadi, lekin ularni **o'qib bo'lmaydi**.
 2. `cloud.db` (hisob-faktura, obuna, loginlar) uch fayl sifatida, dastur
    ishlab turganda nusxalanardi — yirtiq snapshot chiqishi mumkin edi.
@@ -23,7 +23,7 @@ BACKUP = SCRIPTS / "backup_production.sh"
 RESTORE = SCRIPTS / "restore_production.sh"
 
 #: Bularsiz tiklangan baza yaroqsiz.
-CRITICAL_KEYS = ("CHAQIMCHI_CAMERA_SECRET_KEY", "CHAQIMCHI_SNAPSHOT_KEY")
+CRITICAL_KEYS = ("ENES_CAMERA_SECRET_KEY", "ENES_SNAPSHOT_KEY")
 
 
 def _archive_contents() -> list[str]:
@@ -42,7 +42,7 @@ def test_the_backup_password_does_not_live_in_the_archived_env() -> None:
     """Aylanma bog'liqlik bo'lmasin: arxivni ochadigan parol arxiv ichida
     turmasligi kerak."""
     example = (SCRIPTS.parent / ".env.production.example").read_text(encoding="utf-8")
-    assert "CHAQIMCHI_BACKUP_PASSWORD" not in example
+    assert "ENES_BACKUP_PASSWORD" not in example
 
 
 def test_cloud_db_is_copied_atomically() -> None:
@@ -105,7 +105,7 @@ def test_the_backup_unit_example_matches_the_real_compose_file() -> None:
     compose = next(
         line.split("=", 1)[1].strip()
         for line in example.splitlines()
-        if line.startswith("CHAQIMCHI_COMPOSE_FILE=")
+        if line.startswith("ENES_COMPOSE_FILE=")
     )
     assert (SCRIPTS.parent / compose).is_file(), f"{compose} repoda yo'q"
 
@@ -181,7 +181,7 @@ def test_missing_offsite_copy_is_reported() -> None:
     preflight = (SCRIPTS / "production_preflight.py").read_text(encoding="utf-8")
     assert "def check_backup(" in preflight
     assert "RESTIC_REPOSITORY" in preflight
-    assert "CHAQIMCHI_BACKUP_TELEGRAM_TOKEN" in preflight, (
+    assert "ENES_BACKUP_TELEGRAM_TOKEN" in preflight, (
         "Telegram yo'li ham tashqi nusxa hisoblansin"
     )
 
@@ -239,7 +239,7 @@ def test_the_archive_can_leave_the_server_without_an_account() -> None:
     bot allaqachon bor va arxiv AES-256 bilan shifrlangan.
     """
     source = BACKUP.read_text(encoding="utf-8")
-    assert "CHAQIMCHI_BACKUP_TELEGRAM_TOKEN" in source
+    assert "ENES_BACKUP_TELEGRAM_TOKEN" in source
     assert "sendDocument" in source
 
 

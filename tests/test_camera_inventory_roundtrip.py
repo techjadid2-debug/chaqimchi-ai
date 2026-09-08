@@ -22,11 +22,11 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def cloud(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_DB", str(tmp_path / "cloud.db"))
-    monkeypatch.setenv("CHAQIMCHI_EVENT_DB", str(tmp_path / "events.db"))
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "x" * 32)
-    monkeypatch.setenv("CHAQIMCHI_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
+    monkeypatch.setenv("ENES_CLOUD_DB", str(tmp_path / "cloud.db"))
+    monkeypatch.setenv("ENES_EVENT_DB", str(tmp_path / "events.db"))
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "x" * 32)
+    monkeypatch.setenv("ENES_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
 
     from cloud import main
 
@@ -48,7 +48,7 @@ def test_wizard_camera_shows_up_in_the_owner_panel(
     ).json()
 
     # ── Qurilma tomoni: sehrgarda kamera qo'shilgan ────────────────────
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path / "device"))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path / "device"))
     from enes.local import cloud_config, cloud_link, config_store, paths
 
     for module in (paths, config_store, cloud_link, cloud_config):

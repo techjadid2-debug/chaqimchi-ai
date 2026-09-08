@@ -56,13 +56,13 @@ def test_invoice_amount_follows_plan(stores) -> None:
 def test_sotqin_base_invoice_locks_20_usd_at_current_rate(stores, monkeypatch) -> None:
     cloud, pay = stores
     site = cloud.create_site("Lite do'kon", "lite", subscription_months=1)
-    monkeypatch.setenv("CHAQIMCHI_USD_RATE_UZS", "12750")
+    monkeypatch.setenv("ENES_USD_RATE_UZS", "12750")
 
     invoice = pay.create_invoice(site["site_id"], 1)
     assert invoice["amount_uzs"] == 255_000
 
     # Kurs o'zgarsa eski invoice o'zgarmaydi, faqat yangisi yangi summada ochiladi.
-    monkeypatch.setenv("CHAQIMCHI_USD_RATE_UZS", "13000")
+    monkeypatch.setenv("ENES_USD_RATE_UZS", "13000")
     assert pay.get_invoice(invoice["id"])["amount_uzs"] == 255_000
     assert pay.create_invoice(site["site_id"], 1)["amount_uzs"] == 260_000
     # Yillik chegirma barcha tarifga bir xil: rasmiy saytdagi "2 oy bepul"

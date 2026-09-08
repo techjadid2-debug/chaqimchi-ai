@@ -23,11 +23,11 @@ ADMIN = {"X-Cloud-Admin-Key": "test-admin"}
 def cloud(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("ENES_S3_ENDPOINT", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)
@@ -43,7 +43,7 @@ def cloud(tmp_path: Path, monkeypatch):
 
     # Fon halqalari o'chiriladi: lifespan `_maintenance_loop` ni yaratishi
     # bilan u ALOHIDA oqimda darhol purge boshlaydi va testdagi
-    # `setenv("CHAQIMCHI_CLIP_RETENTION_DAYS", ...)` dan OLDIN standart
+    # `setenv("ENES_CLIP_RETENTION_DAYS", ...)` dan OLDIN standart
     # 7 kunni o'qib muzlatib oladi.  To'liq to'plamda oqim kechikib test
     # yaratgan saytga yetib borar va uning klipini o'chirar edi — shu
     # poyga `test_clip_retention_is_configurable` ning uch haftalik
@@ -262,7 +262,7 @@ def test_clips_expire_sooner_than_the_archive_the_customer_paid_for(cloud) -> No
 def test_media_retention_is_configurable(cloud, monkeypatch) -> None:
     """Muddatni env bilan uzaytirib bo'lsin — aks holda orqaga qaytish yo'li yo'q."""
     main, client, _sent = cloud
-    monkeypatch.setenv("CHAQIMCHI_MEDIA_RETENTION_HOURS", str(60 * 24))
+    monkeypatch.setenv("ENES_MEDIA_RETENTION_HOURS", str(60 * 24))
     site, headers = _site(client, "Uzoq klip", plan="enterprise")
 
     client.post(

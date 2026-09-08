@@ -172,7 +172,7 @@ def test_the_supervisor_passes_the_chain_numbers_through(tmp_path, monkeypatch) 
     "o'lchov yo'q" deb hisoblardi."""
     from enes.local.supervisor import RetailSupervisor
 
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     supervisor = RetailSupervisor()
     monkeypatch.setattr(
         supervisor,

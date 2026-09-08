@@ -22,8 +22,8 @@ EDU_HTML = STATIC / "edu.html"
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_APP_URL", "https://app.chaqimchi.test")
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://chaqimchi.test")
+    monkeypatch.setenv("ENES_APP_URL", "https://app.chaqimchi.test")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.test")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._event_store", None)

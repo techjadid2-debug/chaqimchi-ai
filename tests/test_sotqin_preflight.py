@@ -49,10 +49,10 @@ def _healthy(tmp_path: Path) -> Preflight:
     """Hamma narsa joyida bo'lgan qurilma."""
     env = tmp_path / "sotqin.env"
     env.write_text(
-        "CHAQIMCHI_CLOUD_URL=https://ai.example.test\n"
-        "CHAQIMCHI_SITE_ID=site-1\n"
-        "CHAQIMCHI_DEVICE_ID=device-1\n"
-        "CHAQIMCHI_DEVICE_TOKEN=token-1\n",
+        "ENES_CLOUD_URL=https://ai.example.test\n"
+        "ENES_SITE_ID=site-1\n"
+        "ENES_DEVICE_ID=device-1\n"
+        "ENES_DEVICE_TOKEN=token-1\n",
         encoding="utf-8",
     )
     env.chmod(0o600)
@@ -178,10 +178,10 @@ def test_world_readable_env_is_a_failure(tmp_path: Path) -> None:
 def test_unpaired_device_is_reported_with_the_pairing_command(tmp_path: Path) -> None:
     preflight = _healthy(tmp_path)
     preflight.env_path.write_text(
-        "CHAQIMCHI_CLOUD_URL=https://ai.example.test\n"
-        "CHAQIMCHI_SITE_ID=FROM_PAIRING\n"
-        "CHAQIMCHI_DEVICE_ID=FROM_PAIRING\n"
-        "CHAQIMCHI_DEVICE_TOKEN=FROM_PAIRING\n",
+        "ENES_CLOUD_URL=https://ai.example.test\n"
+        "ENES_SITE_ID=FROM_PAIRING\n"
+        "ENES_DEVICE_ID=FROM_PAIRING\n"
+        "ENES_DEVICE_TOKEN=FROM_PAIRING\n",
         encoding="utf-8",
     )
 

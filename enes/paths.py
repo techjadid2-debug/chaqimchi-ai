@@ -40,7 +40,7 @@ def _windows_dir(base_env: str, fallback: str) -> Path:
 
 def install_root() -> Path:
     """Dastur o'rnatilgan papka (`releases/`, `current`, `venv` shu yerda)."""
-    override = os.environ.get("CHAQIMCHI_INSTALL_ROOT", "").strip()
+    override = os.environ.get("ENES_INSTALL_ROOT", "").strip()
     if override:
         return Path(override)
     if is_windows():
@@ -55,7 +55,7 @@ def config_dir() -> Path:
     xizmat yoza olmaydi (UAC), va sozlama yangilanishdan keyin ham joyida
     qolishi kerak.
     """
-    override = os.environ.get("CHAQIMCHI_CONFIG_DIR", "").strip()
+    override = os.environ.get("ENES_CONFIG_DIR", "").strip()
     if override:
         return Path(override)
     if is_windows():
@@ -65,7 +65,7 @@ def config_dir() -> Path:
 
 def data_dir() -> Path:
     """Relizlar orasida saqlanadigan holat: outbox, klip, buffer, loglar."""
-    override = os.environ.get("CHAQIMCHI_DATA_DIR", "").strip()
+    override = os.environ.get("ENES_DATA_DIR", "").strip()
     if override:
         return Path(override)
     if is_windows():
@@ -74,7 +74,7 @@ def data_dir() -> Path:
 
 
 def logs_dir() -> Path:
-    override = os.environ.get("CHAQIMCHI_LOGS_DIR", "").strip()
+    override = os.environ.get("ENES_LOGS_DIR", "").strip()
     if override:
         return Path(override)
     if is_windows():
@@ -84,7 +84,7 @@ def logs_dir() -> Path:
 
 def env_file() -> Path:
     """Pairing sirlari saqlanadigan fayl."""
-    override = os.environ.get("CHAQIMCHI_ENV_FILE", "").strip()
+    override = os.environ.get("ENES_ENV_FILE", "").strip()
     if override:
         return Path(override)
     return config_dir() / "sotqin.env"
@@ -92,14 +92,14 @@ def env_file() -> Path:
 
 def update_key_file() -> Path:
     """OTA ochiq kaliti — o'rnatishda bir marta qotiriladi."""
-    override = os.environ.get("CHAQIMCHI_UPDATE_KEY", "").strip()
+    override = os.environ.get("ENES_UPDATE_KEY", "").strip()
     if override:
         return Path(override)
     return config_dir() / "update-public.pem"
 
 
 def config_file() -> Path:
-    override = os.environ.get("CHAQIMCHI_CONFIG", "").strip()
+    override = os.environ.get("ENES_CONFIG", "").strip()
     if override:
         return Path(override)
     return install_root() / "current" / "config" / "sotqin.yaml"

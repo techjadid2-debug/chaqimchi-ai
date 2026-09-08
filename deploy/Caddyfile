@@ -1,4 +1,4 @@
-{$CHAQIMCHI_DOMAIN} {
+{$ENES_DOMAIN} {
     encode zstd gzip
     reverse_proxy cloud:8750 {
         # Mijoz yuborgan X-Forwarded-For'ni ALMASHTIRAMIZ (qo'shmaymiz):

@@ -14,10 +14,10 @@ product:
   max_cameras: 8
 
 cloud:
-  url: "${CHAQIMCHI_CLOUD_URL}"
-  site_id: "${CHAQIMCHI_SITE_ID}"
-  device_id: "${CHAQIMCHI_DEVICE_ID}"
-  device_token: "${CHAQIMCHI_DEVICE_TOKEN}"
+  url: "${ENES_CLOUD_URL}"
+  site_id: "${ENES_SITE_ID}"
+  device_id: "${ENES_DEVICE_ID}"
+  device_token: "${ENES_DEVICE_TOKEN}"
   heartbeat_sec: 60
   config_poll_sec: 60
 
@@ -49,7 +49,7 @@ update:
   rollout_channel: stable
 
 # ── Yopiq davomat piloti ────────────────────────────────────────────────
-# `CHAQIMCHI_ATTENDANCE_PILOT=true` bo'lmasa yoki tijoriy model manifesti
+# `ENES_ATTENDANCE_PILOT=true` bo'lmasa yoki tijoriy model manifesti
 # tasdiqlanmasa attendance service fail-closed. Biometrika lokal va shifrlangan.
 face:
   model_name: buffalo_l
@@ -65,18 +65,18 @@ camera:
 
 license:
   enabled: true
-  cloud_url: "${CHAQIMCHI_CLOUD_URL}"
-  site_id: "${CHAQIMCHI_SITE_ID}"
-  device_token: "${CHAQIMCHI_DEVICE_TOKEN}"
+  cloud_url: "${ENES_CLOUD_URL}"
+  site_id: "${ENES_SITE_ID}"
+  device_token: "${ENES_DEVICE_TOKEN}"
   heartbeat_interval_sec: 300
   offline_grace_days: 7
 
 cloud_sync:
   enabled: true
-  url: "${CHAQIMCHI_CLOUD_URL}"
-  site_id: "${CHAQIMCHI_SITE_ID}"
-  device_id: "${CHAQIMCHI_DEVICE_ID}"
-  device_token: "${CHAQIMCHI_DEVICE_TOKEN}"
+  url: "${ENES_CLOUD_URL}"
+  site_id: "${ENES_SITE_ID}"
+  device_id: "${ENES_DEVICE_ID}"
+  device_token: "${ENES_DEVICE_TOKEN}"
   interval_sec: 5
   heartbeat_interval_sec: 60
   batch_size: 50

@@ -1,6 +1,6 @@
 """chaqimchi.uz subdomen manzillari — havola qaysi bo'limga tegishli.
 
-Nega kerak.  Ilgari hamma havola bitta `CHAQIMCHI_PUBLIC_URL` dan
+Nega kerak.  Ilgari hamma havola bitta `ENES_PUBLIC_URL` dan
 qurilardi.  Endi platforma subdomenlarga bo'linadi:
 
     chaqimchi.uz          landing (marketing)
@@ -11,7 +11,7 @@ qurilardi.  Endi platforma subdomenlarga bo'linadi:
     partner.chaqimchi.uz  montajchi portali
 
 Har funksiya o'z env o'zgaruvchisini o'qiydi; berilmagan bo'lsa apex
-(`CHAQIMCHI_PUBLIC_URL`) ga tushadi — ya'ni subdomenlarsiz eski
+(`ENES_PUBLIC_URL`) ga tushadi — ya'ni subdomenlarsiz eski
 bitta-domen rejimi ham to'liq ishlayveradi (testlar shu holatda o'tadi).
 """
 
@@ -31,19 +31,19 @@ def _url(env_key: str) -> str:
 
 def app_url() -> str:
     """Mijoz paneli bazasi (bot tugmalari, login havolalari)."""
-    return _url("CHAQIMCHI_APP_URL")
+    return _url("ENES_APP_URL")
 
 
 def api_url() -> str:
     """Qurilma va webhook bazasi (pairing `--cloud`, heartbeat)."""
-    return _url("CHAQIMCHI_API_URL")
+    return _url("ENES_API_URL")
 
 
 def dl_url() -> str:
     """Yuklab olish bazasi (installer, relizlar, OTA fayllari)."""
-    return _url("CHAQIMCHI_DL_URL")
+    return _url("ENES_DL_URL")
 
 
 def partner_url() -> str:
     """Montajchi portali bazasi."""
-    return _url("CHAQIMCHI_PARTNER_URL")
+    return _url("ENES_PARTNER_URL")

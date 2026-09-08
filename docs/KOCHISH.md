@@ -48,16 +48,16 @@ Kod: `git clone git@github.com:techjadid2-debug/chaqimchi-ai.git /home/deploy/ch
 `.env.production.example` dan nusxa oling va to'ldiring. Yangi/muhim:
 
 ```
-CHAQIMCHI_PUBLIC_URL=https://chaqimchi.uz
-CHAQIMCHI_APP_URL=https://app.chaqimchi.uz
-CHAQIMCHI_API_URL=https://api.chaqimchi.uz
-CHAQIMCHI_DL_URL=https://dl.chaqimchi.uz
-CHAQIMCHI_PARTNER_URL=https://partner.chaqimchi.uz
-CHAQIMCHI_ADMIN_URL=https://admin.chaqimchi.uz
+ENES_PUBLIC_URL=https://chaqimchi.uz
+ENES_APP_URL=https://app.chaqimchi.uz
+ENES_API_URL=https://api.chaqimchi.uz
+ENES_DL_URL=https://dl.chaqimchi.uz
+ENES_PARTNER_URL=https://partner.chaqimchi.uz
+ENES_ADMIN_URL=https://admin.chaqimchi.uz
 # Face ID piloti (o'z do'koningiz uchun):
-CHAQIMCHI_ATTENDANCE_PILOT=true
-CHAQIMCHI_EMBEDDING_KEY=<yangi Fernet kalit>
-CHAQIMCHI_FACE_RETENTION_DAYS=14
+ENES_ATTENDANCE_PILOT=true
+ENES_EMBEDDING_KEY=<yangi Fernet kalit>
+ENES_FACE_RETENTION_DAYS=14
 ```
 
 Barcha sirlar YANGI generatsiya qilinadi (eski serverdagi sirlar
@@ -68,9 +68,9 @@ Tekshiruv: `python3 scripts/production_preflight.py` (xato chiqmaguncha deploy y
 
 ```bash
 cd /home/deploy/chaqimchi-ai
-export CHAQIMCHI_COMPOSE_FILE=docker-compose.chaqimchi.yml   # Caddy ichida, subdomenlar bilan
-export CHAQIMCHI_BACKUP_DIR=/home/deploy/chaqimchi-backups
-export CHAQIMCHI_BACKUP_PASSWORD='YANGI_UZUN_SIR'            # parol menejerga yozing!
+export ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml   # Caddy ichida, subdomenlar bilan
+export ENES_BACKUP_DIR=/home/deploy/chaqimchi-backups
+export ENES_BACKUP_PASSWORD='YANGI_UZUN_SIR'            # parol menejerga yozing!
 ./scripts/deploy_cloud.sh
 ```
 

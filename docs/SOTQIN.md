@@ -102,7 +102,7 @@ R1 revision va serial saqlanadi. Secret fayl permission'i `0600`.
    codec, rezolyutsiya va FPS ko'rinadi.
 
 RTSP/NVR loginlari `.env` yoki browserga qaytmaydi. Production cloud uchun
-`CHAQIMCHI_CAMERA_SECRET_KEY` alohida Fernet kaliti bo'lishi shart.
+`ENES_CAMERA_SECRET_KEY` alohida Fernet kaliti bo'lishi shart.
 
 ## Do'kon analitikasi xizmati
 
@@ -113,7 +113,7 @@ systemctl start chaqimchi-retail     # deploy/chaqimchi-retail.service
 ```
 
 Alohida bo'lgani ataylab: detektor yoki ffmpeg yiqilsa control plane va
-heartbeat ishlashda davom etadi. Sozlama `CHAQIMCHI_CONFIG`
+heartbeat ishlashda davom etadi. Sozlama `ENES_CONFIG`
 ko'rsatgan faylning `scene:` va `retail:` bo'limlarida.
 
 ## Qolgan bosqichlar

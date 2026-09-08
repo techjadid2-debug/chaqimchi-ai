@@ -41,10 +41,10 @@ tracking:
 
 security:
   api_key_enabled: false
-  # api_key: "maxfiy-kalit"  # yoki muhit: CHAQIMCHI_API_KEY
+  # api_key: "maxfiy-kalit"  # yoki muhit: ENES_API_KEY
   jwt:
     enabled: false
-    # secret: muhit CHAQIMCHI_JWT_SECRET
+    # secret: muhit ENES_JWT_SECRET
     expire_hours: 24
 
 rate_limit:

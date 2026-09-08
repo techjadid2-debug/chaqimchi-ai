@@ -15,7 +15,7 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
-env_file="$repo_dir/${CHAQIMCHI_ENV_FILE:-.env.production}"
+env_file="$repo_dir/${ENES_ENV_FILE:-.env.production}"
 [[ -f "$env_file" ]] || exit 0
 
 value_of() {
@@ -23,11 +23,11 @@ value_of() {
   sed -n "s/^$1=//p" "$env_file" | head -n 1 | tr -d "\"'" | tr -d '\r'
 }
 
-token="$(value_of CHAQIMCHI_SALES_TELEGRAM_TOKEN)"
-[[ -n "$token" ]] || token="$(value_of CHAQIMCHI_CLOUD_TELEGRAM_TOKEN)"
-[[ -n "$token" ]] || token="$(value_of CHAQIMCHI_OWNER_TELEGRAM_TOKEN)"
-chat="$(value_of CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID)"
-[[ -n "$chat" ]] || chat="$(value_of CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS | cut -d, -f1)"
+token="$(value_of ENES_SALES_TELEGRAM_TOKEN)"
+[[ -n "$token" ]] || token="$(value_of ENES_CLOUD_TELEGRAM_TOKEN)"
+[[ -n "$token" ]] || token="$(value_of ENES_OWNER_TELEGRAM_TOKEN)"
+chat="$(value_of ENES_CLOUD_TELEGRAM_CHAT_ID)"
+[[ -n "$chat" ]] || chat="$(value_of ENES_TELEGRAM_LEAD_CHAT_IDS | cut -d, -f1)"
 
 if [[ -z "$token" || -z "$chat" ]]; then
   echo "Telegram sozlanmagan — backup xatosi haqida xabar yuborilmadi" >&2

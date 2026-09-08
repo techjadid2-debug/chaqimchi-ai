@@ -58,14 +58,14 @@ class FakeFaceService:
 def pilot_client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
-    monkeypatch.setenv("CHAQIMCHI_ATTENDANCE_PILOT", "1")
-    monkeypatch.setenv("CHAQIMCHI_OTP_TEST_CODE", "123456")
-    monkeypatch.setenv("CHAQIMCHI_EMBEDDING_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
+    monkeypatch.setenv("ENES_ENV", "test")
+    monkeypatch.setenv("ENES_ATTENDANCE_PILOT", "1")
+    monkeypatch.setenv("ENES_OTP_TEST_CODE", "123456")
+    monkeypatch.setenv("ENES_EMBEDDING_KEY", Fernet.generate_key().decode())
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("ENES_S3_ENDPOINT", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)
@@ -330,8 +330,8 @@ def test_gate_closes_when_the_models_are_not_commercially_licensed(
     xizmat o'zi yopilsin va bu sozlamaga bog'liq bo'lmasin.
     """
     site, headers = _site_with_device(pilot_client)
-    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
-    monkeypatch.delenv("CHAQIMCHI_ATTENDANCE_PILOT", raising=False)
+    monkeypatch.setenv("ENES_ENV", "production")
+    monkeypatch.delenv("ENES_ATTENDANCE_PILOT", raising=False)
     monkeypatch.setattr(faces, "MODELS_LICENSED_FOR_COMMERCIAL_USE", False)
 
     assert (
@@ -353,14 +353,14 @@ def test_production_keeps_attendance_shut_until_it_is_deliberately_opened(
     bir narsani aytadi.
     """
     site, _headers = _site_with_device(pilot_client)
-    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
-    monkeypatch.delenv("CHAQIMCHI_ATTENDANCE_PILOT", raising=False)
+    monkeypatch.setenv("ENES_ENV", "production")
+    monkeypatch.delenv("ENES_ATTENDANCE_PILOT", raising=False)
 
     shut = pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN)
     assert shut.status_code == 403
 
     # Ataylab yoqilganda esa ochiladi — pilot obyektlari ishlashi kerak.
-    monkeypatch.setenv("CHAQIMCHI_ATTENDANCE_PILOT", "1")
+    monkeypatch.setenv("ENES_ATTENDANCE_PILOT", "1")
     opened = pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN)
     assert opened.status_code == 200
 
@@ -369,7 +369,7 @@ def test_an_unlicensed_model_shuts_attendance_everywhere(pilot_client, monkeypat
     """Litsenziya SHART: u yo'q bo'lsa pilot bayrog'i ham ochmaydi."""
     site, _headers = _site_with_device(pilot_client)
     monkeypatch.setattr(faces, "MODELS_LICENSED_FOR_COMMERCIAL_USE", False)
-    monkeypatch.setenv("CHAQIMCHI_ATTENDANCE_PILOT", "1")
+    monkeypatch.setenv("ENES_ATTENDANCE_PILOT", "1")
 
     response = pilot_client.get(f"/api/v1/admin/sites/{site['site_id']}/faces", headers=ADMIN)
     assert response.status_code == 403

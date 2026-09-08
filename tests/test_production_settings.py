@@ -6,7 +6,7 @@ from enes.settings import AppSettings
 
 
 def test_production_settings_fail_closed(monkeypatch) -> None:
-    for key in ("CHAQIMCHI_API_KEY", "CHAQIMCHI_JWT_SECRET"):
+    for key in ("ENES_API_KEY", "ENES_JWT_SECRET"):
         monkeypatch.delenv(key, raising=False)
     cfg = AppSettings.model_validate({"environment": "production"})
     errors = cfg.production_errors()
@@ -14,7 +14,7 @@ def test_production_settings_fail_closed(monkeypatch) -> None:
 
 
 def test_production_settings_accept_secure_config(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_API_KEY", "a" * 32)
+    monkeypatch.setenv("ENES_API_KEY", "a" * 32)
     cfg = AppSettings.model_validate(
         {
             "environment": "production",

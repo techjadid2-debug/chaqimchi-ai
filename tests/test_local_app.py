@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     # Modulni har testda toza holatda yuklaymiz: `paths` yo'llarni
     # muhitdan o'qiydi va modul darajasida keshlamaydi, lekin `supervisor`
     # bitta global obyekt — u eski `tmp_path` ni ushlab qolmasligi kerak.
@@ -642,7 +642,7 @@ def test_old_config_without_rules_is_healed(tmp_path: Path, monkeypatch) -> None
 
     from enes.local import config_store, paths
 
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     importlib.reload(paths)
     importlib.reload(config_store)
 
@@ -1002,7 +1002,7 @@ def test_second_copy_opens_the_panel_instead_of_crashing(
     from enes.local import app as app_module
 
     # Log fayli haqiqiy uy katalogiga yozilmasin.
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     opened: list[str] = []
     started: list[str] = []
     monkeypatch.setattr(app_module, "_reserve_panel_port", lambda *a, **k: None)
@@ -1010,7 +1010,7 @@ def test_second_copy_opens_the_panel_instead_of_crashing(
         app_module, "webbrowser", type("W", (), {"open": staticmethod(opened.append)})
     )
     monkeypatch.setattr(app_module, "_write_alive", lambda *a, **k: started.append("alive"))
-    monkeypatch.delenv("CHAQIMCHI_LOCAL_NO_BROWSER", raising=False)
+    monkeypatch.delenv("ENES_LOCAL_NO_BROWSER", raising=False)
 
     app_module.main()
 
@@ -1025,9 +1025,9 @@ def test_service_launcher_does_not_open_a_browser(
     hech kim ko'rmaydi, jarayon esa osilib qoladi."""
     from enes.local import app as app_module
 
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_NO_BROWSER", "1")
+    monkeypatch.setenv("ENES_LOCAL_NO_BROWSER", "1")
     assert app_module._browser_enabled() is False
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_NO_BROWSER", "0")
+    monkeypatch.setenv("ENES_LOCAL_NO_BROWSER", "0")
     assert app_module._browser_enabled() is True
 
 
@@ -1253,7 +1253,7 @@ def test_only_one_panel_can_bind_the_port(tmp_path: Path, monkeypatch: pytest.Mo
     """Bitta nusxa qoidasi: ikkinchi `bind` `None` qaytarsin."""
     import importlib
 
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import app as app_module
 
     importlib.reload(app_module)

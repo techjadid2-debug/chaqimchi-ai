@@ -22,7 +22,7 @@ from cloud.store import CloudStore
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description="Chaqimchi portal akkaunti yaratish")
-    result.add_argument("--db", default=os.environ.get("CHAQIMCHI_CLOUD_DB", "data/cloud/cloud.db"))
+    result.add_argument("--db", default=os.environ.get("ENES_CLOUD_DB", "data/cloud/cloud.db"))
     result.add_argument("--username", required=True)
     result.add_argument("--name", required=True)
     result.add_argument("--role", required=True, choices=("admin", "installer", "customer"))

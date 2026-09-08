@@ -173,7 +173,7 @@
   bitta kartada.  2 034 test yashil, `make lint` va `ui-check` toza,
   `ui-build` qilingan.
 - **Deploy kaliti `.env` da.**  Standart `~/.ssh/id_ed25519` serverda
-  ruxsat etilmagan; ishlaydigani — `CHAQIMCHI_DEPLOY_SSH_KEY`
+  ruxsat etilmagan; ishlaydigani — `ENES_DEPLOY_SSH_KEY`
   (loyihaning `.env` fayli).  `deploy` foydalanuvchisi bilan
   `docker compose` ISHLAMAYDI (`/home/deploy/chaqimchi-ai/.env` faqat
   root uchun o'qiladi) — deploy `root@` bilan, tashxis esa
@@ -210,7 +210,7 @@
   tashlandi, soat filtri ishladi, xarita `peak: 300` va bo'sh soat bo'sh.
 - ⚠️ **Deploydan OLDIN serverda tekshiring:**
   `docker compose exec cloud printenv | grep UI_V2`.  Hammasi React
-  panelga yozildi (`CHAQIMCHI_UI_V2_OWNER=1` production uchun majburiy);
+  panelga yozildi (`ENES_UI_V2_OWNER=1` production uchun majburiy);
   eski `owner.html` ga bir qator ham tegilmadi.
 - ⚠️ **Rasm masalasi hal bo'lmasa yangi ko'rinish bo'sh ko'rinadi.**
   Jonli bazada `zone_entered` buzuq chizma sabab o'lik va kamera 360p —
@@ -255,7 +255,7 @@
   `plan_filtered == events` (natija).  Admin sayt kartochkasida qizil
   qator bo'lib chiqadi.
 - **Zaxiraning tashqi nusxasi endi bor** — Telegram yo'li yoqildi va
-  jonli sinaldi (1,1 MB arxiv ketdi).  ⚠️ `CHAQIMCHI_BACKUP_PASSWORD`
+  jonli sinaldi (1,1 MB arxiv ketdi).  ⚠️ `ENES_BACKUP_PASSWORD`
   hali FAQAT serverda — parol menejeriga ko'chirilmaguncha bu nusxa
   server o'lganda ochilmaydi.
 - **Kamera rollari KODDA TAYYOR (0.6.26, nashr qilinmagan):** rol endi
@@ -350,7 +350,7 @@
 F4c va F5 tugadi.  Navbat: **F4b — panel ko'rinishini namunaga
 solishtirish** (ikki tema × uch til skrinshot, farq bo'lsa tuzatish;
 panel allaqachon yaqin) → **F6 ichki nomlar** (`enes`→`enes`,
-132 `CHAQIMCHI_*` env, xizmat/yo'l nomlari, reliz naqshlari
+132 `ENES_*` env, xizmat/yo'l nomlari, reliz naqshlari
 `main.py` da ikkala joy bitta commitda, `product_name`, brauzer
 kalitlari) → **F9 tozalash** (CLAUDE.md, docs, og-rasm, favicon,
 `releases/`) → F7 cutover (egadan: DNS, bot @username, yuridik nom,
@@ -405,7 +405,7 @@ standartlari).  Keyinga: ovoz funksiyalari, video darslar, jonli kamerani
 takomillashtirish.
 
 **0) ⚠️ EGA QILADI — zaxira parolini ko'chiring.**
-`CHAQIMCHI_BACKUP_PASSWORD` faqat serverda (`/etc/chaqimchi/backup.env`).
+`ENES_BACKUP_PASSWORD` faqat serverda (`/etc/chaqimchi/backup.env`).
 Telegramdagi kunlik nusxa shu parolsiz ochilmaydi — ya'ni server o'lsa
 zaxira ham foydasiz.  Parol menejeriga ko'chiring.
 
@@ -473,8 +473,8 @@ qiladi, faqat UI/transport yo'q.
   `suggest_record_url()` `None` qaytaradi. Yechim: naqsh qo'shish yoki
   manzilni qo'lda kiritish — kamera almashtirish qarori bilan birga.
 - C1 rasmiy qabul (4 kamera sharti pilotda bajarib bo'lmaydi) va sotuv
-  darvozalari (`CHAQIMCHI_AVAILABLE_FEATURES` +
-  `CHAQIMCHI_N100_ACCEPTANCE_FILE`, oferta STIR/yurist).
+  darvozalari (`ENES_AVAILABLE_FEATURES` +
+  `ENES_N100_ACCEPTANCE_FILE`, oferta STIR/yurist).
 
 ## OCHIQ MUAMMOLAR
 
@@ -565,7 +565,7 @@ taklif qilish kerak.
 **Sotuvni to'sib turgan ikki darvoza**
 
 - `available_feature_codes()` → `[]`.  **Sabab aniqlashtirildi
-  (2026-08-31): `CHAQIMCHI_AVAILABLE_FEATURES` serverda QO'YILGAN**
+  (2026-08-31): `ENES_AVAILABLE_FEATURES` serverda QO'YILGAN**
   (`person_count,queue_length,store_security` — uchalasi ham haqiqiy
   kod).  To'sib turgani — ikkinchi shart: production'da
   `pilot_acceptance_status()["ok"]` bo'lishi kerak, N100 qabul fayli
@@ -579,7 +579,7 @@ taklif qilish kerak.
 - **✅ YOPILDI (2026-08-29) — beqaror test:**
   `test_clip_retention_is_configurable`. Ildiz: TestClient ochilishi
   bilan `_maintenance_loop` fon oqimida darhol purge boshlab, testdagi
-  `CHAQIMCHI_CLIP_RETENTION_DAYS=60` o'rnatilishidan OLDIN standart
+  `ENES_CLIP_RETENTION_DAYS=60` o'rnatilishidan OLDIN standart
   7 kunni muzlatib olardi; to'liq to'plamda oqim kechikib test saytiga
   yetib borib klipni o'chirardi. Fixture endi fon halqalarini no-op
   qiladi (testlar purge'ni sinxron o'zi chaqiradi).
@@ -740,7 +740,7 @@ taklif qilish kerak.
   emas. Bulut zaxirasidan record manzili ishlayotgan bo'lsa ham panel
   `false` ko'rsatishi mumkin — tashxis qo'yishda ikkalasini ham qarang.
 
-- **`CHAQIMCHI_AVAILABLE_FEATURES` dagi xato kod JIMGINA yutiladi.**
+- **`ENES_AVAILABLE_FEATURES` dagi xato kod JIMGINA yutiladi.**
   `available_feature_codes()` noma'lum kodlarni filtrda tashlab
   yuboradi (`cloud/store.py:52`) — `person_counts` deb yozsangiz xato
   chiqmaydi, funksiya shunchaki ochilmaydi. Env qo'ygandan keyin
@@ -1102,9 +1102,9 @@ Test: `test_panel_v2.py` — `test_the_admin_can_fix_a_shop_remotely`
 Playwright bilan jonli tekshirildi: login → mijoz sahifasi → AI
 imkoniyatlar oynasi → Jamoa → Sozlamalar (skrinshotlar).
 
-Diqqat: lokal serverda portal login uchun `CHAQIMCHI_PORTAL_JWT_SECRET`
+Diqqat: lokal serverda portal login uchun `ENES_PORTAL_JWT_SECRET`
 (≥32 belgi) SHART — usiz `/api/v1/auth/login` 503 beradi va bu
-«tugma ishlamayapti» kabi ko'rinadi.  Baza yo'li — `CHAQIMCHI_CLOUD_DB`.
+«tugma ishlamayapti» kabi ko'rinadi.  Baza yo'li — `ENES_CLOUD_DB`.
 Diqqat: onboarding bosqich matnlari serverdan («Sotqin cloudga
 juftlandi») — F6 da o'zgaradi.
 Diqqat: skrinshot sinovi lokal `data/cloud/cloud.db` ga «Surat do'koni»
@@ -1257,7 +1257,7 @@ UZ/RU/EN va dark/light bilan.  To'liq reja va o'lchovlar:
 `~/.claude/plans/ok-biz-rebrending-qilmoqchimiz-ancient-wilkes.md`.
 
 Tekshiruvda chiqqan asosiy sonlar: `chaqimchi` so'zi **316 faylda**,
-`chaqimchi.uz` **168 marta**, **132 ta** `CHAQIMCHI_*` sozlama;
+`chaqimchi.uz` **168 marta**, **132 ta** `ENES_*` sozlama;
 tarjima qilinadigan matn **~2 000 kalit** (~4 000 tarjima);
 mehnat **~25-33 ish kuni**.  `enes.uz` ro'yxatdan o'tgan, lekin
 ahost.uz parkovkasida (`185.196.212.52`) — DNS Contabo'ga ko'chiriladi.
@@ -1443,7 +1443,7 @@ kundan).  `tests/test_events_ui.py` (20 ta struktura testi).
 Jami 1 996 test yashil.
 
 Diqqat: hammasi FAQAT React panelga yozildi — `cloud/static/owner.html`
-ga tegilmadi.  Deploydan oldin serverda `CHAQIMCHI_UI_V2_OWNER` ni
+ga tegilmadi.  Deploydan oldin serverda `ENES_UI_V2_OWNER` ni
 tekshiring («env pini kodni yengadi»).  Qurilma relizi kerak emas, ya'ni
 soak muzlatishi buzilmaydi.
 
@@ -1489,9 +1489,9 @@ va panel ular uchun 404 beradigan tugma ko'rsatardi (0.6.29 da yopildi).
 Diqqat: `purge_clips_older_than` va `purge_face_media` OLIB TASHLANDI —
 ularning o'rniga bitta `purge_media_older_than`.  Uchta alohida muddat
 (klip 7 kun, yuz 14 kun, rasm 30 kun) bir joyda ko'rinmasdi va
-uzoqlashib ketardi.  `CHAQIMCHI_CLIP_RETENTION_DAYS` va
-`CHAQIMCHI_FACE_RETENTION_DAYS` o'rniga
-`CHAQIMCHI_MEDIA_RETENTION_HOURS` (standart 48).
+uzoqlashib ketardi.  `ENES_CLIP_RETENTION_DAYS` va
+`ENES_FACE_RETENTION_DAYS` o'rniga
+`ENES_MEDIA_RETENTION_HOURS` (standart 48).
 
 ### 2026-08-30 — Do'kon besh kun hodisa yubormagan edi (`commit qilinmagan`, 0.6.27)
 
@@ -1586,7 +1586,7 @@ kichik namunadan foiz baribir chiqarilmaydi (sonlar tayyor
 
 Yo'l-yo'lakay: uch haftalik beqaror test ildizi topildi — TestClient
 lifespan'i `_maintenance_loop` ni yaratishi bilan u fon oqimida darhol
-purge boshlab, test env'i (`CHAQIMCHI_CLIP_RETENTION_DAYS=60`)
+purge boshlab, test env'i (`ENES_CLIP_RETENTION_DAYS=60`)
 o'rnatilishidan OLDIN standart 7 kunni muzlatib olardi; to'liq
 to'plamda oqim kechikib test saytining klipini o'chirardi. Fixture
 endi `_maintenance_loop` va `_demography_rollup_loop` ni no-op qiladi.
@@ -2271,13 +2271,13 @@ Diqqat: elektr `device_metrics` daqiqalik bucketlaridan **o'lchangan**
 ish vaqti × qurilma vatti bo'yicha hisoblanadi. `uptime_sec` ataylab
 ishlatilmadi — restartda nolga tushadi. "O'lchov yo'q" va "nol"
 ajratilgan; `device_metrics` 30 kun saqlanadi. Env:
-`CHAQIMCHI_COST_KWH_UZS=1000`, `CHAQIMCHI_COST_SERVER_MONTHLY_USD=8`
+`ENES_COST_KWH_UZS=1000`, `ENES_COST_SERVER_MONTHLY_USD=8`
 (ikkalasi serverda qo'yilgan), vatt — Windows 65, Box 12.
 
 ### 2026-08-26 — 0.6.16 va yuklab olish pinidan qutulish (`503f98a`, `925e63b`)
 Nima: mijoz endi eng yangi imzolangan relizni oladi; kompyuter soati
 nazorati mijozgacha yetdi.
-Nega: `CHAQIMCHI_WINDOWS_INSTALLER_URL` serverda qotirilgan edi va
+Nega: `ENES_WINDOWS_INSTALLER_URL` serverda qotirilgan edi va
 0.6.14/0.6.15 nashr qilingani holda mijozlar 0.6.13 olib turardi.
 Qayerda: server `.env.production` (pin olib tashlandi),
 `latest_windows_release()`, `cloud/static/install.html`.
@@ -2322,7 +2322,7 @@ Test: `tests/test_cloud_faces.py::test_a_manager_cannot_open_any_biometric_image
 qulflandi, qaytib kela olmaydi).
 Diqqat: `/health/deep` **butunlay yopilmadi** — UptimeRobot aynan shu
 manzilga qaraydi; begona faqat `ok`/`name`/`ms` ni ko'radi.
-Serverda `CHAQIMCHI_JWT_SECRET` **qo'yilmagan** (A9 tekshirildi) —
+Serverda `ENES_JWT_SECRET` **qo'yilmagan** (A9 tekshirildi) —
 owner/portal kalit ajratilishi buzilmagan, O'RTA-7 yopildi.
 
 ### 2026-08-25 — Audit hujjati (`1daf474`)

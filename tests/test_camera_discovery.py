@@ -149,7 +149,7 @@ async def test_discover_cameras_all():
 
 @pytest.fixture
 def local_client(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     import importlib
 
     from fastapi.testclient import TestClient

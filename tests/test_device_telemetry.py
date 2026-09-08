@@ -35,7 +35,7 @@ CLOUD_SYNC = {
 
 @pytest.fixture
 def local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import cloud_config, cloud_link, config_store, counters, paths
 
     for module in (paths, config_store, counters, cloud_link, cloud_config):
@@ -92,7 +92,7 @@ def _capture_heartbeat(module, monkeypatch: pytest.MonkeyPatch) -> Dict[str, Any
 def test_supervisor_reports_the_numbers_from_the_status_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import config_store, counters, paths, supervisor
 
     for module in (paths, config_store, counters, supervisor):
@@ -125,7 +125,7 @@ def test_heartbeat_is_not_silently_zero(
 
     Aynan shu joyda uzilish bor edi va uni hech qanday test ushlamasdi.
     """
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import cloud_config, cloud_link, config_store, counters, paths
     from enes.local import supervisor as supervisor_module
 
@@ -150,7 +150,7 @@ def test_crash_counter_survives_a_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Hisoblagich xotirada bo'lsa, aynan restart paytida yo'qolardi."""
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import counters, paths
 
     for module in (paths, counters):
@@ -168,7 +168,7 @@ def test_deliberate_restarts_are_counted_separately(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Mijoz sozlamani o'zgartirib qayta ishga tushirsa — bu nosozlik emas."""
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import counters, paths
 
     for module in (paths, counters):
@@ -185,7 +185,7 @@ def test_deliberate_restarts_are_counted_separately(
 def test_supervisor_exposes_the_crash_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import config_store, counters, paths, supervisor
 
     for module in (paths, config_store, counters, supervisor):
@@ -216,7 +216,7 @@ def test_sent_events_are_not_counted_as_pending(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Yuborilgan yozuv ikki kun saqlanadi — u navbat emas."""
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import cloud_link, paths
 
     for module in (paths, cloud_link):
@@ -231,7 +231,7 @@ def test_sent_events_are_not_counted_as_pending(
 def test_pending_and_critical_are_counted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import cloud_link, paths
 
     for module in (paths, cloud_link):
@@ -263,7 +263,7 @@ def test_a_missing_outbox_is_not_an_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Yangi o'rnatilgan kompyuterda baza hali yo'q."""
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import cloud_link, paths
 
     for module in (paths, cloud_link):

@@ -71,7 +71,7 @@ do‘kon kompyuteriga qaytib borishi shart emas.
 
 ### Orqaga qaytish
 
-`CHAQIMCHI_DEVICE_HELLO=0` → `device-hello` 404 qaytaradi va yangi
+`ENES_DEVICE_HELLO=0` → `device-hello` 404 qaytaradi va yangi
 dastur **eski yo‘lga** (sehrgar + pairing kod) tushadi. Dala’dagi
 qurilmalar ishlashda davom etadi.
 

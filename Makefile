@@ -83,19 +83,19 @@ windows-installer:
 # ko'rsatiladi), tarqatish tartibi docs/RELIZ_VA_OTA.md da.
 windows-release:
 	@test -n "$(CLOUD_URL)" || (echo 'Usage: make windows-release CLOUD_URL=https://cloud-manzil' && exit 1)
-	CHAQIMCHI_DEFAULT_CLOUD_URL="$(CLOUD_URL)" $(PY) scripts/build_windows_payload.py
+	ENES_DEFAULT_CLOUD_URL="$(CLOUD_URL)" $(PY) scripts/build_windows_payload.py
 	makensis -V2 scripts/windows_installer.nsi
 	@VERSION=$$($(PY) -c "import enes; print(enes.__version__)"); \
 	cp releases/Chaqimchi_AI_Setup.exe "releases/chaqimchi-windows-$$VERSION.exe"; \
 	$(PY) scripts/sign_release.py "releases/chaqimchi-windows-$$VERSION.exe"; \
 	echo ""; \
 	echo "Serverga chiqarish:"; \
-	echo "  CHAQIMCHI_RELEASE_HOST=deploy@<server> make windows-publish"
+	echo "  ENES_RELEASE_HOST=deploy@<server> make windows-publish"
 
 # Relizni serverga chiqaradi — shundan keyin do'konlar uni 15 daqiqada
 # oladi.  Imzoni qayta tekshiradi va tashqaridan (qurilma yuradigan
 # manzildan) fayllar haqiqatan berilayotganini ko'radi.
 windows-publish:
-	@test -n "$(CHAQIMCHI_RELEASE_HOST)" || \
-		(echo 'Usage: CHAQIMCHI_RELEASE_HOST=deploy@IP make windows-publish' && exit 1)
+	@test -n "$(ENES_RELEASE_HOST)" || \
+		(echo 'Usage: ENES_RELEASE_HOST=deploy@IP make windows-publish' && exit 1)
 	scripts/publish_windows_release.sh

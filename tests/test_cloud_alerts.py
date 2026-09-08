@@ -50,10 +50,10 @@ def _site(
 
 
 def test_alert_config_can_reuse_owner_bot_token(monkeypatch) -> None:
-    monkeypatch.delenv("CHAQIMCHI_SALES_TELEGRAM_TOKEN", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", raising=False)
-    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "owner-token")
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "123")
+    monkeypatch.delenv("ENES_SALES_TELEGRAM_TOKEN", raising=False)
+    monkeypatch.delenv("ENES_CLOUD_TELEGRAM_TOKEN", raising=False)
+    monkeypatch.setenv("ENES_OWNER_TELEGRAM_TOKEN", "owner-token")
+    monkeypatch.setenv("ENES_CLOUD_TELEGRAM_CHAT_ID", "123")
     config = AlertConfig.from_env()
     assert config.enabled
     assert config.token == "owner-token"
@@ -65,9 +65,9 @@ def test_sales_bot_token_wins_over_the_customer_bot(monkeypatch) -> None:
     Ikkalasi bitta botdan kelsa, ega uchun "yangi ariza" va "do'kon
     hisoboti" bir chatda aralashib, ikkalasi ham e'tibordan qolardi.
     """
-    monkeypatch.setenv("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "sotuv-token")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "mijoz-token")
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "123")
+    monkeypatch.setenv("ENES_SALES_TELEGRAM_TOKEN", "sotuv-token")
+    monkeypatch.setenv("ENES_OWNER_TELEGRAM_TOKEN", "mijoz-token")
+    monkeypatch.setenv("ENES_CLOUD_TELEGRAM_CHAT_ID", "123")
 
     assert AlertConfig.from_env().token == "sotuv-token"
 
@@ -460,26 +460,26 @@ def test_run_check_on_empty_store(store: CloudStore) -> None:
 
 
 def test_config_disabled_without_env(monkeypatch) -> None:
-    monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("ENES_CLOUD_TELEGRAM_TOKEN", raising=False)
+    monkeypatch.delenv("ENES_CLOUD_TELEGRAM_CHAT_ID", raising=False)
     assert AlertConfig.from_env().enabled is False
 
 
 def test_config_enabled_with_both_values(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "123:abc")
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", "-100")
+    monkeypatch.setenv("ENES_CLOUD_TELEGRAM_TOKEN", "123:abc")
+    monkeypatch.setenv("ENES_CLOUD_TELEGRAM_CHAT_ID", "-100")
     cfg = AlertConfig.from_env()
     assert cfg.enabled is True
     assert cfg.interval_sec == 900
 
 
 def test_config_rejects_too_short_interval(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ALERT_INTERVAL_SEC", "5")
+    monkeypatch.setenv("ENES_CLOUD_ALERT_INTERVAL_SEC", "5")
     assert AlertConfig.from_env().interval_sec == 60
 
 
 def test_config_ignores_broken_interval(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ALERT_INTERVAL_SEC", "tez-tez")
+    monkeypatch.setenv("ENES_CLOUD_ALERT_INTERVAL_SEC", "tez-tez")
     assert AlertConfig.from_env().interval_sec == 900
 
 
@@ -565,9 +565,9 @@ ADMIN = {"X-Cloud-Admin-Key": "test-admin"}
 def cloud_client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.delenv("ENES_CLOUD_TELEGRAM_TOKEN", raising=False)
+    monkeypatch.delenv("ENES_CLOUD_TELEGRAM_CHAT_ID", raising=False)
     import cloud.main as cm
 
     monkeypatch.setattr(cm, "DB_PATH", tmp_path / "c.db")

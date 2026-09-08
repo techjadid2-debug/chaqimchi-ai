@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   base: "/assets/v2/",
   build: {
-    outDir: resolve(import.meta.dirname, process.env.CHAQIMCHI_UI_OUT_DIR || "../cloud/static/v2"),
+    outDir: resolve(import.meta.dirname, process.env.ENES_UI_OUT_DIR || "../cloud/static/v2"),
     emptyOutDir: true,
     assetsDir: "assets",
     rollupOptions: {

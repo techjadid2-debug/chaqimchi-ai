@@ -56,13 +56,13 @@ def available_feature_codes() -> frozenset:
     Public katalog faqat do'kon MVP paketlarini biladi. Ular ham real N100
     qabul testi tugamaguncha environment gate orqali sotuvga ochilmaydi.
 
-    Funksiya ishga tushgach `CHAQIMCHI_AVAILABLE_FEATURES=person_count,...`
+    Funksiya ishga tushgach `ENES_AVAILABLE_FEATURES=person_count,...`
     qo'yiladi; deploy kutish shart emas.
     """
-    raw = os.environ.get("CHAQIMCHI_AVAILABLE_FEATURES", "").strip()
+    raw = os.environ.get("ENES_AVAILABLE_FEATURES", "").strip()
     if not raw:
         return frozenset()
-    if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production":
+    if os.environ.get("ENES_ENV", "development").strip().lower() == "production":
         if not pilot_acceptance_status()["ok"]:
             return frozenset()
     known = {code for code, *_rest in DEFAULT_FEATURES}
@@ -588,17 +588,17 @@ class CloudStore:
         Development testlarda deterministik kalit qulay; productionda esa alohida
         32-byte Fernet kaliti environment orqali majburiy beriladi.
         """
-        key = os.environ.get("CHAQIMCHI_CAMERA_SECRET_KEY", "").strip()
+        key = os.environ.get("ENES_CAMERA_SECRET_KEY", "").strip()
         if not key:
-            if os.environ.get("CHAQIMCHI_ENV", "development") == "production":
-                raise RuntimeError("CHAQIMCHI_CAMERA_SECRET_KEY sozlanmagan")
+            if os.environ.get("ENES_ENV", "development") == "production":
+                raise RuntimeError("ENES_CAMERA_SECRET_KEY sozlanmagan")
             key = base64.urlsafe_b64encode(
                 hashlib.sha256(b"chaqimchi-development-camera-key").digest()
             ).decode("ascii")
         try:
             return Fernet(key.encode("ascii"))
         except (ValueError, TypeError) as exc:
-            raise RuntimeError("CHAQIMCHI_CAMERA_SECRET_KEY Fernet kaliti noto'g'ri") from exc
+            raise RuntimeError("ENES_CAMERA_SECRET_KEY Fernet kaliti noto'g'ri") from exc
 
     @staticmethod
     def _camera_id_is_valid(camera_id: str) -> bool:
@@ -738,7 +738,7 @@ class CloudStore:
           manzil kerak edi va u faqat do'konda turardi;
         * oqim sifatini (720p) bulutdan tekshirib bo'lmasdi.
 
-        Xavf ongli ravishda qabul qilindi: manzil `CHAQIMCHI_CAMERA_
+        Xavf ongli ravishda qabul qilindi: manzil `ENES_CAMERA_
         SECRET_KEY` bilan Fernet orqali shifrlanadi (kalit zaxiraga
         kiradi, zaxiraning o'zi alohida parol bilan yopiladi) va
         panelga hech qachon qaytarilmaydi — admin oynasi buni
@@ -765,7 +765,7 @@ class CloudStore:
                 )
             label = str(item.get("label") or camera_id).strip() or camera_id
             role_raw = str(item.get("role") or "").strip().lower()
-            # Yaroqsiz rol JIM tashlanmaydi: `CHAQIMCHI_AVAILABLE_FEATURES`
+            # Yaroqsiz rol JIM tashlanmaydi: `ENES_AVAILABLE_FEATURES`
             # dagi jim filtr saboqi — xato yutilsa uni hech kim ko'rmaydi.
             if role_raw and role_raw != ROLE_NONE and role_raw not in CAMERA_ROLES:
                 raise ValueError(f"Kamera roli noto'g'ri: {role_raw}")

@@ -23,7 +23,7 @@ class OwnerPrincipal(BaseModel):
 
 
 def owner_jwt_config() -> JwtSettings:
-    secret = os.environ.get("CHAQIMCHI_OWNER_JWT_SECRET", "").strip()
+    secret = os.environ.get("ENES_OWNER_JWT_SECRET", "").strip()
     return JwtSettings(enabled=True, secret=secret or None, expire_hours=12)
 
 

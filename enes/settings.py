@@ -235,12 +235,12 @@ class RetailSettings(BaseModel):
     #: undan (cloud inventari), aks holda quyidagi `cameras` dan.  `config` —
     #: faqat lokal ro'yxat (cloud'siz o'rnatish uchun).
     cameras_source: Literal["auto", "config"] = "auto"
-    #: Sotqin cloud config keshi.  Bo'sh bo'lsa `CHAQIMCHI_SOTQIN_CONFIG_CACHE`
+    #: Sotqin cloud config keshi.  Bo'sh bo'lsa `ENES_SOTQIN_CONFIG_CACHE`
     #: muhit o'zgaruvchisi, keyin standart yo'l ishlatiladi.
     sotqin_config_path: Optional[str] = None
     #: Zanjir holati yoziladigan fayl (kameralarning **haqiqiy** ulanish
     #: holati).  Sotqin agenti uni heartbeat uchun o'qiydi.  Bo'sh bo'lsa
-    #: `CHAQIMCHI_RETAIL_STATUS`, keyin standart yo'l.
+    #: `ENES_RETAIL_STATUS`, keyin standart yo'l.
     status_path: Optional[str] = None
     #: Cloud'da kamera qo'shilsa/o'chirilsa xizmat o'zini to'xtatadi va
     #: systemd uni qayta ishga tushiradi — yangi ro'yxat shunda kuchga kiradi.
@@ -424,12 +424,12 @@ class AppSettings(BaseModel):
         if not self.security.api_key_enabled:
             errors.append("API key autentifikatsiyasi yoqilishi shart")
         if self.security.api_key_enabled and not (
-            os.environ.get("CHAQIMCHI_API_KEY", "").strip() or self.security.api_key
+            os.environ.get("ENES_API_KEY", "").strip() or self.security.api_key
         ):
-            errors.append("CHAQIMCHI_API_KEY berilishi shart")
-        jwt_secret = os.environ.get("CHAQIMCHI_JWT_SECRET", "").strip() or self.security.jwt.secret
+            errors.append("ENES_API_KEY berilishi shart")
+        jwt_secret = os.environ.get("ENES_JWT_SECRET", "").strip() or self.security.jwt.secret
         if self.security.jwt.enabled and (not jwt_secret or len(jwt_secret) < 32):
-            errors.append("CHAQIMCHI_JWT_SECRET kamida 32 belgidan iborat bo'lishi shart")
+            errors.append("ENES_JWT_SECRET kamida 32 belgidan iborat bo'lishi shart")
         if not self.rate_limit.enabled:
             errors.append("rate_limit productionda yoqilishi shart")
         # Face ID / davomat tekshiruvlari olib tashlandi: to'plam arxivda
@@ -457,7 +457,7 @@ class AppSettings(BaseModel):
 
 
 def default_config_path(base_dir: Path) -> Path:
-    env = os.environ.get("CHAQIMCHI_CONFIG")
+    env = os.environ.get("ENES_CONFIG")
     if env:
         return Path(env).expanduser().resolve()
     return (base_dir / "config" / "config.yaml").resolve()

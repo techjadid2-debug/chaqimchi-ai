@@ -38,10 +38,10 @@ Muhim xossalar:
 `.env.production`ga (namuna: `.env.production.example`):
 
 ```
-CHAQIMCHI_GEMINI_API_KEY=...          # Google AI Studio'dan
-CHAQIMCHI_GEMINI_VISION_MODEL=...     # aniq stable nom, "latest" emas
-# CHAQIMCHI_GEMINI_FALLBACK_MODEL=... # ixtiyoriy zaxira
-# CHAQIMCHI_GEMINI_NATIVE_AUDIO_MODEL=...  # ixtiyoriy ovozli javob
+ENES_GEMINI_API_KEY=...          # Google AI Studio'dan
+ENES_GEMINI_VISION_MODEL=...     # aniq stable nom, "latest" emas
+# ENES_GEMINI_FALLBACK_MODEL=... # ixtiyoriy zaxira
+# ENES_GEMINI_NATIVE_AUDIO_MODEL=...  # ixtiyoriy ovozli javob
 ```
 
 **Ikkalasi ham shart**: kalit bo'lib model bo'sh qolsa preflight va
@@ -50,7 +50,7 @@ Kalit umuman berilmasa agent panelda halol "sozlanmagan" holatda ko'rinadi
 va joblar metadata-javob rejimida ishlaydi (Gemini chaqirilmaydi).
 
 Worker `docker-compose.chaqimchi.yml`da alohida servis:
-`CHAQIMCHI_VISION_WORKER_IN_APP=0` cloud'da in-app siklni o'chiradi.
+`ENES_VISION_WORKER_IN_APP=0` cloud'da in-app siklni o'chiradi.
 Worker `frontend` tarmog'ida bo'lishi SHART (Gemini'ga chiqish uchun).
 Boshqa compose fayllarda worker yo'q — u yerda in-app rejim (default `1`)
 ishlaydi.
@@ -82,7 +82,7 @@ ham yiqiladi.
 Har Gemini javobidagi `usageMetadata` (kirish/chiqish + thinking tokenlar)
 jobga yozib boriladi (`vision_jobs.gemini_input_tokens/gemini_output_tokens`).
 Admin → **Moliya** sahifasi shu haqiqiy sarfni narx tarifiga
-(`CHAQIMCHI_GEMINI_INPUT_USD_PER_M` / `CHAQIMCHI_GEMINI_OUTPUT_USD_PER_M`,
+(`ENES_GEMINI_INPUT_USD_PER_M` / `ENES_GEMINI_OUTPUT_USD_PER_M`,
 default flash-sinf: $0.30/$2.50 1M token) ko'paytirib, har mijozning oylik
 Gemini xarajatini so'mda ko'rsatadi. Xato bilan tugagan job sarfi ham
 yoziladi — u ham pul.

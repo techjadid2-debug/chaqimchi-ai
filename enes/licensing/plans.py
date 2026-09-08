@@ -70,15 +70,15 @@ def usd_rate_uzs() -> int:
     serverda boshqariladi va hisob ochilgan paytdagi UZS summa invoice ichida
     saqlanib qoladi. Tashqi kurs servisiga runtime bog'liqlik ataylab yo'q.
     """
-    raw = os.environ.get("CHAQIMCHI_USD_RATE_UZS", "").strip()
+    raw = os.environ.get("ENES_USD_RATE_UZS", "").strip()
     if not raw:
         return DEFAULT_USD_RATE_UZS
     try:
         rate = int(raw)
     except ValueError as exc:
-        raise ValueError("CHAQIMCHI_USD_RATE_UZS butun son bo'lishi kerak") from exc
+        raise ValueError("ENES_USD_RATE_UZS butun son bo'lishi kerak") from exc
     if not 1_000 <= rate <= 100_000:
-        raise ValueError("CHAQIMCHI_USD_RATE_UZS 1000–100000 oralig'ida bo'lishi kerak")
+        raise ValueError("ENES_USD_RATE_UZS 1000–100000 oralig'ida bo'lishi kerak")
     return rate
 
 
@@ -209,7 +209,7 @@ class PlanLimits:
 #
 # `davomat` bu ro'yxatlarda ATAYLAB yo'q va tarif kartasida ham
 # ko'rinmaydi.  U `cloud/main.py` `_attendance_enabled()` bilan alohida
-# boshqariladi — faqat `CHAQIMCHI_ATTENDANCE_PILOT` qo'yilgan serverda.
+# boshqariladi — faqat `ENES_ATTENDANCE_PILOT` qo'yilgan serverda.
 #
 # Sabab endi litsenziya EMAS (modellar 2026-08-21 dan Apache-2.0,
 # `cloud/faces.py`), balki ikkita ochiq band:
@@ -397,7 +397,7 @@ PLANS: Dict[PlanTier, PlanLimits] = {
         retention_days=30,
         telegram_allowed=True,
         # Faqat fallback/display qiymat; amaldagi invoice `monthly_price()`
-        # orqali CHAQIMCHI_USD_RATE_UZS bilan hisoblanadi.
+        # orqali ENES_USD_RATE_UZS bilan hisoblanadi.
         monthly_price_uzs=LITE_MONTHLY_PRICE_USD_CENTS * DEFAULT_USD_RATE_UZS // 100,
         # Sotqin, NVR/kameralar va montaj alohida smeta qilinadi.
         install_price_uzs=0,

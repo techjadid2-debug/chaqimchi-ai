@@ -18,12 +18,12 @@ from cloud import ratelimit
 def client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_USD_RATE_UZS", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_AVAILABLE_FEATURES", raising=False)
+    monkeypatch.delenv("ENES_USD_RATE_UZS", raising=False)
+    monkeypatch.delenv("ENES_AVAILABLE_FEATURES", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)
@@ -51,7 +51,7 @@ def test_pricing_serves_base_and_catalog_in_both_currencies(client) -> None:
 
 
 def test_pricing_follows_the_configured_usd_rate(client, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_USD_RATE_UZS", "14000")
+    monkeypatch.setenv("ENES_USD_RATE_UZS", "14000")
     body = client.get("/api/v1/public/pricing").json()
     assert body["usd_rate_uzs"] == 14_000
     assert body["base"]["monthly_uzs"] == 280_000
@@ -72,7 +72,7 @@ def test_public_catalog_contains_only_store_mvp_and_keeps_acceptance_gate(
         not item["available"] for item in client.get("/api/v1/public/pricing").json()["features"]
     )
 
-    monkeypatch.setenv("CHAQIMCHI_AVAILABLE_FEATURES", "person_count,queue_length")
+    monkeypatch.setenv("ENES_AVAILABLE_FEATURES", "person_count,queue_length")
     features = {
         item["code"]: item for item in client.get("/api/v1/public/pricing").json()["features"]
     }

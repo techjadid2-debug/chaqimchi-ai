@@ -120,7 +120,7 @@ def test_windows_product_is_in_the_allow_list() -> None:
 
 @pytest.fixture
 def updater(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setenv("ENES_LOCAL_DIR", str(tmp_path))
     from enes.local import config_store, paths
     from enes.local import updater as updater_module
 
@@ -188,7 +188,7 @@ def test_missing_public_key_stops_the_update(
 ) -> None:
     """Kalit yo'q bo'lsa imzoni tekshirib bo'lmaydi — o'rnatishdan ko'ra
     eski versiyada qolgan yaxshiroq."""
-    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(tmp_path / "yo'q.pem"))
+    monkeypatch.setenv("ENES_UPDATE_PUBLIC_KEY", str(tmp_path / "yo'q.pem"))
     monkeypatch.setattr(
         "enes.local.updater._cloud",
         lambda: {
@@ -353,7 +353,7 @@ def test_crash_looping_release_is_rolled_back(
 
     from enes import __version__
 
-    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    monkeypatch.setenv("ENES_UPDATE_PUBLIC_KEY", str(keys["public"]))
     manifest = _sign(installer, keys)
     installed = []
     monkeypatch.setattr(updater, "install", lambda path: installed.append(path))
@@ -388,7 +388,7 @@ def test_rollback_never_runs_an_unverified_installer(
 
     from enes import __version__
 
-    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    monkeypatch.setenv("ENES_UPDATE_PUBLIC_KEY", str(keys["public"]))
     manifest = _sign(installer, keys)
     installer.write_bytes(installer.read_bytes() + b"BUZILGAN")
     installed = []
@@ -488,7 +488,7 @@ def test_the_first_ota_fetches_a_rollback_target(
 
     Endi joriy versiyaning o'rnatuvchisi reliz serveridan olib qo'yiladi.
     """
-    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    monkeypatch.setenv("ENES_UPDATE_PUBLIC_KEY", str(keys["public"]))
     keep = updater._keep_dir()
     assert not list(keep.glob("*.exe")), "boshida nishon yo'q"
 
@@ -516,7 +516,7 @@ def test_a_rollback_target_that_fails_verification_is_not_kept(
 ) -> None:
     """Tekshiruvdan o'tmagan fayl nishon bo'lib qolsa, rollback paytida
     imzosiz `.exe` ishga tushirilardi — qoida buzilardi."""
-    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    monkeypatch.setenv("ENES_UPDATE_PUBLIC_KEY", str(keys["public"]))
     keep = updater._keep_dir()
 
     current = tmp_path / f"chaqimchi-windows-{VERSION}.exe"
@@ -546,7 +546,7 @@ def test_a_missing_rollback_target_does_not_block_the_update(
     tuzatishi yetib borishi rollback imkoniyatidan muhimroq."""
     import httpx
 
-    monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
+    monkeypatch.setenv("ENES_UPDATE_PUBLIC_KEY", str(keys["public"]))
     keep = updater._keep_dir()
 
     def fake_download(url: str, dest: Path, headers) -> None:

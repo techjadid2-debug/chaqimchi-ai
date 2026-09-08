@@ -36,9 +36,9 @@ done
 # ── iGPU tekshiruvi ───────────────────────────────────────────────────────
 # Jimgina CPU'ga tushish — mahsulotni buzuq holda yetkazishning eng oson yo'li,
 # chunki hech qanday xato chiqmaydi. Shuning uchun bu yerda baland ovoz bilan
-# to'xtaymiz. Ishlab chiqish mashinasida CHAQIMCHI_ALLOW_CPU_ONLY=true bilan
+# to'xtaymiz. Ishlab chiqish mashinasida ENES_ALLOW_CPU_ONLY=true bilan
 # chetlab o'tish mumkin — lekin mijoz qurilmasida hech qachon.
-allow_cpu_only="${CHAQIMCHI_ALLOW_CPU_ONLY:-false}"
+allow_cpu_only="${ENES_ALLOW_CPU_ONLY:-false}"
 gpu_ok=true
 if ! clinfo -l 2>/dev/null | grep -qi intel; then
   echo "XATO: Intel iGPU OpenCL orqali ko'rinmadi (intel-opencl-icd)." >&2
@@ -54,7 +54,7 @@ if [[ "$gpu_ok" != true ]]; then
   else
     echo "Sotqin R1 iGPU'siz kafolatlangan tezlikni bermaydi. Qurilma Intel N100" >&2
     echo "ekanini va BIOS'da iGPU yoqilganini tekshiring. Ataylab CPU'da sinash" >&2
-    echo "uchun: CHAQIMCHI_ALLOW_CPU_ONLY=true" >&2
+    echo "uchun: ENES_ALLOW_CPU_ONLY=true" >&2
     exit 3
   fi
 fi
@@ -114,18 +114,18 @@ set_env_value() {
   fi
 }
 
-if grep -Eq '^CHAQIMCHI_API_KEY=(GENERATE.*|)$' "$env_file"; then
-  set_env_value CHAQIMCHI_API_KEY \
+if grep -Eq '^ENES_API_KEY=(GENERATE.*|)$' "$env_file"; then
+  set_env_value ENES_API_KEY \
     "$("$install_root/venv/bin/python" -c 'import secrets; print(secrets.token_urlsafe(32))')" \
     "$env_file"
 fi
-if grep -Eq '^CHAQIMCHI_JWT_SECRET=(GENERATE.*|)$' "$env_file"; then
-  set_env_value CHAQIMCHI_JWT_SECRET \
+if grep -Eq '^ENES_JWT_SECRET=(GENERATE.*|)$' "$env_file"; then
+  set_env_value ENES_JWT_SECRET \
     "$("$install_root/venv/bin/python" -c 'import secrets; print(secrets.token_urlsafe(48))')" \
     "$env_file"
 fi
-if grep -Eq '^CHAQIMCHI_EMBEDDING_KEY=(GENERATE.*|)$' "$env_file"; then
-  set_env_value CHAQIMCHI_EMBEDDING_KEY \
+if grep -Eq '^ENES_EMBEDDING_KEY=(GENERATE.*|)$' "$env_file"; then
+  set_env_value ENES_EMBEDDING_KEY \
     "$("$install_root/venv/bin/python" -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
     "$env_file"
 fi
@@ -146,13 +146,13 @@ if [[ -f "$new_key" ]]; then
     install -m 0644 "$new_key" "$update_key"
     echo "OTA ochiq kaliti o'rnatildi: $update_key"
   elif ! cmp -s "$new_key" "$update_key"; then
-    if [[ "${CHAQIMCHI_ROTATE_UPDATE_KEY:-false}" =~ ^(1|true|yes)$ ]]; then
+    if [[ "${ENES_ROTATE_UPDATE_KEY:-false}" =~ ^(1|true|yes)$ ]]; then
       install -m 0644 "$new_key" "$update_key"
       echo "OGOHLANTIRISH: OTA kaliti ataylab almashtirildi" >&2
     else
       echo "OGOHLANTIRISH: paketdagi OTA kaliti qurilmadagidan farq qiladi." >&2
       echo "Mavjud kalit saqlab qolindi. Ataylab almashtirish uchun:" >&2
-      echo "  CHAQIMCHI_ROTATE_UPDATE_KEY=true" >&2
+      echo "  ENES_ROTATE_UPDATE_KEY=true" >&2
     fi
   fi
 else

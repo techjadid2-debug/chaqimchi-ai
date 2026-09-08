@@ -15,13 +15,13 @@ PAYME_AUTH = {"Authorization": "Basic " + base64.b64encode(f"Paycom:{PAYME_KEY}"
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_PAYME_MERCHANT_ID", "merchant-1")
-    monkeypatch.setenv("CHAQIMCHI_PAYME_KEY", PAYME_KEY)
-    monkeypatch.setenv("CHAQIMCHI_CLICK_SERVICE_ID", CLICK_SERVICE_ID)
-    monkeypatch.setenv("CHAQIMCHI_CLICK_MERCHANT_ID", "222")
-    monkeypatch.setenv("CHAQIMCHI_CLICK_SECRET", CLICK_SECRET)
-    monkeypatch.delenv("CHAQIMCHI_PUBLIC_URL", raising=False)
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_PAYME_MERCHANT_ID", "merchant-1")
+    monkeypatch.setenv("ENES_PAYME_KEY", PAYME_KEY)
+    monkeypatch.setenv("ENES_CLICK_SERVICE_ID", CLICK_SERVICE_ID)
+    monkeypatch.setenv("ENES_CLICK_MERCHANT_ID", "222")
+    monkeypatch.setenv("ENES_CLICK_SECRET", CLICK_SECRET)
+    monkeypatch.delenv("ENES_PUBLIC_URL", raising=False)
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "c.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._payments", None)

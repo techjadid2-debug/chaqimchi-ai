@@ -55,7 +55,7 @@ def _read_first(paths: tuple[Path, ...]) -> Optional[str]:
 
 def detected_serial() -> str:
     return (
-        os.environ.get("CHAQIMCHI_SOTQIN_SERIAL", "").strip()
+        os.environ.get("ENES_SOTQIN_SERIAL", "").strip()
         or _read_first(
             (
                 Path("/sys/class/dmi/id/product_serial"),
@@ -70,21 +70,21 @@ def detected_serial() -> str:
 
 class SotqinAgent:
     def __init__(self) -> None:
-        self.cloud_url = os.environ.get("CHAQIMCHI_CLOUD_URL", "").strip().rstrip("/")
-        self.site_id = os.environ.get("CHAQIMCHI_SITE_ID", "").strip()
-        self.device_id = os.environ.get("CHAQIMCHI_DEVICE_ID", "").strip()
-        self.device_token = os.environ.get("CHAQIMCHI_DEVICE_TOKEN", "").strip()
-        self.hardware_model = os.environ.get("CHAQIMCHI_SOTQIN_MODEL", HARDWARE_MODEL).strip()
+        self.cloud_url = os.environ.get("ENES_CLOUD_URL", "").strip().rstrip("/")
+        self.site_id = os.environ.get("ENES_SITE_ID", "").strip()
+        self.device_id = os.environ.get("ENES_DEVICE_ID", "").strip()
+        self.device_token = os.environ.get("ENES_DEVICE_TOKEN", "").strip()
+        self.hardware_model = os.environ.get("ENES_SOTQIN_MODEL", HARDWARE_MODEL).strip()
         self.hardware_revision = os.environ.get(
-            "CHAQIMCHI_SOTQIN_REVISION", HARDWARE_REVISION
+            "ENES_SOTQIN_REVISION", HARDWARE_REVISION
         ).strip()
         self.serial_number = detected_serial()
-        raw_interval = os.environ.get("CHAQIMCHI_SOTQIN_HEARTBEAT_SEC", "60").strip()
+        raw_interval = os.environ.get("ENES_SOTQIN_HEARTBEAT_SEC", "60").strip()
         try:
             self.interval = max(30, int(raw_interval))
         except ValueError:
             self.interval = 60
-        raw_probe_interval = os.environ.get("CHAQIMCHI_CAMERA_PROBE_SEC", "300").strip()
+        raw_probe_interval = os.environ.get("ENES_CAMERA_PROBE_SEC", "300").strip()
         try:
             self.probe_interval = max(60, int(raw_probe_interval))
         except ValueError:
@@ -93,16 +93,16 @@ class SotqinAgent:
         self.monotonic = time.monotonic
         self.config_path = Path(
             os.environ.get(
-                "CHAQIMCHI_SOTQIN_CONFIG_CACHE",
+                "ENES_SOTQIN_CONFIG_CACHE",
                 "/opt/chaqimchi/shared/data/sotqin-config.json",
             )
         )
         data_root = Path("/opt/chaqimchi/shared/data")
         self.outbox_paths = (
-            Path(os.environ.get("CHAQIMCHI_RETAIL_OUTBOX", str(data_root / "outbox.db"))),
+            Path(os.environ.get("ENES_RETAIL_OUTBOX", str(data_root / "outbox.db"))),
             Path(
                 os.environ.get(
-                    "CHAQIMCHI_ATTENDANCE_OUTBOX",
+                    "ENES_ATTENDANCE_OUTBOX",
                     str(data_root / "attendance-outbox.db"),
                 )
             ),
@@ -114,7 +114,7 @@ class SotqinAgent:
         #: turishi mumkin.
         self.retail_status_path = Path(
             os.environ.get(
-                "CHAQIMCHI_RETAIL_STATUS",
+                "ENES_RETAIL_STATUS",
                 str(data_root / "retail-status.json"),
             )
         )

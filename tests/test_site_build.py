@@ -178,11 +178,11 @@ def test_shared_navigation_reaches_every_templated_page() -> None:
 def client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    for key in ("CHAQIMCHI_PUBLIC_URL", "CHAQIMCHI_APP_URL", "CHAQIMCHI_API_URL",
-                "CHAQIMCHI_DL_URL", "CHAQIMCHI_PARTNER_URL", "CHAQIMCHI_ADMIN_URL"):
+    for key in ("ENES_PUBLIC_URL", "ENES_APP_URL", "ENES_API_URL",
+                "ENES_DL_URL", "ENES_PARTNER_URL", "ENES_ADMIN_URL"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
@@ -219,8 +219,8 @@ def test_uzbek_pages_get_their_placeholders_filled(client: TestClient, path: str
 
 
 def test_the_download_host_serves_each_language(client: TestClient, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://enes.uz")
-    monkeypatch.setenv("CHAQIMCHI_DL_URL", "https://dl.enes.uz")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.uz")
+    monkeypatch.setenv("ENES_DL_URL", "https://dl.enes.uz")
     for path, lang in (("/", "uz"), ("/ru/", "ru"), ("/en/", "en")):
         response = client.get(path, headers={"host": "dl.enes.uz"})
         assert response.status_code == 200, path
@@ -229,13 +229,13 @@ def test_the_download_host_serves_each_language(client: TestClient, monkeypatch)
 
 
 def test_the_localized_landing_is_not_served_on_subdomains(client: TestClient, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://enes.uz")
-    monkeypatch.setenv("CHAQIMCHI_APP_URL", "https://app.enes.uz")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.uz")
+    monkeypatch.setenv("ENES_APP_URL", "https://app.enes.uz")
     assert client.get("/ru/", headers={"host": "app.enes.uz"}).status_code == 404
 
 
 def test_the_sitemap_lists_every_language_with_alternates(client: TestClient, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_PUBLIC_URL", "https://enes.uz")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.uz")
     body = client.get("/sitemap.xml", headers={"host": "enes.uz"}).text
     for path in PATHS.values():
         assert f"<loc>https://enes.uz{path}</loc>" in body

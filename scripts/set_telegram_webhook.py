@@ -9,8 +9,8 @@ Ishlatish (server yoki lokal, .env.production yonida):
     python scripts/set_telegram_webhook.py                # .env.production dan o'qiydi
     python scripts/set_telegram_webhook.py --check        # faqat holatni ko'rsatadi
 
-Webhook manzili: {CHAQIMCHI_API_URL yoki CHAQIMCHI_PUBLIC_URL}/api/v1/telegram/webhook
-Secret: CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET (Telegram har so'rovda qaytaradi,
+Webhook manzili: {ENES_API_URL yoki ENES_PUBLIC_URL}/api/v1/telegram/webhook
+Secret: ENES_TELEGRAM_WEBHOOK_SECRET (Telegram har so'rovda qaytaradi,
 cloud uni tekshiradi — begona POST o'tmaydi).
 """
 
@@ -54,17 +54,17 @@ def main() -> int:
     import os
 
     for key in (
-        "CHAQIMCHI_OWNER_TELEGRAM_TOKEN",
-        "CHAQIMCHI_CLOUD_TELEGRAM_TOKEN",
-        "CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET",
-        "CHAQIMCHI_API_URL",
-        "CHAQIMCHI_PUBLIC_URL",
+        "ENES_OWNER_TELEGRAM_TOKEN",
+        "ENES_CLOUD_TELEGRAM_TOKEN",
+        "ENES_TELEGRAM_WEBHOOK_SECRET",
+        "ENES_API_URL",
+        "ENES_PUBLIC_URL",
     ):
         env.setdefault(key, os.environ.get(key, ""))
 
-    token = env.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN") or env.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN")
+    token = env.get("ENES_OWNER_TELEGRAM_TOKEN") or env.get("ENES_CLOUD_TELEGRAM_TOKEN")
     if not token:
-        print("XATO: bot tokeni topilmadi (CHAQIMCHI_OWNER_TELEGRAM_TOKEN)")
+        print("XATO: bot tokeni topilmadi (ENES_OWNER_TELEGRAM_TOKEN)")
         return 1
 
     if args.check:
@@ -75,13 +75,13 @@ def main() -> int:
         print(f"Kutilayotgan yangilanishlar: {info.get('pending_update_count', 0)}")
         return 0
 
-    base = (env.get("CHAQIMCHI_API_URL") or env.get("CHAQIMCHI_PUBLIC_URL") or "").rstrip("/")
-    secret = env.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "")
+    base = (env.get("ENES_API_URL") or env.get("ENES_PUBLIC_URL") or "").rstrip("/")
+    secret = env.get("ENES_TELEGRAM_WEBHOOK_SECRET", "")
     if not base.startswith("https://"):
-        print("XATO: CHAQIMCHI_API_URL yoki CHAQIMCHI_PUBLIC_URL https bo'lishi kerak")
+        print("XATO: ENES_API_URL yoki ENES_PUBLIC_URL https bo'lishi kerak")
         return 1
     if len(secret) < 32:
-        print("XATO: CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET kamida 32 belgi bo'lsin")
+        print("XATO: ENES_TELEGRAM_WEBHOOK_SECRET kamida 32 belgi bo'lsin")
         return 1
 
     webhook = f"{base}/api/v1/telegram/webhook"

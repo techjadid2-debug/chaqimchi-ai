@@ -113,7 +113,7 @@ from enes.sotqin_profile import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = Path(os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
+DB_PATH = Path(os.environ.get("ENES_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 #: Bitta qurilma soatiga shuncha event batch yubora oladi.
@@ -227,7 +227,7 @@ def require_admin(
     authorization: Optional[str] = Header(None),
     x_cloud_admin_key: Optional[str] = Header(None, alias="X-Cloud-Admin-Key"),
 ) -> Optional[PortalPrincipal]:
-    expected = os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "").strip()
+    expected = os.environ.get("ENES_CLOUD_ADMIN_KEY", "").strip()
     if (
         expected
         and x_cloud_admin_key
@@ -820,15 +820,15 @@ def require_active_owner(
 
 
 def _owner_secret() -> str:
-    secret = os.environ.get("CHAQIMCHI_OWNER_JWT_SECRET", "").strip()
+    secret = os.environ.get("ENES_OWNER_JWT_SECRET", "").strip()
     if len(secret) < 32:
-        raise HTTPException(503, "CHAQIMCHI_OWNER_JWT_SECRET sozlanmagan")
+        raise HTTPException(503, "ENES_OWNER_JWT_SECRET sozlanmagan")
     return secret
 
 
 #: Kirish havolasining amal qilish muddati.
 #:
-#: Ilgari bu o'rinda `CHAQIMCHI_OTP_BYPASS_IDS` — Telegram ID bo'yicha
+#: Ilgari bu o'rinda `ENES_OTP_BYPASS_IDS` — Telegram ID bo'yicha
 #: kodsiz kirish bor edi.  U olib tashlandi: Telegram ID sir emas, uni
 #: bilgan har kim panelga kira olardi.  O'rnini `?key=<token>` havolasi
 #: bosdi — token uzun va tasodifiy, admin uni istalgan payt bekor qiladi
@@ -874,8 +874,8 @@ TELEGRAM_WEBAPP_AUTH_MAX_AGE_SEC = 5 * 60
 
 def _telegram_owner_token() -> str:
     return (
-        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
-        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+        os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip()
     )
 
 
@@ -925,11 +925,11 @@ def _attendance_enabled() -> bool:
 
     1. **Litsenziya** (`MODELS_LICENSED_FOR_COMMERCIAL_USE`) — modelni
        tijoratda ishlatish mumkinmi.  Bu SHART, lekin yetarli emas.
-       Ilgari bu yerda `CHAQIMCHI_FACE_MODEL_LICENSED` env bayrog'i
+       Ilgari bu yerda `ENES_FACE_MODEL_LICENSED` env bayrog'i
        turardi va uni noto'g'ri qo'yish tadqiqot modelini "tijoriy"
        qilib ko'rsatardi; 2026-08-21 dan modellar Apache-2.0 va javob
        KODDAN keladi.
-    2. **Pilot ruxsati** (`CHAQIMCHI_ATTENDANCE_PILOT`) — shu server
+    2. **Pilot ruxsati** (`ENES_ATTENDANCE_PILOT`) — shu server
        biometrika bilan ishlashga tayyormi.
 
     2026-08-25 auditi: bu yerda `or` turardi, ya'ni litsenziya rost
@@ -943,9 +943,9 @@ def _attendance_enabled() -> bool:
     """
     if not faces.MODELS_LICENSED_FOR_COMMERCIAL_USE:
         return False
-    if os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() != "production":
+    if os.environ.get("ENES_ENV", "development").strip().lower() != "production":
         return True
-    return os.environ.get("CHAQIMCHI_ATTENDANCE_PILOT", "").strip().lower() in {
+    return os.environ.get("ENES_ATTENDANCE_PILOT", "").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -1004,8 +1004,8 @@ async def _send_owner_telegram(
     import httpx
 
     token = (
-        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
-        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+        os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip()
     )
     if not token:
         raise HTTPException(503, "Owner Telegram bot tokeni sozlanmagan")
@@ -1032,7 +1032,7 @@ async def _send_owner_voice(
     """
     import httpx
 
-    token = (os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip() or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip())
+    token = (os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip() or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip())
     if not token:
         raise HTTPException(503, "Owner Telegram bot tokeni sozlanmagan")
     lowered = mime.lower()
@@ -1061,8 +1061,8 @@ async def _answer_callback(callback_id: str, text: str, *, alert: bool = False) 
     import httpx
 
     token = (
-        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
-        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+        os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip()
     )
     if not token:
         return
@@ -1096,8 +1096,8 @@ async def _send_owner_photo(
     import httpx
 
     token = (
-        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
-        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+        os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip()
     )
     if not token:
         raise HTTPException(503, "Owner Telegram bot tokeni sozlanmagan")
@@ -1133,8 +1133,8 @@ async def _setup_bot_commands() -> None:
     import httpx
 
     token = (
-        os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
-        or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip()
+        os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip()
+        or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip()
     )
     if not token:
         return
@@ -1449,20 +1449,20 @@ MEDIA_RETENTION_HOURS_DEFAULT = 48
 
 
 def _media_retention_hours() -> int:
-    raw = os.environ.get("CHAQIMCHI_MEDIA_RETENTION_HOURS", "").strip()
+    raw = os.environ.get("ENES_MEDIA_RETENTION_HOURS", "").strip()
     try:
         return max(1, int(raw)) if raw else MEDIA_RETENTION_HOURS_DEFAULT
     except ValueError:
-        logger.warning("CHAQIMCHI_MEDIA_RETENTION_HOURS son emas — standart qiymat")
+        logger.warning("ENES_MEDIA_RETENTION_HOURS son emas — standart qiymat")
         return MEDIA_RETENTION_HOURS_DEFAULT
 
 
 def _site_media_quota_bytes() -> int:
-    raw = os.environ.get("CHAQIMCHI_SITE_MEDIA_MAX_BYTES", "").strip()
+    raw = os.environ.get("ENES_SITE_MEDIA_MAX_BYTES", "").strip()
     try:
         return int(raw) if raw else SITE_MEDIA_MAX_BYTES_DEFAULT
     except ValueError:
-        logger.warning("CHAQIMCHI_SITE_MEDIA_MAX_BYTES son emas — standart qiymat")
+        logger.warning("ENES_SITE_MEDIA_MAX_BYTES son emas — standart qiymat")
         return SITE_MEDIA_MAX_BYTES_DEFAULT
 
 
@@ -1732,21 +1732,21 @@ def get_alerts() -> AlertService:
 async def lifespan(app: FastAPI):
     global _digest, _digest_task, _maintenance_task, _lead_notification_task
     global _vision_worker_stop, _vision_worker_task
-    if os.environ.get("CHAQIMCHI_ENV", "development") == "production":
+    if os.environ.get("ENES_ENV", "development") == "production":
         errors = []
         if not os.environ.get("DATABASE_URL", "").startswith("postgresql"):
             errors.append("DATABASE_URL PostgreSQL bo'lishi shart")
-        if not os.environ.get("CHAQIMCHI_S3_ENDPOINT", "").strip():
+        if not os.environ.get("ENES_S3_ENDPOINT", "").strip():
             errors.append("MinIO/S3 endpoint sozlanishi shart")
-        if not os.environ.get("CHAQIMCHI_SNAPSHOT_KEY", "").strip():
+        if not os.environ.get("ENES_SNAPSHOT_KEY", "").strip():
             errors.append("snapshot encryption key sozlanishi shart")
-        if not os.environ.get("CHAQIMCHI_CAMERA_SECRET_KEY", "").strip():
+        if not os.environ.get("ENES_CAMERA_SECRET_KEY", "").strip():
             errors.append("camera credential encryption key sozlanishi shart")
-        if len(os.environ.get("CHAQIMCHI_OWNER_JWT_SECRET", "")) < 32:
+        if len(os.environ.get("ENES_OWNER_JWT_SECRET", "")) < 32:
             errors.append("owner JWT secret kamida 32 belgi bo'lishi shart")
-        if len(os.environ.get("CHAQIMCHI_PORTAL_JWT_SECRET", "")) < 32:
+        if len(os.environ.get("ENES_PORTAL_JWT_SECRET", "")) < 32:
             errors.append("portal JWT secret kamida 32 belgi bo'lishi shart")
-        if len(os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "")) < 32:
+        if len(os.environ.get("ENES_CLOUD_ADMIN_KEY", "")) < 32:
             errors.append("cloud admin key kamida 32 belgi bo'lishi shart")
         # Sinov eshiklari production'da qat'iyan taqiqlanadi.  Bular env
         # o'zgaruvchisi bo'lgani uchun "unutib qoldirish" eng real xavf:
@@ -1754,22 +1754,22 @@ async def lifespan(app: FastAPI):
         # aylantiradi, BYPASS_IDS esa eski kodsiz-kirish ro'yxati (kod
         # olib tashlangan, lekin o'zgaruvchi qolib ketgan bo'lsa ham
         # server yonmasin — sozlama tozalanishi shart).
-        if os.environ.get("CHAQIMCHI_OTP_TEST_CODE", "").strip():
-            errors.append("CHAQIMCHI_OTP_TEST_CODE production'da taqiqlanadi")
-        if os.environ.get("CHAQIMCHI_OTP_BYPASS_IDS", "").strip():
+        if os.environ.get("ENES_OTP_TEST_CODE", "").strip():
+            errors.append("ENES_OTP_TEST_CODE production'da taqiqlanadi")
+        if os.environ.get("ENES_OTP_BYPASS_IDS", "").strip():
             errors.append(
-                "CHAQIMCHI_OTP_BYPASS_IDS olib tashlangan — o'rniga "
+                "ENES_OTP_BYPASS_IDS olib tashlangan — o'rniga "
                 "admin panel orqali kirish havolasi (login-link) ishlating"
             )
         # Gemini kaliti bor-u model nomi yo'q — har agent jobi yiqilib
         # kunlik kvotani yeydi.  Deploy'da darhol ushlanadi.
         if (
-            os.environ.get("CHAQIMCHI_GEMINI_API_KEY", "").strip()
-            and not os.environ.get("CHAQIMCHI_GEMINI_VISION_MODEL", "").strip()
+            os.environ.get("ENES_GEMINI_API_KEY", "").strip()
+            and not os.environ.get("ENES_GEMINI_VISION_MODEL", "").strip()
         ):
             errors.append(
-                "CHAQIMCHI_GEMINI_API_KEY berilgan, lekin "
-                "CHAQIMCHI_GEMINI_VISION_MODEL yo'q — Vision Agent ishlamaydi"
+                "ENES_GEMINI_API_KEY berilgan, lekin "
+                "ENES_GEMINI_VISION_MODEL yo'q — Vision Agent ishlamaydi"
             )
         try:
             usd_rate_uzs()
@@ -1782,8 +1782,8 @@ async def lifespan(app: FastAPI):
     get_event_store()
     get_snapshot_store()
     get_payments()
-    bootstrap_username = os.environ.get("CHAQIMCHI_BOOTSTRAP_ADMIN_USERNAME", "").strip()
-    bootstrap_password = os.environ.get("CHAQIMCHI_BOOTSTRAP_ADMIN_PASSWORD", "")
+    bootstrap_username = os.environ.get("ENES_BOOTSTRAP_ADMIN_USERNAME", "").strip()
+    bootstrap_password = os.environ.get("ENES_BOOTSTRAP_ADMIN_PASSWORD", "")
     if bool(bootstrap_username) != bool(bootstrap_password):
         raise RuntimeError("Bootstrap admin login va paroli birga sozlanishi kerak")
     if bootstrap_username and bootstrap_password:
@@ -1807,7 +1807,7 @@ async def lifespan(app: FastAPI):
     # savol yo'qolmaydi. Birinchi relizda shu cloud process ichidagi alohida
     # coroutine ishlaydi, keyingi horizontal worker ham ayni DB claim
     # kontraktidan foydalana oladi.
-    if os.environ.get("CHAQIMCHI_VISION_WORKER_IN_APP", "1").lower() in {"1", "true", "yes"}:
+    if os.environ.get("ENES_VISION_WORKER_IN_APP", "1").lower() in {"1", "true", "yes"}:
         _vision_worker_stop = asyncio.Event()
         _vision_worker_task = asyncio.create_task(
             vision_agent.worker_loop(
@@ -1843,7 +1843,7 @@ async def lifespan(app: FastAPI):
         await alerts.stop()
 
 
-_cloud_production = os.environ.get("CHAQIMCHI_ENV", "development") == "production"
+_cloud_production = os.environ.get("ENES_ENV", "development") == "production"
 app = FastAPI(
     title="Chaqimchi Cloud",
     lifespan=lifespan,
@@ -2090,7 +2090,7 @@ def _render_landing(request: Request, lang: str = "uz") -> HTMLResponse:
     # holda bir xil mazmun ikki manzilda ko'rinib, ikkalasining ham
     # o'rni pasayadi.
     origin = urls.public_url() or str(request.base_url).rstrip("/")
-    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    bot_username = os.environ.get("ENES_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
     register_url = (
         f"https://t.me/{bot_username}?start=register"
         if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
@@ -2225,7 +2225,7 @@ async def install_page(request: Request) -> HTMLResponse:
 @app.get("/installer", include_in_schema=False)
 async def installer_page(request: Request) -> Any:
     """O'rnatuvchi ro'yxatdan o'tishi, vazifalari va pairing paneli."""
-    redirect = _apex_redirect(request, "CHAQIMCHI_PARTNER_URL")
+    redirect = _apex_redirect(request, "ENES_PARTNER_URL")
     if redirect is not None:
         return redirect
     return _static_page("installer.html")
@@ -2259,8 +2259,8 @@ async def sotqin_bootstrap(request: Request) -> Response:
     Release URL va SHA deploy paytida environmentga qo'yiladi; bo'sh bo'lsa
     noto'g'ri yoki eski paketni mijozga berish o'rniga endpoint yopiq turadi.
     """
-    release_url = os.environ.get("CHAQIMCHI_SOTQIN_RELEASE_URL", "").strip()
-    release_sha256 = os.environ.get("CHAQIMCHI_SOTQIN_RELEASE_SHA256", "").strip()
+    release_url = os.environ.get("ENES_SOTQIN_RELEASE_URL", "").strip()
+    release_sha256 = os.environ.get("ENES_SOTQIN_RELEASE_SHA256", "").strip()
     if not release_url.startswith("https://") or len(release_sha256) != 64:
         raise HTTPException(503, "Sotqin release hali nashr qilinmagan")
     template = BASE_DIR / "deploy" / "bootstrap_sotqin.sh"
@@ -2511,7 +2511,7 @@ def _render_public(name: str, request: Request) -> HTMLResponse:
     if not page.is_file():
         raise HTTPException(404, "Sahifa topilmadi")
     origin = str(request.base_url).rstrip("/")
-    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    bot_username = os.environ.get("ENES_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
     register_url = (
         f"https://t.me/{bot_username}?start=register"
         if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
@@ -2588,7 +2588,7 @@ async def status_page(request: Request) -> HTMLResponse:
 @app.get("/admin", include_in_schema=False)
 async def admin_panel(request: Request) -> Any:
     """Admin paneli. Kirish admin kalit bilan — brauzerda so‘raladi va API ga yuboriladi."""
-    redirect = _apex_redirect(request, "CHAQIMCHI_ADMIN_URL")
+    redirect = _apex_redirect(request, "ENES_ADMIN_URL")
     if redirect is not None:
         return redirect
     page = STATIC_DIR / "v2/admin.html"
@@ -2603,7 +2603,7 @@ def _render_owner() -> HTMLResponse:
         raise ApiError("error.owner_panel_missing", 404)
     # Kirish ekranidagi "Telegram botdan havola oling" tugmasi uchun bot
     # manzili shu yerda qo'yiladi — sahifaga qo'lda yozilmaydi.
-    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    bot_username = os.environ.get("ENES_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
     bot_url = (
         f"https://t.me/{bot_username}" if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username) else ""
     )
@@ -2627,7 +2627,7 @@ def _apex_redirect(request: Request, env_key: str, path: str = "/") -> Optional[
 
 @app.get("/owner", include_in_schema=False)
 async def owner_panel(request: Request) -> Any:
-    redirect = _apex_redirect(request, "CHAQIMCHI_APP_URL")
+    redirect = _apex_redirect(request, "ENES_APP_URL")
     if redirect is not None:
         return redirect
     return _render_owner()
@@ -2636,7 +2636,7 @@ async def owner_panel(request: Request) -> Any:
 @app.get("/owner/{panel_path:path}", include_in_schema=False)
 async def owner_panel_route(panel_path: str, request: Request) -> Any:
     """Owner SPA ning ichki yo'llari — hammasi bitta qobiqqa tushadi."""
-    redirect = _apex_redirect(request, "CHAQIMCHI_APP_URL", f"/{panel_path}" if panel_path else "/")
+    redirect = _apex_redirect(request, "ENES_APP_URL", f"/{panel_path}" if panel_path else "/")
     if redirect is not None:
         return redirect
     return _render_owner()
@@ -2645,7 +2645,7 @@ async def owner_panel_route(panel_path: str, request: Request) -> Any:
 @app.get("/admin/{panel_path:path}", include_in_schema=False)
 async def admin_panel_route(panel_path: str, request: Request) -> Any:
     redirect = _apex_redirect(
-        request, "CHAQIMCHI_ADMIN_URL", f"/{panel_path}" if panel_path else "/"
+        request, "ENES_ADMIN_URL", f"/{panel_path}" if panel_path else "/"
     )
     if redirect is not None:
         return redirect
@@ -2921,7 +2921,7 @@ async def public_pricing() -> Dict[str, Any]:
 
 def _configured_lead_chat_ids() -> List[str]:
     """Environmentdagi qo'shimcha lead qabul qiluvchilarini qaytaradi."""
-    raw = os.environ.get("CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS", "")
+    raw = os.environ.get("ENES_TELEGRAM_LEAD_CHAT_IDS", "")
     return list(
         dict.fromkeys(
             chat_id.strip()
@@ -3107,16 +3107,16 @@ SELF_SERVICE_TRIAL_DAYS_DEFAULT = 14
 
 
 def _self_service_limit() -> int:
-    raw = os.environ.get("CHAQIMCHI_SELF_SERVICE_LIMIT", "").strip()
+    raw = os.environ.get("ENES_SELF_SERVICE_LIMIT", "").strip()
     try:
         return max(0, int(raw)) if raw else SELF_SERVICE_LIMIT_DEFAULT
     except ValueError:
-        logger.warning("CHAQIMCHI_SELF_SERVICE_LIMIT son emas — standart qiymat")
+        logger.warning("ENES_SELF_SERVICE_LIMIT son emas — standart qiymat")
         return SELF_SERVICE_LIMIT_DEFAULT
 
 
 def _self_service_trial_days() -> int:
-    raw = os.environ.get("CHAQIMCHI_SELF_SERVICE_TRIAL_DAYS", "").strip()
+    raw = os.environ.get("ENES_SELF_SERVICE_TRIAL_DAYS", "").strip()
     try:
         return max(1, int(raw)) if raw else SELF_SERVICE_TRIAL_DAYS_DEFAULT
     except ValueError:
@@ -3252,9 +3252,9 @@ async def public_quick_trial(
 #: shuncha shishiradi va har deployda qayta yuklashga majbur qiladi, shuning
 #: uchun production'da fayl GitHub Releases'da turadi va cloud faqat
 #: yo'naltiradi.  Bu Linux relizi bilan bir xil naqsh
-#: (`CHAQIMCHI_SOTQIN_RELEASE_URL`).
-ENV_WINDOWS_INSTALLER_URL = "CHAQIMCHI_WINDOWS_INSTALLER_URL"
-ENV_WINDOWS_INSTALLER_SIZE = "CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB"
+#: (`ENES_SOTQIN_RELEASE_URL`).
+ENV_WINDOWS_INSTALLER_URL = "ENES_WINDOWS_INSTALLER_URL"
+ENV_WINDOWS_INSTALLER_SIZE = "ENES_WINDOWS_INSTALLER_SIZE_MB"
 
 #: Ishlab chiqishda va lokal sinovda fayl repo ichida bo'ladi.
 WINDOWS_INSTALLER_PATHS = (
@@ -3340,7 +3340,7 @@ async def public_windows_release() -> Dict[str, Any]:
         # URL rejimida ham versiya RELIZDAN olinadi (pastdagi izoh bilan
         # bir sabab): cloud image raqami tashqi o'rnatuvchi versiyasini
         # bildirmaydi.  Tashqi URL uchun aniq raqam env bilan beriladi.
-        env_version = os.environ.get("CHAQIMCHI_WINDOWS_INSTALLER_VERSION", "").strip()
+        env_version = os.environ.get("ENES_WINDOWS_INSTALLER_VERSION", "").strip()
         release = latest_windows_release()
         return {
             "available": True,
@@ -3926,9 +3926,9 @@ async def admin_create_site_login(
 @app.get("/api/v1/admin/readiness")
 async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
     public = public_url()
-    owner_token = os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip()
-    bot_username = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip()
-    webhook_secret = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
+    owner_token = os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip()
+    bot_username = os.environ.get("ENES_TELEGRAM_BOT_USERNAME", "").strip()
+    webhook_secret = os.environ.get("ENES_TELEGRAM_WEBHOOK_SECRET", "").strip()
     alert_status = get_alerts().status()
     lead_recipients = _lead_recipient_ids()
     n100_acceptance = pilot_acceptance_status()
@@ -3967,7 +3967,7 @@ async def admin_readiness(_: None = Depends(require_admin)) -> Dict[str, Any]:
             "recipients": len(lead_recipients),
             # Alohida sotuv boti bormi — arizalar mijoz hisobotlari bilan
             # bitta chatda aralashib ketmasligi shundan ko'rinadi.
-            "separate_bot": bool(os.environ.get("CHAQIMCHI_SALES_TELEGRAM_TOKEN", "").strip()),
+            "separate_bot": bool(os.environ.get("ENES_SALES_TELEGRAM_TOKEN", "").strip()),
         },
         {
             "key": "service_alerts",
@@ -4048,20 +4048,20 @@ async def admin_finance(
     end_iso = end_local.astimezone(timezone.utc).isoformat()
 
     rate = usd_rate_uzs()
-    server_monthly_usd = _finance_env_float("CHAQIMCHI_COST_SERVER_MONTHLY_USD", 0.0)
-    domain_yearly_uzs = int(_finance_env_float("CHAQIMCHI_COST_DOMAIN_YEARLY_UZS", 27_000))
+    server_monthly_usd = _finance_env_float("ENES_COST_SERVER_MONTHLY_USD", 0.0)
+    domain_yearly_uzs = int(_finance_env_float("ENES_COST_DOMAIN_YEARLY_UZS", 27_000))
     input_usd_per_m = _finance_env_float(
-        "CHAQIMCHI_GEMINI_INPUT_USD_PER_M", GEMINI_INPUT_USD_PER_M_DEFAULT
+        "ENES_GEMINI_INPUT_USD_PER_M", GEMINI_INPUT_USD_PER_M_DEFAULT
     )
     output_usd_per_m = _finance_env_float(
-        "CHAQIMCHI_GEMINI_OUTPUT_USD_PER_M", GEMINI_OUTPUT_USD_PER_M_DEFAULT
+        "ENES_GEMINI_OUTPUT_USD_PER_M", GEMINI_OUTPUT_USD_PER_M_DEFAULT
     )
 
-    kwh_uzs = _finance_env_float("CHAQIMCHI_COST_KWH_UZS", KWH_UZS_DEFAULT)
+    kwh_uzs = _finance_env_float("ENES_COST_KWH_UZS", KWH_UZS_DEFAULT)
     watts_windows = _finance_env_float(
-        "CHAQIMCHI_DEVICE_WATTS_WINDOWS", DEVICE_WATTS_WINDOWS_DEFAULT
+        "ENES_DEVICE_WATTS_WINDOWS", DEVICE_WATTS_WINDOWS_DEFAULT
     )
-    watts_box = _finance_env_float("CHAQIMCHI_DEVICE_WATTS_BOX", DEVICE_WATTS_BOX_DEFAULT)
+    watts_box = _finance_env_float("ENES_DEVICE_WATTS_BOX", DEVICE_WATTS_BOX_DEFAULT)
 
     server_monthly_uzs = round(server_monthly_usd * rate)
     domain_monthly_uzs = round(domain_yearly_uzs / 12)
@@ -4934,7 +4934,7 @@ async def admin_alerts_test(_: None = Depends(require_admin)) -> Dict[str, Any]:
     if not service.config.enabled:
         raise HTTPException(
             400,
-            "CHAQIMCHI_CLOUD_TELEGRAM_TOKEN va CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID sozlanmagan",
+            "ENES_CLOUD_TELEGRAM_TOKEN va ENES_CLOUD_TELEGRAM_CHAT_ID sozlanmagan",
         )
     ok = await service.sender.send(test_message())
     if not ok:
@@ -5149,11 +5149,11 @@ PENDING_DEVICE_LIMIT_DEFAULT = 200
 
 
 def _pending_device_limit() -> int:
-    raw = os.environ.get("CHAQIMCHI_PENDING_DEVICE_LIMIT", "").strip()
+    raw = os.environ.get("ENES_PENDING_DEVICE_LIMIT", "").strip()
     try:
         return max(1, int(raw)) if raw else PENDING_DEVICE_LIMIT_DEFAULT
     except ValueError:
-        logger.warning("CHAQIMCHI_PENDING_DEVICE_LIMIT son emas — standart qiymat")
+        logger.warning("ENES_PENDING_DEVICE_LIMIT son emas — standart qiymat")
         return PENDING_DEVICE_LIMIT_DEFAULT
 
 
@@ -5165,7 +5165,7 @@ def _device_hello_enabled() -> bool:
     nosozlik chiqsa, bayroqni o'chirish butun parkni eski, sinalgan
     xatti-harakatga qaytaradi — OTA kutish shart emas.
     """
-    raw = os.environ.get("CHAQIMCHI_DEVICE_HELLO", "1").strip().lower()
+    raw = os.environ.get("ENES_DEVICE_HELLO", "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
 
 
@@ -6587,8 +6587,8 @@ async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
     # hamma mijozning OTP'sini bitta doimiy kodga aylantirardi.  Lifespan
     # ham production'da bu o'zgaruvchi qo'yilgan bo'lsa serverni yoqmaydi.
     test_code = ""
-    if os.environ.get("CHAQIMCHI_ENV", "development") != "production":
-        test_code = os.environ.get("CHAQIMCHI_OTP_TEST_CODE", "").strip()
+    if os.environ.get("ENES_ENV", "development") != "production":
+        test_code = os.environ.get("ENES_OTP_TEST_CODE", "").strip()
     code = get_event_store().create_otp(
         body.telegram_id,
         secret=secret,
@@ -6602,7 +6602,7 @@ async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
         "ok": True,
         "message": "Agar akkaunt mavjud bo'lsa, kod yuborildi",
     }
-    if os.environ.get("CHAQIMCHI_ENV", "development") != "production" and test_code:
+    if os.environ.get("ENES_ENV", "development") != "production" and test_code:
         response["debug_code"] = code
     return response
 
@@ -9145,7 +9145,7 @@ async def owner_telegram_invite(
         window_sec=3_600,
         message="Juda ko'p havola yaratildi. Bir soatdan keyin urinib ko'ring.",
     )
-    bot = os.environ.get("CHAQIMCHI_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    bot = os.environ.get("ENES_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
     if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot):
         raise HTTPException(503, "Telegram bot sozlanmagan — administrator bilan bog'laning")
     invite = get_event_store().create_telegram_invite(
@@ -9435,7 +9435,7 @@ async def _telegram_voice_bytes(file_id: str) -> tuple[bytes, str]:
     """Telegram voice faylini faqat Agent jobi uchun vaqtincha oladi."""
     import httpx
 
-    token = (os.environ.get("CHAQIMCHI_OWNER_TELEGRAM_TOKEN", "").strip() or os.environ.get("CHAQIMCHI_CLOUD_TELEGRAM_TOKEN", "").strip())
+    token = (os.environ.get("ENES_OWNER_TELEGRAM_TOKEN", "").strip() or os.environ.get("ENES_CLOUD_TELEGRAM_TOKEN", "").strip())
     if not token:
         raise RuntimeError("Owner Telegram bot tokeni sozlanmagan")
     async with httpx.AsyncClient(timeout=25) as client:
@@ -9454,7 +9454,7 @@ async def owner_telegram_webhook(
     request: Request,
     x_telegram_secret: Optional[str] = Header(None, alias="X-Telegram-Bot-Api-Secret-Token"),
 ) -> Dict[str, Any]:
-    expected = os.environ.get("CHAQIMCHI_TELEGRAM_WEBHOOK_SECRET", "").strip()
+    expected = os.environ.get("ENES_TELEGRAM_WEBHOOK_SECRET", "").strip()
     if (
         not expected
         or not x_telegram_secret
@@ -9469,7 +9469,7 @@ async def owner_telegram_webhook(
     membership_chat = membership.get("chat") or {}
     if membership_chat.get("type") in {"group", "supergroup"}:
         # Guruhlar lead qabul qiluvchi sifatida avtomatik ro'yxatdan o'tmaydi.
-        # Leadlar faqat CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS dagi shaxsiy ID'larga boradi.
+        # Leadlar faqat ENES_TELEGRAM_LEAD_CHAT_IDS dagi shaxsiy ID'larga boradi.
         return {"ok": True}
 
     # ── Tugma bosildi ────────────────────────────────────────────────

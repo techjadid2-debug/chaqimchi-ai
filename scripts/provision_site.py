@@ -10,7 +10,7 @@ import sys
 
 import httpx
 
-DEFAULT_URL = os.environ.get("CHAQIMCHI_CLOUD_URL", "http://127.0.0.1:8750")
+DEFAULT_URL = os.environ.get("ENES_CLOUD_URL", "http://127.0.0.1:8750")
 
 
 def main() -> int:
@@ -26,9 +26,9 @@ def main() -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
-    admin_key = os.environ.get("CHAQIMCHI_CLOUD_ADMIN_KEY", "").strip()
+    admin_key = os.environ.get("ENES_CLOUD_ADMIN_KEY", "").strip()
     if not admin_key:
-        print("CHAQIMCHI_CLOUD_ADMIN_KEY muhit o‘zgaruvchisi kerak", file=sys.stderr)
+        print("ENES_CLOUD_ADMIN_KEY muhit o‘zgaruvchisi kerak", file=sys.stderr)
         return 1
 
     url = args.cloud_url.rstrip("/")

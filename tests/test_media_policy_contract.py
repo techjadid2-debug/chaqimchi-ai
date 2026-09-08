@@ -47,12 +47,12 @@ def test_loitering_stays_out_of_the_media_list() -> None:
 def client(tmp_path: Path, monkeypatch):
     import cloud.main as main
 
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
-    monkeypatch.setenv("CHAQIMCHI_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
-    monkeypatch.setenv("CHAQIMCHI_OTP_TEST_CODE", "123456")
-    monkeypatch.setenv("CHAQIMCHI_ENV", "test")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "owner-secret-with-more-than-32-characters")
+    monkeypatch.setenv("ENES_OTP_TEST_CODE", "123456")
+    monkeypatch.setenv("ENES_ENV", "test")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("CHAQIMCHI_S3_ENDPOINT", raising=False)
+    monkeypatch.delenv("ENES_S3_ENDPOINT", raising=False)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr(main, "_store", None)
     monkeypatch.setattr(main, "_event_store", None)
@@ -106,7 +106,7 @@ def test_the_panel_is_told_the_media_deadline(client) -> None:
     standart = test_client.get("/api/v1/owner/dashboard", headers=owner).json()
     assert standart["media_retention_hours"] == 48
 
-    monkeypatch.setenv("CHAQIMCHI_MEDIA_RETENTION_HOURS", "12")
+    monkeypatch.setenv("ENES_MEDIA_RETENTION_HOURS", "12")
     ozgargan = test_client.get("/api/v1/owner/dashboard", headers=owner).json()
 
     assert ozgargan["media_retention_hours"] == 12, (

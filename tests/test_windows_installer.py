@@ -359,7 +359,7 @@ def test_ffmpeg_is_bundled_with_a_pinned_hash() -> None:
 
 # ── Cloud manzili paket ichida ──────────────────────────────────────────
 #
-# Haqiqiy nosozlik: CI `CHAQIMCHI_DEFAULT_CLOUD_URL` siz ishlagan va
+# Haqiqiy nosozlik: CI `ENES_DEFAULT_CLOUD_URL` siz ishlagan va
 # GitHub Releases'ga cloud manzili BO'SH `.exe` chiqib ketgan.  Bunday
 # paket auto-pair qila olmaydi — sehrgar do'kon egasidan server manzilini
 # so'raydi, u esa uni bilmaydi.  Qurish skripti faqat `log.warning`
@@ -370,7 +370,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "windows-installer.yml"
 
 def test_ci_gives_the_build_a_cloud_address() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "CHAQIMCHI_DEFAULT_CLOUD_URL:" in workflow, (
+    assert "ENES_DEFAULT_CLOUD_URL:" in workflow, (
         "CI qurishga cloud manzilini bermasa, reliz cloudsiz chiqadi"
     )
     assert "https://api.chaqimchi.uz" in workflow, "zaxira qiymat bo'lsin"
@@ -380,7 +380,7 @@ def test_ci_checks_the_address_landed_in_the_package() -> None:
     """Env berilgani yetarli emas — u haqiqatan `.bat` ichiga tushishi kerak."""
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "build/payload/Chaqimchi_AI.bat" in workflow
-    assert "^set CHAQIMCHI_DEFAULT_CLOUD_URL=https://" in workflow
+    assert "^set ENES_DEFAULT_CLOUD_URL=https://" in workflow
 
 
 def test_build_stops_without_a_cloud_address() -> None:
@@ -389,7 +389,7 @@ def test_build_stops_without_a_cloud_address() -> None:
     import subprocess
     import sys
 
-    env = {k: v for k, v in os.environ.items() if k != "CHAQIMCHI_DEFAULT_CLOUD_URL"}
+    env = {k: v for k, v in os.environ.items() if k != "ENES_DEFAULT_CLOUD_URL"}
     result = subprocess.run(
         [sys.executable, str(BUILDER)],
         capture_output=True,
@@ -399,7 +399,7 @@ def test_build_stops_without_a_cloud_address() -> None:
         timeout=120,
     )
     assert result.returncode != 0, "manzilsiz qurish muvaffaqiyatli tugamasligi kerak"
-    assert "CHAQIMCHI_DEFAULT_CLOUD_URL" in result.stderr + result.stdout
+    assert "ENES_DEFAULT_CLOUD_URL" in result.stderr + result.stdout
 
 
 def test_build_rejects_a_plain_http_address() -> None:
@@ -408,7 +408,7 @@ def test_build_rejects_a_plain_http_address() -> None:
     import subprocess
     import sys
 
-    env = dict(os.environ, CHAQIMCHI_DEFAULT_CLOUD_URL="http://api.chaqimchi.uz")
+    env = dict(os.environ, ENES_DEFAULT_CLOUD_URL="http://api.chaqimchi.uz")
     result = subprocess.run(
         [sys.executable, str(BUILDER)],
         capture_output=True,
@@ -482,9 +482,9 @@ def test_the_service_launcher_never_opens_a_browser_or_pauses() -> None:
     source = BUILDER.read_text(encoding="utf-8")
     start = source.index("SERVICE_LAUNCHER = ")
     launcher = source[start : source.index('"""', source.index('"""', start) + 3)]
-    assert "CHAQIMCHI_LOCAL_NO_BROWSER=1" in launcher
+    assert "ENES_LOCAL_NO_BROWSER=1" in launcher
     assert "pause" not in launcher
-    assert "CHAQIMCHI_DEFAULT_CLOUD_URL=__CLOUD_URL__" in launcher, (
+    assert "ENES_DEFAULT_CLOUD_URL=__CLOUD_URL__" in launcher, (
         "xizmat launcheri ham cloud manzilini bilishi kerak"
     )
     assert "Chaqimchi_AI_xizmat.bat" in source, "launcher payloadga yozilsin"
@@ -668,7 +668,7 @@ def test_the_installer_creates_two_shortcuts_for_two_questions() -> None:
 
 
 def test_the_panel_address_comes_from_the_build_not_from_a_guess() -> None:
-    """`version.nsh` uni `CHAQIMCHI_DEFAULT_CLOUD_URL` dan oladi.
+    """`version.nsh` uni `ENES_DEFAULT_CLOUD_URL` dan oladi.
 
     Cloudsiz sinov paketida esa lokal sahifaga tushadi — ishlamaydigan
     yorliq chiqmasin.

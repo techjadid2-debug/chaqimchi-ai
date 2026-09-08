@@ -56,14 +56,14 @@ def test_synthetic_or_short_measurement_is_rejected() -> None:
 
 
 def test_production_feature_gate_requires_valid_acceptance(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_ENV", "production")
-    monkeypatch.setenv("CHAQIMCHI_AVAILABLE_FEATURES", "person_count,unknown")
-    monkeypatch.delenv("CHAQIMCHI_N100_ACCEPTANCE_FILE", raising=False)
+    monkeypatch.setenv("ENES_ENV", "production")
+    monkeypatch.setenv("ENES_AVAILABLE_FEATURES", "person_count,unknown")
+    monkeypatch.delenv("ENES_N100_ACCEPTANCE_FILE", raising=False)
     assert available_feature_codes() == frozenset()
 
     path = tmp_path / "acceptance.json"
     path.write_text(json.dumps(valid_acceptance()), encoding="utf-8")
-    monkeypatch.setenv("CHAQIMCHI_N100_ACCEPTANCE_FILE", str(path))
+    monkeypatch.setenv("ENES_N100_ACCEPTANCE_FILE", str(path))
     assert available_feature_codes() == frozenset({"person_count"})
 
 

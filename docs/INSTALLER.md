@@ -122,8 +122,8 @@ GitHub Releases’ga yuklaydi. Cloud uni git ichida tashimaydi — deployda
 shu ikki o‘zgaruvchi beriladi:
 
 ```bash
-export CHAQIMCHI_WINDOWS_INSTALLER_URL="https://github.com/.../Chaqimchi_AI_Setup.exe"
-export CHAQIMCHI_WINDOWS_INSTALLER_SIZE_MB=68
+export ENES_WINDOWS_INSTALLER_URL="https://github.com/.../Chaqimchi_AI_Setup.exe"
+export ENES_WINDOWS_INSTALLER_SIZE_MB=68
 ```
 
 Berilmasa sayt yuklab olish tugmasi o‘rniga “tayyor bo‘lganda xabar bering”
@@ -134,28 +134,28 @@ formasini ko‘rsatadi — buzuq tugma chiqmaydi.
 ## 1. Cloud (markaz)
 
 ```bash
-export CHAQIMCHI_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
+export ENES_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
 
 # Ogohlantirish (tavsiya etiladi): mijoz tizimi o'chsa Telegramga xabar keladi
-export CHAQIMCHI_CLOUD_TELEGRAM_TOKEN="123456:ABC..."   # @BotFather dan
-export CHAQIMCHI_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
+export ENES_CLOUD_TELEGRAM_TOKEN="123456:ABC..."   # @BotFather dan
+export ENES_CLOUD_TELEGRAM_CHAT_ID="-1001234567890"
 # Public deep-link uchun BotFather bergan username:
-export CHAQIMCHI_TELEGRAM_BOT_USERNAME="chaqimchi_bot"
+export ENES_TELEGRAM_BOT_USERNAME="chaqimchi_bot"
 # Maslahat arizasini faqat shaxsiy akkauntga yuborish:
-export CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS="5476913898"
+export ENES_TELEGRAM_LEAD_CHAT_IDS="5476913898"
 
 make run-cloud
 ```
 
 Bot yaratish: Telegramda **@BotFather** → `/newbot` → token. Shaxsiy xabar
 kelishi uchun foydalanuvchi botga avval `/start` yuborishi shart. Leadlar
-guruhdan avtomatik yig‘ilmaydi; faqat `CHAQIMCHI_TELEGRAM_LEAD_CHAT_IDS`
+guruhdan avtomatik yig‘ilmaydi; faqat `ENES_TELEGRAM_LEAD_CHAT_IDS`
 ro‘yxatiga boradi. Panelda **“Sinov xabari”** tugmasi bilan tekshiring.
 
 ## 2. Yangi mijoz
 
 ```bash
-export CHAQIMCHI_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
+export ENES_CLOUD_ADMIN_KEY="maxfiy-admin-kalit"
 python scripts/provision_site.py "Oq Saroy Do'kon" --plan lite --months 1
 ```
 
@@ -182,7 +182,7 @@ qiladi. Admin onboarding ro‘yxatida Sotqin juftlangan va online bo‘lishi
 kerak.
 
 Attendance faqat yozma rozilikli yopiq pilot bo‘lsa
-`CHAQIMCHI_ATTENDANCE_PILOT=true` qilinadi va lokal xizmat yoqiladi:
+`ENES_ATTENDANCE_PILOT=true` qilinadi va lokal xizmat yoqiladi:
 
 ```bash
 sudo systemctl enable --now chaqimchi-attendance
@@ -192,7 +192,7 @@ ssh -L 8743:127.0.0.1:8743 installer@SOTQIN_IP
 
 Developmentda `make run-web` attendance pilot rejimini va `:8743` portini
 o‘zi qo‘yadi. Cloud inventar/config kerak bo‘lsa avval control agentni pairing
-qiling va `CHAQIMCHI_SOTQIN_CONFIG_CACHE` ni uning kesh fayliga yo‘naltiring.
+qiling va `ENES_SOTQIN_CONFIG_CACHE` ni uning kesh fayliga yo‘naltiring.
 
 ```bash
 make install-dev
@@ -203,7 +203,7 @@ make run-web
 
 ```bash
 curl -X POST "http://127.0.0.1:8750/api/v1/admin/sites/SITE_ID/extend" \
-  -H "X-Cloud-Admin-Key: $CHAQIMCHI_CLOUD_ADMIN_KEY" \
+  -H "X-Cloud-Admin-Key: $ENES_CLOUD_ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{"months": 1}'
 ```
@@ -226,7 +226,7 @@ python scripts/backup_db.py info nusxa.zip   # ichida nima bor
 Yoki serverdan (API kalit bilan):
 
 ```bash
-curl -H "X-API-Key: $CHAQIMCHI_API_KEY" http://MINI_PC:8743/api/backup -O -J
+curl -H "X-API-Key: $ENES_API_KEY" http://MINI_PC:8743/api/backup -O -J
 ```
 
 ### Qurilma almashganda
@@ -243,7 +243,7 @@ Ikki do‘kon bazasini birlashtirish kerak bo‘lsa: `--merge` (bor shaxslar
 takrorlanmaydi).
 
 > **Shifrlangan baza** (`storage.encrypt_embeddings: true`) nusxasi ham
-> shifrlangan bo‘ladi. Tiklashda **o‘sha** `CHAQIMCHI_EMBEDDING_KEY` kerak —
+> shifrlangan bo‘ladi. Tiklashda **o‘sha** `ENES_EMBEDDING_KEY` kerak —
 > kalitni nusxadan **alohida** joyda saqlang. Kalit yo‘qolsa nusxa foydasiz.
 
 > Nusxa — biometrik ma’lumot. Ochiq joyda, umumiy bulutda yoki messenjerda
@@ -265,7 +265,7 @@ ketadi. Kamera ataylab olib tashlangan bo‘lsa kutilgan sonni tushiring:
 
 ```bash
 curl -X POST "http://CLOUD:8750/api/v1/admin/sites/SITE_ID/cameras" \
-  -H "X-Cloud-Admin-Key: $CHAQIMCHI_CLOUD_ADMIN_KEY" \
+  -H "X-Cloud-Admin-Key: $ENES_CLOUD_ADMIN_KEY" \
   -H "Content-Type: application/json" -d '{"expected": 2}'
 ```
 

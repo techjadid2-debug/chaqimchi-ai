@@ -54,15 +54,15 @@ def configured() -> bool:
     o'tar, keyin har bir job "modeli sozlanmagan" xatosi bilan yiqilar
     va kunlik kvotani ham yeb qo'yardi.
     """
-    return bool(os.environ.get("CHAQIMCHI_GEMINI_API_KEY", "").strip()) and _model() != "disabled"
+    return bool(os.environ.get("ENES_GEMINI_API_KEY", "").strip()) and _model() != "disabled"
 
 
 def _model() -> str:
-    return os.environ.get("CHAQIMCHI_GEMINI_VISION_MODEL", "").strip() or "disabled"
+    return os.environ.get("ENES_GEMINI_VISION_MODEL", "").strip() or "disabled"
 
 
 def _fallback_model() -> str:
-    return os.environ.get("CHAQIMCHI_GEMINI_FALLBACK_MODEL", "").strip()
+    return os.environ.get("ENES_GEMINI_FALLBACK_MODEL", "").strip()
 
 
 #: Joriy job davomida ishlatilgan HAQIQIY Gemini tokenlari.
@@ -108,7 +108,7 @@ def _json_from_response(data: Dict[str, Any]) -> Dict[str, Any]:
 
 async def _gemini_json(parts: List[Dict[str, Any]], schema: Dict[str, Any]) -> Dict[str, Any]:
     """Gemini REST chaqiruvi; SDK Edge/containerga ortiqcha bog'lanmasin."""
-    key = os.environ.get("CHAQIMCHI_GEMINI_API_KEY", "").strip()
+    key = os.environ.get("ENES_GEMINI_API_KEY", "").strip()
     models = [item for item in (_model(), _fallback_model()) if item and item != "disabled"]
     if not key or not models:
         raise RuntimeError("Vision Agent Gemini modeli sozlanmagan")
@@ -161,8 +161,8 @@ async def synthesize_audio(text: str) -> Optional[tuple[bytes, str]]:
     kanonik; model audio qaytarmasa job muvaffaqiyatli qoladi va UI faqat
     matnni ko'rsatadi.
     """
-    key = os.environ.get("CHAQIMCHI_GEMINI_API_KEY", "").strip()
-    model = os.environ.get("CHAQIMCHI_GEMINI_NATIVE_AUDIO_MODEL", "").strip()
+    key = os.environ.get("ENES_GEMINI_API_KEY", "").strip()
+    model = os.environ.get("ENES_GEMINI_NATIVE_AUDIO_MODEL", "").strip()
     if not key or not model:
         return None
     payload = {

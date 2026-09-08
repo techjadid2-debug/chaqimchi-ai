@@ -2,7 +2,7 @@ from enes.licensing.plans import PLANS, get_plan
 
 
 def test_lite_is_20_usd_base_and_uses_configured_rate(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_USD_RATE_UZS", "12500")
+    monkeypatch.setenv("ENES_USD_RATE_UZS", "12500")
     lite = PLANS["lite"]
     assert lite.monthly_price_usd == 20
     assert lite.monthly_price() == 250_000
@@ -11,12 +11,12 @@ def test_lite_is_20_usd_base_and_uses_configured_rate(monkeypatch) -> None:
 
 
 def test_lite_rejects_invalid_exchange_rate(monkeypatch) -> None:
-    monkeypatch.setenv("CHAQIMCHI_USD_RATE_UZS", "xato")
+    monkeypatch.setenv("ENES_USD_RATE_UZS", "xato")
     try:
         PLANS["lite"].monthly_price()
         assert False
     except ValueError as exc:
-        assert "CHAQIMCHI_USD_RATE_UZS" in str(exc)
+        assert "ENES_USD_RATE_UZS" in str(exc)
 
 
 def test_plans_pricing_order() -> None:
@@ -84,13 +84,13 @@ def test_the_two_sellable_plans_land_on_round_uzbek_prices() -> None:
     assert PLANS["biznes"].monthly_price() == 299_000
 
     # Kurs ko'tarilsa narx ham ko'chadi, lekin baribir yumaloq qoladi.
-    os.environ["CHAQIMCHI_USD_RATE_UZS"] = "14000"
+    os.environ["ENES_USD_RATE_UZS"] = "14000"
     try:
         assert uzs_from_cents(1_140) % 1_000 == 0
         assert uzs_from_cents(2_300) % 1_000 == 0
         assert PLANS["biznes"].monthly_price() == 322_000
     finally:
-        del os.environ["CHAQIMCHI_USD_RATE_UZS"]
+        del os.environ["ENES_USD_RATE_UZS"]
 
 
 def test_tarmoq_is_not_a_billable_tier() -> None:

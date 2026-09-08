@@ -29,12 +29,12 @@ from cloud.store import CloudStore
 logger = logging.getLogger("vision-worker")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = Path(os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
+DB_PATH = Path(os.environ.get("ENES_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
 HEARTBEAT_MARKER = Path("/tmp/vision-worker.heartbeat")
 
 
 def _production() -> bool:
-    return os.environ.get("CHAQIMCHI_ENV", "development").strip().lower() == "production"
+    return os.environ.get("ENES_ENV", "development").strip().lower() == "production"
 
 
 def validate_environment() -> None:
@@ -48,13 +48,13 @@ def validate_environment() -> None:
     if _production():
         if not os.environ.get("DATABASE_URL", "").strip():
             problems.append("DATABASE_URL yo'q — worker prod'da SQLite'ga tushib qolardi")
-        if not os.environ.get("CHAQIMCHI_S3_ENDPOINT", "").strip():
-            problems.append("CHAQIMCHI_S3_ENDPOINT yo'q — media o'qib bo'lmaydi")
+        if not os.environ.get("ENES_S3_ENDPOINT", "").strip():
+            problems.append("ENES_S3_ENDPOINT yo'q — media o'qib bo'lmaydi")
     if not vision_agent.configured():
         # Bu xato emas — kalit hali sozlanmagan bo'lishi mumkin.  Lekin
         # worker buni har startda aniq aytadi, jim qolmaydi.
         logger.warning(
-            "Gemini sozlanmagan (CHAQIMCHI_GEMINI_API_KEY / CHAQIMCHI_GEMINI_VISION_MODEL) — "
+            "Gemini sozlanmagan (ENES_GEMINI_API_KEY / ENES_GEMINI_VISION_MODEL) — "
             "joblar metadata-javob rejimida ishlaydi"
         )
     if problems:

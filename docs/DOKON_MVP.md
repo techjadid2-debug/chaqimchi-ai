@@ -47,8 +47,8 @@ lokal Face ID davomat to‘plami ham arxivlandi
 - N100 Box yo‘li uchun benchmark/soak (Box keyingi bosqichga qoldirilgan).
 
 Shu bandlar tugamaguncha saytdagi funksiyalar production’da sotuvga
-ochilmaydi. `CHAQIMCHI_AVAILABLE_FEATURES` ning o‘zi yetarli emas:
-`CHAQIMCHI_N100_ACCEPTANCE_FILE` ham tekshiruvdan o‘tishi shart.
+ochilmaydi. `ENES_AVAILABLE_FEATURES` ning o‘zi yetarli emas:
+`ENES_N100_ACCEPTANCE_FILE` ham tekshiruvdan o‘tishi shart.
 
 ## MVP’da yo‘q
 
@@ -90,7 +90,7 @@ Zoo'ga ko'chirildi va uchalasi ham **Apache-2.0** — tijoratga ochiq:
 URL va sha256 — `models/faces_manifest.json`; o'rnatish —
 `scripts/fetch_face_models.py`.  Litsenziya endi env sozlamasi emas,
 koddagi fakt (`cloud/faces.py: MODELS_LICENSED_FOR_COMMERCIAL_USE`) —
-ilgari `CHAQIMCHI_FACE_MODEL_LICENSED` bayrog'ini noto'g'ri qo'yish
+ilgari `ENES_FACE_MODEL_LICENSED` bayrog'ini noto'g'ri qo'yish
 tadqiqot modelini "tijoriy" qilib ko'rsatib qo'yardi.
 
 **Bir martalik migratsiya:** yangi model 256 o'lchamli vektor beradi,
@@ -98,7 +98,7 @@ eskisi 512 — mavjud xodim rasmlari qayta hisoblanishi shart
 (`scripts/reembed_faces.py`).  Hisoblanmagan yozuv moslashga umuman
 qo'shilmaydi; log ogohlantiradi.
 
-**Chegara:** standart 0.6 (`CHAQIMCHI_FACE_MATCH_THRESHOLD`).  Sinovda
+**Chegara:** standart 0.6 (`ENES_FACE_MATCH_THRESHOLD`).  Sinovda
 boshqa odam 0.01, bir xil odam buzilgan rasmda 0.67–0.98.  Haqiqiy
 do'kon kadrlarida qayta o'lchash —
 `scripts/calibrate_face_threshold.py`.
@@ -115,7 +115,7 @@ Sotuvga ochishdan oldin real do‘kon kompyuterida:
 - hodisa klipi cloudga yetib borishi va owner panelda ochilishi;
 - OTA yangilanish (test relizi bilan) muvaffaqiyatli o‘tishi.
 
-Natija qabul JSON fayliga yoziladi va `CHAQIMCHI_N100_ACCEPTANCE_FILE`
+Natija qabul JSON fayliga yoziladi va `ENES_N100_ACCEPTANCE_FILE`
 orqali ulanadi (fayl nomi tarixiy — mexanizm bitta).
 
 Amalda:

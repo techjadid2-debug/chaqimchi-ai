@@ -158,7 +158,7 @@ def test_broken_placeholder_falls_back_instead_of_crashing() -> None:
 def cloud_client(tmp_path, monkeypatch):
     """`tests/test_cloud_api.py` dagi bilan bir xil izolyatsiya:
     har test o'z bazasi bilan ishlaydi."""
-    monkeypatch.setenv("CHAQIMCHI_CLOUD_ADMIN_KEY", "test-admin")
+    monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "c.db")
     monkeypatch.setattr("cloud.main._store", None)
     from cloud.main import app

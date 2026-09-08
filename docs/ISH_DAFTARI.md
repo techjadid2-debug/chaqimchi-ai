@@ -7,7 +7,51 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-09-08
+## HOZIRGI HOLAT · 2026-09-09
+
+- **🚫 DEPLOY TAQIQI — `main` cutover kunigacha SERVERGA CHIQMAYDI.**
+  Jonli server hali eski kodda.  Compose fayldagi `${ENES_*}`
+  almashtirishlari serverdagi env yangilanmaguncha BO'SH qoladi va
+  `enes/envcompat.py` ko'prigi bunga yordam bermaydi — u faqat Python
+  ichida ishlaydi, compose'ning o'zi Python'dan o'tmaydi.  Tartib:
+  F7 §2 (serverda `mv` + `sed`) → keyin deploy.
+
+- **✅ SHOX `main` GA QO'YILDI (2026-09-09).**  `enes-rebrend` → `main`
+  fast-forward (148 commit, `101befd` → `a807983`), `origin/main`
+  yangilandi.  Shox tarix uchun QOLDIRILDI, keyingi ish `main` da.
+
+- **🔧 QADAM 3 — CUTOVERGACHA CLOUD TUZATISHLARI TUGADI (2026-09-09,
+  `39352a8`, `e58a974`, `a889175`, `1e027f1`, `83c055c`, `a466e06`).**
+  Beshtasi ham cutoverga bog'liq emas, hammasi cutover kuni bitta
+  deployda chiqadi.  To'liq to'plam: **2 153 passed, 1 skipped**.
+  - **CI to'liq** — ish endi `make lint` va `make test` chaqiradi
+    (`setup-node` + `npm ci`).  Ilgari faqat `ruff` va `pytest` edi,
+    ya'ni `i18n/*.json` yoki `cloud/site/*` qayta qurilmagan commit
+    CI'da yashil bo'lardi.  Qulf: `tests/test_ci_workflow.py`.
+  - **🔴 `shelf` bayrog'i SAQLANMAS EKAN** — `zone-editor.js:serialise()`
+    `restricted` va `queue` ni yozardi, `shelf` ni esa tashlab
+    yuborardi.  Ya'ni «javon» andozasi saqlangach belgisini yo'qotardi
+    va serverdagi mavjud sozlama ham kimdir chizmani qayta saqlagan
+    zahoti jimgina o'chardi — `enes/retail/shelf.py` (`shelf_empty`)
+    amalda hech qachon yoqilmagan bo'lishi mumkin.  Ikkinchi yarmi:
+    `cloud/static/geometry-panel.js` da «javon» checkboxi yo'q edi,
+    ya'ni usta zonani javon deb belgilay olmasdi.  Kesh tokeni ikkala
+    chaqiruvchida `v=4` ga tenglashtirildi.
+  - **Server tomonda chiqish (O-8)** — `owner_members.auth_version`
+    (`portal_accounts` naqshi), `POST /api/v1/owner/auth/logout` va
+    `POST /api/v1/auth/logout`, panelda `api.ts: logout()`.  Versiya
+    **tokenni bergan** a'zolik qatoriga nisbatan tekshiriladi (ko'p
+    filialli egada tanlangan filial boshqa qator).
+  - **CSP (O-2)** — ikkala Caddyfile'da, lekin `-Report-Only`.
+    `script-src` da `'unsafe-inline'` yo'q, eski statik sahifalarda esa
+    inline `<script>` bor, shuning uchun darhol majburiy qilib
+    bo'lmaydi.  Qulf: `tests/test_security_headers.py` (ikki fayldagi
+    siyosat TENG + siyosat bo'shab ketmasin).
+  - **`/health/deep` resurs ogohlantirishi (O-1)** — `server` va
+    `warnings` maydonlari, **503 qilmasdan**; chegaralar Telegram
+    ogohlantirishi bilan bitta manbadan (`alerts.server_health_warnings`).
+    Raqamlar admin kaliti bilan.
+  - Yetim `cloud/static/chaqimchi-logo-blue.svg` o'chirildi.
 
 - **🏷 F6 + F9 — ICHKI NOMLAR VA TOZALASH TUGADI (2026-09-08, `b8883d8`,
   `ef558cd`, `c0c8cbb` + hujjat commiti).**  Paket `chaqimchi_ai` →
@@ -367,10 +411,32 @@
 
 ## KEYINGI ISH
 
-**REBREND (2026-09-08).** To'liq holat + xatolar + tartib:
-`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F0–F6 va F9
-tugadi (F4b: panel ikki tema × uch tilda skrinshot bilan tekshirildi,
-namunaga mos).  **Qoldi — egaga va soakka bog'liq:**
+**REBREND (2026-09-09).** To'liq holat + xatolar + tartib:
+`~/.claude/plans/loyihada-nimalar-qilishimiz-kerak-*.md` (avvalgisi:
+`loyiha-bo-yicha-nimalar-qilishimiz-*.md`).  F0–F6 va F9 tugadi
+(F4b: panel ikki tema × uch tilda skrinshot bilan tekshirildi,
+namunaga mos); shox `main` ga qo'yildi; cutovergacha qilinadigan
+cloud tuzatishlari (Qadam 3) ham tugadi.  **Qoldi — egaga va soakka
+bog'liq:**
+
+**⏭ CUTOVERDAN KEYIN, kichik lekin unutilmasin:**
+- **CSP majburiy rejimga.**  Hozir `-Report-Only`.  Enforce'dan oldin
+  inline `<script>` lar tashqi faylga chiqarilsin: `site{,.ru,.en}.html`
+  (3 ta), `installer.html` (4 ta), `dl`, `connect`, `status`, `pay`,
+  `edu`, `install`.  Bir hafta hisobot rejimida kuzatilgach sarlavha
+  nomi almashadi (`deploy/Caddyfile` va `Caddyfile.enes` — IKKALASI).
+- **UptimeRobot aynan `/health/deep` ni so'rasin** (`/health` ataylab
+  doim 200 — Docker HEALTHCHECK uchun).
+- **`frontend/package.json` da hamma versiya `latest`.**  `npm ci`
+  lockfile'dan o'rnatadi, ya'ni CI takrorlanadigan; lekin kimdir
+  `npm install` qilsa lockfile jimgina siljiydi.  Versiyalarni
+  qotirish kerak.
+- **Telegram Mini App va `X-Frame-Options: DENY`.**  `app.` hosti
+  `security` snippetini import qiladi, ya'ni panel iframe ichida
+  ochilmaydi.  Telegram Desktop/Android'da Mini App WebView (muammo
+  yo'q), Telegram **Web** da esa iframe — u yerda mini app ishlamasligi
+  mumkin.  Tekshirilmagan; CSP `frame-ancestors 'none'` mavjud xulqni
+  takrorlaydi, o'zgartirmaydi.
 
 **F7 — cutover (egadan kirishlar kelgach, bir kunda, tartib bilan):**
 1. Egadan: `enes.uz` DNS boshqaruvi (TTL 300 ga tushirish), bot
@@ -656,6 +722,32 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **O'QILADIGAN-U QAYTA YOZILMAYDIGAN maydon.**  Egizak tuzoq:
+  `production_events.line_name` yozilardi-yu hech qayerda o'qilmasdi;
+  `zone.shelf` esa AKSINCHA — muharrir uni serverdan yuklardi
+  (`zone-editor.js:84`), andoza qo'yardi (`:360`), lekin
+  `serialise()` uni qaytarmasdi.  Ya'ni belgi ekranda ko'rinardi va
+  saqlash tugmasi bosilgan zahoti o'chardi — hech qanday xato
+  chiqmasdan.  Yangi maydon qo'shsangiz **yuklash va saqlash
+  yo'lini birga** tekshiring; eng ishonchlisi — Node ichida
+  «qo'ydim → saqladim → o'qidim» testi
+  (`test_the_shelf_flag_survives_a_save`).
+
+- **Bir manba ikki chaqiruvchida — kesh tokeni ham ikkita.**
+  `/vendor/zone-editor.js` ni `installer.html` `?v=2` bilan, React
+  `GeometryEditor.tsx` esa `?v=3` bilan yuklardi.  Bitta fayl ikki
+  manzil ostida keshlanadi, ya'ni faylni tuzatib bittasini
+  ko'tarmasangiz yarim mijoz eski nusxada qoladi.  Manbaga tegilsa
+  HAMMA chaqiruvchida token ko'tarilsin.
+
+- **Test o'z IZOHIGA ilinishi mumkin.**  CI qulfi «`pytest` matni
+  bo'lmasin» deb yozilgan edi, lekin o'sha faylning izohida
+  «…→ pytest» so'zi turardi va test o'zini yiqitdi.  Yechim:
+  tekshirishdan oldin `#` dan keyingi qismni tashlash
+  (`test_ci_workflow.py:_commands`).  Xuddi shu naqsh loyihada
+  allaqachon bor edi — `geometry-panel.js` da `onclick=` tenglik
+  belgisi bilan qidiriladi.
 
 - **Brendni ommaviy almashtirishda QO'RIQCHI testlar ham almashadi.**
   `Chaqimchi` → `ENES` perl o'tishi `tests/test_panel_v2.py` dagi
@@ -1105,6 +1197,35 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-09 — Shox `main` ga, Qadam 3: cutovergacha cloud tuzatishlari (`39352a8`…`a466e06`)
+Nima: rebrend `main` ga qo'yildi va cutoverga bog'liq bo'lmagan
+oltita tuzatish yopildi — CI to'liq, «javon» bayrog'i saqlanadi,
+chiqish serverda ham amalga oshadi, CSP hisobot rejimida, `/health/deep`
+resurs ogohlantirishi, yetim fayl o'chdi.
+Nega: cutover egadan Payme/Click va NS SVG kelishini kutadi, F8 esa
+soakni.  Shu ikki darvozaga tegmaydigan ish oldindan bajarilib,
+cutover kuni bitta deployda chiqadi.
+Qayerda: `.github/workflows/ci.yml`, `enes/local/static/zone-editor.js`
+(`serialise`), `cloud/static/geometry-panel.js`, `cloud/event_store.py`
+(`owner_members.auth_version`, `member_by_id`, `revoke_member_sessions`),
+`cloud/owner_auth.py`, `cloud/store.py` (`revoke_account_sessions`),
+`cloud/main.py` (`require_active_owner`, ikkala `logout`, `health_deep`),
+`cloud/alerts.py` (`server_health_warnings`), `frontend/src/api.ts`
+(`logout`), `deploy/Caddyfile{,.enes}`.
+Test: `test_ci_workflow.py`, `test_security_headers.py`,
+`test_the_shelf_flag_survives_a_save`,
+`test_both_editors_offer_the_same_zone_flags`,
+`test_logging_out_kills_the_owner_token_on_the_server`,
+`test_logging_out_kills_the_portal_token_on_the_server`,
+`test_logging_out_asks_the_server_too`,
+`test_deep_health_warns_about_resources_without_crying_503`.
+To'liq: 2 153 passed, 1 skipped.
+Diqqat: **`main` ni cutover kunigacha deploy qilmang** — sabab yuqorida,
+HOZIRGI HOLAT tepasida.  CSP hali `-Report-Only`: majburiy qilishdan
+oldin inline `<script>` lar tashqi faylga chiqarilishi kerak.
+`shelf` tuzatishi eski sozlamani QAYTARMAYDI — u allaqachon o'chgan
+bo'lsa, javon zonasi qayta belgilanishi kerak.
 
 ### 2026-09-08 — F6/F9: ichki nomlar ENES, ko'priklar, hujjat va tozalash (`b8883d8`, `ef558cd`, `c0c8cbb`)
 Nima: paket, env, reliz, xizmat, yo'l, Docker va Windows nomlari ENES;

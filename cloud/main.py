@@ -6769,15 +6769,17 @@ async def owner_dashboard(
             "ready": bool(active) and (not expected or active >= expected),
             "active": active,
             "expected": expected or None,
+            # Sabab matni so'rov tilida: ega paneli buni to'g'ridan-to'g'ri
+            # ko'rsatadi (`capability.*` katalogda).
             "reason": (
                 None if not expected or active >= expected
-                else f"{expected} kameradan {active} tasi faol"
+                else i18n.t("capability.cameras.partial", expected=expected, active=active)
             ),
         },
         "edge_config": {
             "ready": applied,
             "revision": config_revision,
-            "reason": None if applied else "Qurilma yangi sozlamani hali tasdiqlamagan",
+            "reason": None if applied else i18n.t("capability.edge_config.pending"),
         },
         "features": {
             "panel": (health.get("plan") or {}).get("panel_features") or [],
@@ -6802,11 +6804,7 @@ async def owner_dashboard(
         "ready": lines_drawn,
         "lines_drawn": lines_drawn,
         "zones_drawn": bool(site_config.get("zones")),
-        "reason": (
-            None
-            if lines_drawn
-            else "Kirish chizig'i chizilmagan — chiziqsiz mijozlar sanalmaydi"
-        ),
+        "reason": None if lines_drawn else i18n.t("capability.geometry.no_line"),
     }
     return {
         "site": {

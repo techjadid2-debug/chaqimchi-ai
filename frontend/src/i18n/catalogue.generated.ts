@@ -12,6 +12,9 @@ export type CatalogueEntry = string | string[];
 
 export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   uz: {
+  "capability.cameras.partial": "{expected} kameradan {active} tasi faol",
+  "capability.edge_config.pending": "Qurilma yangi sozlamani hali tasdiqlamagan",
+  "capability.geometry.no_line": "Kirish chizig'i chizilmagan — chiziqsiz mijozlar sanalmaydi",
   "event.after_hours_presence": "Ish vaqtidan tashqari harakat",
   "event.ai_review": "AI ko'rdi",
   "event.camera_offline": "Kamera javob bermayapti",
@@ -761,6 +764,9 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "trust.unavailable.silent": "Do'kon kompyuteri {hours} soatdan beri jim — ma'lumot to'liq emas"
 },
   ru: {
+  "capability.cameras.partial": "Из {expected} камер работают {active}",
+  "capability.edge_config.pending": "Устройство ещё не подтвердило новые настройки",
+  "capability.geometry.no_line": "Линия входа не нарисована — без неё посетители не считаются",
   "event.after_hours_presence": "Движение в нерабочее время",
   "event.ai_review": "ИИ посмотрел",
   "event.camera_offline": "Камера не отвечает",
@@ -1510,6 +1516,9 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "trust.unavailable.silent": "Компьютер магазина молчит уже {hours} ч. — данные неполные"
 },
   en: {
+  "capability.cameras.partial": "{active} of {expected} cameras active",
+  "capability.edge_config.pending": "The device has not confirmed the new settings yet",
+  "capability.geometry.no_line": "No entrance line is drawn — visitors are not counted without it",
   "event.after_hours_presence": "Movement outside working hours",
   "event.ai_review": "AI reviewed",
   "event.camera_offline": "Camera is not responding",

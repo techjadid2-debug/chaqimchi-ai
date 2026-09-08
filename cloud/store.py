@@ -1601,7 +1601,7 @@ class CloudStore:
                     (table,),
                 ).fetchall()
                 return {str(dict(row)["column_name"]) for row in rows}
-            return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
 
         if "active_cameras" not in columns("devices"):
             conn.execute("ALTER TABLE devices ADD COLUMN active_cameras INTEGER")

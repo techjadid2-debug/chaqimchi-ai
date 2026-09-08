@@ -70,8 +70,14 @@ def _build_stores() -> tuple[EventStore, CloudStore]:
         if database_url
         else EventStore(sqlite_path=DB_PATH.parent / "events.db")
     )
-    # migrate=False: cloud.db'ning yagona yozuvchisi va migratori API.
-    cloud_store = CloudStore(DB_PATH, migrate=False)
+    # migrate=False: boshqaruv bazasining yagona migratori API.
+    # Manzil API bilan BIR XIL bo'lishi shart, aks holda worker eski
+    # SQLite faylini o'qib, ishlab turgan bazadan boshqa javob berardi.
+    cloud_store = CloudStore(
+        DB_PATH,
+        migrate=False,
+        database_url=os.environ.get("ENES_CONTROL_DATABASE_URL", "").strip(),
+    )
     return event_store, cloud_store
 
 

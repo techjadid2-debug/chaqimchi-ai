@@ -156,10 +156,29 @@ _maintenance_task: Optional[Any] = None
 _lead_notification_task: Optional[Any] = None
 
 
+#: Boshqaruv bazasi (litsenziya, tarif, to'lov, portal parollari).
+#:
+#: ATAYLAB `DATABASE_URL` EMAS.  U production'da allaqachon qo'yilgan
+#: va `EventStore` uni ishlatadi; `CloudStore` ham o'shani o'qisa,
+#: keyingi deploy litsenziya va to'lovlarni BO'SH sxemaga yo'naltirardi
+#: — mijozlar obunasiz, hisob-fakturalar yo'q holatda qolardi.
+#: Shuning uchun alohida o'zgaruvchi va u BO'SH bo'lsa hammasi
+#: avvalgidek SQLite'da qoladi.  Yoqish tartibi:
+#:   1. `scripts/migrate_control_db.py` bilan ma'lumot ko'chiriladi,
+#:   2. tekshiriladi (skript o'zi sanaydi),
+#:   3. shundan keyin bu o'zgaruvchi qo'yiladi va cloud qayta ishga
+#:      tushadi.
+CONTROL_DATABASE_URL_ENV = "ENES_CONTROL_DATABASE_URL"
+
+
+def control_database_url() -> str:
+    return os.environ.get(CONTROL_DATABASE_URL_ENV, "").strip()
+
+
 def get_store() -> CloudStore:
     global _store
     if _store is None:
-        _store = CloudStore(DB_PATH)
+        _store = CloudStore(DB_PATH, database_url=control_database_url())
     return _store
 
 

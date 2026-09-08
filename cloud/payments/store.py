@@ -61,6 +61,12 @@ class PaymentStore:
                 note TEXT,
                 created_at TEXT NOT NULL,
                 paid_at TEXT,
+                -- Yozuv tartibi.  `created_at` bir soniya aniqligida va
+                -- bitta saytga bir soniyada ikki hisob ochilishi mumkin.
+                -- Ilgari tartibni SQLite `rowid` i hal qilardi, lekin
+                -- PostgreSQL'da u YO'Q — `cloud/store.py: device_jobs`
+                -- dagi bilan bir xil yechim.
+                seq INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (site_id) REFERENCES sites(id)
             );
             CREATE INDEX IF NOT EXISTS idx_invoices_site ON invoices(site_id);
@@ -93,8 +99,22 @@ class PaymentStore:
             CREATE INDEX IF NOT EXISTS idx_click_invoice ON click_transactions(invoice_id);
             """
         )
+        # Ishlab turgan bazaga `seq`.  Eski qatorlarga 0 tushadi — ular
+        # baribir `created_at` bo'yicha oldinda.
+        if "seq" not in self._columns(conn, "invoices"):
+            conn.execute("ALTER TABLE invoices ADD COLUMN seq INTEGER NOT NULL DEFAULT 0")
         conn.commit()
         conn.close()
+
+    def _columns(self, conn: Any, table: str) -> set:
+        """Jadval ustunlari.  `PRAGMA` faqat SQLite'da bor."""
+        if self.cloud.postgres:
+            rows = conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name=?",
+                (table,),
+            ).fetchall()
+            return {str(dict(row)["column_name"]) for row in rows}
+        return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
 
     # ── Hisob-faktura ────────────────────────────────────────────────────
 
@@ -125,8 +145,10 @@ class PaymentStore:
         conn = self._connect()
         conn.execute(
             """
-            INSERT INTO invoices (id, site_id, plan, months, amount_uzs, state, note, created_at)
-            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+            INSERT INTO invoices
+                (id, site_id, plan, months, amount_uzs, state, note, created_at, seq)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?,
+                    (SELECT COALESCE(MAX(seq),0)+1 FROM invoices))
             """,
             (invoice_id, site_id, site["plan"], months, amount, note, _iso(_utc_now())),
         )
@@ -159,7 +181,7 @@ class PaymentStore:
         if site_id:
             sql += " WHERE i.site_id = ?"
             params = (site_id,)
-        sql += " ORDER BY i.created_at DESC, i.rowid DESC LIMIT ?"
+        sql += " ORDER BY i.created_at DESC, i.seq DESC LIMIT ?"
         rows = conn.execute(sql, (*params, max(1, int(limit)))).fetchall()
         conn.close()
         return [dict(r) for r in rows]

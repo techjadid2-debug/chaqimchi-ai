@@ -225,3 +225,95 @@ def test_click_gets_an_integer_prepare_id(pg_store) -> None:
     prepared = payments.click_prepare("clk-1", invoice["id"], invoice["amount_uzs"])
 
     assert isinstance(prepared["merchant_prepare_id"], int)
+
+
+# ── `rowid` qaytib kelmasin ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("module", ("store.py", "payments/store.py", "event_store.py"))
+def test_no_query_orders_by_rowid(module: str) -> None:
+    """`rowid` PostgreSQL'da YO'Q.
+
+    U ikki joyda ishlatilgan edi va ikkalasi ham "oxirgi yozuv" ni
+    topish uchun (`latest_job_of_kind`, `list_invoices`).  PostgreSQL'da
+    so'rov `UndefinedColumn` bilan yiqilardi — ya'ni admin paneli va
+    hisob-faktura ro'yxati ishlamay qolardi.  `ctid` o'rnini bosmaydi:
+    u `UPDATE` dan keyin o'zgaradi.  O'rniga `seq` ustuni.
+    """
+    source = (Path(__file__).resolve().parents[1] / "cloud" / module).read_text(encoding="utf-8")
+    offenders = [
+        line.strip()
+        for line in source.splitlines()
+        if "rowid" in line.lower() and "--" not in line and not line.strip().startswith("#")
+    ]
+
+    assert offenders == [], f"{module}: `rowid` PostgreSQL'da yo'q: " + "; ".join(offenders)
+
+
+@needs_postgres
+def test_invoices_are_listed_newest_first(pg_store) -> None:
+    """Tartib `seq` bilan: `created_at` bir soniya aniqligida va bitta
+    saytga bir soniyada ikki hisob ochilishi mumkin."""
+    from cloud.payments.store import PaymentStore
+
+    payments = PaymentStore(pg_store)
+    site = pg_store.create_site("PG do'kon", plan="lite")
+    first = payments.create_invoice(site["site_id"], 1)
+    second = payments.create_invoice(site["site_id"], 2)
+
+    listed = payments.list_invoices(site["site_id"])
+
+    assert [item["id"] for item in listed] == [second["id"], first["id"]]
+
+
+# ── Ko'chirish skripti ───────────────────────────────────────────────────
+
+
+@needs_postgres
+def test_the_migration_keeps_an_edited_catalogue(tmp_path: Path) -> None:
+    """Eng jim yo'qotish: sxema yaratilganda katalog STANDART qiymatlar
+    bilan urug'lanadi va manbadagi tahrirlangan narx `ON CONFLICT DO
+    NOTHING` sabab o'tkazib yuborilardi.  Qatorlar soni esa baribir mos
+    kelardi, ya'ni tekshiruv ham buni ko'rmasdi."""
+    import subprocess
+    import sys
+
+    from cloud.payments.store import PaymentStore
+
+    sqlite_path = tmp_path / "cloud.db"
+    source = CloudStore(sqlite_path)
+    PaymentStore(source)
+    site = source.create_site("Ko'chadigan do'kon", plan="lite")
+    source.create_account(
+        username="kochgan", password="parol12345", role="customer",
+        full_name="Ko'chgan Mijoz", site_id=site["site_id"],
+    )
+    connection = source._connect()
+    connection.execute(
+        "UPDATE feature_prices SET monthly_usd_cents=777 WHERE feature_code='person_count'"
+    )
+    connection.commit()
+    connection.close()
+
+    import psycopg
+
+    with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
+        conn.execute("DROP SCHEMA public CASCADE")
+        conn.execute("CREATE SCHEMA public")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/migrate_control_db.py",
+         "--sqlite", str(sqlite_path), "--postgres", DATABASE_URL],
+        capture_output=True, text=True, timeout=180,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+    assert result.returncode == 0, result.stderr
+
+    migrated = CloudStore(tmp_path / "unused.db", database_url=DATABASE_URL)
+    quote = migrated.feature_quote([{"feature_code": "person_count", "camera_count": 1}])
+
+    assert quote["features"][0]["monthly_usd_cents"] == 777, "tahrirlangan narx yo'qoldi"
+    assert migrated.get_site(site["site_id"])["name"] == "Ko'chadigan do'kon"
+    # Parol ham ko'chsin: hash ustuni bo'lgani uchun u "shunchaki matn",
+    # lekin ko'chirish uni buzsa mijoz panelga kira olmasdi.
+    assert migrated.authenticate_account("kochgan", "parol12345")

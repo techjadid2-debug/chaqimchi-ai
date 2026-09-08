@@ -1,4 +1,4 @@
-"""Windows dasturini Chaqimchi Cloud'ga ulash.
+"""Windows dasturini ENES Cloud'ga ulash.
 
 Nima uchun kerak: ulanmagan dastur to'liq ishlaydi, lekin **yolg'iz**
 qoladi — hodisalar `outbox.db` da to'planadi, mijoz cloud panelida hech
@@ -10,7 +10,7 @@ o'z-o'zidan ishga tushadi (ular cloudda allaqachon yozilgan):
 * mijoz owner panelida o'sha raqamlarni ko'radi.
 
 `scripts/pair_sotqin.py` bilan farqi faqat **natijani qayerga yozishda**:
-u Linux qurilmasida `/etc/chaqimchi/sotqin.env` ga yozadi, bu yerda esa
+u Linux qurilmasida `/etc/enes/sotqin.env` ga yozadi, bu yerda esa
 lokal `config.yaml` ning `cloud_sync` bo'limiga tushadi.  Claim so'rovi
 va uning maydonlari bir xil — cloud ikkalasini ham farq qilmaydi.
 """
@@ -185,7 +185,7 @@ def hello(cloud_url: str) -> Optional[Dict[str, Any]]:
     body = {
         "fingerprint": fingerprint(),
         "label": device_label(),
-        "product_name": "Chaqimchi Windows",
+        "product_name": "ENES Windows",
         "app_version": __version__,
         "os_name": f"{platform.system()} {platform.release()}".strip(),
         "local_ip": _local_ip(),
@@ -339,7 +339,7 @@ def _panel_host(api_base: str) -> str:
     """`https://api.chaqimchi.uz` → `https://app.chaqimchi.uz`.
 
     Panel API bilan BOSHQA xostda: `api.` faqat `/api/*` ni o'tkazadi va
-    `/owner` uchun 404 beradi (`deploy/Caddyfile.chaqimchi`).  Almashuvsiz
+    `/owner` uchun 404 beradi (`deploy/Caddyfile.enes`).  Almashuvsiz
     mijozga o'lik havola ko'rsatilardi.
 
     Tanib bo'lmaydigan manzil (masalan `http://127.0.0.1:8750` — ishlab
@@ -430,7 +430,7 @@ def claim(code: str, cloud_url: str) -> PairedSite:
                 "pairing_code": safe_code,
                 "label": device_label(),
                 "hardware_id": hardware_id(),
-                "product_name": "Chaqimchi Windows",
+                "product_name": "ENES Windows",
                 "hardware_model": platform.processor()[:120] or "Windows PC",
                 "hardware_revision": "W1",
                 "serial_number": hardware_id(),

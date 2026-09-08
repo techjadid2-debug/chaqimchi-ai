@@ -1,4 +1,4 @@
-# Chaqimchi AI — dev/CI to'plami.
+# ENES Monitoring — dev/CI to'plami.
 #
 # Mahsulot to'plamlari alohida:
 #   qurilma (Linux Sotqin)  -> requirements-sotqin.txt

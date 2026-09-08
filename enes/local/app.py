@@ -1,4 +1,4 @@
-"""Lokal Chaqimchi AI — sozlash ustasi va do'kon paneli.
+"""Lokal ENES Monitoring — sozlash ustasi va do'kon paneli.
 
 Ishga tushirish:
 
@@ -87,7 +87,7 @@ def max_cameras() -> int:
 
 supervisor = RetailSupervisor()
 
-app = FastAPI(title="Chaqimchi AI — lokal", docs_url=None, redoc_url=None)
+app = FastAPI(title="ENES Monitoring — lokal", docs_url=None, redoc_url=None)
 
 #: Panel faqat shu nomlar orqali ochiladi.
 #:
@@ -162,7 +162,7 @@ async def panel_page() -> FileResponse:
 
 @app.get("/health", include_in_schema=False)
 async def health() -> Dict[str, Any]:
-    return {"ok": True, "service": "chaqimchi-local"}
+    return {"ok": True, "service": "enes-local"}
 
 
 # ── Sozlama ──────────────────────────────────────────────────────────────
@@ -1659,7 +1659,7 @@ def main() -> None:
             )
             print(f"DIQQAT: portni eski versiya ({other}) ushlab turibdi.")
             print("Kompyuterni qayta yuklang — shundan keyin bitta nusxa qoladi.")
-        print("Chaqimchi AI allaqachon ishlab turibdi — yangi nusxa kerak emas.")
+        print("ENES Monitoring allaqachon ishlab turibdi — yangi nusxa kerak emas.")
         print(f"Boshqaruv paneli: {url}")
         if _browser_enabled():
             try:
@@ -1698,7 +1698,7 @@ def main() -> None:
     browser_url = _first_run_url(url)
 
     print("=" * 62)
-    print("  Chaqimchi AI — do'kon nazorati")
+    print("  ENES Monitoring — do'kon nazorati")
     print(f"  Boshqaruv paneli: {browser_url}")
     if browser_url != url:
         print(f"  Qurilma sahifasi: {url}")

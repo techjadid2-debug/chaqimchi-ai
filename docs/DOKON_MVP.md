@@ -11,7 +11,7 @@ lokal Face ID davomat to‘plami ham arxivlandi
 |---|---|
 | Mijoz | Do‘kon |
 | Pilot | 1 do‘kon, 4 kamera (yagona manba: `enes/limits.py`) |
-| Asosiy qurilma | **Mijozning mavjud Windows 10/11 kompyuteri** (`Chaqimchi_AI_Setup.exe`) |
+| Asosiy qurilma | **Mijozning mavjud Windows 10/11 kompyuteri** (`ENES_Setup.exe`) |
 | Keyingi bosqich | Chaqimchi Box — Sotqin R1: Intel N100, 8 GB, 128 GB NVMe (kod tayyor, sotuv fokusda emas) |
 | Video | To‘liq arxiv NVR’da; qurilma faqat event buffer/klip |
 | Kamera ulash | Sozlash ustasi: ONVIF qidiruv, NVR kanal skaneri yoki qo‘lda RTSP; admin panelda masofadan ham kiritish mumkin |

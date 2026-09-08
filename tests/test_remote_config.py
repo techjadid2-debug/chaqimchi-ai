@@ -304,7 +304,7 @@ def test_heartbeat_reports_the_running_version(local, monkeypatch) -> None:
     assert sent["url"].endswith("/api/v1/edge/heartbeat")
     assert sent["body"]["app_version"] == __version__
     assert sent["body"]["cameras_active"] == 2
-    assert sent["body"]["product_name"] == "Chaqimchi Windows"
+    assert sent["body"]["product_name"] == "ENES Windows"
     assert sent["headers"]["X-Device-Token"] == "tok-1"
 
 

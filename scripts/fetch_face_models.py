@@ -17,7 +17,7 @@ bittasi yetishmasa OpenVINO uni umuman yuklay olmaydi.
 
 Konteynerda (prod):
 
-    docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
+    docker compose -f docker-compose.enes.yml --env-file .env.production \
       exec cloud python scripts/fetch_face_models.py
 
 Lokal (test):

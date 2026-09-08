@@ -1,4 +1,4 @@
-# Chaqimchi AI — Server Edition Config
+# ENES Monitoring — Server Edition Config
 
 face:
   model_name: buffalo_l
@@ -79,7 +79,7 @@ antispoof:
 # keyin kadr ko'rilishini qoida belgilaydi (`actions: [ai_review]`, namuna
 # `config/rules.yaml` da). Ya'ni qurilmadagi arzon model "nimadir bo'ldi"
 # deb topadi, qimmat model esa faqat o'sha lahzani ko'radi.
-# Do'kon analitikasi (Chaqimchi Retail AI) — alohida xizmat sifatida ishlaydi:
+# Do'kon analitikasi (ENES Retail) — alohida xizmat sifatida ishlaydi:
 #   python -m enes.retail.service --config config/config.yaml
 # Yuz tanishdan mustaqil: bittasi yiqilsa ikkinchisi ishlashda davom etadi.
 # Batafsil: enes/retail/README.md

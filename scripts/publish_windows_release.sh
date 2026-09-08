@@ -6,7 +6,7 @@
 # Nega alohida skript kerak: `make windows-release` faqat NOUTBUKDA
 # `.exe` va imzolangan `.json` yasaydi.  Ular serverdagi `releases/`
 # papkasiga tushmaguncha hech bir do'kon yangilanmaydi — cloud aynan
-# o'sha papkadan `chaqimchi-windows-<versiya>.exe` va `.json` juftini
+# o'sha papkadan `enes-windows-<versiya>.exe` va `.json` juftini
 # qidiradi (`cloud/main.py: latest_windows_release`).  Bu oxirgi qadam
 # qo'lda `scp` edi va uni unutish "reliz chiqdi, lekin hech kimga
 # yetmadi" degan jim holatga olib kelardi.
@@ -17,20 +17,20 @@
 #
 #   # CI qurgan faylni chiqarish (GitHub Releases'dan yuklab olingan):
 #   ENES_RELEASE_HOST=deploy@169.58.198.111 \
-#     scripts/publish_windows_release.sh --exe ~/Downloads/Chaqimchi_AI_Setup.exe
+#     scripts/publish_windows_release.sh --exe ~/Downloads/ENES_Setup.exe
 #
 # Muhitdan o'qiladi:
 #   ENES_RELEASE_HOST      majburiy — `deploy@IP`
 #   ENES_RELEASE_DIR       serverdagi papka (standart quyida)
-#   ENES_RELEASE_SSH_KEY   SSH kaliti (standart `.deploy_keys/chaqimchi_prod`)
+#   ENES_RELEASE_SSH_KEY   SSH kaliti (standart `.deploy_keys/enes_prod`)
 #   ENES_DL_URL            tashqi tekshiruv manzili (standart dl.chaqimchi.uz)
 #
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-remote_dir="${ENES_RELEASE_DIR:-/home/deploy/chaqimchi-ai/releases}"
-ssh_key="${ENES_RELEASE_SSH_KEY:-.deploy_keys/chaqimchi_prod}"
+remote_dir="${ENES_RELEASE_DIR:-/home/deploy/enes/releases}"
+ssh_key="${ENES_RELEASE_SSH_KEY:-.deploy_keys/enes_prod}"
 dl_url="${ENES_DL_URL:-https://dl.chaqimchi.uz}"
 py="${PY:-python3}"
 
@@ -48,11 +48,11 @@ if [[ -z "${ENES_RELEASE_HOST:-}" ]]; then
 fi
 
 version="$("$py" -c 'import enes; print(enes.__version__)')"
-exe="releases/chaqimchi-windows-$version.exe"
-manifest="releases/chaqimchi-windows-$version.json"
+exe="releases/enes-windows-$version.exe"
+manifest="releases/enes-windows-$version.json"
 echo "→ Versiya: $version"
 
-# CI qurgan fayl boshqa nom bilan keladi (`Chaqimchi_AI_Setup.exe`).
+# CI qurgan fayl boshqa nom bilan keladi (`ENES_Setup.exe`).
 # Uni versiyali nomga ko'chiramiz: cloud faqat shu nomni taniydi.
 if [[ -n "$source_exe" ]]; then
   [[ -f "$source_exe" ]] || { echo "Fayl topilmadi: $source_exe" >&2; exit 1; }
@@ -90,7 +90,7 @@ from enes.signed_update import verify_release_manifest
 
 archive, manifest = Path(sys.argv[1]), Path(sys.argv[2])
 data = verify_release_manifest(archive, manifest, Path("deploy/update-public.pem"))
-print(f"   ✓ {data['version']} · {data.get('product', 'chaqimchi-windows')}")
+print(f"   ✓ {data['version']} · {data.get('product', 'enes-windows')}")
 PY
 
 size_bytes="$(wc -c < "$exe" | tr -d ' ')"

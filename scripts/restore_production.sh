@@ -156,7 +156,7 @@ if [[ "$kind" == "media" ]]; then
   fi
 else
   # Kunlik arxivda media ATAYLAB yo'q (disk 15 barobar shishmasligi uchun).
-  # Rasm va kliplar alohida `chaqimchi-media-*` arxividan tiklanadi.
+  # Rasm va kliplar alohida `enes-media-*` arxividan tiklanadi.
   note "MinIO obyektlari" "kunlik arxivda yo'q — media arxividan tiklanadi"
 fi
 
@@ -242,7 +242,7 @@ echo "→ Xizmatlar ko'tarilmoqda…"
 echo
 echo "✓ Tiklandi."
 echo "Qolgan qo'l ishlari:"
-echo "  1. Rasm va kliplar: eng yangi chaqimchi-media-*.tar.gz.enc arxivini"
+echo "  1. Rasm va kliplar: eng yangi enes-media-*.tar.gz.enc arxivini"
 echo "     shu skript bilan --restore qiling (ular kunlik arxivda yo'q)"
 echo "  2. Yuz modellari: python scripts/fetch_face_models.py (arxivga kirmaydi)"
 echo "  3. Telegram webhook: python scripts/set_telegram_webhook.py"

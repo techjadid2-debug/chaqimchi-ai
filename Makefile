@@ -1,4 +1,4 @@
-# Chaqimchi AI
+# ENES Monitoring
 PY ?= python3
 
 .PHONY: install-dev test lint fmt ui-install ui-build ui-check run-sotqin run-cloud run-local run-retail provision docker-build cloud-config cloud-deploy benchmark windows-installer windows-release windows-publish
@@ -54,7 +54,7 @@ provision:
 	$(PY) scripts/provision_site.py "$(NAME)" --plan $(PLAN) --months $(MONTHS)
 
 docker-build:
-	docker build -f Dockerfile.cloud -t chaqimchi-cloud .
+	docker build -f Dockerfile.cloud -t enes-cloud .
 
 cloud-config:
 	docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet
@@ -77,7 +77,7 @@ windows-installer:
 # nusxa + Ed25519 imzo.  0.6.4 relizida bu qadamlar qo'lda bajarilib, ikkita
 # tuzoqqa duch kelindi (cloud URL unutildi, imzo noto'g'ri mahsulot bilan
 # ketayozdi) — endi hammasi bitta buyruq:
-#   make windows-release CLOUD_URL=https://chaqimchi.example
+#   make windows-release CLOUD_URL=https://enes.example
 # Eslatma: versiyani OLDIN ko'taring (pyproject.toml + enes/__init__.py)
 # va commit qiling; chiqqan .exe/.json ni serverga scp qiling (buyruq oxirida
 # ko'rsatiladi), tarqatish tartibi docs/RELIZ_VA_OTA.md da.
@@ -86,8 +86,8 @@ windows-release:
 	ENES_DEFAULT_CLOUD_URL="$(CLOUD_URL)" $(PY) scripts/build_windows_payload.py
 	makensis -V2 scripts/windows_installer.nsi
 	@VERSION=$$($(PY) -c "import enes; print(enes.__version__)"); \
-	cp releases/Chaqimchi_AI_Setup.exe "releases/chaqimchi-windows-$$VERSION.exe"; \
-	$(PY) scripts/sign_release.py "releases/chaqimchi-windows-$$VERSION.exe"; \
+	cp releases/ENES_Setup.exe "releases/enes-windows-$$VERSION.exe"; \
+	$(PY) scripts/sign_release.py "releases/enes-windows-$$VERSION.exe"; \
 	echo ""; \
 	echo "Serverga chiqarish:"; \
 	echo "  ENES_RELEASE_HOST=deploy@<server> make windows-publish"

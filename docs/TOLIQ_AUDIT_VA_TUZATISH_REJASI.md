@@ -1,4 +1,4 @@
-# Chaqimchi AI — to'liq audit va xatolarni tuzatish rejasi
+# ENES Monitoring — to'liq audit va xatolarni tuzatish rejasi
 
 Saqlangan sana: 2026-09-06.
 Holat: reja saqlandi; dastlabki tekshiruv o'tkazilgan, tuzatishlar hali bajarilmagan.

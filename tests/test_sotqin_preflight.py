@@ -208,7 +208,7 @@ def test_a_stopped_service_is_reported_with_the_log_command(tmp_path: Path) -> N
         }
     )
 
-    check = next(item for item in preflight.run() if item.name == "Xizmat chaqimchi-retail")
+    check = next(item for item in preflight.run() if item.name == "Xizmat enes-retail")
     assert check.status == FAIL
     assert "journalctl" in check.fix
 

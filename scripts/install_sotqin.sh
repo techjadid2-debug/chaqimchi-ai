@@ -7,8 +7,8 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 source_dir="$(cd "$(dirname "$0")/.." && pwd)"
-install_root=/opt/chaqimchi
-env_file=/etc/chaqimchi/sotqin.env
+install_root=/opt/enes
+env_file=/etc/enes/sotqin.env
 version="$(date -u +%Y%m%dT%H%M%SZ)"
 release="$install_root/releases/$version"
 
@@ -61,28 +61,28 @@ fi
 
 # `render` va `video` guruhlari /dev/dri/renderD128 ga kirish uchun shart —
 # aks holda drayver o'rnatilgan bo'lsa ham xizmat GPU'ni ko'rmaydi.
-if id chaqimchi >/dev/null 2>&1; then
-  usermod -aG render,video chaqimchi || true
+if id enes >/dev/null 2>&1; then
+  usermod -aG render,video enes || true
 else
   useradd --system --home "$install_root" --shell /usr/sbin/nologin \
-    --groups render,video chaqimchi
+    --groups render,video enes
 fi
 
 # ── Muhit fayli ───────────────────────────────────────────────────────────
 # Sirlar keyinroq (venv tayyor bo'lgach) yaratiladi, lekin faylning o'zi shu
 # yerda kerak: davomat piloti yoqilganmi — pip o'rnatishidan oldin bilishimiz
 # kerak.
-install -d -m 0700 /etc/chaqimchi
+install -d -m 0700 /etc/enes
 if [[ ! -f "$env_file" ]]; then
-  if [[ -f /etc/chaqimchi/edge.env ]]; then
-    install -m 0600 /etc/chaqimchi/edge.env "$env_file"
+  if [[ -f /etc/enes/edge.env ]]; then
+    install -m 0600 /etc/enes/edge.env "$env_file"
   else
     install -m 0600 "$source_dir/deploy/sotqin.env.example" "$env_file"
   fi
 fi
 
 # ── Reliz nusxasi ─────────────────────────────────────────────────────────
-install -d -o chaqimchi -g chaqimchi "$release" "$install_root/shared/data" "$install_root/shared/logs" "$install_root/shared/models"
+install -d -o enes -g enes "$release" "$install_root/shared/data" "$install_root/shared/logs" "$install_root/shared/models"
 install -d "$release/config" "$release/models" "$release/scripts"
 cp -a "$source_dir/enes" "$source_dir/requirements-sotqin.txt" "$release/"
 cp -a "$source_dir/config/sotqin.yaml" "$source_dir/config/rules.yaml" "$release/config/"
@@ -103,7 +103,7 @@ python3 -m venv "$install_root/venv"
 # va commit qilingan SHA-256 manifesti bilan tekshiriladi.
 "$install_root/venv/bin/python" "$release/scripts/fetch_retail_model.py"
 ln -sfn "$release" "$install_root/current"
-chown -R chaqimchi:chaqimchi "$install_root"
+chown -R enes:enes "$install_root"
 
 set_env_value() {
   local key="$1" value="$2" file="$3"
@@ -139,7 +139,7 @@ chmod 0600 "$env_file"
 # cloud buzilsa ham hujumchi imzo yasay olmaydi va qurilma eski kodda
 # qolaveradi.  Agar bu yerda har o'rnatishda ustiga yozilsa, zararli paket
 # o'z kalitini qo'yib qo'ya olardi va butun imzo qatlami ma'nosiz bo'lardi.
-update_key=/etc/chaqimchi/update-public.pem
+update_key=/etc/enes/update-public.pem
 new_key="$source_dir/deploy/update-public.pem"
 if [[ -f "$new_key" ]]; then
   if [[ ! -f "$update_key" ]]; then
@@ -159,8 +159,8 @@ else
   echo "OGOHLANTIRISH: paketda OTA ochiq kaliti yo'q — bu qurilma masofadan yangilanmaydi" >&2
 fi
 
-install -m 0644 "$source_dir/deploy/chaqimchi-sotqin.service" /etc/systemd/system/chaqimchi-sotqin.service
-install -m 0644 "$source_dir/deploy/chaqimchi-retail.service" /etc/systemd/system/chaqimchi-retail.service
+install -m 0644 "$source_dir/deploy/enes-sotqin.service" /etc/systemd/system/enes-sotqin.service
+install -m 0644 "$source_dir/deploy/enes-retail.service" /etc/systemd/system/enes-retail.service
 systemctl daemon-reload
-systemctl enable chaqimchi-sotqin.service chaqimchi-retail.service
+systemctl enable enes-sotqin.service enes-retail.service
 echo "Sotqin R1 o'rnatildi: control va retail tayyor. Pairingdan keyin xizmatlar ishga tushadi."

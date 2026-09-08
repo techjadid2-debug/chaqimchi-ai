@@ -15,7 +15,7 @@ Skript bazadagi saqlangan xodim rasmlaridan foydalanadi:
 Chiqadigan jadval ikki taqsimotni ko'rsatadi va ular orasidagi eng keng
 bo'shliqni tavsiya qiladi.
 
-    docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
+    docker compose -f docker-compose.enes.yml --env-file .env.production \
       exec cloud python scripts/calibrate_face_threshold.py
 
 Bitta obyekt bo'yicha:

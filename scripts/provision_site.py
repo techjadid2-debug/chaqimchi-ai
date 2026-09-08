@@ -14,7 +14,7 @@ DEFAULT_URL = os.environ.get("ENES_CLOUD_URL", "http://127.0.0.1:8750")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Chaqimchi — mijoz ochish")
+    parser = argparse.ArgumentParser(description="ENES — mijoz ochish")
     parser.add_argument("name", help="Mijoz / joy nomi")
     parser.add_argument(
         "--plan",

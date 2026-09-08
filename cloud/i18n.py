@@ -33,7 +33,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional, Tuple
 
-logger = logging.getLogger("chaqimchi.i18n")
+logger = logging.getLogger("enes.i18n")
 
 Lang = Literal["uz", "ru", "en"]
 
@@ -49,7 +49,7 @@ _CATALOGUE: Dict[str, Dict[str, Any]] = {}
 
 #: Joriy so'rov tili.  Standart qiymat bor: fon vazifasi yoki test
 #: to'g'ridan-to'g'ri `t()` ni chaqirsa ham hech narsa yiqilmaydi.
-_current: ContextVar[Lang] = ContextVar("chaqimchi_lang", default=DEFAULT_LANG)
+_current: ContextVar[Lang] = ContextVar("enes_lang", default=DEFAULT_LANG)
 
 
 def _load() -> Dict[str, Dict[str, Any]]:

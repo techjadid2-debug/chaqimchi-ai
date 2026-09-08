@@ -1,4 +1,4 @@
-# Chaqimchi AI — Keng Qamrovli Strategik Audit, Tizim Tahlili va Rivojlantirish Rejasi
+# ENES Monitoring — Keng Qamrovli Strategik Audit, Tizim Tahlili va Rivojlantirish Rejasi
 
 > **Hujjat turi:** Boshqaruv, Arxitektura, QA, UI/UX, Biznes va Kiberxavfsizlik Auditi  
 > **Sana:** 2026-08-23  
@@ -34,7 +34,7 @@
 
 ```mermaid
 graph TD
-    A[Chaqimchi AI 1M Strategiyasi] --> B[1. Mahsulot Modelini Yengillashtirish]
+    A[ENES Monitoring 1M Strategiyasi] --> B[1. Mahsulot Modelini Yengillashtirish]
     A --> C[2. Killer Value / POS Integratsiya]
     A --> D[3. PLG & Telegram Ecosystem]
     A --> E[4. Global Expansion]
@@ -125,7 +125,7 @@ graph TD
   * WCAG kontrast talablari bajarilgan (5.6:1).
 
 ### 5.2. Kamchiliklar va Yaxshilash Tavsiyalari
-1. **Brend Nomi ("Chaqimchi AI"):**
+1. **Brend Nomi ("ENES Monitoring"):**
    * O'zbek tilida "Chaqimchi" so'zi biroz salbiy ma'noga ega (xodimlar orasida norozilik uyg'otishi mumkin: "boshliq bizga chaqimchi qo'ydi").
    * *Tavsiya:* Brendni ommaga taqdim etganda "Aqlli Do'kon Yordamchisi", "Chaqimchi Retail AI" yoki B2B darajasidagi jiddiy shiorlar bilan muvozanatlash.
 2. **Interaktiv Dashboard Grafiklari:**

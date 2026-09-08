@@ -374,7 +374,7 @@ def test_lead_notification_reaches_only_explicit_personal_ids_once(
     # Takroriy ariza (bir xil telefon) qayta xabar TUG'DIRMAYDI: tugmani
     # 5 marta bosgan mehmon adminga 5 ta xabar bo'lib tushar edi.
     assert [chat_id for chat_id, _ in sent] == ["5476913898"]
-    assert "Yangi Chaqimchi AI" in sent[0][1]
+    assert "Yangi ENES Monitoring" in sent[0][1]
 
 
 def test_public_registration_opens_bot_and_start_returns_role_buttons(
@@ -382,9 +382,9 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
 ) -> None:
     import cloud.main as cm
 
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", "webhook-test")
-    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.example")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.example")
     sent = []
 
     async def fake_send(chat_id, text, *, reply_markup=None):
@@ -392,7 +392,7 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
 
     monkeypatch.setattr(cm, "_send_owner_telegram", fake_send)
     page = cloud_client.get("/")
-    assert "https://t.me/chaqimchi_bot?start=register" in page.text
+    assert "https://t.me/enes_bot?start=register" in page.text
     assert "__TELEGRAM_REGISTER_URL__" not in page.text
 
     webhook = cloud_client.post(
@@ -408,9 +408,9 @@ def test_public_registration_opens_bot_and_start_returns_role_buttons(
     assert webhook.status_code == 200
     assert sent[0][0] == "5476913898"
     buttons = sent[0][2]["inline_keyboard"]
-    assert buttons[0][0]["web_app"]["url"] == "https://chaqimchi.example/owner"
-    assert buttons[1][0]["url"] == "https://chaqimchi.example/installer"
-    assert buttons[2][0]["url"] == "https://chaqimchi.example/#narx"
+    assert buttons[0][0]["web_app"]["url"] == "https://enes.example/owner"
+    assert buttons[1][0]["url"] == "https://enes.example/installer"
+    assert buttons[2][0]["url"] == "https://enes.example/#narx"
     # Ichki kod nomi mijozga ko'rinmasin.
     assert "Sotqin" not in sent[0][1]
     assert cloud_client.post("/api/v1/telegram/webhook", json={"message": {}}).status_code == 404
@@ -549,7 +549,7 @@ def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch)
 
 
 def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_path) -> None:
-    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer = tmp_path / "ENES_Setup.exe"
     installer.write_bytes(b"MZ" + b"\0" * 2_000_000)
     monkeypatch.delenv("ENES_WINDOWS_INSTALLER_URL", raising=False)
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
@@ -566,7 +566,7 @@ def test_windows_installer_is_served_from_disk(cloud_client, monkeypatch, tmp_pa
     # nom va deyarli bir xil hajm tushardi va mijoz yangi versiyani
     # olganini ko'ra olmasdi.
     disposition = response.headers.get("content-disposition", "")
-    assert "Chaqimchi_AI_Setup-" in disposition
+    assert "ENES_Setup-" in disposition
     assert disposition.endswith('.exe"')
 
 
@@ -578,7 +578,7 @@ def test_download_filename_carries_version_and_pairing_code(
     Versiya qo'shilgach kod nomning **oxirida** qolishi shart — NSIS
     aynan oxirgi `-XXXXXX` ni o'qiydi.
     """
-    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer = tmp_path / "ENES_Setup.exe"
     installer.write_bytes(b"MZ")
     monkeypatch.delenv("ENES_WINDOWS_INSTALLER_URL", raising=False)
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
@@ -595,7 +595,7 @@ def test_windows_installer_redirects_when_published_externally(cloud_client, mon
     Releases'da turadi va cloud faqat yo'naltiradi."""
     monkeypatch.setenv(
         "ENES_WINDOWS_INSTALLER_URL",
-        "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
+        "https://github.com/example/releases/ENES_Setup.exe",
     )
     monkeypatch.setenv("ENES_WINDOWS_INSTALLER_SIZE_MB", "71")
 
@@ -670,7 +670,7 @@ def test_windows_release_version_comes_from_the_file_not_the_server(tmp_path, mo
 
     releases = tmp_path / "releases"
     releases.mkdir()
-    exe = releases / "chaqimchi-windows-9.9.9.exe"
+    exe = releases / "enes-windows-9.9.9.exe"
     exe.write_bytes(b"x" * 2048)
     exe.with_suffix(".json").write_text('{"version": "9.9.9"}', encoding="utf-8")
 
@@ -824,15 +824,15 @@ def test_a_coded_link_keeps_the_code_even_when_a_public_url_is_set(
     JIMGINA buzilgan edi.
 
     Redirect brauzerga manzildagi nomni saqlatadi
-    (`chaqimchi-windows-0.6.8.exe`) — kod yo'qoladi va mijoz sehrgarda
+    (`enes-windows-0.6.8.exe`) — kod yo'qoladi va mijoz sehrgarda
     6 ta belgini qo'lda kiritishga majbur bo'ladi.  Ya'ni "bir bosishda
     ulanish" va'dasi bitta env o'zgaruvchisi bilan o'chib qolardi.
     """
-    installer = tmp_path / "Chaqimchi_AI_Setup.exe"
+    installer = tmp_path / "ENES_Setup.exe"
     installer.write_bytes(b"MZ")
     monkeypatch.setenv(
         "ENES_WINDOWS_INSTALLER_URL",
-        "https://dl.example.uz/releases/chaqimchi-windows-0.6.8.exe",
+        "https://dl.example.uz/releases/enes-windows-0.6.8.exe",
     )
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", (installer,))
     monkeypatch.setattr("cloud.main._release_dirs", list)
@@ -852,7 +852,7 @@ def test_a_coded_link_still_works_when_the_file_is_only_remote(
     yuklab olish baribir ishlashi kerak (sehrgar kodni so'raydi)."""
     monkeypatch.setenv(
         "ENES_WINDOWS_INSTALLER_URL",
-        "https://github.com/example/releases/Chaqimchi_AI_Setup.exe",
+        "https://github.com/example/releases/ENES_Setup.exe",
     )
     monkeypatch.setattr("cloud.main.WINDOWS_INSTALLER_PATHS", ())
     monkeypatch.setattr("cloud.main._release_dirs", list)

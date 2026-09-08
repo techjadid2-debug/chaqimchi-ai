@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reliz arxivini imzolaydi va qurilma kutgan manifestni yozadi.
 
-    python scripts/sign_release.py releases/chaqimchi-sotqin-0.6.0.tar.gz
+    python scripts/sign_release.py releases/enes-sotqin-0.6.0.tar.gz
 
 Uchta narsa ataylab shunday:
 
@@ -43,17 +43,17 @@ from enes.signed_update import (
     verify_release_manifest,
 )
 
-DEFAULT_PRIVATE = Path.home() / ".chaqimchi" / "sotqin-release-signing.pem"
+DEFAULT_PRIVATE = Path.home() / ".enes" / "sotqin-release-signing.pem"
 DEFAULT_PUBLIC = BASE_DIR / "deploy" / "update-public.pem"
 
 #: `signed_update.verify_release_manifest` qabul qiladigan belgilar.
 VERSION_PATTERN = re.compile(r"^[A-Za-z0-9.\-_]+$")
 
-#: `chaqimchi-sotqin-0.6.0.tar.gz` va `chaqimchi-windows-0.7.0.exe`.
+#: `enes-sotqin-0.6.0.tar.gz` va `enes-windows-0.7.0.exe`.
 #: Windows o'rnatuvchisi ham xuddi shu imzo yo'lidan o'tadi: u mijoz
 #: kompyuterida **administrator huquqi** bilan bajariladi, ya'ni
 #: tekshirilmagan fayl qurilmani butunlay topshirish demak.
-ARCHIVE_PATTERN = re.compile(r"^chaqimchi-(sotqin|lite|windows)-(?P<version>.+)\.(?:tar\.gz|exe)$")
+ARCHIVE_PATTERN = re.compile(r"^enes-(sotqin|lite|windows)-(?P<version>.+)\.(?:tar\.gz|exe)$")
 
 VERSION_IN_SOURCE = re.compile(r"^__version__\s*=\s*[\"'](?P<version>[^\"']+)[\"']", re.M)
 
@@ -68,7 +68,7 @@ def version_from_name(archive: Path) -> str:
 def version_inside(archive: Path) -> Optional[str]:
     """Arxiv ichidagi `enes/__init__.py` dagi versiya.
 
-    Topilmasa `None` — bu xato emas, `chaqimchi-lite` paketida boshqacha
+    Topilmasa `None` — bu xato emas, `enes-lite` paketida boshqacha
     tuzilma bo'lishi mumkin.  `.exe` ham `None` qaytaradi: u tar arxiv
     emas, ichini ochib bo'lmaydi.  Bunday holda nomdagi versiyaga
     ishoniladi va uni `build_windows_payload.py` `__version__` dan qo'yadi.
@@ -116,7 +116,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--private-key", type=Path, default=DEFAULT_PRIVATE)
     parser.add_argument("--public-key", type=Path, default=DEFAULT_PUBLIC)
     # Standart qiymat YO'Q — mahsulot fayl nomidan aniqlanadi.  Ilgari
-    # default "chaqimchi-sotqin" edi va Windows relizi bir marta noto'g'ri
+    # default "enes-sotqin" edi va Windows relizi bir marta noto'g'ri
     # mahsulot bilan imzolanib ketgan (2026-08-17, ushlab qolindi).
     parser.add_argument("--product", default=None)
     parser.add_argument("--target-arch", default="x86_64")
@@ -128,7 +128,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         args.product = next(
             (
                 prefix
-                for prefix in ("chaqimchi-windows", "chaqimchi-sotqin", "chaqimchi-lite")
+                for prefix in (
+                    "enes-windows", "enes-sotqin", "enes-lite",
+                    # Rebrenddan oldingi arxivlarni qayta imzolash uchun.
+                    "chaqimchi-windows", "chaqimchi-sotqin", "chaqimchi-lite",
+                )
                 if name.startswith(prefix + "-")
             ),
             None,
@@ -136,7 +140,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.product is None:
             print(
                 f"XATO: fayl nomidan mahsulot aniqlanmadi: {name}\n"
-                "Nom chaqimchi-windows-X.Y.Z.exe yoki chaqimchi-sotqin-X.Y.Z.tar.gz "
+                "Nom enes-windows-X.Y.Z.exe yoki enes-sotqin-X.Y.Z.tar.gz "
                 "ko'rinishida bo'lsin, yoki --product bering.",
                 file=sys.stderr,
             )
@@ -183,8 +187,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         target_arch=args.target_arch,
         private_key=private_key,
     )
-    # `with_suffix()` ishlatib bo'lmaydi: `chaqimchi-windows-0.7.0.exe` da
-    # oxirgi "suffix" — `.0`, ya'ni natija `chaqimchi-windows-0.7.json`
+    # `with_suffix()` ishlatib bo'lmaydi: `enes-windows-0.7.0.exe` da
+    # oxirgi "suffix" — `.0`, ya'ni natija `enes-windows-0.7.json`
     # bo'lib ketardi va qurilma manifestni topolmasdi.  Kengaytmani
     # nomdan aniq kesamiz.
     output = args.output

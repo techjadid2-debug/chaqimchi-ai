@@ -50,9 +50,9 @@ jobs:
         run: |
           set -euo pipefail
           grep -q "^set ENES_DEFAULT_CLOUD_URL=https://" \
-            build/payload/Chaqimchi_AI.bat
+            build/payload/ENES.bat
           echo "Cloud manzili joyida:"
-          grep "^set ENES_DEFAULT_CLOUD_URL=" build/payload/Chaqimchi_AI.bat
+          grep "^set ENES_DEFAULT_CLOUD_URL=" build/payload/ENES.bat
 
       - name: O'rnatuvchini kompilyatsiya qilish
         run: makensis -V2 scripts/windows_installer.nsi
@@ -60,11 +60,11 @@ jobs:
       - name: Natijani tekshirish
         run: |
           set -euo pipefail
-          test -f releases/Chaqimchi_AI_Setup.exe
+          test -f releases/ENES_Setup.exe
           # PE fayl "MZ" bilan boshlanadi — bo'sh yoki buzuq artefakt
           # relizga chiqmasligi kerak.
-          head -c 2 releases/Chaqimchi_AI_Setup.exe | grep -q "MZ"
-          SIZE_MB=$(( $(stat -c%s releases/Chaqimchi_AI_Setup.exe) / 1024 / 1024 ))
+          head -c 2 releases/ENES_Setup.exe | grep -q "MZ"
+          SIZE_MB=$(( $(stat -c%s releases/ENES_Setup.exe) / 1024 / 1024 ))
           echo "Hajmi: ${SIZE_MB} MB"
           # 40 MB dan kichik bo'lsa payload tushib qolgan (Python yoki
           # AI modeli qo'shilmagan) — bunday fayl mijozda ishlamaydi.
@@ -73,15 +73,15 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Chaqimchi_AI_Setup
-          path: releases/Chaqimchi_AI_Setup.exe
+          name: ENES_Setup
+          path: releases/ENES_Setup.exe
           retention-days: 14
 
       - name: GitHub Release'ga yuklash
         if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
-          files: releases/Chaqimchi_AI_Setup.exe
+          files: releases/ENES_Setup.exe
           body: |
             Windows uchun o'rnatuvchi (${{ env.SIZE_MB }} MB).
 

@@ -20,14 +20,14 @@ from cloud.main import CLIP_MAX_BYTES, SNAPSHOT_MAX_BYTES
 ROOT = Path(__file__).resolve().parents[1]
 
 #: Ikkala Caddyfile ham tekshiriladi.  Bungacha faqat `deploy/Caddyfile`
-#: o'qilardi, holbuki **productionda `Caddyfile.chaqimchi` ishlatiladi**
-#: (`docker-compose.chaqimchi.yml`).  Ya'ni bu test o'zi qo'riqlashi kerak
-#: bo'lgan faylga umuman qaramas edi — va `Caddyfile.chaqimchi` ichidagi
+#: o'qilardi, holbuki **productionda `Caddyfile.enes` ishlatiladi**
+#: (`docker-compose.enes.yml`).  Ya'ni bu test o'zi qo'riqlashi kerak
+#: bo'lgan faylga umuman qaramas edi — va `Caddyfile.enes` ichidagi
 #: `api.` izohida esa "tests/test_proxy_limits.py mosligini tekshiradi"
 #: deb yozib qo'yilgan edi.  Soxta ishonch.
 CADDYFILES = {
     "prod": ROOT / "deploy" / "Caddyfile",
-    "chaqimchi": ROOT / "deploy" / "Caddyfile.chaqimchi",
+    "enes": ROOT / "deploy" / "Caddyfile.enes",
 }
 
 _UNITS = {"KB": 1024, "MB": 1024**2, "GB": 1024**3}
@@ -36,7 +36,7 @@ _UNITS = {"KB": 1024, "MB": 1024**2, "GB": 1024**3}
 def _vhost_limits(path: Path) -> dict[str, int]:
     """Har bir vhost uchun `max_size` (bayt).
 
-    `Caddyfile.chaqimchi` da yettita turli `max_size` bor (1MB dan 60MB
+    `Caddyfile.enes` da yettita turli `max_size` bor (1MB dan 60MB
     gacha).  Butun fayl bo'ylab birinchi mos kelganini olish — aynan
     shu testdagi xato edi: u `chaqimchi.uz` ning 5MB'ini topib,
     "limit klipdan kichik" deb yiqilardi yoki, aksincha, noto'g'ri
@@ -80,12 +80,12 @@ def test_klip_yuklanadigan_vhost_limiti_yetarli() -> None:
 
 
 def test_production_caddyfile_ham_tekshiriladi() -> None:
-    """`Caddyfile.chaqimchi` haqiqatan o'qilyaptimi.
+    """`Caddyfile.enes` haqiqatan o'qilyaptimi.
 
     Bu testning o'zi tirqishni qo'riqlaydi: kimdir yana faqat bitta
     faylni tekshiradigan qilib qo'ysa, shu yerda ushlanadi.
     """
-    limits = _vhost_limits(CADDYFILES["chaqimchi"])
+    limits = _vhost_limits(CADDYFILES["enes"])
     assert "api.chaqimchi.uz" in limits, (
         "Productionda ishlatiladigan Caddyfile'da api vhosti topilmadi — "
         "test noto'g'ri faylga qarayotgan bo'lishi mumkin"
@@ -109,7 +109,7 @@ def test_http3_advertised_bo_lsa_udp_porti_ochiq_bo_lsin() -> None:
     """
     import yaml
 
-    for name in ("docker-compose.chaqimchi.yml", "docker-compose.prod.yml"):
+    for name in ("docker-compose.enes.yml", "docker-compose.prod.yml"):
         compose = yaml.safe_load((ROOT / name).read_text(encoding="utf-8"))
         ports = [str(p) for p in compose["services"]["caddy"]["ports"]]
         assert "443:443" in ports, f"{name}: HTTPS uchun TCP porti yo'q"
@@ -173,7 +173,7 @@ def test_statik_fayllarda_kesh_muddati_bor() -> None:
 
 def test_owner_pwa_worker_app_subdomainida_ochiq() -> None:
     """V2 panel worker'ni ro'yxatdan o'tkazadi; Caddy uni 404 qilmasin."""
-    text = CADDYFILES["chaqimchi"].read_text(encoding="utf-8")
+    text = CADDYFILES["enes"].read_text(encoding="utf-8")
     app_block = text.split("app.chaqimchi.uz {", 1)[1].split("partner.chaqimchi.uz {", 1)[0]
     assert "/owner-sw.js" in app_block
 
@@ -189,7 +189,7 @@ def test_ulash_ekrani_uchun_zarur_yollar_app_subdomainida_ochiq() -> None:
 
     2026-08-24 da deploy'dan keyin aynan shu bo'ldi.
     """
-    text = CADDYFILES["chaqimchi"].read_text(encoding="utf-8")
+    text = CADDYFILES["enes"].read_text(encoding="utf-8")
     app_block = text.split("app.chaqimchi.uz {", 1)[1].split("partner.chaqimchi.uz {", 1)[0]
 
     for path in ("/api/v1/public/device-connect", "/api/v1/public/quick-trial"):

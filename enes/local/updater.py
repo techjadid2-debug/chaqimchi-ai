@@ -17,7 +17,7 @@ Yangilash jarayoni:
       → sha256 + Ed25519 tekshiruvi → Setup.exe /S (jimgina o'rnatish)
 
 Jimgina o'rnatish sozlamalarga tegmaydi: NSIS skripti `IfSilent` bilan
-`%PROGRAMDATA%\\Chaqimchi` ni saqlab qoladi.  Ya'ni kamera sozlamalari,
+`%PROGRAMDATA%\\ENES` ni saqlab qoladi.  Ya'ni kamera sozlamalari,
 chiziqlar va hisobot yangilashdan keyin joyida qoladi.
 
 Ishga tushirish (odatda rejalashtirilgan vazifa chaqiradi):
@@ -210,8 +210,8 @@ def download_and_verify(update: Dict[str, Any], workdir: Path) -> Path:
         "X-Device-Token": str(raw["device_token"]),
     }
     version = str(update["version"])
-    installer = workdir / f"chaqimchi-windows-{version}.exe"
-    manifest = workdir / f"chaqimchi-windows-{version}.json"
+    installer = workdir / f"enes-windows-{version}.exe"
+    manifest = workdir / f"enes-windows-{version}.json"
 
     try:
         _download(str(update["download_url"]), installer, headers)
@@ -417,7 +417,7 @@ def run_once(*, dry_run: bool = False) -> int:
 
     version = str(update["version"])
     logger.info("Yangi versiya: %s (joriy: %s)", version, __version__)
-    with tempfile.TemporaryDirectory(prefix="chaqimchi-update-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="enes-update-") as tmp:
         try:
             installer = download_and_verify(update, Path(tmp))
         except UpdateError as exc:
@@ -439,8 +439,8 @@ def run_once(*, dry_run: bool = False) -> int:
         # Joriy versiyaning o'rnatuvchisi (oldingi yangilanishdan qolgan)
         # rollback nishoni bo'ladi.  Qolgan eski fayllar o'chiriladi —
         # disk yangilanish arxiviga aylanib ketmasin.
-        prev_exe = keep / f"chaqimchi-windows-{__version__}.exe"
-        prev_manifest = keep / f"chaqimchi-windows-{__version__}.json"
+        prev_exe = keep / f"enes-windows-{__version__}.exe"
+        prev_manifest = keep / f"enes-windows-{__version__}.json"
         # Birinchi masofaviy yangilanishda nishon bo'lmaydi — uni reliz
         # serveridan olib qo'yamiz, aks holda buzuq reliz chiqsa do'kon
         # qo'lda tiklanishni kutib qolardi.
@@ -456,7 +456,7 @@ def run_once(*, dry_run: bool = False) -> int:
             prev_manifest,
         )
         wanted = {final, keep / manifest_src.name, prev_exe, prev_manifest}
-        for stale in keep.glob("chaqimchi-windows-*"):
+        for stale in keep.glob("enes-windows-*"):
             if stale not in wanted:
                 stale.unlink(missing_ok=True)
 

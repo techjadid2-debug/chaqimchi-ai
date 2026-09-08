@@ -1,6 +1,6 @@
-# Chaqimchi AI — do‘kon MVP
+# ENES Monitoring — do‘kon MVP
 
-Chaqimchi AI hozir **mijozning mavjud Windows kompyuteri + NVR/IP kamera +
+ENES Monitoring hozir **mijozning mavjud Windows kompyuteri + NVR/IP kamera +
 Cloud** sifatida faqat do‘konlar uchun qurilmoqda. Birinchi qabul profili —
 bitta do‘kon va ko‘pi bilan **4 kamera** (yagona manba:
 `enes/limits.py`). Uzluksiz video NVR’da qoladi; tahlil do‘kon
@@ -54,7 +54,7 @@ Asosiy xizmatlar:
 
 ## Windows lokal o‘rnatish (asosiy yo‘l)
 
-Do‘kon egasi mavjud Windows kompyuteriga o‘zi o‘rnatadi: `Chaqimchi_AI_Setup.exe`
+Do‘kon egasi mavjud Windows kompyuteriga o‘zi o‘rnatadi: `ENES_Setup.exe`
 → Keyingi → Keyingi → Tayyor → brauzerda **bulut paneli** ochiladi: ega o‘sha
 yerda ro‘yxatdan o‘tadi, qurilmani tasdiqlaydi va kamerani sozlaydi. Python va
 AI modeli o‘rnatuvchi ichida, o‘rnatish uchun internet talab qilinmaydi. Kamera
@@ -62,7 +62,7 @@ ro‘yxati lokal konfigda ham turadi, ya’ni cloud uzilsa tahlil to‘xtamaydi.
 
 ```bash
 python scripts/build_windows_payload.py     # → build/payload
-makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.exe
+makensis -V2 scripts/windows_installer.nsi  # → releases/ENES_Setup.exe
 ```
 
 Mijozga beriladigan qadam-baqadam yo‘riqnoma saytda: `/install`.

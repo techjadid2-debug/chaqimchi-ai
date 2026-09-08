@@ -31,7 +31,7 @@ def keys(tmp_path: Path) -> tuple[Path, Path]:
     return private, public
 
 
-def make_archive(path: Path, *, version: str = "0.6.0", top: str = "chaqimchi-sotqin-0.6.0"):
+def make_archive(path: Path, *, version: str = "0.6.0", top: str = "enes-sotqin-0.6.0"):
     """Ichida `enes/__init__.py` bo'lgan haqiqiy tar.gz."""
     source = f'__version__ = "{version}"\n'.encode()
     with tarfile.open(path, "w:gz") as package:
@@ -52,6 +52,7 @@ def test_private_key_is_owner_only_and_outside_the_repo(tmp_path: Path) -> None:
 
     assert private.stat().st_mode & 0o777 == 0o600
     # Standart yo'l repo ichida emas.
+    # Repo papkasi diskda hali "Chaqimchi AI" — kalit uning ichida bo'lmasin.
     assert "Chaqimchi AI" not in str(generate_update_key.DEFAULT_PRIVATE)
     assert generate_update_key.DEFAULT_PRIVATE.name.endswith(".pem")
 
@@ -98,7 +99,7 @@ def test_a_signed_manifest_verifies_on_the_device(tmp_path: Path, keys) -> None:
     """Butun modulning ma'nosi: imzolovchi va tekshiruvchi bir xil
     baytlarni ko'rsin."""
     private, public = keys
-    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz")
+    archive = make_archive(tmp_path / "enes-sotqin-0.6.0.tar.gz")
 
     assert (
         sign_release.main(
@@ -107,11 +108,11 @@ def test_a_signed_manifest_verifies_on_the_device(tmp_path: Path, keys) -> None:
         == 0
     )
 
-    manifest_path = tmp_path / "chaqimchi-sotqin-0.6.0.json"
+    manifest_path = tmp_path / "enes-sotqin-0.6.0.json"
     verified = verify_release_manifest(archive, manifest_path, public)
     assert verified["version"] == "0.6.0"
     assert verified["schema_version"] == 2
-    assert verified["product"] == "chaqimchi-sotqin"
+    assert verified["product"] == "enes-sotqin"
     assert verified["target_arch"] == "x86_64"
 
 
@@ -119,10 +120,10 @@ def test_the_manifest_has_exactly_the_expected_fields(tmp_path: Path, keys) -> N
     """V2 hamma maydonni imzolaydi — har qo'shimcha maydon abadiy
     majburiyat bo'lib qoladi."""
     private, public = keys
-    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz")
+    archive = make_archive(tmp_path / "enes-sotqin-0.6.0.tar.gz")
     sign_release.main([str(archive), "--private-key", str(private), "--public-key", str(public)])
 
-    manifest = json.loads((tmp_path / "chaqimchi-sotqin-0.6.0.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "enes-sotqin-0.6.0.json").read_text(encoding="utf-8"))
 
     assert set(manifest) == {
         "schema_version",
@@ -137,14 +138,14 @@ def test_the_manifest_has_exactly_the_expected_fields(tmp_path: Path, keys) -> N
 def test_a_mismatched_version_inside_the_archive_is_refused(tmp_path: Path, keys) -> None:
     """Diskda aynan shunday tarball topilgan: nomi 0.5.0, ichi boshqa kod."""
     private, public = keys
-    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz", version="0.5.0")
+    archive = make_archive(tmp_path / "enes-sotqin-0.6.0.tar.gz", version="0.5.0")
 
     code = sign_release.main(
         [str(archive), "--private-key", str(private), "--public-key", str(public)]
     )
 
     assert code == 1
-    assert not (tmp_path / "chaqimchi-sotqin-0.6.0.json").exists()
+    assert not (tmp_path / "enes-sotqin-0.6.0.json").exists()
 
 
 def test_signing_with_the_wrong_key_fails_on_the_laptop(tmp_path: Path, keys) -> None:
@@ -153,7 +154,7 @@ def test_signing_with_the_wrong_key_fails_on_the_laptop(tmp_path: Path, keys) ->
     private, _public = keys
     other_public = tmp_path / "boshqa.pem"
     generate_update_key.generate(tmp_path / "boshqa-maxfiy.pem", other_public)
-    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz")
+    archive = make_archive(tmp_path / "enes-sotqin-0.6.0.tar.gz")
 
     code = sign_release.main(
         [str(archive), "--private-key", str(private), "--public-key", str(other_public)]
@@ -161,21 +162,21 @@ def test_signing_with_the_wrong_key_fails_on_the_laptop(tmp_path: Path, keys) ->
 
     assert code == 1
     # Yaroqsiz manifest diskda qolmasin.
-    assert not (tmp_path / "chaqimchi-sotqin-0.6.0.json").exists()
+    assert not (tmp_path / "enes-sotqin-0.6.0.json").exists()
 
 
 def test_a_tampered_archive_no_longer_verifies(tmp_path: Path, keys) -> None:
     private, public = keys
-    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz")
+    archive = make_archive(tmp_path / "enes-sotqin-0.6.0.tar.gz")
     sign_release.main([str(archive), "--private-key", str(private), "--public-key", str(public)])
 
     archive.write_bytes(archive.read_bytes() + b"qo-shimcha")
 
     with pytest.raises(UpdateVerificationError, match="SHA-256"):
-        verify_release_manifest(archive, tmp_path / "chaqimchi-sotqin-0.6.0.json", public)
+        verify_release_manifest(archive, tmp_path / "enes-sotqin-0.6.0.json", public)
 
 
-@pytest.mark.parametrize("name", ["boshqa-paket-1.0.tar.gz", "chaqimchi-sotqin.tar.gz"])
+@pytest.mark.parametrize("name", ["boshqa-paket-1.0.tar.gz", "enes-sotqin.tar.gz"])
 def test_an_unexpected_archive_name_is_refused(tmp_path: Path, keys, name: str) -> None:
     private, public = keys
     archive = make_archive(tmp_path / name)
@@ -193,7 +194,7 @@ def test_a_version_the_device_would_reject_is_refused(tmp_path: Path, keys) -> N
     uchun belgilar ro'yxati qat'iy. Bu tekshiruvsiz xato faqat qurilmada
     chiqardi."""
     private, public = keys
-    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0+yomon.tar.gz", version="0.6.0+yomon")
+    archive = make_archive(tmp_path / "enes-sotqin-0.6.0+yomon.tar.gz", version="0.6.0+yomon")
 
     assert (
         sign_release.main(
@@ -204,7 +205,7 @@ def test_a_version_the_device_would_reject_is_refused(tmp_path: Path, keys) -> N
 
 
 def test_a_missing_private_key_says_what_to_run(tmp_path: Path, capsys) -> None:
-    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz")
+    archive = make_archive(tmp_path / "enes-sotqin-0.6.0.tar.gz")
 
     code = sign_release.main([str(archive), "--private-key", str(tmp_path / "yo-q.pem")])
 

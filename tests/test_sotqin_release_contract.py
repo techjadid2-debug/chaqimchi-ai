@@ -60,7 +60,7 @@ def test_installer_refuses_to_fall_back_to_cpu_silently() -> None:
     """iGPU'siz o'rnatish jimgina davom etmasin: detektor CPU'ga tushsa
     tizim 4-8 barobar sekin bo'ladi va buni hech kim sezmaydi."""
     installer = (ROOT / "scripts" / "install_sotqin.sh").read_text()
-    unit = (ROOT / "deploy" / "chaqimchi-retail.service").read_text()
+    unit = (ROOT / "deploy" / "enes-retail.service").read_text()
 
     assert "intel-opencl-icd" in installer
     assert "intel-media-va-driver" in installer
@@ -74,8 +74,8 @@ def test_installer_refuses_to_fall_back_to_cpu_silently() -> None:
 def test_services_declare_a_memory_ceiling() -> None:
     """RAM shifti cgroup darajasida — talab: butun qurilma <= 6.5 GB."""
     limits = {
-        "chaqimchi-retail.service": "MemoryMax=2560M",
-        "chaqimchi-sotqin.service": "MemoryMax=512M",
+        "enes-retail.service": "MemoryMax=2560M",
+        "enes-sotqin.service": "MemoryMax=512M",
     }
     for unit, expected in limits.items():
         assert expected in (ROOT / "deploy" / unit).read_text(), unit
@@ -86,7 +86,7 @@ def test_release_contains_every_runtime_service_and_verified_model() -> None:
     builder = (ROOT / "scripts" / "build_sotqin_release.sh").read_text()
     manifest = json.loads((ROOT / "models" / "retail_manifest.json").read_text())
 
-    assert "chaqimchi-retail.service" in installer
+    assert "enes-retail.service" in installer
     assert "fetch_retail_model.py" in installer
     assert (ROOT / "scripts" / "soak_n100.py").is_file()
     assert '"$root/models/retail_manifest.json"' in builder
@@ -100,11 +100,11 @@ def test_release_contains_every_runtime_service_and_verified_model() -> None:
 
 
 def test_retail_service_resolves_release_assets_from_current_symlink() -> None:
-    unit = (ROOT / "deploy" / "chaqimchi-retail.service").read_text()
+    unit = (ROOT / "deploy" / "enes-retail.service").read_text()
     service = (ROOT / "enes" / "retail" / "service.py").read_text()
 
-    assert "--base-dir /opt/chaqimchi/current" in unit
-    assert "--base-dir /opt/chaqimchi/shared" not in unit
+    assert "--base-dir /opt/enes/current" in unit
+    assert "--base-dir /opt/enes/shared" not in unit
     assert "CloudEventSync(sync_cfg, outbox)" in service
     assert 'name="retail-cloud-sync"' in service
 
@@ -218,7 +218,7 @@ def test_the_update_key_ships_and_is_never_silently_replaced() -> None:
 
     assert (ROOT / "deploy" / "update-public.pem").is_file()
     assert '"$root/deploy/update-public.pem"' in builder
-    assert "/etc/chaqimchi/update-public.pem" in installer
+    assert "/etc/enes/update-public.pem" in installer
     # Mavjud kalit faqat ataylab almashtiriladi.
     assert "ENES_ROTATE_UPDATE_KEY" in installer
     assert "cmp -s" in installer

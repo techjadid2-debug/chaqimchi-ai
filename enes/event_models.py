@@ -21,7 +21,7 @@ EventType = Literal[
     "zone_entered",
     "loitering",
     "occupancy_exceeded",
-    # ── Retail (Chaqimchi Retail AI) ──────────────────────────────────────
+    # ── Retail (ENES Retail) ──────────────────────────────────────
     #: Kirish/chiqish chizig'i kesildi.  `direction` bilan birga keladi —
     #: mijozlar oqimi va konversiya hisobining asosi.
     "line_crossed",

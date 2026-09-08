@@ -40,7 +40,7 @@ REQUIRED_ENV = (
     "ENES_DEVICE_TOKEN",
 )
 
-SERVICES = ("chaqimchi-sotqin", "chaqimchi-retail")
+SERVICES = ("enes-sotqin", "enes-retail")
 
 OK = "OK"
 WARN = "OGOHLANTIRISH"
@@ -70,11 +70,11 @@ class Preflight:
     Har bir bog'liqlik alohida beriladi — testda soxta qiymat qo'yiladi.
     """
 
-    env_path: Path = Path("/etc/chaqimchi/sotqin.env")
-    model_dir: Path = Path("/opt/chaqimchi/current/models/retail")
-    manifest_path: Path = Path("/opt/chaqimchi/current/models/retail_manifest.json")
-    data_dir: Path = Path("/opt/chaqimchi/shared/data")
-    config_cache: Path = Path("/opt/chaqimchi/shared/data/sotqin-config.json")
+    env_path: Path = Path("/etc/enes/sotqin.env")
+    model_dir: Path = Path("/opt/enes/current/models/retail")
+    manifest_path: Path = Path("/opt/enes/current/models/retail_manifest.json")
+    data_dir: Path = Path("/opt/enes/shared/data")
+    config_cache: Path = Path("/opt/enes/shared/data/sotqin-config.json")
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
     which: Callable[[str], Optional[str]] = shutil.which
     disk_usage: Callable[[Any], Any] = shutil.disk_usage
@@ -126,7 +126,7 @@ class Preflight:
                 FAIL,
                 "Intel grafikasi ko'rinmadi — inferens CPU'da ketadi (~4-8 barobar sekin)",
                 "sudo apt-get install -y intel-opencl-icd && "
-                "sudo usermod -aG render,video chaqimchi && sudo reboot",
+                "sudo usermod -aG render,video enes && sudo reboot",
             )
         else:
             self.add("iGPU (OpenCL)", OK, "Intel grafikasi topildi")
@@ -382,7 +382,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--env",
         type=Path,
-        default=Path(os.environ.get("ENES_ENV_FILE", "/etc/chaqimchi/sotqin.env")),
+        default=Path(os.environ.get("ENES_ENV_FILE", "/etc/enes/sotqin.env")),
     )
     args = parser.parse_args(argv)
 

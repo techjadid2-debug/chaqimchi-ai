@@ -1256,7 +1256,7 @@ class AlertService:
 def test_message() -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return (
-        "🔔 <b>Chaqimchi Cloud</b>\n"
+        "🔔 <b>ENES Cloud</b>\n"
         "Ogohlantirish sozlandi — mijoz tizimi o‘chsa shu yerga xabar keladi.\n"
         f"<i>{stamp}</i>"
     )

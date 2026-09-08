@@ -22,9 +22,9 @@ SUPPORTED_MANIFEST_SCHEMAS = {1, 2}
 #: `product` bilan imzolangan paket rad etiladi, ya'ni bir mahsulot uchun
 #: chiqarilgan reliz boshqasiga tasodifan o'rnatilib ketmaydi.
 #:
-#: `chaqimchi-windows` — mijozning o'z kompyuteriga o'rnatiladigan
+#: `enes-windows` — mijozning o'z kompyuteriga o'rnatiladigan
 #: `.exe` paketi (`scripts/build_windows_payload.py`).
-KNOWN_PRODUCTS = frozenset({"chaqimchi-sotqin", "chaqimchi-lite", "chaqimchi-windows"})
+KNOWN_PRODUCTS = frozenset({"enes-sotqin", "enes-lite", "enes-windows"})
 
 
 def canonical_manifest_payload(manifest: Dict[str, Any]) -> bytes:

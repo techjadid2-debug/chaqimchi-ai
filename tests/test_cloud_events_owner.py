@@ -78,7 +78,7 @@ def test_config_profile_matches_the_device_product(production_client) -> None:
     ).json()["pairing_code"]
     windows = client.post(
         "/api/v1/devices/claim",
-        json={"pairing_code": code, "product_name": "Chaqimchi Windows"},
+        json={"pairing_code": code, "product_name": "ENES Windows"},
     ).json()
     win_headers = {
         "X-Site-Id": windows["site_id"],
@@ -86,7 +86,7 @@ def test_config_profile_matches_the_device_product(production_client) -> None:
         "X-Device-Token": windows["device_token"],
     }
     win_config = client.get("/api/v1/sotqin/config", headers=win_headers).json()
-    assert win_config["product"]["name"] == "Chaqimchi Windows"
+    assert win_config["product"]["name"] == "ENES Windows"
     assert "hardware_model" not in win_config["product"]
     assert win_config["product"]["max_cameras"] == 4
     assert "max_bytes" not in win_config["buffer_policy"], "N100 bufer siyosati ketmasin"
@@ -970,7 +970,7 @@ def test_owner_can_mute_the_daily_digest(production_client) -> None:
 
 
 def test_lite_plan_includes_every_feature_out_of_the_box(production_client) -> None:
-    """Yagona tarif (2026-08-17): Chaqimchi Lite'da HAMMA funksiya ichida.
+    """Yagona tarif (2026-08-17): ENES Lite'da HAMMA funksiya ichida.
 
     Ilgari cloud_features faqat qo'lda approve qilingan assignmentlardan
     kelardi va hech bir saytga avto-biriktirilmasdi — pullik mijozning

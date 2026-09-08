@@ -48,7 +48,7 @@ class S3SnapshotStore:
             from minio import Minio
         except ImportError as exc:  # pragma: no cover - production dependency
             raise RuntimeError("MinIO Python klienti o'rnatilishi kerak") from exc
-        self.bucket = os.environ.get("ENES_S3_BUCKET", "chaqimchi-snapshots")
+        self.bucket = os.environ.get("ENES_S3_BUCKET", "enes-snapshots")
         encryption_key = os.environ.get("ENES_SNAPSHOT_KEY", "").strip()
         self.cipher = Fernet(encryption_key.encode()) if encryption_key else None
         raw_endpoint = os.environ.get("ENES_S3_ENDPOINT", "")

@@ -450,7 +450,7 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # nosozlik oylab sezilmadi.
         "stale_chains": _stale_chains(),
         "app_version": __version__,
-        "product_name": "Chaqimchi Windows",
+        "product_name": "ENES Windows",
         # Qurilma HOZIR qaysi sozlama revisionida ishlayapti.
         #
         # Maydon Windows yo'lida umuman yuborilmasdi va cloud standart

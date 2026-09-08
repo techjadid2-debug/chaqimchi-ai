@@ -11,7 +11,7 @@ qurilmani yangilash. Ikkalasi ham bitta imzolangan paketdan foydalanadi.
 python scripts/generate_update_key.py
 ```
 
-* Maxfiy kalit — `~/.chaqimchi/sotqin-release-signing.pem`, 0600,
+* Maxfiy kalit — `~/.enes/sotqin-release-signing.pem`, 0600,
   **repo daraxtidan tashqarida**.
 * Ochiq kalit — `deploy/update-public.pem`, commit qilinadi va reliz
   paketi ichida qurilmaga boradi.
@@ -20,7 +20,7 @@ python scripts/generate_update_key.py
 mavjud qurilmalarni boshqa yangilay olmaysiz — ular yangi kalit bilan
 imzolangan paketni rad etadi (va bu to'g'ri xatti-harakat).
 
-Kalit `install_sotqin.sh` tomonidan `/etc/chaqimchi/update-public.pem` ga
+Kalit `install_sotqin.sh` tomonidan `/etc/enes/update-public.pem` ga
 bir marta yoziladi va keyin **almashtirilmaydi**. Sababi: birinchi
 o'rnatishda ishonch cloudga tayanadi (HTTPS + SHA-256), lekin kalit
 qotirilgach — cloud buzilsa ham hujumchi imzo yasay olmaydi va qurilma
@@ -40,17 +40,17 @@ git commit -am "0.6.1"
 
 # 3. Quring va imzolang
 ./scripts/build_sotqin_release.sh
-python scripts/sign_release.py releases/chaqimchi-sotqin-0.6.1.tar.gz
+python scripts/sign_release.py releases/enes-sotqin-0.6.1.tar.gz
 
 # 4. Serverga ikkala faylni ham qo'ying
-scp releases/chaqimchi-sotqin-0.6.1.{tar.gz,json} <server>:<deploy-dir>/releases/
+scp releases/enes-sotqin-0.6.1.{tar.gz,json} <server>:<deploy-dir>/releases/
 ```
 
 Imzolovchi uch narsani o'zi tekshiradi va xato bo'lsa manifest yozmaydi:
 arxiv nomi bilan ichidagi `__version__` mos kelishi, versiya qurilma qabul
 qiladigan belgilardan iborat bo'lishi, va imzo **aynan qurilmadagi ochiq
-kalit** bilan tekshirilishi. Mahsulot nomi (`chaqimchi-windows` /
-`chaqimchi-sotqin`) fayl nomidan o'zi aniqlanadi.
+kalit** bilan tekshirilishi. Mahsulot nomi (`enes-windows` /
+`enes-sotqin`) fayl nomidan o'zi aniqlanadi.
 
 ### Windows relizi (asosiy mahsulot)
 
@@ -76,10 +76,10 @@ CI qurgan faylni chiqarish (GitHub Releases'dan yuklab olingan):
 
 ```bash
 ENES_RELEASE_HOST=deploy@169.58.198.111 \
-  scripts/publish_windows_release.sh --exe ~/Downloads/Chaqimchi_AI_Setup.exe
+  scripts/publish_windows_release.sh --exe ~/Downloads/ENES_Setup.exe
 ```
 
-Skript uni `chaqimchi-windows-<versiya>.exe` nomiga ko'chiradi: cloud
+Skript uni `enes-windows-<versiya>.exe` nomiga ko'chiradi: cloud
 faqat shu nomni taniydi (`latest_windows_release`).
 
 `CLOUD_URL` majburiy: u o'rnatuvchiga bake qilinadi va yangi mijoz
@@ -96,7 +96,7 @@ Tarqatish tartibi — pastdagi "Bosqichli tarqatish" bo'limi.
 qayta ishlating:
 
 ```
-ENES_SOTQIN_RELEASE_URL=https://<domen>/releases/chaqimchi-sotqin-0.6.1.tar.gz
+ENES_SOTQIN_RELEASE_URL=https://<domen>/releases/enes-sotqin-0.6.1.tar.gz
 ENES_SOTQIN_RELEASE_SHA256=<sign_release.py chop etgan sha256>
 ```
 
@@ -108,16 +108,16 @@ yarim sozlangan cloud ishlamaydigan o'rnatish buyrug'ini bermasligi kerak.
 ## Qurilmani yangilash
 
 ```bash
-sudo /opt/chaqimchi/venv/bin/python \
-  /opt/chaqimchi/current/scripts/apply_signed_update.py \
+sudo /opt/enes/venv/bin/python \
+  /opt/enes/current/scripts/apply_signed_update.py \
   --fetch-version 0.6.1 --cloud https://<domen>
 ```
 
 Qo'lda ko'chirilgan fayllar bilan (zaxira yo'l):
 
 ```bash
-sudo /opt/chaqimchi/venv/bin/python \
-  /opt/chaqimchi/current/scripts/apply_signed_update.py \
+sudo /opt/enes/venv/bin/python \
+  /opt/enes/current/scripts/apply_signed_update.py \
   paket.tar.gz paket.json
 ```
 
@@ -143,7 +143,7 @@ Health darvozasi qoidasi: *yangilanish qurilmani oldingidan sog'lomroq
 bo'lishini talab qilmaydi.* Agent javob berishi shart (503 ham bo'ladi —
 u pairing yo'qligini bildiradi, lekin ilova import bo'lganini isbotlaydi);
 boshqa xizmatlardan esa faqat yangilanishdan **oldin ishlab turganlari**
-so'raladi. Shu sababdan kamerasiz stendda `chaqimchi-retail` ishga
+so'raladi. Shu sababdan kamerasiz stendda `enes-retail` ishga
 tushmasligi yangilanishni rad etish uchun sabab bo'lmaydi.
 
 ### Yangi Python paketi kerak bo'lsa
@@ -169,7 +169,7 @@ darvozasi uni ushlashi, `current` qaytishi va `/health` eski versiyada
 javob berishi kerak:
 
 ```bash
-readlink -f /opt/chaqimchi/current     # eski versiya
+readlink -f /opt/enes/current     # eski versiya
 curl -s 127.0.0.1:8742/health | head
 ```
 
@@ -179,12 +179,12 @@ ishlatishga asos beradi.
 ## Yangilanishdan keyin
 
 ```bash
-readlink -f /opt/chaqimchi/current                  # yangi versiya
+readlink -f /opt/enes/current                  # yangi versiya
 curl -s 127.0.0.1:8742/health                       # versiya mos kelsin
-ls /opt/chaqimchi/releases/<versiya>/models/retail/  # model joyida
-systemctl status chaqimchi-sotqin chaqimchi-retail
-python /opt/chaqimchi/current/scripts/sotqin_preflight.py
-cat /opt/chaqimchi/shared/logs/update.log            # yangilanishlar tarixi
+ls /opt/enes/releases/<versiya>/models/retail/  # model joyida
+systemctl status enes-sotqin enes-retail
+python /opt/enes/current/scripts/sotqin_preflight.py
+cat /opt/enes/shared/logs/update.log            # yangilanishlar tarixi
 ```
 
 Bir daqiqa ichida cloud panelida ham yangi `app_version` ko'rinadi —
@@ -248,7 +248,7 @@ versiya ko'tariladi  →  make windows-release   (quriladi + imzolanadi)
 ```
 
 Qurilma tomonida hech qanday qo'l ishi yo'q: yangilanish vazifasi
-(`Chaqimchi AI Update`, SYSTEM, har 15 daqiqa) o'rnatuvchi bilan birga
+(`ENES Monitoring Update`, SYSTEM, har 15 daqiqa) o'rnatuvchi bilan birga
 kelgan va u imzoni har safar tekshiradi.
 
 ---
@@ -257,12 +257,12 @@ kelgan va u imzoni har safar tekshiradi.
 
 Hozir yangilanish har bir qurilmada qo'lda ishga tushiriladi. Cloud'dan
 "barcha qurilmalarni 0.6.1 ga o't" deyish uchun **huquqlarni ajratish**
-kerak: `chaqimchi-sotqin` xizmati `User=chaqimchi`, `NoNewPrivileges=true`
+kerak: `enes-sotqin` xizmati `User=chaqimchi`, `NoNewPrivileges=true`
 va `ProtectSystem=strict` bilan ishlaydi, ya'ni agent na
-`/opt/chaqimchi/releases` ga yoza oladi, na `systemctl` chaqira oladi.
+`/opt/enes/releases` ga yoza oladi, na `systemctl` chaqira oladi.
 
 Rejalashtirilgan yechim: agent heartbeat javobini o'qib
 `shared/data/update-request.json` yozadi, root egaligidagi systemd `.path`
-unit uni kuzatadi va `chaqimchi-update.service` ni ishga tushiradi. Agent
+unit uni kuzatadi va `enes-update.service` ni ishga tushiradi. Agent
 hech qachon root olmaydi, applier esa cloudga ishonmaydi — imzoni baribir
 tekshiradi.

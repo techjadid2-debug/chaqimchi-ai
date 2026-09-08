@@ -25,9 +25,9 @@ if [[ "$allow_dirty" != true ]] && command -v git >/dev/null 2>&1; then
 fi
 
 version="$(awk -F '"' '/^version = / { print $2; exit }' "$root/pyproject.toml")"
-name="chaqimchi-sotqin-${version}"
+name="enes-sotqin-${version}"
 output_dir="${args[0]:-$root/releases}"
-stage="$(mktemp -d "${TMPDIR:-/tmp}/chaqimchi-release.XXXXXX")"
+stage="$(mktemp -d "${TMPDIR:-/tmp}/enes-release.XXXXXX")"
 cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
 
@@ -38,8 +38,8 @@ cp "$root/models/retail_manifest.json" "$stage/$name/models/"
 cp \
   "$root/deploy/sotqin.env.example" \
   "$root/deploy/update-public.pem" \
-  "$root/deploy/chaqimchi-sotqin.service" \
-  "$root/deploy/chaqimchi-retail.service" \
+  "$root/deploy/enes-sotqin.service" \
+  "$root/deploy/enes-retail.service" \
   "$stage/$name/deploy/"
 for script in \
   accept_n100_pilot.py apply_signed_update.py benchmark_n100.py \

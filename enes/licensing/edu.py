@@ -1,4 +1,4 @@
-"""Chaqimchi Edu — ta'lim muassasalari uchun narx modeli.
+"""ENES Edu — ta'lim muassasalari uchun narx modeli.
 
 Do'kon tarifidan (`plans.py`) nima bilan farq qiladi: u yerda narx
 kamera soniga bog'langan, bu yerda esa **odamlar soniga**.  Maktabda
@@ -227,7 +227,7 @@ def edge_for_load(load: float) -> Optional[Dict[str, Any]]:
     for ceiling, name, spec, price in EDGE_CATALOG:
         if load <= ceiling:
             return {
-                "name": f"Chaqimchi Edge {name}",
+                "name": f"ENES Edge {name}",
                 "spec": spec,
                 "price_uzs": price,
                 "max_load": ceiling,

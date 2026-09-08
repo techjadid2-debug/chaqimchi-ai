@@ -1,4 +1,4 @@
-"""Chaqimchi Edu sahifasi va uning bulut bilan shartnomasi.
+"""ENES Edu sahifasi va uning bulut bilan shartnomasi.
 
 Sahifa kalkulyatorni brauzerda hisoblaydi — har bosishda so'rov
 yuborish uni sekin va cheklovlarga bog'liq qilardi.  Lekin RAQAMLAR
@@ -22,8 +22,8 @@ EDU_HTML = STATIC / "edu.html"
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("ENES_APP_URL", "https://app.chaqimchi.test")
-    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.test")
+    monkeypatch.setenv("ENES_APP_URL", "https://app.enes.test")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.test")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._event_store", None)
@@ -162,6 +162,6 @@ def test_the_main_site_design_still_has_three_shop_plans() -> None:
 
 
 def test_search_engines_are_told_about_the_page(client: TestClient) -> None:
-    response = client.get("/sitemap.xml", headers={"Host": "chaqimchi.test"})
+    response = client.get("/sitemap.xml", headers={"Host": "enes.test"})
 
     assert "/edu" in response.text

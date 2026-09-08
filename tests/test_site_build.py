@@ -152,11 +152,11 @@ def test_no_generated_page_carries_the_old_brand() -> None:
 
     Kichik harfli `chaqimchi` istisno: bot nomi (`@chaqimchi_ai_bot`) va
     domen egadan keladigan F7 kirishlari — ular cutover'da almashadi.
-    O'rnatuvchi fayl nomi (`Chaqimchi_AI_Setup`) qurilma relizi (F8)
+    O'rnatuvchi fayl nomi (`ENES_Setup`) qurilma relizi (F8)
     gacha haqiqat — u ham istisno.
     """
     for page in sorted(STATIC.glob("*.html")):
-        text = visible(page.read_text(encoding="utf-8")).replace("Chaqimchi_AI_Setup", "")
+        text = visible(page.read_text(encoding="utf-8"))
         assert "Chaqimchi" not in text, f"{page.name}: eski brend nomi qolgan"
 
 

@@ -1,9 +1,9 @@
-# Chaqimchi Cloud kunlik backup jadvali.  03:30 — do'konlar yopiq,
+# ENES Cloud kunlik backup jadvali.  03:30 — do'konlar yopiq,
 # event oqimi minimal payt.  Persistent=true: server o'sha payt o'chiq
 # bo'lsa, yonishi bilan qoldirilgan backup bajariladi.
 
 [Unit]
-Description=Chaqimchi Cloud kunlik backup
+Description=ENES Cloud kunlik backup
 
 [Timer]
 OnCalendar=*-*-* 03:30:00

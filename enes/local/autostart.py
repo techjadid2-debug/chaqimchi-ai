@@ -31,14 +31,20 @@ logger = logging.getLogger(__name__)
 
 #: O'rnatuvchi qo'yadigan nom bilan AYNAN bir xil bo'lishi shart, aks
 #: holda ikkita vazifa paydo bo'lardi va dastur ikki nusxada ochilardi.
-TASK_NAME = "Chaqimchi AI"
+TASK_NAME = "ENES Monitoring"
 
 #: Eski avtostart usuli — vazifa ishlagach o'chiriladi.
 RUN_KEY = r"HKLM\Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_KEY_VALUE = "ChaqimchiAI"
+RUN_KEY_VALUE = "ENES"
+
+#: Rebrenddan oldingi nomlar (0.6.x «Chaqimchi AI»).  Yangi vazifa
+#: yaratilgach eskisi O'CHIRILADI — ikkalasi qolsa dastur ikki nusxada
+#: ochilib, bitta kamerani ikki zanjir talashardi.
+LEGACY_TASK_NAMES = ("Chaqimchi AI",)
+LEGACY_RUN_KEY_VALUES = ("ChaqimchiAI",)
 
 #: Brauzersiz, `pause`siz ishga tushirgich (`build_windows_payload.py`).
-SERVICE_LAUNCHER = "Chaqimchi_AI_xizmat.bat"
+SERVICE_LAUNCHER = "ENES_xizmat.bat"
 
 #: Kompyuter yongandan keyin shuncha kutiladi: tarmoq va NVR ko'tarilsin.
 START_DELAY = "0000:30"
@@ -142,8 +148,23 @@ def ensure() -> Dict[str, Any]:
         logger.warning("Avtostart vazifasi sozlanmadi: %s", tune_out[:200])
 
     _drop_run_key()
+    _drop_legacy_tasks()
     logger.info("Avtostart vazifasi yaratildi: %s", TASK_NAME)
     return {"ok": True, "created": True, "reason": ""}
+
+
+def _drop_legacy_tasks() -> None:
+    """Eski nomdagi vazifalarni to'xtatib o'chiradi (yangi vazifa bor bo'lganda)."""
+    for name in LEGACY_TASK_NAMES:
+        code, _out = _run(["schtasks", "/Query", "/TN", name])
+        if code != 0:
+            continue
+        _run(["schtasks", "/End", "/TN", name])
+        code, out = _run(["schtasks", "/Delete", "/F", "/TN", name])
+        if code == 0:
+            logger.info("Eski nomdagi vazifa olib tashlandi: %s", name)
+        else:
+            logger.info("Eski vazifa o'chirilmadi (%s): %s", name, out[:200])
 
 
 def _drop_run_key() -> None:
@@ -152,11 +173,12 @@ def _drop_run_key() -> None:
     Faqat vazifa ishlaydigan holatda chaqiriladi, aks holda kompyuterni
     avtostartsiz qoldirgan bo'lardik.
     """
-    code, out = _run(["reg", "query", RUN_KEY, "/v", RUN_KEY_VALUE])
-    if code != 0:
-        return
-    code, out = _run(["reg", "delete", RUN_KEY, "/v", RUN_KEY_VALUE, "/f"])
-    if code == 0:
-        logger.info("Eski avtostart kaliti olib tashlandi (%s)", RUN_KEY_VALUE)
-    else:
-        logger.info("Eski avtostart kaliti o'chirilmadi: %s", out[:200])
+    for value in (RUN_KEY_VALUE, *LEGACY_RUN_KEY_VALUES):
+        code, out = _run(["reg", "query", RUN_KEY, "/v", value])
+        if code != 0:
+            continue
+        code, out = _run(["reg", "delete", RUN_KEY, "/v", value, "/f"])
+        if code == 0:
+            logger.info("Eski avtostart kaliti olib tashlandi (%s)", value)
+        else:
+            logger.info("Eski avtostart kaliti o'chirilmadi: %s", out[:200])

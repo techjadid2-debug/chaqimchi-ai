@@ -15,8 +15,8 @@ Python bilan ishga tushirish mumkin:
 
 Manbalari:
     http://127.0.0.1:8760/api/status   panel (kamera, xato, restart soni)
-    %PROGRAMDATA%\\Chaqimchi\\counters.json   doimiy hisoblagichlar
-    %PROGRAMDATA%\\Chaqimchi\\data\\outbox.db  navbat va tashlangan hodisalar
+    %PROGRAMDATA%\\ENES\\counters.json   doimiy hisoblagichlar
+    %PROGRAMDATA%\\ENES\\data\\outbox.db  navbat va tashlangan hodisalar
 
 Natija `accept_n100_pilot.py` kutgan shaklda chiqadi.
 """
@@ -47,8 +47,8 @@ def default_data_dir() -> Path:
         return Path(override).expanduser()
     if os.name == "nt":
         root = os.environ.get("PROGRAMDATA") or os.environ.get("LOCALAPPDATA") or r"C:\ProgramData"
-        return Path(root) / "Chaqimchi"
-    return Path.home() / ".chaqimchi"
+        return Path(root) / "ENES"
+    return Path.home() / ".enes"
 
 
 def read_status(url: str) -> Dict[str, Any]:

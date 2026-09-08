@@ -1,7 +1,7 @@
 # Sotqin R1 — Intel N100, 8 GB RAM, 128 GB NVMe canonical do'kon profili.
 #
 # Yengil inferens (odam deteksiyasi, do'kon analitikasi) shu qurilmada
-# bajariladi — pastdagi `retail` bo'limi va chaqimchi-retail.service.
+# bajariladi — pastdagi `retail` bo'limi va enes-retail.service.
 # Birinchi pilot 4 kamera bilan qabul qilinadi. 8 kamera faqat alohida 72
 # soatlik benchmark gate'dan keyin. To'liq video arxiv NVR'da qoladi.
 environment: production
@@ -35,7 +35,7 @@ media:
   ai_inference: false
 
 buffer:
-  path: /opt/chaqimchi/shared/data/buffer
+  path: /opt/enes/shared/data/buffer
   # NVR to'liq videoni saqlaydi. Sotqin faqat event clip/frame navbatidir.
   max_days: 3
   max_bytes: 42949672960
@@ -53,7 +53,7 @@ update:
 # tasdiqlanmasa attendance service fail-closed. Biometrika lokal va shifrlangan.
 face:
   model_name: buffalo_l
-  model_root: /opt/chaqimchi/shared/models/insightface
+  model_root: /opt/enes/shared/models/insightface
   model_version: insightface-pilot-only
   det_size: [640, 640]
   preprocess_max_side: 1024
@@ -132,7 +132,7 @@ telegram:
 # Face ID kameralari cloud `attendance_camera_ids` ro'yxatidan olinadi.
 cameras: []
 
-# ── Qurilmadagi AI (chaqimchi-retail.service) ────────────────────────────
+# ── Qurilmadagi AI (enes-retail.service) ────────────────────────────
 # Odam deteksiyasi modeli. Yuklash: python scripts/fetch_retail_model.py
 scene:
   enabled: true
@@ -150,8 +150,8 @@ retail:
   target_fps: 30.0      # scripts/benchmark_n100.py o'lchagan songa moslang
   min_fps: 2.0
   max_fps: 45.0
-  buffer_dir: /opt/chaqimchi/shared/data/buffer
-  clip_dir: /opt/chaqimchi/shared/data/clips
+  buffer_dir: /opt/enes/shared/data/buffer
+  clip_dir: /opt/enes/shared/data/clips
   buffer_retention_sec: 259200      # 3 kun — buffer.max_days bilan bir xil
   buffer_max_bytes: 42949672960     # 40 GB — buffer.max_bytes bilan bir xil
   tamper_enabled: true

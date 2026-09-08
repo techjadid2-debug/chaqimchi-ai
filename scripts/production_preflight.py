@@ -181,10 +181,10 @@ def validate(values: Dict[str, str]) -> Tuple[List[str], List[str]]:
     return errors, warnings
 
 
-#: Zaxira sozlamalari alohida faylda turadi (`chaqimchi-backup.service`
+#: Zaxira sozlamalari alohida faylda turadi (`enes-backup.service`
 #: shuni o'qiydi), shuning uchun `.env.production` bilan bir qatorda
 #: tekshiriladi.
-DEFAULT_BACKUP_ENV = Path("/etc/chaqimchi/backup.env")
+DEFAULT_BACKUP_ENV = Path("/etc/enes/backup.env")
 
 
 def check_backup(path: Path) -> List[str]:
@@ -217,13 +217,13 @@ def check_backup(path: Path) -> List[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Chaqimchi Cloud production preflight")
+    parser = argparse.ArgumentParser(description="ENES Cloud production preflight")
     parser.add_argument("--env-file", type=Path, default=Path(".env.production"))
     parser.add_argument(
         "--backup-env",
         type=Path,
         default=DEFAULT_BACKUP_ENV,
-        help="zaxira sozlamalari fayli (chaqimchi-backup.service o'qiydigan)",
+        help="zaxira sozlamalari fayli (enes-backup.service o'qiydigan)",
     )
     args = parser.parse_args()
     if not args.env_file.is_file():

@@ -7,7 +7,7 @@
         # o'tilardi.
         header_up X-Forwarded-For {remote_host}
     }
-    # Statik fayllar keshi — sabab `Caddyfile.chaqimchi` dagi bilan bir
+    # Statik fayllar keshi — sabab `Caddyfile.enes` dagi bilan bir
     # xil: `Cache-Control` yo'q bo'lsa brauzer har safar "o'zgardimi?"
     # deb so'rab chiqadi.
     @versioned {

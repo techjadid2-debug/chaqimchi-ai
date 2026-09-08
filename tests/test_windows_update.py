@@ -44,7 +44,7 @@ def keys(tmp_path: Path) -> Dict[str, Path]:
     return {"private": private, "public": public_pem}
 
 
-def _sign(installer: Path, keys: Dict[str, Any], *, product: str = "chaqimchi-windows") -> Path:
+def _sign(installer: Path, keys: Dict[str, Any], *, product: str = "enes-windows") -> Path:
     manifest = {
         "schema_version": 2,
         "product": product,
@@ -54,14 +54,14 @@ def _sign(installer: Path, keys: Dict[str, Any], *, product: str = "chaqimchi-wi
     }
     signature = keys["private"].sign(canonical_manifest_payload(manifest))
     manifest["signature"] = base64.b64encode(signature).decode("ascii")
-    path = installer.with_name(f"chaqimchi-windows-{VERSION}.json")
+    path = installer.with_name(f"enes-windows-{VERSION}.json")
     path.write_text(json.dumps(manifest), encoding="utf-8")
     return path
 
 
 @pytest.fixture
 def installer(tmp_path: Path) -> Path:
-    path = tmp_path / f"chaqimchi-windows-{VERSION}.exe"
+    path = tmp_path / f"enes-windows-{VERSION}.exe"
     path.write_bytes(b"MZ" + b"soxta o'rnatuvchi" * 100)
     return path
 
@@ -73,7 +73,7 @@ def test_a_correctly_signed_package_is_accepted(installer: Path, keys) -> None:
     manifest = _sign(installer, keys)
     verified = verify_release_manifest(installer, manifest, keys["public"])
     assert verified["version"] == VERSION
-    assert verified["product"] == "chaqimchi-windows"
+    assert verified["product"] == "enes-windows"
 
 
 def test_a_tampered_installer_is_rejected(installer: Path, keys) -> None:
@@ -111,8 +111,8 @@ def test_a_package_for_another_product_is_rejected(installer: Path, keys) -> Non
 def test_windows_product_is_in_the_allow_list() -> None:
     from enes.signed_update import KNOWN_PRODUCTS
 
-    assert "chaqimchi-windows" in KNOWN_PRODUCTS
-    assert "chaqimchi-sotqin" in KNOWN_PRODUCTS, "Linux relizi buzilmasligi kerak"
+    assert "enes-windows" in KNOWN_PRODUCTS
+    assert "enes-sotqin" in KNOWN_PRODUCTS, "Linux relizi buzilmasligi kerak"
 
 
 # ── Yangilovchi mantiqi ──────────────────────────────────────────────────
@@ -438,12 +438,12 @@ def test_install_that_never_happened_clears_the_state(updater) -> None:
 def test_release_route_accepts_windows_names() -> None:
     from cloud.main import RELEASE_FILE_PATTERN
 
-    assert RELEASE_FILE_PATTERN.match("chaqimchi-windows-0.7.0.exe")
-    assert RELEASE_FILE_PATTERN.match("chaqimchi-windows-0.7.0.json")
-    assert RELEASE_FILE_PATTERN.match("chaqimchi-sotqin-0.6.0.tar.gz")
+    assert RELEASE_FILE_PATTERN.match("enes-windows-0.7.0.exe")
+    assert RELEASE_FILE_PATTERN.match("enes-windows-0.7.0.json")
+    assert RELEASE_FILE_PATTERN.match("enes-sotqin-0.6.0.tar.gz")
     # Yo'l bo'ylab chiqib ketish va begona fayllar rad etilsin.
     assert not RELEASE_FILE_PATTERN.match("../../etc/passwd")
-    assert not RELEASE_FILE_PATTERN.match("chaqimchi-windows-0.7.0.bat")
+    assert not RELEASE_FILE_PATTERN.match("enes-windows-0.7.0.bat")
     assert not RELEASE_FILE_PATTERN.match("zararli.exe")
 
 
@@ -462,11 +462,11 @@ def test_unsigned_release_is_not_offered(tmp_path: Path, monkeypatch: pytest.Mon
     qurilma uni baribir rad etadi."""
     import cloud.main as cloud_main
 
-    (tmp_path / "chaqimchi-windows-9.9.9.exe").write_bytes(b"MZ")
+    (tmp_path / "enes-windows-9.9.9.exe").write_bytes(b"MZ")
     monkeypatch.setattr(cloud_main, "_release_dirs", lambda: [tmp_path])
     assert cloud_main.latest_windows_release() is None
 
-    (tmp_path / "chaqimchi-windows-9.9.9.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "enes-windows-9.9.9.json").write_text("{}", encoding="utf-8")
     release = cloud_main.latest_windows_release()
     assert release is not None and release["version"] == "9.9.9"
 
@@ -492,7 +492,7 @@ def test_the_first_ota_fetches_a_rollback_target(
     keep = updater._keep_dir()
     assert not list(keep.glob("*.exe")), "boshida nishon yo'q"
 
-    current = tmp_path / f"chaqimchi-windows-{VERSION}.exe"
+    current = tmp_path / f"enes-windows-{VERSION}.exe"
     current.write_bytes(b"joriy o'rnatuvchi")
     current_manifest = _sign(current, keys)
 
@@ -519,7 +519,7 @@ def test_a_rollback_target_that_fails_verification_is_not_kept(
     monkeypatch.setenv("ENES_UPDATE_PUBLIC_KEY", str(keys["public"]))
     keep = updater._keep_dir()
 
-    current = tmp_path / f"chaqimchi-windows-{VERSION}.exe"
+    current = tmp_path / f"enes-windows-{VERSION}.exe"
     current.write_bytes(b"joriy o'rnatuvchi")
     current_manifest = _sign(current, keys)
     current.write_bytes(b"BUZILGAN")  # imzo endi mos kelmaydi
@@ -557,8 +557,8 @@ def test_a_missing_rollback_target_does_not_block_the_update(
     ok = updater._ensure_rollback_target(
         "https://api.example.uz/releases",
         {},
-        keep / f"chaqimchi-windows-{VERSION}.exe",
-        keep / f"chaqimchi-windows-{VERSION}.json",
+        keep / f"enes-windows-{VERSION}.exe",
+        keep / f"enes-windows-{VERSION}.json",
     )
 
     assert ok is False
@@ -621,33 +621,33 @@ def test_only_the_new_and_the_rollback_package_survive(
 
     # Diskda uchta eski paket yotibdi (uchta oldingi yangilanishdan).
     for version in ("0.6.10", "0.6.11", "0.6.12"):
-        (keep / f"chaqimchi-windows-{version}.exe").write_bytes(b"eski")
-        (keep / f"chaqimchi-windows-{version}.json").write_text("{}", encoding="utf-8")
+        (keep / f"enes-windows-{version}.exe").write_bytes(b"eski")
+        (keep / f"enes-windows-{version}.json").write_text("{}", encoding="utf-8")
 
     # Yangi paket va rollback nishoni (joriy versiya) joyida.
-    new_exe = keep / "chaqimchi-windows-9.9.9.exe"
+    new_exe = keep / "enes-windows-9.9.9.exe"
     new_exe.write_bytes(b"yangi")
-    (keep / "chaqimchi-windows-9.9.9.json").write_text("{}", encoding="utf-8")
-    (keep / f"chaqimchi-windows-{__version__}.exe").write_bytes(b"rollback")
-    (keep / f"chaqimchi-windows-{__version__}.json").write_text("{}", encoding="utf-8")
+    (keep / "enes-windows-9.9.9.json").write_text("{}", encoding="utf-8")
+    (keep / f"enes-windows-{__version__}.exe").write_bytes(b"rollback")
+    (keep / f"enes-windows-{__version__}.json").write_text("{}", encoding="utf-8")
 
     # `run_once()` ning tozalash qismini takrorlaymiz: aynan shu to'plam
     # saqlanadi, qolgani o'chadi.
     wanted = {
         new_exe,
-        keep / "chaqimchi-windows-9.9.9.json",
-        keep / f"chaqimchi-windows-{__version__}.exe",
-        keep / f"chaqimchi-windows-{__version__}.json",
+        keep / "enes-windows-9.9.9.json",
+        keep / f"enes-windows-{__version__}.exe",
+        keep / f"enes-windows-{__version__}.json",
     }
-    for stale in keep.glob("chaqimchi-windows-*"):
+    for stale in keep.glob("enes-windows-*"):
         if stale not in wanted:
             stale.unlink(missing_ok=True)
 
-    remaining = sorted(item.name for item in keep.glob("chaqimchi-windows-*.exe"))
+    remaining = sorted(item.name for item in keep.glob("enes-windows-*.exe"))
     assert remaining == sorted(
-        [f"chaqimchi-windows-{__version__}.exe", "chaqimchi-windows-9.9.9.exe"]
+        [f"enes-windows-{__version__}.exe", "enes-windows-9.9.9.exe"]
     ), "faqat yangi paket va rollback nishoni qolishi kerak"
-    assert not (keep / "chaqimchi-windows-0.6.10.exe").exists()
+    assert not (keep / "enes-windows-0.6.10.exe").exists()
 
 
 def test_run_once_keeps_exactly_two_packages(updater) -> None:

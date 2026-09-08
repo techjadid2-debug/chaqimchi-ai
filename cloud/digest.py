@@ -815,7 +815,7 @@ class DailyDigestService:
         return sent
 
     async def _monthly_value_once(self, now: datetime) -> int:
-        """Oyning 1-kuni — «Chaqimchi o'zini qopladimi» cheki.
+        """Oyning 1-kuni — «ENES o'zini qopladimi» cheki.
 
         Obunani uzaytirish qarori aynan shu savolga bog'liq, shuning
         uchun bu xabar mahsulotning eng muhim xabarlaridan biri.

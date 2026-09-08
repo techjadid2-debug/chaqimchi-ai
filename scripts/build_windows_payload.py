@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Windows o'rnatuvchisi ichiga kiradigan payloadni yig'adi.
 
-Natija: `build/payload/` — NSIS shu papkani `Program Files\\Chaqimchi AI` ga
+Natija: `build/payload/` — NSIS shu papkani `Program Files\\ENES Monitoring` ga
 ko'chiradi.  Ichida hamma narsa bor, mijoz kompyuterida **internet kerak
 emas va `pip` ishlamaydi**:
 
@@ -10,7 +10,7 @@ emas va `pip` ishlamaydi**:
       enes/           dastur kodi
       config/                 namuna konfiguratsiya
       models/retail/          OpenVINO odam detektori
-      Chaqimchi_AI.bat        ishga tushirish
+      ENES.bat        ishga tushirish
 
 Nima uchun qayta yozildi (eski `build_windows_bundle.py` o'rniga):
 
@@ -298,7 +298,7 @@ DEFAULT_CLOUD_URL = os.environ.get("ENES_DEFAULT_CLOUD_URL", "").strip().rstrip(
 
 LAUNCHER = """@echo off
 chcp 65001 > nul
-title Chaqimchi AI
+title ENES Monitoring
 
 cd /d "%~dp0"
 
@@ -309,13 +309,13 @@ set ENES_DEFAULT_CLOUD_URL=__CLOUD_URL__
 
 if not exist "python\\python.exe" (
     echo [XATO] Dastur fayllari topilmadi.
-    echo Chaqimchi AI ni qaytadan o'rnating.
+    echo ENES Monitoring ni qaytadan o'rnating.
     pause
     exit /b 1
 )
 
 echo.
-echo   Chaqimchi AI ishga tushmoqda...
+echo   ENES Monitoring ishga tushmoqda...
 echo   Boshqaruv panelingiz brauzerda ochiladi.
 echo   (Qurilma holati: http://localhost:8760)
 echo.
@@ -335,7 +335,7 @@ pause
 """
 
 # Avtomatik ishga tushirish (rejalashtirilgan vazifa, SYSTEM nomidan)
-# uchun alohida launcher.  Oddiy `Chaqimchi_AI.bat` dan ikki farqi bor va
+# uchun alohida launcher.  Oddiy `ENES.bat` dan ikki farqi bor va
 # ikkalasi ham majburiy:
 #
 #   1. brauzer ochilmaydi — SYSTEM sessiyasida ochiladigan brauzerni
@@ -352,12 +352,12 @@ set ENES_LOCAL_NO_BROWSER=1
 "python\\python.exe" -m enes.local.app
 """
 
-READ_ME = """Chaqimchi AI - do'kon nazorati
+READ_ME = """ENES Monitoring - do'kon nazorati
 ==============================
 
 Ishga tushirish
 ---------------
-Ish stolidagi "Chaqimchi AI" yorlig'ini bosing.
+Ish stolidagi "ENES Monitoring" yorlig'ini bosing.
 Brauzerda boshqaruv panelingiz ochiladi.
 
 Nazorat kompyuter yonganda o'zi ishga tushadi (o'rnatishda "Kompyuter
@@ -388,7 +388,7 @@ kompyuterda saqlanadi va aloqa tiklangach o'zi jo'naydi.
 
 Sozlamalar va jurnal qayerda
 ----------------------------
-C:\\ProgramData\\Chaqimchi\\
+C:\\ProgramData\\ENES\\
 
 Yordam
 ------
@@ -426,10 +426,10 @@ def check_cloud_url(*, allow_no_cloud: bool = False) -> None:
 
 def step_launcher() -> None:
     log.info("[6/6] Ishga tushirish fayllari")
-    (PAYLOAD / "Chaqimchi_AI.bat").write_text(
+    (PAYLOAD / "ENES.bat").write_text(
         LAUNCHER.replace("__CLOUD_URL__", DEFAULT_CLOUD_URL), encoding="utf-8"
     )
-    (PAYLOAD / "Chaqimchi_AI_xizmat.bat").write_text(
+    (PAYLOAD / "ENES_xizmat.bat").write_text(
         SERVICE_LAUNCHER.replace("__CLOUD_URL__", DEFAULT_CLOUD_URL), encoding="utf-8"
     )
     # Windows Notepad CRLF kutadi; LF bilan yozilsa matn bitta qatorga

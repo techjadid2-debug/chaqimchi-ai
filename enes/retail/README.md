@@ -136,7 +136,7 @@ etadi, teskarisi ham.
 
 ```bash
 python -m enes.retail.service --config config/config.yaml
-# qurilmada: systemctl start chaqimchi-retail  (deploy/chaqimchi-retail.service)
+# qurilmada: systemctl start enes-retail  (deploy/enes-retail.service)
 ```
 
 Sozlama `config.yaml` ning `retail:` bo'limida — kameralar, byudjet, buffer

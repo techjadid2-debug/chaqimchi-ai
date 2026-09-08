@@ -1,4 +1,4 @@
-# Chaqimchi AI — agent uchun kirish
+# ENES Monitoring — agent uchun kirish
 
 > Bu faylni Claude Code har sessiyada o'zi o'qiydi. Qisqa turadi;
 > tafsilot havolalarda.
@@ -77,20 +77,20 @@ PYTHONPATH="$PWD" ENES_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
   python scripts/build_windows_payload.py
 makensis -V2 scripts/windows_installer.nsi
 PYTHONPATH="$PWD" ENES_RELEASE_HOST=root@169.58.198.111 \
-  ./scripts/publish_windows_release.sh --exe releases/Chaqimchi_AI_Setup.exe
+  ./scripts/publish_windows_release.sh --exe releases/ENES_Setup.exe
 ```
-Imzo kaliti: `~/.chaqimchi/sotqin-release-signing.pem`.
+Imzo kaliti: `~/.enes/sotqin-release-signing.pem`.
 
 **Cloud deploy:**
 
 ```bash
-rsync -az --delete ... root@169.58.198.111:/home/deploy/chaqimchi-ai/
-ssh root@169.58.198.111 'cd /home/deploy/chaqimchi-ai && \
-  set -a && . /etc/chaqimchi/backup.env && set +a && \
-  ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh'
+rsync -az --delete ... root@169.58.198.111:/home/deploy/enes/
+ssh root@169.58.198.111 'cd /home/deploy/enes && \
+  set -a && . /etc/enes/backup.env && set +a && \
+  ENES_COMPOSE_FILE=docker-compose.enes.yml ./scripts/deploy_cloud.sh'
 ```
 To'liq `--exclude` ro'yxati: [docs/DEPLOY_TARIFLAR.md](docs/DEPLOY_TARIFLAR.md) §3.
-Zaxira kalitlari serverdagi `/etc/chaqimchi/backup.env` da (repoda emas).
+Zaxira kalitlari serverdagi `/etc/enes/backup.env` da (repoda emas).
 
 ## Uslub
 

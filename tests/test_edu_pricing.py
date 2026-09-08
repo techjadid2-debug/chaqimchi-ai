@@ -1,4 +1,4 @@
-"""Chaqimchi Edu narx modeli.
+"""ENES Edu narx modeli.
 
 Bu yerdagi mezon oddiy: **spec'dagi tayyor hisob-kitob namunalari**.
 Ular sotuvchi mijozga aytadigan raqamlar, ya'ni kod ulardan chetga
@@ -142,7 +142,7 @@ def test_each_edge_covers_up_to_its_limit(load: float, expected: str) -> None:
     edge = edu.edge_for_load(load)
 
     assert edge is not None
-    assert edge["name"] == f"Chaqimchi Edge {expected}"
+    assert edge["name"] == f"ENES Edge {expected}"
 
 
 def test_beyond_the_biggest_box_we_propose_several() -> None:
@@ -218,7 +218,7 @@ def test_the_published_examples_still_hold(
     if edge is None:
         assert result["edge"] is None
     else:
-        assert result["edge"]["name"] == f"Chaqimchi Edge {edge}"
+        assert result["edge"]["name"] == f"ENES Edge {edge}"
 
 
 # ── Sahifaga beriladigan katalog ─────────────────────────────────────

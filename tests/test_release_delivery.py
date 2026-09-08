@@ -17,8 +17,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = "chaqimchi-sotqin-0.6.0.tar.gz"
-MANIFEST = "chaqimchi-sotqin-0.6.0.json"
+ARCHIVE = "enes-sotqin-0.6.0.tar.gz"
+MANIFEST = "enes-sotqin-0.6.0.json"
 
 
 @pytest.fixture
@@ -82,9 +82,9 @@ def test_both_files_are_public(client: TestClient) -> None:
         "../.env.production",
         "../../etc/passwd",
         "sotqin.env",
-        "chaqimchi-sotqin-0.6.0.tar.gz.bak",
+        "enes-sotqin-0.6.0.tar.gz.bak",
         "boshqa-mahsulot-1.0.tar.gz",
-        "chaqimchi-sotqin-0.6.0.sh",
+        "enes-sotqin-0.6.0.sh",
     ],
 )
 def test_only_release_files_are_served(client: TestClient, name: str) -> None:
@@ -92,7 +92,7 @@ def test_only_release_files_are_served(client: TestClient, name: str) -> None:
 
 
 def test_a_missing_release_is_not_an_error_page(client: TestClient) -> None:
-    assert client.get("/releases/chaqimchi-sotqin-9.9.9.tar.gz").status_code == 404
+    assert client.get("/releases/enes-sotqin-9.9.9.tar.gz").status_code == 404
 
 
 # ── Deploy artefaktlari ──────────────────────────────────────────────────
@@ -154,8 +154,8 @@ def test_a_paused_rollout_stops_the_device_from_updating(
         "X-Device-Token": claimed["device_token"],
     }
     releases = tmp_path / "releases"
-    (releases / "chaqimchi-windows-9.9.9.exe").write_bytes(b"MZ soxta")
-    (releases / "chaqimchi-windows-9.9.9.json").write_text('{"version":"9.9.9"}', encoding="utf-8")
+    (releases / "enes-windows-9.9.9.exe").write_bytes(b"MZ soxta")
+    (releases / "enes-windows-9.9.9.json").write_text('{"version":"9.9.9"}', encoding="utf-8")
 
     before = client.get("/api/v1/edge/update", headers=device).json()
     assert before["available"] is True, "odatda yangilanish beriladi"

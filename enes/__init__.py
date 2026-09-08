@@ -1,4 +1,4 @@
-"""Chaqimchi AI paketi.
+"""ENES Monitoring paketi.
 
 Lokal Face ID (davomat) to'plami arxivlangan — `archive/attendance-local`
 git tegida turadi.  Yuz tanish keyinchalik **cloud** tomonda quriladi

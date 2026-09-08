@@ -1,5 +1,5 @@
 """
-Chaqimchi Cloud — mijozlar, litsenziya, o‘rnatish juftlash.
+ENES Cloud — mijozlar, litsenziya, o‘rnatish juftlash.
 
 Ishga tushirish: make run-cloud  (port 8750)
 """
@@ -385,7 +385,7 @@ class DeviceHelloBody(BaseModel):
 
     fingerprint: str = Field(min_length=16, max_length=128, pattern=r"^[0-9a-f]+$")
     label: str = Field(default="", max_length=64)
-    product_name: str = Field(default="Chaqimchi Windows", max_length=64)
+    product_name: str = Field(default="ENES Windows", max_length=64)
     app_version: str = Field(default="", max_length=32)
     os_name: str = Field(default="", max_length=64)
     local_ip: str = Field(default="", max_length=45)
@@ -1037,10 +1037,10 @@ async def _send_owner_voice(
         raise HTTPException(503, "Owner Telegram bot tokeni sozlanmagan")
     lowered = mime.lower()
     if "ogg" in lowered or "opus" in lowered:
-        method, field, filename = "sendVoice", "voice", "chaqimchi-agent.ogg"
+        method, field, filename = "sendVoice", "voice", "enes-agent.ogg"
     else:
         ext = "mp3" if "mpeg" in lowered else "m4a" if "mp4" in lowered else "wav"
-        method, field, filename = "sendAudio", "audio", f"chaqimchi-agent.{ext}"
+        method, field, filename = "sendAudio", "audio", f"enes-agent.{ext}"
     async with httpx.AsyncClient(timeout=25) as client:
         response = await client.post(
             f"https://api.telegram.org/bot{token}/{method}",
@@ -1845,7 +1845,7 @@ async def lifespan(app: FastAPI):
 
 _cloud_production = os.environ.get("ENES_ENV", "development") == "production"
 app = FastAPI(
-    title="Chaqimchi Cloud",
+    title="ENES Cloud",
     lifespan=lifespan,
     docs_url=None if _cloud_production else "/docs",
     redoc_url=None if _cloud_production else "/redoc",
@@ -1900,7 +1900,7 @@ async def health() -> Dict[str, Any]:
     Bog'liqliklar `/health/deep` da tekshiriladi — UptimeRobot o'shanga
     qaratilishi kerak.
     """
-    return {"ok": True, "service": "chaqimchi-cloud"}
+    return {"ok": True, "service": "enes-cloud"}
 
 
 #: Diskda shundan kam joy qolsa `/health/deep` ogohlantiradi.  Klip va
@@ -1973,7 +1973,7 @@ def _health_checks() -> List[Dict[str, Any]]:
 #: FAQAT admin kaliti bilan ko'rinadi.  2026-08-25 auditi: bu endpoint
 #: ochiq turardi va `{"sites": 4}` qaytarardi — ya'ni istalgan odam
 #: bitta `curl` bilan mijozlar sonimizni bilib olardi.  Xato matni ham
-#: sizdirardi ("MinIO bucket topilmadi: chaqimchi-snapshots").
+#: sizdirardi ("MinIO bucket topilmadi: enes-snapshots").
 _PUBLIC_HEALTH_FIELDS = ("name", "ok", "ms")
 
 
@@ -2020,7 +2020,7 @@ async def health_deep(
     if _is_admin_request(authorization, x_cloud_admin_key):
         return {
             "ok": ok,
-            "service": "chaqimchi-cloud",
+            "service": "enes-cloud",
             "version": __version__,
             "checks": checks,
             # Chegara tufayli rad etilgan so'rovlar — bucket bo'yicha.
@@ -2038,7 +2038,7 @@ async def health_deep(
         }
     return {
         "ok": ok,
-        "service": "chaqimchi-cloud",
+        "service": "enes-cloud",
         "checks": [
             {key: item[key] for key in _PUBLIC_HEALTH_FIELDS if key in item}
             for item in checks
@@ -2288,7 +2288,7 @@ async def sotqin_bootstrap(request: Request) -> Response:
 #: imzosidan** keladi: buzilgan cloud istalgan faylni bera oladi, lekin
 #: imzo yasay olmaydi va qurilma uni rad etadi.
 RELEASE_FILE_PATTERN = re.compile(
-    r"^chaqimchi-(?:sotqin|lite|windows)-[A-Za-z0-9.\-_]+\.(?:tar\.gz|exe|json)$"
+    r"^(?:enes|chaqimchi)-(?:sotqin|lite|windows)-[A-Za-z0-9.\-_]+\.(?:tar\.gz|exe|json)$"
 )
 
 RELEASE_MEDIA_TYPES = {
@@ -2570,7 +2570,7 @@ async def surveillance_notice_page(request: Request) -> HTMLResponse:
 
 @app.get("/edu", include_in_schema=False)
 async def edu_page(request: Request) -> HTMLResponse:
-    """Chaqimchi Edu — ta'lim muassasalari uchun alohida sahifa.
+    """ENES Edu — ta'lim muassasalari uchun alohida sahifa.
 
     Bosh sahifa do'kon tilida gapiradi ("mijozlar oqimi", "kassa
     navbati") va maktab direktoriga u begona.  Shuning uchun alohida
@@ -2854,7 +2854,7 @@ def _public_plan_card(code: str) -> Dict[str, Any]:
 
 @app.get("/api/v1/public/edu-pricing")
 async def public_edu_pricing() -> Dict[str, Any]:
-    """Chaqimchi Edu kalkulyatori uchun konstantalar.
+    """ENES Edu kalkulyatori uchun konstantalar.
 
     Sahifa hisobni O'ZI qiladi — har bosishda so'rov yuborish
     kalkulyatorni sekin va cheklovlarga bog'liq qilardi.  Lekin
@@ -2938,7 +2938,7 @@ def _lead_recipient_ids() -> List[str]:
 
 def _lead_notification_text(lead: Dict[str, Any], *, duplicate: bool = False) -> str:
     title = (
-        "Takroriy Chaqimchi AI do'kon arizasi" if duplicate else "Yangi Chaqimchi AI do'kon arizasi"
+        "Takroriy ENES Monitoring do'kon arizasi" if duplicate else "Yangi ENES Monitoring do'kon arizasi"
     )
     return (
         f"📥 <b>{title}</b>\n"
@@ -3258,13 +3258,31 @@ ENV_WINDOWS_INSTALLER_SIZE = "ENES_WINDOWS_INSTALLER_SIZE_MB"
 
 #: Ishlab chiqishda va lokal sinovda fayl repo ichida bo'ladi.
 WINDOWS_INSTALLER_PATHS = (
+    BASE_DIR / "releases" / "ENES_Setup.exe",
+    Path("/app/releases/ENES_Setup.exe"),
+    # Rebrenddan oldingi nom — serverda hali shu fayl turgan bo'lishi mumkin.
     BASE_DIR / "releases" / "Chaqimchi_AI_Setup.exe",
     Path("/app/releases/Chaqimchi_AI_Setup.exe"),
 )
 
-#: Imzolangan Windows relizi: `chaqimchi-windows-<versiya>.exe` va yonida
+#: Imzolangan Windows relizi: `enes-windows-<versiya>.exe` va yonida
 #: `.json` manifest.  Qurilma yangilanishni aynan shu juftlikdan oladi.
-WINDOWS_RELEASE_PATTERN = re.compile(r"^chaqimchi-windows-(?P<version>[A-Za-z0-9.\-_]+)\.exe$")
+#:
+#: Eski prefiks (`chaqimchi-windows-`) ham qabul qilinadi: serverdagi
+#: nashr qilingan relizlar (0.6.29 gacha) shu nom bilan turadi va ular
+#: birinchi `enes-windows-*` reliz chiqquncha qurilmalarga kerak.
+WINDOWS_RELEASE_PREFIXES = ("enes-windows-", "chaqimchi-windows-")
+WINDOWS_RELEASE_PATTERN = re.compile(
+    r"^(?:enes|chaqimchi)-windows-(?P<version>[A-Za-z0-9.\-_]+)\.exe$"
+)
+
+
+def _windows_release_files(directory: Path) -> List[Path]:
+    """Papkadagi reliz `.exe` lari — yangi va eski prefiks bilan, nom tartibida."""
+    files: List[Path] = []
+    for prefix in WINDOWS_RELEASE_PREFIXES:
+        files.extend(directory.glob(f"{prefix}*.exe"))
+    return sorted(files)
 
 
 def _release_dirs() -> List[Path]:
@@ -3294,7 +3312,7 @@ def latest_windows_release() -> Optional[Dict[str, Any]]:
     for directory in _release_dirs():
         if not directory.is_dir():
             continue
-        for exe in directory.glob("chaqimchi-windows-*.exe"):
+        for exe in _windows_release_files(directory):
             match = WINDOWS_RELEASE_PATTERN.match(exe.name)
             if not match:
                 continue
@@ -3371,7 +3389,7 @@ async def public_download_installer(code: str = "") -> Response:
     """Windows o'rnatuvchisi (.exe).
 
     `code` berilsa **fayl nomiga** qo'shiladi:
-    `Chaqimchi_AI_Setup-A1B2C3.exe`.  O'rnatuvchi nomdan kodni o'qiydi va
+    `ENES_Setup-A1B2C3.exe`.  O'rnatuvchi nomdan kodni o'qiydi va
     dastur birinchi ishga tushishda cloudga o'zi ulanadi — mijoz 6 ta
     belgini qo'lda ko'chirmaydi.
 
@@ -3385,13 +3403,13 @@ async def public_download_installer(code: str = "") -> Response:
     """
     safe_code = re.sub(r"[^A-Fa-f0-9]", "", code).upper()[:6]
 
-    # Versiya fayl nomida bo'lishi shart.  Usiz `Chaqimchi_AI_Setup.exe`
+    # Versiya fayl nomida bo'lishi shart.  Usiz `ENES_Setup.exe`
     # har safar bir xil nom va deyarli bir xil hajm bilan tushardi —
     # mijoz yangi versiyani yuklab olganini **ko'ra olmasdi** va eski
     # faylni qayta o'rnatib, muammo tuzalmadi deb o'ylardi.
     release = latest_windows_release()
     version = release["version"] if release else __version__
-    parts = ["Chaqimchi_AI_Setup", version]
+    parts = ["ENES_Setup", version]
     if len(safe_code) == 6:
         parts.append(safe_code)
     filename = "-".join(parts) + ".exe"
@@ -3401,7 +3419,7 @@ async def public_download_installer(code: str = "") -> Response:
 
     # Kodli havolada fayl NOMI muhim: o'rnatuvchi pairing kodni aynan
     # nomdan o'qiydi.  Redirect esa nomni yo'qotadi — brauzer manzildagi
-    # nomni saqlaydi (`chaqimchi-windows-0.6.8.exe`), kod esa yo'qoladi va
+    # nomni saqlaydi (`enes-windows-0.6.8.exe`), kod esa yo'qoladi va
     # mijoz sehrgarda kodni QO'LDA kiritishga majbur bo'ladi.
     #
     # Shuning uchun kod berilgan bo'lsa faylni o'zimiz beramiz — bu
@@ -6105,15 +6123,16 @@ async def edge_update(
 
 def _windows_release_by_version(version: str) -> Optional[Dict[str, Any]]:
     for directory in _release_dirs():
-        exe = directory / f"chaqimchi-windows-{version}.exe"
-        manifest = directory / f"chaqimchi-windows-{version}.json"
-        if exe.is_file() and manifest.is_file():
-            return {
-                "version": version,
-                "exe": exe,
-                "manifest": manifest,
-                "size_bytes": exe.stat().st_size,
-            }
+        for prefix in WINDOWS_RELEASE_PREFIXES:
+            exe = directory / f"{prefix}{version}.exe"
+            manifest = directory / f"{prefix}{version}.json"
+            if exe.is_file() and manifest.is_file():
+                return {
+                    "version": version,
+                    "exe": exe,
+                    "manifest": manifest,
+                    "size_bytes": exe.stat().st_size,
+                }
     return None
 
 
@@ -6235,9 +6254,11 @@ async def edge_site_config(
     plan_cameras = SHOP_MAX_CAMERAS
     if site_plan:
         plan_cameras = min(SHOP_MAX_CAMERAS, get_plan(site_plan).max_cameras)
-    if str(device.get("product_name") or "").lower().startswith("chaqimchi windows"):
+    # Eski qurilmalar hali «Chaqimchi Windows» deb tanishtiradi.
+    product_lower = str(device.get("product_name") or "").lower()
+    if product_lower.startswith(("enes windows", "chaqimchi windows")):
         config["product"] = {
-            "name": "Chaqimchi Windows",
+            "name": "ENES Windows",
             "hardware_profile": "WINDOWS-SHOP-PC",
             "guaranteed_cameras": plan_cameras,
             "max_cameras": plan_cameras,
@@ -6464,7 +6485,7 @@ async def admin_windows_releases(_: None = Depends(require_admin)) -> Dict[str, 
     for directory in _release_dirs():
         if not directory.is_dir():
             continue
-        for exe in sorted(directory.glob("chaqimchi-windows-*.exe")):
+        for exe in _windows_release_files(directory):
             match = WINDOWS_RELEASE_PATTERN.match(exe.name)
             manifest = exe.with_name(f"{exe.name[: -len('.exe')]}.json")
             if not match or match.group("version") in seen:
@@ -6596,7 +6617,7 @@ async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
     )
     await _send_owner_telegram(
         body.telegram_id,
-        f"Chaqimchi AI kirish kodi: {code}\nKod 5 daqiqa amal qiladi.",
+        f"ENES Monitoring kirish kodi: {code}\nKod 5 daqiqa amal qiladi.",
     )
     response: Dict[str, Any] = {
         "ok": True,

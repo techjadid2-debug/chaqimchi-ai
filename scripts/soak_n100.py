@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 SERVICES = (
-    "chaqimchi-sotqin.service",
-    "chaqimchi-retail.service",
-    "chaqimchi-attendance.service",
+    "enes-sotqin.service",
+    "enes-retail.service",
+    "enes-attendance.service",
 )
 
 

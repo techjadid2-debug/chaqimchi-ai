@@ -1,4 +1,4 @@
-"""Sotqin R1 — NVR/IP kameralar bilan Chaqimchi Cloud orasidagi gateway.
+"""Sotqin R1 — NVR/IP kameralar bilan ENES Cloud orasidagi gateway.
 
 Bu servis AI inferens bajarmaydi. U qurilma identifikatsiyasi, heartbeat,
 cloud konfiguratsiyasi va ishonchli yangilanish uchun yengil control plane'dir.
@@ -94,10 +94,10 @@ class SotqinAgent:
         self.config_path = Path(
             os.environ.get(
                 "ENES_SOTQIN_CONFIG_CACHE",
-                "/opt/chaqimchi/shared/data/sotqin-config.json",
+                "/opt/enes/shared/data/sotqin-config.json",
             )
         )
-        data_root = Path("/opt/chaqimchi/shared/data")
+        data_root = Path("/opt/enes/shared/data")
         self.outbox_paths = (
             Path(os.environ.get("ENES_RETAIL_OUTBOX", str(data_root / "outbox.db"))),
             Path(
@@ -148,7 +148,7 @@ class SotqinAgent:
             temperature = float(thermal.read_text(encoding="utf-8").strip()) / 1000
         except (OSError, ValueError):
             temperature = None
-        data_root = Path("/opt/chaqimchi/shared/data")
+        data_root = Path("/opt/enes/shared/data")
         if not data_root.exists():
             data_root = Path.cwd()
         disk = shutil.disk_usage(data_root)
@@ -463,7 +463,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Chaqimchi Sotqin R1",
+    title="ENES Sotqin R1",
     lifespan=lifespan,
     docs_url=None,
     redoc_url=None,
@@ -527,8 +527,8 @@ async def preflight() -> JSONResponse:
                 "ready": False,
                 "detail": "Tekshiruvni buyruq satridan ishga tushiring",
                 "command": (
-                    "/opt/chaqimchi/venv/bin/python "
-                    "/opt/chaqimchi/current/scripts/sotqin_preflight.py"
+                    "/opt/enes/venv/bin/python "
+                    "/opt/enes/current/scripts/sotqin_preflight.py"
                 ),
             },
         )

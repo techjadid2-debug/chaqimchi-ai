@@ -23,7 +23,7 @@ Uchta narsa ataylab shunday:
    `data/` esa symlink bo'lib **qoladi**: xizmatlar `ProtectSystem=strict`
    ostida ishlaydi va faqat `shared/data` ga yoza oladi.
 2. **Health darvozasi qurilmani oldingidan sog'lomroq bo'lishini talab
-   qilmaydi.**  Kamerasiz stendda `chaqimchi-retail` umuman ishga tushmaydi
+   qilmaydi.**  Kamerasiz stendda `enes-retail` umuman ishga tushmaydi
    (`retail/service.py` kamera topilmasa xato beradi), shuning uchun faqat
    yangilanishdan **oldin ishlab turgan** xizmatlardan keyin ham ishlashi
    so'raladi.  Agent uchun esa 503 ham yetarli — u pairing yo'qligini
@@ -72,9 +72,9 @@ EXIT_PRECONDITION = 1  # tekshiruv yiqildi, qurilmada hech nima o'zgarmadi
 EXIT_ROLLED_BACK = 2  # health yiqildi, oldingi versiya qaytarildi
 EXIT_BROKEN = 3  # rollback ham yiqildi — odam kerak
 
-SOTQIN = "chaqimchi-sotqin.service"
-RETAIL = "chaqimchi-retail.service"
-ATTENDANCE = "chaqimchi-attendance.service"
+SOTQIN = "enes-sotqin.service"
+RETAIL = "enes-retail.service"
+ATTENDANCE = "enes-attendance.service"
 
 #: Cloud'dan yuklab olinadigan eng katta paket.
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
@@ -90,7 +90,7 @@ def validate_release_target(manifest: dict, machine: Optional[str] = None) -> No
     """V2 Sotqin paketining shu qurilmaga mo'ljallanganini tekshiradi."""
     if int(manifest.get("schema_version", 1)) < 2:
         return
-    if manifest.get("product") not in {"chaqimchi-sotqin", "chaqimchi-lite"}:
+    if manifest.get("product") not in {"enes-sotqin", "enes-lite"}:
         raise UpdateVerificationError("Release boshqa mahsulot uchun")
     expected = _normalized_arch(str(manifest.get("target_arch", "")))
     actual = _normalized_arch(machine or platform.machine())
@@ -124,9 +124,9 @@ def _chown_tree(path: Path, user: str, group: str) -> None:
 
 @dataclass
 class Updater:
-    root: Path = Path("/opt/chaqimchi")
-    public_key: Path = Path("/etc/chaqimchi/update-public.pem")
-    venv_python: Path = Path("/opt/chaqimchi/venv/bin/python")
+    root: Path = Path("/opt/enes")
+    public_key: Path = Path("/etc/enes/update-public.pem")
+    venv_python: Path = Path("/opt/enes/venv/bin/python")
     systemd_dir: Path = Path("/etc/systemd/system")
     health_url: str = "http://127.0.0.1:8742/health"
     health_timeout: float = 120.0
@@ -164,7 +164,7 @@ class Updater:
         base = cloud.rstrip("/")
         if not base.startswith("https://") and "127.0.0.1" not in base and "localhost" not in base:
             raise UpdateVerificationError("Cloud manzili HTTPS bo'lishi kerak")
-        name = f"chaqimchi-sotqin-{version}"
+        name = f"enes-sotqin-{version}"
         pairs = (
             (f"{base}/releases/{name}.json", target / f"{name}.json"),
             (f"{base}/releases/{name}.tar.gz", target / f"{name}.tar.gz"),
@@ -326,10 +326,10 @@ class Updater:
                 package.extractall(stage, filter="data")
             children = list(stage.iterdir())
             source = children[0] if len(children) == 1 and children[0].is_dir() else stage
-            product = manifest.get("product", "chaqimchi-lite")
+            product = manifest.get("product", "enes-lite")
             required = (
                 source / "enes" / "sotqin_agent.py"
-                if product == "chaqimchi-sotqin"
+                if product == "enes-sotqin"
                 else source / "webapp" / "main.py"
             )
             if not required.is_file():
@@ -354,7 +354,7 @@ class Updater:
         self.provision_models(previous, destination)
         self.check_requirements(previous, destination)
         restore_units = self.sync_units(destination)
-        self.chown(destination, "chaqimchi", "chaqimchi")
+        self.chown(destination, "enes", "enes")
 
         baseline = {unit: self._unit_state(unit) for unit in self._installed_units()}
 
@@ -406,8 +406,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("manifest", type=Path, nargs="?")
     parser.add_argument("--fetch-version", default=None, help="cloud'dan shu versiyani oladi")
     parser.add_argument("--cloud", default=None, help="cloud manzili (--fetch-version bilan)")
-    parser.add_argument("--public-key", type=Path, default=Path("/etc/chaqimchi/update-public.pem"))
-    parser.add_argument("--root", type=Path, default=Path("/opt/chaqimchi"))
+    parser.add_argument("--public-key", type=Path, default=Path("/etc/enes/update-public.pem"))
+    parser.add_argument("--root", type=Path, default=Path("/opt/enes"))
     parser.add_argument(
         "--pip", action="store_true", help="yangi bog'liqliklarni o'rnatishga ruxsat"
     )
@@ -438,7 +438,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return EXIT_PRECONDITION
 
     try:
-        with tempfile.TemporaryDirectory(prefix="chaqimchi-update-") as download_dir:
+        with tempfile.TemporaryDirectory(prefix="enes-update-") as download_dir:
             if args.fetch_version:
                 archive, manifest = updater.fetch(
                     args.cloud, args.fetch_version, Path(download_dir)

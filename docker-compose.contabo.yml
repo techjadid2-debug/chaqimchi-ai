@@ -1,6 +1,6 @@
 # Pilot deploy: existing serverdagi robosinf-caddy 80/443 ni boshqaradi.
 # Shu sabab bu stack o'z Caddy containerini ishga tushirmaydi.
-name: chaqimchi-ai
+name: enes
 
 services:
   cloud:
@@ -22,7 +22,7 @@ services:
         condition: service_completed_successfully
     networks:
       edge:
-        aliases: [chaqimchi-cloud]
+        aliases: [enes-cloud]
       backend: {}
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]

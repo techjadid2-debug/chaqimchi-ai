@@ -2,7 +2,7 @@
 #
 # Kunlik backup yiqilganda Telegramga xabar beradi.
 #
-# Nega kerak: `chaqimchi-backup.service` — `Type=oneshot` va unda
+# Nega kerak: `enes-backup.service` — `Type=oneshot` va unda
 # `OnFailure=` yo'q edi.  Skript yiqilsa (masalan compose fayl nomi
 # noto'g'ri bo'lsa) systemd shunchaki xatoni jurnalga yozardi va boshqa
 # hech narsa bo'lmasdi.  Har kecha jimgina takrorlanadigan bunday xato
@@ -35,8 +35,8 @@ if [[ -z "$token" || -z "$chat" ]]; then
 fi
 
 host="$(hostname)"
-text="⚠️ Chaqimchi: kunlik zaxira nusxa OLINMADI ($host).
-Sabab: journalctl -u chaqimchi-backup.service -n 30
+text="⚠️ ENES: kunlik zaxira nusxa OLINMADI ($host).
+Sabab: journalctl -u enes-backup.service -n 30
 Tuzatilmaguncha yangi zaxira yo'q."
 
 curl -fsS --max-time 20 \

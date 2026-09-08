@@ -27,8 +27,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("ENES_CLOUD_ADMIN_KEY", "test-admin")
     monkeypatch.setenv("ENES_OWNER_JWT_SECRET", "o" * 64)
     monkeypatch.setenv("ENES_PORTAL_JWT_SECRET", "p" * 64)
-    monkeypatch.setenv("ENES_PUBLIC_URL", "https://chaqimchi.test")
-    monkeypatch.setenv("ENES_APP_URL", "https://app.chaqimchi.test")
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.test")
+    monkeypatch.setenv("ENES_APP_URL", "https://app.enes.test")
     monkeypatch.setattr("cloud.main.DB_PATH", tmp_path / "cloud.db")
     monkeypatch.setattr("cloud.main._store", None)
     monkeypatch.setattr("cloud.main._event_store", None)
@@ -74,7 +74,7 @@ def test_hello_gives_a_link_the_owner_can_open(client: TestClient) -> None:
     state = hello(client)
 
     assert state["status"] == "pending"
-    assert state["connect_url"].startswith("https://app.chaqimchi.test/owner?connect=")
+    assert state["connect_url"].startswith("https://app.enes.test/owner?connect=")
     assert state["connect_token"] in state["connect_url"]
     assert len(state["verify_code"]) == 6
     assert state["expires_in_sec"] > 0

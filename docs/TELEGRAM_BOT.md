@@ -28,7 +28,7 @@ Do'koningiz nazorati: kirdi-chiqdi hisobi, navbat, kamera holati va kunlik hisob
 `/setabouttext` yuboring, botni tanlang, keyin shu matnni yuboring:
 
 ```
-Chaqimchi AI — do'kon uchun aqlli kamera-nazorat. Kunlik va haftalik hisobotlar, jonli kamera rasmlari, muhim ogohlantirishlar.
+ENES Monitoring — do'kon uchun aqlli kamera-nazorat. Kunlik va haftalik hisobotlar, jonli kamera rasmlari, muhim ogohlantirishlar.
 ```
 
 ## 4. Bot nomi (agar hali qo'yilmagan bo'lsa)
@@ -36,7 +36,7 @@ Chaqimchi AI — do'kon uchun aqlli kamera-nazorat. Kunlik va haftalik hisobotla
 `/setname` yuboring, botni tanlang, keyin:
 
 ```
-Chaqimchi AI
+ENES Monitoring
 ```
 
 ## Tekshirish

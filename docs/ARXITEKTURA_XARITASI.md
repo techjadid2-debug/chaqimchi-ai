@@ -450,9 +450,9 @@ flowchart TB
 
 | Fayl | Vazifa |
 |---|---|
-| `docker-compose.chaqimchi.yml` | jonli compose |
+| `docker-compose.enes.yml` | jonli compose |
 | `Dockerfile.cloud` | uch bosqichli: React → pip → runtime |
-| `deploy/Caddyfile.chaqimchi` | subdomenlar |
+| `deploy/Caddyfile.enes` | subdomenlar |
 | `scripts/deploy_cloud.sh` | zaxira + deploy |
 | `scripts/backup_production.sh` | kunlik zaxira |
 | `scripts/production_preflight.py` | deploydan oldingi tekshiruv |
@@ -494,9 +494,9 @@ flowchart TB
 darajada shishirardi. `.gitignore` da `releases/*.exe`. Fayl GitHub
 Releases'da yoki serverdagi `releases/` da turadi.
 
-**Ikki nom, ikki ma'no:** `Chaqimchi_AI_Setup.exe` — build artefakti,
+**Ikki nom, ikki ma'no:** `ENES_Setup.exe` — build artefakti,
 ichki hujjatlarda **to'g'ri**. `publish_windows_release.sh` uni nashrda
-`Chaqimchi_AI_Setup-<versiya>.exe` deb qayta nomlaydi.
+`ENES_Setup-<versiya>.exe` deb qayta nomlaydi.
 
 | Qism | Fayl |
 |---|---|

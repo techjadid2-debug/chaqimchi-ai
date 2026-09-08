@@ -1,4 +1,4 @@
-"""Chaqimchi Retail AI — do'kon analitikasining edge qismi.
+"""ENES Retail — do'kon analitikasining edge qismi.
 
 Bu paket N100 (8 GB / 128 GB) qurilmasida qabul qilingan 4 kamerani bitta inferens
 byudjeti ustida ishlatish uchun.  Asosiy g'oya: kameralar bir vaqtda emas,

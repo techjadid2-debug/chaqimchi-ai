@@ -35,7 +35,7 @@ def issue_owner_token(member: dict) -> str:
             "site_id": str(member["site_id"]),
             "telegram_id": str(member["telegram_id"]),
             "role": str(member["role"]),
-            "kind": "chaqimchi-owner",
+            "kind": "enes-owner",
         },
     )
 
@@ -47,7 +47,7 @@ def require_owner(authorization: str | None = Header(None)) -> OwnerPrincipal:
         raise HTTPException(401, "Owner session talab qilinadi") from exc
     try:
         payload = decode_access_token(token, cfg=owner_jwt_config())
-        if payload.get("kind") != "chaqimchi-owner":
+        if payload.get("kind") != "enes-owner":
             raise JwtError("Token turi noto'g'ri")
         return OwnerPrincipal(
             member_id=str(payload["sub"]),

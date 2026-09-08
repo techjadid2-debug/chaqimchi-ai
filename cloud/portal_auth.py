@@ -103,7 +103,7 @@ def issue_portal_token(account: dict) -> str:
             "status": str(account["status"]),
             "site_id": account.get("site_id"),
             "auth_version": int(account.get("auth_version") or 1),
-            "kind": "chaqimchi-portal",
+            "kind": "enes-portal",
         },
     )
 
@@ -111,7 +111,7 @@ def issue_portal_token(account: dict) -> str:
 def decode_portal_token(token: str) -> PortalPrincipal:
     try:
         payload = decode_access_token(token, cfg=portal_jwt_config())
-        if payload.get("kind") != "chaqimchi-portal":
+        if payload.get("kind") != "enes-portal":
             raise JwtError("Token turi noto'g'ri")
         return PortalPrincipal(
             account_id=str(payload["sub"]),

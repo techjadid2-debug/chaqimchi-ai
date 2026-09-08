@@ -8,7 +8,7 @@ PostgreSQL va MinIO bilan ishlaydigan cloud deployi uchun canonical tartibdir.
 Cloud va Sotqin env'larini aralashtirmang:
 
 - cloud: `.env.production.example` → `.env.production`;
-- Sotqin: `deploy/sotqin.env.example` → `/etc/chaqimchi/sotqin.env`.
+- Sotqin: `deploy/sotqin.env.example` → `/etc/enes/sotqin.env`.
 
 Cloud env fayli `chmod 600 .env.production` bo‘lishi shart. Deploydan oldin:
 
@@ -62,7 +62,7 @@ history o‘chirilgan shell yoki secret manager orqali bajaring.
 Dedicated server:
 
 ```bash
-export ENES_BACKUP_DIR=/srv/chaqimchi-backups
+export ENES_BACKUP_DIR=/srv/enes-backups
 export ENES_BACKUP_PASSWORD='UZUN_BACKUP_SECRET'
 ./scripts/deploy_cloud.sh
 ```
@@ -71,7 +71,7 @@ Bandlik/Vizora/Robosinf bilan bitta Caddy ishlatadigan test server:
 
 ```bash
 export ENES_COMPOSE_FILE=docker-compose.contabo.yml
-export ENES_BACKUP_DIR=/home/deploy/chaqimchi-backups
+export ENES_BACKUP_DIR=/home/deploy/enes-backups
 export ENES_BACKUP_PASSWORD='UZUN_BACKUP_SECRET'
 ./scripts/deploy_cloud.sh
 ```
@@ -104,28 +104,28 @@ biznes to‘xtaydi; bir haftalik klip yo‘qolsa — yo‘q.
 VPS’da bir marta o‘rnatiladi:
 
 ```bash
-sudo mkdir -p /etc/chaqimchi
-sudo cp deploy/backup.env.example /etc/chaqimchi/backup.env
-sudo nano /etc/chaqimchi/backup.env         # parol va yo'llarni kiriting
-sudo chmod 600 /etc/chaqimchi/backup.env
-sudo cp deploy/chaqimchi-backup.service deploy/chaqimchi-backup.timer /etc/systemd/system/
+sudo mkdir -p /etc/enes
+sudo cp deploy/backup.env.example /etc/enes/backup.env
+sudo nano /etc/enes/backup.env         # parol va yo'llarni kiriting
+sudo chmod 600 /etc/enes/backup.env
+sudo cp deploy/enes-backup.service deploy/enes-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now chaqimchi-backup.timer
-sudo systemctl start chaqimchi-backup.service   # birinchi sinov darhol
-systemctl list-timers chaqimchi-backup.timer    # keyingi ishga tushish vaqti
+sudo systemctl enable --now enes-backup.timer
+sudo systemctl start enes-backup.service   # birinchi sinov darhol
+systemctl list-timers enes-backup.timer    # keyingi ishga tushish vaqti
 ```
 
 Har kuni 03:30 da baza backupi olinadi, 14 kundan eskilari o‘chiriladi.
-Holatni tekshirish: `journalctl -u chaqimchi-backup.service -n 20`.
+Holatni tekshirish: `journalctl -u enes-backup.service -n 20`.
 
 Media uchun ikkinchi unit (bir marta):
 
 ```bash
-sudo cp deploy/chaqimchi-backup-media.service deploy/chaqimchi-backup-media.timer \
+sudo cp deploy/enes-backup-media.service deploy/enes-backup-media.timer \
   /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now chaqimchi-backup-media.timer
-sudo systemctl start chaqimchi-backup-media.service   # birinchi sinov
+sudo systemctl enable --now enes-backup-media.timer
+sudo systemctl start enes-backup-media.service   # birinchi sinov
 ```
 
 Qo‘lda media zaxirasi: `./scripts/backup_production.sh --media`.
@@ -136,7 +136,7 @@ bepul 10–15 GB lik ombor bir necha oyga yetadi. Preflight buni tekshiradi:
 
 ```bash
 python3 scripts/production_preflight.py --env-file .env.production \
-  --backup-env /etc/chaqimchi/backup.env
+  --backup-env /etc/enes/backup.env
 ```
 
 ### 2.2 Restore mashqi (oyiga 1 marta)
@@ -144,11 +144,11 @@ python3 scripts/production_preflight.py --env-file .env.production \
 Mashq **production'ga tegmaydi**: arxiv ochiladi va mazmuni tekshiriladi.
 
 ```bash
-cd /home/deploy/chaqimchi-ai
+cd /home/deploy/enes
 export ENES_BACKUP_PASSWORD='...'          # parol menejeridan
-export ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml
+export ENES_COMPOSE_FILE=docker-compose.enes.yml
 ./scripts/restore_production.sh --check \
-  /home/deploy/chaqimchi-backups/chaqimchi-<sana>.tar.gz.enc
+  /home/deploy/enes-backups/enes-<sana>.tar.gz.enc
 ```
 
 Skript to'rt narsani tekshiradi va bittasi ham yetishmasa xato beradi:
@@ -177,7 +177,7 @@ Skript `TIKLASH` deb yozishni so'raydi, so'ng joriy `.env.production` ni
 zaxiralab, sozlamalarni, PostgreSQL'ni, `cloud.db` ni va MinIO'ni
 arxivdagisiga almashtiradi. Undan keyin qo'lda ikki ish qoladi:
 
-1. Rasm va kliplar — eng yangi `chaqimchi-media-*.tar.gz.enc` arxivini
+1. Rasm va kliplar — eng yangi `enes-media-*.tar.gz.enc` arxivini
    ham `--restore` qiling (ular kunlik arxivda yo'q)
 2. Yuz modellari — `python scripts/fetch_face_models.py` (ular arxivga
    ataylab kirmaydi: o'zgarmaydi va ~180 MB joy egallaydi)
@@ -251,7 +251,7 @@ belgi) shart.
    panelni qayta qursa ham, repo bilan diskdagi bundle ajralib ketsa
    tashxis qiyinlashadi (2026-09-06 tuzog'i: API ishlagan, tugma
    ko'rinmagan).
-2. `deploy/Caddyfile.chaqimchi` da `/assets/v2/assets/*` uchun
+2. `deploy/Caddyfile.enes` da `/assets/v2/assets/*` uchun
    `immutable` qoidasi bor — Caddyfile o'zgargan bo'lsa konteynerni
    qayta yarating (oddiy restart eski faylni saqlaydi).
 3. PWA: manifest, ikonka yoki nom o'zgarsa `owner-sw.js` dagi kesh
@@ -277,7 +277,7 @@ qobig'iga tegmaydi.
 AI yordamchining kalitlari, worker servisi, kvota va rotatsiya tartibi —
 alohida hujjatda: `docs/VISION_AGENT.md`.  Qisqasi: `ENES_GEMINI_API_KEY`
 va `ENES_GEMINI_VISION_MODEL` IKKALASI ham `.env.production`da bo'lishi
-shart (preflight tekshiradi); worker `docker-compose.chaqimchi.yml`dagi
+shart (preflight tekshiradi); worker `docker-compose.enes.yml`dagi
 `vision-worker` servisida ishlaydi va `frontend` tarmog'ida bo'lishi kerak.
 
 ## 7. Moliya paneli

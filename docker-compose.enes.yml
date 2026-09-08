@@ -1,8 +1,8 @@
 # chaqimchi.uz subdomen platformasi uchun compose — prod.yml'ning
-# nusxasi, farqi bitta: Caddy subdomenli Caddyfile.chaqimchi bilan
+# nusxasi, farqi bitta: Caddy subdomenli Caddyfile.enes bilan
 # ishlaydi (hostlar faylda qat'iy, ENES_DOMAIN kerak emas).
-# Ishlatish: ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml ./scripts/deploy_cloud.sh
-name: chaqimchi
+# Ishlatish: ENES_COMPOSE_FILE=docker-compose.enes.yml ./scripts/deploy_cloud.sh
+name: enes
 
 services:
   caddy:
@@ -18,7 +18,7 @@ services:
       # saytda bor edi, port esa yopiq.
       - "443:443/udp"
     volumes:
-      - ./deploy/Caddyfile.chaqimchi:/etc/caddy/Caddyfile:ro
+      - ./deploy/Caddyfile.enes:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

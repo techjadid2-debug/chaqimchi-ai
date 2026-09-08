@@ -3,7 +3,7 @@
 
 Ikki apparat yo'li uchun ishlaydi:
 
-    # Chaqimchi Box (N100)
+    # ENES Box (N100)
     python scripts/accept_n100_pilot.py --benchmark b.json --soak s.json \
         --approved-by "Ism" --output acceptance.json
 

@@ -66,7 +66,7 @@ def print_report(result: Dict[str, Any]) -> None:
     verdict = result["verdict"]
     print()
     print("═" * 66)
-    print("  Chaqimchi Retail AI — qurilma sig'imi")
+    print("  ENES Retail — qurilma sig'imi")
     print("═" * 66)
     print(f"  Qurilma      : {result['host']['machine']} / {result['host']['system']}")
     print(f"  Inferens     : {result['device_in_use']}")

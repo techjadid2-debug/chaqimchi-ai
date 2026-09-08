@@ -2,7 +2,7 @@
 # allaqachon tugagan payt, ya'ni ikkalasi bir vaqtda diskni talashmaydi.
 
 [Unit]
-Description=Chaqimchi Cloud haftalik media zaxirasi
+Description=ENES Cloud haftalik media zaxirasi
 
 [Timer]
 OnCalendar=Sun *-*-* 04:30:00

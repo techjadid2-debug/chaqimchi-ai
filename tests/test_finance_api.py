@@ -233,7 +233,7 @@ def _windows_site(client: TestClient, name: str) -> str:
     ).json()
     client.post(
         "/api/v1/devices/claim",
-        json={"pairing_code": site["pairing_code"], "product_name": "Chaqimchi Windows"},
+        json={"pairing_code": site["pairing_code"], "product_name": "ENES Windows"},
     )
     return str(site["site_id"])
 

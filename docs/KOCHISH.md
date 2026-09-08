@@ -40,7 +40,7 @@ adduser deploy && usermod -aG docker deploy
 # SSH kalitni deploy foydalanuvchiga qo'shing; parolli kirishni o'chiring.
 ```
 
-Kod: `git clone git@github.com:techjadid2-debug/chaqimchi-ai.git /home/deploy/chaqimchi-ai`
+Kod: `git clone git@github.com:techjadid2-debug/chaqimchi-ai.git /home/deploy/enes`
 (yoki Mac'dan rsync — deploy skript baribir lokal build qiladi).
 
 ## 3. .env.production
@@ -67,9 +67,9 @@ Tekshiruv: `python3 scripts/production_preflight.py` (xato chiqmaguncha deploy y
 ## 4. Deploy
 
 ```bash
-cd /home/deploy/chaqimchi-ai
-export ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml   # Caddy ichida, subdomenlar bilan
-export ENES_BACKUP_DIR=/home/deploy/chaqimchi-backups
+cd /home/deploy/enes
+export ENES_COMPOSE_FILE=docker-compose.enes.yml   # Caddy ichida, subdomenlar bilan
+export ENES_BACKUP_DIR=/home/deploy/enes-backups
 export ENES_BACKUP_PASSWORD='YANGI_UZUN_SIR'            # parol menejerga yozing!
 ./scripts/deploy_cloud.sh
 ```
@@ -79,13 +79,13 @@ o'zi oladi (DNS tarqalgan bo'lishi shart). Tekshirish:
 `curl -I https://chaqimchi.uz` va `https://api.chaqimchi.uz/health`.
 
 Caddyfile sintaksisini oldindan tekshirish (ixtiyoriy):
-`docker run --rm -v $PWD/deploy/Caddyfile.chaqimchi:/etc/caddy/Caddyfile:ro caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile`
+`docker run --rm -v $PWD/deploy/Caddyfile.enes:/etc/caddy/Caddyfile:ro caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile`
 
 ## 5. Deploy'dan keyingi bir martalik ishlar
 
 ```bash
 # Yuz modellari (Face ID pilot, ~280 MB):
-docker compose --env-file .env.production -f docker-compose.chaqimchi.yml \
+docker compose --env-file .env.production -f docker-compose.enes.yml \
   exec cloud python scripts/fetch_face_models.py
 
 # Telegram webhook (api. manziliga):
@@ -93,8 +93,8 @@ python3 scripts/set_telegram_webhook.py
 python3 scripts/set_telegram_webhook.py --check
 
 # Kunlik backup cron:
-crontab -e   # → 30 3 * * * flock -n /home/deploy/chaqimchi-backup.lock /home/deploy/chaqimchi-backup-daily.sh
-# (skript: deploy/chaqimchi-backup.* namunalari, runbook §2.1)
+crontab -e   # → 30 3 * * * flock -n /home/deploy/enes-backup.lock /home/deploy/enes-backup-daily.sh
+# (skript: deploy/enes-backup.* namunalari, runbook §2.1)
 ```
 
 ## 6. Windows relizini yangi manzil bilan qayta yig'ish (Mac'da)
@@ -103,7 +103,7 @@ Ichiga cloud manzili yoziladi — YANGI api manzil bilan qayta build shart:
 
 ```bash
 make windows-release CLOUD_URL=https://api.chaqimchi.uz PY=.venv/bin/python
-scp releases/chaqimchi-windows-<VERSIYA>.{exe,json} deploy@SERVER_IP:/home/deploy/chaqimchi-ai/releases/
+scp releases/enes-windows-<VERSIYA>.{exe,json} deploy@SERVER_IP:/home/deploy/enes/releases/
 ```
 
 ## 7. status.chaqimchi.uz (UptimeRobot, bepul)

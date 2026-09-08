@@ -300,7 +300,7 @@ def test_without_internet_the_wizard_is_still_offered(monkeypatch) -> None:
 
 def test_the_panel_lives_on_a_different_host_than_the_api(monkeypatch) -> None:
     """`api.` xosti faqat `/api/*` ni o'tkazadi va `/owner` uchun 404
-    beradi (`deploy/Caddyfile.chaqimchi`).
+    beradi (`deploy/Caddyfile.enes`).
 
     Bu holat haqiqiy: pairing kod bilan o'rnatilgan qurilma birinchi
     `/edge/config` gacha ulangan, lekin panel manzilini bilmaydi —

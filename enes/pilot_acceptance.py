@@ -2,9 +2,9 @@
 
 Ikki apparat yo'li bor va ularning mezonlari **bir xil emas**:
 
-* `SOTQIN-N100-8-128-R1` — Chaqimchi Box.  Intel iGPU'da ishlaydi va
+* `SOTQIN-N100-8-128-R1` — ENES Box.  Intel iGPU'da ishlaydi va
   harorat o'lchanadi (`/sys/class/thermal`).
-* `CHAQIMCHI-WINDOWS-W1` — mijozning o'z Windows kompyuteri (asosiy
+* `ENES-WINDOWS-W1` — mijozning o'z Windows kompyuteri (asosiy
   mahsulot).  U yerda iGPU odatda yaroqsiz (masalan HD 4600 — OpenVINO
   qo'llab-quvvatlamaydi), ya'ni tahlil CPU'da ketadi, va Windows'da
   harorat manbasi umuman yo'q.
@@ -38,7 +38,7 @@ MIN_CAMERA_UPTIME_PERCENT = 99.0
 MAX_TEMPERATURE_C = 85.0
 
 #: Windows yo'lining profil nomi.
-WINDOWS_PROFILE = "CHAQIMCHI-WINDOWS-W1"
+WINDOWS_PROFILE = "ENES-WINDOWS-W1"
 
 #: Kunlik kirish soni qo'lda sanash bilan shundan ko'p farq qilmasin.
 MAX_DAILY_COUNT_DELTA_PERCENT = 10.0

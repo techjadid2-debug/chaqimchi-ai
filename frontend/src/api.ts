@@ -3,8 +3,8 @@ import type { Dashboard } from "./types";
 
 export type ApiOptions = RequestInit & { siteId?: string };
 
-const OWNER_TOKEN = "chaqimchi_owner_token_v2";
-const ADMIN_TOKEN = "chaqimchi_admin_token_v2";
+const OWNER_TOKEN = "enes_owner_token";
+const ADMIN_TOKEN = "enes_admin_token";
 
 /* Do'kon egasi tokeni `localStorage` da, admin tokeni `sessionStorage` da.
  *

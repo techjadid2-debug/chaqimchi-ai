@@ -204,7 +204,7 @@ def test_installer_keeps_writable_data_out_of_program_files() -> None:
     va `data\\` yozmoqchi bo'lardi, u yerda esa yozish huquqi yo'q — dastur
     birinchi ishga tushishdayoq yiqilardi."""
     source = _nsis_code()
-    assert "$APPDATA\\Chaqimchi" in source, "ma'lumot ProgramData'da bo'lishi kerak"
+    assert "$APPDATA\\ENES" in source, "ma'lumot ProgramData'da bo'lishi kerak"
     assert ".venv" not in source, "mijoz kompyuterida virtual muhit qurilmaydi"
     assert "pip install" not in source, "o'rnatishda internet talab qilinmasin"
 
@@ -220,7 +220,7 @@ def test_installer_offers_autostart() -> None:
 def test_uninstaller_cleans_up_everything_it_created() -> None:
     source = _nsis()
     uninstall = source[source.index('Section "Uninstall"') :]
-    for leftover in ("$DESKTOP\\${APP_NAME}.lnk", "ChaqimchiAI", "$INSTDIR\\python"):
+    for leftover in ("$DESKTOP\\${APP_NAME}.lnk", "ENES", "$INSTDIR\\python"):
         assert leftover in uninstall, f"o'chirishda qolib ketadi: {leftover}"
     assert 'DeleteRegValue HKLM "${REG_RUN}"' in uninstall, "avtostart yozuvi qolib ketadi"
 
@@ -238,7 +238,7 @@ def test_installer_launcher_stays_visible_on_error() -> None:
     """Ilgari yorliq `.vbs` orqali oynani berkitib ishga tushirardi —
     xato ekranga chiqmasdi va mijoz nima bo'lganini bilmasdi."""
     source = BUILDER.read_text(encoding="utf-8")
-    assert "Chaqimchi_AI.bat" in source
+    assert "ENES.bat" in source
     assert "pause" in source, "xato oynada qolishi kerak"
     assert ".vbs" not in _nsis_code(), "yashirin ishga tushirish qaytarilmasin"
 
@@ -379,7 +379,7 @@ def test_ci_gives_the_build_a_cloud_address() -> None:
 def test_ci_checks_the_address_landed_in_the_package() -> None:
     """Env berilgani yetarli emas — u haqiqatan `.bat` ichiga tushishi kerak."""
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "build/payload/Chaqimchi_AI.bat" in workflow
+    assert "build/payload/ENES.bat" in workflow
     assert "^set ENES_DEFAULT_CLOUD_URL=https://" in workflow
 
 
@@ -469,7 +469,7 @@ def test_the_run_key_is_only_a_fallback() -> None:
 def test_uninstall_removes_the_autostart_task() -> None:
     source = _nsis_code()
     uninstall = source[source.index('Section "Uninstall"') :]
-    assert 'schtasks /Delete /F /TN "Chaqimchi AI"' in uninstall
+    assert 'schtasks /Delete /F /TN "ENES Monitoring"' in uninstall
 
 
 def test_the_service_launcher_never_opens_a_browser_or_pauses() -> None:
@@ -487,11 +487,11 @@ def test_the_service_launcher_never_opens_a_browser_or_pauses() -> None:
     assert "ENES_DEFAULT_CLOUD_URL=__CLOUD_URL__" in launcher, (
         "xizmat launcheri ham cloud manzilini bilishi kerak"
     )
-    assert "Chaqimchi_AI_xizmat.bat" in source, "launcher payloadga yozilsin"
+    assert "ENES_xizmat.bat" in source, "launcher payloadga yozilsin"
 
 
 def test_the_autostart_task_runs_the_service_launcher() -> None:
-    assert "Chaqimchi_AI_xizmat.bat" in _autostart_block()
+    assert "ENES_xizmat.bat" in _autostart_block()
 
 
 # ── Masofadan yangilash fayllarni band holda topmasin ───────────────────
@@ -512,7 +512,7 @@ def _uninstall_block() -> str:
 def test_the_task_is_stopped_before_the_process() -> None:
     """Teskari tartibda vazifa o'ldirilgan dasturni qayta ko'tarardi."""
     block = _uninstall_block()
-    assert block.index('schtasks /End /TN "Chaqimchi AI"') < block.index("Stop-Process"), (
+    assert block.index('schtasks /End /TN "ENES Monitoring"') < block.index("Stop-Process"), (
         "avval vazifa to'xtatilsin, keyin jarayon"
     )
 
@@ -531,7 +531,7 @@ def test_processes_are_matched_by_path_not_window_title() -> None:
 def test_the_updater_task_is_also_stopped() -> None:
     """O'chirilgan dasturni qayta o'rnatishga urinmasin."""
     block = _uninstall_block()
-    assert 'schtasks /Delete /F /TN "Chaqimchi AI Update"' in block
+    assert 'schtasks /Delete /F /TN "ENES Update"' in block
 
 
 # ── Avtostartni dastur o'zi tiklaydi ────────────────────────────────────
@@ -540,7 +540,7 @@ def test_the_updater_task_is_also_stopped() -> None:
 def test_autostart_task_name_matches_the_installer() -> None:
     """Nom farq qilsa ikkita vazifa paydo bo'lardi — dastur ikki nusxada.
 
-    O'rnatuvchi vazifani `Chaqimchi AI` deb yaratadi; dastur esa
+    O'rnatuvchi vazifani `ENES Monitoring` deb yaratadi; dastur esa
     yo'qligini tekshirib o'zi yaratadi (0.6.7 gacha o'rnatilgan
     kompyuterlarda avtostart `Run` kaliti bo'lib, tokdan keyin nazorat
     umuman boshlanmasdi).

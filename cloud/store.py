@@ -287,7 +287,7 @@ class CloudStore:
                 verify_code TEXT NOT NULL,
                 fingerprint TEXT NOT NULL,
                 label TEXT NOT NULL DEFAULT '',
-                product_name TEXT NOT NULL DEFAULT 'Chaqimchi Windows',
+                product_name TEXT NOT NULL DEFAULT 'ENES Windows',
                 app_version TEXT,
                 os_name TEXT,
                 local_ip TEXT,
@@ -593,7 +593,7 @@ class CloudStore:
             if os.environ.get("ENES_ENV", "development") == "production":
                 raise RuntimeError("ENES_CAMERA_SECRET_KEY sozlanmagan")
             key = base64.urlsafe_b64encode(
-                hashlib.sha256(b"chaqimchi-development-camera-key").digest()
+                hashlib.sha256(b"enes-development-camera-key").digest()
             ).decode("ascii")
         try:
             return Fernet(key.encode("ascii"))
@@ -2531,7 +2531,9 @@ class CloudStore:
             # ikkala tur ham bo'lsa Windows ustun keladi — kam emas, KO'P
             # baholash to'g'riroq: kam baholangan xarajat foydani yolg'on
             # ko'rsatadi.
-            " SUM(CASE WHEN product_name LIKE 'Chaqimchi Windows%' THEN 1 ELSE 0 END)"
+            # Eski qatorlar «Chaqimchi Windows» bilan qolgan — ikkalasi sanaladi.
+            " SUM(CASE WHEN product_name LIKE 'ENES Windows%'"
+            " OR product_name LIKE 'Chaqimchi Windows%' THEN 1 ELSE 0 END)"
             " AS windows_devices"
             " FROM devices GROUP BY site_id"
         ).fetchall()
@@ -3026,7 +3028,7 @@ class CloudStore:
         *,
         fingerprint: str,
         label: str = "",
-        product_name: str = "Chaqimchi Windows",
+        product_name: str = "ENES Windows",
         app_version: str = "",
         os_name: str = "",
         local_ip: str = "",

@@ -90,11 +90,11 @@ def test_a_failed_backup_is_not_silent() -> None:
     """`Type=oneshot` xatosi faqat jurnalga tushadi, papkada esa eski
     arxiv qoladi — hammasi joyidaday ko'rinadi.  Zaxira yo'qligi server
     yo'qolgandan keyin emas, o'sha kuniyoq bilinishi kerak."""
-    unit = (SCRIPTS.parent / "deploy" / "chaqimchi-backup.service").read_text(encoding="utf-8")
+    unit = (SCRIPTS.parent / "deploy" / "enes-backup.service").read_text(encoding="utf-8")
     assert "OnFailure=" in unit
     notifier = SCRIPTS / "notify_backup_failure.sh"
     assert notifier.is_file() and os.stat(notifier).st_mode & stat.S_IXUSR
-    assert (SCRIPTS.parent / "deploy" / "chaqimchi-backup-failed.service").is_file()
+    assert (SCRIPTS.parent / "deploy" / "enes-backup-failed.service").is_file()
 
 
 def test_the_backup_unit_example_matches_the_real_compose_file() -> None:
@@ -131,7 +131,7 @@ def test_the_daily_archive_leaves_media_out() -> None:
 def test_media_backup_is_a_separate_opt_in_run() -> None:
     source = BACKUP.read_text(encoding="utf-8")
     assert "--media" in source, "media rejimi ataylab so'ralsin"
-    assert "chaqimchi-media-$stamp" in source, "media arxivi alohida nom oladi"
+    assert "enes-media-$stamp" in source, "media arxivi alohida nom oladi"
     media = [g for g in _archive_contents() if "minio" in g]
     assert media, "media rejimida MinIO arxivga kirishi kerak"
 
@@ -146,12 +146,12 @@ def test_media_mirror_only_runs_in_media_mode() -> None:
 
 def test_the_two_units_clean_up_different_files() -> None:
     """Kunlik unit media arxivini o'chirib yubormasin va aksincha."""
-    daily = (UNITS / "chaqimchi-backup.service").read_text(encoding="utf-8")
-    media = (UNITS / "chaqimchi-backup-media.service").read_text(encoding="utf-8")
-    assert "chaqimchi-[0-9]*.tar.gz.enc" in daily, "kunlik tozalash faqat baza arxivlarini olsin"
-    assert "chaqimchi-media-*.tar.gz.enc" in media
+    daily = (UNITS / "enes-backup.service").read_text(encoding="utf-8")
+    media = (UNITS / "enes-backup-media.service").read_text(encoding="utf-8")
+    assert "enes-[0-9]*.tar.gz.enc" in daily, "kunlik tozalash faqat baza arxivlarini olsin"
+    assert "enes-media-*.tar.gz.enc" in media
     assert "--media" in media, "haftalik unit media rejimida chaqirsin"
-    assert (UNITS / "chaqimchi-backup-media.timer").is_file()
+    assert (UNITS / "enes-backup-media.timer").is_file()
 
 
 def test_the_snapshot_does_not_go_to_the_container_tmpfs() -> None:

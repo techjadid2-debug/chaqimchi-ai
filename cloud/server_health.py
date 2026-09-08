@@ -207,7 +207,7 @@ def snapshot() -> Dict[str, Any]:
     chizmaydi.
 
     Eslatma: Docker standart holatda konteynerga host protsessorini
-    ko'rsatadi (`docker-compose.chaqimchi.yml` da `cpus:` chegarasi
+    ko'rsatadi (`docker-compose.enes.yml` da `cpus:` chegarasi
     yo'q), ya'ni bu raqamlar VPS'ning o'zi haqida.
     """
     data: Dict[str, Any] = {}

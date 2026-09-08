@@ -128,22 +128,22 @@ fi
 # parollari `ENES_CAMERA_SECRET_KEY` bilan, MinIO'dagi har bir rasm
 # va klip esa `ENES_SNAPSHOT_KEY` bilan shifrlangan — kalitsiz ular
 # o'qib bo'lmaydigan axlat.  Arxivning o'zi AES-256 bilan yopilgan,
-# backup paroli esa boshqa joyda (`/etc/chaqimchi/backup.env`) turadi va
+# backup paroli esa boshqa joyda (`/etc/enes/backup.env`) turadi va
 # bu faylga KIRMAYDI, ya'ni aylanma bog'liqlik yo'q.
 cp -- "$env_file" "$stage/env.production"
 chmod 600 "$stage/env.production"
 
 # Arxiv nomi rejimni AYTIB turadi: tozalash qoidalari va tiklash paytida
 # qaysi fayl nima ekani nomidan ko'rinsin.
-#   chaqimchi-<sana>.tar.gz.enc         — baza (har kuni, 14 kun saqlanadi)
-#   chaqimchi-media-<sana>.tar.gz.enc   — media (haftada bir, 2 nusxa)
+#   enes-<sana>.tar.gz.enc         — baza (har kuni, 14 kun saqlanadi)
+#   enes-media-<sana>.tar.gz.enc   — media (haftada bir, 2 nusxa)
 if [[ "$with_media" == "1" ]]; then
-  archive="$ENES_BACKUP_DIR/chaqimchi-media-$stamp.tar.gz.enc"
+  archive="$ENES_BACKUP_DIR/enes-media-$stamp.tar.gz.enc"
   # Kalitlar media arxiviga ham kiradi: MinIO'dagi har bir fayl
   # `ENES_SNAPSHOT_KEY` bilan shifrlangan, kalitsiz ular axlat.
   contents=(minio env.production)
 else
-  archive="$ENES_BACKUP_DIR/chaqimchi-$stamp.tar.gz.enc"
+  archive="$ENES_BACKUP_DIR/enes-$stamp.tar.gz.enc"
   contents=(postgres.dump cloud-state env.production)
 fi
 
@@ -169,7 +169,7 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
 fi
 
 # Telegram hujjatlari chatni tez to'ldiradi. Xato ogohlantirishi alohida
-# `chaqimchi-backup-failed.service` orqali ishlaydi, shuning uchun muvaffaqiyatli
+# `enes-backup-failed.service` orqali ishlaydi, shuning uchun muvaffaqiyatli
 # arxiv yuborishni o'chirish uni o'chirmaydi.
 telegram_send_document="${ENES_BACKUP_TELEGRAM_SEND_DOCUMENT:-1}"
 telegram_token="${ENES_BACKUP_TELEGRAM_TOKEN:-}"
@@ -187,7 +187,7 @@ if [[ "$with_media" != "1" && "$telegram_send_document" == "1" && -n "$telegram_
       | curl -sS -f -m 300 -K - \
           -F "chat_id=$telegram_chat" \
           -F "document=@$archive" \
-          -F "caption=Chaqimchi zaxira · $(hostname -s) · $stamp · $((bytes / 1024)) KB" \
+          -F "caption=ENES zaxira · $(hostname -s) · $stamp · $((bytes / 1024)) KB" \
           -o /dev/null; then
       offsite=1
     else

@@ -16,9 +16,9 @@ releases/*.zip
 releases/*.exe
 # Windows manifesti har qurishda yangi SHA bilan qayta yoziladi va u
 # ta'riflaydigan `.exe` git'da yo'q — ya'ni yolg'iz manifestning ma'nosi
-# ham yo'q.  (Linux `chaqimchi-sotqin-*.json` esa kuzatiladi: u reliz
+# ham yo'q.  (Linux `enes-sotqin-*.json` esa kuzatiladi: u reliz
 # tarixining bir qismi.)
-releases/chaqimchi-windows-*.json
+releases/enes-windows-*.json
 
 # Ma'lumotlar va modellar
 data/
@@ -37,7 +37,7 @@ secrets/
 *.pem
 # OTA ochiq kaliti — ataylab commit qilinadi: u reliz paketi ichida
 # qurilmaga boradi va o'rnatishda qotiriladi.  Maxfiy kalit esa repo
-# daraxtidan tashqarida (~/.chaqimchi/), ya'ni bu yerga tushishi mumkin emas.
+# daraxtidan tashqarida (~/.enes/), ya'ni bu yerga tushishi mumkin emas.
 !deploy/update-public.pem
 *.key
 *.p12

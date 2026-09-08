@@ -182,5 +182,5 @@ def announce(code: str) -> bool:
             custom_dir() / f"{code}.wav",
         )
 
-    threading.Thread(target=_run, name=f"chaqimchi-audio-{code}", daemon=True).start()
+    threading.Thread(target=_run, name=f"enes-audio-{code}", daemon=True).start()
     return True

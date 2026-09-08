@@ -312,7 +312,7 @@ def main() -> int:
             # rasmni 200 KB chegarasidan chiqarib yuborardi.
             context = browser.new_context(viewport=VIEWPORT, device_scale_factor=1.5)
             context.add_init_script(
-                "localStorage.setItem('chaqimchi_owner_token_v2', 'demo-token')"
+                "localStorage.setItem('enes_owner_token', 'demo-token')"
             )
             page = context.new_page()
 

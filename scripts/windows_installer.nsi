@@ -1,8 +1,8 @@
 ; ============================================================================
-; Chaqimchi AI — Windows o'rnatuvchisi
+; ENES Monitoring — Windows o'rnatuvchisi
 ;
 ; Mijoz ko'radigan oqim:
-;   Chaqimchi_AI_Setup.exe → "Ha, ruxsat beraman" (UAC)
+;   ENES_Setup.exe → "Ha, ruxsat beraman" (UAC)
 ;   → Keyingi → Keyingi → O'rnatish → Tayyor → brauzer o'zi ochiladi
 ;
 ; Ichida hamma narsa bor (Python, AI modeli, kutubxonalar) — mijoz
@@ -18,7 +18,7 @@
 ;     ichiga `.venv`, `data\` va `install.log` yozmoqchi bo'lardi — u yerda
 ;     oddiy foydalanuvchida yozish huquqi yo'q, ya'ni dastur birinchi ishga
 ;     tushishdayoq jimgina yiqilardi.  Endi yoziladigan hamma narsa
-;     `C:\ProgramData\Chaqimchi` da.
+;     `C:\ProgramData\ENES` da.
 ;   * Yorliq YASHIRIN emas.  Ilgari `.vbs` oynani berkitardi va xato
 ;     ekranga chiqmasdi — mijoz nima bo'lganini bilmasdi.
 ;   * FIREWALL qoidasi yo'q.  Dastur faqat `127.0.0.1` da tinglaydi;
@@ -44,8 +44,8 @@ Unicode True
 ; yaroqsiz bo'lardi.
 !include "..\build\version.nsh"
 
-!define APP_NAME     "Chaqimchi AI"
-!define APP_PUBLISHER "Chaqimchi AI"
+!define APP_NAME     "ENES Monitoring"
+!define APP_PUBLISHER "ENES Monitoring"
 !define APP_PORT     "8760"
 !define APP_URL      "http://localhost:${APP_PORT}"
 
@@ -56,7 +56,7 @@ Unicode True
   !define APP_PANEL_URL "${APP_URL}"
 !endif
 
-!define REG_UNINSTALL "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChaqimchiAI"
+!define REG_UNINSTALL "Software\Microsoft\Windows\CurrentVersion\Uninstall\ENES"
 !define REG_RUN      "Software\Microsoft\Windows\CurrentVersion\Run"
 
 ; Fayl nomidan olingan pairing kod.  NSIS o'zgaruvchini **ishlatilishidan
@@ -64,9 +64,9 @@ Unicode True
 Var PairingCode
 
 Name "${APP_NAME}"
-OutFile "..\releases\Chaqimchi_AI_Setup.exe"
-InstallDir "$PROGRAMFILES64\Chaqimchi AI"
-InstallDirRegKey HKLM "Software\ChaqimchiAI" "InstallDir"
+OutFile "..\releases\ENES_Setup.exe"
+InstallDir "$PROGRAMFILES64\ENES Monitoring"
+InstallDirRegKey HKLM "Software\ENES" "InstallDir"
 
 ; Dastur `Program Files` ga yozadi va avtostart registrini qo'yadi —
 ; administrator huquqi kerak.  Windows buni UAC oynasi bilan so'raydi.
@@ -96,7 +96,7 @@ VIAddVersionKey "LegalCopyright" "© ${APP_PUBLISHER}"
 !define MUI_WELCOMEPAGE_TEXT "Bu dastur do'koningizdagi kameralarni sun'iy intellekt bilan tahlil qiladi: mijozlar soni, kassa navbati va xavfsizlik.$\r$\n$\r$\nO'rnatish uchun qo'shimcha hech narsa kerak emas — Python va AI modeli shu paketning ichida.$\r$\n$\r$\nDavom etish uchun 'Keyingi' ni bosing."
 
 ; Oxirgi sahifada dasturni ochish — mijoz yorliq qidirib yurmasin.
-!define MUI_FINISHPAGE_RUN "$INSTDIR\Chaqimchi_AI.bat"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\ENES.bat"
 !define MUI_FINISHPAGE_RUN_TEXT "${APP_NAME} ni hozir ishga tushirish"
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\O'QING.txt"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Qisqacha yo'riqnomani o'qish"
@@ -133,7 +133,7 @@ Section "!${APP_NAME} (majburiy)" SecMain
   SetShellVarContext all
 
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
-  CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\Chaqimchi_AI.bat" "" "$INSTDIR\app.ico" 0
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\ENES.bat" "" "$INSTDIR\app.ico" 0
   ; Ikki yorliq, ikki xil savol uchun.  Ilgari bittasi bor edi va u
   ; localhost'ga ketardi — mijoz "hisobotim qayerda?" degan savol bilan
   ; qurilma sahifasiga tushib qolardi.
@@ -144,8 +144,8 @@ Section "!${APP_NAME} (majburiy)" SecMain
   ; ── Pairing kodni fayl nomidan olish ────────────────────────────────
   ;
   ; Admin panel `...?code=A1B2C3` havolasini beradi va brauzer faylni
-  ; `Chaqimchi_AI_Setup-A1B2C3.exe` nomi bilan saqlaydi.  Kodni
-  ; `%PROGRAMDATA%\Chaqimchi\pairing.txt` ga yozamiz — dastur birinchi
+  ; `ENES_Setup-A1B2C3.exe` nomi bilan saqlaydi.  Kodni
+  ; `%PROGRAMDATA%\ENES\pairing.txt` ga yozamiz — dastur birinchi
   ; ishga tushishda uni o'qib cloudga o'zi ulanadi va faylni o'chiradi.
   ;
   ; Nom buzilsa (brauzer `(1)` qo'shsa yoki mijoz faylni qayta nomlasa)
@@ -153,8 +153,8 @@ Section "!${APP_NAME} (majburiy)" SecMain
   ; Ya'ni bu qulaylik, majburiyat emas.
   Call ExtractPairingCode
   ${If} $PairingCode != ""
-    CreateDirectory "$APPDATA\Chaqimchi"
-    FileOpen $0 "$APPDATA\Chaqimchi\pairing.txt" w
+    CreateDirectory "$APPDATA\ENES"
+    FileOpen $0 "$APPDATA\ENES\pairing.txt" w
     FileWrite $0 "$PairingCode"
     FileClose $0
     DetailPrint "Ulanish kodi topildi: $PairingCode"
@@ -170,9 +170,9 @@ Section "!${APP_NAME} (majburiy)" SecMain
   ; SID'lar ataylab: guruh nomlari tildan tilga o'zgaradi (ruscha
   ; Windows'da "Administrators" yo'q), SID esa hamma joyda bir xil.
   ;   S-1-5-18 = SYSTEM, S-1-5-32-544 = Administrators, S-1-5-4 = INTERACTIVE
-  CreateDirectory "$APPDATA\Chaqimchi"
+  CreateDirectory "$APPDATA\ENES"
   DetailPrint "Sozlamalar papkasi himoyalanmoqda..."
-  nsExec::ExecToLog 'icacls "$APPDATA\Chaqimchi" /inheritance:r \
+  nsExec::ExecToLog 'icacls "$APPDATA\ENES" /inheritance:r \
     /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-4:(OI)(CI)M"'
   Pop $0
   ${If} $0 != 0
@@ -181,7 +181,7 @@ Section "!${APP_NAME} (majburiy)" SecMain
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-  WriteRegStr HKLM "Software\ChaqimchiAI" "InstallDir" "$INSTDIR"
+  WriteRegStr HKLM "Software\ENES" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "${REG_UNINSTALL}" "DisplayName" "${APP_NAME} — do'kon nazorati"
   WriteRegStr HKLM "${REG_UNINSTALL}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKLM "${REG_UNINSTALL}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
@@ -218,7 +218,7 @@ Section "Kameralarni avtomatik topish (tarmoq ruxsati)" SecFirewall
   ; portiga umuman mos kelmasdi va tugma baribir bo'sh ro'yxat qaytarardi.
   DetailPrint "Kamera qidiruvi uchun tarmoq ruxsati..."
   nsExec::ExecToLog 'netsh advfirewall firewall add rule \
-    name="Chaqimchi AI — kamera qidiruvi" dir=in action=allow \
+    name="ENES — kamera qidiruvi" dir=in action=allow \
     protocol=UDP profile=private,domain \
     remoteip=localsubnet program="$INSTDIR\python\python.exe"'
   Pop $0
@@ -262,7 +262,7 @@ SectionEnd
 
 Section "Ish stoliga yorliq" SecDesktop
   SetShellVarContext all
-  CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\Chaqimchi_AI.bat" "" "$INSTDIR\app.ico" 0
+  CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\ENES.bat" "" "$INSTDIR\app.ico" 0
 SectionEnd
 
 Section "Kompyuter yonganda avtomatik ishga tushsin" SecAutostart
@@ -283,22 +283,22 @@ Section "Kompyuter yonganda avtomatik ishga tushsin" SecAutostart
   ; Rejalashtirilgan vazifa ikkalasini ham yopadi: SYSTEM nomidan, kirishdan
   ; qat'i nazar, ko'rinmas holda ishlaydi.
   DetailPrint "Avtomatik ishga tushirish vazifasi..."
-  nsExec::ExecToLog 'schtasks /Create /F /TN "Chaqimchi AI" \
-    /TR "\"$INSTDIR\Chaqimchi_AI_xizmat.bat\"" \
+  nsExec::ExecToLog 'schtasks /Create /F /TN "ENES Monitoring" \
+    /TR "\"$INSTDIR\ENES_xizmat.bat\"" \
     /SC ONSTART /DELAY 0000:30 /RU SYSTEM /RL HIGHEST'
   Pop $0
   ${If} $0 != 0
     ; Zaxira yo'l: vazifa yaratilmasa hech bo'lmasa eski usul ishlasin.
     DetailPrint "Ogohlantirish: vazifa qo'shilmadi (kod $0)."
     DetailPrint "Eski usul ishlatiladi: dastur tizimga kirgandan keyin ochiladi."
-    WriteRegStr HKLM "${REG_RUN}" "ChaqimchiAI" '"$INSTDIR\Chaqimchi_AI.bat"'
+    WriteRegStr HKLM "${REG_RUN}" "ENES" '"$INSTDIR\ENES.bat"'
   ${Else}
     ; `schtasks` yaratgan vazifa standart bo'yicha 72 soatdan keyin
     ; TO'XTATILADI (`ExecutionTimeLimit=PT72H`).  24/7 nazorat uchun bu
     ; jimgina o'chish degani — va aynan 72 soatlik barqarorlik sinovining
     ; oxirida.  Cheklovni olib tashlaymiz va yiqilsa qayta ko'tarilsin.
     DetailPrint "Vazifa sozlanmoqda (vaqt cheklovisiz, qayta ko'tarish bilan)..."
-    nsExec::ExecToLog "powershell -NoProfile -ExecutionPolicy Bypass -Command $\"$$t = Get-ScheduledTask -TaskName 'Chaqimchi AI'; $$t.Settings.ExecutionTimeLimit = 'PT0S'; $$t.Settings.RestartCount = 3; $$t.Settings.RestartInterval = 'PT1M'; $$t.Settings.DisallowStartIfOnBatteries = $$false; $$t.Settings.StopIfGoingOnBatteries = $$false; Set-ScheduledTask -InputObject $$t | Out-Null$\""
+    nsExec::ExecToLog "powershell -NoProfile -ExecutionPolicy Bypass -Command $\"$$t = Get-ScheduledTask -TaskName 'ENES Monitoring'; $$t.Settings.ExecutionTimeLimit = 'PT0S'; $$t.Settings.RestartCount = 3; $$t.Settings.RestartInterval = 'PT1M'; $$t.Settings.DisallowStartIfOnBatteries = $$false; $$t.Settings.StopIfGoingOnBatteries = $$false; Set-ScheduledTask -InputObject $$t | Out-Null$\""
     Pop $0
     ${If} $0 != 0
       DetailPrint "Ogohlantirish: vazifa sozlamalari o'zgartirilmadi (kod $0)."
@@ -306,7 +306,7 @@ Section "Kompyuter yonganda avtomatik ishga tushsin" SecAutostart
     ${EndIf}
     ; Vazifani hoziroq ishga tushiramiz — mijoz kompyuterni qayta
     ; yoqmasdan ham nazorat boshlansin.
-    nsExec::ExecToLog 'schtasks /Run /TN "Chaqimchi AI"'
+    nsExec::ExecToLog 'schtasks /Run /TN "ENES Monitoring"'
     Pop $0
   ${EndIf}
 SectionEnd
@@ -333,7 +333,7 @@ Section "Yangilanishlarni o'zi olsin" SecUpdater
   ; esa bu bitta kichik HTTPS so'rovi.  Yuklab olish faqat haqiqatan
   ; yangi versiya bo'lganda boshlanadi.
   DetailPrint "Yangilanish vazifasi qo'shilmoqda..."
-  nsExec::ExecToLog 'schtasks /Create /F /TN "Chaqimchi AI Update" \
+  nsExec::ExecToLog 'schtasks /Create /F /TN "ENES Update" \
     /TR "\"$INSTDIR\python\python.exe\" -m enes.local.updater" \
     /SC MINUTE /MO 15 /RU SYSTEM /RL HIGHEST'
   Pop $0
@@ -369,7 +369,7 @@ LangString DESC_SecAutostart ${LANG_ENGLISH} "Starts monitoring automatically wh
 
 Function ExtractPairingCode
   ; Fayl nomidan oxirgi `-` dan keyingi 6 belgini oladi va ular hex
-  ; ekanini tekshiradi: `Chaqimchi_AI_Setup-A1B2C3.exe` -> `A1B2C3`.
+  ; ekanini tekshiradi: `ENES_Setup-A1B2C3.exe` -> `A1B2C3`.
   ;
   ; Nega qat'iy tekshiruv: bu qiymat keyin cloudga yuboriladi.  Nomda
   ; tasodifiy matn bo'lsa (`Setup (1).exe`) uni kod deb yuborish
@@ -433,6 +433,28 @@ Function .onInit
   ; Ilgari o'rnatilgan bo'lsa avval o'chirishni taklif qilamiz: eski
   ; `site-packages` ustiga yozilsa mos kelmaydigan versiyalar aralashib
   ; ketardi va sabab topib bo'lmaydigan xato chiqardi.
+  ; Rebrenddan oldingi (0.6.x, "Chaqimchi AI") o'rnatish BOSHQA reg
+  ; kalitida turadi.  Topilsa o'sha uninstaller chaqiriladi — aks holda
+  ; ikki nusxa yonma-yon qolib, ikkita vazifa bitta kamerani talashardi.
+  ; Ma'lumot papkasi (`ProgramData\Chaqimchi`) tegilmaydi: dastur eski
+  ; papka bor bo'lsa uni ishlatishda davom etadi (`enes/paths.py`).
+  ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChaqimchiAI" "UninstallString"
+  ${If} $R1 != ""
+    ReadRegStr $R2 HKLM "Software\ChaqimchiAI" "InstallDir"
+    DetailPrint "Eski nomdagi (Chaqimchi AI) o'rnatish topildi — olib tashlanmoqda..."
+    ${If} $R2 != ""
+      ExecWait '$R1 /S _?=$R2'
+    ${Else}
+      ExecWait '$R1 /S'
+    ${EndIf}
+    nsExec::ExecToLog 'schtasks /End /TN "Chaqimchi AI"'
+    nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI"'
+    nsExec::ExecToLog 'schtasks /End /TN "Chaqimchi AI Update"'
+    nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI Update"'
+    DeleteRegValue HKLM "${REG_RUN}" "ChaqimchiAI"
+    DeleteRegKey HKLM "Software\ChaqimchiAI"
+  ${EndIf}
+
   ReadRegStr $R0 HKLM "${REG_UNINSTALL}" "UninstallString"
   ${If} $R0 != ""
     ; `/S` (jim) — bu masofadan yangilanish yo'li.  `MessageBox` u yerda
@@ -499,7 +521,7 @@ Function .onInit
        Start-Sleep -Milliseconds 250 }; \
      $$left = @(Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
        Where-Object { $$_.CommandLine -match $$pat }); \
-     $$dir = Join-Path $$env:ProgramData $\"Chaqimchi$\"; \
+     $$dir = Join-Path $$env:ProgramData $\"ENES$\"; \
      New-Item -ItemType Directory -Force -Path $$dir | Out-Null; \
      @{ remaining = $$left.Count; at = (Get-Date).ToString($\"o$\") } | ConvertTo-Json -Compress | \
        Set-Content -Path (Join-Path $$dir $\"update-warning.json$\") -Encoding UTF8"'
@@ -532,18 +554,18 @@ Section "Uninstall"
 
   ; 1. Avval VAZIFANI to'xtatamiz, keyin jarayonni.  Teskarisi bo'lsa
   ;    vazifa o'ldirilgan dasturni qayta ko'tarib yuborardi.
-  nsExec::ExecToLog 'schtasks /End /TN "Chaqimchi AI"'
-  nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI"'
+  nsExec::ExecToLog 'schtasks /End /TN "ENES Monitoring"'
+  nsExec::ExecToLog 'schtasks /Delete /F /TN "ENES Monitoring"'
   ; Yangilanish vazifasi ham olib tashlanadi: qolib ketsa o'chirilgan
   ; dasturni qayta o'rnatishga urinardi.
-  nsExec::ExecToLog 'schtasks /End /TN "Chaqimchi AI Update"'
-  nsExec::ExecToLog 'schtasks /Delete /F /TN "Chaqimchi AI Update"'
+  nsExec::ExecToLog 'schtasks /End /TN "ENES Update"'
+  nsExec::ExecToLog 'schtasks /Delete /F /TN "ENES Update"'
 
   ; 2. Jarayonni YO'L bo'yicha to'xtatamiz, oyna sarlavhasi bo'yicha emas.
   ;
   ;    Bu muhim o'zgarish: nazorat endi rejalashtirilgan vazifa orqali,
   ;    SYSTEM nomidan, OYNASIZ ishlaydi.  Eski
-  ;    `taskkill /FI "WINDOWTITLE eq Chaqimchi*"` bunday jarayonni umuman
+  ;    `taskkill /FI "WINDOWTITLE eq ENES*"` bunday jarayonni umuman
   ;    topa olmaydi — sarlavha yo'q.  Topilmasa `python.exe` band bo'lib
   ;    qolardi va yangi versiya fayllarni ustiga yoza olmasdi, ya'ni
   ;    masofadan yangilanish jimgina ishlamay qo'yardi.
@@ -556,18 +578,18 @@ Section "Uninstall"
      Where-Object { $$_.Path -like $\"$INSTDIR\*$\" } | \
      Stop-Process -Force -ErrorAction SilentlyContinue"'
   ; Zaxira: PowerShell bo'lmagan/cheklangan mashinada eski usul.
-  ExecWait 'taskkill /F /IM python.exe /FI "WINDOWTITLE eq Chaqimchi*"'
+  ExecWait 'taskkill /F /IM python.exe /FI "WINDOWTITLE eq ENES*"'
   ; Fayl tutqichlari bo'shashiga bir lahza beramiz.
   Sleep 2000
   ; Fayrvol qoidasi ham olib tashlanadi: o'chirilgan dasturdan keyin
   ; ochiq port qolib ketmasligi kerak.
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule \
-    name="Chaqimchi AI — kamera qidiruvi"'
+    name="ENES — kamera qidiruvi"'
   Pop $0
 
-  DeleteRegValue HKLM "${REG_RUN}" "ChaqimchiAI"
+  DeleteRegValue HKLM "${REG_RUN}" "ENES"
   DeleteRegKey HKLM "${REG_UNINSTALL}"
-  DeleteRegKey HKLM "Software\ChaqimchiAI"
+  DeleteRegKey HKLM "Software\ENES"
 
   SetShellVarContext all
   Delete "$DESKTOP\${APP_NAME}.lnk"
@@ -581,7 +603,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\enes"
   RMDir /r "$INSTDIR\config"
   RMDir /r "$INSTDIR\models"
-  Delete "$INSTDIR\Chaqimchi_AI.bat"
+  Delete "$INSTDIR\ENES.bat"
   Delete "$INSTDIR\O'QING.txt"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
@@ -600,6 +622,6 @@ Section "Uninstall"
   MessageBox MB_YESNO|MB_ICONQUESTION \
     "Sozlamalar va do'kon hisobotlari ham o'chirilsinmi?$\r$\n$\r$\nYo'q — kamera sozlamalari saqlanadi (qayta o'rnatsangiz kerak bo'ladi).$\r$\nHa — hammasi butunlay o'chadi." \
     IDNO skip_data
-  RMDir /r "$APPDATA\Chaqimchi"
+  RMDir /r "$APPDATA\ENES"
   skip_data:
 SectionEnd

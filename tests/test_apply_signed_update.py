@@ -80,7 +80,7 @@ def build_release(
 ) -> Tuple[Path, Path]:
     """Haqiqiy, imzolangan reliz paketi."""
     stage = tmp_path / f"stage-{version}"
-    top = stage / f"chaqimchi-sotqin-{version}"
+    top = stage / f"enes-sotqin-{version}"
     (top / "enes").mkdir(parents=True)
     (top / "enes" / "sotqin_agent.py").write_text("app = None\n", encoding="utf-8")
     (top / "enes" / "__init__.py").write_text(
@@ -105,7 +105,7 @@ def build_release(
         (top / "deploy" / unit).write_text(unit_body, encoding="utf-8")
     (top / "requirements-sotqin.txt").write_text(requirements, encoding="utf-8")
 
-    archive = tmp_path / f"chaqimchi-sotqin-{version}.tar.gz"
+    archive = tmp_path / f"enes-sotqin-{version}.tar.gz"
     with tarfile.open(archive, "w:gz") as package:
         package.add(top, arcname=top.name)
 
@@ -119,7 +119,7 @@ def build_release(
         )
         == 0
     )
-    return archive, tmp_path / f"chaqimchi-sotqin-{version}.json"
+    return archive, tmp_path / f"enes-sotqin-{version}.json"
 
 
 def _sha(payload: bytes) -> str:
@@ -241,7 +241,7 @@ def test_the_new_tree_is_handed_to_the_service_user(tmp_path: Path) -> None:
 
     control.run(archive, manifest)
 
-    assert owned == [("0.6.1", "chaqimchi")]
+    assert owned == [("0.6.1", "enes")]
 
 
 # ── Model ololmasa ───────────────────────────────────────────────────────
@@ -295,7 +295,7 @@ def test_a_dead_agent_rolls_back(tmp_path: Path) -> None:
 
 
 def test_a_camera_less_retail_does_not_block_the_update(tmp_path: Path) -> None:
-    """Bugungi stendda `chaqimchi-retail` kamera yo'qligi sababli umuman
+    """Bugungi stendda `enes-retail` kamera yo'qligi sababli umuman
     ishga tushmaydi.  Yangilanish qurilmani oldingidan sog'lomroq
     bo'lishini talab qilmasligi kerak."""
     archive, manifest = build_release(tmp_path)
@@ -431,8 +431,8 @@ def test_the_same_version_cannot_be_installed_twice(tmp_path: Path) -> None:
 def test_fetch_pulls_both_files_from_the_cloud(tmp_path: Path) -> None:
     archive, manifest = build_release(tmp_path)
     payloads = {
-        "https://ai.test/releases/chaqimchi-sotqin-0.6.1.tar.gz": archive.read_bytes(),
-        "https://ai.test/releases/chaqimchi-sotqin-0.6.1.json": manifest.read_bytes(),
+        "https://ai.test/releases/enes-sotqin-0.6.1.tar.gz": archive.read_bytes(),
+        "https://ai.test/releases/enes-sotqin-0.6.1.json": manifest.read_bytes(),
     }
     control = updater(tmp_path, http_get=lambda url, _t: (200, payloads[url]))
     target = tmp_path / "yuklama"
@@ -464,7 +464,7 @@ def test_a_missing_release_is_reported_clearly(tmp_path: Path) -> None:
 def test_the_script_runs_from_any_directory(tmp_path: Path) -> None:
     """#7 — buni ushlaydigan yagona test.
 
-    Skript `/opt/chaqimchi/current/scripts/` dan ishga tushiriladi, ya'ni
+    Skript `/opt/enes/current/scripts/` dan ishga tushiriladi, ya'ni
     `sys.path[0]` da `enes` bo'lmaydi va paket venv'ga hech qachon
     o'rnatilmagan.  Ilgari bu `ModuleNotFoundError` berardi.
     """

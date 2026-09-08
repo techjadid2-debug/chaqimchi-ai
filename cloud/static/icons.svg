@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
   <!--
-    Chaqimchi AI ikonkalari — bitta sprite.
+    ENES AI ikonkalari — bitta sprite.
     Ishlatish:  <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#kamera"/></svg>
 
     Uslub v2 panel (`frontend/src/icons.tsx`) bilan AYNAN bir xil:
@@ -112,7 +112,7 @@
     <path d="M15.5 9.5h3.2M15.5 13h3.2"/>
   </symbol>
 
-  <!-- Maktab — ta'lim muassasasi (Chaqimchi Edu). -->
+  <!-- Maktab — ta'lim muassasasi (ENES Edu). -->
   <symbol id="maktab" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 3 3 7.5 12 12l9-4.5L12 3Z"/>
     <path d="M6.5 9.8V15c0 1.9 2.5 3.4 5.5 3.4s5.5-1.5 5.5-3.4V9.8"/>

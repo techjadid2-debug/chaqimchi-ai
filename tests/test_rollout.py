@@ -64,7 +64,7 @@ def _device(client: TestClient, created: dict) -> dict:
             "pairing_code": created["pairing_code"],
             "label": "Sinov kompyuteri",
             "hardware_id": "sinov-" + created["site_id"],
-            "product_name": "Chaqimchi Windows",
+            "product_name": "ENES Windows",
         },
     )
     assert response.status_code < 400, response.text
@@ -79,8 +79,8 @@ def _device(client: TestClient, created: dict) -> dict:
 def _publish_fake_release(tmp_path: Path, version: str = "9.9.9") -> None:
     """Cloud manifestsiz `.exe` ni e'tiborsiz qoldiradi — juftini yozamiz."""
     releases = tmp_path / "releases"
-    (releases / f"chaqimchi-windows-{version}.exe").write_bytes(b"soxta")
-    (releases / f"chaqimchi-windows-{version}.json").write_text(
+    (releases / f"enes-windows-{version}.exe").write_bytes(b"soxta")
+    (releases / f"enes-windows-{version}.json").write_text(
         '{"version": "' + version + '"}', encoding="utf-8"
     )
 
@@ -202,12 +202,12 @@ def test_status_survives_a_shop_without_devices(client: TestClient) -> None:
 
 
 def test_publish_uses_the_name_the_cloud_looks_for() -> None:
-    """Cloud aynan `chaqimchi-windows-<versiya>.{exe,json}` juftini
+    """Cloud aynan `enes-windows-<versiya>.{exe,json}` juftini
     qidiradi (`latest_windows_release`).  Boshqa nom bilan qo'yilgan fayl
     e'tiborsiz qoladi va buni hech kim sezmaydi."""
     source = PUBLISH.read_text(encoding="utf-8")
-    assert 'releases/chaqimchi-windows-$version.exe' in source
-    assert 'releases/chaqimchi-windows-$version.json' in source
+    assert 'releases/enes-windows-$version.exe' in source
+    assert 'releases/enes-windows-$version.json' in source
 
 
 def test_publish_refuses_to_ship_an_unsigned_release() -> None:

@@ -266,8 +266,8 @@ def test_panel_has_no_inline_event_handlers() -> None:
 
 
 def test_the_old_brand_stays_off_the_panels() -> None:
-    """Rebrend (2026-09-08): mijoz va admin ko'radigan matnda «Chaqimchi»
-    qolmasin.  Brauzer kalitlari (`chaqimchi_owner_token_v2`) va env
+    """Rebrend (2026-09-08): mijoz va admin ko'radigan matnda «ENES»
+    qolmasin.  Brauzer kalitlari (`enes_owner_token`) va env
     nomlari (`ENES_*`) F6 da o'zgaradi — ular istisno."""
     for name in OWNER_FILES + ADMIN_FILES + ("Connect.tsx",):
         found = re.search(r"Chaqimchi(?![_A-Z])", src(name))

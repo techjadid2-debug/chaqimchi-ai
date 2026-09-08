@@ -29,7 +29,7 @@ Ichki profil kodi: `SOTQIN-N100-8-128-R1`. Mijoz uchun nom doim **Sotqin**.
 > Yechim — **yengil** inferensni qurilmada bajarish, qimmatini cloudda
 > qoldirish.
 
-**Qurilmada** (`chaqimchi-retail.service`):
+**Qurilmada** (`enes-retail.service`):
 
 - qo‘lda kiritilgan RTSP/NVR substream, software decode, harakat va sifat filtri;
 - **odam deteksiyasi** — `person-detection-retail-0013` (OpenVINO, iGPU,
@@ -63,7 +63,7 @@ Nega shunday bo'lingani va qurilma sig'imi qanday hisoblangani:
 - `enes.sotqin_agent` — yengil agent;
 - `scripts/install_sotqin.sh` — atomik release katalogiga installer;
 - `scripts/pair_sotqin.py` — pairing va hardware identity;
-- `chaqimchi-sotqin.service` — systemd supervision;
+- `enes-sotqin.service` — systemd supervision;
 - `/api/v1/sotqin/claim`, `/heartbeat`, `/config`, `/config/ack`;
 - admin kamera inventari: RTSP credentiallari cloud DBda Fernet bilan
   shifrlanadi, admin ro'yxatida qayta ko'rinmaydi;
@@ -71,7 +71,7 @@ Nega shunday bo'lingani va qurilma sig'imi qanday hisoblangani:
   holatini cloudga qaytaradi;
 - product/model/revision/serial, health va config ACK/NACK admin panelda;
 - config 0600 permission bilan atomik saqlanadi;
-- Sotqin uchun `chaqimchi-sotqin`/`x86_64` imzolangan update va rollback.
+- Sotqin uchun `enes-sotqin`/`x86_64` imzolangan update va rollback.
 
 Eski `/api/v1/edge/*` endpointlari compatibility alias bo'lib qoladi
 (`pair_edge.py` va `install_edge.sh` shim'lari o'chirilgan).
@@ -80,16 +80,16 @@ Eski `/api/v1/edge/*` endpointlari compatibility alias bo'lib qoladi
 
 ```bash
 sudo ./scripts/install_sotqin.sh
-sudo /opt/chaqimchi/venv/bin/python \
-  /opt/chaqimchi/current/scripts/pair_sotqin.py \
+sudo /opt/enes/venv/bin/python \
+  /opt/enes/current/scripts/pair_sotqin.py \
   --cloud https://YOUR_DOMAIN --code ABC123
-sudo systemctl start chaqimchi-sotqin
-sudo systemctl start chaqimchi-retail
+sudo systemctl start enes-sotqin
+sudo systemctl start enes-retail
 # faqat tasdiqlangan yopiq attendance pilotida:
 sudo systemctl start chaqimchi-attendance
 ```
 
-Pairingdan so'ng `/etc/chaqimchi/sotqin.env` ichida device token, Intel modeli,
+Pairingdan so'ng `/etc/enes/sotqin.env` ichida device token, Intel modeli,
 R1 revision va serial saqlanadi. Secret fayl permission'i `0600`.
 
 ## Kamera ulash
@@ -109,7 +109,7 @@ RTSP/NVR loginlari `.env` yoki browserga qaytmaydi. Production cloud uchun
 Qurilmadagi AI alohida jarayonda ishlaydi:
 
 ```bash
-systemctl start chaqimchi-retail     # deploy/chaqimchi-retail.service
+systemctl start enes-retail     # deploy/enes-retail.service
 ```
 
 Alohida bo'lgani ataylab: detektor yoki ffmpeg yiqilsa control plane va

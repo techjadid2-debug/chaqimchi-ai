@@ -7,8 +7,8 @@ dastur birinchi ishga tushishdayoq jimgina yiqilardi.
 
 Shuning uchun ikki joy qat'iy ajratilgan:
 
-    Program Files\\Chaqimchi AI    — kod, Python, AI modeli (faqat o'qish)
-    %PROGRAMDATA%\\Chaqimchi       — config, log, hodisa bazasi, klip (yoziladi)
+    Program Files\\ENES Monitoring    — kod, Python, AI modeli (faqat o'qish)
+    %PROGRAMDATA%\\ENES       — config, log, hodisa bazasi, klip (yoziladi)
 
 `%PROGRAMDATA%` ataylab `%LOCALAPPDATA%` dan afzal: do'kon kompyuterida
 tizimga kim kirganidan qat'i nazar bitta sozlama bo'lishi kerak, aks holda
@@ -31,9 +31,9 @@ def data_dir() -> Path:
         base = Path(override).expanduser()
     elif os.name == "nt":
         root = os.environ.get("PROGRAMDATA") or os.environ.get("LOCALAPPDATA") or r"C:\ProgramData"
-        base = Path(root) / "Chaqimchi"
+        base = Path(root) / "ENES"
     else:
-        base = Path.home() / ".chaqimchi"
+        base = Path.home() / ".enes"
     base.mkdir(parents=True, exist_ok=True)
     return base
 

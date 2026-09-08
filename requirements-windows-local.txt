@@ -1,4 +1,4 @@
-# Chaqimchi AI — mijozning Windows kompyuteri uchun aniq paket ro'yxati.
+# ENES Monitoring — mijozning Windows kompyuteri uchun aniq paket ro'yxati.
 #
 # Nega alohida fayl: `requirements.txt` yuz tanish (insightface, onnxruntime)
 # va production cloud (psycopg, minio) uchun ham paketlarni o'z ichiga oladi.

@@ -75,7 +75,7 @@
   va'da («obyekt ochib kod olasiz») rostiga almashdi.
   **Qoldi (F5/F7/F8/F9):** tarif kartalari matni, `@chaqimchi_ai_bot`
   va `chaqimchi.uz` havolalari (docs sahifalarida, eslatmada) — cutover
-  kuni; `Chaqimchi_AI_Setup` fayl nomi — qurilma relizi; `og-v3.png`;
+  kuni; `ENES_Setup` fayl nomi — qurilma relizi; `og-v3.png`;
   install/edu tarjimasi (ega xohlasa).
 - **🎨 F3.1 — BOSH SAHIFA UCH TILDA, YANGI DIZAYNDA (2026-09-08, `4f199ce`).**
   `cloud/site/index.html` (shablon) + `i18n/*.json` dagi **172 ta
@@ -133,7 +133,7 @@
 - **⏳ Egadan kutilmoqda:** "NS" logotipi SVG'da; `enes.uz` DNS
   boshqaruvi; Telegram bot @username; yuridik nom; Payme/Click kabineti.
 
-- **🎨 REBRENDING BOSHLANDI: Chaqimchi AI → ENES Monitoring (enes.uz).**
+- **🎨 REBRENDING BOSHLANDI: ENES Monitoring → ENES Monitoring (enes.uz).**
   Reja tasdiqlangan: `~/.claude/plans/ok-biz-rebrending-*.md`.
   Ega qarorlari: nom **to'liq** o'zgaradi (ichki nomlar ham),
   eski domen **butunlay o'chadi** (bir kunlik cutover), sayt va'dalari
@@ -175,7 +175,7 @@
 - **Deploy kaliti `.env` da.**  Standart `~/.ssh/id_ed25519` serverda
   ruxsat etilmagan; ishlaydigani — `ENES_DEPLOY_SSH_KEY`
   (loyihaning `.env` fayli).  `deploy` foydalanuvchisi bilan
-  `docker compose` ISHLAMAYDI (`/home/deploy/chaqimchi-ai/.env` faqat
+  `docker compose` ISHLAMAYDI (`/home/deploy/enes/.env` faqat
   root uchun o'qiladi) — deploy `root@` bilan, tashxis esa
   `docker inspect` / `docker exec` bilan qilinadi (deploy `docker`
   guruhida).
@@ -301,7 +301,7 @@
   ishlaganini faqat 24 soatdan keyin bilib bo'lardi.
 - 0.6.24 (kamera manzili zaxirasi). Oldingi: (0.6.22 dagi o'lchov xatosi
   tuzatilgan holda). Oldingi holat: (imzo tekshirildi, tashqaridan
-  ochiladi: `dl.chaqimchi.uz/releases/chaqimchi-windows-0.6.22.exe`,
+  ochiladi: `dl.chaqimchi.uz/releases/enes-windows-0.6.22.exe`,
   sha256 `145e240f…`). Cloud uni beryapti
   (`/api/v1/public/windows-release` → `0.6.22`).
   **Dalada bitta qurilma bor** — Do'kon (5070), siyosat `auto`, ya'ni
@@ -405,7 +405,7 @@ standartlari).  Keyinga: ovoz funksiyalari, video darslar, jonli kamerani
 takomillashtirish.
 
 **0) ⚠️ EGA QILADI — zaxira parolini ko'chiring.**
-`ENES_BACKUP_PASSWORD` faqat serverda (`/etc/chaqimchi/backup.env`).
+`ENES_BACKUP_PASSWORD` faqat serverda (`/etc/enes/backup.env`).
 Telegramdagi kunlik nusxa shu parolsiz ochilmaydi — ya'ni server o'lsa
 zaxira ham foydasiz.  Parol menejeriga ko'chiring.
 
@@ -2282,7 +2282,7 @@ Nega: `ENES_WINDOWS_INSTALLER_URL` serverda qotirilgan edi va
 Qayerda: server `.env.production` (pin olib tashlandi),
 `latest_windows_release()`, `cloud/static/install.html`.
 Diqqat: **bu pinni qayta qo'ymang.** Yon natija — fayl nomi endi
-`Chaqimchi_AI_Setup-<versiya>.exe` (redirect emas, to'g'ridan-to'g'ri
+`ENES_Setup-<versiya>.exe` (redirect emas, to'g'ridan-to'g'ri
 berish) va pairing kod nomda ishlaydi.
 
 ### 2026-08-26 — B6/B7: soat nazorati va audit jurnali (`13ae521`)

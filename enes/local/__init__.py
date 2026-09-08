@@ -1,4 +1,4 @@
-"""Mijozning o'z kompyuterida ishlaydigan Chaqimchi AI.
+"""Mijozning o'z kompyuterida ishlaydigan ENES Monitoring.
 
 Bu paket `cloud/` dan **mustaqil**: mijoz mashinasida admin paneli, to'lov
 callbacklari yoki lead API ishlashi kerak emas va xavfli ham.  Windows

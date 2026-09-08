@@ -19,7 +19,7 @@ CAMERA_01_RTSP=rtsp://camera/sub
     rendered = render_env(
         existing,
         {
-            "ENES_CONFIG": "/opt/chaqimchi/current/config/sotqin.yaml",
+            "ENES_CONFIG": "/opt/enes/current/config/sotqin.yaml",
             "ENES_CLOUD_URL": "https://cloud.example.uz",
             "ENES_SITE_ID": "new-site",
             "ENES_DEVICE_ID": "device-1",
@@ -55,19 +55,19 @@ def test_atomic_write_env_uses_private_permissions(tmp_path: Path) -> None:
 
 def test_linux_pairing_defaults_are_stable(monkeypatch) -> None:
     monkeypatch.setattr("scripts.pair_sotqin.os.name", "posix")
-    assert default_env_file() == "/etc/chaqimchi/sotqin.env"
-    assert default_config_path() == "/opt/chaqimchi/current/config/sotqin.yaml"
-    assert restart_hint() == "sudo systemctl restart chaqimchi-sotqin"
+    assert default_env_file() == "/etc/enes/sotqin.env"
+    assert default_config_path() == "/opt/enes/current/config/sotqin.yaml"
+    assert restart_hint() == "sudo systemctl restart enes-sotqin"
 
 
 def test_windows_pairing_defaults_use_program_data(monkeypatch) -> None:
     monkeypatch.setattr("scripts.pair_sotqin.os.name", "nt")
     monkeypatch.setenv("PROGRAMDATA", r"D:\ProgramData")
     monkeypatch.setenv("PROGRAMFILES", r"D:\Program Files")
-    assert default_env_file().replace("\\", "/").endswith("Chaqimchi/Sotqin/sotqin.env")
+    assert default_env_file().replace("\\", "/").endswith("ENES/Sotqin/sotqin.env")
     assert (
         default_config_path()
         .replace("\\", "/")
-        .endswith("Chaqimchi/Sotqin/current/config/sotqin.yaml")
+        .endswith("ENES/Sotqin/current/config/sotqin.yaml")
     )
-    assert restart_hint() == "Restart-Service ChaqimchiSotqin"
+    assert restart_hint() == "Restart-Service EnesSotqin"

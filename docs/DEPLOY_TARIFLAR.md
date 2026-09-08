@@ -26,7 +26,7 @@ Branch: `tariflar-3-ta` · Server: Contabo `169.58.198.111`
 ## 1. Oldindan tekshirish (lokal, 2 daqiqa)
 
 ```bash
-cd "/Users/abdulvosit/Desktop/Chaqimchi AI"
+cd "/Users/abdulvosit/Desktop/ENES Monitoring"
 git checkout tariflar-3-ta
 .venv/bin/python -m ruff check enes cloud tests scripts
 .venv/bin/python -m pytest -q
@@ -41,14 +41,14 @@ Ikkalasi ham toza bo'lishi shart. Toza bo'lmasa — deploy qilinmaydi.
 `employee_faces` jadvalidagi embeddinglar **qayta yoziladi**. Xato
 bo'lsa orqaga qaytishning yagona yo'li — zaxira.
 
-Skript parol va papkani `/etc/chaqimchi/backup.env` dan oladi — uni
+Skript parol va papkani `/etc/enes/backup.env` dan oladi — uni
 **qo'lda yuklash shart**, aks holda "ENES_BACKUP_DIR shart" deb
 to'xtaydi:
 
 ```bash
 ssh -i .deploy_keys/chaqimchi_prod root@169.58.198.111
-cd /home/deploy/chaqimchi-ai
-set -a && . /etc/chaqimchi/backup.env && set +a
+cd /home/deploy/enes
+set -a && . /etc/enes/backup.env && set +a
 ./scripts/backup_production.sh
 ```
 
@@ -57,7 +57,7 @@ So'ng arxiv haqiqatan butunligini tekshiring — "backup bor" degani
 
 ```bash
 ./scripts/restore_production.sh --check \
-  /home/deploy/chaqimchi-backups/chaqimchi-<SANA>.tar.gz.enc
+  /home/deploy/enes-backups/chaqimchi-<SANA>.tar.gz.enc
 ```
 
 Kutiladigan javob: `✓ Arxiv butun.` va jadval sanog'i (`sites=…`).
@@ -68,7 +68,7 @@ Kutiladigan javob: `✓ Arxiv butun.` va jadval sanog'i (`sites=…`).
 
 ```bash
 # Lokal mashinada
-cd "/Users/abdulvosit/Desktop/Chaqimchi AI"
+cd "/Users/abdulvosit/Desktop/ENES Monitoring"
 rsync -az --delete \
   --exclude '.git' --exclude '.venv' --exclude 'build' --exclude 'releases' \
   --exclude '.deploy_keys' --exclude 'data' \
@@ -77,10 +77,10 @@ rsync -az --delete \
   --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.ruff_cache' \
   --exclude '.DS_Store' \
   -e "ssh -i .deploy_keys/chaqimchi_prod" \
-  ./ root@169.58.198.111:/home/deploy/chaqimchi-ai/
+  ./ root@169.58.198.111:/home/deploy/enes/
 ```
 
-`root@` ataylab: `/home/deploy/chaqimchi-ai` fayllari uid 501 egaligida
+`root@` ataylab: `/home/deploy/enes` fayllari uid 501 egaligida
 va `deploy` foydalanuvchisi ularga yoza olmaydi.
 
 **Har bir `--exclude` ning sababi bor, hech qaysisi olib tashlanmasin:**
@@ -107,7 +107,7 @@ rsync -azn --delete --itemize-changes ...  # yuqoridagi bilan bir xil, faqat -n
 ### TUZOQ: `Caddyfile` o'zgarsa — konteynerni QAYTA YARATISH kerak
 
 `docker-compose` da Caddyfile bitta FAYL sifatida ulangan
-(`./deploy/Caddyfile.chaqimchi:/etc/caddy/Caddyfile:ro`).  Fayl bind-mount'i
+(`./deploy/Caddyfile.enes:/etc/caddy/Caddyfile:ro`).  Fayl bind-mount'i
 yo'lga emas, **inode'ga** bog'lanadi.  `rsync` esa faylni joyida
 o'zgartirmaydi — vaqtinchalik nusxa yozib, uni `rename` qiladi, ya'ni
 inode almashadi va konteyner ESKI nusxani ushlab qoladi.
@@ -119,7 +119,7 @@ keyin ham 404 berardi).
 To'g'ri yo'l:
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.chaqimchi.yml \
+docker compose --env-file .env.production -f docker-compose.enes.yml \
   up -d --no-deps --force-recreate caddy
 
 # Tasdiqlash — HOST fayli emas, KONTEYNER ichidagisi o'qilsin:
@@ -132,9 +132,9 @@ docker exec chaqimchi-caddy-1 sh -c "grep -n 'allowed path' /etc/caddy/Caddyfile
 
 ```bash
 ssh -i .deploy_keys/chaqimchi_prod root@169.58.198.111
-cd /home/deploy/chaqimchi-ai
+cd /home/deploy/enes
 
-docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
+docker compose -f docker-compose.enes.yml --env-file .env.production \
   exec cloud python scripts/fetch_face_models.py
 ```
 
@@ -163,9 +163,9 @@ to'g'ri xatti-harakat, qayta ishga tushiring.
 ## 5. Deploy
 
 ```bash
-cd /home/deploy/chaqimchi-ai
-set -a && . /etc/chaqimchi/backup.env && set +a
-export ENES_COMPOSE_FILE=docker-compose.chaqimchi.yml
+cd /home/deploy/enes
+set -a && . /etc/enes/backup.env && set +a
+export ENES_COMPOSE_FILE=docker-compose.enes.yml
 ./scripts/deploy_cloud.sh
 ```
 
@@ -199,14 +199,14 @@ qoladi va hech qanday xato chiqmaydi.
 Avval nima bo'lishini ko'ring:
 
 ```bash
-docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
+docker compose -f docker-compose.enes.yml --env-file .env.production \
   exec cloud python scripts/reembed_faces.py --dry-run
 ```
 
 Keyin bajaring:
 
 ```bash
-docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
+docker compose -f docker-compose.enes.yml --env-file .env.production \
   exec cloud python scripts/reembed_faces.py
 ```
 
@@ -225,7 +225,7 @@ Standart moslik chegarasi **0.6** — sun'iy sinovda o'lchangan. Haqiqiy
 do'kon kadrlarida boshqacha bo'lishi mumkin:
 
 ```bash
-docker compose -f docker-compose.chaqimchi.yml --env-file .env.production \
+docker compose -f docker-compose.enes.yml --env-file .env.production \
   exec cloud python scripts/calibrate_face_threshold.py
 ```
 

@@ -54,7 +54,7 @@ def test_v2_manifest_signs_product_and_architecture(tmp_path: Path) -> None:
     )
     manifest = {
         "schema_version": 2,
-        "product": "chaqimchi-sotqin",
+        "product": "enes-sotqin",
         "target_arch": "x86_64",
         "version": "0.4.0",
         "sha256": hashlib.sha256(b"lite-release").hexdigest(),
@@ -79,7 +79,7 @@ def test_v2_manifest_rejects_wrong_device_architecture() -> None:
         validate_release_target(
             {
                 "schema_version": 2,
-                "product": "chaqimchi-sotqin",
+                "product": "enes-sotqin",
                 "target_arch": "x86_64",
             },
             "aarch64",

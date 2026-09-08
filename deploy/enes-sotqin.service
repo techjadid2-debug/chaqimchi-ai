@@ -1,0 +1,27 @@
+[Unit]
+Description=ENES Sotqin R1 Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=enes
+Group=enes
+WorkingDirectory=/opt/enes/current
+EnvironmentFile=/etc/enes/sotqin.env
+ExecStart=/opt/enes/venv/bin/uvicorn enes.sotqin_agent:app --host 127.0.0.1 --port 8742 --workers 1
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/enes/shared/data /opt/enes/shared/logs
+PrivateDevices=no
+UMask=0077
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

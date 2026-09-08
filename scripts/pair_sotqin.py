@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sotqin'ni pairing kodi bilan Chaqimchi Cloud'ga ulaydi."""
+"""Sotqin'ni pairing kodi bilan ENES Cloud'ga ulaydi."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ def default_env_file() -> str:
     """Platformaga mos, secret saqlanadigan env fayl yo'lini qaytaradi."""
     if os.name == "nt":
         program_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
-        return str(PureWindowsPath(program_data) / "Chaqimchi" / "Sotqin" / "sotqin.env")
-    return "/etc/chaqimchi/sotqin.env"
+        return str(PureWindowsPath(program_data) / "ENES" / "Sotqin" / "sotqin.env")
+    return "/etc/enes/sotqin.env"
 
 
 def default_config_path() -> str:
@@ -38,20 +38,20 @@ def default_config_path() -> str:
         program_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
         return str(
             PureWindowsPath(program_files)
-            / "Chaqimchi"
+            / "ENES"
             / "Sotqin"
             / "current"
             / "config"
             / "sotqin.yaml"
         )
-    return "/opt/chaqimchi/current/config/sotqin.yaml"
+    return "/opt/enes/current/config/sotqin.yaml"
 
 
 def restart_hint() -> str:
     return (
-        "Restart-Service ChaqimchiSotqin"
+        "Restart-Service EnesSotqin"
         if os.name == "nt"
-        else "sudo systemctl restart chaqimchi-sotqin"
+        else "sudo systemctl restart enes-sotqin"
     )
 
 
@@ -145,7 +145,7 @@ def atomic_write_env(path: Path, content: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Chaqimchi Sotqin pairing")
+    parser = argparse.ArgumentParser(description="ENES Sotqin pairing")
     parser.add_argument("--cloud", required=True, help="https://cloud.example.uz")
     parser.add_argument("--code", required=True, help="Admin paneldagi 6 xonali pairing kod")
     parser.add_argument("--label", default=platform.node() or "sotqin-1")

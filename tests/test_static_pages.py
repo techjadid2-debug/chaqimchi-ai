@@ -357,14 +357,14 @@ def test_the_dark_admin_css_is_gone_for_good() -> None:
 
 
 def test_the_install_guide_describes_the_real_file_name() -> None:
-    """Server fayl nomiga versiyani qo'shadi (`Chaqimchi_AI_Setup-0.6.2.exe`)
+    """Server fayl nomiga versiyani qo'shadi (`ENES_Setup-0.6.2.exe`)
     — mijoz yangi versiyani olganini shundan ko'radi.  Yo'riqnoma esa
-    aynan `Chaqimchi_AI_Setup.exe` bo'lishini talab qilardi va boshqasini
+    aynan `ENES_Setup.exe` bo'lishini talab qilardi va boshqasini
     "manba kodi, o'rnatilmaydi" deb atardi.  Mijoz TO'G'RI faylni yuklab
     olib, uni tashlab yuborardi — kritik yo'ldagi o'zi yaratgan xavotir.
     """
     guide = (STATIC / "install.html").read_text(encoding="utf-8")
-    assert "Fayl nomi: <code>Chaqimchi_AI_Setup.exe</code>" not in guide
+    assert "Fayl nomi: <code>ENES_Setup.exe</code>" not in guide
     assert "manba kodini yuklab olgansiz" not in guide
 
 
@@ -397,7 +397,7 @@ def test_the_installer_guide_is_not_offered_to_search_engines() -> None:
 
 
 def test_one_sku_has_one_name() -> None:
-    """Mijozga «Chaqimchi Lite» sotiladi, to'lov sahifasida esa
+    """Mijozga «ENES Lite» sotiladi, to'lov sahifasida esa
     «Sotqin R1» yozilardi — bitta mahsulot, uch xil nom."""
     # Panellar `tests/test_panel_v2.py` da tekshiriladi (ular endi React).
     for name in ("pay.html", "site.html"):

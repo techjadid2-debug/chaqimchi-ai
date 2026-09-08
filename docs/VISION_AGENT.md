@@ -49,7 +49,7 @@ lifespan deploy'ni to'xtatadi (aks holda har savol yiqilib kvota yer edi).
 Kalit umuman berilmasa agent panelda halol "sozlanmagan" holatda ko'rinadi
 va joblar metadata-javob rejimida ishlaydi (Gemini chaqirilmaydi).
 
-Worker `docker-compose.chaqimchi.yml`da alohida servis:
+Worker `docker-compose.enes.yml`da alohida servis:
 `ENES_VISION_WORKER_IN_APP=0` cloud'da in-app siklni o'chiradi.
 Worker `frontend` tarmog'ida bo'lishi SHART (Gemini'ga chiqish uchun).
 Boshqa compose fayllarda worker yo'q — u yerda in-app rejim (default `1`)

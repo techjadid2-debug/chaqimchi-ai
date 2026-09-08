@@ -212,7 +212,7 @@ def sotqin_cache_path(settings: AppSettings, base_dir: Path) -> Path:
     return Path(
         os.environ.get(
             "ENES_SOTQIN_CONFIG_CACHE",
-            "/opt/chaqimchi/shared/data/sotqin-config.json",
+            "/opt/enes/shared/data/sotqin-config.json",
         )
     )
 
@@ -526,7 +526,7 @@ def retail_status_path(settings: AppSettings, base_dir: Path) -> Path:
     return Path(
         os.environ.get(
             "ENES_RETAIL_STATUS",
-            "/opt/chaqimchi/shared/data/retail-status.json",
+            "/opt/enes/shared/data/retail-status.json",
         )
     )
 
@@ -837,7 +837,7 @@ def _live_frame_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threadin
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Chaqimchi Retail AI xizmati")
+    parser = argparse.ArgumentParser(description="ENES Retail xizmati")
     parser.add_argument("--config", default=None, help="config yo'li (standart: $ENES_CONFIG)")
     parser.add_argument("--base-dir", default=".", help="loyiha ildizi")
     parser.add_argument("--log-level", default="INFO")

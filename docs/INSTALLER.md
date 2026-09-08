@@ -11,7 +11,7 @@ Ikkita yo‘l bor va ular bir-biridan mustaqil:
 
 ## 0. Windows lokal o‘rnatish (mijoz o‘zi)
 
-Mijoz `Chaqimchi_AI_Setup.exe` ni saytdan yuklab oladi. Ichida Python, AI
+Mijoz `ENES_Setup.exe` ni saytdan yuklab oladi. Ichida Python, AI
 modeli va barcha kutubxonalar bor — o‘rnatish uchun **`pip` kerak emas**.
 
 Ikki oqim bor. **Ega oqimi asosiy**, usta oqimi esa murakkab holatlar
@@ -52,18 +52,18 @@ Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
 
 | Nima | Qayerda |
 |---|---|
-| Dastur | `C:\Program Files\Chaqimchi AI` (faqat o‘qish) |
-| Sozlama, log, hodisalar | `C:\ProgramData\Chaqimchi` |
+| Dastur | `C:\Program Files\ENES Monitoring` (faqat o‘qish) |
+| Sozlama, log, hodisalar | `C:\ProgramData\ENES` |
 | Boshqaruv paneli | `https://app.chaqimchi.uz/owner` (telefondan ham) |
 | Qurilma holati | `http://localhost:8760` (faqat shu kompyuterda) |
 | Usta sehrgari | `http://localhost:8760/setup` |
-| Avtostart | Rejalashtirilgan vazifa `Chaqimchi AI` (SYSTEM, `ONSTART`) |
+| Avtostart | Rejalashtirilgan vazifa `ENES Monitoring` (SYSTEM, `ONSTART`) |
 
 ### Avtomatik ishga tushish qanday ishlaydi
 
 Nazorat **kompyuter yonganda** ishga tushadi — tizimga kirish shart emas.
-Buni rejalashtirilgan vazifa qiladi: `Chaqimchi AI`, SYSTEM nomidan,
-30 soniyalik kechikish bilan, `Chaqimchi_AI_xizmat.bat` ni ishga tushiradi
+Buni rejalashtirilgan vazifa qiladi: `ENES Monitoring`, SYSTEM nomidan,
+30 soniyalik kechikish bilan, `ENES_xizmat.bat` ni ishga tushiradi
 (u brauzerni ochmaydi va oxirida `pause` qilmaydi).
 
 Bungacha bu `HKLM\...\Run` kaliti edi va ikkita muammosi bor edi:
@@ -79,7 +79,7 @@ sinovining oxirida nazorat jimgina o‘chib qolardi.
 Tekshirish (do‘kon kompyuterida):
 
 ```powershell
-schtasks /Query /TN "Chaqimchi AI" /V /FO LIST
+schtasks /Query /TN "ENES Monitoring" /V /FO LIST
 ```
 
 **0.6.7 dan oldin o‘rnatilgan kompyuterlar.** Ularda avtostart hamon
@@ -114,7 +114,7 @@ Cloudga ulash keyinroq, pairing kod bilan bajariladi (3-bo‘lim).
 
 ```bash
 python scripts/build_windows_payload.py     # Python + wheel + model → build/payload
-makensis -V2 scripts/windows_installer.nsi  # → releases/Chaqimchi_AI_Setup.exe
+makensis -V2 scripts/windows_installer.nsi  # → releases/ENES_Setup.exe
 ```
 
 CI ham shuni qiladi (`.github/workflows/windows-installer.yml`) va faylni
@@ -122,7 +122,7 @@ GitHub Releases’ga yuklaydi. Cloud uni git ichida tashimaydi — deployda
 shu ikki o‘zgaruvchi beriladi:
 
 ```bash
-export ENES_WINDOWS_INSTALLER_URL="https://github.com/.../Chaqimchi_AI_Setup.exe"
+export ENES_WINDOWS_INSTALLER_URL="https://github.com/.../ENES_Setup.exe"
 export ENES_WINDOWS_INSTALLER_SIZE_MB=68
 ```
 
@@ -169,14 +169,14 @@ dependencylarini o‘rnatadi. Admin paneldagi pairing kod bilan:
 
 ```bash
 sudo ./scripts/install_sotqin.sh
-sudo /opt/chaqimchi/venv/bin/python /opt/chaqimchi/current/scripts/pair_sotqin.py \
+sudo /opt/enes/venv/bin/python /opt/enes/current/scripts/pair_sotqin.py \
   --cloud https://YOUR_DOMAIN --code ABC123
-sudo systemctl start chaqimchi-sotqin
-sudo systemctl start chaqimchi-retail
+sudo systemctl start enes-sotqin
+sudo systemctl start enes-retail
 curl http://127.0.0.1:8742/health
 ```
 
-Pairing skripti `/etc/chaqimchi/sotqin.env` dagi lokal secretlarni
+Pairing skripti `/etc/enes/sotqin.env` dagi lokal secretlarni
 saqlaydi, cloud identifikatorlarini atomik yangilaydi va fayl huquqini `0600`
 qiladi. Admin onboarding ro‘yxatida Sotqin juftlangan va online bo‘lishi
 kerak.

@@ -1,0 +1,8 @@
+{
+  "schema_version": 2,
+  "product": "chaqimchi-windows",
+  "target_arch": "x86_64",
+  "version": "0.6.14",
+  "sha256": "c830ab139b7584972718bc159b242e6604bd5ff52960094526221167cc743857",
+  "signature": "MGN9PMpm9MIDSDBnwkPmFKtRLi4IASBOQiwu9e00SgywbSQCjZA+wo1b4g46vngHvybrets5bS+nTGOFL/71Ag=="
+}

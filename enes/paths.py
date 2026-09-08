@@ -6,8 +6,8 @@ lekin fayllar boshqa joyda turadi:
 
 | | Linux | Windows |
 |---|---|---|
-| Dastur | `/opt/chaqimchi` | `%PROGRAMFILES%\\Chaqimchi\\Sotqin` |
-| Sozlama va sirlar | `/etc/chaqimchi` | `%PROGRAMDATA%\\Chaqimchi\\Sotqin` |
+| Dastur | `/opt/enes` | `%PROGRAMFILES%\\ENES\\Sotqin` |
+| Sozlama va sirlar | `/etc/enes` | `%PROGRAMDATA%\\ENES\\Sotqin` |
 
 Bu modul `scripts/pair_sotqin.py` da allaqachon ishlagan `os.name == "nt"`
 naqshini umumlashtiradi — u yagona to'g'ri qilingan joy edi, qolgan hamma
@@ -24,7 +24,16 @@ import os
 from pathlib import Path, PureWindowsPath
 
 #: Windows'da barcha fayllar shu ikki papka ostida.
-_WINDOWS_VENDOR = ("Chaqimchi", "Sotqin")
+_WINDOWS_VENDOR = ("ENES", "Sotqin")
+
+#: Rebrenddan oldingi papka.  O'rnatilgan kompyuterda sozlama, token va
+#: bufer shu yerda turadi va yangi nomga KO'CHIRILMAYDI: ko'chirish
+#: yangilanish o'rtasida uzilsa ikkala papka ham yarim bo'lardi.  Eski
+#: papka bor bo'lsa u ishlatiladi; yangi o'rnatish yangi nomni oladi.
+_LEGACY_WINDOWS_VENDOR = ("Chaqimchi", "Sotqin")
+
+#: Linux (Box) uchun ham xuddi shu qoida.
+_LINUX_LEGACY = {"/opt/enes": "/opt/chaqimchi", "/etc/enes": "/etc/chaqimchi"}
 
 
 def is_windows() -> bool:
@@ -34,8 +43,21 @@ def is_windows() -> bool:
 
 
 def _windows_dir(base_env: str, fallback: str) -> Path:
-    base = os.environ.get(base_env, fallback)
-    return Path(PureWindowsPath(base).joinpath(*_WINDOWS_VENDOR))
+    base = PureWindowsPath(os.environ.get(base_env, fallback))
+    current = Path(base.joinpath(*_WINDOWS_VENDOR))
+    legacy = Path(base.joinpath(*_LEGACY_WINDOWS_VENDOR))
+    if not current.exists() and legacy.exists():
+        return legacy
+    return current
+
+
+def _linux_dir(path: str) -> Path:
+    """`/opt/enes` — lekin eski `/opt/chaqimchi` turgan qurilmada o'sha."""
+    current = Path(path)
+    legacy = _LINUX_LEGACY.get(path)
+    if legacy and not current.exists() and Path(legacy).exists():
+        return Path(legacy)
+    return current
 
 
 def install_root() -> Path:
@@ -45,7 +67,7 @@ def install_root() -> Path:
         return Path(override)
     if is_windows():
         return _windows_dir("PROGRAMFILES", r"C:\Program Files")
-    return Path("/opt/chaqimchi")
+    return _linux_dir("/opt/enes")
 
 
 def config_dir() -> Path:
@@ -60,7 +82,7 @@ def config_dir() -> Path:
         return Path(override)
     if is_windows():
         return _windows_dir("PROGRAMDATA", r"C:\ProgramData")
-    return Path("/etc/chaqimchi")
+    return _linux_dir("/etc/enes")
 
 
 def data_dir() -> Path:
@@ -70,7 +92,7 @@ def data_dir() -> Path:
         return Path(override)
     if is_windows():
         return _windows_dir("PROGRAMDATA", r"C:\ProgramData") / "shared" / "data"
-    return Path("/opt/chaqimchi/shared/data")
+    return _linux_dir("/opt/enes") / "shared" / "data"
 
 
 def logs_dir() -> Path:
@@ -79,7 +101,7 @@ def logs_dir() -> Path:
         return Path(override)
     if is_windows():
         return _windows_dir("PROGRAMDATA", r"C:\ProgramData") / "shared" / "logs"
-    return Path("/opt/chaqimchi/shared/logs")
+    return _linux_dir("/opt/enes") / "shared" / "logs"
 
 
 def env_file() -> Path:
@@ -107,9 +129,9 @@ def config_file() -> Path:
 
 #: Xizmat nomlari.  Linux'da systemd unit, Windows'da Service nomi.
 SERVICES = {
-    "agent": ("chaqimchi-sotqin.service", "ChaqimchiSotqin"),
-    "retail": ("chaqimchi-retail.service", "ChaqimchiRetail"),
-    "attendance": ("chaqimchi-attendance.service", "ChaqimchiAttendance"),
+    "agent": ("enes-sotqin.service", "EnesSotqin"),
+    "retail": ("enes-retail.service", "EnesRetail"),
+    "attendance": ("enes-attendance.service", "EnesAttendance"),
 }
 
 

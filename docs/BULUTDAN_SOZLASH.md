@@ -46,7 +46,7 @@ o‘rnatish  →  POST /api/v1/public/device-hello        (qurilma → bulut)
 
 Qurilma tomonida: `enes/local/cloud_link.py` →
 `hello()`, `handover()`, `poll_connection()`. Holat `connect.json` da,
-`C:\ProgramData\Chaqimchi\` ichida.
+`C:\ProgramData\ENES\` ichida.
 
 `poll_connection()` fon siklidan har 20 soniyada chaqiriladi. Ega
 tasdiqlagan lahzada qurilma `cloud_sync` ni o‘zi to‘ldiradi — mijoz

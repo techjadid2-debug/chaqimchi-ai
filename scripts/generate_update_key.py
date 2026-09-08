@@ -5,14 +5,14 @@ Ishlatish:
 
     python scripts/generate_update_key.py
 
-**Maxfiy kalit repo daraxtidan tashqarida** turadi (`~/.chaqimchi/`).  Bu
+**Maxfiy kalit repo daraxtidan tashqarida** turadi (`~/.enes/`).  Bu
 ataylab: `.gitignore` ga ishonish yetarli emas — `git add -f`, repo
 ildizidan olingan `tar`, yoki Docker build konteksti uni baribir ilib
 ketishi mumkin.  Fayl tizimida boshqa joyda bo'lsa, bunday yo'l umuman yo'q.
 
 **Ochiq kalit repoga commit qilinadi** (`deploy/update-public.pem`) va reliz
 paketi ichida qurilmaga boradi.  `install_sotqin.sh` uni
-`/etc/chaqimchi/update-public.pem` ga bir marta yozadi va **almashtirmaydi**.
+`/etc/enes/update-public.pem` ga bir marta yozadi va **almashtirmaydi**.
 
 Nima uchun shunday: birinchi o'rnatish baribir cloudga ishonadi (arxiv
 HTTPS + SHA-256 bilan olinadi).  Lekin kalit o'rnatishda qotirilgach,
@@ -41,7 +41,7 @@ if str(BASE_DIR) not in sys.path:
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-DEFAULT_PRIVATE = Path.home() / ".chaqimchi" / "sotqin-release-signing.pem"
+DEFAULT_PRIVATE = Path.home() / ".enes" / "sotqin-release-signing.pem"
 DEFAULT_PUBLIC = BASE_DIR / "deploy" / "update-public.pem"
 
 

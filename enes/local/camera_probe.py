@@ -152,7 +152,7 @@ def rtsp_describe(url: str, *, timeout_sec: float = 5.0) -> Tuple[int, str]:
     password = unquote(parts.password or "")
 
     def _request(auth_header: str = "", seq: int = 1) -> str:
-        lines = [f"DESCRIBE {target} RTSP/1.0", f"CSeq: {seq}", "User-Agent: Chaqimchi"]
+        lines = [f"DESCRIBE {target} RTSP/1.0", f"CSeq: {seq}", "User-Agent: ENES"]
         if auth_header:
             lines.append(auth_header)
         return "\r\n".join(lines) + "\r\n\r\n"

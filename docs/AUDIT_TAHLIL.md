@@ -13,7 +13,7 @@ belgilanadi — hujjat tirik qolsin, arxivga aylanmasin.
 
 ## Kontekst — nega bu ish qilinyapti
 
-Chaqimchi AI sotuvga chiqish arafasida: sayt jonli (`https://chaqimchi.uz`,
+ENES Monitoring sotuvga chiqish arafasida: sayt jonli (`https://chaqimchi.uz`,
 HTTP 200), narxlar e'lon qilingan, "14 kun bepul" tugmasi ishlaydi va
 o'rnatuvchi fayl yuklab olinadi. Ya'ni **mijoz bugun kelib pul to'lay
 oladi**.
@@ -482,7 +482,7 @@ huquqiy savol yuristga beriladi (B2).
 > joyida. Muammo build'da emas — `.env.production` da:
 >
 > ```
-> ENES_WINDOWS_INSTALLER_URL=...chaqimchi-windows-0.6.13.exe
+> ENES_WINDOWS_INSTALLER_URL=...enes-windows-0.6.13.exe
 > ```
 >
 > Qotirilgan URL 0.6.13 da qolib ketgan va ikkita reliz hech kimga
@@ -505,12 +505,12 @@ huquqiy savol yuristga beriladi (B2).
 >    relizdan o'zi keladi va bu xato takrorlanmaydi.
 >
 > **Yon natija:** pin ketgach pairing kod fayl nomida ishlaydigan bo'ldi
-> (`Chaqimchi_AI_Setup-0.6.16-A1B2C3.exe`). Ilgari redirect nomni
+> (`ENES_Setup-0.6.16-A1B2C3.exe`). Ilgari redirect nomni
 > yo'qotardi va mijoz 6 belgini qo'lda kiritardi.
 >
 > **Yon oqibat:** fayl nomi ham o'zgardi, shuning uchun A6 tuzatishi
 > teskari tomonga to'g'rilandi — `install.html` endi
-> `Chaqimchi_AI_Setup-<versiya>.exe` deydi va nom relizdan yasaladi.
+> `ENES_Setup-<versiya>.exe` deydi va nom relizdan yasaladi.
 >
 > Jonli tekshiruv: yuklab olish 0.6.16 beradi, sahifadagi nom mos,
 > API 0.6.16 deydi. Hozir birorta qurilma ulanmagan (4 saytdan 3 tasi
@@ -525,10 +525,10 @@ Mijoz yuklab oladi:  /download-installer      → 0.6.13  ← 2 versiya orqada
                      (last-modified: 23-avgust, 102 705 431 bayt)
 ```
 `GET /api/v1/public/download-installer` → 307 →
-`https://dl.chaqimchi.uz/releases/chaqimchi-windows-0.6.13.exe`
+`https://dl.chaqimchi.uz/releases/enes-windows-0.6.13.exe`
 (102 705 431 bayt, `last-modified: Sun, 23 Aug 2026`).
 
-`releases/chaqimchi-windows-0.6.15.json` manifest fayli bor, lekin
+`releases/enes-windows-0.6.15.json` manifest fayli bor, lekin
 `0.6.15.exe` build qilinmagan (papkada eng yangisi `0.6.9.exe`).
 
 **Nima uchun muhim:** 0.6.14 dagi asosiy tuzatish — *"Demografiya
@@ -548,21 +548,21 @@ hold.
 > ## ✅ TUZATILDI — 2026-08-25
 >
 > Fayl nomi endi **relizdan** olinadi: `install.html` dagi JS
-> `/api/v1/public/windows-release` javobidan `chaqimchi-windows-<versiya>.exe`
+> `/api/v1/public/windows-release` javobidan `enes-windows-<versiya>.exe`
 > ni yasab qo'yadi. Qo'lda yozilgan nom boshqa qaytib kelmaydi.
 >
 > Tekshiruv paytida ma'lum bo'ldiki, ichki hujjatlardagi
-> `Chaqimchi_AI_Setup.exe` **to'g'ri** ekan — bu build artefaktining nomi;
+> `ENES_Setup.exe` **to'g'ri** ekan — bu build artefaktining nomi;
 > `scripts/publish_windows_release.sh:55-61` uni nashr paytida
-> `chaqimchi-windows-<versiya>.exe` ga qayta nomlaydi. Ya'ni xato faqat
+> `enes-windows-<versiya>.exe` ga qayta nomlaydi. Ya'ni xato faqat
 > mijoz ko'radigan ikki sahifada edi va tuzatish aynan shu yerga
 > qo'llandi.
 
 **Dalil:**
-- `cloud/static/install.html:53-54`: *"Fayl nomi `Chaqimchi_AI_Setup-`
-  bilan boshlanadi... masalan `Chaqimchi_AI_Setup-0.6.8.exe`"*
+- `cloud/static/install.html:53-54`: *"Fayl nomi `ENES_Setup-`
+  bilan boshlanadi... masalan `ENES_Setup-0.6.8.exe`"*
 - `install.html:216` yana takrorlaydi.
-- Haqiqiy fayl: **`chaqimchi-windows-0.6.13.exe`**
+- Haqiqiy fayl: **`enes-windows-0.6.13.exe`**
 
 Mijoz yuklamalar papkasini ochadi, aytilgan nomni topmaydi.
 Muammolar bo'limi esa aynan shu nom bilan "to'g'ri faylni" tanishtiradi —
@@ -675,7 +675,7 @@ $ curl https://chaqimchi.uz/health/deep
   {"name":"disk","free_gb":85.1,"used_percent":11.1}]}
 ```
 Autentifikatsiya yo'q, rate limit yo'q
-(`cloud/main.py:1648-1669`, `deploy/Caddyfile.chaqimchi:107`).
+(`cloud/main.py:1648-1669`, `deploy/Caddyfile.enes:107`).
 
 **Biznes zarari:** Raqobatchi yoki investor bir buyruq bilan **sizda 4 ta
 mijoz borligini** biladi. Sotuv suhbatida "bizda o'nlab do'kon bor"
@@ -759,7 +759,7 @@ production'da bitta SQLite faylda turadi:
 - shifrlangan RTSP/NVR parollari
 - audit jurnali
 
-`docker-compose.chaqimchi.yml:35,71` ikkita servis bir xil faylga
+`docker-compose.enes.yml:35,71` ikkita servis bir xil faylga
 yozadi (WAL, `timeout=30`) — yozuv raqobati xavfi bor.
 
 **Tuzatish:** `CloudStore` va `PaymentStore` ni ham Postgres'ga ko'chirish
@@ -818,7 +818,7 @@ parol o'zgarsa barcha tokenlar darhol o'ladi (`cloud/store.py:1722`) —
 `cloud/ratelimit.py:3-11` moduli o'zi tan oladi: *"jarayon qayta ishga
 tushganda nolga qaytadi"*. Login brute-force cheklovi (8 urinish / 15
 daqiqa) deploy paytida yoki ikkinchi instansiyada nolga qaytadi
-(`docker-compose.chaqimchi.yml:35,71`).
+(`docker-compose.enes.yml:35,71`).
 
 Shuningdek `POST /api/v1/owner/auth/verify` (`cloud/main.py:5667`) da IP
 bo'yicha cheklov umuman yo'q — faqat DB'dagi 5 urinish hisoblagichi.
@@ -1094,7 +1094,7 @@ ishlaydi" degani emas. Chaqiruv joyini ham ko'rish kerak.
 
 ### O'RTA-1 · `/health` haqiqatni ko'rsatmaydi
 
-`https://chaqimchi.uz/health` → `{"ok":true,"service":"chaqimchi-cloud"}`
+`https://chaqimchi.uz/health` → `{"ok":true,"service":"enes-cloud"}`
 
 Bu faqat "web-server javob beryapti" degani. Baza, MinIO, Telegram,
 Gemini va navbat tekshirilmaydi. `/status` sahifasi
@@ -1111,7 +1111,7 @@ bo'yicha ko'rsatsin. **Egasi:** Backend/DevOps · **Hajmi:** M
 
 Jonli javobda: HSTS ✓, `X-Frame-Options: DENY` ✓, `nosniff` ✓,
 `Referrer-Policy` ✓, `Permissions-Policy` ✓ — lekin
-**`Content-Security-Policy` yo'q** (`deploy/Caddyfile.chaqimchi:11-24`).
+**`Content-Security-Policy` yo'q** (`deploy/Caddyfile.enes:11-24`).
 
 Panel (`app.`) XSS bo'lsa himoya qatlami yetishmaydi.
 **Tuzatish:** Avval `Content-Security-Policy-Report-Only` bilan
@@ -1217,7 +1217,7 @@ Audit davomida tasdiqlangan kuchli tomonlar — bularni saqlash kerak:
   `ENES_OTP_TEST_CODE` qolib ketsa deploy to'xtaydi.
 - **Backup infratuzilmasi tayyor:** kunlik shifrlangan zaxira, systemd
   timer, muvaffaqiyatsizlikda Telegram xabari
-  (`scripts/backup_production.sh`, `deploy/chaqimchi-backup*.service`).
+  (`scripts/backup_production.sh`, `deploy/enes-backup*.service`).
 - **Kodda birorta hardcode qilingan sir topilmadi**; `.env` git'da yo'q.
 - **OTA imzosi jiddiy:** Ed25519 + sha256, imzodan o'tmagan fayl
   o'chiriladi, rollback nishoni **qayta imzo tekshiruvidan o'tadi**,

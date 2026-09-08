@@ -271,7 +271,7 @@ def monthly_receipt(
     monthly_price_uzs: int,
     lang: str = i18n.DEFAULT_LANG,
 ) -> str:
-    """Oylik hisob-kitob cheki — «Chaqimchi o'zini qopladimi».
+    """Oylik hisob-kitob cheki — «ENES o'zini qopladimi».
 
     Eng muhim xabar: mijoz obunani uzaytirishdan oldin aynan shu
     savolga javob izlaydi.  Raqam o'zimizning foydamizga emas,

@@ -56,3 +56,21 @@ def test_ci_installs_node_for_the_typecheck() -> None:
     assert "npm ci" in commands
     assert "npm install" not in commands
     assert (ROOT / "frontend" / "package-lock.json").is_file()
+
+
+def test_the_frontend_pins_its_versions() -> None:
+    """`"latest"` bilan qurilgan panel takrorlanmaydi.
+
+    Bugungi va ertangi `npm install` boshqa daraxt qurardi va buni
+    hech narsa aytmasdi: React yoki Vite katta versiyasi o'zgarganda
+    panel qurilishi kutilmaganda buzilardi, sabab esa bizning
+    commitlarimizda ko'rinmasdi.  `^` — xavfsizlik yamog'i o'zi
+    kelsin, katta versiya ataylab ko'tarilsin.
+    """
+    import json
+
+    manifest = json.loads((ROOT / "frontend" / "package.json").read_text(encoding="utf-8"))
+    for section in ("dependencies", "devDependencies"):
+        for name, spec in manifest.get(section, {}).items():
+            assert spec != "latest", f"{name}: versiya qotirilmagan"
+            assert spec[0] in "^~0123456789", f"{name}: tushunarsiz versiya `{spec}`"

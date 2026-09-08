@@ -78,6 +78,12 @@ windows-installer:
 # tuzoqqa duch kelindi (cloud URL unutildi, imzo noto'g'ri mahsulot bilan
 # ketayozdi) — endi hammasi bitta buyruq:
 #   make windows-release CLOUD_URL=https://enes.example
+#
+# `LEGACY_NAME=1` — O'TISH relizi: fayl va manifest ESKI nom bilan
+# chiqadi (`chaqimchi-windows-<v>`).  Sababi: daladagi qurilma va jonli
+# cloud rebrenddan oldingi kodda va yangi nomni umuman tanimaydi
+# (`scripts/publish_windows_release.sh` da to'liq izoh).
+#
 # Eslatma: versiyani OLDIN ko'taring (pyproject.toml + enes/__init__.py)
 # va commit qiling; chiqqan .exe/.json ni serverga scp qiling (buyruq oxirida
 # ko'rsatiladi), tarqatish tartibi docs/RELIZ_VA_OTA.md da.
@@ -86,8 +92,9 @@ windows-release:
 	ENES_DEFAULT_CLOUD_URL="$(CLOUD_URL)" $(PY) scripts/build_windows_payload.py
 	makensis -V2 scripts/windows_installer.nsi
 	@VERSION=$$($(PY) -c "import enes; print(enes.__version__)"); \
-	cp releases/ENES_Setup.exe "releases/enes-windows-$$VERSION.exe"; \
-	$(PY) scripts/sign_release.py "releases/enes-windows-$$VERSION.exe"; \
+	PREFIX=$(if $(LEGACY_NAME),chaqimchi-windows,enes-windows); \
+	cp releases/ENES_Setup.exe "releases/$$PREFIX-$$VERSION.exe"; \
+	$(PY) scripts/sign_release.py "releases/$$PREFIX-$$VERSION.exe"; \
 	echo ""; \
 	echo "Serverga chiqarish:"; \
 	echo "  ENES_RELEASE_HOST=deploy@<server> make windows-publish"

@@ -32,6 +32,11 @@ ALLOWED_FILES = {
     "enes/paths.py",                   # eski ma'lumot papkasi bor bo'lsa ishlatiladi
     "enes/local/autostart.py",         # eski vazifa/Run kaliti o'chiriladi
     "enes/local/chain_processes.py",   # eski nomdagi zanjir ham o'ldiriladi
+    "enes/signed_update.py",           # eski `product` nomi (o'tish relizi + orqaga qaytish)
+    "scripts/publish_windows_release.sh",  # o'tish relizi eski nom bilan chiqadi
+    "Makefile",                        # o'tish relizi bayrog'i (LEGACY_NAME)
+    "docs/RELIZ_VA_OTA.md",            # o'tish relizi tartibi hujjatlangan
+    "tests/test_rollout.py",           # o'tish relizi nomining qulfi
     "scripts/windows_installer.nsi",   # eski o'rnatishni topib olib tashlaydi
     "scripts/build_windows_payload.py",  # ko'prik papkasi payloadga kiradi
     "scripts/sign_release.py",         # eski arxivni qayta imzolash, eski kalit yo'li

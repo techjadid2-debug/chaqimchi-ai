@@ -211,3 +211,50 @@ def test_a_missing_private_key_says_what_to_run(tmp_path: Path, capsys) -> None:
 
     assert code == 1
     assert "generate_update_key.py" in capsys.readouterr().err
+
+
+# ── Brend almashuvi: o'tish relizi ───────────────────────────────────────
+#
+# Daladagi 0.6.25 qurilmasi FAQAT eski `product` nomlarini biladi.  Yangi
+# nom bilan chiqqan reliz uni "Release product noma'lum" deb rad etardi,
+# ya'ni rebrend avto-yangilanish zanjirini uzardi va pilotni qo'lda
+# qayta o'rnatish kerak bo'lardi.  Yechim — bitta o'tish relizi ESKI nom
+# bilan; shundan keyingisi yangi nomda.
+
+
+def test_a_transition_release_may_carry_the_old_product_name(tmp_path: Path, keys) -> None:
+    private, public = keys
+    archive = make_archive(tmp_path / "chaqimchi-sotqin-0.6.0.tar.gz")
+
+    assert (
+        sign_release.main(
+            [
+                str(archive),
+                "--product",
+                "chaqimchi-sotqin",
+                "--private-key",
+                str(private),
+                "--public-key",
+                str(public),
+            ]
+        )
+        == 0
+    )
+
+    verified = verify_release_manifest(
+        archive, tmp_path / "chaqimchi-sotqin-0.6.0.json", public
+    )
+    assert verified["product"] == "chaqimchi-sotqin"
+
+
+def test_the_new_device_still_accepts_the_old_manifest_it_kept() -> None:
+    """Orqaga qaytish yo'li tirik qolsin.
+
+    O'tish relizi o'rnatilgach qurilmada ESKI manifest saqlanib qoladi
+    (`updater.py` uni `prev_manifest` sifatida qayta tekshiradi).  Eski
+    nom ro'yxatdan chiqsa qaytish yo'li jimgina o'lardi.
+    """
+    from enes.signed_update import KNOWN_PRODUCTS
+
+    assert {"chaqimchi-windows", "chaqimchi-sotqin", "chaqimchi-lite"} <= KNOWN_PRODUCTS
+    assert {"enes-windows", "enes-sotqin", "enes-lite"} <= KNOWN_PRODUCTS

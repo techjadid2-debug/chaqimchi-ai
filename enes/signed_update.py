@@ -24,7 +24,31 @@ SUPPORTED_MANIFEST_SCHEMAS = {1, 2}
 #:
 #: `enes-windows` — mijozning o'z kompyuteriga o'rnatiladigan
 #: `.exe` paketi (`scripts/build_windows_payload.py`).
-KNOWN_PRODUCTS = frozenset({"enes-sotqin", "enes-lite", "enes-windows"})
+#:
+#: **Eski nomlar ataylab QOLDIRILGAN** (`tests/test_brand.py` ko'priklar
+#: ro'yxatida).  Ikki sabab, ikkalasi ham jonli:
+#:
+#: 1. Daladagi 0.6.25 qurilmasi FAQAT eski nomlarni biladi, ya'ni
+#:    `product: "enes-windows"` bilan chiqqan relizni "noma'lum" deb
+#:    rad etadi.  Manifest v2 imzosi hamma maydonni qamragani uchun
+#:    `product` ni qo'lda tahrirlab ham bo'lmaydi.  Shu sababdan
+#:    o'tish relizi ESKI nom bilan chiqadi.
+#: 2. O'tish relizi o'rnatilgach qurilmada eski manifest saqlanib
+#:    qoladi va ORQAGA QAYTISH yo'li (`updater.py` `verify_release_
+#:    manifest(prev_exe, prev_manifest)`) uni qayta tekshiradi — bu
+#:    ro'yxatsiz qaytish yo'li o'lardi.
+#:
+#: Olib tashlash: hamma qurilma yangi nomdagi relizga o'tgach.
+KNOWN_PRODUCTS = frozenset(
+    {
+        "enes-sotqin",
+        "enes-lite",
+        "enes-windows",
+        "chaqimchi-sotqin",
+        "chaqimchi-lite",
+        "chaqimchi-windows",
+    }
+)
 
 
 def canonical_manifest_payload(manifest: Dict[str, Any]) -> bytes:

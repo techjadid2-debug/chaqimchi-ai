@@ -24,6 +24,8 @@
 #   ENES_RELEASE_DIR       serverdagi papka (standart quyida)
 #   ENES_RELEASE_SSH_KEY   SSH kaliti (standart `.deploy_keys/enes_prod`)
 #   ENES_DL_URL            tashqi tekshiruv manzili (standart dl.chaqimchi.uz)
+#   ENES_RELEASE_LEGACY_NAME=1  reliz ESKI nom bilan chiqadi
+#                          (`chaqimchi-windows-<v>`) — pastdagi izohga qarang
 #
 set -euo pipefail
 
@@ -48,8 +50,25 @@ if [[ -z "${ENES_RELEASE_HOST:-}" ]]; then
 fi
 
 version="$("$py" -c 'import enes; print(enes.__version__)')"
-exe="releases/enes-windows-$version.exe"
-manifest="releases/enes-windows-$version.json"
+
+# ── Nom: yangi yoki O'TISH relizi ───────────────────────────────────────
+#
+# Daladagi qurilma (0.6.25) va jonli cloud REBRENDDAN OLDINGI kodda:
+# qurilmaning tekshiruvchisi `product: "enes-windows"` ni "noma'lum"
+# deb rad etadi (`KNOWN_PRODUCTS` o'sha versiyada faqat eski nomlarni
+# biladi), cloud esa `releases/` dan faqat `chaqimchi-windows-*` ni
+# qidiradi.  Ya'ni yangi nomdagi birinchi reliz hech kimga YETMAYDI.
+#
+# Shuning uchun brend almashuvida bitta O'TISH relizi eski nom bilan
+# chiqadi.  U o'rnatilgach qurilmada yangi kod ishlaydi va u ikkala
+# nomni ham taniydi — keyingi relizlar yangi nomda ketaveradi.
+prefix="enes-windows"
+if [[ "${ENES_RELEASE_LEGACY_NAME:-}" == "1" ]]; then
+  prefix="chaqimchi-windows"
+  echo "→ O'TISH RELIZI: eski nom bilan chiqadi ($prefix)"
+fi
+exe="releases/$prefix-$version.exe"
+manifest="releases/$prefix-$version.json"
 echo "→ Versiya: $version"
 
 # CI qurgan fayl boshqa nom bilan keladi (`ENES_Setup.exe`).
@@ -68,6 +87,7 @@ if [[ ! -f "$exe" ]]; then
   echo "Topilmadi: $exe" >&2
   echo "Avval quring:" >&2
   echo "  make windows-release CLOUD_URL=https://api.chaqimchi.uz" >&2
+  echo "  (o'tish relizi uchun: LEGACY_NAME=1 make windows-release …)" >&2
   echo "yoki CI qurgan faylni bering: --exe <yuklab olingan .exe>" >&2
   exit 1
 fi

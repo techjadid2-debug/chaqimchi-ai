@@ -82,6 +82,32 @@ ENES_RELEASE_HOST=deploy@169.58.198.111 \
 Skript uni `enes-windows-<versiya>.exe` nomiga ko'chiradi: cloud
 faqat shu nomni taniydi (`latest_windows_release`).
 
+### O'TISH RELIZI — brend almashuvida bir marta
+
+```bash
+LEGACY_NAME=1 make windows-release CLOUD_URL=https://api.chaqimchi.uz
+ENES_RELEASE_HOST=deploy@169.58.198.111 ENES_RELEASE_LEGACY_NAME=1 \
+  scripts/publish_windows_release.sh
+```
+
+Fayl va manifest **eski nom** bilan chiqadi (`chaqimchi-windows-<v>.exe`,
+`product: "chaqimchi-windows"`).  Nega shart:
+
+- **Qurilma:** 0.6.25 dagi tekshiruvchi `KNOWN_PRODUCTS` ro'yxatida faqat
+  eski nomlarni biladi va `product: "enes-windows"` ni «noma'lum» deb
+  rad etadi.  Manifest v2 imzosi hamma maydonni qamragani uchun
+  `product` ni qo'lda tahrirlab ham bo'lmaydi.
+- **Cloud:** jonli server hali rebrenddan oldingi kodda va `releases/`
+  papkasidan faqat `chaqimchi-windows-*` juftini qidiradi.
+
+Ya'ni yangi nomdagi birinchi reliz **hech kimga yetmaydi** va buni hech
+narsa aytmaydi — qurilma jimgina eski versiyada qolaveradi.
+
+O'tish relizi o'rnatilgach qurilmada yangi kod ishlaydi va u **ikkala**
+nomni ham taniydi (`enes/signed_update.py` ko'prigi), cloud deploy
+qilingach esa u ham ikkala prefiksni ko'radi — shundan keyingi relizlar
+oddiy (yangi) nom bilan chiqaveradi.
+
 `CLOUD_URL` majburiy: u o'rnatuvchiga bake qilinadi va yangi mijoz
 pairing kod bilan yuklaganda dastur cloudga o'zi ulanadi. Usiz sehrgar
 manzilni qo'lda so'raydi (0.6.4 da bir marta shu unutilgan).

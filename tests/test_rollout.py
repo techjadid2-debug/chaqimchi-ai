@@ -202,12 +202,26 @@ def test_status_survives_a_shop_without_devices(client: TestClient) -> None:
 
 
 def test_publish_uses_the_name_the_cloud_looks_for() -> None:
-    """Cloud aynan `enes-windows-<versiya>.{exe,json}` juftini
+    """Cloud aynan `<prefiks>-windows-<versiya>.{exe,json}` juftini
     qidiradi (`latest_windows_release`).  Boshqa nom bilan qo'yilgan fayl
     e'tiborsiz qoladi va buni hech kim sezmaydi."""
     source = PUBLISH.read_text(encoding="utf-8")
-    assert 'releases/enes-windows-$version.exe' in source
-    assert 'releases/enes-windows-$version.json' in source
+    assert 'prefix="enes-windows"' in source, "standart nom yangi brendda bo'lsin"
+    assert 'exe="releases/$prefix-$version.exe"' in source
+    assert 'manifest="releases/$prefix-$version.json"' in source
+
+
+def test_publish_can_ship_a_transition_release_under_the_old_name() -> None:
+    """Brend almashuvida bitta reliz ESKI nom bilan chiqishi shart.
+
+    Daladagi 0.6.25 qurilmasi `product: "enes-windows"` ni «noma'lum»
+    deb rad etadi, jonli cloud esa `releases/` dan faqat eski prefiksni
+    qidiradi — ya'ni yangi nomdagi birinchi reliz hech kimga yetmasdi va
+    buni hech narsa aytmasdi.
+    """
+    source = PUBLISH.read_text(encoding="utf-8")
+    assert "ENES_RELEASE_LEGACY_NAME" in source
+    assert 'prefix="chaqimchi-windows"' in source
 
 
 def test_publish_refuses_to_ship_an_unsigned_release() -> None:

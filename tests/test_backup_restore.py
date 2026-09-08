@@ -263,3 +263,23 @@ def test_an_oversized_archive_warns_instead_of_failing_silently() -> None:
     source = BACKUP.read_text(encoding="utf-8")
     assert "45 * 1024 * 1024" in source
     assert "Telegram chegarasidan" in source
+
+
+def test_the_backup_refuses_a_control_database_it_cannot_capture() -> None:
+    """Boshqaruv bazasi PostgreSQL'ga ko'chgach `cloud.db` ESKIRADI.
+
+    Ikki xavf bor va ikkalasi ham jim: (1) eskirgan fayl zaxiraga
+    tushib, tiklash kuni haqiqiy deb ishlatilishi mumkin; (2) agar
+    boshqaruv bazasi hodisalar bazasidan BOSHQA PostgreSQL bazasida
+    bo'lsa, `pg_dump` uni umuman qamramaydi va litsenziya, to'lov,
+    portal parollari zaxirasiz qoladi — buni faqat tiklash kerak
+    bo'lgan kuni bilardik.
+    """
+    script = (Path(__file__).resolve().parents[1] / "scripts" / "backup_production.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ENES_CONTROL_DATABASE_URL" in script, "backup boshqaruv bazasidan xabardor bo'lsin"
+    # Ikki baza mos kelmasa zaxira TO'XTAYDI — jimgina yarim nusxa emas.
+    assert "exit 1" in script
+    assert "cloud.db nusxasi olinmaydi" in script

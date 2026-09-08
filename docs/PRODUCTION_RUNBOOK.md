@@ -57,6 +57,52 @@ maxfiy qiymat ko'rinmaydi.
 Token yoki secretni terminal tarixiga yozmaslik uchun real chaqiruvni vaqtinchalik,
 history o‘chirilgan shell yoki secret manager orqali bajaring.
 
+## 1.1 Boshqaruv bazasi: SQLite → PostgreSQL (ixtiyoriy, bir martalik)
+
+`cloud/store.py` (litsenziya, tarif, narx kitobi, portal parollari,
+audit jurnali) va `cloud/payments/store.py` (hisob-faktura) ikkala
+dialektda ham ishlaydi.  Standart holat — SQLite; ko'chish
+**ixtiyoriy** va `ENES_CONTROL_DATABASE_URL` bilan yoqiladi.
+
+⚠️ **`DATABASE_URL` ni ishlatmang.**  U hodisalar bazasi uchun
+allaqachon qo'yilgan.  `CloudStore` ham o'shani o'qiganda deploy
+litsenziya va to'lovlarni bo'sh sxemaga yo'naltirardi.
+
+⚠️ **Boshqaruv bazasi hodisalar bazasi bilan BITTA PostgreSQL
+bazasida bo'lsin.**  Aks holda kunlik zaxira (`pg_dump`) uni
+qamramaydi — skript buni tekshiradi va mos kelmasa to'xtaydi.
+
+Tartib:
+
+1. **Zaxira** — `scripts/backup_production.sh` (majburiy, tiklab
+   ko'rilgan bo'lsin: §2.2).
+2. **Ko'chirish** (cloud to'xtatilgan holda, yozuv bormasin):
+
+   ```bash
+   docker compose stop cloud
+   docker compose exec -T cloud python scripts/migrate_control_db.py \
+     --sqlite /app/data/cloud/cloud.db \
+     --postgres "postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB"
+   ```
+
+   Skript jadval-ba-jadval qatorlarni sanab solishtiradi.  Mos
+   kelmasa **o'zgaruvchini qo'ymang** — u shuni aytadi va 1 qaytaradi.
+3. **Yoqish:** env'ga `ENES_CONTROL_DATABASE_URL=...` (aynan shu
+   manzil), `docker compose up -d cloud`.
+4. **Tekshiruv:** `/health/deep` da `control_db` yashil; admin panelda
+   do'kon ro'yxati va hisob-fakturalar joyida; mavjud mijoz ESKI
+   paroli bilan kira olsin.
+5. **Qaytish:** o'zgaruvchini olib tashlab qayta ishga tushiring.
+   Manba `cloud.db` tegilmagan — lekin ko'chishdan keyin yozilgan
+   ma'lumot faqat PostgreSQL'da qoladi.
+
+**`--workers` ni HOZIRCHA ko'tarmang.**  `Dockerfile.cloud` dagi
+`--workers 1` ikki sababdan: (a) SQLite — bu ko'chish bilan hal
+bo'ladi; (b) `cloud/ratelimit.py` cheklovni XOTIRADA saqlaydi, ya'ni
+har worker o'z hisobini yuritadi va chegara worker soniga ko'payadi.
+Ikkinchisi hal bo'lmaguncha `--workers 2+` kirish urinishlari va
+ariza cheklovlarini jimgina zaiflashtiradi.
+
 ## 2. Backup va deploy
 
 Dedicated server:

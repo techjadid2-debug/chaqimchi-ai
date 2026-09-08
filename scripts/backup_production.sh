@@ -74,7 +74,29 @@ if [[ "$with_media" != "1" ]]; then
   'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$stage/postgres.dump"
 
 # `cloud.db` — hisob-faktura, obuna, portal loginlari va kamera
-# inventari.  Fayllarni shunchaki nusxalash YETARLI EMAS: baza WAL
+# inventari.
+#
+# ⚠️ BOSHQARUV BAZASI PostgreSQL'ga ko'chirilgan bo'lsa
+# (`ENES_CONTROL_DATABASE_URL` qo'yilgan), bu fayl ESKIRGAN bo'ladi va
+# uni zaxiraga qo'yish xavfli: tiklash kuni kimdir uni haqiqiy deb
+# o'ylab ishlatishi mumkin.  Bunday holda jadvalar yuqoridagi
+# `pg_dump` ichiga kiradi — SHARTI: boshqaruv bazasi hodisalar bilan
+# BITTA PostgreSQL bazasida bo'lishi kerak.  Skript buni tekshiradi.
+control_url="$("${compose[@]}" exec -T cloud sh -lc 'printf %s "${ENES_CONTROL_DATABASE_URL:-}"' 2>/dev/null || true)"
+if [ -n "$control_url" ]; then
+  control_db="${control_url##*/}"
+  control_db="${control_db%%\?*}"
+  events_db="$("${compose[@]}" exec -T postgres sh -lc 'printf %s "$POSTGRES_DB"' 2>/dev/null || true)"
+  if [ "$control_db" != "$events_db" ]; then
+    echo "XATO: boshqaruv bazasi ($control_db) hodisalar bazasidan ($events_db) boshqa." >&2
+    echo "      Zaxira uni QAMRAB OLMAYDI.  Ikkalasini bitta bazada saqlang" >&2
+    echo "      yoki backup skriptiga ikkinchi pg_dump qo'shing." >&2
+    exit 1
+  fi
+  echo "Boshqaruv bazasi PostgreSQL'da — cloud.db nusxasi olinmaydi (pg_dump qamragan)."
+else
+
+# Fayllarni shunchaki nusxalash YETARLI EMAS: baza WAL
 # rejimida ishlaydi va `cloud.db`, `-wal`, `-shm` uch alohida nusxa
 # sifatida olinsa, orasidagi yozuv yirtiq snapshot beradi.  `PRAGMA
 # integrity_check` bunday faylni ham "sog'lom" deb o'tkazib yuboradi.
@@ -109,6 +131,7 @@ finally:
         if os.path.exists(leftover):
             os.remove(leftover)
 " > "$stage/cloud-state/cloud.db"
+fi   # ← boshqaruv bazasi hali SQLite'da
 fi   # ← baza rejimi tugadi
 
 # Media (rasm va kliplar) faqat `--media` rejimida olinadi — u o'nlab GB

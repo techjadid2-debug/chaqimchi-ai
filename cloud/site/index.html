@@ -460,7 +460,7 @@
   <!-- `site.js` satrlari — katalogdan, qurish paytida.  Skript tilni
        `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
        manbadan kelgani uchun ajralib ketmaydi. -->
-  <script>window.__SITE__ = {{site_json}};</script>
+  <script type="application/json" id="site-data">{{site_json}}</script>
   <script src="{{asset:site.js}}" defer></script>
 </body>
 </html>

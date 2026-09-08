@@ -172,16 +172,20 @@ def test_the_installer_tool_loads_the_editor() -> None:
     """
     installer = (ROOT / "cloud" / "static" / "installer.html").read_text(encoding="utf-8")
     panel = (ROOT / "cloud" / "static" / "geometry-panel.js").read_text(encoding="utf-8")
+    # Sahifa mantig'i 2026-09-09 da `installer.js` ga chiqdi (CSP:
+    # `script-src` da `'unsafe-inline'` yo'q), kadr va tugmalar esa
+    # HTML'da qoldi — shuning uchun ikkalasi ham o'qiladi.
+    script = (ROOT / "cloud" / "static" / "installer.js").read_text(encoding="utf-8")
 
     # Chizish vositasi va uning atrofidagi panel — ikkalasi ham ulangan.
     assert "zone-editor.js" in installer
-    assert 'id="geoCanvas"' in installer
     assert "geometry-panel.js" in installer
+    assert 'id="geoCanvas"' in script
 
     # Manzil endi `base` o'zgaruvchisidan yig'iladi (bir joyda), shuning
     # uchun to'liq satr o'rniga uning ikki qismi tekshiriladi.
-    assert "/api/v1/installer/sites/${activeSite}" in installer
-    assert "config:`${base}/config`" in installer.replace(" ", "")
+    assert "/api/v1/installer/sites/${activeSite}" in script
+    assert "config:`${base}/config`" in script.replace(" ", "")
 
     # Mantiq bitta joyda: ikki nusxa bo'lsa ular uzoqlashardi.
     assert "GeometryPanel" in panel

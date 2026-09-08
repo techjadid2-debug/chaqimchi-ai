@@ -373,9 +373,21 @@ export async function copyText(value: string): Promise<boolean> {
   }
 }
 
+/** Bot manzili — server qobiqqa qo'ygan `application/json` blokidan.
+ *
+ * `window.__ENES_BOT_URL__` ga qiymat berish INLINE skript bo'lardi va
+ * CSP `script-src` uni bloklardi.  `type="application/json"` bloki esa
+ * ijro etilmaydi, ya'ni siyosatdan tashqarida qoladi.  Bot sozlanmagan
+ * bo'lsa server bo'sh satr qo'yadi — login ekranida "botdan havola
+ * oling" taklifi ko'rsatilmaydi. */
 export function telegramBotUrl(): string {
-  const raw = (window as Window & { __ENES_BOT_URL__?: string }).__ENES_BOT_URL__ || "";
-  return raw.startsWith("http") ? raw : "";
+  try {
+    const holder = document.getElementById("bot-url");
+    const raw = holder ? String(JSON.parse(holder.textContent || '""')) : "";
+    return raw.startsWith("http") ? raw : "";
+  } catch {
+    return "";
+  }
 }
 
 /** "2026-yil 24-avgust, dushanba" — joriy tilda.

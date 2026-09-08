@@ -81,9 +81,10 @@
   </div>
   <p class="footer-powered">Powered by NS camera</p>
 </footer>
-  <script>
-    const TEXT = { upTitle: "Облако работает", upText: "Сайт, панель и сервис подключения устройств отвечают.", downTitle: "Нет связи с облаком", downText: "Команда сервиса должна проверить состояние." };
-    fetch('/health',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{document.getElementById('light').classList.add('online');document.getElementById('statusTitle').textContent=TEXT.upTitle;document.getElementById('statusText').textContent=TEXT.upText}).catch(()=>{document.getElementById('statusTitle').textContent=TEXT.downTitle;document.getElementById('statusText').textContent=TEXT.downText});
+  <script type="application/json" id="page-text">
+    {"upTitle": "Облако работает", "upText": "Сайт, панель и сервис подключения устройств отвечают.",
+     "downTitle": "Нет связи с облаком", "downText": "Команда сервиса должна проверить состояние."}
   </script>
+  <script src="/assets/status.js?v=3d3af3055b" defer></script>
 </body>
 </html>

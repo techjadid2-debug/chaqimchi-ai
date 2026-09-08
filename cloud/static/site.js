@@ -5,12 +5,18 @@
 
   // ── Til ────────────────────────────────────────────────────────────────
   //
-  // Satrlar sahifaga QURISH paytida qo'yilgan `window.__SITE__` dan keladi
-  // (`scripts/build_site.py`, `i18n/*.json` dagi `site.js.*` kalitlari).
-  // Skript uchala tilda BITTA fayl: brauzer keshi uchun ham, kesh tokeni
-  // uchun ham.  Kalit yo'q bo'lsa kalitning o'zi qaytadi — bo'sh joy emas:
-  // yetishmagan tarjima ekranda darrov ko'rinadi (`cloud/i18n.py` qoidasi).
-  const SITE = window.__SITE__ || {};
+  // Satrlar sahifaga QURISH paytida qo'yiladi (`scripts/build_site.py`,
+  // `i18n/*.json` dagi `site.js.*` kalitlari).  Skript uchala tilda
+  // BITTA fayl: brauzer keshi uchun ham, kesh tokeni uchun ham.  Kalit
+  // yo'q bo'lsa kalitning o'zi qaytadi — bo'sh joy emas: yetishmagan
+  // tarjima ekranda darrov ko'rinadi (`cloud/i18n.py` qoidasi).
+  //
+  // Ma'lumot `application/json` blokida, `window.__SITE__` da EMAS:
+  // qiymat berish inline skript bo'lardi va CSP `script-src` uni
+  // bloklardi.  `type` ijro etilmaydigan qilgani uchun bu blok
+  // siyosatdan tashqarida qoladi.
+  const holder = document.getElementById("site-data");
+  const SITE = holder ? JSON.parse(holder.textContent) : {};
   const LANG = SITE.lang || document.documentElement.lang || "uz";
   const STRINGS = SITE.t || {};
   function T(key, params) {

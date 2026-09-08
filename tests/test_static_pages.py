@@ -224,9 +224,9 @@ def test_landing_page_shows_the_installer_version() -> None:
 
 
 def test_install_guide_shows_the_installer_version() -> None:
-    html = (STATIC / "install.html").read_text(encoding="utf-8")
-    assert 'id="guideDownloadVersion"' in html
-    assert "release.version" in html
+    assert 'id="guideDownloadVersion"' in (STATIC / "install.html").read_text(encoding="utf-8")
+    # Mantiq 2026-09-09 da inline `<script>` dan `install.js` ga chiqdi.
+    assert "release.version" in (STATIC / "install.js").read_text(encoding="utf-8")
 
 
 def test_version_is_hidden_until_it_is_known() -> None:
@@ -465,9 +465,16 @@ def test_the_customer_can_reach_a_human_from_every_dead_end() -> None:
     "yozing" deb aytilardi-yu, qayerga yozishni ko'rsatilmasdi.
     """
     # Panel ichidagi aloqa — `tests/test_panel_v2.py` da (React sidebar).
+    #
+    # Sahifa bilan uning skripti BIRGA qaraladi: `pay.html` da chiqish
+    # yo'li (telefon, Telegram) JS chizadigan blokda va u 2026-09-09 da
+    # `pay.js` ga ko'chdi (CSP: inline `<script>` yo'q).
     for name in ("aloqa.html", "pay.html", "site.html", "edu.html"):
-        html = (STATIC / name).read_text(encoding="utf-8")
-        assert PHONE_HREF in html, f"{name}: telefon havolasi yo'q"
+        page = (STATIC / name).read_text(encoding="utf-8")
+        script = STATIC / (Path(name).stem + ".js")
+        if script.is_file():
+            page += script.read_text(encoding="utf-8")
+        assert PHONE_HREF in page, f"{name}: telefon havolasi yo'q"
 
 
 # ── Mijoz paneli: bitta operativ ekran ───────────────────────────────────
@@ -756,7 +763,11 @@ def test_a_the_shop_gets_a_printable_notice_for_its_door() -> None:
     osmaydi."""
     html = (STATIC / "kuzatuv-eslatmasi.html").read_text(encoding="utf-8")
 
-    assert "window.print()" in html
+    # `onclick="window.print()"` atributi CSP ostida ishlamaydi —
+    # tugma `data-act` bilan, mantiq `print-button.js` da (2026-09-09).
+    assert 'data-act="print"' in html
+    assert "print-button.js" in html
+    assert "window.print()" in (STATIC / "print-button.js").read_text(encoding="utf-8")
     assert "@media print" in html
     assert "class=\"blank\"" in html, "do'kon o'z nomini to'ldirsin"
     # Maxfiylik sahifasidan unga yo'l bo'lsin.

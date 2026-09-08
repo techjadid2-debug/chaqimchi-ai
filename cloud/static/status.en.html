@@ -81,9 +81,10 @@
   </div>
   <p class="footer-powered">Powered by NS camera</p>
 </footer>
-  <script>
-    const TEXT = { upTitle: "Cloud is up", upText: "The website, the panel and the device service are responding.", downTitle: "Cloud is unreachable", downText: "The service team needs to look into it." };
-    fetch('/health',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{document.getElementById('light').classList.add('online');document.getElementById('statusTitle').textContent=TEXT.upTitle;document.getElementById('statusText').textContent=TEXT.upText}).catch(()=>{document.getElementById('statusTitle').textContent=TEXT.downTitle;document.getElementById('statusText').textContent=TEXT.downText});
+  <script type="application/json" id="page-text">
+    {"upTitle": "Cloud is up", "upText": "The website, the panel and the device service are responding.",
+     "downTitle": "Cloud is unreachable", "downText": "The service team needs to look into it."}
   </script>
+  <script src="/assets/status.js?v=3d3af3055b" defer></script>
 </body>
 </html>

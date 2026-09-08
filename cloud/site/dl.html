@@ -36,17 +36,9 @@
     <p class="meta hint" id="dlMeta">{{site.dl.meta_checking}}</p>
     <p class="meta hint">{{site.dl.guide_label}} <a class="plain" href="/install">{{site.dl.guide_link}}</a></p>
   </div>
-  <script>
-    const TEXT = { version: {{json:site.dl.meta_version}}, pending: {{json:site.dl.meta_pending}} };
-    fetch("/api/v1/public/windows-release").then((r) => r.ok ? r.json() : null).then((d) => {
-      const meta = document.getElementById("dlMeta");
-      if (d && d.available) {
-        meta.textContent = TEXT.version.replace("{version}", d.version).replace("{size}", d.size_mb);
-      } else {
-        meta.textContent = TEXT.pending;
-        document.getElementById("dlBtn").style.opacity = ".5";
-      }
-    }).catch(() => {});
+  <script type="application/json" id="page-text">
+    {"version": {{json:site.dl.meta_version}}, "pending": {{json:site.dl.meta_pending}}}
   </script>
+  <script src="{{asset:dl.js}}" defer></script>
 </body>
 </html>

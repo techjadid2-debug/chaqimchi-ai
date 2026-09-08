@@ -16,25 +16,33 @@
 		Referrer-Policy "same-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 
-		# CSP — HOZIRCHA faqat hisobot rejimida (audit O'RTA-2).
+		# CSP (audit O'RTA-2).
 		#
-		# `Report-Only` ataylab: `script-src` da `'unsafe-inline'` YO'Q,
-		# eski statik sahifalarda esa inline `<script>` bor
-		# (`site*.html` 3 ta, `installer.html` 4 ta, `dl`, `connect`,
-		# `status`, `pay`, `edu`, `install`).  Darhol majburiy qilinsa
-		# o'sha sahifalar jimgina ishlamay qolardi — brauzer bloklashni
-		# ekranda ko'rsatmaydi.  Tartib: bir hafta hisobot rejimida
-		# kuzatiladi, inline skriptlar tashqi faylga chiqariladi, keyin
-		# sarlavha nomi `Content-Security-Policy` ga almashadi.
+		# Kod tomoni TAYYOR: sahifalarda ijro etiladigan inline
+		# `<script>` ham, `onclick="…"` atributi ham qolmadi.  Mantiq
+		# `/assets/*.js` da, server qo'yadigan qiymatlar esa
+		# `application/json` bloklarida (ular ijro etilmaydi, ya'ni
+		# `script-src` ularga tegmaydi).
 		#
-		# `style-src` da `'unsafe-inline'` QOLADI: React `style={{…}}`
-		# atributlari (22 o'rin) va sahifalardagi `<style>` bloklari shu
-		# ostida.  Inline uslub JS bajarmaydi, ya'ni asosiy xavf emas —
-		# uni yopish alohida, kichikroq ish.
+		# YAGONA istisno — panel qobig'idagi tema bootstrap'i
+		# (`frontend/owner.html`, `admin.html`).  U birinchi chizishdan
+		# OLDIN ishlashi shart: tashqi faylga chiqarilsa sahifa bir
+		# zumga yorug' ochilib, keyin qorayardi.  Shuning uchun u
+		# hashga olingan.  Skript o'zgarsa hash ham o'zgaradi va
+		# `tests/test_security_headers.py` buni darhol aytadi.
+		#
+		# Hali `-Report-Only`: siyosat jonli trafikda bir hafta
+		# kuzatilsin (deploy cutover kuni bo'ladi), keyin sarlavha nomi
+		# `Content-Security-Policy` ga almashadi.  Bitta so'z.
+		#
+		# `style-src` da `'unsafe-inline'` ataylab QOLADI: React
+		# `style={{…}}` atributlari (22 o'rin) va sahifalardagi
+		# `<style>` bloklari.  Inline uslub JS bajarmaydi — asosiy xavf
+		# emas, uni yopish alohida va kichikroq ish.
 		#
 		# `telegram.org` — Mini App SDK'si (`owner.html`).  `blob:` —
 		# panel kadr va klipni `URL.createObjectURL` bilan ko'rsatadi.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://telegram.org 'sha256-0GOmhbWvbvAgGk4AueWj7EVEA4P9l0+cO+8xcwykeec='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
 	log {

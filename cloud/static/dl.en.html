@@ -48,17 +48,9 @@
     <p class="meta hint" id="dlMeta">Checking the version…</p>
     <p class="meta hint">Install guide: <a class="plain" href="/install">step by step</a></p>
   </div>
-  <script>
-    const TEXT = { version: "Version {version} · {size} MB · signed", pending: "The release is still being prepared." };
-    fetch("/api/v1/public/windows-release").then((r) => r.ok ? r.json() : null).then((d) => {
-      const meta = document.getElementById("dlMeta");
-      if (d && d.available) {
-        meta.textContent = TEXT.version.replace("{version}", d.version).replace("{size}", d.size_mb);
-      } else {
-        meta.textContent = TEXT.pending;
-        document.getElementById("dlBtn").style.opacity = ".5";
-      }
-    }).catch(() => {});
+  <script type="application/json" id="page-text">
+    {"version": "Version {version} · {size} MB · signed", "pending": "The release is still being prepared."}
   </script>
+  <script src="/assets/dl.js?v=80a44ce313" defer></script>
 </body>
 </html>

@@ -18,6 +18,10 @@ from fastapi.testclient import TestClient
 
 STATIC = Path(__file__).resolve().parents[1] / "cloud" / "static"
 EDU_HTML = STATIC / "edu.html"
+#: Sahifa mantig'i 2026-09-09 da inline `<script>` dan chiqarildi (CSP:
+#: `script-src` da `'unsafe-inline'` yo'q).  Bu yerdagi tekshiruvlar
+#: ikkalasiga ham qaraydi — qoida sahifa qayerda turishiga bog'liq emas.
+EDU_JS = STATIC / "edu.js"
 
 
 @pytest.fixture
@@ -78,8 +82,7 @@ def test_the_page_never_writes_a_price_into_its_own_script() -> None:
     `<noscript>` bundan mustasno: u JavaScript ishlamaganda ko'rinadi
     va bazaviy narxni matn sifatida aytadi.
     """
-    html = EDU_HTML.read_text(encoding="utf-8")
-    script = html[html.index("<script>") : html.index("</script>")]
+    script = EDU_JS.read_text(encoding="utf-8")
 
     # Narx darajasidagi raqamlar (5 xonadan katta) skriptda bo'lmasin.
     numbers = [int(item) for item in re.findall(r"\b\d{5,}\b", script)]
@@ -99,28 +102,26 @@ def test_the_wizard_starts_from_people_not_cameras() -> None:
 
 
 def test_the_owner_can_correct_the_camera_estimate() -> None:
-    html = EDU_HTML.read_text(encoding="utf-8")
-
-    assert 'id="cameras"' in html
-    assert "syncCameraEstimate" in html
+    assert 'id="cameras"' in EDU_HTML.read_text(encoding="utf-8")
+    assert "syncCameraEstimate" in EDU_JS.read_text(encoding="utf-8")
 
 
 def test_the_device_price_stays_out_of_the_monthly_total() -> None:
     """Bir martalik qurilma narxi oylik obunaga qo'shilsa, taqqoslash
     butunlay noto'g'ri chiqardi."""
-    html = EDU_HTML.read_text(encoding="utf-8")
+    page = EDU_HTML.read_text(encoding="utf-8") + EDU_JS.read_text(encoding="utf-8")
 
-    assert "oylik obunaga kirmaydi" in html
-    assert 'id="ownPc"' in html
+    assert "oylik obunaga kirmaydi" in page
+    assert 'id="ownPc"' in page
 
 
 def test_the_lead_carries_the_whole_calculation() -> None:
     """Ariza faqat telefon raqami bo'lsa, sotuvchi mijozdan hammasini
     qaytadan so'rashi kerak bo'lardi."""
-    html = EDU_HTML.read_text(encoding="utf-8")
+    script = EDU_JS.read_text(encoding="utf-8")
 
-    assert '"EDU | "' in html
-    assert "/api/v1/public/leads" in html
+    assert '"EDU | "' in script
+    assert "/api/v1/public/leads" in script
 
 
 def test_the_page_says_the_prices_are_provisional() -> None:

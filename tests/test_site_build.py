@@ -100,14 +100,17 @@ def test_the_landing_carries_no_old_brand(lang: str) -> None:
 def test_site_script_takes_its_strings_from_the_catalogue() -> None:
     """`site.js` uchala tilda BITTA fayl; satrlar sahifadan keladi."""
     js = (STATIC / "site.js").read_text(encoding="utf-8")
-    assert "window.__SITE__" in js
+    # Satrlar `application/json` blokidan o'qiladi.  Ilgari ular
+    # `window.__SITE__ = {…}` inline skripti bilan berilardi — u CSP
+    # `script-src` ostida bloklanardi (2026-09-09).
+    assert 'getElementById("site-data")' in js
     assert "function T(key" in js
     # Eski qotirilgan o'zbekcha satrlar qaytmasin.
     for literal in ("So‘rov yuborilmoqda", "Narxni yuklab bo", "Tanlash"):
         assert f'"{literal}' not in js, f"qotirilgan satr: {literal}"
     for lang in LANDINGS:
         html = landing(lang)
-        assert f'window.__SITE__ = {{"lang": "{lang}"' in html, f"{lang}: skript satrlari yo'q"
+        assert f'id="site-data">{{"lang": "{lang}"' in html, f"{lang}: skript satrlari yo'q"
 
 
 def test_cache_tokens_are_computed_not_typed() -> None:

@@ -38,7 +38,7 @@
       to‘ldiring va chop eting.
     </p>
     <div class="print-bar page-note">
-      <button class="button button-light" type="button" onclick="window.print()">Chop etish</button>
+      <button class="button button-light" type="button" data-act="print">Chop etish</button>
     </div>
 
     <section class="notice-doc">
@@ -72,5 +72,6 @@
     </p>
   </main>
   {{include:partials/footer.html}}
+  <script src="{{asset:print-button.js}}" defer></script>
 </body>
 </html>

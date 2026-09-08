@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from cloud.portal_auth import hash_password, verify_password
 from cloud.store import CloudStore
 
+STATIC = Path(__file__).resolve().parents[1] / "cloud" / "static"
+
 ADMIN_KEY = {"X-Cloud-Admin-Key": "test-admin"}
 
 
@@ -224,9 +226,13 @@ def test_public_site_exposes_customer_and_installer_entry_points(
     assert "Dahua" in guide.text
     assert "Nimani qayerga ulash kerak" in guide.text
     assert "Windows 11 x64" in guide.text
-    assert "/Streaming/Channels/${channel}02" in panel.text
-    assert "/cam/realmonitor?channel=${channel}&subtype=1" in panel.text
     assert "Ro‘yxatdan o‘tish" in panel.text
+    # RTSP shabloni 2026-09-09 da inline `<script>` dan `installer.js`
+    # ga chiqdi (CSP: `script-src` da `'unsafe-inline'` yo'q).
+    assert '<script src="/assets/installer.js"' in panel.text
+    script = (STATIC / "installer.js").read_text(encoding="utf-8")
+    assert "/Streaming/Channels/${channel}02" in script
+    assert "/cam/realmonitor?channel=${channel}&subtype=1" in script
 
 
 def test_customer_can_switch_only_between_granted_sites(portal_client: TestClient) -> None:
@@ -401,5 +407,7 @@ def test_ui_v2_flag_serves_react_shells(
     # Bot manzili server tomonda almashtiriladi — qobiqda o'rin bo'lishi
     # SHART, aks holda login ekranida "botdan havola oling" yo'li
     # jimgina yo'qoladi.
-    assert "__ENES_BOT_URL__" in owner.text
+    # Qiymat `application/json` blokida: `window.__ENES_BOT_URL__ = "…"`
+    # inline skript bo'lardi va CSP uni bloklardi (2026-09-09).
+    assert 'id="bot-url"' in owner.text
     assert "__TELEGRAM_BOT_URL__" not in owner.text, "almashtirish ishlamadi"

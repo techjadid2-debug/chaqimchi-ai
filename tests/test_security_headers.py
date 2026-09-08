@@ -9,6 +9,8 @@ IKKALA faylda ham va bir xil ekani tekshiriladi.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import re
 from pathlib import Path
 
@@ -78,3 +80,77 @@ def test_the_telegram_mini_app_sdk_is_allowed() -> None:
     assert "https://telegram.org/js/telegram-web-app.js" in shell
 
     assert "https://telegram.org" in _csp(CADDYFILES["enes"])
+
+
+# ── Inline skriptlar: CSP ni majburiy qilishga to'sqinlik qiladigan narsa ──
+#
+# `script-src` da `'unsafe-inline'` yo'q, ya'ni sahifadagi har bir
+# ijro etiladigan `<script>` bloki va har bir `onclick="…"` atributi
+# jonli saytda ISHLAMAY qoladi.  Brauzer buni ekranda ko'rsatmaydi —
+# tugma shunchaki bosilmaydi.  Shu sabab qoida test bilan qulflanadi.
+
+STATIC = ROOT / "cloud" / "static"
+
+#: Ijro etiladigan inline blok.  `type="application/json"` va
+#: `application/ld+json` — «data block»: brauzer ularni bajarmaydi va
+#: CSP ham ularga tegmaydi, shuning uchun ro'yxatdan chiqariladi.
+_INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)([^>]*)>(.*?)</script>", re.S)
+_INLINE_HANDLER = re.compile(r"\son[a-z]+\s*=\s*[\"']")
+
+
+def _executable_inline_blocks(text: str) -> list[str]:
+    return [body for attrs, body in _INLINE_SCRIPT.findall(text) if "json" not in attrs]
+
+
+def _csp_hash(body: str) -> str:
+    return "sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode()
+
+
+def test_no_page_carries_an_inline_event_handler() -> None:
+    """`onclick="…"` — CSP ostida o'lik tugma."""
+    offenders = [
+        str(path.relative_to(ROOT))
+        for path in sorted(STATIC.rglob("*.html"))
+        if _INLINE_HANDLER.search(path.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, "inline ishlov beruvchi (`data-act` + delegatsiya ishlating):\n" + "\n".join(offenders)
+
+
+def test_every_inline_script_is_covered_by_a_hash() -> None:
+    """Qolgan har bir inline blok siyosatda hash bilan ruxsat etilgan bo'lsin.
+
+    Bugun bittasi bor: panel qobig'idagi tema bootstrap'i, u birinchi
+    chizishdan OLDIN ishlashi shart (tashqi faylga chiqarilsa sahifa
+    bir zumga yorug' ochilib, keyin qorayadi).  Skript o'zgarsa hash
+    ham o'zgaradi va bu test yangi qiymatni aytadi — Caddyfile'ga
+    o'shani qo'ying.
+    """
+    policy = _csp(CADDYFILES["enes"])
+    missing = []
+    for path in sorted(STATIC.rglob("*.html")):
+        for body in _executable_inline_blocks(path.read_text(encoding="utf-8")):
+            digest = _csp_hash(body)
+            if f"'{digest}'" not in policy:
+                missing.append(f"{path.relative_to(ROOT)}: '{digest}'")
+
+    assert not missing, (
+        "siyosatda hash yo'q — skriptni tashqi faylga chiqaring yoki "
+        "quyidagini `script-src` ga qo'shing:\n" + "\n".join(missing)
+    )
+
+
+def test_the_shell_theme_script_is_the_only_hashed_one() -> None:
+    """Hash ro'yxati o'smasin.
+
+    Har yangi hash — qo'lda sinxron saqlanadigan yana bitta qiymat.
+    Yangi inline skript yozish o'rniga uni `/assets/*.js` ga chiqaring;
+    server qo'yadigan qiymat esa `application/json` blokiga (u ijro
+    etilmaydi, ya'ni hash kerak emas).
+    """
+    policy = _csp(CADDYFILES["enes"])
+    assert policy.count("sha256-") == 1, "faqat tema bootstrap'i hashda bo'lsin"
+
+    shells = [STATIC / "v2" / "owner.html", STATIC / "v2" / "admin.html"]
+    bodies = {body for page in shells for body in _executable_inline_blocks(page.read_text(encoding="utf-8"))}
+    assert len(bodies) == 1, "ikkala qobiqda tema skripti AYNAN bir xil bo'lsin — hash bitta"
+    assert "localStorage.getItem" in next(iter(bodies))

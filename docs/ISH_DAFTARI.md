@@ -20,6 +20,17 @@
   fast-forward (148 commit, `101befd` → `a807983`), `origin/main`
   yangilandi.  Shox tarix uchun QOLDIRILDI, keyingi ish `main` da.
 
+- **🧮 «TARMOQ» KALKULYATORI (2026-09-09, `cbe7599`).**  Karta
+  «so'rov bo'yicha» derdi va tugma to'g'ridan-to'g'ri arizaga olib
+  borardi — mijoz kattalik haqida tasavvursiz ketardi.  Endi tugma
+  kalkulyatorni ochadi: do'kon soni × funksiya × kamera → taxminiy
+  oylik va yillik summa, ariza shu hisob bilan boradi.  Summani
+  **server** hisoblaydi (`POST /api/v1/public/quote`, `feature_quote`
+  ustida) — saytda qo'shish yo'q.  **Tannarx va marja javobga
+  chiqmaydi**, maydonlar ro'yxati aniq sanaladi.  Chegara 1–100
+  do'kon (forma chegarasi, mahsulot chegarasi emas).  Matn uch tilda:
+  HTML `site.calc.*`, JS `site.js.calc_*`.
+
 - **💳 5A BOSHLANDI — obuna eslatmasi to'lov sahifasiga ulandi
   (2026-09-09, `e713a7d`).**  Eslatma «To'lovni panelda ochasiz» deb
   tugardi va zanjir shu yerda uzilardi.  Endi xabarda to'lov
@@ -31,8 +42,9 @@
   `DailyDigestService` to'lov qatlamini import qilmaydi — chaqiruv
   orqali oladi (`renewal_invoice`), aks holda aylanma bog'liqlik
   chiqardi.  `ENES_PUBLIC_URL` yo'q bo'lsa havola ham, hisob ham
-  ochilmaydi.  **Qoldi (5A):** Payme/Click merchant kalitlari (egadan),
-  «Moslashtirilgan» tarif kalkulyatori, karta tokeni bilan avto-yechish.
+  ochilmaydi.  **Qoldi (5A):** Payme/Click merchant kalitlari (egadan), karta
+  tokeni bilan avto-yechish (shartnomada recurring ruxsati kerak),
+  demo 7 kunmi/14 mi degan qaror (`quick-trial` hozir 14).
 
 - **🔒 CSP MAJBURIY REJIMGA TAYYOR (2026-09-09, `e068cf9`, `701ec62`).**
   Sahifalarda ijro etiladigan inline `<script>` ham, `onclick="…"`
@@ -749,6 +761,14 @@ taklif qilish kerak.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
 
+- **Shablondan qurilmaydigan sahifaning kesh tokeni QO'LDA
+  yangilanadi.**  `site.css` o'zgarganda `build_site.py` hamma
+  shablonli sahifada `?v=` ni qayta hisoblaydi, `installer.html` esa
+  qo'lda yozilgan — u eski tokenda qolib ketdi va mijozning brauzeri
+  eski uslubni keshdan olib turardi.  `test_cache_token_matches_the_
+  file_contents` buni ushladi (u aynan shu sinf xato uchun yozilgan:
+  2026-09-06 da 13 sahifa oylab eskirgan edi).
+
 - **Sahifadan skriptni ko'chirsangiz, unga qaraydigan TESTLAR ham
   ko'chadi.**  Inline `<script>` lar tashqi faylga chiqarilganda 11 ta
   test bir vaqtda qulab tushdi — hammasi HTML matnidan JS bo'lagini
@@ -1246,6 +1266,25 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-09 — 5A: «Tarmoq» kalkulyatori (`cbe7599`)
+Nima: rasmiy saytda tarmoq uchun taxminiy hisob — do'kon soni,
+funksiya va kamera tanlanadi, summa darhol ko'rinadi, ariza shu hisob
+bilan ketadi.
+Nega: «so'rov bo'yicha» degan javob mijozni kattalik haqida
+tasavvursiz qoldirardi va ko'pchilik shu joyda to'xtardi; operator ham
+suhbatni noldan boshlardi.
+Qayerda: `cloud/main.py` (`PublicQuoteBody`, `public_quote`,
+`NETWORK_QUOTE_MAX_SHOPS`), `cloud/site/index.html`,
+`cloud/static/site.js` (`openCalculator`, `requestQuote`),
+`cloud/static/site.css` (`.calc*`), `i18n/*.json` (10 kalit).
+Test: `test_cloud_api.py` da to'rtta, `test_site_build.py` da ikkita.
+To'liq: 2 171 passed, 1 skipped.
+Diqqat: narx qoidasi FAQAT serverda (`feature_quote`) — saytga
+formula ko'chirilmasin.  Tannarx/marja public javobga chiqmasligini
+`test_the_public_quote_never_leaks_cost_or_margin` qulflaydi.
+Tarmoq chegirmasi YO'Q: hisob do'kon soniga oddiy ko'paytma, ya'ni
+kelishuvda narx faqat pasayishi mumkin.
 
 ### 2026-09-09 — 5A: obuna eslatmasi to'lov sahifasiga ulandi (`e713a7d`)
 Nima: obuna tugashi haqidagi Telegram eslatmasida endi to'lov

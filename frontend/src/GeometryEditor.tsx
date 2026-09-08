@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, tokenFor } from "./api";
 import { Card, EmptyState, PageHeader, Pill } from "./components";
+import { t } from "./i18n";
 import { Icon } from "./icons";
 import type { LineShape, ZoneEditorInstance, ZoneShape } from "./zone-editor";
 
@@ -26,7 +27,7 @@ function loadEditor(): Promise<void> {
     tag.onload = () => resolve();
     tag.onerror = () => {
       loader = null;
-      reject(new Error("Chizish muharriri yuklanmadi"));
+      reject(new Error(t("panel.geometry.editor_load_failed")));
     };
     document.head.appendChild(tag);
   });
@@ -74,11 +75,14 @@ async function loadFrame(cameraId: string, siteId: string, kind: Kind = "owner")
   }
 }
 
-const PRESETS: { type: "entrance" | "queue" | "shelf" | "restricted"; label: string }[] = [
-  { type: "entrance", label: "Kirish eshigi" },
-  { type: "queue", label: "Kassa navbati" },
-  { type: "shelf", label: "Javon" },
-  { type: "restricted", label: "Taqiqlangan zona" },
+// Yorliq matn emas, katalog KALITI: modul yuklanganda til hali
+// tanlanmagan (`initLang()` keyinroq), shuning uchun `t()` faqat
+// render paytida chaqiriladi.
+const PRESETS: { type: "entrance" | "queue" | "shelf" | "restricted"; key: string }[] = [
+  { type: "entrance", key: "panel.geometry.preset.entrance" },
+  { type: "queue", key: "panel.geometry.preset.queue" },
+  { type: "shelf", key: "panel.geometry.preset.shelf" },
+  { type: "restricted", key: "panel.geometry.preset.restricted" },
 ];
 
 export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { siteId: string; cameras: Camera[]; kind?: Kind; onSaved?: () => void }) {
@@ -113,7 +117,7 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
         });
         setReady(true);
       })
-      .catch(reason => setError(reason instanceof Error ? reason.message : "Muharrir yuklanmadi"));
+      .catch(reason => setError(reason instanceof Error ? reason.message : t("panel.geometry.editor_failed")));
     return () => { stopped = true; };
   }, [sync]);
 
@@ -122,7 +126,7 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
     let stopped = false;
     api<{ config: SiteConfig }>(url.config, kind, siteHeader)
       .then(result => { if (!stopped) setConfig(result.config || {}); })
-      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : "Sozlama olinmadi"); });
+      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : t("panel.geometry.config_failed")); });
     return () => { stopped = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId, kind]);
@@ -137,7 +141,7 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
     // Bo'sh kanvas eng ko'p tashlab ketiladigan qadam edi.
     if (!instance.visibleLines().length && !instance.visibleZones().length) {
       instance.setMode("line");
-      instance.addPreset("entrance", "Kirish");
+      instance.addPreset("entrance", t("panel.geometry.default_line"));
     }
     setShapes(instance.serialise());
 
@@ -167,7 +171,7 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
         });
       }, 2500);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Kadr so‘ralmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.geometry.frame_request_failed"));
     }
   };
 
@@ -189,7 +193,7 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
       setSaved(true);
       onSaved?.();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Saqlanmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.geometry.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -197,12 +201,12 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
 
   if (!cameras.length) {
     return <>
-      <PageHeader title="Chiziq va zonalar" subtitle="Avval kamerani ulang." />
+      <PageHeader title={t("panel.geometry.title")} subtitle={t("panel.geometry.no_camera.subtitle")} />
       <Card>
         <EmptyState
           icon="camera"
-          title="Kamera ulanmagan"
-          detail="«Kamerani ulash» bo‘limidan birinchi kamerani qo‘shing, so‘ng shu yerda kirish chizig‘ini chizasiz."
+          title={t("panel.geometry.no_camera.title")}
+          detail={t("panel.geometry.no_camera.detail")}
         />
       </Card>
     </>;
@@ -212,10 +216,10 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
 
   return <>
     <PageHeader
-      title="Chiziq va zonalar"
-      subtitle="Chiziqsiz hech narsa sanalmaydi — kirish eshigidan boshlang."
+      title={t("panel.geometry.title")}
+      subtitle={t("panel.geometry.subtitle")}
       actions={
-        <select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)} aria-label="Kamera">
+        <select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)} aria-label={t("panel.common.camera")}>
           {cameras.map(camera => (
             <option key={camera.camera_id} value={camera.camera_id}>
               {camera.label || camera.camera_id}
@@ -228,44 +232,46 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
     <Card>
       <div className="card-head">
         <div>
-          <h2>Kadr ustida chizing</h2>
-          <p>Yashil chiziqni eshik oldiga surib qo‘ying — nuqtalarni sudrab ko‘chirasiz.</p>
+          <h2>{t("panel.geometry.draw.title")}</h2>
+          <p>{t("panel.geometry.draw.subtitle")}</p>
         </div>
         <div className="page-actions">
-          <button className="btn" onClick={() => void refreshFrame()}><Icon name="camera" />Kadrni yangilash</button>
+          <button className="btn" onClick={() => void refreshFrame()}><Icon name="camera" />{t("panel.geometry.refresh_frame")}</button>
         </div>
       </div>
       <div className="card-body">
         {error ? <div className="form-error" role="alert">{error}</div> : null}
         <div className="page-actions preset-names">
           {PRESETS.map(preset => (
-            <button key={preset.type} className="btn" onClick={() => addPreset(preset.type, preset.label)}>
-              {preset.label}
+            <button key={preset.type} className="btn" onClick={() => addPreset(preset.type, t(preset.key))}>
+              {t(preset.key)}
             </button>
           ))}
         </div>
         <canvas ref={canvas} className="geometry-canvas" width={960} height={540} />
         <p className="metric-note">
-          Bir marta bosib nuqta qo‘yasiz, ikki marta bosib yakunlaysiz. O‘ng tugma — o‘chiradi.
+          {t("panel.geometry.draw.hint")}
         </p>
 
         <div className="shape-summary">
           {shapes.lines.map(line => (
-            <Pill key={`line-${line.name}`} state="active">{line.name || "Chiziq"}</Pill>
+            <Pill key={`line-${line.name}`} state="active">{line.name || t("panel.geometry.line")}</Pill>
           ))}
           {shapes.zones.map(zone => (
             <Pill key={`zone-${zone.name}`} state={zone.restricted ? "offline" : zone.queue ? "grace" : undefined}>
-              {zone.name || "Zona"}
+              {zone.name || t("panel.geometry.zone")}
             </Pill>
           ))}
-          {!total ? <span className="metric-note">Hali hech narsa chizilmagan</span> : null}
+          {!total ? <span className="metric-note">{t("panel.geometry.nothing_drawn")}</span> : null}
         </div>
 
         <button className="btn btn-primary btn-wide" disabled={saving || !total} onClick={() => void save()}>
-          {saving ? "Saqlanmoqda…" : saved ? "Saqlandi ✓" : "Saqlash va ishga tushirish"}
+          {saving ? t("panel.common.saving") : saved ? `${t("panel.common.saved")} ✓` : t("panel.geometry.save_and_start")}
         </button>
+        {/* Matn kamera sehrgaridagi bilan bir xil — bitta kalit, ikki
+            joyda takrorlanmaydi. */}
         <p className="metric-note">
-          Saqlagach do‘kon kompyuteri 20 soniya ichida yangi sozlamani oladi.
+          {t("panel.setup.applies_soon")}
         </p>
       </div>
     </Card>

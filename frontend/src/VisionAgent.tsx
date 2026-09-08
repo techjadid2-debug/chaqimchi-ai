@@ -3,6 +3,7 @@ import { api, formatTimeUz, tashkentDay, tashkentHour, tashkentToday, tokenFor }
 import { Card, EmptyState, PageHeader, Skeleton } from "./components";
 import { EventTimeline } from "./EventTimeline";
 import { Icon } from "./icons";
+import { t } from "./i18n";
 
 type Settings = { consented: boolean; audio_reply_enabled: boolean; provider_configured: boolean };
 type Source = { event_id: string; camera_id?: string; occurred_at?: string; label?: string; event_type?: string; has_snapshot?: boolean; has_clip?: boolean; observation?: { summary?: string; confidence?: number } };
@@ -41,7 +42,7 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
 
   const loadSettings = useCallback(async () => {
     try { setSettings(await api<Settings>("/api/v1/owner/agent/settings", "owner", { siteId })); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Sozlama olinmadi"); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : t("panel.agent.settings_failed")); }
   }, [siteId]);
   useEffect(() => { void loadSettings(); return () => window.clearTimeout(timer.current); }, [loadSettings]);
 
@@ -54,7 +55,7 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
       const next = await api<Job>(`/api/v1/owner/agent/jobs/${encodeURIComponent(id)}`, "owner", { siteId });
       if (next.status === "queued" || next.status === "running") {
         if (ticks >= 130) {
-          setJob({ ...next, status: "failed", error: "Javob cho‘zilib ketdi. Savol navbatda qoldi — birozdan so‘ng qayta so‘rang yoki qo‘llab-quvvatlashga yozing." });
+          setJob({ ...next, status: "failed", error: t("panel.agent.timeout") });
           return;
         }
         setJob(next);
@@ -64,8 +65,8 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
       setJob(next);
     } catch (reason) {
       if (fails >= 4) {
-        setError(reason instanceof Error ? reason.message : "Javob olinmadi");
-        setJob(current => current ? { ...current, status: "failed", error: "Server bilan aloqa uzildi — qayta urinib ko‘ring." } : current);
+        setError(reason instanceof Error ? reason.message : t("panel.agent.answer_failed"));
+        setJob(current => current ? { ...current, status: "failed", error: t("panel.agent.connection_lost") } : current);
         return;
       }
       timer.current = window.setTimeout(() => void poll(id, ticks + 1, fails + 1), 3000);
@@ -78,7 +79,7 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
     try {
       const next = await api<Job>("/api/v1/owner/agent/queries", "owner", { siteId, method: "POST", body: JSON.stringify({ message, want_audio_reply: audioReply }) });
       setJob(next); void poll(next.job_id);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Savol yuborilmadi"); setJob(null); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("panel.agent.send_failed")); setJob(null); }
   };
 
   const askAudio = async (file?: File) => {
@@ -88,34 +89,34 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
     try {
       const next = await api<Job>("/api/v1/owner/agent/audio", "owner", { siteId, method: "POST", body: form });
       setJob(next); void poll(next.job_id);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Ovozli savol yuborilmadi"); setJob(null); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("panel.agent.audio_send_failed")); setJob(null); }
   };
 
   const consent = async () => {
     try {
       const next = await api<Settings>("/api/v1/owner/agent/settings", "owner", { siteId, method: "PUT", body: JSON.stringify({ consented: true, audio_reply_enabled: audioReply }) });
       setSettings({ ...next, provider_configured: settings?.provider_configured || false });
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Rozilik saqlanmadi"); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("panel.agent.consent_failed")); }
   };
 
   const playAudio = async () => {
     if (!job?.job_id) return;
     const response = await fetch(`/api/v1/owner/agent/jobs/${encodeURIComponent(job.job_id)}/audio`, { headers: { Authorization: `Bearer ${tokenFor("owner")}`, "X-Owner-Site-Id": siteId } });
-    if (!response.ok) { setError("Ovozli javob ochilmadi"); return; }
+    if (!response.ok) { setError(t("panel.agent.audio_open_failed")); return; }
     const url = URL.createObjectURL(await response.blob());
     const audio = new Audio(url); audio.onended = () => URL.revokeObjectURL(url); await audio.play();
   };
 
   return <>
-    <PageHeader title="ENES yordamchisi" subtitle="Savolni Uzbek tilida bering — javob faqat kamera eventlari va dalillariga tayanadi." />
+    <PageHeader title={t("panel.agent.title")} subtitle={t("panel.agent.subtitle")} />
     {error ? <div className="alert-strip alert-info"><Icon name="bell"/><div>{error}</div></div> : null}
     {settings === null ? <Card><div className="card-body"><Skeleton height={190}/></div></Card>
-      : !settings.consented ? <Card><EmptyState icon="shield" title="Agent uchun rozilik kerak" detail="Savol matni va zarur snapshotlar Gemini’ga faqat javob tayyorlash uchun yuboriladi. Audio va media nusxalari suhbat tarixiga saqlanmaydi."/><div className="card-body agent-composer"><label className="consent-row"><input type="checkbox" checked={audioReply} onChange={event => setAudioReply(event.target.checked)}/><span>Native audio javobini ham yoqish</span></label><button className="btn btn-primary" onClick={() => void consent()}>Rozilik berib yoqish</button></div></Card>
-      : !settings.provider_configured ? <Card><EmptyState icon="pulse" title="Agent tayyorlanmoqda" detail="Filial roziligi saqlandi. Administrator Gemini providerini sozlagach savollar qabul qilinadi."/></Card>
+      : !settings.consented ? <Card><EmptyState icon="shield" title={t("panel.agent.consent_title")} detail={t("panel.agent.consent_detail")}/><div className="card-body agent-composer"><label className="consent-row"><input type="checkbox" checked={audioReply} onChange={event => setAudioReply(event.target.checked)}/><span>{t("panel.agent.consent_audio")}</span></label><button className="btn btn-primary" onClick={() => void consent()}>{t("panel.agent.consent_button")}</button></div></Card>
+      : !settings.provider_configured ? <Card><EmptyState icon="pulse" title={t("panel.agent.preparing_title")} detail={t("panel.agent.preparing_detail")}/></Card>
       : <>
-        <Card><div className="card-body agent-composer"><label>Masalan: “Bugun 14:00 dan 16:00 gacha kirishda kimdir kirdimi?”<textarea className="input" value={question} onChange={event => setQuestion(event.target.value)} maxLength={4000} rows={4}/></label>{settings.audio_reply_enabled ? <label className="consent-row"><input type="checkbox" checked={audioReply} onChange={event => setAudioReply(event.target.checked)}/><span>Javobni ovozda ham tayyorlash</span></label> : null}<div className="page-actions"><button className="btn btn-primary" disabled={job?.status === "queued" || job?.status === "running"} onClick={() => void ask()}><Icon name="pulse"/>{job?.status === "queued" || job?.status === "running" ? "Dalillar tekshirilmoqda…" : "Savol berish"}</button><label className="btn upload-btn">Ovoz fayli<input type="file" accept="audio/ogg,audio/opus,audio/mpeg,audio/mp4,audio/wav" capture="user" onChange={event => { void askAudio(event.target.files?.[0]); event.currentTarget.value = ""; }}/></label></div></div></Card>
-        {job?.status === "completed" ? <Card className="section-gap"><div className="card-head"><div><h2>Dalilli javob</h2><p>Eventlar Edge tomonidan qayd etilgan, vizual xulosa esa zarur kadrlargina ko‘rilganda beriladi.</p></div>{job.has_audio_reply ? <button className="btn" onClick={() => void playAudio()}><Icon name="pulse"/>Ovozda tinglash</button> : null}</div><div className="card-body"><p className="agent-answer">{job.result?.answer}</p>{agentDay(job) ? <><p className="media-note">Javob tayangan kun: {agentDay(job)}. Manba soatlari lentada belgilangan.</p><EventTimeline siteId={siteId} date={agentDay(job)} markedHours={markedHours(job)}/></> : null}{job.result?.sources?.length ? <div className="simple-list">{job.result.sources.map(source => <div className="simple-row" key={source.event_id}><div><b>{source.label || "Hodisa"}</b><div className="table-sub">{source.camera_id || "Kamera"} · {formatTimeUz(source.occurred_at)}{source.observation?.summary ? ` · ${source.observation.summary}` : ""}</div></div><button className="btn" onClick={() => onNavigate("alerts", source.event_id)}>Dalilni ochish</button></div>)}</div> : <EmptyState icon="report" title="Dalil topilmadi" detail="Tanlangan vaqt oralig‘ida saqlangan event yo‘q."/>}</div></Card> : null}
-        {job?.status === "failed" ? <Card className="section-gap"><EmptyState icon="bell" title="Agent javob bera olmadi" detail={job.error || "Keyinroq qayta urinib ko‘ring."}/></Card> : null}
+        <Card><div className="card-body agent-composer"><label>{t("panel.agent.example")}<textarea className="input" value={question} onChange={event => setQuestion(event.target.value)} maxLength={4000} rows={4}/></label>{settings.audio_reply_enabled ? <label className="consent-row"><input type="checkbox" checked={audioReply} onChange={event => setAudioReply(event.target.checked)}/><span>{t("panel.agent.audio_reply")}</span></label> : null}<div className="page-actions"><button className="btn btn-primary" disabled={job?.status === "queued" || job?.status === "running"} onClick={() => void ask()}><Icon name="pulse"/>{job?.status === "queued" || job?.status === "running" ? t("panel.agent.checking") : t("panel.agent.ask")}</button><label className="btn upload-btn">{t("panel.agent.audio_file")}<input type="file" accept="audio/ogg,audio/opus,audio/mpeg,audio/mp4,audio/wav" capture="user" onChange={event => { void askAudio(event.target.files?.[0]); event.currentTarget.value = ""; }}/></label></div></div></Card>
+        {job?.status === "completed" ? <Card className="section-gap"><div className="card-head"><div><h2>{t("panel.agent.answer_title")}</h2><p>{t("panel.agent.answer_note")}</p></div>{job.has_audio_reply ? <button className="btn" onClick={() => void playAudio()}><Icon name="pulse"/>{t("panel.agent.listen")}</button> : null}</div><div className="card-body"><p className="agent-answer">{job.result?.answer}</p>{agentDay(job) ? <><p className="media-note">{t("panel.agent.answer_day", { day: agentDay(job) })}</p><EventTimeline siteId={siteId} date={agentDay(job)} markedHours={markedHours(job)}/></> : null}{job.result?.sources?.length ? <div className="simple-list">{job.result.sources.map(source => <div className="simple-row" key={source.event_id}><div><b>{source.label || t("panel.agent.source_event")}</b><div className="table-sub">{source.camera_id || t("panel.common.camera")} · {formatTimeUz(source.occurred_at)}{source.observation?.summary ? ` · ${source.observation.summary}` : ""}</div></div><button className="btn" onClick={() => onNavigate("alerts", source.event_id)}>{t("panel.agent.open_evidence")}</button></div>)}</div> : <EmptyState icon="report" title={t("panel.agent.no_sources_title")} detail={t("panel.agent.no_sources_detail")}/>}</div></Card> : null}
+        {job?.status === "failed" ? <Card className="section-gap"><EmptyState icon="bell" title={t("panel.agent.failed_title")} detail={job.error || t("panel.agent.failed_detail")}/></Card> : null}
       </>}
   </>;
 }

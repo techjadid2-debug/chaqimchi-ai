@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, formatNumber, hasFeature } from "./api";
 import { Card, EmptyState, PlanLock } from "./components";
+import { t } from "./i18n";
 import type { Dashboard, Demografiya } from "./types";
 
 /* "Mijoz portreti" — do'konga kirganlarning anonim jins va yosh
@@ -35,20 +36,25 @@ const AGE_ORDER = ["<18", "18-30", "31-45", "46-60", "60+"];
  * 0-12 va 13-17 ga ATAYLAB bo'linmaydi: model yoshni ~7 yil xato
  * bilan baholaydi, ya'ni bunday bo'linish aniqdek ko'rinib,
  * ishonchsiz bo'lardi. */
-const AGE_LABEL: Record<string, string> = {
-  "<18": "Bolalar va o‘smirlar",
-  "18-30": "18-30 yosh",
-  "31-45": "31-45 yosh",
-  "46-60": "46-60 yosh",
-  "60+": "60 dan katta",
-};
+function ageLabel(key: string): string {
+  if (key === "<18") return t("panel.demo.age.under18");
+  if (key === "60+") return t("panel.demo.age.over60");
+  return t("panel.demo.age.range", { range: key });
+}
 
-const PERIODS: { id: string; label: string; note: string }[] = [
-  { id: "today", label: "Bugun", note: "bugun kirgan mijozlar" },
-  { id: "week", label: "Hafta", note: "oxirgi 7 kun" },
-  { id: "month", label: "Oy", note: "oxirgi 30 kun" },
-  { id: "year", label: "Yil", note: "oxirgi 365 kun" },
+/* Matn kalitda, chizishda `t()` bilan ochiladi: modul yuklanganda til
+   hali tanlanmagan bo'ladi (`initLang` keyin chaqiriladi), ya'ni shu
+   yerda `t()` chaqirilsa doim o'zbekcha qolardi. */
+const PERIODS: { id: string; label: string; days: number }[] = [
+  { id: "today", label: "panel.common.today", days: 0 },
+  { id: "week", label: "panel.common.week", days: 7 },
+  { id: "month", label: "panel.common.month", days: 30 },
+  { id: "year", label: "panel.demo.period.year", days: 365 },
 ];
+
+function periodNote(item: { id: string; days: number }): string {
+  return item.id === "today" ? t("panel.demo.period.today_note") : t("panel.demo.period.last_days", { count: item.days });
+}
 
 type RangeAnswer = Demografiya & { kunlar?: number; mijozli_kunlar?: number; kirgan?: number };
 
@@ -69,7 +75,7 @@ export function Demography({ dashboard, siteId, onNavigate }: {
     setLoading(true);
     api<RangeAnswer>(`/api/v1/owner/demography?period=${period}`, "owner", { siteId })
       .then(answer => { if (!stopped) { setRange(answer); setError(""); } })
-      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : "Olinmadi"); })
+      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : t("panel.demo.load_failed")); })
       .then(() => { if (!stopped) setLoading(false); });
     return () => { stopped = true; };
   }, [open, period, siteId]);
@@ -83,11 +89,11 @@ export function Demography({ dashboard, siteId, onNavigate }: {
   if (!open) {
     return <Card>
       <div className="card-head">
-        <div><h2>Mijoz portreti</h2><p>Bugun kirgan mijozlarning anonim tavsifi</p></div>
+        <div><h2>{t("panel.demo.title")}</h2><p>{t("panel.demo.subtitle_today")}</p></div>
       </div>
       <PlanLock
-        title="Mijoz portreti Biznes tarifida"
-        detail="Do‘koningizga kim ko‘proq kelishini ko‘rasiz: yosh guruhi va jins. Baho anonim — rasm saqlanmaydi, yuz tanilmaydi."
+        title={t("panel.demo.lock.title")}
+        detail={t("panel.demo.lock.detail")}
         onUpgrade={() => onNavigate("billing")}
       />
     </Card>;
@@ -107,26 +113,26 @@ export function Demography({ dashboard, siteId, onNavigate }: {
   const tabs = <div className="segmented">
     {PERIODS.map(item => (
       <button key={item.id} className={item.id === period ? "active" : ""} onClick={() => setPeriod(item.id)}>
-        {item.label}
+        {t(item.label)}
       </button>
     ))}
   </div>;
 
   const head = <div className="card-head">
     <div>
-      <h2>Mijoz portreti</h2>
+      <h2>{t("panel.demo.title")}</h2>
       <p>{counted
-        ? `Kirdi: ${formatNumber(entered)} · portret ${formatNumber(counted)} mijozda · ${active.note}`
-        : active.note}</p>
+        ? t("panel.demo.summary", { entered: formatNumber(entered), counted: formatNumber(counted), note: periodNote(active) })
+        : periodNote(active)}</p>
     </div>
     {tabs}
   </div>;
 
   if (error) {
-    return <Card>{head}<EmptyState icon="users" title="Ma’lumot olinmadi" detail={error} /></Card>;
+    return <Card>{head}<EmptyState icon="users" title={t("panel.demo.error_title")} detail={error} /></Card>;
   }
   if (loading && !data) {
-    return <Card>{head}<EmptyState icon="users" title="Yig‘ilmoqda…" detail="Tanlangan davr uchun raqamlar tayyorlanmoqda." /></Card>;
+    return <Card>{head}<EmptyState icon="users" title={t("panel.demo.loading.title")} detail={t("panel.demo.loading.detail")} /></Card>;
   }
   if (!data || counted <= 0) {
     /* Uch xil "bo'sh"ning uch xil sababi bor va ular egaga TURLICHA
@@ -137,10 +143,10 @@ export function Demography({ dashboard, siteId, onNavigate }: {
     const geometry = dashboard.capabilities?.geometry;
     const offline = dashboard.site.connection !== "online";
     const empty = geometry && !geometry.lines_drawn
-      ? { title: "Portret uchun kirish chizig‘i kerak", detail: "Kirish chizig‘i chizilmagani uchun mijozlar (va ularning yosh-jinsi) sanalmayapti. «Chiziq va zonalar» bo‘limida eshik ustiga chiziq qo‘ying." }
+      ? { title: t("panel.demo.empty.no_line.title"), detail: t("panel.demo.empty.no_line.detail") }
       : offline
-        ? { title: "Do‘kon kompyuteri bilan aloqa yo‘q", detail: "Portret do‘kondagi kompyuterda hisoblanadi. Kompyuter yoqilib bulutga ulanganida raqamlar shu yerda paydo bo‘ladi." }
-        : { title: period === "today" ? "Bugun hali portret yig‘ilmadi" : "Bu davrda ma’lumot yo‘q", detail: "Mijoz eshikdan kirganda uning taxminiy yoshi va jinsi anonim qayd etiladi. Birinchi tashrifdan keyin shu yerda ko‘rinadi." };
+        ? { title: t("panel.demo.empty.offline.title"), detail: t("panel.demo.empty.offline.detail") }
+        : { title: period === "today" ? t("panel.demo.empty.today.title") : t("panel.demo.empty.period.title"), detail: t("panel.demo.empty.wait.detail") };
     return <Card>
       {head}
       <EmptyState icon="users" title={empty.title} detail={empty.detail} />
@@ -157,13 +163,13 @@ export function Demography({ dashboard, siteId, onNavigate }: {
     <div className="mini-metrics">
       {/* SON birinchi, foiz qavsda — ega "nechtasi" deb so'raydi.
           Eski cloud `jins_soni` bermasa foizning o'zi ko'rinadi. */}
-      <div><span>Ayollar</span><b>{data.jins_soni?.ayol != null
-        ? `${formatNumber(data.jins_soni.ayol)} ta (${Math.round(Number(data.jins?.ayol || 0))}%)`
+      <div><span>{t("panel.demo.women")}</span><b>{data.jins_soni?.ayol != null
+        ? t("panel.demo.count_share", { count: formatNumber(data.jins_soni.ayol), share: Math.round(Number(data.jins?.ayol || 0)) })
         : `${Math.round(Number(data.jins?.ayol || 0))}%`}</b></div>
-      <div><span>Erkaklar</span><b>{data.jins_soni?.erkak != null
-        ? `${formatNumber(data.jins_soni.erkak)} ta (${Math.round(Number(data.jins?.erkak || 0))}%)`
+      <div><span>{t("panel.demo.men")}</span><b>{data.jins_soni?.erkak != null
+        ? t("panel.demo.count_share", { count: formatNumber(data.jins_soni.erkak), share: Math.round(Number(data.jins?.erkak || 0)) })
         : `${Math.round(Number(data.jins?.erkak || 0))}%`}</b></div>
-      <div><span>Bolalar</span><b>{formatNumber(Number((data.yosh || {})["<18"] || 0))} ta</b></div>
+      <div><span>{t("panel.demo.children")}</span><b>{t("panel.demo.count_pcs", { count: formatNumber(Number((data.yosh || {})["<18"] || 0)) })}</b></div>
     </div>
 
     <div className="zone-list">
@@ -171,7 +177,7 @@ export function Demography({ dashboard, siteId, onNavigate }: {
         const count = Number(ages[key] || 0);
         const share = counted ? Math.round((count / counted) * 100) : 0;
         return <div className="zone-row" key={key}>
-          <div className="zone-name"><b>{AGE_LABEL[key]}</b><small>{share}%</small></div>
+          <div className="zone-name"><b>{ageLabel(key)}</b><small>{share}%</small></div>
           <div className="zone-bar"><i style={{ width: `${Math.max(6, (count / peak) * 100)}%` }} /></div>
           <span className="list-value">{formatNumber(count)}</span>
         </div>;
@@ -180,14 +186,12 @@ export function Demography({ dashboard, siteId, onNavigate }: {
 
     <div className="card-body">
       <p className="metric-note">
-        Yosh — taxminiy baho (bolalarda aniqlik pastroq). Xodimlar hisobga kirmaydi.
-        Rasm saqlanmaydi va yuborilmaydi. Portret faqat yuzi kameraga ko‘ringan
-        kirishlarda yoziladi — shuning uchun u kirganlar sonidan kam bo‘ladi.
+        {t("panel.demo.note")}
         {/* Ikki son ataylab: 30 kundan faqat 5 tasida mijoz
             qayd etilgan bo'lsa, qurilma o'sha kunlari ishlamagan —
             va buni do'kon egasi bilishi kerak. */}
         {range?.kunlar
-          ? ` ${range.kunlar} kundan ${range.mijozli_kunlar ?? 0} tasida mijoz qayd etilgan.`
+          ? ` ${t("panel.demo.days_with_customers", { days: range.kunlar, with: range.mijozli_kunlar ?? 0 })}`
           : ""}
       </p>
     </div>

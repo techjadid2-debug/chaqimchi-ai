@@ -11,7 +11,23 @@ from pathlib import Path
 
 import pytest
 
+from cloud.i18n import tg
+
 SRC = Path(__file__).resolve().parents[1] / "frontend" / "src"
+
+
+def key_text(source: str, key: str) -> str:
+    """Manba KALITGA bog'langanini tekshiradi va o'zbekcha matnini qaytaradi.
+
+    Matn katalogga ko'chdi (F4c): testlar endi "shu jumla manbada bormi"
+    emas, "manba shu kalitni ishlatadimi va kalit shu ma'noni beradimi"
+    deb so'raydi — tarjima tahriri testga tegmaydi, kalit yo'qolsa
+    yiqiladi.
+    """
+    assert f'"{key}"' in source, f"{key} manbada ishlatilmagan"
+    text = tg("uz", key)
+    assert text != key, f"katalogda {key} yo'q"
+    return text
 
 
 def read(name: str) -> str:
@@ -181,7 +197,7 @@ def test_the_youngest_band_is_explained_in_words() -> None:
     """
     demo = read("Demography.tsx")
 
-    assert "Bolalar va o‘smirlar" in demo
+    assert "Bolalar va o‘smirlar" in key_text(demo, "panel.demo.age.under18")
     assert '"0-12"' not in demo
 
 
@@ -193,8 +209,9 @@ def test_the_card_promises_anonymity_where_the_owner_reads_it() -> None:
     """
     demo = read("Demography.tsx")
 
-    assert "Rasm saqlanmaydi" in demo
-    assert "Xodimlar hisobga kirmaydi" in demo
+    note = key_text(demo, "panel.demo.note")
+    assert "Rasm saqlanmaydi" in note
+    assert "Xodimlar hisobga kirmaydi" in note
 
 
 def test_a_locked_heatmap_looks_like_an_offer_not_a_breakage() -> None:
@@ -207,7 +224,7 @@ def test_a_locked_heatmap_looks_like_an_offer_not_a_breakage() -> None:
     heatmap = read("Heatmap.tsx")
 
     assert 'hasFeature(dashboard, "xarita")' in heatmap
-    assert "Issiqlik xaritasi Biznes tarifida" in heatmap
+    assert "Issiqlik xaritasi Biznes tarifida" in key_text(heatmap, "panel.heat.lock_title")
 
 
 def test_the_owner_can_switch_between_day_week_month_and_year() -> None:

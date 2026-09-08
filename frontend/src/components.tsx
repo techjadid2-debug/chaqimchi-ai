@@ -129,12 +129,12 @@ export function EmptyState({ icon = "report", title, detail }: { icon?: string; 
 export function PlanLock({ title, detail, onUpgrade }: { title: string; detail: string; onUpgrade: () => void }) {
   return <>
     <EmptyState icon="card" title={title} detail={detail} />
-    <div className="card-body"><button className="btn btn-wide" onClick={onUpgrade}>Tarifni ko‘rish</button></div>
+    <div className="card-body"><button className="btn btn-wide" onClick={onUpgrade}>{t("panel.lock.view_plan")}</button></div>
   </>;
 }
 
 export function Skeleton({ height = 80 }: { height?: number }) {
-  return <div className="skeleton" style={{ height }} aria-label="Yuklanmoqda" />;
+  return <div className="skeleton" style={{ height }} aria-label={t("panel.common.loading")} />;
 }
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle: string; actions?: ReactNode }) {
@@ -163,7 +163,7 @@ export function ActionMenu({ items }: { items: { label: string; onSelect: () => 
   }, [open]);
   if (!items.length) return null;
   return <div className="action-menu" ref={box}>
-    <button className="btn btn-icon" aria-label="Amallar" aria-expanded={open} onClick={() => setOpen(value => !value)}><Icon name="more" /></button>
+    <button className="btn btn-icon" aria-label={t("panel.shell.actions")} aria-expanded={open} onClick={() => setOpen(value => !value)}><Icon name="more" /></button>
     {open ? <div className="action-list" role="menu">
       {items.map(item => <button key={item.label} role="menuitem" className={item.danger ? "danger" : ""} onClick={() => { setOpen(false); item.onSelect(); }}>{item.label}</button>)}
     </div> : null}
@@ -176,7 +176,7 @@ export function ActionMenu({ items }: { items: { label: string; onSelect: () => 
  * bosadi va baribir ishonchi bo'lmaydi.  Nusxalash imkonsiz muhitda
  * halol aytiladi ("qo'lda nusxalang") — jimgina yutilmaydi.
  */
-export function CopyButton({ value, label = "Nusxalash" }: { value: string; label?: string }) {
+export function CopyButton({ value, label = t("panel.common.copy") }: { value: string; label?: string }) {
   const [state, setState] = useState<"" | "ok" | "fail">("");
   useEffect(() => {
     if (!state) return;
@@ -186,14 +186,14 @@ export function CopyButton({ value, label = "Nusxalash" }: { value: string; labe
   return <button
     className={`btn${state === "ok" ? " btn-copied" : ""}`}
     onClick={() => { void copyText(value).then(ok => setState(ok ? "ok" : "fail")); }}
-  >{state === "ok" ? "Nusxalandi ✓" : state === "fail" ? "Qo‘lda nusxalang" : label}</button>;
+  >{state === "ok" ? `${t("panel.common.copied")} ✓` : state === "fail" ? t("panel.shell.copy_manually") : label}</button>;
 }
 
 export type SearchEntry = { id: string; label: string; hint?: string; onSelect: () => void };
 
 /** ⌘K qidiruv — bo'limlar va mijozlar bo'yicha, brauzer ichida.
  *  Serverga so'rov yubormaydi: ro'yxat allaqachon yuklangan. */
-export function SearchPalette({ entries, placeholder = "Qidirish…" }: { entries: SearchEntry[]; placeholder?: string }) {
+export function SearchPalette({ entries, placeholder = `${t("panel.common.search")}…` }: { entries: SearchEntry[]; placeholder?: string }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -222,7 +222,7 @@ export function SearchPalette({ entries, placeholder = "Qidirish…" }: { entrie
               <span>{entry.label}</span>{entry.hint ? <em>{entry.hint}</em> : null}
             </button>
           </li>)}
-        </ul> : <p className="palette-empty">Hech narsa topilmadi</p>}
+        </ul> : <p className="palette-empty">{t("panel.shell.search_empty")}</p>}
       </div>
     </div> : null}
   </>;
@@ -247,7 +247,7 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="sidebar-logo"><Logo /></div>
-      <nav aria-label="Asosiy menyu">{nav.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</nav>
+      <nav aria-label={t("panel.shell.main_menu")}>{nav.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-foot">
         {sidebarFooter}
         {/* Aloqa panel ICHIDA bo'lsin.  Ilgari u faqat kirish ekranida
@@ -256,14 +256,14 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
         <a className="sidebar-support" href={`tel:${SUPPORT_PHONE}`}>
           <Icon name="bell"/><span>{t("panel.support")}<b>{SUPPORT_PHONE_LABEL}</b></span>
         </a>
-        <button className="sidebar-logout" onClick={onLogout}><Icon name="logout"/><span>Chiqish</span></button>
+        <button className="sidebar-logout" onClick={onLogout}><Icon name="logout"/><span>{t("panel.common.logout")}</span></button>
       </div>
     </aside>
     <main className="main-shell">
       <div className="topbar"><div className="topbar-title"><strong>{title}</strong><span>{subtitle}</span></div><div className="topbar-actions">{headerActions}<LangSwitch/><ThemeToggle/></div></div>
       <div className="content">{children}</div>
     </main>
-    <nav className="bottom-nav" aria-label="Mobil menyu">{mobile.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>)}<button onClick={() => onNavigate("more")}><Icon name="more"/><span>Yana</span></button></nav>
+    <nav className="bottom-nav" aria-label={t("panel.shell.mobile_menu")}>{mobile.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => onNavigate(item.id)}><Icon name={item.icon}/><span>{item.label}</span></button>)}<button onClick={() => onNavigate("more")}><Icon name="more"/><span>{t("panel.common.more")}</span></button></nav>
   </div>;
 }
 
@@ -286,7 +286,7 @@ export function Modal({ title, children, onClose, wide = false, footer }: { titl
   }, [onClose]);
   return <div className="modal-backdrop" onClick={onClose}>
     <div className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} onClick={event => event.stopPropagation()}>
-      <div className="modal-head"><h2>{title}</h2><button className="btn btn-icon" aria-label="Yopish" onClick={onClose}><Icon name="close" /></button></div>
+      <div className="modal-head"><h2>{title}</h2><button className="btn btn-icon" aria-label={t("panel.common.close")} onClick={onClose}><Icon name="close" /></button></div>
       <div className="modal-body">{children}</div>
       {footer ? <div className="modal-foot">{footer}</div> : null}
     </div>
@@ -309,11 +309,11 @@ export function ConfirmDialog({ request, onResolve }: { request: ConfirmRequest;
   const [typed, setTyped] = useState("");
   const blocked = Boolean(request.typed) && typed.trim() !== request.typed;
   return <Modal title={request.title} onClose={() => onResolve(false)} footer={<>
-    <button className="btn" onClick={() => onResolve(false)}>Bekor qilish</button>
-    <button className={`btn ${request.danger ? "btn-danger" : "btn-primary"}`} disabled={blocked} onClick={() => onResolve(true)}>{request.confirmLabel || "Ha"}</button>
+    <button className="btn" onClick={() => onResolve(false)}>{t("panel.common.cancel")}</button>
+    <button className={`btn ${request.danger ? "btn-danger" : "btn-primary"}`} disabled={blocked} onClick={() => onResolve(true)}>{request.confirmLabel || t("panel.common.yes")}</button>
   </>}>
     <p className="modal-text">{request.text}</p>
-    {request.typed ? <label className="field-label">Tasdiqlash uchun «{request.typed}» deb yozing<input className="input" value={typed} onChange={event => setTyped(event.target.value)} autoFocus /></label> : null}
+    {request.typed ? <label className="field-label">{t("panel.shell.confirm_typed", { text: request.typed })}<input className="input" value={typed} onChange={event => setTyped(event.target.value)} autoFocus /></label> : null}
   </Modal>;
 }
 
@@ -344,14 +344,14 @@ export function useToast(): [(message: string, ok?: boolean) => void, ReactNode]
 export function MonthPicker({ value, onChange, max = 60 }: { value: number; onChange: (months: number) => void; max?: number }) {
   return <div className="month-picker">
     <div className="chip-row">
-      {[1, 3, 6, 12].map(months => <button key={months} type="button" className={`chip${value === months ? " active" : ""}`} onClick={() => onChange(months)}>{months} oy</button>)}
+      {[1, 3, 6, 12].map(months => <button key={months} type="button" className={`chip${value === months ? " active" : ""}`} onClick={() => onChange(months)}>{t("panel.shell.months_count", { count: months })}</button>)}
     </div>
-    <label className="field-label">Yoki boshqa son<input className="input" type="number" min={1} max={max} value={value} onChange={event => onChange(Math.max(1, Math.min(max, Number(event.target.value) || 1)))} /></label>
+    <label className="field-label">{t("panel.shell.other_number")}<input className="input" type="number" min={1} max={max} value={value} onChange={event => onChange(Math.max(1, Math.min(max, Number(event.target.value) || 1)))} /></label>
   </div>;
 }
 
 /** Nusxalanadigan maydon: havola yoki kod + tugma. */
-export function CopyField({ value, label = "Nusxalash" }: { value: string; label?: string }) {
+export function CopyField({ value, label = t("panel.common.copy") }: { value: string; label?: string }) {
   return <div className="copy-field"><input readOnly value={value} onFocus={event => event.currentTarget.select()} /><CopyButton value={value} label={label} /></div>;
 }
 
@@ -363,7 +363,7 @@ export function PasswordInput({ className, ...rest }: InputHTMLAttributes<HTMLIn
       type="button"
       className="pw-eye"
       tabIndex={-1}
-      aria-label={show ? "Parolni yashirish" : "Parolni ko‘rsatish"}
+      aria-label={t(show ? "panel.login.hide_password" : "panel.login.show_password")}
       onClick={() => setShow(value => !value)}
     ><Icon name={show ? "eyeOff" : "eye"} size={18} /></button>
   </span>;
@@ -373,8 +373,8 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
   return <main className="login-page">
     <section className="login-visual">
       <Logo />
-      <div><span className="eyebrow">ENES CLOUD</span><h1>{kind === "owner" ? "Biznesingizni raqamlar orqali boshqaring." : "Tizim holatini bitta joydan boshqaring."}</h1><p>Kameralar, oqim, xavfsizlik va operatsion ko‘rsatkichlar — ortiqcha murakkabliksiz.</p></div>
-      <div className="login-proof"><Icon name="shield"/><span>Ma’lumotlar himoyalangan ulanish orqali uzatiladi</span></div>
+      <div><span className="eyebrow">ENES CLOUD</span><h1>{t(kind === "owner" ? "panel.login.headline_owner" : "panel.login.headline_admin")}</h1><p>{t("panel.login.tagline")}</p></div>
+      <div className="login-proof"><Icon name="shield"/><span>{t("panel.login.secure_note")}</span></div>
     </section>
     <section className="login-panel">
       {/* Tema tugmasi kirish ekranida ham kerak: paneldagisi faqat
@@ -383,15 +383,15 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
       <div className="login-tools"><LangSwitch/><ThemeToggle/></div>
       <form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onSubmit(String(data.get("username") || ""), String(data.get("password") || "")); }}>
         <div className="login-mobile-logo"><Logo /></div>
-        <span className="eyebrow">{kind === "owner" ? "BIZNES PANELI" : "ADMIN PANEL"}</span>
-        <h2>Xush kelibsiz</h2><p>Davom etish uchun login va parolingizni kiriting.</p>
-        <label>Login<input name="username" autoComplete="username" required /></label>
-        <label>Parol<PasswordInput name="password" autoComplete="current-password" required /></label>
+        <span className="eyebrow">{t(kind === "owner" ? "panel.login.eyebrow_owner" : "panel.login.eyebrow_admin")}</span>
+        <h2>{t("panel.login.welcome")}</h2><p>{t("panel.login.intro")}</p>
+        <label>{t("panel.login.username")}<input name="username" autoComplete="username" required /></label>
+        <label>{t("panel.login.password")}<PasswordInput name="password" autoComplete="current-password" required /></label>
         {error ? <div className="form-error" role="alert">{error}</div> : null}
-        <button className="btn btn-primary btn-wide" disabled={busy}>{busy ? "Tekshirilmoqda…" : "Kirish"}</button>
+        <button className="btn btn-primary btn-wide" disabled={busy}>{busy ? t("panel.login.checking") : t("panel.login.submit")}</button>
         {/* Parolsiz yo'l: bot bir martalik havola yuboradi.  Do'kon
             egasi uchun ko'pincha bu yagona qulay kirish usuli. */}
-        {botUrl ? <p className="login-alt">Parolni eslay olmadingizmi? <a href={botUrl} target="_blank" rel="noreferrer">Telegram botdan kirish havolasini oling</a></p> : null}
+        {botUrl ? <p className="login-alt">{t("panel.login.forgot")} <a href={botUrl} target="_blank" rel="noreferrer">{t("panel.login.bot_link")}</a></p> : null}
       </form>
     </section>
   </main>;

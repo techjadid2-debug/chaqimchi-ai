@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, formatNumber } from "./api";
 import { Card } from "./components";
+import { t } from "./i18n";
 import type { Conversion, Dashboard, DailySales, DoorCount } from "./types";
 
 /* «Raqamlar» — kunning marketing yakuni bitta kartada.
@@ -47,20 +48,20 @@ export function Numbers({ dashboard, siteId }: { dashboard: Dashboard; siteId: s
   return <Card>
     <div className="card-head">
       <div>
-        <h2>Bugungi raqamlar</h2>
-        <p>Kirdi-chiqdi, eshik bo‘yicha taqsimot va xaridga aylangan tashriflar</p>
+        <h2>{t("panel.numbers.title")}</h2>
+        <p>{t("panel.numbers.subtitle")}</p>
       </div>
     </div>
 
     {/* `.summary-strip` mavjud naqsh — yangi to'r kiritilmaydi. */}
     <div className="summary-strip">
-      <div><span>Kirdi</span><b>{formatNumber(entered)}</b></div>
-      <div><span>Chiqdi</span><b>{formatNumber(exited)}</b></div>
+      <div><span>{t("panel.numbers.entered")}</span><b>{formatNumber(entered)}</b></div>
+      <div><span>{t("panel.numbers.exited")}</span><b>{formatNumber(exited)}</b></div>
       {/* Xodim o'tishi sanoqdan CHIQARILGANI ochiq aytiladi: aks holda
           "kecha 210 edi, bugun 190" farqini ega tushuntira olmaydi. */}
-      <div><span>Xodim chiqarilgan</span><b>{formatNumber(staff)}</b></div>
+      <div><span>{t("panel.numbers.staff_excluded")}</span><b>{formatNumber(staff)}</b></div>
       <div>
-        <span>Gavjum soat</span>
+        <span>{t("panel.numbers.busiest_hour")}</span>
         <b>{busiest ? `${String(busiest.hour).padStart(2, "0")}:00` : "—"}</b>
       </div>
     </div>
@@ -92,7 +93,7 @@ function ReceiptsBlock({ siteId, entered, sales, conversion, onSaved }: {
   async function save() {
     const receipts = Number(draft);
     if (!draft.trim() || !Number.isInteger(receipts) || receipts < 0) {
-      setError("Chek sonini butun son bilan yozing, masalan 100");
+      setError(t("panel.numbers.receipts_invalid"));
       return;
     }
     setBusy(true);
@@ -106,7 +107,7 @@ function ReceiptsBlock({ siteId, entered, sales, conversion, onSaved }: {
       onSaved({ sales: answer.sales, conversion: answer.conversion ?? null });
       setDraft("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Saqlanmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.numbers.save_failed"));
     } finally {
       setBusy(false);
     }
@@ -118,16 +119,16 @@ function ReceiptsBlock({ siteId, entered, sales, conversion, onSaved }: {
         {/* Foiz FAQAT server bergan bo'lsa chiqadi.  12 kishilik kunning
             "67% konversiyasi" o'lchov emas, tasodif — bunday kunda ega
             faqat sonlarni ko'radi. */}
-        Sotib oldi: <b>{formatNumber(conversion.receipts)}</b>
+        {t("panel.numbers.bought")} <b>{formatNumber(conversion.receipts)}</b>
         {conversion.percent !== null
-          ? <> ({conversion.percent}%) — {formatNumber(conversion.entered)} tashrifdan</>
-          : <> · {formatNumber(conversion.entered)} kishi kirgan (foiz uchun kam)</>}
+          ? <> {t("panel.numbers.with_percent", { percent: conversion.percent, entered: formatNumber(conversion.entered) })}</>
+          : <> · {t("panel.numbers.without_percent", { entered: formatNumber(conversion.entered) })}</>}
       </p>
     ) : (
       /* Nol emas, BO'SH.  Nol «hech kim sotib olmadi» degani; kiritilmagan
          kun esa «ma'lumot yo'q». */
       <p className="receipts-line receipts-empty">
-        Chek soni kiritilmagan — konversiya hisoblanmadi.
+        {t("panel.numbers.no_receipts")}
       </p>
     )}
 
@@ -137,20 +138,20 @@ function ReceiptsBlock({ siteId, entered, sales, conversion, onSaved }: {
         type="number"
         min={0}
         inputMode="numeric"
-        placeholder={sales ? String(sales.receipts) : "masalan, 100"}
+        placeholder={sales ? String(sales.receipts) : t("panel.numbers.receipts_placeholder")}
         value={draft}
         onChange={event => setDraft(event.target.value)}
       />
       <button className="btn" onClick={save} disabled={busy}>
-        {busy ? "Saqlanmoqda…" : sales ? "Yangilash" : "Saqlash"}
+        {busy ? t("panel.common.saving") : sales ? t("panel.numbers.update") : t("panel.common.save")}
       </button>
       <span className="receipts-hint">
-        Telegramda ham bo‘ladi: <code>/chek 100</code>
+        {t("panel.numbers.telegram_hint")} <code>/chek 100</code>
       </span>
     </div>
     {error ? <p className="receipts-error">{error}</p> : null}
     {entered === 0 ? (
-      <p className="receipts-hint">Bugun hali kirish sanalmadi — konversiya kirish sanog‘i bilan hisoblanadi.</p>
+      <p className="receipts-hint">{t("panel.numbers.no_entries")}</p>
     ) : null}
   </div>;
 }
@@ -161,18 +162,18 @@ function DoorSplit({ doors }: { doors?: DoorCount[] }) {
      Yo'q: bu kun eski (taqsimot yozilmagan paytda yig'ilgan).
      Bo'sh: kun yozilgan, lekin o'tish bo'lmagan. */
   if (doors === undefined) {
-    return <p className="receipts-hint">Bu kun uchun eshik taqsimoti saqlanmagan — u yangi kunlardan boshlab yig‘iladi.</p>;
+    return <p className="receipts-hint">{t("panel.numbers.doors_missing")}</p>;
   }
   if (!doors.length) return null;
   const most = Math.max(...doors.map(door => door.entered), 1);
   return <div className="doors">
-    <h3>Eshik bo‘yicha</h3>
+    <h3>{t("panel.numbers.doors_title")}</h3>
     {doors.map(door => (
       <div className="door-row" key={`${door.camera_id}-${door.line || ""}`}>
         <span className="door-name">{door.label || door.camera_id}</span>
         <span className="door-bar"><i style={{ width: `${Math.round((door.entered / most) * 100)}%` }} /></span>
         <span className="door-count">
-          {formatNumber(door.entered)} kirdi · {formatNumber(door.exited)} chiqdi
+          {t("panel.numbers.door_counts", { entered: formatNumber(door.entered), exited: formatNumber(door.exited) })}
         </span>
       </div>
     ))}

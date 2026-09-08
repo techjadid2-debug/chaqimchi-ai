@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatNumber, hasFeature, mediaObjectUrl, tashkentToday } from "./api";
 import { Card, EmptyState, PageHeader, PlanLock } from "./components";
+import { t } from "./i18n";
 import type { Dashboard } from "./types";
 
 /* Issiqlik xaritasi.  `owner.tsx` dan alohida faylga chiqarildi: soat
@@ -12,9 +13,9 @@ type DayAnswer = { grid: number[][]; rows: number; cols: number; points?: number
 type HourBucket = { hour: number; grid: number[][]; points: number; frames: number };
 type HoursAnswer = { rows: number; cols: number; peak: number; points: number; hours: HourBucket[] };
 
-function heatRgb(t: number) {
+function heatRgb(ratio: number) {
   const stops = [[37,99,235],[34,211,238],[34,197,94],[250,204,21],[220,38,38]];
-  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const x = Math.max(0, Math.min(1, ratio)) * (stops.length - 1);
   const i = Math.min(stops.length - 2, Math.floor(x)); const f = x - i;
   return stops[i].map((value, index) => Math.round(value + (stops[i + 1][index] - value) * f));
 }
@@ -75,7 +76,7 @@ export function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dash
           if (!stopped) { setDayAnswer(answer); setError(""); }
         }
       } catch (reason) {
-        if (!stopped) setError(reason instanceof Error ? reason.message : "Xarita olinmadi");
+        if (!stopped) setError(reason instanceof Error ? reason.message : t("panel.heat.load_failed"));
       }
     })();
     return () => { stopped = true; };
@@ -104,7 +105,7 @@ export function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dash
     } else {
       ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, width, height);
       ctx.fillStyle = "#64748b"; ctx.font = "600 15px system-ui";
-      ctx.fillText("Kamera kadri hali kelmagan — xarita mavhum fonda", 20, height - 20);
+      ctx.fillText(t("panel.heat.no_frame"), 20, height - 20);
     }
     // Bo'sh soat BO'SH qoladi: eski to'r ekranda qolib ketsa ega uni
     // "yangilanmayapti" deb o'qiydi.
@@ -147,44 +148,45 @@ export function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dash
   }, []);
 
   const points = mode === "hour" ? bucket?.points : dayAnswer?.points;
+  const hourLabel = String(hour).padStart(2, "0");
   const subtitle = mode === "hour"
     ? (hoursAnswer == null
-        ? "Ma’lumot yuklanmoqda…"
+        ? t("panel.heat.loading")
         : points
-          ? `${String(hour).padStart(2, "0")}:00 · ${formatNumber(points)} ta anonim harakat nuqtasi`
-          : `${String(hour).padStart(2, "0")}:00 · bu soatda harakat qayd etilmagan`)
-    : (dayAnswer == null ? "Ma’lumot yuklanmoqda…" : points ? `${formatNumber(points)} ta anonim harakat nuqtasi` : "Bu davr uchun harakat ma’lumoti yo‘q");
+          ? t("panel.heat.hour_points", { hour: hourLabel, count: formatNumber(points) })
+          : t("panel.heat.hour_empty", { hour: hourLabel }))
+    : (dayAnswer == null ? t("panel.heat.loading") : points ? t("panel.heat.points", { count: formatNumber(points) }) : t("panel.heat.period_empty"));
 
   return <>
-    <PageHeader title="Faol zonalar" subtitle="Tanlangan kameraning haqiqiy ko‘rinishidagi silliq anonim harakat oqimi." actions={<select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)}>{dashboard.cameras.map(camera => <option value={camera.camera_id} key={camera.camera_id}>{camera.label || camera.camera_id}</option>)}</select>}/>
+    <PageHeader title={t("panel.heat.title")} subtitle={t("panel.heat.subtitle")} actions={<select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)}>{dashboard.cameras.map(camera => <option value={camera.camera_id} key={camera.camera_id}>{camera.label || camera.camera_id}</option>)}</select>}/>
     <Card>
       <div className="card-head">
-        <div><h2>Kamera ko‘rinishidagi faol zonalar</h2><p>{subtitle}</p></div>
+        <div><h2>{t("panel.heat.card_title")}</h2><p>{subtitle}</p></div>
         <div className="page-actions">
           <div className="segmented">
-            <button className={mode === "days" ? "active" : ""} onClick={() => switchMode("days")}>Kun bo‘yicha</button>
-            <button className={mode === "hour" ? "active" : ""} onClick={() => switchMode("hour")}>Soat bo‘yicha</button>
+            <button className={mode === "days" ? "active" : ""} onClick={() => switchMode("days")}>{t("panel.heat.mode_days")}</button>
+            <button className={mode === "hour" ? "active" : ""} onClick={() => switchMode("hour")}>{t("panel.heat.mode_hour")}</button>
           </div>
-          {mode === "days" ? <div className="segmented">{[1,7,30].map(value => <button key={value} className={days === value ? "active" : ""} onClick={() => setDays(value)}>{value === 1 ? "Bugun" : `${value} kun`}</button>)}</div> : null}
+          {mode === "days" ? <div className="segmented">{[1,7,30].map(value => <button key={value} className={days === value ? "active" : ""} onClick={() => setDays(value)}>{value === 1 ? t("panel.common.today") : t("panel.common.days_count", { count: value })}</button>)}</div> : null}
         </div>
       </div>
       {!hasFeature(dashboard, "xarita")
-        ? <PlanLock title="Issiqlik xaritasi Biznes tarifida" detail="Mijozlarning qayerda ko‘p to‘xtashini aynan kamera burchagida ko‘rasiz." onUpgrade={() => onNavigate("billing")}/>
-        : error ? <EmptyState icon="heat" title="Xarita hozir ochilmadi" detail={error}/>
+        ? <PlanLock title={t("panel.heat.lock_title")} detail={t("panel.heat.lock_detail")} onUpgrade={() => onNavigate("billing")}/>
+        : error ? <EmptyState icon="heat" title={t("panel.heat.error_title")} detail={error}/>
         : cameraId ? <>
           {mode === "hour" ? <div className="heat-scrub">
-            <button className="btn" onClick={() => setHour(value => (value + 23) % 24)} aria-label="Oldingi soat">◀</button>
-            <button className="btn" disabled={active.length < 2} onClick={() => setPlaying(value => !value)}>{playing ? "⏸ To‘xtatish" : "▶ Ijro"}</button>
-            <button className="btn" onClick={() => setHour(value => (value + 1) % 24)} aria-label="Keyingi soat">▶</button>
-            <input type="range" min={0} max={23} value={hour} onChange={event => { setPlaying(false); setHour(Number(event.target.value)); }} aria-label="Soat"/>
+            <button className="btn" onClick={() => setHour(value => (value + 23) % 24)} aria-label={t("panel.heat.prev_hour")}>◀</button>
+            <button className="btn" disabled={active.length < 2} onClick={() => setPlaying(value => !value)}>{playing ? `⏸ ${t("panel.heat.pause")}` : `▶ ${t("panel.heat.play")}`}</button>
+            <button className="btn" onClick={() => setHour(value => (value + 1) % 24)} aria-label={t("panel.heat.next_hour")}>▶</button>
+            <input type="range" min={0} max={23} value={hour} onChange={event => { setPlaying(false); setHour(Number(event.target.value)); }} aria-label={t("panel.heat.hour_label")}/>
             <b>{String(hour).padStart(2, "0")}:00</b>
           </div> : null}
           <div className="heatmap-wrap">
-            <canvas ref={canvas} width="960" height="540" aria-label="Kamera ko‘rinishidagi faol zonalar"/>
-            <div className="heat-legend"><span>past</span><i/><span>yuqori</span></div>
+            <canvas ref={canvas} width="960" height="540" aria-label={t("panel.heat.card_title")}/>
+            <div className="heat-legend"><span>{t("panel.heat.legend_low")}</span><i/><span>{t("panel.heat.legend_high")}</span></div>
           </div>
-          {mode === "hour" ? <p className="media-note" style={{ padding: "0 20px 16px" }}>Ranglar butun kunning eng gavjum katagiga nisbatan — soatlarni bir-biri bilan solishtirsa bo‘ladi.</p> : null}
-        </> : <EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera qo‘shilgach faol zonalar shu yerda ko‘rinadi."/>}
+          {mode === "hour" ? <p className="media-note" style={{ padding: "0 20px 16px" }}>{t("panel.heat.scale_note")}</p> : null}
+        </> : <EmptyState icon="camera" title={t("panel.heat.no_camera_title")} detail={t("panel.heat.no_camera_detail")}/>}
     </Card>
   </>;
 }

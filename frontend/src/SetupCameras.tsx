@@ -10,6 +10,7 @@ import {
   type ScanStream,
 } from "./api";
 import { Card, EmptyState, PageHeader, PasswordInput, Pill } from "./components";
+import { t } from "./i18n";
 import { Icon } from "./icons";
 
 /* Kamerani bulutdan ulash.
@@ -38,11 +39,23 @@ const SLOW_AFTER_MS = 60_000;
 // Tugma rolni tanlaydi va nomni to'ldiradi; rolsiz saqlash ham mumkin —
 // majburiy tanlov 2026-08-22 da hamma kamerani jimgina "Kirish" qilib
 // qo'ygan xatoning ildizi edi.
-const ROLE_CHOICES: Array<{ role: CameraRole; label: string }> = [
-  { role: "entrance", label: "Kirish eshigi" },
-  { role: "checkout", label: "Kassa" },
-  { role: "sales", label: "Savdo zali" },
-  { role: "storage", label: "Ombor" },
+//
+// Yorliq matn emas, katalog KALITI: modul yuklanganda til hali
+// tanlanmagan bo'ladi (`initLang()` keyinroq chaqiriladi), shuning
+// uchun `t()` faqat render paytida ishlatiladi.
+const ROLE_CHOICES: Array<{ role: CameraRole; key: string }> = [
+  { role: "entrance", key: "panel.setup.role.entrance" },
+  { role: "checkout", key: "panel.setup.role.checkout" },
+  { role: "sales", key: "panel.setup.role.sales" },
+  { role: "storage", key: "panel.setup.role.storage" },
+];
+
+//: Qadam nomlari ham shu sababdan kalit.
+const STEP_KEYS = [
+  "panel.setup.step.search",
+  "panel.setup.step.pick",
+  "panel.setup.step.check",
+  "panel.setup.step.save",
 ];
 
 type Step = 1 | 2 | 3 | 4;
@@ -76,7 +89,7 @@ function useScanJob(siteId: string) {
             timer.current = window.setTimeout(tick, POLL_MS);
           }
         } catch (reason) {
-          setError(reason instanceof Error ? reason.message : "Holat olinmadi");
+          setError(reason instanceof Error ? reason.message : t("panel.setup.status_failed"));
         }
       };
       void tick();
@@ -96,7 +109,7 @@ function useScanJob(siteId: string) {
         setJob(started);
         watch(started.job_id);
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Qidiruv boshlanmadi");
+        setError(reason instanceof Error ? reason.message : t("panel.setup.scan_start_failed"));
       }
     },
     [siteId, stop, watch],
@@ -113,8 +126,8 @@ function Progress({ job, slow }: { job: ScanJob | null; slow: boolean }) {
     <div className="scan-progress">
       <div className="progress"><span style={{ width: `${Math.max(6, job.progress)}%` }} /></div>
       <p className="metric-note">
-        {job.note || "Do‘kon kompyuteri tarmoqni tekshirmoqda…"}
-        {slow ? " Biroz cho‘zilyapti — NVR sekin javob berayotgan bo‘lishi mumkin." : ""}
+        {job.note || t("panel.setup.progress_default")}
+        {slow ? ` ${t("panel.setup.progress_slow")}` : ""}
       </p>
     </div>
   );
@@ -133,10 +146,10 @@ function ScanFrame({ siteId, jobId }: { siteId: string; jobId: string }) {
         if (stopped) { URL.revokeObjectURL(next); return; }
         current = next; setUrl(next);
       })
-      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : "Kadr ochilmadi"); });
+      .catch(reason => { if (!stopped) setError(reason instanceof Error ? reason.message : t("panel.setup.frame_failed")); });
     return () => { stopped = true; if (current) URL.revokeObjectURL(current); };
   }, [jobId, siteId]);
-  return url ? <img className="scan-frame" src={url} alt="Kameradan olingan kadr" /> : <EmptyState icon="camera" title="Kadr ochilmadi" detail={error || "Kadr yuklanmoqda…"} />;
+  return url ? <img className="scan-frame" src={url} alt={t("panel.setup.frame_alt")} /> : <EmptyState icon="camera" title={t("panel.setup.frame_failed")} detail={error || t("panel.setup.frame_loading")} />;
 }
 
 export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () => void }) {
@@ -164,12 +177,12 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
       await saveCameraFromScan(siteId, {
         job_id: scan.job.job_id,
         stream_ref: picked.stream_ref,
-        label: label.trim() || "Kamera",
+        label: label.trim() || t("panel.common.camera"),
         role,
       });
       onDone();
     } catch (reason) {
-      setSaveError(reason instanceof Error ? reason.message : "Kamera saqlanmadi");
+      setSaveError(reason instanceof Error ? reason.message : t("panel.setup.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -182,13 +195,13 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
     setSaveError("");
     try {
       await saveCameraManually(siteId, String(data.get("camera_id") || "camera-01"), {
-        label: String(data.get("label") || "Kamera"),
+        label: String(data.get("label") || t("panel.common.camera")),
         rtsp_url: String(data.get("rtsp_url") || ""),
         role: String(data.get("role") || "") as CameraRole | "",
       });
       onDone();
     } catch (reason) {
-      setSaveError(reason instanceof Error ? reason.message : "Kamera saqlanmadi");
+      setSaveError(reason instanceof Error ? reason.message : t("panel.setup.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -196,57 +209,57 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
 
   return <>
     <PageHeader
-      title="Kamerani ulash"
-      subtitle="Qidiruv do‘kon kompyuteringizda bajariladi — siz shu yerdan boshqarasiz."
+      title={t("panel.setup.title")}
+      subtitle={t("panel.setup.subtitle")}
       actions={<button className="btn" onClick={() => setManual(value => !value)}>
-        {manual ? "Qidiruvga qaytish" : "Qo‘lda kiritish"}
+        {manual ? t("panel.setup.back_to_scan") : t("panel.setup.manual_entry")}
       </button>}
     />
 
     {manual ? (
       <Card>
         <div className="card-head">
-          <div><h2>RTSP manzilini qo‘lda kiritish</h2><p>Kamera qidiruvda topilmasa</p></div>
+          <div><h2>{t("panel.setup.manual.title")}</h2><p>{t("panel.setup.manual.subtitle")}</p></div>
         </div>
         <form className="card-body" onSubmit={saveManual}>
           <div className="form-grid">
-            <label>Kamera o‘rni
+            <label>{t("panel.setup.field.slot")}
               <select className="select" name="camera_id" defaultValue="camera-01">
                 {[1, 2, 3, 4].map(index => (
                   <option key={index} value={`camera-0${index}`}>{`camera-0${index}`}</option>
                 ))}
               </select>
             </label>
-            <label>Nomi
+            <label>{t("panel.setup.field.name")}
               {/* Bo'sh boshlanadi — "Kirish eshigi" jim standarti hamma
                   kamerani kirish qilib ko'rsatib qo'yardi. */}
-              <input className="input" name="label" placeholder="Masalan: Kassa" required />
+              <input className="input" name="label" placeholder={t("panel.setup.name_placeholder")} required />
             </label>
-            <label>Vazifasi
+            <label>{t("panel.setup.field.role")}
               <select className="select" name="role" defaultValue="">
-                <option value="">Rol tanlanmagan</option>
+                <option value="">{t("panel.setup.role.none")}</option>
                 {ROLE_CHOICES.map(choice => (
-                  <option key={choice.role} value={choice.role}>{choice.label}</option>
+                  <option key={choice.role} value={choice.role}>{t(choice.key)}</option>
                 ))}
               </select>
             </label>
           </div>
-          <label>RTSP manzil
+          <label>{t("panel.setup.field.rtsp")}
             <input className="input" name="rtsp_url" required placeholder="rtsp://foydalanuvchi:parol@192.168.1.64:554/..." />
           </label>
           <p className="metric-note">
-            Manzil shifrlangan holda saqlanadi va panelga hech qachon qaytmaydi.
+            {t("panel.setup.manual.note")}
           </p>
           {saveError ? <div className="form-error" role="alert">{saveError}</div> : null}
-          <button className="btn btn-primary" disabled={saving}>{saving ? "Saqlanmoqda…" : "Saqlash"}</button>
+          <button className="btn btn-primary" disabled={saving}>{saving ? t("panel.common.saving") : t("panel.common.save")}</button>
         </form>
       </Card>
     ) : (
       <>
         <ol className="setup-steps">
-          {["Qidirish", "Kamerani tanlash", "Tasvirni tekshirish", "Saqlash"].map((name, index) => (
-            <li key={name} className={step === index + 1 ? "active" : step > index + 1 ? "done" : ""}>
-              <b>{index + 1}</b>{name}
+          {STEP_KEYS.map((key, index) => (
+            <li key={key} className={step === index + 1 ? "active" : step > index + 1 ? "done" : ""}>
+              <b>{index + 1}</b>{t(key)}
             </li>
           ))}
         </ol>
@@ -254,26 +267,26 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
         {step === 1 ? (
           <Card>
             <div className="card-head">
-              <div><h2>Tarmoqdagi kameralarni qidirish</h2><p>Odatda 10–30 soniya davom etadi</p></div>
+              <div><h2>{t("panel.setup.scan.title")}</h2><p>{t("panel.setup.scan.subtitle")}</p></div>
               <button
                 className="btn btn-primary"
                 disabled={scan.running}
                 onClick={() => void scan.begin({ kind: "lan_scan" })}
               >
-                <Icon name="search" />{scan.running ? "Qidirilmoqda…" : "Kamera qidirish"}
+                <Icon name="search" />{scan.running ? t("panel.setup.scan.running") : t("panel.setup.scan.button")}
               </button>
             </div>
             <div className="card-body">
               {scan.error ? <div className="form-error" role="alert">{scan.error}</div> : null}
               {scan.running ? <Progress job={scan.job} slow={scan.slow} /> : null}
               {scan.job?.status === "failed" ? (
-                <EmptyState icon="camera" title="Qidiruv tugamadi" detail={scan.job.error || "Qayta urinib ko‘ring."} />
+                <EmptyState icon="camera" title={t("panel.setup.scan.failed_title")} detail={scan.job.error || t("panel.setup.scan.failed_detail")} />
               ) : null}
               {done && !found.length ? (
                 <EmptyState
                   icon="camera"
-                  title="Tarmoqda kamera topilmadi"
-                  detail="NVR va kompyuter bitta tarmoqda ekaniga ishonch hosil qiling, so‘ng qayta qidiring yoki manzilni qo‘lda kiriting."
+                  title={t("panel.setup.scan.empty_title")}
+                  detail={t("panel.setup.scan.empty_detail")}
                 />
               ) : null}
               {done && found.length ? (
@@ -287,8 +300,8 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                       <div className="scan-name">
                         <Icon name="camera" />
                         <div>
-                          <b>{item.ip || item.name || "Kamera"}</b>
-                          <small>{item.vendor_hint || "Brend aniqlanmadi"}</small>
+                          <b>{item.ip || item.name || t("panel.common.camera")}</b>
+                          <small>{item.vendor_hint || t("panel.setup.vendor_unknown")}</small>
                         </div>
                       </div>
                       <div className="page-actions">
@@ -306,12 +319,12 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
         {step === 2 ? (
           <Card>
             <div className="card-head">
-              <div><h2>{picked?.ip || "Kamera"}</h2><p>NVR yoki kamera login va parolini kiriting</p></div>
-              <button className="btn" onClick={() => back(1)}>Orqaga</button>
+              <div><h2>{picked?.ip || t("panel.common.camera")}</h2><p>{t("panel.setup.credentials.subtitle")}</p></div>
+              <button className="btn" onClick={() => back(1)}>{t("panel.common.back")}</button>
             </div>
             <div className="card-body">
               <div className="form-grid">
-                <label>Foydalanuvchi
+                <label>{t("panel.setup.field.username")}
                   <input
                     className="input"
                     value={credentials.username}
@@ -319,7 +332,7 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                     onChange={event => setCredentials(current => ({ ...current, username: event.target.value }))}
                   />
                 </label>
-                <label>Parol
+                <label>{t("panel.setup.field.password")}
                   <PasswordInput
                     className="input"
                     value={credentials.password}
@@ -329,8 +342,7 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                 </label>
               </div>
               <p className="metric-note">
-                Parol shifrlangan holda saqlanadi va panelga qaytmaydi. Faqat live-view
-                huquqidagi alohida NVR akkauntidan foydalanish tavsiya etiladi.
+                {t("panel.setup.credentials.note")}
               </p>
               {scan.error ? <div className="form-error" role="alert">{scan.error}</div> : null}
               {scan.running ? <Progress job={scan.job} slow={scan.slow} /> : null}
@@ -347,7 +359,7 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                         const suggested = (item.suggested_role || "") as CameraRole | "";
                         setRole(suggested);
                         const choice = ROLE_CHOICES.find(entry => entry.role === suggested);
-                        setLabel(choice ? choice.label : item.name || "");
+                        setLabel(choice ? t(choice.key) : item.name || "");
                         // Manzil emas, INDEKS yuboriladi — parol
                         // brauzerga umuman tushmaydi.
                         void scan.begin({
@@ -361,14 +373,14 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                       <div className="scan-name">
                         <Icon name="camera" />
                         <div>
-                          <b>{item.name || `Oqim ${item.stream_ref + 1}`}</b>
+                          <b>{item.name || t("panel.setup.stream_n", { n: item.stream_ref + 1 })}</b>
                           <small>
                             {item.encoding || "—"}
                             {item.width ? ` · ${item.width}×${item.height}` : ""}
                           </small>
                         </div>
                       </div>
-                      {item.works === false ? <Pill state="offline">Ishlamadi</Pill> : <Pill state="active">Tayyor</Pill>}
+                      {item.works === false ? <Pill state="offline">{t("panel.setup.stream_failed")}</Pill> : <Pill state="active">{t("panel.setup.stream_ok")}</Pill>}
                     </button>
                   ))}
                 </div>
@@ -385,7 +397,7 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                     })
                   }
                 >
-                  Oqimlarni topish
+                  {t("panel.setup.find_streams")}
                 </button>
               ) : null}
             </div>
@@ -395,8 +407,8 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
         {step === 3 ? (
           <Card>
             <div className="card-head">
-              <div><h2>Tasvirni tekshiramiz</h2><p>Kadr kelsa — kamera to‘g‘ri ulangan</p></div>
-              <button className="btn" onClick={() => back(2)}>Orqaga</button>
+              <div><h2>{t("panel.setup.check.title")}</h2><p>{t("panel.setup.check.subtitle")}</p></div>
+              <button className="btn" onClick={() => back(2)}>{t("panel.common.back")}</button>
             </div>
             <div className="card-body">
               {scan.running ? <Progress job={scan.job} slow={scan.slow} /> : null}
@@ -404,12 +416,12 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                 <>
                   <ScanFrame siteId={siteId} jobId={scan.job.job_id} />
                   <div className="page-actions">
-                    <button className="btn btn-primary" onClick={() => setStep(4)}>Tasvir to‘g‘ri</button>
-                    <button className="btn" onClick={() => back(2)}>Boshqa oqim</button>
+                    <button className="btn btn-primary" onClick={() => setStep(4)}>{t("panel.setup.check.ok")}</button>
+                    <button className="btn" onClick={() => back(2)}>{t("panel.setup.check.other_stream")}</button>
                   </div>
                 </>
               ) : scan.job?.status === "failed" ? (
-                <EmptyState icon="camera" title="Kadr kelmadi" detail={scan.job.error || "Login yoki parolni tekshiring."} />
+                <EmptyState icon="camera" title={t("panel.setup.check.failed_title")} detail={scan.job.error || t("panel.setup.check.failed_detail")} />
               ) : null}
             </div>
           </Card>
@@ -418,8 +430,8 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
         {step === 4 ? (
           <Card>
             <div className="card-head">
-              <div><h2>Kameraning vazifasi va nomi</h2><p>Rol tizimga bu kamera nimaga ishlatilishini aytadi</p></div>
-              <button className="btn" onClick={() => back(3)}>Orqaga</button>
+              <div><h2>{t("panel.setup.name.title")}</h2><p>{t("panel.setup.name.subtitle")}</p></div>
+              <button className="btn" onClick={() => back(3)}>{t("panel.common.back")}</button>
             </div>
             <div className="card-body">
               <div className="page-actions preset-names">
@@ -429,16 +441,16 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
                     className={`btn ${role === choice.role ? "btn-primary" : ""}`}
                     onClick={() => {
                       setRole(choice.role);
-                      setLabel(current => (current.trim() ? current : choice.label));
+                      setLabel(current => (current.trim() ? current : t(choice.key)));
                     }}
                   >
-                    {choice.label}
+                    {t(choice.key)}
                   </button>
                 ))}
                 {/* Ochiq "rolsiz" varianti SHART: majburiy tanlov
                     2026-08-22 xatosining ildizi edi. */}
                 <button className={`btn ${role === "" ? "btn-primary" : ""}`} onClick={() => setRole("")}>
-                  Rolsiz
+                  {t("panel.setup.role.skip")}
                 </button>
               </div>
               {picked?.suggestion_reasons?.length ? (
@@ -446,17 +458,16 @@ export function SetupCameras({ siteId, onDone }: { siteId: string; onDone: () =>
               ) : null}
               {role === "entrance" ? (
                 <p className="metric-note">
-                  «Kirish eshigi» tanlangani uchun bu kamera xodim davomati (Face ID)
-                  kamerasi ham bo‘ladi — keyin «Xodimlar» bo‘limida o‘zgartirsa bo‘ladi.
+                  {t("panel.setup.entrance_note")}
                 </p>
               ) : null}
-              <label>Nomi<input className="input" value={label} placeholder="Masalan: Kassa" onChange={event => setLabel(event.target.value)} /></label>
+              <label>{t("panel.setup.field.name")}<input className="input" value={label} placeholder={t("panel.setup.name_placeholder")} onChange={event => setLabel(event.target.value)} /></label>
               {saveError ? <div className="form-error" role="alert">{saveError}</div> : null}
               <button className="btn btn-primary btn-wide" disabled={saving} onClick={() => void save()}>
-                {saving ? "Saqlanmoqda…" : "Kamerani saqlash"}
+                {saving ? t("panel.common.saving") : t("panel.setup.save_camera")}
               </button>
               <p className="metric-note">
-                Saqlagach do‘kon kompyuteri 20 soniya ichida yangi sozlamani oladi.
+                {t("panel.setup.applies_soon")}
               </p>
             </div>
           </Card>

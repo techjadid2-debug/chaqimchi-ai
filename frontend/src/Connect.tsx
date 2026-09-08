@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { claimDevice, login, peekConnect, registerTrial, type PendingDevice } from "./api";
 import { PasswordInput } from "./components";
+import { t } from "./i18n";
 import { Icon, Logo } from "./icons";
 
 /* Do'kon kompyuterini hisobga ulash ekrani.
@@ -23,7 +24,7 @@ function VerifyCard({ device }: { device: PendingDevice | null }) {
       <div className="verify-head">
         <Icon name="server" />
         <div>
-          <b>{device.label || "Do‘kon kompyuteri"}</b>
+          <b>{device.label || t("panel.connect.device_default")}</b>
           <small>
             {device.os_name || device.product_name}
             {device.local_ip_masked ? ` · ${device.local_ip_masked}` : ""}
@@ -33,11 +34,11 @@ function VerifyCard({ device }: { device: PendingDevice | null }) {
       {/* Kodni ikkala ekranda solishtirish — "qo'shnining kompyuterini
           tasdiqlab yubordim" xatosining yagona to'sig'i. */}
       <div className="verify-code">
-        <span>Kompyuter ekranidagi kod</span>
+        <span>{t("panel.connect.code_label")}</span>
         <b>{device.verify_code}</b>
       </div>
       <p className="verify-hint">
-        Kod bir xil bo‘lmasa — tasdiqlamang va qo‘llab-quvvatlashga murojaat qiling.
+        {t("panel.connect.code_hint")}
       </p>
     </div>
   );
@@ -96,7 +97,7 @@ export function Connect({
       await login(username, password, "owner");
       await attach();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Ro‘yxatdan o‘tish amalga oshmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.connect.register_failed"));
     } finally {
       setBusy(false);
     }
@@ -111,7 +112,7 @@ export function Connect({
       await login(String(data.get("username") || ""), String(data.get("password") || ""), "owner");
       await attach();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Kirish amalga oshmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.connect.login_failed"));
     } finally {
       setBusy(false);
     }
@@ -123,7 +124,7 @@ export function Connect({
     try {
       await attach();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Ulash amalga oshmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.connect.attach_failed"));
     } finally {
       setBusy(false);
     }
@@ -133,13 +134,13 @@ export function Connect({
     <section className="login-visual">
       <Logo />
       <div>
-        <span className="eyebrow">ENES CLOUD</span>
-        <h1>Do‘kon kompyuteringiz tayyor.</h1>
-        <p>Bir necha qadamdan keyin kameralaringiz raqamlarga aylanadi.</p>
+        <span className="eyebrow">{t("panel.connect.brand")}</span>
+        <h1>{t("panel.connect.hero_title")}</h1>
+        <p>{t("panel.connect.hero_text")}</p>
       </div>
       <div className="login-proof">
         <Icon name="shield" />
-        <span>Ma’lumotlar himoyalangan ulanish orqali uzatiladi</span>
+        <span>{t("panel.connect.secure_note")}</span>
       </div>
     </section>
   );
@@ -151,8 +152,8 @@ export function Connect({
         <section className="login-panel">
           <div className="connect-done">
             <span className="connect-tick"><Icon name="shield" size={26} /></span>
-            <h2>Ulandi</h2>
-            <p>Kompyuter bir daqiqa ichida aloqaga chiqadi. Endi kameralarni ulaymiz.</p>
+            <h2>{t("panel.connect.done_title")}</h2>
+            <p>{t("panel.connect.done_text")}</p>
           </div>
         </section>
       </main>
@@ -166,10 +167,9 @@ export function Connect({
         {visual}
         <section className="login-panel">
           <div className="connect-done">
-            <h2>Havola eskirgan</h2>
+            <h2>{t("panel.connect.expired_title")}</h2>
             <p>
-              Do‘kon kompyuteridagi ENES dasturini qayta ishga tushiring — u yangi
-              havola ochadi.
+              {t("panel.connect.expired_text")}
             </p>
           </div>
         </section>
@@ -183,12 +183,12 @@ export function Connect({
       <section className="login-panel">
         {authenticated ? (
           <div className="connect-form">
-            <span className="eyebrow">KOMPYUTERNI ULASH</span>
-            <h2>Shu kompyuterni ulaymizmi?</h2>
+            <span className="eyebrow">{t("panel.connect.eyebrow")}</span>
+            <h2>{t("panel.connect.confirm_title")}</h2>
             <VerifyCard device={device} />
             {error ? <div className="form-error" role="alert">{error}</div> : null}
             <button className="btn btn-primary btn-wide" disabled={busy} onClick={() => void confirm()}>
-              {busy ? "Ulanmoqda…" : "Ha, do‘konimga ulang"}
+              {busy ? t("panel.connect.connecting") : t("panel.connect.confirm_button")}
             </button>
           </div>
         ) : (
@@ -197,44 +197,46 @@ export function Connect({
             <VerifyCard device={device} />
             <div className="segmented connect-tabs">
               <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>
-                Yangi do‘kon
+                {t("panel.connect.tab_register")}
               </button>
               <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
-                Menda hisob bor
+                {t("panel.connect.tab_login")}
               </button>
             </div>
 
             {mode === "register" ? (
               <form onSubmit={submitRegister}>
-                <h2>Do‘kon ochamiz</h2>
-                <p>14 kun bepul. Karta so‘ralmaydi.</p>
-                <label>Do‘kon nomi<input name="company" required minLength={2} maxLength={120} /></label>
-                <label>Ismingiz<input name="full_name" required minLength={2} autoComplete="name" /></label>
-                <label>Telefon<input name="phone" required inputMode="tel" autoComplete="tel" placeholder="+998 90 000 00 00" /></label>
-                <label>Login<input name="username" required autoComplete="username" placeholder="dokonchi" /></label>
+                <h2>{t("panel.connect.register_title")}</h2>
+                <p>{t("panel.connect.register_text")}</p>
+                <label>{t("panel.connect.field.company")}<input name="company" required minLength={2} maxLength={120} /></label>
+                <label>{t("panel.connect.field.full_name")}<input name="full_name" required minLength={2} autoComplete="name" /></label>
+                <label>{t("panel.connect.field.phone")}<input name="phone" required inputMode="tel" autoComplete="tel" placeholder="+998 90 000 00 00" /></label>
+                <label>{t("panel.connect.field.username")}<input name="username" required autoComplete="username" placeholder={t("panel.connect.username_placeholder")} /></label>
                 <label>
-                  Parol
+                  {t("panel.connect.field.password")}
                   <PasswordInput name="password" required minLength={10} autoComplete="new-password" />
-                  <small>Kamida 10 belgi, harf va raqam bo‘lsin</small>
+                  <small>{t("panel.connect.password_hint")}</small>
                 </label>
                 {error ? <div className="form-error" role="alert">{error}</div> : null}
                 <button className="btn btn-primary btn-wide" disabled={busy}>
-                  {busy ? "Ochilmoqda…" : "Do‘konni ochish va ulash"}
+                  {busy ? t("panel.connect.opening") : t("panel.connect.register_button")}
                 </button>
+                {/* Jumla uch bo'lakda: o'zbekchada «-ga» qo'shimchasi
+                    havola so'ziga YOPISHIB keladi («shartlariga»), ya'ni
+                    havolani bitta matn ichiga joylab bo'lmaydi. */}
                 <p className="login-alt">
-                  Davom etish orqali <a href="/privacy" target="_blank" rel="noreferrer">maxfiylik shartlari</a>ga
-                  rozilik bildirasiz.
+                  {t("panel.connect.consent_before")} <a href="/privacy" target="_blank" rel="noreferrer">{t("panel.connect.consent_link")}</a>{t("panel.connect.consent_after")}
                 </p>
               </form>
             ) : (
               <form onSubmit={submitLogin}>
-                <h2>Hisobingizga kiring</h2>
-                <p>Kompyuter shu do‘konga ulanadi.</p>
-                <label>Login<input name="username" required autoComplete="username" /></label>
-                <label>Parol<PasswordInput name="password" required autoComplete="current-password" /></label>
+                <h2>{t("panel.connect.login_title")}</h2>
+                <p>{t("panel.connect.login_text")}</p>
+                <label>{t("panel.connect.field.username")}<input name="username" required autoComplete="username" /></label>
+                <label>{t("panel.connect.field.password")}<PasswordInput name="password" required autoComplete="current-password" /></label>
                 {error ? <div className="form-error" role="alert">{error}</div> : null}
                 <button className="btn btn-primary btn-wide" disabled={busy}>
-                  {busy ? "Tekshirilmoqda…" : "Kirish va ulash"}
+                  {busy ? t("panel.connect.checking") : t("panel.connect.login_button")}
                 </button>
               </form>
             )}

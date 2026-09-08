@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { api, clearToken, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
-import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, type NavItem } from "./components";
+import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, useConfirm, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
@@ -15,31 +15,36 @@ import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
 import type { Camera, Dashboard, Employee, Invoice, Site, TelegramMember, TrendPoint } from "./types";
 import { Icon, Logo } from "./icons";
-import { initLang } from "./i18n";
+import { initLang, t } from "./i18n";
 import { applyTheme, readTheme } from "./theme";
 import "./styles.css";
 
-const NAV: NavItem[] = [
-  { id: "home", label: "Bosh sahifa", icon: "home" },
-  { id: "setup", label: "Kamerani ulash", icon: "search" },
-  { id: "zones", label: "Chiziq va zonalar", icon: "shapes" },
-  { id: "cameras", label: "Kameralar", icon: "camera" },
-  { id: "traffic", label: "Mijozlar oqimi", icon: "chart" },
-  { id: "employees", label: "Xodimlar", icon: "users" },
-  { id: "heatmap", label: "Issiqlik xaritasi", icon: "heat" },
-  { id: "branches", label: "Filiallar", icon: "branch" },
-  { id: "reports", label: "Hisobotlar", icon: "report" },
-  { id: "alerts", label: "Hodisalar", icon: "shield" },
-  { id: "agent", label: "AI yordamchi", icon: "pulse" },
-  { id: "billing", label: "Tarif va to‘lov", icon: "card" },
-  { id: "telegram", label: "Telegram", icon: "telegram" },
-  { id: "settings", label: "Sozlamalar", icon: "settings" },
+/* Yorliq matn emas, katalog KALITI (`SetupCameras.tsx: ROLE_CHOICES`
+   bilan bir xil sabab): modul yuklanganda til hali tanlanmagan —
+   `initLang()` shu faylning oxirida chaqiriladi, ya'ni bu yerda `t()`
+   ishlatilsa menyu doim o'zbekcha qolardi.  Matn `OwnerApp` ichida,
+   chizish paytida ochiladi. */
+const NAV_ITEMS: Array<{ id: string; key: string; icon: string }> = [
+  { id: "home", key: "panel.nav.home", icon: "home" },
+  { id: "setup", key: "panel.nav.setup", icon: "search" },
+  { id: "zones", key: "panel.nav.zones", icon: "shapes" },
+  { id: "cameras", key: "panel.nav.cameras", icon: "camera" },
+  { id: "traffic", key: "panel.nav.traffic", icon: "chart" },
+  { id: "employees", key: "panel.nav.employees", icon: "users" },
+  { id: "heatmap", key: "panel.nav.heatmap", icon: "heat" },
+  { id: "branches", key: "panel.nav.branches", icon: "branch" },
+  { id: "reports", key: "panel.nav.reports", icon: "report" },
+  { id: "alerts", key: "panel.nav.alerts", icon: "shield" },
+  { id: "agent", key: "panel.nav.agent", icon: "pulse" },
+  { id: "billing", key: "panel.nav.billing", icon: "card" },
+  { id: "telegram", key: "panel.nav.telegram", icon: "telegram" },
+  { id: "settings", key: "panel.nav.settings", icon: "settings" },
 ];
 
 /* "Hodisalar" endi menyuda ham bor: rasm/klip galereyasi faqat
    qo'ng'iroq belgisi orqali topiladigan yashirin sahifa bo'lib qolgan
    edi — mijoz uni umuman ko'rmasdi. */
-const ROUTE_IDS = NAV.map(item => item.id);
+const ROUTE_IDS = NAV_ITEMS.map(item => item.id);
 const MOBILE_NAV = ["home", "cameras", "traffic", "employees"];
 
 function value(report: Record<string, unknown>, ...keys: string[]) {
@@ -75,7 +80,7 @@ function useAdaptiveDashboard(siteId: string, authenticated: boolean) {
       failures.current = 0;
     } catch (reason) {
       failures.current += 1;
-      setError(reason instanceof Error ? reason.message : "Ma’lumot olinmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.owner.dashboard_load_failed"));
     } finally {
       setLoading(false);
     }
@@ -100,11 +105,11 @@ function useAdaptiveDashboard(siteId: string, authenticated: boolean) {
 
 function TrendChart({ points }: { points: TrendPoint[] }) {
   const normalized = (points || []).slice(-14).map(point => ({ label: String(point.date || point.day || "").slice(5), value: Number(point.entries ?? point.entered ?? point.count ?? 0) }));
-  if (!normalized.length) return <EmptyState icon="chart" title="Oqim ma’lumoti hali yo‘q" detail="Kamera odam kirishini qayd qilgach bu yerda kunlar bo‘yicha grafik paydo bo‘ladi." />;
+  if (!normalized.length) return <EmptyState icon="chart" title={t("panel.traffic.trend_empty_title")} detail={t("panel.traffic.trend_empty_detail")} />;
   const maximum = Math.max(...normalized.map(item => item.value), 1);
   const coords = normalized.map((item, index) => `${10 + (index * 580) / Math.max(1, normalized.length - 1)},${190 - (item.value / maximum) * 155}`).join(" ");
   return <div className="chart-wrap">
-    <svg className="chart" viewBox="0 0 600 210" preserveAspectRatio="none" role="img" aria-label="Kunlik mijozlar oqimi grafigi">
+    <svg className="chart" viewBox="0 0 600 210" preserveAspectRatio="none" role="img" aria-label={t("panel.traffic.trend_aria")}>
       <defs><linearGradient id="areaBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4285f4" stopOpacity=".23"/><stop offset="1" stopColor="#4285f4" stopOpacity="0"/></linearGradient></defs>
       {[35,75,115,155,195].map(y => <line key={y} className="chart-grid" x1="0" y1={y} x2="600" y2={y}/>) }
       <polygon className="chart-area" points={`10,195 ${coords} 590,195`} />
@@ -140,7 +145,7 @@ function NotificationBell({ siteId, onOpenEvent }: { siteId: string; onOpenEvent
       setItems(data.events || []);
       setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Bildirishnomalar olinmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.owner.notif_load_failed"));
     }
   }, [siteId]);
 
@@ -185,14 +190,14 @@ function NotificationBell({ siteId, onOpenEvent }: { siteId: string; onOpenEvent
   };
 
   return <div className="notif-wrap" ref={box}>
-    <button className="btn btn-icon topbar-bell" aria-expanded={open} onClick={toggle} aria-label={unread ? `Bildirishnomalar: ${unread} ta o‘qilmagan` : "Bildirishnomalar"}>
+    <button className="btn btn-icon topbar-bell" aria-expanded={open} onClick={toggle} aria-label={unread ? t("panel.owner.notif_aria_unread", { count: unread }) : t("panel.owner.notifications")}>
       <Icon name="bell"/>
       {unread ? <i className="bell-badge">{unread > 9 ? "9+" : unread}</i> : null}
     </button>
-    {open ? <div className="notif-panel" role="dialog" aria-label="Bildirishnomalar">
+    {open ? <div className="notif-panel" role="dialog" aria-label={t("panel.owner.notifications")}>
       <div className="notif-head">
-        <b>{unread ? `${formatNumber(unread)} ta o‘qilmagan` : "Yangi ogohlantirish yo‘q"}</b>
-        {unread ? <button className="btn btn-small" onClick={() => void markRead()}>Hammasi o‘qildi</button> : null}
+        <b>{unread ? t("panel.owner.notif_unread_count", { count: formatNumber(unread) }) : t("panel.owner.notif_none")}</b>
+        {unread ? <button className="btn btn-small" onClick={() => void markRead()}>{t("panel.owner.notif_mark_read")}</button> : null}
       </div>
       {error ? <p className="notif-empty">{error}</p> : null}
       {items === null ? <div className="notif-empty"><Skeleton height={60}/></div>
@@ -201,14 +206,14 @@ function NotificationBell({ siteId, onOpenEvent }: { siteId: string; onOpenEvent
               <span className={`notif-dot sev-${item.severity || "info"}`}/>
               <div>
                 <b>{item.label || item.event_type}</b>
-                <small>{item.camera_id || "Tizim"} · {formatTimeUz(item.occurred_at)}</small>
+                <small>{item.camera_id || t("panel.home.events.system")} · {formatTimeUz(item.occurred_at)}</small>
               </div>
             </li>)}
           </ul>
         /* Bo'sh holat AYBLAMAYDI: ogohlantirish yo'qligi yaxshi
            xabar, "hech narsa topilmadi" esa buzuqday ko'rinadi. */
-        : <p className="notif-empty">Hozircha tinch — e’tibor talab qiladigan hodisa yo‘q.</p>}
-      <button className="btn btn-wide" onClick={() => { setOpen(false); onOpenEvent(); }}>Hammasini ko‘rish</button>
+        : <p className="notif-empty">{t("panel.owner.notif_empty")}</p>}
+      <button className="btn btn-wide" onClick={() => { setOpen(false); onOpenEvent(); }}>{t("panel.owner.notif_view_all")}</button>
     </div> : null}
   </div>;
 }
@@ -285,16 +290,16 @@ function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId
     void load();
     return () => { stopped = true; window.clearTimeout(timer); if (current) URL.revokeObjectURL(current); };
   }, [camera.camera_id, live, overlay, siteId]);
-  const emptyLabel = error ? (requested ? "Kadr so‘raldi, 20 soniyacha kuting…" : "Kadr hozircha kelmadi") : "Kadr yuklanmoqda…";
+  const emptyLabel = error ? (requested ? t("panel.cameras.frame_requested") : t("panel.cameras.frame_missing")) : t("panel.cameras.frame_loading");
   /* Jonli rejimda kadr 2-3 soniyada yangilanadi.  25 soniyadan eski
      bo'lsa oqim uzilgan: buni AYTISH kerak, aks holda ega eski rasmga
      qarab do'konda hozir nima bo'layotgani haqida qaror qabul qiladi. */
   const frameAge = live && frameAt ? (Date.now() - new Date(frameAt).getTime()) / 1000 : 0;
   const frozen = live && frameAt && frameAge > 25;
   return <div className="camera-frame">
-    {src ? <img src={src} alt={`${camera.label || camera.camera_id} kamerasi`} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{emptyLabel}</span></div>}
-    {overlay && src ? <span className="camera-overlay-badge">AI tahlil</span> : null}
-    {stamp && src ? <span className={`camera-stamp${frozen ? " is-stale" : ""}`}>{frozen ? `${stamp} · yangilanmayapti` : stamp}</span> : null}
+    {src ? <img src={src} alt={t("panel.cameras.image_alt", { name: camera.label || camera.camera_id })} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{emptyLabel}</span></div>}
+    {overlay && src ? <span className="camera-overlay-badge">{t("panel.cameras.ai_badge")}</span> : null}
+    {stamp && src ? <span className={`camera-stamp${frozen ? " is-stale" : ""}`}>{frozen ? t("panel.cameras.stamp_stale", { time: stamp }) : stamp}</span> : null}
   </div>;
 }
 
@@ -363,11 +368,11 @@ function CamerasBlock({ dashboard, siteId, expanded = false, onOpenAll }: { dash
   };
   return <Card>
     <div className="card-head">
-      <div><h2>Jonli kameralar</h2><p>Do‘kon holati va so‘nggi haqiqiy kadrlar</p></div>
+      <div><h2>{t("panel.cameras.live_title")}</h2><p>{t("panel.cameras.live_subtitle")}</p></div>
       <div className="page-actions">
-        <button className="btn" onClick={toggleOverlay}><Icon name="eye"/>{overlay ? "AI ramkani yopish" : "AI ramkani ko‘rsatish"}</button>
-        <button className={`btn ${live ? "btn-primary" : ""}`} onClick={toggleLive}><Icon name="pulse"/>{live ? "Jonli" : "Jonli ko‘rish"}</button>
-        {!expanded && onOpenAll ? <button className="btn" onClick={onOpenAll}>Barchasini ochish</button> : null}
+        <button className="btn" onClick={toggleOverlay}><Icon name="eye"/>{overlay ? t("panel.cameras.overlay_hide") : t("panel.cameras.overlay_show")}</button>
+        <button className={`btn ${live ? "btn-primary" : ""}`} onClick={toggleLive}><Icon name="pulse"/>{live ? t("panel.cameras.live") : t("panel.cameras.live_start")}</button>
+        {!expanded && onOpenAll ? <button className="btn" onClick={onOpenAll}>{t("panel.cameras.open_all")}</button> : null}
       </div>
     </div>
     {cameras.length ? <div className="live-grid">{cameras.map((camera, index) => {
@@ -375,7 +380,7 @@ function CamerasBlock({ dashboard, siteId, expanded = false, onOpenAll }: { dash
       // Uch holat uch xil so'z bilan: "eskirgan" va "oflayn" bir xil
       // qizil "Aloqa yo'q" bo'lib chiqsa, egasi tuzatib bo'ladigan
       // kechikishni butunlay uzilish deb o'ylaydi.
-      const live_label = state === "online" ? "Jonli" : state === "stale" ? "Kechikmoqda" : "Aloqa yo‘q";
+      const live_label = state === "online" ? t("panel.cameras.live") : state === "stale" ? t("panel.cameras.state_stale") : t("panel.cameras.state_offline");
       return <article className="camera-tile" key={camera.camera_id}>
         <CameraImage camera={camera} siteId={siteId} overlay={overlay} live={live}/>
         {/* Sarlavha kadr USTIDA: namunadagidek, va shu bilan plitka
@@ -384,10 +389,10 @@ function CamerasBlock({ dashboard, siteId, expanded = false, onOpenAll }: { dash
         <span className={`camera-live is-${state}`}><i/>{live_label}</span>
         <div className="camera-meta">
           <div className="camera-name"><StatusDot state={state}/><span>{camera.label || camera.camera_id}</span></div>
-          <small>{stateMap.get(camera.camera_id)?.reason || "Holat olinmoqda"}</small>
+          <small>{stateMap.get(camera.camera_id)?.reason || t("panel.cameras.state_loading")}</small>
         </div>
       </article>;
-    })}</div> : <EmptyState icon="camera" title="Kamera ulanmagan" detail="Kamera o‘rnatuvchi tomonidan qo‘shilgach haqiqiy kadrlar shu yerda ko‘rinadi." />}
+    })}</div> : <EmptyState icon="camera" title={t("panel.cameras.empty_title")} detail={t("panel.cameras.empty_detail")} />}
   </Card>;
 }
 
@@ -406,12 +411,12 @@ function EmployeesPage({ siteId }: { siteId: string }) {
         setItems(data.employees || []); setError("");
       } catch (reason) {
         setItems([]);
-        setError(reason instanceof Error ? reason.message : "Xodimlar ro‘yxati olinmadi");
+        setError(reason instanceof Error ? reason.message : t("panel.employees.load_failed"));
       }
     }
   },[siteId]);
   useEffect(() => { void load(); }, [load]);
-  const create = async (event:React.FormEvent<HTMLFormElement>) => { event.preventDefault();const form=event.currentTarget;const data=new FormData(form);setBusy(true);setError("");try{await api("/api/v1/owner/employees","owner",{method:"POST",siteId,body:JSON.stringify({name:String(data.get("name")||""),external_id:String(data.get("external_id")||"")||null,consent:data.get("consent")==="on",consent_note:"Yozma rozilik biznes egasi tomonidan tasdiqlandi"})});form.reset();setAdding(false);await load();}catch(reason){setError(reason instanceof Error?reason.message:"Xodim qo‘shilmadi");}finally{setBusy(false);}};
+  const create = async (event:React.FormEvent<HTMLFormElement>) => { event.preventDefault();const form=event.currentTarget;const data=new FormData(form);setBusy(true);setError("");try{await api("/api/v1/owner/employees","owner",{method:"POST",siteId,body:JSON.stringify({name:String(data.get("name")||""),external_id:String(data.get("external_id")||"")||null,consent:data.get("consent")==="on",consent_note:"Yozma rozilik biznes egasi tomonidan tasdiqlandi"})});form.reset();setAdding(false);await load();}catch(reason){setError(reason instanceof Error?reason.message:t("panel.employees.create_failed"));}finally{setBusy(false);}};
   const uploadFace = async (employee:Employee, file?:File) => {
     if (!file) return;
     setUploading(employee.id); setError("");
@@ -424,34 +429,38 @@ function EmployeesPage({ siteId }: { siteId: string }) {
       const type = file.type === "image/png" ? "image/png" : "image/jpeg";
       await api(`/api/v1/owner/faces/employees/${encodeURIComponent(employee.id)}/photos`,"owner",{method:"POST",siteId,headers:{"Content-Type":type},body:payload});
       await load();
-    } catch(reason) { setError(reason instanceof Error?reason.message:"Rasm yuklanmadi"); }
+    } catch(reason) { setError(reason instanceof Error?reason.message:t("panel.employees.photo_failed")); }
     finally { setUploading(""); }
   };
-  return <><PageHeader title="Xodimlar" subtitle="Xodim profili va Face ID yopiq pilot holati." actions={<button className="btn btn-primary" onClick={()=>setAdding(value=>!value)}><Icon name="users"/><span>{adding?"Bekor qilish":"Xodim qo‘shish"}</span></button>}/>{adding?<Card className="employee-form"><form className="card-body" onSubmit={create}><div className="form-grid"><label>Ism va familiya<input className="input" name="name" minLength={2} required/></label><label>Ichki ID (ixtiyoriy)<input className="input" name="external_id"/></label></div><label className="consent-row"><input type="checkbox" name="consent" required/><span>Xodimning biometrik ma’lumotlarni qayta ishlash bo‘yicha yozma roziligi olindi.</span></label><button className="btn btn-primary" disabled={busy}>{busy?"Saqlanmoqda…":"Xodimni saqlash"}</button></form></Card>:null}{error?<div className="alert-strip"><Icon name="bell"/><div><strong>Amal bajarilmadi:</strong> {error}</div></div>:null}<Card><div className="card-head"><div><h2>Xodimlar ro‘yxati</h2><p>Yuz rasmi faqat xodim roziligidan keyin yuklanadi va pilot yoqilgan tizimda ishlaydi</p></div></div>{items === null ? <div className="card-body"><Skeleton height={180}/></div> : items.length ? <div className="table-wrap"><table><thead><tr><th>Xodim</th><th>Ichki ID</th><th>Face ID</th><th>Holat</th><th>Amal</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><div className="table-title">{item.name || "Nomsiz xodim"}</div></td><td>{item.external_id || "—"}</td><td>{item.enrollment_status==="enrolled"?`${item.photos?.length || 1} ta shablon`:"Sozlanmagan"}</td><td><Pill state={item.active === false ? "offline" : "active"}>{item.active === false ? "Nofaol" : "Faol"}</Pill></td><td><label className={`btn upload-btn ${uploading===item.id?"disabled":""}`}>{uploading===item.id?"Yuklanmoqda…":"Yuz rasmi"}<input type="file" accept="image/*" capture="user" disabled={Boolean(uploading)} onChange={event=>{void uploadFace(item,event.target.files?.[0]);event.currentTarget.value="";}}/></label></td></tr>)}</tbody></table></div> : <EmptyState icon="users" title="Xodim qo‘shilmagan" detail="Yopiq pilot yoqilgan bo‘lsa, yozma rozilikdan keyin birinchi xodimni qo‘shing."/>}</Card></>;
+  return <><PageHeader title={t("panel.nav.employees")} subtitle={t("panel.employees.subtitle")} actions={<button className="btn btn-primary" onClick={()=>setAdding(value=>!value)}><Icon name="users"/><span>{adding?t("panel.common.cancel"):t("panel.employees.add")}</span></button>}/>{adding?<Card className="employee-form"><form className="card-body" onSubmit={create}><div className="form-grid"><label>{t("panel.employees.full_name")}<input className="input" name="name" minLength={2} required/></label><label>{t("panel.employees.external_id_optional")}<input className="input" name="external_id"/></label></div><label className="consent-row"><input type="checkbox" name="consent" required/><span>{t("panel.employees.consent_text")}</span></label><button className="btn btn-primary" disabled={busy}>{busy?t("panel.common.saving"):t("panel.employees.save")}</button></form></Card>:null}{error?<div className="alert-strip"><Icon name="bell"/><div><strong>{t("panel.employees.error_prefix")}</strong> {error}</div></div>:null}<Card><div className="card-head"><div><h2>{t("panel.employees.list_title")}</h2><p>{t("panel.employees.list_subtitle")}</p></div></div>{items === null ? <div className="card-body"><Skeleton height={180}/></div> : items.length ? <div className="table-wrap"><table><thead><tr><th>{t("panel.employees.col_employee")}</th><th>{t("panel.employees.col_external_id")}</th><th>{t("panel.employees.col_face_id")}</th><th>{t("panel.employees.col_status")}</th><th>{t("panel.employees.col_action")}</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><div className="table-title">{item.name || t("panel.employees.unnamed")}</div></td><td>{item.external_id || "—"}</td><td>{item.enrollment_status==="enrolled"?t("panel.employees.templates_count",{count:item.photos?.length || 1}):t("panel.employees.not_enrolled")}</td><td><Pill state={item.active === false ? "offline" : "active"}>{item.active === false ? t("panel.employees.inactive") : t("panel.employees.active")}</Pill></td><td><label className={`btn upload-btn ${uploading===item.id?"disabled":""}`}>{uploading===item.id?t("panel.common.loading"):t("panel.employees.upload_photo")}<input type="file" accept="image/*" capture="user" disabled={Boolean(uploading)} onChange={event=>{void uploadFace(item,event.target.files?.[0]);event.currentTarget.value="";}}/></label></td></tr>)}</tbody></table></div> : <EmptyState icon="users" title={t("panel.employees.empty_title")} detail={t("panel.employees.empty_detail")}/>}</Card></>;
 }
 
 function BillingPage({dashboard,siteId}:{dashboard:Dashboard;siteId:string}) {
   const [invoices,setInvoices]=useState<Invoice[]|null>(null);const[months,setMonths]=useState(1);const[busy,setBusy]=useState(false);const[error,setError]=useState("");
-  const load=useCallback(()=>api<Invoice[]>("/api/v1/owner/invoices","owner",{siteId}).then(data=>{setInvoices(data);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:"Hisoblar olinmadi")),[siteId]);
+  const load=useCallback(()=>api<Invoice[]>("/api/v1/owner/invoices","owner",{siteId}).then(data=>{setInvoices(data);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:t("panel.billing.load_failed"))),[siteId]);
   useEffect(()=>{void load();},[load]);
-  const create=async()=>{setBusy(true);setError("");try{const invoice=await api<Invoice>("/api/v1/owner/invoices","owner",{method:"POST",siteId,body:JSON.stringify({months})});setInvoices(current=>[invoice,...(current||[])]);}catch(reason){setError(reason instanceof Error?reason.message:"Hisob yaratilmadi");}finally{setBusy(false);}};
-  return <><PageHeader title="Tarif va to‘lov" subtitle="Amaldagi obuna va server hisoblagan haqiqiy hisob-fakturalar."/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>{dashboard.site.plan?.name || "Amaldagi tarif"}</h2><p>To‘lov operator tasdig‘idan keyin obunaga qo‘shiladi</p></div><Pill state={dashboard.subscription?.status}>{dashboard.subscription?.status || "—"}</Pill></div><div className="card-body"><div className="metric-value">{formatMoney(dashboard.subscription?.monthly_price_uzs)}</div><p className="metric-note">oyiga · {dashboard.subscription?.days_left==null?"muddat olinmadi":`${dashboard.subscription.days_left} kun qoldi`}</p><div className="invoice-create"><select className="select" value={months} onChange={event=>setMonths(Number(event.target.value))} aria-label="Hisob muddati"><option value={1}>1 oy</option><option value={3}>3 oy</option><option value={6}>6 oy</option><option value={12}>12 oy</option></select><button className="btn btn-primary" disabled={busy} onClick={()=>void create()}>{busy?"Yaratilmoqda…":"Hisob-faktura yaratish"}</button></div></div></Card><Card><div className="card-head"><div><h2>To‘lov tartibi</h2><p>Provayder ulanmaguncha qo‘lda tasdiqlash</p></div></div><div className="card-body"><p className="metric-note">Hisobni yarating, rekvizitlar bo‘yicha to‘lang. Operator tushumni tasdiqlagandan keyin obuna avtomatik uzayadi.</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>Hisob bilan muammo:</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>Hisob-fakturalar</h2><p>Summalar tarif va muddat bo‘yicha serverda hisoblangan</p></div></div>{invoices===null?<div className="card-body"><Skeleton height={140}/></div>:invoices.length?<div className="table-wrap"><table><thead><tr><th>Raqam</th><th>Muddat</th><th>Summa</th><th>Holat</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{invoices.map(invoice=><tr key={invoice.id}><td><div className="table-title">#{invoice.id}</div></td><td>{invoice.months} oy</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?"To‘langan":invoice.state==="pending"?"Kutilmoqda":"Bekor qilingan"}</Pill></td><td>{formatDateShort(invoice.created_at)}</td><td>{invoice.state==="pending"&&invoice.pay_url?<a className="btn" href={invoice.pay_url} target="_blank" rel="noreferrer">Ochish</a>:"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title="Hisob-faktura yo‘q" detail="Kerakli muddatni tanlab birinchi hisob-fakturani yarating."/>}</Card></>;
+  const create=async()=>{setBusy(true);setError("");try{const invoice=await api<Invoice>("/api/v1/owner/invoices","owner",{method:"POST",siteId,body:JSON.stringify({months})});setInvoices(current=>[invoice,...(current||[])]);}catch(reason){setError(reason instanceof Error?reason.message:t("panel.billing.create_failed"));}finally{setBusy(false);}};
+  return <><PageHeader title={t("panel.nav.billing")} subtitle={t("panel.billing.subtitle")}/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>{dashboard.site.plan?.name || t("panel.billing.current_plan")}</h2><p>{t("panel.billing.plan_note")}</p></div><Pill state={dashboard.subscription?.status}>{dashboard.subscription?.status || "—"}</Pill></div><div className="card-body"><div className="metric-value">{formatMoney(dashboard.subscription?.monthly_price_uzs)}</div><p className="metric-note">{t("panel.billing.per_month")} · {dashboard.subscription?.days_left==null?t("panel.billing.term_unknown"):t("panel.billing.days_left",{count:dashboard.subscription.days_left})}</p><div className="invoice-create"><select className="select" value={months} onChange={event=>setMonths(Number(event.target.value))} aria-label={t("panel.billing.term_aria")}>{[1,3,6,12].map(count=><option value={count} key={count}>{t("panel.shell.months_count",{count})}</option>)}</select><button className="btn btn-primary" disabled={busy} onClick={()=>void create()}>{busy?t("panel.billing.creating"):t("panel.billing.create_invoice")}</button></div></div></Card><Card><div className="card-head"><div><h2>{t("panel.billing.how_title")}</h2><p>{t("panel.billing.how_subtitle")}</p></div></div><div className="card-body"><p className="metric-note">{t("panel.billing.how_note")}</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>{t("panel.billing.error_prefix")}</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>{t("panel.billing.invoices_title")}</h2><p>{t("panel.billing.invoices_subtitle")}</p></div></div>{invoices===null?<div className="card-body"><Skeleton height={140}/></div>:invoices.length?<div className="table-wrap"><table><thead><tr><th>{t("panel.billing.col_number")}</th><th>{t("panel.billing.col_term")}</th><th>{t("panel.billing.col_amount")}</th><th>{t("panel.billing.col_state")}</th><th>{t("panel.billing.col_date")}</th><th>{t("panel.billing.col_action")}</th></tr></thead><tbody>{invoices.map(invoice=><tr key={invoice.id}><td><div className="table-title">#{invoice.id}</div></td><td>{t("panel.shell.months_count",{count:invoice.months})}</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?t("panel.billing.state_paid"):invoice.state==="pending"?t("panel.billing.state_pending"):t("panel.billing.state_cancelled")}</Pill></td><td>{formatDateShort(invoice.created_at)}</td><td>{invoice.state==="pending"&&invoice.pay_url?<a className="btn" href={invoice.pay_url} target="_blank" rel="noreferrer">{t("panel.common.open")}</a>:"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title={t("panel.billing.empty_title")} detail={t("panel.billing.empty_detail")}/>}</Card></>;
 }
 
 function TelegramPage({siteId}:{siteId:string}) {
-  const [members,setMembers]=useState<TelegramMember[]|null>(null);const[role,setRole]=useState<"owner"|"manager">("manager");const[name,setName]=useState("");const[invite,setInvite]=useState<{url:string;expires_minutes:number}|null>(null);const[busy,setBusy]=useState(false);const[error,setError]=useState("");
-  const load=useCallback(()=>api<{members:TelegramMember[]}>("/api/v1/owner/members","owner",{siteId}).then(data=>{setMembers(data.members||[]);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:"A’zolar olinmadi")),[siteId]);
+  const [members,setMembers]=useState<TelegramMember[]|null>(null);const[role,setRole]=useState<"owner"|"manager">("manager");const[name,setName]=useState("");const[invite,setInvite]=useState<{url:string;expires_minutes:number}|null>(null);const[busy,setBusy]=useState(false);const[error,setError]=useState("");const[confirm,confirmDialog]=useConfirm();
+  const load=useCallback(()=>api<{members:TelegramMember[]}>("/api/v1/owner/members","owner",{siteId}).then(data=>{setMembers(data.members||[]);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:t("panel.telegram.members_load_failed"))),[siteId]);
   useEffect(()=>{void load();},[load]);
-  const createInvite=async()=>{setBusy(true);setError("");try{const result=await api<{url:string;expires_minutes:number}>("/api/v1/owner/telegram-invite","owner",{method:"POST",siteId,body:JSON.stringify({role,display_name:name.trim()||null})});setInvite(result);}catch(reason){setError(reason instanceof Error?reason.message:"Taklif yaratilmadi");}finally{setBusy(false);}};
-  const remove=async(member:TelegramMember)=>{if(!window.confirm(`${member.display_name||member.telegram_id} a’zoligini o‘chirasizmi?`))return;setError("");try{await api(`/api/v1/owner/members/${encodeURIComponent(member.id)}`,"owner",{method:"DELETE",siteId});await load();}catch(reason){setError(reason instanceof Error?reason.message:"A’zo o‘chirilmadi");}};
-  return <><PageHeader title="Telegram" subtitle="Egalar va menejerlar uchun botga xavfsiz, bir martalik taklif."/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>Taklif havolasi</h2><p>Havola 30 daqiqada eskiradi va bir marta ishlaydi</p></div></div><div className="card-body"><div className="form-grid"><label>Kim uchun<select className="select" value={role} onChange={event=>setRole(event.target.value as "owner"|"manager")}><option value="manager">Menejer</option><option value="owner">Biznes egasi</option></select></label><label>Ism (ixtiyoriy)<input className="input" value={name} onChange={event=>setName(event.target.value)} maxLength={120}/></label></div><button className="btn btn-primary" disabled={busy} onClick={()=>void createInvite()}>{busy?"Yaratilmoqda…":"Taklif yaratish"}</button>{invite?<div className="invite-result"><b>Taklif tayyor · {invite.expires_minutes} daqiqa</b><a href={invite.url} target="_blank" rel="noreferrer">{invite.url}</a><div className="page-actions"><CopyButton value={invite.url}/><a className="btn btn-primary" href={invite.url} target="_blank" rel="noreferrer">Telegramda ochish</a></div></div>:null}</div></Card><Card><div className="card-head"><div><h2>Nima yuboriladi?</h2><p>Filial bo‘yicha ruxsatga bog‘liq</p></div></div><div className="card-body"><p className="metric-note">Muhim kamera va tizim ogohlantirishlari, kunlik biznes xulosasi hamda Mini App havolasi. Boshqa filial ma’lumoti berilmaydi.</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>Telegram bilan muammo:</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>Ulangan foydalanuvchilar</h2><p>Faol bot a’zolari</p></div></div>{members===null?<div className="card-body"><Skeleton height={130}/></div>:members.length?<div className="table-wrap"><table><thead><tr><th>Foydalanuvchi</th><th>Rol</th><th>Kunlik xulosa</th><th>Amal</th></tr></thead><tbody>{members.map(member=><tr key={member.id}><td><div className="table-title">{member.display_name||`Telegram ${member.telegram_id}`}</div></td><td>{member.role==="owner"?"Egasi":member.role==="manager"?"Menejer":"Servis admin"}</td><td>{member.digest_muted?"O‘chirilgan":"Yoqilgan"}</td><td><button className="btn btn-danger" onClick={()=>void remove(member)}>O‘chirish</button></td></tr>)}</tbody></table></div>:<EmptyState icon="bell" title="Telegram ulanmagan" detail="Taklif yarating va uni kerakli egasi yoki menejerga yuboring."/>}</Card></>;
+  const createInvite=async()=>{setBusy(true);setError("");try{const result=await api<{url:string;expires_minutes:number}>("/api/v1/owner/telegram-invite","owner",{method:"POST",siteId,body:JSON.stringify({role,display_name:name.trim()||null})});setInvite(result);}catch(reason){setError(reason instanceof Error?reason.message:t("panel.telegram.invite_failed"));}finally{setBusy(false);}};
+  /* Brauzerning o'z tasdiq oynasi emas, admin paneldagi bilan bir xil
+     `ConfirmDialog`: brauzer oynasi panel tiliga bo'ysunmaydi va
+     Telegram WebView'ida umuman ko'rinmasligi mumkin — tugma bosilib,
+     hech narsa bo'lmasdi. */
+  const remove=async(member:TelegramMember)=>{if(!(await confirm({title:t("panel.telegram.remove_title"),text:t("panel.telegram.remove_text",{name:member.display_name||member.telegram_id}),confirmLabel:t("panel.common.delete"),danger:true})))return;setError("");try{await api(`/api/v1/owner/members/${encodeURIComponent(member.id)}`,"owner",{method:"DELETE",siteId});await load();}catch(reason){setError(reason instanceof Error?reason.message:t("panel.telegram.remove_failed"));}};
+  return <><PageHeader title={t("panel.nav.telegram")} subtitle={t("panel.telegram.subtitle")}/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>{t("panel.telegram.invite_title")}</h2><p>{t("panel.telegram.invite_subtitle")}</p></div></div><div className="card-body"><div className="form-grid"><label>{t("panel.telegram.for_whom")}<select className="select" value={role} onChange={event=>setRole(event.target.value as "owner"|"manager")}><option value="manager">{t("panel.telegram.role_manager")}</option><option value="owner">{t("panel.telegram.role_owner_option")}</option></select></label><label>{t("panel.telegram.name_optional")}<input className="input" value={name} onChange={event=>setName(event.target.value)} maxLength={120}/></label></div><button className="btn btn-primary" disabled={busy} onClick={()=>void createInvite()}>{busy?t("panel.telegram.creating"):t("panel.telegram.create_invite")}</button>{invite?<div className="invite-result"><b>{t("panel.telegram.invite_ready",{count:invite.expires_minutes})}</b><a href={invite.url} target="_blank" rel="noreferrer">{invite.url}</a><div className="page-actions"><CopyButton value={invite.url}/><a className="btn btn-primary" href={invite.url} target="_blank" rel="noreferrer">{t("panel.telegram.open_in_telegram")}</a></div></div>:null}</div></Card><Card><div className="card-head"><div><h2>{t("panel.telegram.what_title")}</h2><p>{t("panel.telegram.what_subtitle")}</p></div></div><div className="card-body"><p className="metric-note">{t("panel.telegram.what_note")}</p></div></Card></div>{error?<div className="alert-strip section-gap"><Icon name="bell"/><div><strong>{t("panel.telegram.error_prefix")}</strong> {error}</div></div>:null}<Card className="section-gap"><div className="card-head"><div><h2>{t("panel.telegram.members_title")}</h2><p>{t("panel.telegram.members_subtitle")}</p></div></div>{members===null?<div className="card-body"><Skeleton height={130}/></div>:members.length?<div className="table-wrap"><table><thead><tr><th>{t("panel.telegram.col_user")}</th><th>{t("panel.telegram.col_role")}</th><th>{t("panel.telegram.col_digest")}</th><th>{t("panel.telegram.col_action")}</th></tr></thead><tbody>{members.map(member=><tr key={member.id}><td><div className="table-title">{member.display_name||t("panel.telegram.member_fallback",{id:member.telegram_id})}</div></td><td>{member.role==="owner"?t("panel.telegram.role_owner"):member.role==="manager"?t("panel.telegram.role_manager"):t("panel.telegram.role_service_admin")}</td><td>{member.digest_muted?t("panel.telegram.digest_off"):t("panel.telegram.digest_on")}</td><td><button className="btn btn-danger" onClick={()=>void remove(member)}>{t("panel.common.delete")}</button></td></tr>)}</tbody></table></div>:<EmptyState icon="bell" title={t("panel.telegram.empty_title")} detail={t("panel.telegram.empty_detail")}/>}</Card>{confirmDialog}</>;
 }
 
 function downloadTrafficCsv(dashboard:Dashboard) {
   const rows = dashboard.trend.map(point=>[point.date||point.day||"",point.entries??point.entered??point.count??0]);
-  const csv = ["sana,kirgan_mijozlar",...rows.map(row=>row.join(","))].join("\n");
+  const csv = [[t("panel.download.csv_col_date"),t("panel.download.csv_col_entered")].join(","),...rows.map(row=>row.join(","))].join("\n");
   const url=URL.createObjectURL(new Blob([`\uFEFF${csv}`],{type:"text/csv;charset=utf-8"}));
-  const link=document.createElement("a");link.href=url;link.download=`chaqimchi-${dashboard.site.id}-14-kun.csv`;link.click();URL.revokeObjectURL(url);
+  const link=document.createElement("a");link.href=url;link.download=t("panel.download.traffic_csv_filename",{site:dashboard.site.id});link.click();URL.revokeObjectURL(url);
 }
 
 /* Kunning to'liq hisobotini serverdan Excelda ochiladigan CSV qilib oladi.
@@ -463,7 +472,7 @@ function downloadTrafficCsv(dashboard:Dashboard) {
 async function downloadDailyReportCsv(siteId:string) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
   const url = await mediaObjectUrl("/api/v1/owner/report.csv", "owner", siteId);
-  const link=document.createElement("a");link.href=url;link.download=`dokon-hisoboti-${today}.csv`;link.click();URL.revokeObjectURL(url);
+  const link=document.createElement("a");link.href=url;link.download=t("panel.download.daily_filename",{date:today});link.click();URL.revokeObjectURL(url);
 }
 
 /* Oxirgi 30 kunning davriy hisoboti — raqobatchining oylik branch-summary
@@ -476,20 +485,20 @@ async function downloadPeriodReportCsv(siteId:string) {
   const startDate = new Date(); startDate.setDate(startDate.getDate() - 29);
   const start = startDate.toLocaleDateString("en-CA", tz);
   const url = await mediaObjectUrl(`/api/v1/owner/report.csv?start=${start}&end=${end}`, "owner", siteId);
-  const link=document.createElement("a");link.href=url;link.download=`dokon-hisoboti-${start}_${end}.csv`;link.click();URL.revokeObjectURL(url);
+  const link=document.createElement("a");link.href=url;link.download=t("panel.download.period_filename",{start,end});link.click();URL.revokeObjectURL(url);
 }
 
 function GenericPage({ id, dashboard, sites, siteId, onNavigate, focusEventId = "" }: { id:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:(id:string,focus?:string)=>void; focusEventId?:string }) {
-  if (id === "cameras") return <><PageHeader title="Kameralar" subtitle="Jonli kadr, ulanish holati va AI tahlil qatlami."/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>;
+  if (id === "cameras") return <><PageHeader title={t("panel.nav.cameras")} subtitle={t("panel.cameras.page_subtitle")}/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>;
   if (id === "traffic") return <TrafficPage dashboard={dashboard}/>;
   if (id === "heatmap") return <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
-  if (id === "branches") return <><PageHeader title="Filiallar" subtitle="Barcha savdo nuqtalaringizning aloqa va kamera holati."/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? "Aloqada" : "Aloqani tekshiring")} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
+  if (id === "branches") return <><PageHeader title={t("panel.nav.branches")} subtitle={t("panel.owner.branches_subtitle")}/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? t("panel.owner.branch_online") : t("panel.owner.branch_check"))} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
   if (id === "alerts") return <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>;
-  if (id === "reports") return <><PageHeader title="Hisobotlar" subtitle="Oqim, kamera va xavfsizlik bo‘yicha tushunarli yakun." actions={<><button className="btn btn-primary" onClick={()=>void downloadDailyReportCsv(siteId)}><Icon name="download"/>Kunlik hisobot (Excel)</button><button className="btn" onClick={()=>void downloadPeriodReportCsv(siteId)}><Icon name="download"/>Oylik (Excel)</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>14 kunlik CSV</button></>}/><div className="metric-grid"><MetricCard label="Bugungi tashrif" value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label="Navbat holatlari" value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label="Faol kameralar" value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label="Hodisalar" value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>14 kunlik ko‘rsatkich</h2><p>Grafik va yuklab olinadigan CSV bitta real ma’lumotdan tuzilgan</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
+  if (id === "reports") return <><PageHeader title={t("panel.nav.reports")} subtitle={t("panel.owner.reports_subtitle")} actions={<><button className="btn btn-primary" onClick={()=>void downloadDailyReportCsv(siteId)}><Icon name="download"/>{t("panel.download.daily_excel")}</button><button className="btn" onClick={()=>void downloadPeriodReportCsv(siteId)}><Icon name="download"/>{t("panel.download.monthly_excel")}</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>{t("panel.download.traffic_csv")}</button></>}/><div className="metric-grid"><MetricCard label={t("panel.owner.metric_visits_today")} value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label={t("panel.owner.metric_queue")} value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label={t("panel.home.stat.cameras")} value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label={t("panel.nav.alerts")} value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>{t("panel.owner.trend_title")}</h2><p>{t("panel.owner.trend_note")}</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
   if (id === "billing") return <BillingPage dashboard={dashboard} siteId={siteId}/>;
   if (id === "telegram") return <TelegramPage siteId={siteId}/>;
   if (id === "settings") return <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>;
-  return <><PageHeader title="Bo‘lim" subtitle="Bu bo‘lim panel tarkibida."/><Card><EmptyState icon="settings" title="Soddalashtirilgan ish maydoni" detail="Kerakli ma’lumotlar yig‘ilgach mazmun avtomatik ko‘rinadi."/></Card></>;
+  return <><PageHeader title={t("panel.owner.section_title")} subtitle={t("panel.owner.section_subtitle")}/><Card><EmptyState icon="settings" title={t("panel.owner.section_empty_title")} detail={t("panel.owner.section_empty_detail")}/></Card></>;
 }
 
 /** Oqim sahifasi: bugungi soatlik egri va 14 kunlik dinamika. */
@@ -499,15 +508,15 @@ function TrafficPage({ dashboard }: { dashboard: Dashboard }) {
   const hourPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2,"0")}:00`, value: Number(item.entered) || 0 }));
   const exitPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2,"0")}:00`, value: Number(item.exited) || 0 }));
   return <>
-    <PageHeader title="Mijozlar oqimi" subtitle="Kunlar va vaqt bo‘yicha anonim tashriflar tahlili."/>
+    <PageHeader title={t("panel.nav.traffic")} subtitle={t("panel.traffic.subtitle")}/>
     <Card>
-      <div className="card-head"><div><h2>Bugun, soat bo‘yicha</h2><p>Kirgan va chiqqanlar — shaxsni saqlamasdan</p></div></div>
+      <div className="card-head"><div><h2>{t("panel.home.flow.subtitle")}</h2><p>{t("panel.traffic.hourly_subtitle")}</p></div></div>
       {hourPoints.some(point => point.value > 0)
-        ? <LineChart series={[{ name: "Kirdi", points: hourPoints }, { name: "Chiqdi", points: exitPoints }]}/>
-        : <EmptyState icon="chart" title="Bugun hali tashrif yo‘q" detail="Kamera birinchi kirishni qayd qilgach grafik shu yerda to‘ladi."/>}
+        ? <LineChart series={[{ name: t("panel.numbers.entered"), points: hourPoints }, { name: t("panel.numbers.exited"), points: exitPoints }]}/>
+        : <EmptyState icon="chart" title={t("panel.home.flow.empty_title")} detail={t("panel.home.flow.empty_detail")}/>}
     </Card>
     <Card className="section-gap">
-      <div className="card-head"><div><h2>Oxirgi 14 kun</h2><p>Kunlik dinamika</p></div></div>
+      <div className="card-head"><div><h2>{t("panel.traffic.last_14_days")}</h2><p>{t("panel.traffic.daily_dynamics")}</p></div></div>
       <TrendChart points={dashboard.trend}/>
     </Card>
   </>;
@@ -519,10 +528,12 @@ function TrafficPage({ dashboard }: { dashboard: Dashboard }) {
  * aytilmasdi.  2026-08-26 da sinov do'konida 449 hodisadan 9 tasi botga
  * bordi — ega "bot buzilgan" deb o'yladi, chunki qolgan 440 tasi jimgina
  * panelda qolgani hech qanday joyda yozilmagan edi. */
+/* `label`/`note` — katalog kalitlari, `NAV_ITEMS` dagi bilan bir xil
+   sabab: modul yuklanganda til hali tanlanmagan. */
 const TELEGRAM_LEVELS = [
-  { id: "critical", label: "Faqat muhimi", note: "Kamera buzilishi, tungi harakat, taqiqlangan zona" },
-  { id: "warning", label: "Muhim + ogohlantirish", note: "Yuqoridagilar va navbat, uzoq turish, bo‘sh kassa" },
-  { id: "all", label: "Hammasi", note: "Har bir hodisa — kuniga yuzlab xabar bo‘lishi mumkin" },
+  { id: "critical", label: "panel.telegram.level_critical", note: "panel.telegram.level_critical_note" },
+  { id: "warning", label: "panel.telegram.level_warning", note: "panel.telegram.level_warning_note" },
+  { id: "all", label: "panel.common.all", note: "panel.telegram.level_all_note" },
 ] as const;
 
 function TelegramLevelPicker({ siteId }: { siteId: string }) {
@@ -533,7 +544,7 @@ function TelegramLevelPicker({ siteId }: { siteId: string }) {
     let stopped = false;
     api<{ config: Record<string, unknown> }>("/api/v1/owner/config", "owner", { siteId })
       .then(answer => { if (!stopped) setConfig(answer.config); })
-      .catch(() => { if (!stopped) setError("Sozlama olinmadi"); });
+      .catch(() => { if (!stopped) setError(t("panel.telegram.level_load_failed")); });
     return () => { stopped = true; };
   }, [siteId]);
 
@@ -550,7 +561,7 @@ function TelegramLevelPicker({ siteId }: { siteId: string }) {
       });
       setConfig({ ...config, telegram_min_severity: level });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Saqlanmadi");
+      setError(reason instanceof Error ? reason.message : t("panel.telegram.level_save_failed"));
     } finally { setSaving(""); }
   };
 
@@ -562,8 +573,8 @@ function TelegramLevelPicker({ siteId }: { siteId: string }) {
       disabled={!config || Boolean(saving)}
       onClick={() => void choose(level.id)}
     >
-      <div><b>{level.label}</b><div className="table-sub">{level.note}</div></div>
-      {current === level.id ? <Pill state="active">Tanlangan</Pill> : null}
+      <div><b>{t(level.label)}</b><div className="table-sub">{t(level.note)}</div></div>
+      {current === level.id ? <Pill state="active">{t("panel.telegram.level_selected")}</Pill> : null}
     </button>)}
     {error ? <p className="media-error">{error}</p> : null}
   </div>;
@@ -574,26 +585,26 @@ function TelegramLevelPicker({ siteId }: { siteId: string }) {
 function SettingsPage({ dashboard, sites, siteId, onNavigate }: { dashboard: Dashboard; sites: Site[]; siteId: string; onNavigate: (id: string) => void }) {
   const site = sites.find(item => item.id === siteId);
   return <>
-    <PageHeader title="Sozlamalar" subtitle="Do‘kon ma’lumotlari va bildirishnoma kanallari."/>
+    <PageHeader title={t("panel.nav.settings")} subtitle={t("panel.settings.subtitle")}/>
     <div className="dashboard-grid">
       <Card>
-        <div className="card-head"><div><h2>Do‘kon</h2><p>O‘rnatuvchi kiritgan ma’lumot</p></div></div>
+        <div className="card-head"><div><h2>{t("panel.settings.store_title")}</h2><p>{t("panel.settings.store_subtitle")}</p></div></div>
         <div className="card-body">
-          <div className="simple-row"><span>Nomi</span><b>{site?.name || dashboard.site.name}</b></div>
-          <div className="simple-row"><span>Manzil</span><b>{site?.address || dashboard.site.address || "—"}</b></div>
-          <div className="simple-row"><span>Tarif</span><b>{dashboard.site.plan?.name || "—"}</b></div>
-          <div className="simple-row"><span>Kameralar</span><b>{formatNumber(dashboard.site.cameras_expected)} tagacha</b></div>
-          <p className="metric-note">Bu maydonlarni o‘zgartirish uchun o‘rnatuvchi yoki qo‘llab-quvvatlash xizmatiga murojaat qiling.</p>
+          <div className="simple-row"><span>{t("panel.settings.name")}</span><b>{site?.name || dashboard.site.name}</b></div>
+          <div className="simple-row"><span>{t("panel.settings.address")}</span><b>{site?.address || dashboard.site.address || "—"}</b></div>
+          <div className="simple-row"><span>{t("panel.settings.plan")}</span><b>{dashboard.site.plan?.name || "—"}</b></div>
+          <div className="simple-row"><span>{t("panel.nav.cameras")}</span><b>{t("panel.settings.cameras_up_to", { count: formatNumber(dashboard.site.cameras_expected) })}</b></div>
+          <p className="metric-note">{t("panel.settings.store_note")}</p>
         </div>
       </Card>
       <Card>
-        <div className="card-head"><div><h2>Bildirishnomalar</h2><p>Telegram orqali yuboriladi</p></div></div>
+        <div className="card-head"><div><h2>{t("panel.owner.notifications")}</h2><p>{t("panel.settings.notifications_subtitle")}</p></div></div>
         <div className="card-body">
           <TelegramLevelPicker siteId={siteId}/>
-          <p className="metric-note">Kunlik xulosa darajadan qat’i nazar boradi. Kim olishini «Telegram» bo‘limida boshqarasiz.</p>
+          <p className="metric-note">{t("panel.settings.digest_note")}</p>
           {/* `<a href>` EMAS: to'liq sahifa qayta yuklanishi va hash
               rejimida (`router.ts`) 404 beradi.  SPA ichida qolamiz. */}
-          <button className="btn btn-wide" onClick={() => onNavigate("telegram")}>Telegram a’zolari</button>
+          <button className="btn btn-wide" onClick={() => onNavigate("telegram")}>{t("panel.settings.telegram_members")}</button>
         </div>
       </Card>
     </div>
@@ -612,6 +623,9 @@ function OwnerApp() {
   const [focusEvent,setFocusEvent] = useState("");
   const [loginError,setLoginError] = useState(""); const [busy,setBusy] = useState(false);
   const {data,error,loading,refresh} = useAdaptiveDashboard(siteId,authenticated);
+  /* Menyu yorliqlari shu yerda ochiladi (`NAV_ITEMS` izohiga qarang).
+     Bir marta yetadi: til almashsa sahifa qayta yuklanadi (`i18n/index.ts`). */
+  const nav: NavItem[] = useMemo(() => NAV_ITEMS.map(({ id, key, icon }) => ({ id, icon, label: t(key) })), []);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/owner-sw.js").catch(() => undefined);
@@ -630,7 +644,7 @@ function OwnerApp() {
         if (await loginWithLinkKey()) { if (!stopped) setAuthenticated(true); return; }
         if (await loginWithTelegram()) { if (!stopped) setAuthenticated(true); return; }
       } catch (reason) {
-        if (!stopped) setLoginError(reason instanceof Error ? reason.message : "Havola bo‘yicha kirish amalga oshmadi");
+        if (!stopped) setLoginError(reason instanceof Error ? reason.message : t("panel.owner.link_login_failed"));
       } finally {
         if (!stopped) setCheckingLink(false);
       }
@@ -650,11 +664,11 @@ function OwnerApp() {
       // beruvchining o'zini yiqitardi.
       const status = (reason as { status?: number } | null)?.status;
       if (status === 401) { clearToken("owner"); setAuthenticated(false); }
-      else setLoginError(reason instanceof Error ? reason.message : "Filiallar olinmadi");
+      else setLoginError(reason instanceof Error ? reason.message : t("panel.owner.sites_load_failed"));
     });
   }, [authenticated,loadSites]);
 
-  const submit = async (username:string,password:string) => { setBusy(true);setLoginError("");try { await login(username,password,"owner");setAuthenticated(true); } catch(reason) { setLoginError(reason instanceof Error ? reason.message : "Kirish amalga oshmadi"); } finally { setBusy(false); } };
+  const submit = async (username:string,password:string) => { setBusy(true);setLoginError("");try { await login(username,password,"owner");setAuthenticated(true); } catch(reason) { setLoginError(reason instanceof Error ? reason.message : t("panel.owner.login_failed")); } finally { setBusy(false); } };
   const logout = () => { clearToken("owner");setAuthenticated(false);setSites([]);setSiteId(""); };
   /* Ikkinchi argument — ochilishi kerak bo'lgan aniq hodisa.
      "Dalilni ochish" tugmasi shuni uzatadi. */
@@ -664,8 +678,8 @@ function OwnerApp() {
     navigateTo(id); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"});
   };
 
-  const splash = (title:string) => <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">BIZNES PANELI</span><h1>{title}</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={54}/><div style={{height:14}}/><Skeleton height={150}/></div></section></div>;
-  if (checkingLink) return splash("Havola tekshirilmoqda.");
+  const splash = (title:string) => <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">{t("panel.login.eyebrow_owner")}</span><h1>{title}</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={54}/><div style={{height:14}}/><Skeleton height={150}/></div></section></div>;
+  if (checkingLink) return splash(t("panel.owner.splash_checking_link"));
   // Kompyuterni ulash oqimi login ekranidan OLDIN: dastur o'rnatilgach
   // brauzer aynan shu havolani ochadi va odam hali hisobga ega
   // bo'lmasligi mumkin.
@@ -677,21 +691,21 @@ function OwnerApp() {
     />;
   }
   if (!authenticated) return <LoginScreen kind="owner" onSubmit={submit} busy={busy} error={loginError} botUrl={telegramBotUrl()}/>;
-  if (loading && !data) return splash("Ko‘rsatkichlar tayyorlanmoqda.");
+  if (loading && !data) return splash(t("panel.owner.splash_preparing"));
   /* Ma'lumot kelmadi — sabab va chiqish yo'li KO'RSATILADI.  Avval bu
      holat cheksiz skeletga tushardi: 0 ta filial ham, doimiy server
      xatosi ham xabarsiz "yuklanmoqda" bo'lib qolar edi. */
   if (!data) {
     return <div className="login-page">
-      <section className="login-visual"><Logo/><div><span className="eyebrow">BIZNES PANELI</span>
-        <h1>{sites.length === 0 && !loginError ? "Sizga hali do‘kon biriktirilmagan" : "Ma’lumot ochilmadi"}</h1></div></section>
+      <section className="login-visual"><Logo/><div><span className="eyebrow">{t("panel.login.eyebrow_owner")}</span>
+        <h1>{sites.length === 0 && !loginError ? t("panel.owner.no_site_title") : t("panel.owner.data_failed_title")}</h1></div></section>
       <section className="login-panel"><div style={{width:"min(390px,100%)"}}>
         <p className="metric-note">{sites.length === 0 && !loginError
-          ? "Hisobingiz ishlayapti, lekin unga birorta do‘kon ulanmagan. O‘rnatuvchi yoki qo‘llab-quvvatlash xizmatiga murojaat qiling."
-          : error || loginError || "Server bilan aloqa bo‘lmadi. Internetni tekshirib, qayta urinib ko‘ring."}</p>
+          ? t("panel.owner.no_site_note")
+          : error || loginError || t("panel.owner.server_unreachable")}</p>
         <div className="page-actions" style={{marginTop:14}}>
-          <button className="btn btn-primary" onClick={() => { void loadSites(); void refresh(); }}>Qayta urinish</button>
-          <button className="btn" onClick={logout}>Chiqish</button>
+          <button className="btn btn-primary" onClick={() => { void loadSites(); void refresh(); }}>{t("panel.common.retry")}</button>
+          <button className="btn" onClick={logout}>{t("panel.common.logout")}</button>
         </div>
       </div></section>
     </div>;
@@ -700,24 +714,24 @@ function OwnerApp() {
   const selected = sites.find(site => site.id === siteId);
   const today = formatDateUz();
   return <AppShell
-    nav={NAV}
+    nav={nav}
     mobileNav={MOBILE_NAV}
     active={active}
     onNavigate={navigate}
     title={selected?.name || data.site.name}
-    subtitle={`Yangilandi: ${new Date(data.updated_at).toLocaleTimeString("uz-UZ",{hour:"2-digit",minute:"2-digit"})}`}
+    subtitle={t("panel.owner.updated_at", { time: formatTimeUz(data.updated_at) })}
     onLogout={logout}
-    sidebarFooter={<div className="sidebar-user"><Icon name="store"/><div><b>{selected?.name || data.site.name}</b><small>{selected?.address || data.site.address || "Manzil kiritilmagan"}</small></div></div>}
+    sidebarFooter={<div className="sidebar-user"><Icon name="store"/><div><b>{selected?.name || data.site.name}</b><small>{selected?.address || data.site.address || t("panel.home.branches.no_address")}</small></div></div>}
     headerActions={<>
-      {sites.length > 1 ? <select className="select" value={siteId} onChange={event => setSiteId(event.target.value)} aria-label="Filialni tanlash">{sites.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : null}
+      {sites.length > 1 ? <select className="select" value={siteId} onChange={event => setSiteId(event.target.value)} aria-label={t("panel.owner.select_branch")}>{sites.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : null}
       <span className="topbar-date"><Icon name="calendar" size={16}/>{today}</span>
       <NotificationBell siteId={siteId} onOpenEvent={() => navigate("alerts")}/>
-      <button className="btn btn-icon" onClick={() => refresh()} aria-label="Yangilash"><Icon name="pulse"/></button>
+      <button className="btn btn-icon" onClick={() => refresh()} aria-label={t("panel.common.refresh")}><Icon name="pulse"/></button>
     </>}>
-    {error ? <div className="alert-strip"><Icon name="bell"/><div><strong>Yangilashda muammo:</strong> {error}. Oxirgi olingan ma’lumot ko‘rsatilmoqda.</div></div> : null}
+    {error ? <div className="alert-strip"><Icon name="bell"/><div><strong>{t("panel.owner.refresh_error_title")}</strong> {error}. {t("panel.owner.refresh_error_note")}</div></div> : null}
     {active === "home"
       ? <>
-          <PageHeader title="Bugungi nazorat" subtitle={today} />
+          <PageHeader title={t("panel.owner.home_title")} subtitle={today} />
           <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
         </>
       : active === "employees" ? <EmployeesPage siteId={siteId}/>
@@ -725,7 +739,7 @@ function OwnerApp() {
       : active === "zones" ? <GeometryEditor siteId={siteId} cameras={data.cameras}/>
       : active === "agent" ? <VisionAgent siteId={siteId} onNavigate={navigate}/>
       : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} focusEventId={focusEvent}/>}
-    {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label="Yopish"><Icon name="close"/></button></div><nav>{NAV.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>Chiqish</button></nav></aside></div> : null}
+    {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label={t("panel.common.close")}><Icon name="close"/></button></div><nav>{nav.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>{t("panel.common.logout")}</button></nav></aside></div> : null}
   </AppShell>;
 }
 

@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from cloud.i18n import tg
+
 SRC = Path(__file__).resolve().parents[1] / "frontend" / "src"
 SHELLS = Path(__file__).resolve().parents[1] / "frontend"
 STATIC = Path(__file__).resolve().parents[1] / "cloud" / "static"
@@ -180,7 +182,8 @@ def test_the_camera_role_is_offered_but_never_forced() -> None:
     assert '<option value="">' in setup, "«Rol tanlanmagan» varianti bo'lsin"
     # Nom maydoni ham bo'sh boshlansin: "Kirish eshigi" jim standarti
     # hamma kamerani kirish qilib ko'rsatib qo'yardi.
-    assert 'placeholder="Masalan: Kassa"' in setup
+    assert 'placeholder={t("panel.setup.name_placeholder")}' in setup
+    assert "Masalan: Kassa" in tg("uz", "panel.setup.name_placeholder")
 
 
 def test_panel_hides_the_unobservable_occupancy_limit() -> None:

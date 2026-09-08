@@ -10,7 +10,23 @@ from pathlib import Path
 
 import pytest
 
+from cloud.i18n import tg
+
 SRC = Path(__file__).resolve().parents[1] / "frontend" / "src"
+
+
+def key_text(source: str, key: str) -> str:
+    """Manba KALITGA bog'langanini tekshiradi va o'zbekcha matnini qaytaradi.
+
+    Matn katalogga ko'chdi (F4c): testlar endi "shu jumla manbada bormi"
+    emas, "manba shu kalitni ishlatadimi va kalit shu ma'noni beradimi"
+    deb so'raydi — tarjima tahriri testga tegmaydi, kalit yo'qolsa
+    yiqiladi.
+    """
+    assert f'"{key}"' in source, f"{key} manbada ishlatilmagan"
+    text = tg("uz", key)
+    assert text != key, f"katalogda {key} yo'q"
+    return text
 
 
 def read(name: str) -> str:
@@ -70,10 +86,11 @@ def test_a_card_without_a_photo_says_why() -> None:
     """To'rt holat — va ular chalkashtirilmasin."""
     source = read("EventEvidence.tsx")
 
-    assert "saqlanmaydi" in source and "maxfiylik qoidasi" in source
-    assert "Kadr hali yuklanmagan" in source
-    assert "muddati o‘tdi" in source
-    assert "Hodisaning o‘zi joyida" in source
+    not_kept = key_text(source, "panel.evidence.media_not_kept")
+    assert "saqlanmaydi" in not_kept and "maxfiylik qoidasi" in not_kept
+    assert "Kadr hali yuklanmagan" in key_text(source, "panel.evidence.media_pending")
+    assert "muddati o‘tdi" in key_text(source, "panel.evidence.media_expired")
+    assert "Hodisaning o‘zi joyida" in key_text(source, "panel.evidence.media_expired_kept")
 
 
 def test_the_media_deadline_is_not_hard_coded() -> None:
@@ -160,13 +177,13 @@ def test_the_heat_hours_share_one_scale() -> None:
 
     assert "hoursAnswer?.peak" in source
     assert "Math.max(1, ...heat.grid.flat())" not in source
-    assert "eng gavjum katagiga nisbatan" in source
+    assert "eng gavjum katagiga nisbatan" in key_text(source, "panel.heat.scale_note")
 
 
 def test_the_owner_can_stop_the_animation() -> None:
     source = read("Heatmap.tsx")
 
-    assert "To‘xtatish" in source
+    assert "To‘xtatish" in key_text(source, "panel.heat.pause")
     assert "clearInterval" in source
     assert "document.hidden" in source
 
@@ -185,7 +202,7 @@ def test_an_empty_hour_is_drawn_empty() -> None:
     source = read("Heatmap.tsx")
 
     assert "if (!grid || !rows || !cols) return;" in source
-    assert "harakat qayd etilmagan" in source
+    assert "harakat qayd etilmagan" in key_text(source, "panel.heat.hour_empty")
 
 
 def test_the_camera_frame_is_loaded_once_not_per_hour() -> None:
@@ -227,13 +244,13 @@ def test_a_day_without_receipts_is_shown_as_empty_not_zero() -> None:
     """Nol «hech kim sotib olmadi» degani; kiritilmagan kun «ma'lumot yo'q»."""
     source = read("Numbers.tsx")
 
-    assert "Chek soni kiritilmagan" in source
+    assert "Chek soni kiritilmagan" in key_text(source, "panel.numbers.no_receipts")
 
 
 def test_a_small_day_shows_numbers_instead_of_a_percentage() -> None:
     source = read("Numbers.tsx")
 
-    assert "foiz uchun kam" in source
+    assert "foiz uchun kam" in key_text(source, "panel.numbers.without_percent")
 
 
 def test_an_old_day_says_the_door_split_was_not_stored() -> None:
@@ -241,7 +258,7 @@ def test_an_old_day_says_the_door_split_was_not_stored() -> None:
     source = read("Numbers.tsx")
 
     assert "doors === undefined" in source
-    assert "eshik taqsimoti saqlanmagan" in source
+    assert "eshik taqsimoti saqlanmagan" in key_text(source, "panel.numbers.doors_missing")
 
 
 def test_the_door_bars_share_one_scale() -> None:

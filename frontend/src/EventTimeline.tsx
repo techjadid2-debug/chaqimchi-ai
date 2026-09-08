@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { Timeline, type TimelineSegment } from "./charts";
 import { Skeleton } from "./components";
+import { t } from "./i18n";
 import type { TimelineAnswer } from "./types";
 
 /* Vaqt lentasining domen qobig'i.
@@ -42,12 +43,14 @@ export function toneOf(eventType: string | null | undefined): string {
 
 const TONE_ORDER = ["red", "yellow", "grey", "green", "blue"];
 
-const TONE_LABELS: Record<string, string> = {
-  red: "Xavfsizlik",
-  yellow: "Do‘kon ishi",
-  blue: "Kirish-chiqish",
-  green: "Tiklandi",
-  grey: "Boshqa",
+/* Kalitlar, matn emas: modul yuklanganda til hali tanlanmagan bo'ladi
+   (`initLang` keyin chaqiriladi), shuning uchun `t()` chizishda. */
+const TONE_LABEL_KEYS: Record<string, string> = {
+  red: "panel.timeline.tone_red",
+  yellow: "panel.timeline.tone_yellow",
+  blue: "panel.timeline.tone_blue",
+  green: "panel.timeline.tone_green",
+  grey: "panel.timeline.tone_grey",
 };
 
 function segmentsFor(byType: Record<string, number>): TimelineSegment[] {
@@ -84,7 +87,7 @@ export function EventTimeline({
     const query = new URLSearchParams({ date });
     api<TimelineAnswer>(`/api/v1/owner/events/timeline?${query}`, "owner", { siteId })
       .then(result => { if (alive) setAnswer(result); })
-      .catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : "Lenta olinmadi"); });
+      .catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : t("panel.timeline.load_failed")); });
     return () => { alive = false; };
   }, [date, siteId]);
 
@@ -96,7 +99,7 @@ export function EventTimeline({
   // yerda esa SABAB aytiladi: bo'sh joy "yuklanmayapti" degan taassurot
   // beradi, matn esa aniq javob.
   if (!answer.total) {
-    return <p className="media-note">Bu kunda hodisa qayd etilmagan.</p>;
+    return <p className="media-note">{t("panel.timeline.empty_day")}</p>;
   }
 
   const tones = TONE_ORDER.filter(tone =>
@@ -108,8 +111,8 @@ export function EventTimeline({
     {/* Afsona faqat SHU kuni bor turlardan: bo'lmagan turni ko'rsatish
         "nega nol?" degan javobsiz savol tug'diradi. */}
     <div className="timeline-legend">
-      {tones.map(tone => <span key={tone}><i className={`tone-${tone}`} />{TONE_LABELS[tone]}</span>)}
-      <span>Jami: <b>{answer.total}</b></span>
+      {tones.map(tone => <span key={tone}><i className={`tone-${tone}`} />{t(TONE_LABEL_KEYS[tone])}</span>)}
+      <span>{t("panel.timeline.total")} <b>{answer.total}</b></span>
     </div>
   </>;
 }

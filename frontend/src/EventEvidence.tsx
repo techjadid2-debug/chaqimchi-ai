@@ -32,10 +32,10 @@ export function mediaState(item: Event, retentionHours: number): MediaState {
 function MediaNote({ state, retentionHours }: { state: MediaState; retentionHours: number }) {
   if (state === "bor") return null;
   if (state === "saqlanmaydi") {
-    return <p className="media-note">Bu turdagi hodisada tasvir saqlanmaydi — maxfiylik qoidasi.</p>;
+    return <p className="media-note">{t("panel.evidence.media_not_kept")}</p>;
   }
-  if (state === "kutilmoqda") return <p className="media-note">Kadr hali yuklanmagan.</p>;
-  return <p className="media-note">Kadr {retentionHours} soat saqlangan, muddati o‘tdi. <b>Hodisaning o‘zi joyida</b> — vaqti, kamerasi va turi tarif muddatigacha qoladi.</p>;
+  if (state === "kutilmoqda") return <p className="media-note">{t("panel.evidence.media_pending")}</p>;
+  return <p className="media-note">{t("panel.evidence.media_expired", { hours: retentionHours })} <b>{t("panel.evidence.media_expired_kept")}</b> {t("panel.evidence.media_expired_detail")}</p>;
 }
 
 function Evidence({ item, kind, siteId, focused = false, retentionHours = 0, autoPhoto = false }: { item: Event; kind: "owner" | "admin"; siteId?: string; focused?: boolean; retentionHours?: number; autoPhoto?: boolean }) {
@@ -62,7 +62,7 @@ function Evidence({ item, kind, siteId, focused = false, retentionHours = 0, aut
         urls.current.video = url; setVideo(url);
       }
       setError("");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Dalil ochilmadi"); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("panel.evidence.open_failed")); }
   }, [base, kind, targetSite]);
   useEffect(() => () => { if (urls.current.image) URL.revokeObjectURL(urls.current.image); if (urls.current.video) URL.revokeObjectURL(urls.current.video); }, []);
   /* Kartochka RASMLI bo'lishi kerak — ega hodisani o'qib emas, ko'rib
@@ -80,7 +80,7 @@ function Evidence({ item, kind, siteId, focused = false, retentionHours = 0, aut
   }, [focused, hasSnapshot, open]);
   const when = item.occurred_at || item.created_at;
   const state = kind === "owner" ? mediaState(item, retentionHours) : "bor";
-  return <article className={`evidence-card${focused ? " is-focused" : ""}`} ref={card}><div className="event-row"><div className="event-name"><div className="metric-icon tone-blue" style={{position:"static",width:34,height:34}}><Icon name="pulse" size={17}/></div><div><b>{eventLabel(item.event_type)}</b><small>{item.site_name ? `${item.site_name} · ` : ""}{item.camera_id || "Tizim"} · {kind === "owner" ? formatTimeUz(when) : when || "—"}</small></div></div><div className="page-actions">{hasSnapshot && !image ? <button className="btn" onClick={() => void open("snapshot")}>Kadr</button> : null}{hasClip ? <button className="btn" onClick={() => void open("clip")}>Klip</button> : null}</div></div>{error ? <p className="media-error">{error}</p> : null}{image ? <img className="event-media" src={image} alt={t("panel.event.evidence_alt", { label: eventLabel(item.event_type) })} /> : null}{video ? <video className="event-media" src={video} controls playsInline /> : null}{!image && !video && !error ? <MediaNote state={state} retentionHours={retentionHours}/> : null}</article>;
+  return <article className={`evidence-card${focused ? " is-focused" : ""}`} ref={card}><div className="event-row"><div className="event-name"><div className="metric-icon tone-blue" style={{position:"static",width:34,height:34}}><Icon name="pulse" size={17}/></div><div><b>{eventLabel(item.event_type)}</b><small>{item.site_name ? `${item.site_name} · ` : ""}{item.camera_id || t("panel.evidence.system")} · {kind === "owner" ? formatTimeUz(when) : when || "—"}</small></div></div><div className="page-actions">{hasSnapshot && !image ? <button className="btn" onClick={() => void open("snapshot")}>{t("panel.evidence.photo")}</button> : null}{hasClip ? <button className="btn" onClick={() => void open("clip")}>{t("panel.evidence.clip")}</button> : null}</div></div>{error ? <p className="media-error">{error}</p> : null}{image ? <img className="event-media" src={image} alt={t("panel.event.evidence_alt", { label: eventLabel(item.event_type) })} /> : null}{video ? <video className="event-media" src={video} controls playsInline /> : null}{!image && !video && !error ? <MediaNote state={state} retentionHours={retentionHours}/> : null}</article>;
 }
 
 /** Bir marta ko'rsatiladigan kartochka soni.
@@ -107,7 +107,7 @@ export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboar
     const path = kind === "owner" ? `/api/v1/owner/events?${query}` : `/api/v1/admin/events${selected ? `?site_id=${encodeURIComponent(selected)}` : ""}`;
     api<{events:Event[]}>(path, kind, { siteId: kind === "owner" ? siteId : undefined })
       .then(result => { setEvents(result.events || []); setError(""); setShown(PAGE); })
-      .catch(reason => setError(reason instanceof Error ? reason.message : "Hodisalar olinmadi"));
+      .catch(reason => setError(reason instanceof Error ? reason.message : t("panel.evidence.load_failed")));
   }, [day, hour, kind, selected, siteId]);
   useEffect(() => { void load(); }, [load]);
 
@@ -116,25 +116,25 @@ export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboar
 
   const dayPicker = kind === "owner" && !locked ? <>
     <div className="segmented">
-      <button className={day === tashkentToday() ? "active" : ""} onClick={() => pick(tashkentToday())}>Bugun</button>
-      <button className={day === yesterday ? "active" : ""} onClick={() => pick(yesterday)}>Kecha</button>
-      <button className={day === "" ? "active" : ""} onClick={() => pick("")}>Oxirgi</button>
+      <button className={day === tashkentToday() ? "active" : ""} onClick={() => pick(tashkentToday())}>{t("panel.common.today")}</button>
+      <button className={day === yesterday ? "active" : ""} onClick={() => pick(yesterday)}>{t("panel.common.yesterday")}</button>
+      <button className={day === "" ? "active" : ""} onClick={() => pick("")}>{t("panel.evidence.latest")}</button>
     </div>
-    <input className="input" type="date" value={day} max={tashkentToday()} onChange={event => pick(event.target.value)} aria-label="Kun tanlash"/>
+    <input className="input" type="date" value={day} max={tashkentToday()} onChange={event => pick(event.target.value)} aria-label={t("panel.evidence.pick_day")}/>
   </> : null;
 
   const visible = (events || []).slice(0, shown);
 
-  return <><PageHeader title="Hodisalar va dalillar" subtitle="Kun bo‘ylab nima bo‘lganini bir qarashda ko‘ring; kadr faqat u mavjud bo‘lgan hodisada ochiladi." actions={kind === "admin" ? <select className="select" value={selected} onChange={event => setSelected(event.target.value)}><option value="">Barcha filiallar</option>{sites?.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : <>{dayPicker}<button className="btn" onClick={load}>Yangilash</button></>}/>
+  return <><PageHeader title={t("panel.evidence.title")} subtitle={t("panel.evidence.subtitle")} actions={kind === "admin" ? <select className="select" value={selected} onChange={event => setSelected(event.target.value)}><option value="">{t("panel.evidence.all_sites")}</option>{sites?.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : <>{dayPicker}<button className="btn" onClick={load}>{t("panel.common.refresh")}</button></>}/>
     {/* Nima uchun ko'p hodisada tugma yo'qligi ANIQ aytiladi: kirish-chiqish
         qatorlarida rasm bo'lmasligi mijozga "buzilgan"day ko'rinardi. */}
-    <div className="alert-strip alert-info"><Icon name="shield"/><div>Rasm va klip maxfiylik uchun faqat <b>xavfsizlik hodisalarida</b> saqlanadi: kamera to‘silsa, ish vaqtidan keyin harakat bo‘lsa yoki taqiqlangan zonaga kirilsa. Oddiy kirish-chiqishlarda tasvir saqlanmaydi.</div></div>
+    <div className="alert-strip alert-info"><Icon name="shield"/><div>{t("panel.evidence.privacy_before")} <b>{t("panel.evidence.privacy_bold")}</b> {t("panel.evidence.privacy_after")}</div></div>
     {error ? <div className="alert-strip alert-info"><Icon name="bell"/>{error}</div> : null}
     {locked
-      ? <Card><PlanLock title="Vaqt lentasi va dalillar Biznes tarifida" detail="Kun bo‘ylab nima bo‘lganini bir qarashda ko‘rasiz: soat bo‘yicha lenta, kadrli kartochkalar va klip." onUpgrade={() => onNavigate?.("billing")}/></Card>
+      ? <Card><PlanLock title={t("panel.evidence.lock_title")} detail={t("panel.evidence.lock_detail")} onUpgrade={() => onNavigate?.("billing")}/></Card>
       : <>
-        {kind === "owner" && day ? <Card><div className="card-head"><div><h2>Kun bo‘ylab</h2><p>{hour == null ? "Soatga bosing — pastdagi ro‘yxat o‘sha soatdan bo‘ladi" : `Tanlangan soat: ${String(hour).padStart(2, "0")}:00`}</p></div></div><EventTimeline siteId={siteId} date={day} selectedHour={hour} onSelectHour={value => { setHour(value); setEvents(null); }}/></Card> : null}
-        <Card className={kind === "owner" && day ? "section-gap" : ""}>{events === null ? <div className="card-body"><Skeleton height={180}/></div> : visible.length ? <><div className="evidence-list">{visible.map((item, index) => <Evidence key={item.id || item.event_id || index} item={item} kind={kind} siteId={kind === "owner" ? siteId : selected || item.site_id} retentionHours={retentionHours} autoPhoto={kind === "owner"} focused={Boolean(focusEventId) && (item.id === focusEventId || item.event_id === focusEventId)}/>)}</div>{events.length > shown ? <div className="card-body"><button className="btn btn-wide" onClick={() => setShown(value => value + PAGE)}>Yana {Math.min(PAGE, events.length - shown)} ta ko‘rsatish</button></div> : null}</> : <EmptyState icon="pulse" title="Hodisa yo‘q" detail={day ? "Tanlangan kun (yoki soat) uchun hodisa qayd etilmagan. Boshqa kunni tanlab ko‘ring." : "Qurilma AI hodisa yuborgach uning vaqti va dalili shu yerda ko‘rinadi."}/>}</Card>
+        {kind === "owner" && day ? <Card><div className="card-head"><div><h2>{t("panel.evidence.day_title")}</h2><p>{hour == null ? t("panel.evidence.pick_hour_hint") : t("panel.evidence.selected_hour", { hour: String(hour).padStart(2, "0") })}</p></div></div><EventTimeline siteId={siteId} date={day} selectedHour={hour} onSelectHour={value => { setHour(value); setEvents(null); }}/></Card> : null}
+        <Card className={kind === "owner" && day ? "section-gap" : ""}>{events === null ? <div className="card-body"><Skeleton height={180}/></div> : visible.length ? <><div className="evidence-list">{visible.map((item, index) => <Evidence key={item.id || item.event_id || index} item={item} kind={kind} siteId={kind === "owner" ? siteId : selected || item.site_id} retentionHours={retentionHours} autoPhoto={kind === "owner"} focused={Boolean(focusEventId) && (item.id === focusEventId || item.event_id === focusEventId)}/>)}</div>{events.length > shown ? <div className="card-body"><button className="btn btn-wide" onClick={() => setShown(value => value + PAGE)}>{t("panel.evidence.show_more", { count: Math.min(PAGE, events.length - shown) })}</button></div> : null}</> : <EmptyState icon="pulse" title={t("panel.evidence.empty_title")} detail={day ? t("panel.evidence.empty_day") : t("panel.evidence.empty_recent")}/>}</Card>
       </>}
   </>;
 }

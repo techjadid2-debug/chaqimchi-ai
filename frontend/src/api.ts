@@ -1,4 +1,4 @@
-import { getLang, t } from "./i18n";
+import { getLang, t, tList } from "./i18n";
 import type { Dashboard } from "./types";
 
 export type ApiOptions = RequestInit & { siteId?: string };
@@ -97,7 +97,7 @@ export async function mediaObjectUrl(path: string, kind: "owner" | "admin", site
   const response = await fetch(path, { headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || "Media ochilmadi");
+    throw new Error(body.detail || t("panel.error.media_open_failed"));
   }
   return URL.createObjectURL(await response.blob());
 }
@@ -109,7 +109,7 @@ export async function login(username: string, password: string, kind: "owner" | 
     { method: "POST", body: JSON.stringify({ username, password }) },
   );
   const allowed = kind === "owner" ? result.account.role === "customer" : result.account.role === "admin";
-  if (!allowed) throw new Error(kind === "owner" ? "Bu login biznes paneliga tegishli emas" : "Admin ruxsati talab qilinadi");
+  if (!allowed) throw new Error(t(kind === "owner" ? "panel.login.not_owner_account" : "panel.login.admin_required"));
   saveToken(kind, result.access_token);
   return result;
 }
@@ -360,18 +360,24 @@ export function telegramBotUrl(): string {
   return raw.startsWith("http") ? raw : "";
 }
 
-const MONTHS_UZ = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
-const WEEKDAYS_UZ = ["yakshanba", "dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba"];
-
-/** "2026-yil 24-avgust, dushanba".
+/** "2026-yil 24-avgust, dushanba" — joriy tilda.
  *
  * `Intl` ishlatilmaydi: panel Telegram ichidagi WebView'da ochiladi va
  * u yerdagi ba'zi Android qurilmalarda `uz-UZ` uchun ICU ma'lumoti
- * yo'q — sana "M08 24, Mon" bo'lib chiqadi.  O'n ikki oy nomi bilan
- * bu xavf butunlay yo'qoladi. */
+ * yo'q — sana "M08 24, Mon" bo'lib chiqadi.  Oy va kun nomlari
+ * katalogdan (`format.*`) keladi — server ham aynan shu nomlarni
+ * ishlatadi, ya'ni panel bilan Telegram xabari bir xil yozadi.
+ *
+ * Hafta kuni: JS `getDay()` yakshanbadan (0) boshlaydi, katalog esa
+ * dushanbadan — shuning uchun `(getDay() + 6) % 7`. */
 export function formatDateUz(date: Date = new Date(), withWeekday = true) {
-  const base = `${date.getFullYear()}-yil ${date.getDate()}-${MONTHS_UZ[date.getMonth()]}`;
-  return withWeekday ? `${base}, ${WEEKDAYS_UZ[date.getDay()]}` : base;
+  const params = {
+    year: date.getFullYear(),
+    day: date.getDate(),
+    month: tList("format.months")[date.getMonth()] ?? "",
+    weekday: tList("format.weekdays")[(date.getDay() + 6) % 7] ?? "",
+  };
+  return t(withWeekday ? "format.date.long" : "format.date.long_no_weekday", params);
 }
 
 /** "24.08.2026" — jadval katakchalari uchun qisqa shakl. */
@@ -472,17 +478,25 @@ export function tashkentToday(): string {
   return tashkentDay(new Date().toISOString()) || "";
 }
 
-/** "1 234 567" — mingliklar orasida probel.
+/** "1 234 567" — mingliklar orasida probel (o'zbekcha va ruscha),
+ *  inglizchada "1,234,567".
  *
  * `Intl` emas: ba'zi WebView'larda `uz-UZ` uchun ICU yo'q va raqam
  * "1,234,567" bo'lib chiqadi — o'zbekcha yozuvda vergul kasr belgisi,
- * ya'ni bu son butunlay boshqacha o'qiladi. */
+ * ya'ni bu son butunlay boshqacha o'qiladi.  Ajratgichlar katalogdan
+ * (`format.number.*`): server hisobotida ham xuddi shu belgilar.
+ *
+ * Katalogdagi ODDIY probel bu yerda UZILMAS probelga (U+00A0)
+ * aylanadi.  Telegramda farqi yo'q, brauzerda esa oddiy probel tor
+ * kartada raqamni ikki qatorga bo'lib yuboradi — "48 600" ning "48"
+ * i bir qatorda, "600" i keyingisida. */
 export function formatNumber(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   const rounded = Math.round(value * 100) / 100;
   const [whole, fraction] = String(Math.abs(rounded)).split(".");
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${rounded < 0 ? "−" : ""}${grouped}${fraction ? `,${fraction}` : ""}`;
+  const group = t("format.number.group");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, group === " " ? "\u00a0" : group);
+  return `${rounded < 0 ? "−" : ""}${grouped}${fraction ? `${t("format.number.decimal")}${fraction}` : ""}`;
 }
 
 /** Pul.  Million va undan katta summalar qisqartiriladi: "48,6 mln
@@ -492,17 +506,19 @@ export function formatMoney(value: number | null | undefined, { short = true } =
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   if (short && Math.abs(value) >= 1_000_000) {
     const millions = Math.round(value / 100_000) / 10;
-    return `${formatNumber(millions)} mln so‘m`;
+    return t("money.mln", { value: formatNumber(millions) });
   }
-  return `${formatNumber(value)} so‘m`;
+  return t("money.plain", { value: formatNumber(value) });
 }
 
+/** "12 daqiqa oldin" — oxirgi aloqa yoshi.  Chegaralar (60, 1440)
+ *  serverdagi `minutes_since_seen` bilan bir xil birlikda: daqiqa. */
 export function relativeMinutes(value: number | null | undefined) {
-  if (value == null) return "hali ma’lumot yo‘q";
-  if (value < 1) return "hozir";
-  if (value < 60) return `${value} daqiqa oldin`;
-  if (value < 1440) return `${Math.floor(value / 60)} soat oldin`;
-  return `${Math.floor(value / 1440)} kun oldin`;
+  if (value == null) return t("panel.common.no_data");
+  if (value < 1) return t("format.relative.now");
+  if (value < 60) return t("format.relative.minutes", { count: value });
+  if (value < 1440) return t("format.relative.hours", { count: Math.floor(value / 60) });
+  return t("format.relative.days", { count: Math.floor(value / 1440) });
 }
 
 
@@ -537,7 +553,7 @@ export async function toJpeg(file: File, maxSide = 1600, quality = 0.9): Promise
       element.onload = () => resolve(element);
       /* Safari HEIC'ni tizim kodeki bilan ocha oladi; ocholmasa xato
          mijozga ko'rinadi va u boshqa rasm tanlaydi. */
-      element.onerror = () => reject(new Error("Rasm ochilmadi"));
+      element.onerror = () => reject(new Error(t("panel.error.image_open_failed")));
       element.src = url;
     });
     const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
@@ -545,12 +561,12 @@ export async function toJpeg(file: File, maxSide = 1600, quality = 0.9): Promise
     canvas.width = Math.max(1, Math.round(image.width * scale));
     canvas.height = Math.max(1, Math.round(image.height * scale));
     const context = canvas.getContext("2d");
-    if (!context) throw new Error("Rasm o‘qilmadi");
+    if (!context) throw new Error(t("panel.error.image_read_failed"));
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>(resolve =>
       canvas.toBlob(resolve, "image/jpeg", quality),
     );
-    if (!blob) throw new Error("Rasm saqlanmadi");
+    if (!blob) throw new Error(t("panel.error.image_save_failed"));
     return blob;
   } finally {
     URL.revokeObjectURL(url);

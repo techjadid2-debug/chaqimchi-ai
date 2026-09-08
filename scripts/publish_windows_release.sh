@@ -47,7 +47,7 @@ if [[ -z "${CHAQIMCHI_RELEASE_HOST:-}" ]]; then
   exit 1
 fi
 
-version="$("$py" -c 'import chaqimchi_ai; print(chaqimchi_ai.__version__)')"
+version="$("$py" -c 'import enes; print(enes.__version__)')"
 exe="releases/chaqimchi-windows-$version.exe"
 manifest="releases/chaqimchi-windows-$version.json"
 echo "→ Versiya: $version"
@@ -74,7 +74,7 @@ fi
 
 # ── Imzo ────────────────────────────────────────────────────────────────
 #
-# Imzosiz paketni qurilma RAD ETADI (`chaqimchi_ai/signed_update.py`) —
+# Imzosiz paketni qurilma RAD ETADI (`enes/signed_update.py`) —
 # ya'ni imzolanmagan relizni chiqarish shunchaki foydasiz ish bo'lardi.
 if [[ ! -f "$manifest" ]]; then
   echo "→ Imzolanmoqda…"
@@ -86,7 +86,7 @@ echo "→ Imzo tekshirilmoqda (qurilmadagi ochiq kalit bilan)…"
 import sys
 from pathlib import Path
 
-from chaqimchi_ai.signed_update import verify_release_manifest
+from enes.signed_update import verify_release_manifest
 
 archive, manifest = Path(sys.argv[1]), Path(sys.argv[2])
 data = verify_release_manifest(archive, manifest, Path("deploy/update-public.pem"))

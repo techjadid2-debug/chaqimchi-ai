@@ -23,8 +23,8 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from chaqimchi_ai.camera_roles import RoleCandidate, suggest_role, suggest_roles
 from cloud.store import CloudStore
+from enes.camera_roles import RoleCandidate, suggest_role, suggest_roles
 
 SUB = "rtsp://admin:maxfiy@192.168.1.64:554/Streaming/Channels/102"
 MAIN = "rtsp://admin:maxfiy@192.168.1.64:554/Streaming/Channels/101"
@@ -194,7 +194,7 @@ def test_the_role_reaches_the_camera_plan_with_its_priority() -> None:
     """Qayta o'rnatilgan kompyuter (lokal sozlama bo'sh): rol bulutdan
     keladi va prioritetni O'ZI beradi — «kirish» haqiqiy `security`
     navbatiga aylanadi."""
-    from chaqimchi_ai.retail.inventory import InventoryCamera, merge_cameras
+    from enes.retail.inventory import InventoryCamera, merge_cameras
 
     plans = merge_cameras(
         [InventoryCamera(camera_id="camera-01", source=SUB, role="entrance")], []
@@ -206,7 +206,7 @@ def test_the_role_reaches_the_camera_plan_with_its_priority() -> None:
 
 def test_the_local_priority_still_wins_over_the_role_default() -> None:
     """Usta/support lokal kiritgan prioritet roldan ustun."""
-    from chaqimchi_ai.retail.inventory import InventoryCamera, merge_cameras
+    from enes.retail.inventory import InventoryCamera, merge_cameras
 
     class LocalCamera:
         id = "camera-01"
@@ -229,7 +229,7 @@ def test_the_local_priority_still_wins_over_the_role_default() -> None:
 def test_the_cache_reader_parses_the_role(tmp_path: Path) -> None:
     import json
 
-    from chaqimchi_ai.retail.inventory import read_sotqin_cache
+    from enes.retail.inventory import read_sotqin_cache
 
     path = tmp_path / "sotqin-config.json"
     path.write_text(
@@ -447,8 +447,8 @@ def local_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
     import importlib
 
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import config_store, paths, supervisor
+    from enes.local import app as app_module
+    from enes.local import config_store, paths, supervisor
 
     importlib.reload(paths)
     importlib.reload(config_store)
@@ -496,8 +496,8 @@ def test_the_record_url_backfill_preserves_the_role(
 ) -> None:
     """`save_camera` yozuvni NOLDAN quradi — backfill rolni uzatmasa u
     jimgina o'chib ketardi.  Bu regressiya testi o'sha tuzoqni qulflaydi."""
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import config_store
+    from enes.local import app as app_module
+    from enes.local import config_store
 
     config_store.save_camera(
         camera_id="camera-01",
@@ -543,7 +543,7 @@ def test_the_local_suggestion_endpoint_contract(local_client: TestClient) -> Non
 def test_feature_status_warns_about_a_role_without_geometry(
     local_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.save_camera(
         camera_id="camera-01",
@@ -572,7 +572,7 @@ def test_feature_status_warns_about_a_role_without_geometry(
 def test_feature_status_is_quiet_when_the_geometry_matches(
     local_client: TestClient,
 ) -> None:
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.save_camera(
         camera_id="camera-01",

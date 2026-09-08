@@ -2,7 +2,7 @@ from pathlib import Path
 
 import yaml
 
-from chaqimchi_ai.settings import AppSettings
+from enes.settings import AppSettings
 
 
 def test_production_settings_fail_closed(monkeypatch) -> None:

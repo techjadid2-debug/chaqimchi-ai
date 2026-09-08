@@ -33,7 +33,7 @@ eski kodda qolaveradi. Ataylab almashtirish uchun
 
 ```bash
 # 1. Versiyani ko'taring — ikkala joyda ham (test buni tekshiradi)
-#    pyproject.toml  va  chaqimchi_ai/__init__.py
+#    pyproject.toml  va  enes/__init__.py
 # 2. Commit qiling (iflos worktree'dan qurish rad etiladi)
 make lint && pytest -q
 git commit -am "0.6.1"
@@ -222,7 +222,7 @@ python3 scripts/rollout.py --toxtat     # hamma qurilma darhol to'xtaydi
 python3 scripts/rollout.py --davom      # tuzatilgach qayta yoqiladi
 ```
 
-Himoya qatlamlari (`chaqimchi_ai/local/updater.py`):
+Himoya qatlamlari (`enes/local/updater.py`):
 
 - **Faqat yangiroq versiya** o'rnatiladi — serverga yozish huquqini olgan
   hujumchi eski (zaif) relizni qaytara olmaydi. `pin` bundan mustasno

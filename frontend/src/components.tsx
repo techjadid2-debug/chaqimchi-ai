@@ -271,7 +271,7 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
  *
  *  Telefon klaviaturasida xato terish oson, xatoni ko'rmasdan tuzatib
  *  bo'lmaydi.  Statik sahifalar uchun xuddi shu naqsh
- *  `chaqimchi_ai/local/static/pw-eye.js` da. */
+ *  `enes/local/static/pw-eye.js` da. */
 /** Modal oyna — brauzerning `prompt`/`confirm` o'rniga.
  *
  * Eski admin qoidasi (2026-08-19): brauzer oynasida "auto" yoki "naqd"

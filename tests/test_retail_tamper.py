@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import pytest
 
-from chaqimchi_ai.retail.tamper import (
+from enes.retail.tamper import (
     BLURRED,
     DARK,
     FREEZE,

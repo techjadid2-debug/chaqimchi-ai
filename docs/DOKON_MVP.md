@@ -10,7 +10,7 @@ lokal Face ID davomat to‘plami ham arxivlandi
 | Qaror | Canonical qiymat |
 |---|---|
 | Mijoz | Do‘kon |
-| Pilot | 1 do‘kon, 4 kamera (yagona manba: `chaqimchi_ai/limits.py`) |
+| Pilot | 1 do‘kon, 4 kamera (yagona manba: `enes/limits.py`) |
 | Asosiy qurilma | **Mijozning mavjud Windows 10/11 kompyuteri** (`Chaqimchi_AI_Setup.exe`) |
 | Keyingi bosqich | Chaqimchi Box — Sotqin R1: Intel N100, 8 GB, 128 GB NVMe (kod tayyor, sotuv fokusda emas) |
 | Video | To‘liq arxiv NVR’da; qurilma faqat event buffer/klip |
@@ -40,7 +40,7 @@ lokal Face ID davomat to‘plami ham arxivlandi
 ## Kod bor, lekin hali real qurilmada qabul qilinmagan
 
 - 4 kamerali sig‘im bahosi real i5-4590 da o‘lchov bilan tasdiqlanmagan
-  (`chaqimchi_ai/local/hardware.py` dagi `INFERENCES_PER_CORE=8.0` — taxmin);
+  (`enes/local/hardware.py` dagi `INFERENCES_PER_CORE=8.0` — taxmin);
 - 72 soatlik elektr/internet/kamera uzilishi barqarorlik sinovi;
 - real do‘konlarda line/queue/tamper/loitering aniqlik kalibratsiyasi;
 - Windows OTA rollback stsenariysining real qurilmada sinovi;
@@ -174,7 +174,7 @@ rejalashtirilgan vazifa, SYSTEM nomidan, tizimga kirish shart emas
   oqim o‘lchamidan), odam sehrgarda tasdiqlaydi; «kirish» roli kamerani
   davomat (Face ID) ro‘yxatiga ham qo‘shadi (ko‘pi bilan 2 ta, ega
   panelda o‘zgartira oladi). 4 tadan ko‘p topilsa tizim eng yaxshi
-  4 tasini belgilab beradi. Yagona manba: `chaqimchi_ai/camera_roles.py`.
+  4 tasini belgilab beradi. Yagona manba: `enes/camera_roles.py`.
 - Taqiqlangan zonalar va ish soatlari aniq qanday?
 - Telegram alert kimlarga va qaysi severity’dan yuboriladi?
 - 72 soat sinovni boshlash sanasi va qabul qiluvchi mas’ul kim?

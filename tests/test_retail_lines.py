@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from chaqimchi_ai.retail.lines import (
+from enes.retail.lines import (
     CountingLine,
     DwellTracker,
     LineCounter,

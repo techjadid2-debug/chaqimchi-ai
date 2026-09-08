@@ -15,17 +15,17 @@ from typing import Any, Dict, List, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from chaqimchi_ai.camera_roles import CAMERA_ROLES, ROLE_NONE
-from chaqimchi_ai.licensing.plans import (
+from cloud.portal_auth import hash_password, normalize_username, verify_password
+from enes.camera_roles import CAMERA_ROLES, ROLE_NONE
+from enes.licensing.plans import (
     DEFAULT_USD_RATE_UZS,
     LITE_MONTHLY_PRICE_USD_CENTS,
     PlanTier,
     get_plan,
     usd_rate_uzs,
 )
-from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
-from chaqimchi_ai.sotqin_profile import GUARANTEED_CAMERAS
-from cloud.portal_auth import hash_password, normalize_username, verify_password
+from enes.pilot_acceptance import pilot_acceptance_status
+from enes.sotqin_profile import GUARANTEED_CAMERAS
 
 # V1 cloud-AI katalogi. Narxlar sentda saqlanadi: invoice va shartnoma
 # snapshotlari floating-point xatodan holi bo'lishi kerak.
@@ -1492,7 +1492,7 @@ class CloudStore:
             # Manzil faqat do'kon kompyuterida turgani uchun buni
             # masofadan ko'rib ham, tuzatib ham bo'lmasdi.
             "record_ciphertext": "TEXT",
-            # Kameraning mahsulot vazifasi (`chaqimchi_ai/camera_roles.py`).
+            # Kameraning mahsulot vazifasi (`enes/camera_roles.py`).
             # NULL = tanlanmagan — bu halol holat, standart qiymat ATAYLAB
             # yo'q (jim standart 2026-08-22 da hamma kamerani "Kirish"
             # qilib qo'ygan edi).

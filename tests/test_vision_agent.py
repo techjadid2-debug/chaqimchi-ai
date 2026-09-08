@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud.event_store import EventStore
 from cloud.vision_agent import (
     MAX_JOB_ATTEMPTS,
@@ -11,6 +10,7 @@ from cloud.vision_agent import (
     parse_query,
     process_next_job,
 )
+from enes.event_models import EdgeEvent
 
 
 def test_uzbek_query_parser_finds_time_camera_and_event_type() -> None:

@@ -75,12 +75,12 @@ holda (shifrlangan saqlanadi), xaridorning yuzi (umuman tanilmaydi).
 
 | Qism | Fayl |
 |---|---|
-| Kamera chegarasi (4 ta) | `chaqimchi_ai/limits.py` |
-| Kamera rollari va taklif dvigateli | `chaqimchi_ai/camera_roles.py` |
-| Sozlash ustasi va lokal panel | `chaqimchi_ai/local/app.py` |
-| Cloudga ulanish (pairing) | `chaqimchi_ai/local/cloud_link.py` |
-| AI zanjiri | `chaqimchi_ai/retail/` — [README](../chaqimchi_ai/retail/README.md) |
-| Offline navbat | `chaqimchi_ai/outbox.py`, `chaqimchi_ai/cloud_sync.py` |
+| Kamera chegarasi (4 ta) | `enes/limits.py` |
+| Kamera rollari va taklif dvigateli | `enes/camera_roles.py` |
+| Sozlash ustasi va lokal panel | `enes/local/app.py` |
+| Cloudga ulanish (pairing) | `enes/local/cloud_link.py` |
+| AI zanjiri | `enes/retail/` — [README](../enes/retail/README.md) |
+| Offline navbat | `enes/outbox.py`, `enes/cloud_sync.py` |
 | Cloud API | `cloud/main.py` |
 | Telegram | `cloud/alerts.py`, `cloud/notify.py`, `cloud/digest.py` |
 | To'lov | `cloud/payments/` — `payme.py`, `click.py` |
@@ -134,14 +134,14 @@ mijozi bo'lsa mijoz bitta hodisa uchun ikkita xabar olardi.
 
 | Qadam | Fayl |
 |---|---|
-| Kadr olish halqasi | `chaqimchi_ai/retail/runner.py` |
-| Filtr, analiz, klip navbati | `chaqimchi_ai/retail/pipeline.py` |
-| Navbat va byudjet | `chaqimchi_ai/retail/broker.py`, `budget.py` |
-| Detektor | `chaqimchi_ai/retail/detector_ov.py` |
-| Qoidalar | `chaqimchi_ai/retail/rules.py`, `config/rules.yaml` |
-| Kamera buzilishi | `chaqimchi_ai/retail/tamper.py` |
-| Navbat va uzatish | `chaqimchi_ai/outbox.py`, `chaqimchi_ai/cloud_sync.py` |
-| Hodisa modeli | `chaqimchi_ai/event_models.py` |
+| Kadr olish halqasi | `enes/retail/runner.py` |
+| Filtr, analiz, klip navbati | `enes/retail/pipeline.py` |
+| Navbat va byudjet | `enes/retail/broker.py`, `budget.py` |
+| Detektor | `enes/retail/detector_ov.py` |
+| Qoidalar | `enes/retail/rules.py`, `config/rules.yaml` |
+| Kamera buzilishi | `enes/retail/tamper.py` |
+| Navbat va uzatish | `enes/outbox.py`, `enes/cloud_sync.py` |
+| Hodisa modeli | `enes/event_models.py` |
 | Cloud qabuli | `cloud/main.py` → `/api/v1/edge/events` |
 | Alert tanlash va tormoz | `cloud/notify.py`, `cloud/alerts.py` |
 
@@ -198,16 +198,16 @@ kadr kutadi).
 **Kuzatiladigan ikki raqam:** `floor_violations` (qurilma yetishmayapti)
 va `p95_latency_ms` (model sekinlashgan).
 
-To'liq tafsilot — [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md).
+To'liq tafsilot — [enes/retail/README.md](../enes/retail/README.md).
 
 | Qism | Fayl |
 |---|---|
-| Broker va byudjet | `chaqimchi_ai/retail/broker.py`, `budget.py` |
-| Ring buffer (klip uchun) | `chaqimchi_ai/retail/ringbuffer.py` |
-| Sanoq chiziqlari, zona | `chaqimchi_ai/retail/lines.py`, `chaqimchi_ai/scene_analytics.py` |
-| Bosim signali | `chaqimchi_ai/retail/pressure.py` |
-| Xizmat sifatida ishga tushirish | `chaqimchi_ai/retail/service.py` |
-| Apparat imkoniyati | `chaqimchi_ai/local/hardware.py` |
+| Broker va byudjet | `enes/retail/broker.py`, `budget.py` |
+| Ring buffer (klip uchun) | `enes/retail/ringbuffer.py` |
+| Sanoq chiziqlari, zona | `enes/retail/lines.py`, `enes/scene_analytics.py` |
+| Bosim signali | `enes/retail/pressure.py` |
+| Xizmat sifatida ishga tushirish | `enes/retail/service.py` |
+| Apparat imkoniyati | `enes/local/hardware.py` |
 
 ---
 
@@ -288,8 +288,8 @@ production'da server **ataylab yonmaydi**.
 | Vazifa | Fayl |
 |---|---|
 | Marshrutlar, fon vazifalari | `cloud/main.py` |
-| Litsenziya/tarif mantiqi | `chaqimchi_ai/licensing/plans.py`, `enforce.py` |
-| Ta'lim tarifi | `chaqimchi_ai/licensing/edu.py` |
+| Litsenziya/tarif mantiqi | `enes/licensing/plans.py`, `enforce.py` |
+| Ta'lim tarifi | `enes/licensing/edu.py` |
 | Server sog'ligi | `cloud/server_health.py` |
 | Manzillar | `cloud/urls.py` |
 
@@ -396,7 +396,7 @@ Telegram bot `/start` beradigan `?key=<token>`. Eski `?tg=` va
 |---|---|
 | Owner token | `cloud/owner_auth.py` |
 | Portal token (admin/usta) | `cloud/portal_auth.py` |
-| JWT yadrosi | `chaqimchi_ai/jwt_auth.py` |
+| JWT yadrosi | `enes/jwt_auth.py` |
 | Davomat darvozasi | `cloud/main.py:834` `_attendance_enabled()` |
 | Testlar | `tests/test_portal_auth.py`, `tests/test_cloud_faces.py` |
 
@@ -463,7 +463,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-  V["1 · Versiyani ko'tarish<br/>chaqimchi_ai/__init__.py + pyproject.toml"]
+  V["1 · Versiyani ko'tarish<br/>enes/__init__.py + pyproject.toml"]
   B["2 · Payload yig'ish<br/>build_windows_payload.py<br/>Python + kutubxona + AI modeli"]
   N["3 · NSIS<br/>windows_installer.nsi → .exe"]
   S["4 · Ed25519 imzo<br/>sign_release.py"]
@@ -504,7 +504,7 @@ ichki hujjatlarda **to'g'ri**. `publish_windows_release.sh` uni nashrda
 | O'rnatuvchi | `scripts/windows_installer.nsi` |
 | Imzo | `scripts/sign_release.py`, `generate_update_key.py` |
 | Nashr | `scripts/publish_windows_release.sh` |
-| Qurilma tomoni | `chaqimchi_ai/local/updater.py`, `chaqimchi_ai/signed_update.py` |
+| Qurilma tomoni | `enes/local/updater.py`, `enes/signed_update.py` |
 | Bosqichli tarqatish | `scripts/rollout.py` |
 | CI | `.github/workflows/windows-installer.yml` |
 | Kontrakt testi | `tests/test_sotqin_release_contract.py` |

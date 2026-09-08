@@ -1,6 +1,6 @@
 /* `window.ZoneEditor` tipi.
  *
- * Muharrir manbasi `chaqimchi_ai/local/static/zone-editor.js` da yotadi
+ * Muharrir manbasi `enes/local/static/zone-editor.js` da yotadi
  * va u ATAYLAB bundle qilinmaydi: Windows payload `cloud/` ni
  * ko'chirmaydi, ya'ni bundle qilingan nusxa qurilmadagi bilan bir kun
  * ajralib ketardi.  Uning o'rniga skript ish vaqtida

@@ -106,7 +106,7 @@ def _parse_meminfo(text: str) -> Optional[float]:
     "band" ko'rinadi, lekin kerak bo'lganda bir zumda bo'shatiladi.
     `MemAvailable` aynan shuni hisobga oladi — ya'ni bu haqiqiy tanqislik
     o'lchovi.  Xuddi shu mulohaza qurilma tomonida ham qo'llanadi
-    (`chaqimchi_ai/retail/pressure.py`), lekin u modul ATAYLAB import
+    (`enes/retail/pressure.py`), lekin u modul ATAYLAB import
     qilinmaydi: bulut qurilma paketiga bog'lanib qolmasin.
     """
     total = available = None

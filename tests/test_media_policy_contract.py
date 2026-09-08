@@ -1,6 +1,6 @@
 """Media siyosati: qurilma va panel BIR XIL ro'yxatni bilishi.
 
-Nega kontrakt testi kerak: `cloud` `chaqimchi_ai.retail.pipeline` ni
+Nega kontrakt testi kerak: `cloud` `enes.retail.pipeline` ni
 import qila olmaydi (u `cv2`/`numpy` tortadi va serverda ular yo'q), ya'ni
 "qaysi hodisaga rasm olinadi" ro'yxati IKKI joyda yozilgan.  Ikki fayldagi
 ikki qiymat bir-birini inkor qilishi mumkin va buni hech qaysi modul
@@ -19,10 +19,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from chaqimchi_ai.retail.pipeline import SECURITY_MEDIA_EVENTS
 from cloud import ratelimit
 from cloud.notify import MEDIA_EVENT_TYPES
 from cloud.snapshots import LocalSnapshotStore
+from enes.retail.pipeline import SECURITY_MEDIA_EVENTS
 
 ADMIN = {"X-Cloud-Admin-Key": "test-admin"}
 

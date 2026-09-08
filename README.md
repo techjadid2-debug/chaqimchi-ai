@@ -3,7 +3,7 @@
 Chaqimchi AI hozir **mijozning mavjud Windows kompyuteri + NVR/IP kamera +
 Cloud** sifatida faqat do‘konlar uchun qurilmoqda. Birinchi qabul profili —
 bitta do‘kon va ko‘pi bilan **4 kamera** (yagona manba:
-`chaqimchi_ai/limits.py`). Uzluksiz video NVR’da qoladi; tahlil do‘kon
+`enes/limits.py`). Uzluksiz video NVR’da qoladi; tahlil do‘kon
 kompyuterida lokal ishlaydi, cloudga esa hodisa, ruxsat etilgan media,
 hisobot va health yuboriladi.
 
@@ -96,7 +96,7 @@ uchun sotuvda ehtiyotkor va’da beriladi (batafsil:
 
 - [Do‘kon MVP kontrakti va gap-list](docs/DOKON_MVP.md)
 - [Sotqin R1 / Box](docs/SOTQIN.md)
-- [Retail pipeline](chaqimchi_ai/retail/README.md)
+- [Retail pipeline](enes/retail/README.md)
 - [Installer](docs/INSTALLER.md)
 - [Bulutdan sozlash](docs/BULUTDAN_SOZLASH.md)
 - [Reliz chiqarish va OTA](docs/RELIZ_VA_OTA.md)

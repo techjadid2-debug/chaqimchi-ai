@@ -35,7 +35,7 @@ const POLL_MS = 2000;
 //: spinnerni "qotib qoldi" deb o'ylamasin.
 const SLOW_AFTER_MS = 60_000;
 
-// Rol — nomdan alohida SAQLANADIGAN maydon (chaqimchi_ai/camera_roles.py).
+// Rol — nomdan alohida SAQLANADIGAN maydon (enes/camera_roles.py).
 // Tugma rolni tanlaydi va nomni to'ldiradi; rolsiz saqlash ham mumkin —
 // majburiy tanlov 2026-08-22 da hamma kamerani jimgina "Kirish" qilib
 // qo'ygan xatoning ildizi edi.

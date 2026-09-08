@@ -144,7 +144,7 @@ def test_plan_prices_match_the_invoice_exactly(client) -> None:
     Ilgari `site.js` so'mga o'girish formulasini qaytadan yozgan edi —
     ikki joyda turgan formula bir-biridan uzoqlashishi mumkin.
     """
-    from chaqimchi_ai.licensing.plans import PLANS
+    from enes.licensing.plans import PLANS
 
     for card in client.get("/api/v1/public/pricing").json()["plans"]:
         if card["price_kind"] != "fixed":
@@ -154,7 +154,7 @@ def test_plan_prices_match_the_invoice_exactly(client) -> None:
 
 def test_base_includes_come_from_the_biznes_plan(client) -> None:
     """Bitta ro'yxat ikki joyda yozilib, bir-biridan uzoqlashmasin."""
-    from chaqimchi_ai.licensing.plans import PLANS
+    from enes.licensing.plans import PLANS
 
     data = client.get("/api/v1/public/pricing").json()
     assert data["base"]["includes"] == list(PLANS["biznes"].includes)
@@ -186,7 +186,7 @@ def test_the_flat_list_is_derived_from_the_bullets() -> None:
     Biri yangilanadi, ikkinchisi unutiladi — va sayt bir narsani,
     `<noscript>` yoki panel boshqasini aytadi.
     """
-    from chaqimchi_ai.licensing.plans import PLANS
+    from enes.licensing.plans import PLANS
 
     for code in ("boshlangich", "biznes", "lite"):
         limits = PLANS[code]

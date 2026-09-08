@@ -18,7 +18,7 @@ from typing import Optional
 
 import pytest
 
-from chaqimchi_ai.retail.pressure import (
+from enes.retail.pressure import (
     CPU_CEILING,
     MEMORY_CEILING,
     TEMP_CEILING_C,
@@ -145,14 +145,14 @@ def test_memory_is_read_from_meminfo(tmp_path: Path, monkeypatch) -> None:
         "Buffers:          100000 kB\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("chaqimchi_ai.retail.pressure.Path", lambda _p: meminfo)
+    monkeypatch.setattr("enes.retail.pressure.Path", lambda _p: meminfo)
 
     assert read_memory_ratio() == pytest.approx(0.5)
 
 
 def test_missing_meminfo_reports_no_pressure(monkeypatch) -> None:
     monkeypatch.setattr(
-        "chaqimchi_ai.retail.pressure.Path", lambda _p: Path("/mavjud/emas/meminfo")
+        "enes.retail.pressure.Path", lambda _p: Path("/mavjud/emas/meminfo")
     )
     assert read_memory_ratio() == 0.0
 
@@ -162,14 +162,14 @@ def test_the_hottest_zone_wins(tmp_path: Path, monkeypatch) -> None:
         zone = tmp_path / f"thermal_zone{index}"
         zone.mkdir()
         (zone / "temp").write_text(str(milli), encoding="utf-8")
-    monkeypatch.setattr("chaqimchi_ai.retail.pressure.THERMAL_ZONES", str(tmp_path))
+    monkeypatch.setattr("enes.retail.pressure.THERMAL_ZONES", str(tmp_path))
 
     # 0 va 9999999 — ma'nosiz qiymatlar, ular hisobga olinmaydi.
     assert read_temperature_c() == pytest.approx(67.0)
 
 
 def test_no_thermal_zones_returns_none(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("chaqimchi_ai.retail.pressure.THERMAL_ZONES", str(tmp_path))
+    monkeypatch.setattr("enes.retail.pressure.THERMAL_ZONES", str(tmp_path))
     assert read_temperature_c() is None
 
 
@@ -178,7 +178,7 @@ def test_no_thermal_zones_returns_none(tmp_path: Path, monkeypatch) -> None:
 
 def test_the_budget_actually_receives_the_pressure() -> None:
     """`set_pressure()` chaqirilmasa `budget.py:130` o'lik kod bo'lib qoladi."""
-    from chaqimchi_ai.retail.budget import InferenceBudget
+    from enes.retail.budget import InferenceBudget
 
     budget = InferenceBudget(target_fps=30.0, min_fps=1.0, max_fps=60.0)
     assert budget.stats()["pressure"] == 0.0
@@ -191,7 +191,7 @@ def test_the_budget_actually_receives_the_pressure() -> None:
 def test_high_pressure_lowers_the_target_before_latency_shows_it() -> None:
     """Butun modulning ma'nosi shu: harorat ko'tarilganda kechikish hali
     ko'rinmasligi mumkin, lekin byudjet allaqachon tushishi kerak."""
-    from chaqimchi_ai.retail.budget import MIN_SAMPLES, InferenceBudget
+    from enes.retail.budget import MIN_SAMPLES, InferenceBudget
 
     budget = InferenceBudget(target_fps=30.0, min_fps=1.0, max_fps=60.0)
     budget.set_pressure(0.9)

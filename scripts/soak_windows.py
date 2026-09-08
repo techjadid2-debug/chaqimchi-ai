@@ -33,15 +33,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-#: Qurilma paneli (`chaqimchi_ai/local/app.py`).
+#: Qurilma paneli (`enes/local/app.py`).
 DEFAULT_STATUS_URL = "http://127.0.0.1:8760/api/status"
 
-#: `outbox.priority`: critical=30 (`chaqimchi_ai/outbox.py`).
+#: `outbox.priority`: critical=30 (`enes/outbox.py`).
 CRITICAL_PRIORITY = 30
 
 
 def default_data_dir() -> Path:
-    """Sozlama va navbat qayerda (`chaqimchi_ai/local/paths.py` bilan bir xil)."""
+    """Sozlama va navbat qayerda (`enes/local/paths.py` bilan bir xil)."""
     override = os.environ.get("CHAQIMCHI_LOCAL_DIR", "").strip()
     if override:
         return Path(override).expanduser()

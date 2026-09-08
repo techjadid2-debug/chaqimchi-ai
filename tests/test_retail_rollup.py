@@ -23,8 +23,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud.event_store import EventStore
+from enes.event_models import EdgeEvent
 
 #: Hisobot va yig'indi shu mintaqada kun chegarasini qo'yadi — test
 #: ham aynan shunda yozsin, aks holda soat indeksi siljib ketadi.

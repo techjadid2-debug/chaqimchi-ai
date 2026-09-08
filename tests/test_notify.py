@@ -6,7 +6,6 @@ alohida ketardi va bot Telegram limitiga urilib, xabar umuman yetib bormasdi.
 
 from __future__ import annotations
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud.notify import (
     MAX_NOTE_CHARS,
     AlertThrottle,
@@ -14,6 +13,7 @@ from cloud.notify import (
     event_note,
     summarize,
 )
+from enes.event_models import EdgeEvent
 
 
 # MINIMAL rejim: botga faqat critical boradi, shuning uchun mexanika

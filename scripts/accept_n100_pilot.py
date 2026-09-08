@@ -33,8 +33,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from chaqimchi_ai.pilot_acceptance import WINDOWS_PROFILE, validate_n100_acceptance  # noqa: E402
-from chaqimchi_ai.sotqin_profile import HARDWARE_PROFILE  # noqa: E402
+from enes.pilot_acceptance import WINDOWS_PROFILE, validate_n100_acceptance  # noqa: E402
+from enes.sotqin_profile import HARDWARE_PROFILE  # noqa: E402
 
 
 def _read(path: Path) -> Dict[str, Any]:

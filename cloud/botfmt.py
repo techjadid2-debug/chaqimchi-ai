@@ -182,7 +182,7 @@ def alert_buttons(
     «Ko'rdim» ataylab bor: egasi javob berganini bilmasak, uni bir xil
     hodisa bilan qayta-qayta bezovta qilamiz.
     """
-    from chaqimchi_ai import announcements
+    from enes import announcements
 
     rows = []
     item = announcements.BY_CODE.get(speak_phrase)

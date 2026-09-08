@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from chaqimchi_ai.signed_update import UpdateVerificationError, verify_release_manifest
+from enes.signed_update import UpdateVerificationError, verify_release_manifest
 from scripts import generate_update_key, sign_release
 
 
@@ -32,10 +32,10 @@ def keys(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def make_archive(path: Path, *, version: str = "0.6.0", top: str = "chaqimchi-sotqin-0.6.0"):
-    """Ichida `chaqimchi_ai/__init__.py` bo'lgan haqiqiy tar.gz."""
+    """Ichida `enes/__init__.py` bo'lgan haqiqiy tar.gz."""
     source = f'__version__ = "{version}"\n'.encode()
     with tarfile.open(path, "w:gz") as package:
-        info = tarfile.TarInfo(f"{top}/chaqimchi_ai/__init__.py")
+        info = tarfile.TarInfo(f"{top}/enes/__init__.py")
         info.size = len(source)
         package.addfile(info, io.BytesIO(source))
     return path

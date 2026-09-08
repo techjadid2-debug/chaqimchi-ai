@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud.digest import build_digest
 from cloud.event_store import EventStore
+from enes.event_models import EdgeEvent
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
 DAY = date(2026, 8, 13)

@@ -3,10 +3,10 @@
 Nega bu test bor.  Qurilma o'lchagan raqam cloudga yetguncha **to'rtta**
 qo'ldan o'tadi:
 
-    RetailPipeline._stats()        (chaqimchi_ai/retail/pipeline.py)
-      → write_status()             (chaqimchi_ai/retail/service.py)
-        → RetailSupervisor.status()(chaqimchi_ai/local/supervisor.py)
-          → send_heartbeat()       (chaqimchi_ai/local/cloud_config.py)
+    RetailPipeline._stats()        (enes/retail/pipeline.py)
+      → write_status()             (enes/retail/service.py)
+        → RetailSupervisor.status()(enes/local/supervisor.py)
+          → send_heartbeat()       (enes/local/cloud_config.py)
 
 Har qo'lda kalit qo'lda ko'chiriladi va bittasini unutish **jimgina**
 nolga aylantiradi: hisoblagich bor, so'rov bor, javob bor — faqat
@@ -86,8 +86,8 @@ def _writes(node: ast.AST) -> Set[str]:
 
 
 def test_the_status_file_gets_everything_it_asks_the_pipeline_for() -> None:
-    stats = _writes(_function("chaqimchi_ai/retail/pipeline.py", "_stats"))
-    write_status = _function("chaqimchi_ai/retail/service.py", "write_status")
+    stats = _writes(_function("enes/retail/pipeline.py", "_stats"))
+    write_status = _function("enes/retail/service.py", "write_status")
 
     missing = _reads(write_status, "stats") - stats - OUTSIDE_THE_CHAIN
 
@@ -98,8 +98,8 @@ def test_the_status_file_gets_everything_it_asks_the_pipeline_for() -> None:
 
 
 def test_the_supervisor_gets_everything_it_asks_the_status_file_for() -> None:
-    written = _writes(_function("chaqimchi_ai/retail/service.py", "write_status"))
-    supervisor = _function("chaqimchi_ai/local/supervisor.py", "status")
+    written = _writes(_function("enes/retail/service.py", "write_status"))
+    supervisor = _function("enes/local/supervisor.py", "status")
 
     missing = _reads(supervisor, "status_file") - written - OUTSIDE_THE_CHAIN
 
@@ -109,8 +109,8 @@ def test_the_supervisor_gets_everything_it_asks_the_status_file_for() -> None:
 
 
 def test_the_heartbeat_gets_everything_it_asks_the_supervisor_for() -> None:
-    supervisor = _writes(_function("chaqimchi_ai/local/supervisor.py", "status"))
-    heartbeat = _function("chaqimchi_ai/local/cloud_config.py", "send_heartbeat")
+    supervisor = _writes(_function("enes/local/supervisor.py", "status"))
+    heartbeat = _function("enes/local/cloud_config.py", "send_heartbeat")
 
     missing = _reads(heartbeat, "status") - supervisor - OUTSIDE_THE_CHAIN
 
@@ -127,10 +127,10 @@ def test_the_diagnostics_that_answer_does_attendance_work_survive_the_whole_chai
     topilgan aniq holatni qaytib kelishidan saqlaydi.
     """
     chain = [
-        _writes(_function("chaqimchi_ai/retail/pipeline.py", "_stats")),
-        _writes(_function("chaqimchi_ai/retail/service.py", "write_status")),
-        _writes(_function("chaqimchi_ai/local/supervisor.py", "status")),
-        _writes(_function("chaqimchi_ai/local/cloud_config.py", "send_heartbeat")),
+        _writes(_function("enes/retail/pipeline.py", "_stats")),
+        _writes(_function("enes/retail/service.py", "write_status")),
+        _writes(_function("enes/local/supervisor.py", "status")),
+        _writes(_function("enes/local/cloud_config.py", "send_heartbeat")),
     ]
 
     for key in ("face_crops", "demography", "clips"):
@@ -212,8 +212,8 @@ SUPERVISOR_STAYS_LOCAL = {
 
 
 def test_nothing_the_pipeline_measures_is_silently_dropped() -> None:
-    stats = _returned_keys(_function("chaqimchi_ai/retail/pipeline.py", "_stats"))
-    written = _returned_keys(_function("chaqimchi_ai/retail/service.py", "write_status"))
+    stats = _returned_keys(_function("enes/retail/pipeline.py", "_stats"))
+    written = _returned_keys(_function("enes/retail/service.py", "write_status"))
 
     dropped = stats - written - set(STATS_STAYS_LOCAL)
 
@@ -224,8 +224,8 @@ def test_nothing_the_pipeline_measures_is_silently_dropped() -> None:
 
 
 def test_nothing_in_the_status_file_is_silently_dropped() -> None:
-    written = _returned_keys(_function("chaqimchi_ai/retail/service.py", "write_status"))
-    supervisor = _returned_keys(_function("chaqimchi_ai/local/supervisor.py", "status"))
+    written = _returned_keys(_function("enes/retail/service.py", "write_status"))
+    supervisor = _returned_keys(_function("enes/local/supervisor.py", "status"))
 
     dropped = written - supervisor - set(STATUS_FILE_STAYS_LOCAL)
 
@@ -237,8 +237,8 @@ def test_nothing_in_the_status_file_is_silently_dropped() -> None:
 
 def test_nothing_the_supervisor_knows_is_silently_dropped() -> None:
     """Zanjirning eng ko'p uziladigan bo'g'ini — uchala xato ham shu yerda."""
-    supervisor = _returned_keys(_function("chaqimchi_ai/local/supervisor.py", "status"))
-    heartbeat = _returned_keys(_function("chaqimchi_ai/local/cloud_config.py", "send_heartbeat"))
+    supervisor = _returned_keys(_function("enes/local/supervisor.py", "status"))
+    heartbeat = _returned_keys(_function("enes/local/cloud_config.py", "send_heartbeat"))
 
     dropped = supervisor - heartbeat - set(SUPERVISOR_STAYS_LOCAL)
 
@@ -267,7 +267,7 @@ def test_the_new_clip_diagnostics_survive_the_whole_chain() -> None:
     lug'atda bo'lsa ham cloudga chiqmasligi mumkin.  Aynan shu naqsh
     zanjirning eng nozik joyi.
     """
-    source = (ROOT / "chaqimchi_ai/local/cloud_config.py").read_text(encoding="utf-8")
+    source = (ROOT / "enes/local/cloud_config.py").read_text(encoding="utf-8")
     for key in ("no_segments", "cut_failed"):
         assert f'"{key}"' in source, f"'clips.{key}' heartbeatga ko'chirilmagan"
 

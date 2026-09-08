@@ -9,7 +9,7 @@ haqiqiy kameralardan olingan namunalar qulflanadi.
 
 from __future__ import annotations
 
-from chaqimchi_ai.local.camera_probe import audio_track
+from enes.local.camera_probe import audio_track
 
 # Hikvision: G.711 A-law, rtpmap bilan.
 HIKVISION = """v=0

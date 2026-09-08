@@ -161,10 +161,10 @@ def test_the_device_publishes_both_streams() -> None:
     Sozlamada maydon `stream_url`, bulut modelida esa `source`.  Nom
     farqi jimgina bo'sh manzil yuborishga olib kelishi mumkin edi.
     """
-    from chaqimchi_ai.local import cloud_config
+    from enes.local import cloud_config
 
     source = (
-        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "cloud_config.py"
+        Path(__file__).resolve().parents[1] / "enes" / "local" / "cloud_config.py"
     ).read_text(encoding="utf-8")
     block = source[source.index("def publish_cameras") : source.index("def _outbox_stats")]
 
@@ -184,7 +184,7 @@ def test_a_reinstalled_computer_gets_its_clip_url_back_from_the_cloud() -> None:
     kamera yana ishlaydi, klip esa substreamdan yozilib past sifatli
     chiqardi va buni hech kim sezmasdi.
     """
-    from chaqimchi_ai.retail.inventory import InventoryCamera, merge_cameras
+    from enes.retail.inventory import InventoryCamera, merge_cameras
 
     inventory = [
         InventoryCamera(
@@ -200,7 +200,7 @@ def test_a_reinstalled_computer_gets_its_clip_url_back_from_the_cloud() -> None:
 
 def test_the_local_setting_still_wins_over_the_cloud_copy() -> None:
     """Lokal sozlama ustun: usta shu kompyuterda ataylab kiritgan."""
-    from chaqimchi_ai.retail.inventory import InventoryCamera, merge_cameras
+    from enes.retail.inventory import InventoryCamera, merge_cameras
 
     class LocalCamera:
         id = "camera-01"
@@ -220,7 +220,7 @@ def test_the_local_setting_still_wins_over_the_cloud_copy() -> None:
 
 def test_without_any_record_url_the_substream_is_still_used() -> None:
     """Klipsiz qolgandan ko'ra past sifatli klip yaxshiroq — eski xulq."""
-    from chaqimchi_ai.retail.inventory import InventoryCamera, merge_cameras
+    from enes.retail.inventory import InventoryCamera, merge_cameras
 
     plans = merge_cameras([InventoryCamera(camera_id="camera-01", source=SUB)], [])
 

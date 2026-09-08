@@ -16,7 +16,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from chaqimchi_ai.retail.shelf import MIN_SAMPLES, ShelfWatcher, crop_polygon, edge_density
+from enes.retail.shelf import MIN_SAMPLES, ShelfWatcher, crop_polygon, edge_density
 
 FULL_SIZE = (200, 300, 3)
 

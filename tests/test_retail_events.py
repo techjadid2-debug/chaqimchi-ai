@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud import ratelimit
 from cloud.event_store import EventStore
 from cloud.notify import event_label, summarize
 from cloud.snapshots import LocalSnapshotStore
+from enes.event_models import EdgeEvent
 
 ADMIN = {"X-Cloud-Admin-Key": "test-admin"}
 
@@ -63,7 +63,7 @@ def test_every_event_type_has_an_uzbek_label() -> None:
     """Mijoz `queue_threshold_exceeded` ni tushunmaydi."""
     from typing import get_args
 
-    from chaqimchi_ai.event_models import EventType
+    from enes.event_models import EventType
 
     for event_type in get_args(EventType):
         assert event_label(event_type) != event_type, f"{event_type} uchun nom yo'q"

@@ -33,7 +33,7 @@ CLOUD_SYNC = {
 @pytest.fixture
 def local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import cloud_config, config_store, paths
+    from enes.local import cloud_config, config_store, paths
 
     for module in (paths, config_store, cloud_config):
         importlib.reload(module)
@@ -84,7 +84,7 @@ def test_cloud_cameras_reach_the_pipeline(local, tmp_path: Path, monkeypatch) ->
 def test_cache_is_readable_by_the_pipeline(local, monkeypatch) -> None:
     """Kesh formati zanjir kutgani bilan bir xil bo'lishi kerak —
     aks holda xizmat "config keshi buzuq" deb ishga tushmasdi."""
-    from chaqimchi_ai.retail.inventory import read_sotqin_cache
+    from enes.retail.inventory import read_sotqin_cache
 
     _reply(local, {"revision": 1, "cameras": [CAMERA], "config": {}}, monkeypatch)
     local.sync_once()
@@ -135,7 +135,7 @@ def test_cloud_limits_and_hours_are_applied(local, tmp_path: Path, monkeypatch) 
 def test_empty_cloud_never_erases_local_cameras(local, tmp_path: Path, monkeypatch) -> None:
     """Mijoz sehrgarda kamera qo'shgan, cloudda esa hali hech narsa yo'q.
     Bo'sh javob uning sozlamasini yo'q qilmasligi kerak."""
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.save_camera(camera_id="camera-01", stream_url="rtsp://lokal/1", label="Mahalliy")
     _reply(local, {"revision": 9, "cameras": [], "config": {}}, monkeypatch)
@@ -150,7 +150,7 @@ def test_empty_cloud_never_erases_local_cameras(local, tmp_path: Path, monkeypat
 
 
 def test_empty_cloud_never_erases_local_lines(local, tmp_path: Path, monkeypatch) -> None:
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.save_geometry([LINE], [])
     _reply(local, {"revision": 9, "cameras": [], "config": {"lines": [], "zones": []}}, monkeypatch)
@@ -170,7 +170,7 @@ def test_half_filled_hours_are_ignored(local, tmp_path: Path, monkeypatch) -> No
     )
     local.sync_once()
 
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.load_settings()  # yiqilmasligi kerak
     assert _config(tmp_path)["retail"].get("open_from") is None
@@ -253,7 +253,7 @@ def test_unchanged_revision_does_no_work(local, monkeypatch) -> None:
 
 
 def test_unpaired_device_does_not_call_the_cloud(local, monkeypatch) -> None:
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.update("cloud_sync", {"enabled": False})
 
@@ -280,7 +280,7 @@ def test_network_failure_is_not_fatal(local, monkeypatch) -> None:
 
 def test_heartbeat_reports_the_running_version(local, monkeypatch) -> None:
     """Versiyasiz cloud yangilanish qaysi do'konga yetganini bilolmaydi."""
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     sent = {}
 
@@ -309,7 +309,7 @@ def test_heartbeat_reports_the_running_version(local, monkeypatch) -> None:
 
 
 def test_heartbeat_is_skipped_when_not_paired(local, monkeypatch) -> None:
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.update("cloud_sync", {"enabled": False})
 

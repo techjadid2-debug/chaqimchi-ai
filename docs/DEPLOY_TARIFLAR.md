@@ -28,7 +28,7 @@ Branch: `tariflar-3-ta` · Server: Contabo `169.58.198.111`
 ```bash
 cd "/Users/abdulvosit/Desktop/Chaqimchi AI"
 git checkout tariflar-3-ta
-.venv/bin/python -m ruff check chaqimchi_ai cloud tests scripts
+.venv/bin/python -m ruff check enes cloud tests scripts
 .venv/bin/python -m pytest -q
 ```
 

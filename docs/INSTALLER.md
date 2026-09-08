@@ -86,7 +86,7 @@ schtasks /Query /TN "Chaqimchi AI" /V /FO LIST
 `Run` kaliti bo‘lishi mumkin: masofadan yangilash o‘rnatuvchini qayta
 ishlatmaydi, ya’ni yangi versiyaga o‘tgan qurilma ham eski usulda
 qolaveradi. Shuning uchun dastur buni **o‘zi to‘g‘irlaydi**
-(`chaqimchi_ai/local/autostart.py`): ishga tushganda va har 15 daqiqalik
+(`enes/local/autostart.py`): ishga tushganda va har 15 daqiqalik
 yangilanish vazifasida vazifa bor-yo‘qligini tekshiradi, yo‘q bo‘lsa
 yaratadi va eski `Run` kalitini olib tashlaydi. Vazifa SYSTEM huquqini
 talab qiladi — shuning uchun uni odatda yangilanish vazifasi bajaradi.
@@ -103,7 +103,7 @@ Ikki narsa kerak, ikkalasi ham do‘konda tekshiriladi:
    yoki NVR kompyuterdan kechroq yonsa AI zanjiri bir necha marta
    yiqilishi mumkin — bu normal: nazoratchi 1 → 5 → 15 daqiqa oralig‘ida
    o‘zi qayta urinadi va **hech qachon butunlay to‘xtamaydi**
-   (`chaqimchi_ai/local/supervisor.py: COOLDOWN_STEPS_SEC`). Panelda
+   (`enes/local/supervisor.py: COOLDOWN_STEPS_SEC`). Panelda
    sababi va keyingi urinishgacha qolgan vaqt ko‘rinib turadi.
 
 Bu rejimda kamera ro‘yxati lokal `config.yaml` da turadi

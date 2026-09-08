@@ -47,7 +47,7 @@ def test_the_calculator_gets_its_numbers_from_the_server(client: TestClient) -> 
 
 def test_the_public_catalog_matches_the_module(client: TestClient) -> None:
     """Endpoint konstantalarni qayta yozmasin — u faqat uzatadi."""
-    from chaqimchi_ai.licensing import edu
+    from enes.licensing import edu
 
     assert client.get("/api/v1/public/edu-pricing").json() == edu.catalog()
 

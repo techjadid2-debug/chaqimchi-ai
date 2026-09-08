@@ -319,7 +319,7 @@ class Preflight:
             return
         # ffprobe bilan har birini tekshiramiz — bu yerda RTSP manzili
         # chiqishga tushmasligi uchun faqat kamera ID yoziladi.
-        from chaqimchi_ai.sotqin_media import SotqinMediaRuntime
+        from enes.sotqin_media import SotqinMediaRuntime
 
         media = SotqinMediaRuntime(runner=self.runner)
         media.apply_config(payload)

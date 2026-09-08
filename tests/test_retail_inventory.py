@@ -13,14 +13,14 @@ from typing import Any, Dict, List
 
 import pytest
 
-from chaqimchi_ai.retail.inventory import (
+from enes.retail.inventory import (
     InventoryCamera,
     describe,
     merge_cameras,
     read_sotqin_cache,
 )
-from chaqimchi_ai.retail.service import build_runner, plan_cameras
-from chaqimchi_ai.settings import AppSettings
+from enes.retail.service import build_runner, plan_cameras
+from enes.settings import AppSettings
 
 
 def cache_file(tmp_path: Path, cameras: List[Dict[str, Any]], revision: int = 4) -> Path:
@@ -206,7 +206,7 @@ def test_the_service_refuses_to_start_with_no_cameras_anywhere(tmp_path: Path) -
 
 
 def test_cloud_cameras_reach_the_broker(tmp_path: Path) -> None:
-    from chaqimchi_ai.outbox import EventOutbox
+    from enes.outbox import EventOutbox
 
     path = cache_file(
         tmp_path,

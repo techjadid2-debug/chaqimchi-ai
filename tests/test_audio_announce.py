@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from chaqimchi_ai import announcements
-from chaqimchi_ai.local import audio, cloud_config
+from enes import announcements
+from enes.local import audio, cloud_config
 
 
 @pytest.fixture

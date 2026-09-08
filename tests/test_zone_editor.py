@@ -20,13 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from chaqimchi_ai.settings import SceneLineSettings, SceneZoneSettings
+from enes.settings import SceneLineSettings, SceneZoneSettings
 
 ROOT = Path(__file__).resolve().parents[1]
 #: Muharrir cloud'dan tashqarida turadi: uni ham o'rnatuvchi paneli, ham
 #: mijozning lokal sozlash ustasi ishlatadi va Windows paketiga `cloud/`
 #: ko'chirilmaydi.
-EDITOR = ROOT / "chaqimchi_ai" / "local" / "static" / "zone-editor.js"
+EDITOR = ROOT / "enes" / "local" / "static" / "zone-editor.js"
 
 
 def _node(script: str) -> dict:
@@ -197,10 +197,10 @@ def test_wizard_offers_one_click_presets_and_camera_roles() -> None:
     tomonda bor edi — UI yo'q edi.  Bu test ular qaytib yo'qolib
     qolmasligini qo'riqlaydi.
     """
-    setup_html = (ROOT / "chaqimchi_ai" / "local" / "static" / "setup.html").read_text(
+    setup_html = (ROOT / "enes" / "local" / "static" / "setup.html").read_text(
         encoding="utf-8"
     )
-    setup_js = (ROOT / "chaqimchi_ai" / "local" / "static" / "setup.js").read_text(encoding="utf-8")
+    setup_js = (ROOT / "enes" / "local" / "static" / "setup.js").read_text(encoding="utf-8")
 
     for button in ("presetLineBtn", "presetQueueBtn", "presetRestrictedBtn"):
         assert button in setup_html, f"shablon tugmasi yo'q: {button}"

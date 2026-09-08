@@ -24,8 +24,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from chaqimchi_ai import limits
-from chaqimchi_ai.retail import pipeline
+from enes import limits
+from enes.retail import pipeline
 
 #: Amalda uchraydigan tahlil oqimlari.  360p — sinov do'konining
 #: bugungi holati; 720p — kelishilgan keyingi qadam.
@@ -137,7 +137,7 @@ def test_the_crop_helper_matches_the_real_pipeline(tmp_path) -> None:
     camera = type("Camera", (), {"last_frame": np.zeros((height, width, 3), dtype=np.uint8)})()
     engine._cameras = {"camera-01": camera}
 
-    from chaqimchi_ai.event_models import EdgeEvent
+    from enes.event_models import EdgeEvent
 
     event = EdgeEvent(
         event_type="face_captured",

@@ -9,7 +9,7 @@ Bu hujjat **Face Recognition Core** modulining mantiqiy arxitekturasini o‘zbek
 
 - **Maqsad**: real vaqtga yaqin video oqimida yuzni aniqlash, geometrik tekislash (alignment), 512 o‘lchamli embedding olish va ma’lum bazadagi vektorlar bilan kosinus o‘xshashligi bo‘yicha solishtirish.
 - **Chegara**: bu modul faqat **kompyuter ko‘rishi yadrosi**; autentifikatsiya siyosati, foydalanuvchi interfeysi va server API alohida qatlamlarda bo‘lishi tavsiya etiladi.
-- **Bu yerda yo‘q**: do‘kon analitikasi (odam deteksiyasi, sanoq, dwell, navbat) butunlay boshqa yo‘l — alohida jarayon, alohida model va o‘z inferens byudjeti bilan: [chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md).
+- **Bu yerda yo‘q**: do‘kon analitikasi (odam deteksiyasi, sanoq, dwell, navbat) butunlay boshqa yo‘l — alohida jarayon, alohida model va o‘z inferens byudjeti bilan: [enes/retail/README.md](../enes/retail/README.md).
 
 ## 2. Yuqori darajadagi komponentlar
 
@@ -78,4 +78,4 @@ flowchart TB
 - **Track ID**: yuzni kadrlar bo‘yicha izchil kuzatish (DeepSORT / BYTETrack va hokazo).
 - **Xavfsizlik**: anti-spoofing, hayajon chegaralarini serverda qayta kalibrlash.
 
-Bu hujjat loyiha rivojlanishi bilan yangilanishi kerak; API o‘zgarishlari `chaqimchi_ai/face_engine.py` dagi tip annotatsiyalar va docstringlar bilan sinxronlanadi.
+Bu hujjat loyiha rivojlanishi bilan yangilanishi kerak; API o‘zgarishlari `enes/face_engine.py` dagi tip annotatsiyalar va docstringlar bilan sinxronlanadi.

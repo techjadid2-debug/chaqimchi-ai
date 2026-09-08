@@ -318,8 +318,8 @@ def test_a_line_drawn_by_the_installer_reaches_the_device(
     """
     import json
 
-    from chaqimchi_ai.retail.service import apply_remote_site_settings
-    from chaqimchi_ai.settings import AppSettings
+    from enes.retail.service import apply_remote_site_settings
+    from enes.settings import AppSettings
 
     site, device_headers = _site_with_camera(client)
     site_id = site["site_id"]
@@ -392,8 +392,8 @@ def test_empty_cloud_geometry_keeps_the_wizard_drawn_line(tmp_path: Path) -> Non
     """
     import json
 
-    from chaqimchi_ai.retail.service import apply_remote_site_settings
-    from chaqimchi_ai.settings import AppSettings
+    from enes.retail.service import apply_remote_site_settings
+    from enes.settings import AppSettings
 
     cache = tmp_path / "sotqin-config.json"
     cache.write_text(

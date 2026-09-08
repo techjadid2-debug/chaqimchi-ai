@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from chaqimchi_ai.retail.conversion import SeenCounter
+from enes.retail.conversion import SeenCounter
 
 
 def test_a_one_frame_flicker_is_not_a_person() -> None:

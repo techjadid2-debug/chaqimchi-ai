@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from chaqimchi_ai.local import cloud_jobs, cloud_link
+from enes.local import cloud_jobs, cloud_link
 
 
 @pytest.fixture(autouse=True)
@@ -244,7 +244,7 @@ def test_the_handover_writes_the_credentials_and_clears_the_link(tmp_path, monke
     assert site is not None
     assert site.site_id == "site-1"
 
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     saved = config_store.read_raw().get("cloud_sync") or {}
     assert saved["device_token"] == "secret-token"
@@ -266,7 +266,7 @@ def test_the_fingerprint_is_stable_across_calls() -> None:
 
 
 def test_the_first_run_opens_the_cloud_panel_when_connected(monkeypatch) -> None:
-    from chaqimchi_ai.local import app as local_app
+    from enes.local import app as local_app
 
     monkeypatch.setattr(cloud_link, "is_connected", lambda: True)
     monkeypatch.setattr(cloud_link, "panel_url", lambda: "https://app.example.uz/owner")
@@ -275,7 +275,7 @@ def test_the_first_run_opens_the_cloud_panel_when_connected(monkeypatch) -> None
 
 
 def test_the_first_run_opens_the_connect_page_when_not_connected(monkeypatch) -> None:
-    from chaqimchi_ai.local import app as local_app
+    from enes.local import app as local_app
 
     monkeypatch.setattr(cloud_link, "is_connected", lambda: False)
     monkeypatch.setattr(
@@ -290,7 +290,7 @@ def test_the_first_run_opens_the_connect_page_when_not_connected(monkeypatch) ->
 def test_without_internet_the_wizard_is_still_offered(monkeypatch) -> None:
     """Internetsiz o'rnatilgan do'konda mijoz baribir kamerani ulay
     olishi kerak — shuning uchun lokal sehrgar oxirgi pog'ona."""
-    from chaqimchi_ai.local import app as local_app
+    from enes.local import app as local_app
 
     monkeypatch.setattr(cloud_link, "is_connected", lambda: False)
     monkeypatch.setattr(cloud_link, "ensure_connect_state", lambda *_a, **_k: {})
@@ -314,7 +314,7 @@ def test_the_panel_lives_on_a_different_host_than_the_api(monkeypatch) -> None:
 
 
 def test_the_cloud_wins_over_the_guessed_panel_address(tmp_path, monkeypatch) -> None:
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.update(
         "cloud_sync",
@@ -330,7 +330,7 @@ def test_the_cloud_wins_over_the_guessed_panel_address(tmp_path, monkeypatch) ->
 
 
 def test_a_broken_cloud_never_blocks_the_first_run(monkeypatch) -> None:
-    from chaqimchi_ai.local import app as local_app
+    from enes.local import app as local_app
 
     def _boom(*_a, **_k):
         raise RuntimeError("bulut javob bermadi")
@@ -348,7 +348,7 @@ def test_a_broken_cloud_never_blocks_the_first_run(monkeypatch) -> None:
 
 
 def test_clean_chains_job_reports_what_it_killed(monkeypatch) -> None:
-    from chaqimchi_ai.local import chain_processes, cloud_jobs
+    from enes.local import chain_processes, cloud_jobs
 
     monkeypatch.setattr(
         chain_processes,
@@ -372,7 +372,7 @@ def test_clean_chains_reports_survivors_instead_of_hiding_them(monkeypatch) -> N
 
     "Jim muvaffaqiyatsizlik" aynan shu nosozlikni oylab yashirgan edi.
     """
-    from chaqimchi_ai.local import chain_processes, cloud_jobs
+    from enes.local import chain_processes, cloud_jobs
 
     monkeypatch.setattr(
         chain_processes,
@@ -392,12 +392,12 @@ def test_clean_chains_reports_survivors_instead_of_hiding_them(monkeypatch) -> N
 # "Avval o'lchang, keyin chegarani o'zgartiring" degan qoida bor edi,
 # lekin uni bajarish MUMKIN EMASDI: o'lchov ma'noli bo'ladigan yagona
 # joy — mijozning o'z kompyuteri — va u yerda na terminal, na `scripts/`
-# bor (Windows payload'iga faqat `chaqimchi_ai` ko'chiriladi).  Natijada
+# bor (Windows payload'iga faqat `enes` ko'chiriladi).  Natijada
 # 2026-08-28 gacha birorta ham haqiqiy o'lchov olinmagan.
 
 
 def test_benchmark_job_measures_the_real_camera(monkeypatch, tmp_path) -> None:
-    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+    from enes.local import benchmark, cloud_jobs, config_store, paths
 
     # Sozlamaning HAQIQIY shakli: `retail.cameras[].stream_url`.
     # Ilgari bu yerda `{"cameras": [{"url": ...}]}` turardi va test
@@ -435,7 +435,7 @@ def test_benchmark_job_measures_the_real_camera(monkeypatch, tmp_path) -> None:
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-    import chaqimchi_ai.retail.detector_ov as detector_module
+    import enes.retail.detector_ov as detector_module
 
     monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", FakeDetector)
 
@@ -462,7 +462,7 @@ def test_benchmark_refuses_to_measure_without_a_camera(monkeypatch) -> None:
     yuqori bo'ladi va aynan shunday raqamga suyanib kamera soni va'da
     qilinardi.
     """
-    from chaqimchi_ai.local import cloud_jobs, config_store
+    from enes.local import cloud_jobs, config_store
 
     monkeypatch.setattr(config_store, "read_raw", lambda: {"retail": {"cameras": []}})
     sent = []
@@ -483,7 +483,7 @@ def test_benchmark_reads_the_camera_list_from_the_right_place(monkeypatch, tmp_p
     (`AppSettings.cameras`, veb-kamera uchun eski yo'l, do'kon
     kompyuterida doim bo'sh) va `retail` ichida (haqiqiy ro'yxat).
     """
-    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+    from enes.local import benchmark, cloud_jobs, config_store, paths
 
     monkeypatch.setattr(
         config_store,
@@ -513,7 +513,7 @@ def test_benchmark_reads_the_camera_list_from_the_right_place(monkeypatch, tmp_p
     monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"total_ms": 1.0})
     monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {"ok": False})
 
-    import chaqimchi_ai.retail.detector_ov as detector_module
+    import enes.retail.detector_ov as detector_module
 
     monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", lambda *a, **k: object())
     sent = []
@@ -531,7 +531,7 @@ def test_the_benchmark_reports_what_the_camera_actually_sends(monkeypatch, tmp_p
     `frame_size` har doim 640x360 (tahlil shunda ketadi) va u kamera
     sozlamasi haqida hech narsa aytmaydi.  Ikkisi aralashtirilmasin.
     """
-    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+    from enes.local import benchmark, cloud_jobs, config_store, paths
 
     monkeypatch.setattr(
         config_store,
@@ -555,7 +555,7 @@ def test_the_benchmark_reports_what_the_camera_actually_sends(monkeypatch, tmp_p
         },
     )
 
-    import chaqimchi_ai.retail.detector_ov as detector_module
+    import enes.retail.detector_ov as detector_module
 
     monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", lambda *a, **k: object())
     sent = []
@@ -570,7 +570,7 @@ def test_the_benchmark_reports_what_the_camera_actually_sends(monkeypatch, tmp_p
 
 def test_an_unknown_stream_size_is_null_not_a_guess(monkeypatch, tmp_path) -> None:
     """O'lcham o'qilmasa `None` — eski qiymat yoki taxmin EMAS."""
-    from chaqimchi_ai.local import benchmark, cloud_jobs, config_store, paths
+    from enes.local import benchmark, cloud_jobs, config_store, paths
 
     monkeypatch.setattr(
         config_store,
@@ -585,7 +585,7 @@ def test_an_unknown_stream_size_is_null_not_a_guess(monkeypatch, tmp_path) -> No
     monkeypatch.setattr(benchmark, "measure_frame_overhead", lambda *a, **k: {"total_ms": 1.0})
     monkeypatch.setattr(benchmark, "measure_decode", lambda *a, **k: {"ok": False})
 
-    import chaqimchi_ai.retail.detector_ov as detector_module
+    import enes.retail.detector_ov as detector_module
 
     monkeypatch.setattr(detector_module, "OpenVINOPersonDetector", lambda *a, **k: object())
     sent = []

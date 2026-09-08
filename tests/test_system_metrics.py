@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from chaqimchi_ai.local import cloud_config, system_metrics
+from enes.local import cloud_config, system_metrics
 
 
 @pytest.fixture(autouse=True)
@@ -170,7 +170,7 @@ def test_the_supervisor_passes_the_chain_numbers_through(tmp_path, monkeypatch) 
     """Bu bo'shliq eng uzun yashiringan joy edi: zanjir raqamlarni
     yozardi, supervisor ularni tashlab yuborardi va heartbeat
     "o'lchov yo'q" deb hisoblardi."""
-    from chaqimchi_ai.local.supervisor import RetailSupervisor
+    from enes.local.supervisor import RetailSupervisor
 
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
     supervisor = RetailSupervisor()

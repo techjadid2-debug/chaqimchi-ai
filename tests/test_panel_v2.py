@@ -202,7 +202,7 @@ def test_plan_locked_sections_show_a_lock_not_an_error() -> None:
     """Tarifda yo'q bo'lim YO'QOLMASIN, qulflangan holda ko'rinsin.
 
     Yo'qolgan bo'lim mijozga "buzilibdi" degan taassurot beradi, qulf
-    esa "ko'tarish mumkin" deydi (`chaqimchi_ai/licensing/plans.py`
+    esa "ko'tarish mumkin" deydi (`enes/licensing/plans.py`
     dagi izohga qarang).
     """
     assert "PlanLock" in src("components.tsx")

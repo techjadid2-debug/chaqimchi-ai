@@ -30,8 +30,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from chaqimchi_ai.outbox import EventOutbox  # noqa: E402
-from chaqimchi_ai.paths import data_dir  # noqa: E402
+from enes.outbox import EventOutbox  # noqa: E402
+from enes.paths import data_dir  # noqa: E402
 
 
 def _outbox_path() -> Path:

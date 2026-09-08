@@ -23,7 +23,7 @@
   tili a'zoga yozib qo'yiladi (faqat standart `uz` turganda).  CSV:
   sarlavha va fayl nomi so'rov tilida (`otchet-magazina-…csv`), BOM
   saqlanadi.  Tarif kartasi: `PlanBullet.key` + `params`, matn
-  `chaqimchi_ai` ichida uz manba, tarjima katalogda; kamera soni
+  `enes` ichida uz manba, tarjima katalogda; kamera soni
   `limits` dan (`{count}`).  `tests/test_i18n_surfaces.py` (7 test)
   qulflaydi.  Katalog: **1 160 kalit**, uch tilda teng.
 - **🌐 F4c — EGA PANELI MATNI UCH TILDA (2026-09-08, `1edc5f3`).**
@@ -264,7 +264,7 @@
   Tizim rol TAKLIF qiladi (kanal nomi + oqim o'lchami), odam
   tasdiqlaydi; «kirish» roli kamerani davomat ro'yxatiga avto-qo'shadi
   (faqat o'tishda, maks. 2); 4 tadan ko'p topilsa eng yaxshi 4 belgilanadi.
-  Yagona manba: `chaqimchi_ai/camera_roles.py`. **Soak muzlatishi
+  Yagona manba: `enes/camera_roles.py`. **Soak muzlatishi
   sabab Windows nashr QILINMAYDI** — soak tugagach chiqadi.
 - **Cloud deploy QILINDI (2026-08-30):** 🚻 tuzatishi + kamera rollari
   serverga chiqdi (`25a2882`, `af08057`). Tekshirildi: konteynerlar
@@ -349,7 +349,7 @@
 `~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F3, F4a,
 F4c va F5 tugadi.  Navbat: **F4b — panel ko'rinishini namunaga
 solishtirish** (ikki tema × uch til skrinshot, farq bo'lsa tuzatish;
-panel allaqachon yaqin) → **F6 ichki nomlar** (`chaqimchi_ai`→`enes`,
+panel allaqachon yaqin) → **F6 ichki nomlar** (`enes`→`enes`,
 132 `CHAQIMCHI_*` env, xizmat/yo'l nomlari, reliz naqshlari
 `main.py` da ikkala joy bitta commitda, `product_name`, brauzer
 kalitlari) → **F9 tozalash** (CLAUDE.md, docs, og-rasm, favicon,
@@ -623,7 +623,7 @@ taklif qilish kerak.
   kalit shu ma'noni beradimi).  Yangi test yozganda ham shu.
 
 - **Repo ildiziga yangi papka qo'shsangiz `Dockerfile.cloud` ga ham
-  qo'shing.**  `COPY` ro'yxati aniq sanaladi (`chaqimchi_ai`, `cloud`,
+  qo'shing.**  `COPY` ro'yxati aniq sanaladi (`enes`, `cloud`,
   `deploy`, `scripts`, `models`); F2 da `i18n/` qo'shildi-yu Dockerfile
   yangilanmadi — lokalda hamma test o'tardi, konteynerda esa birinchi
   `t()` `FileNotFoundError` berardi.  Bir kun kechroq topilganda bu
@@ -843,10 +843,10 @@ taklif qilish kerak.
   chaqiradi?
 
 - **`scripts/` do'kon kompyuterida YO'Q.** Windows payload'iga faqat
-  `chaqimchi_ai` ko'chiriladi (`build_windows_payload.py: CODE_DIRS`).
+  `enes` ko'chiriladi (`build_windows_payload.py: CODE_DIRS`).
   Shu sabab "avval `benchmark_n100.py` bilan o'lchang" degan tavsiya
   bajarib bo'lmaydigan edi — o'lchov ma'noli bo'ladigan yagona mashinada
-  skript yo'q. Qurilmada ishlashi kerak bo'lgan kod `chaqimchi_ai`
+  skript yo'q. Qurilmada ishlashi kerak bo'lgan kod `enes`
   ichida bo'lsin.
 
 - **Har yangi `device_jobs.kind` uchun ALOHIDA migratsiya kerak.**
@@ -1046,7 +1046,7 @@ Qayerda: `cloud/digest.py` (`TextBuilder`, `_deliver`), `cloud/alerts.py`
 `_bot_lang`, `_adopt_telegram_language`, `_bullet_text`,
 `_localized_network_card`, CSV funksiyalari), `cloud/notify.py`,
 `cloud/trust_score.py`, `cloud/botfmt.py`, `cloud/value.py`,
-`chaqimchi_ai/licensing/plans.py` (`PlanBullet.key/params`).
+`enes/licensing/plans.py` (`PlanBullet.key/params`).
 Test: `tests/test_i18n_surfaces.py`, `test_value.py`, `test_cloud_alerts.py`,
 `test_device_health_alerts.py` (kalitga o'tkazildi).
 Diqqat: `owner_text` endi satr emas, `OwnerMessage` — `.for_lang("uz")`.
@@ -1278,7 +1278,7 @@ Ega qarori: **moslashuvchan (A1+A2)** va **hozir yozib qo'yish** (reliz
 soak tugagach). Sof, testlangan yadro qo'shildi (qurilma pipeline'iga
 HALI ulanmagan — soak):
 
-- `chaqimchi_ai/retail/conversion.py: SeenCounter` — bir kamerada oynada
+- `enes/retail/conversion.py: SeenCounter` — bir kamerada oynada
   ko'ringan noyob odam soni (capture rate maxraji). Bir kadrlik xato
   deteksiya odam deb sanalmaydi (`min_frames`, standart 2); bir track
   oynada bir marta; oynadan keyin qaytsa yangi tashrif (line_crossed
@@ -1514,8 +1514,8 @@ Qayerda: `cloud/main.py` (`site_cloud_features()` — yangi yagona manba,
 `cloud/store.py: feature_quote`, `cloud/config_health.py:
 feature_problems()`, `cloud/static/admin.html`,
 `cloud/event_store.py: requeue_failed_vision_jobs()`,
-`chaqimchi_ai/outbox.py: failure_reason(), requeue_dead_letters()`,
-`chaqimchi_ai/cloud_sync.py`, `scripts/dead_letters.py` (yangi).
+`enes/outbox.py: failure_reason(), requeue_dead_letters()`,
+`enes/cloud_sync.py`, `scripts/dead_letters.py` (yangi).
 
 Test: `test_a_paying_site_keeps_plan_features_without_acceptance`
 (`test_cloud_events_owner.py`), `test_config_health.py` dagi yettita
@@ -1549,7 +1549,7 @@ ishlatilishi hech qayerda hal bo'lmasdi (ega qarori, 2026-08-30).
 rol per-kamera maydon (sayt-konfig dict emas), bo'sh variant har UI da
 bor, va rol haqiqatan O'QILADI.
 
-Qayerda: `chaqimchi_ai/camera_roles.py` (yangi — konstantalar + taklif
+Qayerda: `enes/camera_roles.py` (yangi — konstantalar + taklif
 dvigateli), `settings.py:RetailCameraSettings.role`,
 `local/config_store.py:save_camera`, `local/app.py` (`CameraSaveBody.role`,
 `POST /api/setup/role-suggestions`), `local/static/setup.js` (kanal-skan
@@ -1615,8 +1615,8 @@ ishlaganini shu ko'rsatadi; usiz buni faqat 24 soatlik bilvosita
 statistikadan bilib bo'lardi. Ertalab 04:11 da ikkinchi sig'im o'lchovi
 ham olindi (36,1 inf/s, xulosa o'zgarmadi — 11 kamera).
 
-Qayerda: `chaqimchi_ai/local/benchmark.py`,
-`chaqimchi_ai/local/cloud_jobs.py:338`, `cloud/static/admin.html:1621`.
+Qayerda: `enes/local/benchmark.py`,
+`enes/local/cloud_jobs.py:338`, `cloud/static/admin.html:1621`.
 Test: `test_benchmark_n100.py` (+3), `test_local_jobs.py` (+2).
 
 Diqqat: `native_size` heartbeatga CHIQMAYDI — faqat admin paneldagi
@@ -1657,9 +1657,9 @@ tuzatildi (`per_second` mavjud emas edi).
 
 Qayerda: `cloud/store.py` (migratsiya, `register_device_cameras`,
 `list_cameras`), `cloud/main.py` (`EdgeCameraItem`),
-`chaqimchi_ai/local/cloud_config.py` (`publish_cameras`),
-`chaqimchi_ai/retail/inventory.py` (`InventoryCamera.record_url`,
-`merge_cameras`), `chaqimchi_ai/local/cloud_jobs.py`.
+`enes/local/cloud_config.py` (`publish_cameras`),
+`enes/retail/inventory.py` (`InventoryCamera.record_url`,
+`merge_cameras`), `enes/local/cloud_jobs.py`.
 Test: `test_camera_credentials.py` (11 ta, yangi),
 `test_device_telemetry.py` (qaror o'zgarishi),
 `test_local_jobs.py` (haqiqiy `capacity_verdict`).
@@ -1705,7 +1705,7 @@ qachon probe qilinmaydi** — bulutda `probe_status` abadiy `pending`,
 `width`/`height`/`codec` esa `null`. Sinov do'konining ikkala kamerasi
 shunday, ya'ni oqim o'lchamini bulutdan bilib bo'lmaydi.
 
-Qayerda: `chaqimchi_ai/local/cloud_jobs.py`, `cloud/store.py`
+Qayerda: `enes/local/cloud_jobs.py`, `cloud/store.py`
 (`latest_job_of_kind`), `cloud/main.py`, `cloud/static/admin.html`.
 Test: `test_local_jobs.py` (+1 va ikkitasi tuzatildi),
 `test_device_jobs.py` (+3), `test_config_health.py` (+1),
@@ -1769,7 +1769,7 @@ marta o'zi ketadi.
 `test_status_chain.py` endi **teskari yo'nalishni** ham qulflaydi.
 
 **T8 · Sig'imni masofadan o'lchash mumkin bo'ldi.** O'lchov yadrosi
-`scripts/benchmark_n100.py` dan `chaqimchi_ai/local/benchmark.py` ga
+`scripts/benchmark_n100.py` dan `enes/local/benchmark.py` ga
 ko'chdi (payload'da `scripts/` yo'q edi, ya'ni tavsiya bajarib
 bo'lmasdi) va admin panelda «Sig'imni o'lchash» tugmasi paydo bo'ldi.
 
@@ -1779,12 +1779,12 @@ aliasga o'tkazildi va naqsh uchala baza moduli uchun testda qulflandi.
 Qayerda: `cloud/digest.py`, `cloud/event_store.py`,
 `cloud/config_health.py` (yangi), `cloud/main.py`, `cloud/store.py`,
 `cloud/static/admin.html`, `cloud/static/owner.html`,
-`chaqimchi_ai/limits.py`, `chaqimchi_ai/scene_analytics.py`,
-`chaqimchi_ai/retail/pipeline.py`, `chaqimchi_ai/retail/ringbuffer.py`,
-`chaqimchi_ai/retail/service.py`, `chaqimchi_ai/local/benchmark.py`
-(yangi), `chaqimchi_ai/local/cloud_config.py`,
-`chaqimchi_ai/local/cloud_jobs.py`, `chaqimchi_ai/local/supervisor.py`,
-`chaqimchi_ai/local/app.py`.
+`enes/limits.py`, `enes/scene_analytics.py`,
+`enes/retail/pipeline.py`, `enes/retail/ringbuffer.py`,
+`enes/retail/service.py`, `enes/local/benchmark.py`
+(yangi), `enes/local/cloud_config.py`,
+`enes/local/cloud_jobs.py`, `enes/local/supervisor.py`,
+`enes/local/app.py`.
 
 Test: `test_config_health.py` (8 ta, yangi — jonli revision 11
 konfiguratsiyasi kirish sifatida), `test_face_crop_contract.py` (8 ta,
@@ -1868,10 +1868,10 @@ Tuzatishlar:
    Bo'sh sabab ham to'ldiriladi ("602× sabab yozilmagan" shundan edi).
 
 Qayerda: `cloud/event_store.py`, `cloud/alerts.py`, `cloud/main.py`,
-`chaqimchi_ai/limits.py`, `chaqimchi_ai/retail/pipeline.py`,
-`chaqimchi_ai/retail/service.py`, `chaqimchi_ai/local/supervisor.py`,
-`chaqimchi_ai/local/cloud_config.py`, `chaqimchi_ai/local/app.py`,
-`chaqimchi_ai/outbox.py`, `chaqimchi_ai/cloud_sync.py`.
+`enes/limits.py`, `enes/retail/pipeline.py`,
+`enes/retail/service.py`, `enes/local/supervisor.py`,
+`enes/local/cloud_config.py`, `enes/local/app.py`,
+`enes/outbox.py`, `enes/cloud_sync.py`.
 
 Test: `test_status_chain.py` (yangi, 4 ta — zanjirni qulflaydi),
 `test_owner_notifications.py` (+3, `dict_row` va naqsh qulfi),
@@ -1956,7 +1956,7 @@ Qayerda: `cloud/event_store.py` (`notification_reads`,
 `cloud/store.py` (`stop_live`, `camera_frame_at`),
 `frontend/src/owner.tsx` (`NotificationBell`, keepalive),
 `frontend/src/components.tsx` (`CopyButton`), `frontend/src/api.ts`
-(`copyText`), `chaqimchi_ai/local/camera_probe.py` (`audio_track`).
+(`copyText`), `enes/local/camera_probe.py` (`audio_track`).
 
 Test: 4 ta yangi fayl/bo'lim — `test_owner_notifications.py` (6 ta),
 `test_camera_audio_track.py` (5 ta), `test_owner_cameras.py` (jonli
@@ -2014,7 +2014,7 @@ kuchaytirildi, tekshiruv esa qo'shilmadi.
 
 Beshta ish:
 
-1. **`chaqimchi_ai/local/chain_processes.py`** (yangi) —
+1. **`enes/local/chain_processes.py`** (yangi) —
    `find_chains()` / `kill_chains()`.  Mantiq NSIS ichidagi PowerShell
    satrlaridan modulga ko'chdi: endi u testlanadi va uchta joyga xizmat
    qiladi (supervisor, masofaviy topshiriq, heartbeat).  `kill_chains()`
@@ -2038,7 +2038,7 @@ Fayllar bo'yicha esa hammasi joyida edi: `updater.run_once()` yangi
 paket va rollback nishonini qoldirib, qolganini o'chiradi.  Endi bu
 testga bog'landi (`test_windows_update.py`).
 
-Qayerda: `chaqimchi_ai/local/chain_processes.py` (yangi),
+Qayerda: `enes/local/chain_processes.py` (yangi),
 `local/supervisor.py`, `local/cloud_jobs.py`, `local/cloud_config.py`,
 `scripts/windows_installer.nsi`, `cloud/event_store.py`
 (`active_edge_versions`), `cloud/main.py`, `cloud/store.py`,
@@ -2092,8 +2092,8 @@ ishlayotgan edi.
    himoya ichkaridan ishlaydi.  Fayl buzilsa `True` qaytadi: ishlab
    turgan zanjirni to'xtatish nazoratsiz qolishdan yomonroq.
 
-Qayerda: `chaqimchi_ai/local/supervisor.py`,
-`chaqimchi_ai/retail/service.py` (`write_status` ga `pid` qo'shildi).
+Qayerda: `enes/local/supervisor.py`,
+`enes/retail/service.py` (`write_status` ga `pid` qo'shildi).
 Test: `test_supervisor_recovery.py` (4 ta), `test_retail_service.py`
 (3 ta) — jami 1799 test o'tdi.
 
@@ -2179,11 +2179,11 @@ umuman yo'q; 45 daqiqada **399 ta** `face_captured` (9 ta tashrifchidan);
 snapshot byudjetini (500) yedi, keyin HAR bir rasm 429 oldi, va
 `cloud_sync.py` uni **hodisa xatosi** deb butun hodisani qayta
 navbatga qo'ydi → cheksiz halqa.
-Qayerda: `chaqimchi_ai/cloud_sync.py:_upload_media` (4xx endi hodisani
+Qayerda: `enes/cloud_sync.py:_upload_media` (4xx endi hodisani
 o'ldirmaydi, 5xx esa avvalgidek qayta urinadi);
 `cloud/main.py:upload_event_snapshot` (yuz kadri endi FAQAT o'z
 chegarasini sarflaydi, umumiy byudjetga tegmaydi);
-`chaqimchi_ai/scene_analytics.py` (`FACE_EMITS_PER_HOUR = 40` — track
+`enes/scene_analytics.py` (`FACE_EMITS_PER_HOUR = 40` — track
 almashuvidan mustaqil shift; tuzatishsiz 200 track = 200 kadr edi).
 
 **S2 · Panel kadrni hech qachon SO'RAMASDI.**  `CameraImage` faqat GET
@@ -2211,8 +2211,8 @@ yuborardi.  Sabab: `cloud_config.apply()` davomat o'zgarishini `changed`
 ga yozmasdi, ya'ni zanjir qayta ishga tushmasdi — u esa davomat
 ro'yxatini faqat startda o'qiydi.  **Bu xato ikkinchi marta:** aynan shu
 tuzoq ilgari "ish vaqti" bilan bo'lgan va kodda izohi ham bor edi.
-Qayerda: `chaqimchi_ai/local/cloud_config.py:_attendance_signature`,
-`chaqimchi_ai/local/app.py` (restart sharti + yangi sozlama qo'shganda
+Qayerda: `enes/local/cloud_config.py:_attendance_signature`,
+`enes/local/app.py` (restart sharti + yangi sozlama qo'shganda
 nima tekshirish kerakligi yozib qo'yildi).
 
 **S5 · Bunday nosozlik hech kimga bildirilmasdi** — eng qimmat topilma.
@@ -2313,7 +2313,7 @@ tashlandi; bajarilmayotgan va'dalar saytdan o'chdi.
 Nega: audit 22 topilma berdi, 4 tasi kritik.
 Qayerda: `cloud/main.py:877` (`require_biometric_access` — yuzga
 tegadigan **yettala** marshrut endi bitta nomdan o'tadi, ikkitasi
-umuman tekshirmasdi); `chaqimchi_ai/licensing/edu.py` (`MODULES` endi
+umuman tekshirmasdi); `enes/licensing/edu.py` (`MODULES` endi
 faqat `faceid` + `branch`, qolgani `PLANNED_MODULES` da narxsiz);
 `/maxfiylik` ga ikkita yangi bo'lim; `/health/deep` javobi rolga qarab
 qisqaradi.

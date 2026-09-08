@@ -32,7 +32,7 @@ cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
 
 mkdir -p "$output_dir" "$stage/$name" "$stage/$name/config" "$stage/$name/models" "$stage/$name/deploy" "$stage/$name/scripts"
-cp -R "$root/chaqimchi_ai" "$stage/$name/"
+cp -R "$root/enes" "$stage/$name/"
 cp "$root/config/sotqin.yaml" "$root/config/rules.yaml" "$stage/$name/config/"
 cp "$root/models/retail_manifest.json" "$stage/$name/models/"
 cp \

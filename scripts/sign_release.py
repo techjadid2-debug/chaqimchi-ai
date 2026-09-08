@@ -36,7 +36,7 @@ if str(BASE_DIR) not in sys.path:
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from chaqimchi_ai.signed_update import (
+from enes.signed_update import (
     UpdateVerificationError,
     canonical_manifest_payload,
     sha256_file,
@@ -66,7 +66,7 @@ def version_from_name(archive: Path) -> str:
 
 
 def version_inside(archive: Path) -> Optional[str]:
-    """Arxiv ichidagi `chaqimchi_ai/__init__.py` dagi versiya.
+    """Arxiv ichidagi `enes/__init__.py` dagi versiya.
 
     Topilmasa `None` — bu xato emas, `chaqimchi-lite` paketida boshqacha
     tuzilma bo'lishi mumkin.  `.exe` ham `None` qaytaradi: u tar arxiv
@@ -80,7 +80,7 @@ def version_inside(archive: Path) -> Optional[str]:
             if not member.isfile():
                 continue
             parts = Path(member.name).parts
-            if parts[-2:] != ("chaqimchi_ai", "__init__.py"):
+            if parts[-2:] != ("enes", "__init__.py"):
                 continue
             handle = package.extractfile(member)
             if handle is None:

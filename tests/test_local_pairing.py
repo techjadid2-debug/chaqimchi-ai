@@ -28,8 +28,8 @@ CLOUD = "https://cloud.example.uz"
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import cloud_link, config_store, paths, supervisor
+    from enes.local import app as app_module
+    from enes.local import cloud_link, config_store, paths, supervisor
 
     for module in (paths, config_store, cloud_link, supervisor, app_module):
         importlib.reload(module)
@@ -71,7 +71,7 @@ def test_pairing_writes_every_identifier_the_sync_needs(
     """`CloudEventSync` uchtasini ham talab qiladi; bittasi yetishmasa
     hodisalar jimgina yuborilmay qoladi."""
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(
             200, {"site_id": "site-1", "device_id": "dev-1", "device_token": "tok-1"}
         ),
@@ -93,7 +93,7 @@ def test_pairing_never_returns_the_device_token(
     """Token brauzerga chiqsa, uni ko'rgan har kim qurilma nomidan
     hodisa yubora oladi."""
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(
             200, {"site_id": "s", "device_id": "d", "device_token": "MAXFIY-TOKEN"}
         ),
@@ -108,7 +108,7 @@ def test_code_is_accepted_in_the_shape_people_actually_type(
 ) -> None:
     """Mijoz kodni kichik harf bilan yoki chiziqcha bilan ko'chiradi."""
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(200, {"site_id": "s", "device_id": "d", "device_token": "t"}),
     )
     assert (
@@ -151,7 +151,7 @@ def test_rejected_code_leaves_no_half_connected_state(
 ) -> None:
     """Cloud kodni rad etsa (muddati o'tgan/ishlatilgan) config toza qolsin."""
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(400, {"detail": "Pairing kod topilmadi"}),
     )
     response = client.post("/api/setup/pair", json={"code": "A1B2C3", "cloud_url": CLOUD})
@@ -166,7 +166,7 @@ def test_network_failure_leaves_no_half_connected_state(
     def _boom(*args, **kwargs):
         raise httpx.ConnectError("tarmoq yo'q")
 
-    monkeypatch.setattr("chaqimchi_ai.local.cloud_link.httpx.post", _boom)
+    monkeypatch.setattr("enes.local.cloud_link.httpx.post", _boom)
     response = client.post("/api/setup/pair", json={"code": "A1B2C3", "cloud_url": CLOUD})
     assert response.status_code == 422
     assert _cloud_sync(tmp_path).get("enabled") is not True
@@ -177,7 +177,7 @@ def test_incomplete_cloud_response_is_rejected(
 ) -> None:
     """`device_token`siz javob — yarim ulanish; qabul qilinmasligi kerak."""
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(200, {"site_id": "s", "device_id": "d"}),
     )
     assert (
@@ -196,7 +196,7 @@ def test_unpair_removes_the_token_not_just_the_flag(
     """Dastur boshqa kompyuterga ko'chirilsa eski obyektga hodisa
     yuborib qo'ymasligi kerak."""
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(200, {"site_id": "s", "device_id": "d", "device_token": "t"}),
     )
     client.post("/api/setup/pair", json={"code": "A1B2C3", "cloud_url": CLOUD})
@@ -238,11 +238,11 @@ def _handoff(tmp_path: Path, code: str) -> Path:
 def test_installer_handoff_pairs_without_the_customer_typing_anything(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(
             200, {"site_id": "s1", "device_id": "d1", "device_token": "t1"}
         ),
@@ -261,14 +261,14 @@ def test_handoff_is_kept_when_the_shop_has_no_internet_yet(
 ) -> None:
     """Do'konda internet keyinroq ulanishi mumkin — kod saqlanib qolsin
     va keyingi ishga tushishda qayta urinilsin."""
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
 
     def _boom(*args, **kwargs):
         raise httpx.ConnectError("tarmoq yo'q")
 
-    monkeypatch.setattr("chaqimchi_ai.local.cloud_link.httpx.post", _boom)
+    monkeypatch.setattr("enes.local.cloud_link.httpx.post", _boom)
     handoff = _handoff(tmp_path, "A1B2C3")
 
     assert cloud_link.auto_pair() is None
@@ -281,11 +281,11 @@ def test_handoff_is_dropped_when_the_code_is_already_used(
 ) -> None:
     """Kod rad etilgan bo'lsa (muddati o'tgan/ishlatilgan) uni saqlashning
     ma'nosi yo'q — lekin dastur yiqilmasligi ham kerak."""
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(400, {"detail": "Pairing kod topilmadi"}),
     )
     _handoff(tmp_path, "A1B2C3")
@@ -296,7 +296,7 @@ def test_handoff_is_dropped_when_the_code_is_already_used(
 
 def test_no_handoff_file_is_not_an_error(client: TestClient) -> None:
     """Odatdagi holat: mijoz oddiy havoladan yuklab olgan."""
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     assert cloud_link.auto_pair() is None
 
@@ -305,7 +305,7 @@ def test_auto_pairing_is_skipped_without_a_default_cloud(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Paket qaysi cloudga ulanishini bilmasa, taxmin qilmasligi kerak."""
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.delenv("CHAQIMCHI_DEFAULT_CLOUD_URL", raising=False)
     handoff = _handoff(tmp_path, "A1B2C3")
@@ -319,11 +319,11 @@ def test_already_connected_device_ignores_a_stale_handoff(
 ) -> None:
     """Qayta o'rnatishda eski kod qolib ketishi mumkin — u ishlab turgan
     ulanishni buzmasligi kerak."""
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(
             200, {"site_id": "s1", "device_id": "d1", "device_token": "t1"}
         ),
@@ -334,7 +334,7 @@ def test_already_connected_device_ignores_a_stale_handoff(
     def _fail(*args, **kwargs):
         raise AssertionError("ulangan qurilma qayta claim qilmasligi kerak")
 
-    monkeypatch.setattr("chaqimchi_ai.local.cloud_link.httpx.post", _fail)
+    monkeypatch.setattr("enes.local.cloud_link.httpx.post", _fail)
     assert cloud_link.auto_pair() is None
     assert not handoff.exists(), "eskirgan kod tozalanishi kerak"
     assert _cloud_sync(tmp_path)["site_id"] == "s1"
@@ -359,11 +359,11 @@ def test_default_cloud_url_prefills_the_wizard(
 def test_expired_code_is_reported_to_the_customer(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(400, {"detail": "Pairing kod topilmadi"}),
     )
     _handoff(tmp_path, "A1B2C3")
@@ -381,14 +381,14 @@ def test_a_network_outage_is_marked_as_temporary(
 ) -> None:
     """Internet yo'qligi va eskirgan kod — bir xil emas: birinchisida
     mijoz hech narsa qilmasligi kerak."""
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
 
     def _boom(*args, **kwargs):
         raise httpx.ConnectError("tarmoq yo'q")
 
-    monkeypatch.setattr("chaqimchi_ai.local.cloud_link.httpx.post", _boom)
+    monkeypatch.setattr("enes.local.cloud_link.httpx.post", _boom)
     _handoff(tmp_path, "A1B2C3")
 
     assert cloud_link.auto_pair() is None
@@ -399,12 +399,12 @@ def test_a_network_outage_is_marked_as_temporary(
 def test_the_error_disappears_after_a_successful_pairing(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.setenv("CHAQIMCHI_DEFAULT_CLOUD_URL", CLOUD)
     cloud_link.record_auto_pair_error("eski xato", retryable=False)
     monkeypatch.setattr(
-        "chaqimchi_ai.local.cloud_link.httpx.post",
+        "enes.local.cloud_link.httpx.post",
         lambda *a, **k: _FakeResponse(
             200, {"site_id": "s1", "device_id": "d1", "device_token": "t1"}
         ),
@@ -421,7 +421,7 @@ def test_a_package_without_a_cloud_address_says_so(
 ) -> None:
     """CI bir marta cloud manzilisiz reliz chiqargan.  Bunday paket
     tushgan mijoz hech bo'lmasa sababini bilsin."""
-    from chaqimchi_ai.local import cloud_link
+    from enes.local import cloud_link
 
     monkeypatch.delenv("CHAQIMCHI_DEFAULT_CLOUD_URL", raising=False)
     _handoff(tmp_path, "A1B2C3")
@@ -434,7 +434,7 @@ def test_a_package_without_a_cloud_address_says_so(
 def test_the_wizard_shows_the_reason_above_the_form() -> None:
     """Xato formadan yuqorida bo'lsin: mijoz avval nima bo'lganini
     o'qisin, keyin kodni qo'lda kiritsin."""
-    static = Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "static"
+    static = Path(__file__).resolve().parents[1] / "enes" / "local" / "static"
     html = (static / "setup.html").read_text(encoding="utf-8")
     js = (static / "setup.js").read_text(encoding="utf-8")
     assert 'id="pairAutoError"' in html

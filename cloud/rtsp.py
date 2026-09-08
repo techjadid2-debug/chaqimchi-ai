@@ -1,6 +1,6 @@
 """RTSP manzillarini brauzerga chiqarishdan oldin tozalash.
 
-Nega bulutda alohida nusxa: qurilmadagi `chaqimchi_ai.local.camera_probe`
+Nega bulutda alohida nusxa: qurilmadagi `enes.local.camera_probe`
 `cv2` ni import qiladi va uni bulut image'iga tortib kirish mumkin emas
 (u yerda OpenCV yo'q va kerak ham emas).  Shu sabab bu yerda faqat
 redaksiya qismi takrorlanadi.

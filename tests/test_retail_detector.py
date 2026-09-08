@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from chaqimchi_ai.retail.detector_ov import INPUT_HEIGHT, INPUT_WIDTH, decode_ssd_output
+from enes.retail.detector_ov import INPUT_HEIGHT, INPUT_WIDTH, decode_ssd_output
 
 
 def ssd(*rows) -> np.ndarray:
@@ -87,7 +87,7 @@ def test_flat_output_shape_is_accepted() -> None:
 
 
 def test_preprocess_produces_the_documented_tensor_shape() -> None:
-    from chaqimchi_ai.retail.detector_ov import OpenVINOPersonDetector
+    from enes.retail.detector_ov import OpenVINOPersonDetector
 
     frame = np.zeros((360, 640, 3), dtype=np.uint8)
     tensor = OpenVINOPersonDetector.preprocess(frame)
@@ -98,7 +98,7 @@ def test_preprocess_produces_the_documented_tensor_shape() -> None:
 
 def test_missing_model_file_fails_before_importing_openvino(tmp_path) -> None:
     """Yo'q fayl uchun xato aniq bo'lsin, OpenVINO importi haqida emas."""
-    from chaqimchi_ai.retail.detector_ov import OpenVINOPersonDetector
+    from enes.retail.detector_ov import OpenVINOPersonDetector
 
     with pytest.raises(FileNotFoundError, match="topilmadi"):
         OpenVINOPersonDetector(tmp_path / "yoq.xml")

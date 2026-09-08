@@ -10,8 +10,8 @@ from typing import List, Tuple
 
 import numpy as np
 
-from chaqimchi_ai.scene_analytics import SceneAnalyzer
-from chaqimchi_ai.settings import SceneSettings
+from enes.scene_analytics import SceneAnalyzer
+from enes.settings import SceneSettings
 
 FRAME = np.zeros((100, 100, 3), dtype=np.uint8)
 
@@ -487,7 +487,7 @@ def test_shelf_zone_reports_only_after_learning_and_only_when_free() -> None:
     Usulning o'zi `tests/test_retail_shelf.py` da tekshiriladi — bu yerda
     faqat zanjirga ulangani muhim.
     """
-    from chaqimchi_ai.retail.shelf import MIN_SAMPLES
+    from enes.retail.shelf import MIN_SAMPLES
 
     analyzer, detector = analyzer_for(
         occupancy_limit=9999,
@@ -567,7 +567,7 @@ def test_a_demography_result_carries_only_two_numbers() -> None:
     U faqat ikkita kalit qaytarsa, hodisaga rasm yoki yuz namunasi
     qo'shib yuborishning yo'li qolmaydi.
     """
-    from chaqimchi_ai.retail.demography import parse_age_gender
+    from enes.retail.demography import parse_age_gender
 
     # Chiqish nomlari proshivkaga qarab farq qiladi — modul ularni
     # SHAKL bo'yicha ajratadi: ikkita son — jins, bitta son — yosh.
@@ -587,7 +587,7 @@ def test_a_demography_crossing_puts_no_image_on_the_wire() -> None:
     """
     import json
 
-    from chaqimchi_ai.event_models import EdgeEvent
+    from enes.event_models import EdgeEvent
 
     event = EdgeEvent(
         event_type="line_crossed",
@@ -611,7 +611,7 @@ def test_a_demography_module_never_writes_or_uploads_a_frame() -> None:
     from pathlib import Path
 
     source = (
-        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "retail" / "demography.py"
+        Path(__file__).resolve().parents[1] / "enes" / "retail" / "demography.py"
     ).read_text(encoding="utf-8")
 
     for forbidden in ("imwrite", "imencode", "b64encode", "tobytes", "requests", "httpx"):

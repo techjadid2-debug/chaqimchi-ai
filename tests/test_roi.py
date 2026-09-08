@@ -1,6 +1,6 @@
 import numpy as np
 
-from chaqimchi_ai.roi import RoiConfig, apply_roi
+from enes.roi import RoiConfig, apply_roi
 
 
 def test_apply_roi_crops_center() -> None:

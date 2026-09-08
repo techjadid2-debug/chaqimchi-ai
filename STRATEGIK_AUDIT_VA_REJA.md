@@ -69,9 +69,9 @@ graph TD
 | # | Modul / Fayl | Aniqlangan Muammo | Potensial Oqibat | Tavsiya etilgan Yechim |
 |---|---|---|---|---|
 | 1 | `cloud/store.py`, `cloud/event_store.py` | **SQLite Concurrency & Lock:** Bir nechta thread/jarayonlar bir vaqtda yozganda `sqlite3.OperationalError: database is locked` yuzaga keladi. | Yuklama oshganda eventlar yo'qoladi, API 500 beradi. | Productionda PostgreSQL (asosiy baza) va TimescaleDB/ClickHouse (hodisalar uchun) ga o'tish. |
-| 2 | `chaqimchi_ai/local/app.py`, `pipeline.py` | **Windows Sleep / Power State:** Do'kon kompyuteri kutish rejimiga (Sleep/Hibernate) o'tganda fon xizmati to'xtaydi. | Tahlil to'xtab qoladi, do'kondor tizim ishlamayapti deb o'ylaydi. | O'rnatuvchi orqali Windows Power Plan sozlamasini (`SetThreadExecutionState` / `powercfg`) to'g'rilash yoki ogohlantirish berish. |
-| 3 | `chaqimchi_ai/retail/pipeline.py` | **RTSP Stream Drop & Memory Leak:** Kamera signali uzilganda `cv2.VideoCapture` thread bloklanishi yoki xotira oshishi mumkin. | Dastur qotib qoladi, kompyuter xotirasi to'ladi. | Reconnect mantiqiga qat'iy watchdog va alohida process-level izolyatsiya qo'yish. |
-| 4 | `cloud/faces.py`, `chaqimchi_ai/retail/` | **Yuz tanishda yorug'lik va burchak sezgirligi:** Do'kon kamerasining burchagi (yuqoridan pastga) sababli yuzlar deformatsiyalanadi. | Xodim davomatida False Negative (tanimaslik) ko'payadi. | Yuz burchagi filtri (yaw/pitch threshold) va yorug'likni avtomatik normallash (CLAHE). |
+| 2 | `enes/local/app.py`, `pipeline.py` | **Windows Sleep / Power State:** Do'kon kompyuteri kutish rejimiga (Sleep/Hibernate) o'tganda fon xizmati to'xtaydi. | Tahlil to'xtab qoladi, do'kondor tizim ishlamayapti deb o'ylaydi. | O'rnatuvchi orqali Windows Power Plan sozlamasini (`SetThreadExecutionState` / `powercfg`) to'g'rilash yoki ogohlantirish berish. |
+| 3 | `enes/retail/pipeline.py` | **RTSP Stream Drop & Memory Leak:** Kamera signali uzilganda `cv2.VideoCapture` thread bloklanishi yoki xotira oshishi mumkin. | Dastur qotib qoladi, kompyuter xotirasi to'ladi. | Reconnect mantiqiga qat'iy watchdog va alohida process-level izolyatsiya qo'yish. |
+| 4 | `cloud/faces.py`, `enes/retail/` | **Yuz tanishda yorug'lik va burchak sezgirligi:** Do'kon kamerasining burchagi (yuqoridan pastga) sababli yuzlar deformatsiyalanadi. | Xodim davomatida False Negative (tanimaslik) ko'payadi. | Yuz burchagi filtri (yaw/pitch threshold) va yorug'likni avtomatik normallash (CLAHE). |
 | 5 | `cloud/payments/payme.py`, `click.py` | **Race Condition to'lovlarda:** Parallel so'rovlarda obuna muddatini ikki marta hisoblash xavfi. | Balans yoki obuna hisob-kitobida nomuvofiqlik. | Baza darajasida atomik tranzaksiya va `SELECT ... FOR UPDATE` (PostgreSQL) ishlatish. |
 | 6 | `docs/DOKON_MVP.md` | **72-soatlik jonli Soak Test qilinmagan:** Haqiqiy do'konda 4 kamera bilan 72 soatlik sinov o'tkazilmagan. | Haqiqiy yuklamada kutilmagan restartlar chiqadi. | Test stendi va kamida 3 ta do'konda 72 soatlik pilot soak test o'tkazish. |
 
@@ -192,7 +192,7 @@ flowchart LR
     end
 ```
 
-#### 1-Zaiflik: Lokal API'da Autentifikatsiya va CSRF Himoyasi Yo'qligi (`chaqimchi_ai/local/app.py`)
+#### 1-Zaiflik: Lokal API'da Autentifikatsiya va CSRF Himoyasi Yo'qligi (`enes/local/app.py`)
 * **Tavsifi:** Mahalliy server `127.0.0.1:8760` portida ishlaydi. Undagi `/api/setup/*` endpointlarida hech qanday token, parol yoki Origin tekshiruvi yo'q.
 * **Xavf:** Agar do'kon kompyuterida brauzerda zararli veb-sahifa ochilsa, sahifadagi JavaScript kodi `127.0.0.1:8760/api/setup/scan` yoki `/api/setup/cameras` ga so'rov yuborib, ichki tarmoqdagi kameralarni skanerlashi yoki sozlamalarni o'zgartirishi mumkin (Cross-Site Port Scanning / SSRF).
 * **Tuzatish:** Lokal API ga tasodifiy generatsiya qilinadigan `Local-Auth-Token` yoki bir martalik session cookie qo'yish va Origin sarlavhasini qat'iy tekshirish.

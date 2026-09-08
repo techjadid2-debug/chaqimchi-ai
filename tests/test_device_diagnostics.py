@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from chaqimchi_ai.local import cloud_config
+from enes.local import cloud_config
 
 
 def _reset() -> None:
@@ -92,7 +92,7 @@ def test_the_sync_loop_actually_calls_it() -> None:
     jadval oylab bo'sh turdi.
     """
     source = (
-        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "app.py"
+        Path(__file__).resolve().parents[1] / "enes" / "local" / "app.py"
     ).read_text(encoding="utf-8")
 
     assert "upload_diagnostics_if_due()" in source, (

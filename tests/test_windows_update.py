@@ -21,7 +21,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from chaqimchi_ai.signed_update import (
+from enes.signed_update import (
     UpdateVerificationError,
     canonical_manifest_payload,
     sha256_file,
@@ -109,7 +109,7 @@ def test_a_package_for_another_product_is_rejected(installer: Path, keys) -> Non
 
 
 def test_windows_product_is_in_the_allow_list() -> None:
-    from chaqimchi_ai.signed_update import KNOWN_PRODUCTS
+    from enes.signed_update import KNOWN_PRODUCTS
 
     assert "chaqimchi-windows" in KNOWN_PRODUCTS
     assert "chaqimchi-sotqin" in KNOWN_PRODUCTS, "Linux relizi buzilmasligi kerak"
@@ -121,8 +121,8 @@ def test_windows_product_is_in_the_allow_list() -> None:
 @pytest.fixture
 def updater(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import config_store, paths
-    from chaqimchi_ai.local import updater as updater_module
+    from enes.local import config_store, paths
+    from enes.local import updater as updater_module
 
     for module in (paths, config_store, updater_module):
         importlib.reload(module)
@@ -138,7 +138,7 @@ def test_update_is_skipped_when_not_paired(updater) -> None:
 def test_same_version_is_not_an_update(updater, monkeypatch: pytest.MonkeyPatch) -> None:
     """Joriy versiya qaytsa yangilash bo'lmasligi kerak — aks holda
     dastur o'zini cheksiz qayta o'rnatardi."""
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     cloud = {
         "enabled": True,
@@ -157,7 +157,7 @@ def test_same_version_is_not_an_update(updater, monkeypatch: pytest.MonkeyPatch)
         def json(self) -> Dict[str, Any]:
             return {"available": True, "version": __version__}
 
-    monkeypatch.setattr("chaqimchi_ai.local.updater.httpx.get", lambda *a, **k: _Response())
+    monkeypatch.setattr("enes.local.updater.httpx.get", lambda *a, **k: _Response())
     assert updater.check(cloud) is None
 
 
@@ -179,7 +179,7 @@ def test_no_release_means_no_update(updater, monkeypatch: pytest.MonkeyPatch) ->
         def json(self) -> Dict[str, Any]:
             return {"available": False, "reason": "reliz yo'q"}
 
-    monkeypatch.setattr("chaqimchi_ai.local.updater.httpx.get", lambda *a, **k: _Response())
+    monkeypatch.setattr("enes.local.updater.httpx.get", lambda *a, **k: _Response())
     assert updater.check(cloud) is None
 
 
@@ -190,7 +190,7 @@ def test_missing_public_key_stops_the_update(
     eski versiyada qolgan yaxshiroq."""
     monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(tmp_path / "yo'q.pem"))
     monkeypatch.setattr(
-        "chaqimchi_ai.local.updater._cloud",
+        "enes.local.updater._cloud",
         lambda: {
             "enabled": True,
             "url": "https://c.uz",
@@ -199,7 +199,7 @@ def test_missing_public_key_stops_the_update(
             "device_token": "t",
         },
     )
-    monkeypatch.setattr("chaqimchi_ai.local.updater._download", lambda url, dest, headers: None)
+    monkeypatch.setattr("enes.local.updater._download", lambda url, dest, headers: None)
     with pytest.raises(updater.UpdateError, match="kalit"):
         updater.download_and_verify(
             {
@@ -244,7 +244,7 @@ def _fake_response(monkeypatch: pytest.MonkeyPatch, payload: Dict[str, Any]) -> 
         def json(self) -> Dict[str, Any]:
             return payload
 
-    monkeypatch.setattr("chaqimchi_ai.local.updater.httpx.get", lambda *a, **k: _Response())
+    monkeypatch.setattr("enes.local.updater.httpx.get", lambda *a, **k: _Response())
 
 
 def test_downgrade_offer_is_rejected(updater, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -304,7 +304,7 @@ def test_blocked_version_is_not_reoffered(updater, monkeypatch: pytest.MonkeyPat
 
 
 def _alive(updater, *, phase: str, version: str, at: str) -> None:
-    from chaqimchi_ai.local import paths
+    from enes.local import paths
 
     paths.alive_marker_path().write_text(
         json.dumps({"version": version, "phase": phase, "at": at}),
@@ -313,7 +313,7 @@ def _alive(updater, *, phase: str, version: str, at: str) -> None:
 
 
 def test_successful_update_clears_the_state(updater) -> None:
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     updater._write_state(
         {
@@ -330,7 +330,7 @@ def test_successful_update_clears_the_state(updater) -> None:
 
 def test_no_login_yet_means_no_verdict(updater) -> None:
     """Tunda yangilangan, hech kim kirmagan — bu qulash EMAS."""
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     updater._write_state(
         {
@@ -351,7 +351,7 @@ def test_crash_looping_release_is_rolled_back(
     """Dastur ishga tushishga urinib `running` ga yetmasa — reliz buzuq."""
     from datetime import datetime, timezone
 
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
     manifest = _sign(installer, keys)
@@ -386,7 +386,7 @@ def test_rollback_never_runs_an_unverified_installer(
     """Qoida rollback'da ham o'zgarmaydi: imzosiz fayl ishga tushmaydi."""
     from datetime import datetime, timezone
 
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     monkeypatch.setenv("CHAQIMCHI_UPDATE_PUBLIC_KEY", str(keys["public"]))
     manifest = _sign(installer, keys)
@@ -418,7 +418,7 @@ def test_rollback_never_runs_an_unverified_installer(
 
 def test_install_that_never_happened_clears_the_state(updater) -> None:
     """Setup umuman ishlamagan (tok o'chgan) — eski versiya davom etadi."""
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     updater._write_state(
         {
@@ -613,8 +613,8 @@ def test_the_pause_survives_a_restart(tmp_path: Path) -> None:
 def test_only_the_new_and_the_rollback_package_survive(
     updater, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from chaqimchi_ai import __version__
-    from chaqimchi_ai.local import paths
+    from enes import __version__
+    from enes.local import paths
 
     keep = paths.data_dir() / "update"
     keep.mkdir(parents=True, exist_ok=True)

@@ -14,14 +14,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from chaqimchi_ai.retail.heatmap import (
+from cloud import ratelimit
+from cloud.snapshots import LocalSnapshotStore
+from enes.retail.heatmap import (
     GRID_COLS,
     GRID_ROWS,
     HeatmapGrid,
     write_heatmap_file,
 )
-from cloud import ratelimit
-from cloud.snapshots import LocalSnapshotStore
 
 ADMIN = {"X-Cloud-Admin-Key": "test-admin"}
 
@@ -86,8 +86,8 @@ def test_hourly_file_accumulates_between_flushes(tmp_path: Path) -> None:
 def test_analyzer_accumulates_foot_points() -> None:
     import numpy as np
 
-    from chaqimchi_ai.scene_analytics import SceneAnalyzer
-    from chaqimchi_ai.settings import SceneSettings
+    from enes.scene_analytics import SceneAnalyzer
+    from enes.settings import SceneSettings
 
     class OnePerson:
         def detect(self, frame):

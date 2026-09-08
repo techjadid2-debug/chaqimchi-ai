@@ -7,7 +7,7 @@ emas va `pip` ishlamaydi**:
 
     payload/
       python/                 Python 3.12 embed + oldindan o'rnatilgan paketlar
-      chaqimchi_ai/           dastur kodi
+      enes/           dastur kodi
       config/                 namuna konfiguratsiya
       models/retail/          OpenVINO odam detektori
       Chaqimchi_AI.bat        ishga tushirish
@@ -97,7 +97,10 @@ MODEL_MANIFEST = ROOT / "models" / "retail_manifest.json"
 #: Payloadga **faqat** shular kiradi.  `cloud/` va `webapp/` ataylab yo'q:
 #: mijoz kompyuterida admin paneli, lead API va to'lov callbacklari
 #: ishlashi kerak emas.
-CODE_DIRS = ["chaqimchi_ai"]
+#: `chaqimchi_ai` — eski nomga ko'prik (o'sha papkadagi izohga qarang):
+#: o'rnatilgan qurilmadagi yangilanish vazifasi hali eski nom bilan
+#: chaqiradi.
+CODE_DIRS = ["enes", "chaqimchi_ai"]
 
 #: Kodni ko'chirishda tashlab ketiladigan narsalar.
 CODE_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", ".DS_Store", "*.log")
@@ -144,7 +147,7 @@ def step_python(cache: Path) -> Path:
     # Embed Python standart holatda `site` modulini yoqmaydi va
     # `site-packages` ni ko'rmaydi — ya'ni o'rnatilgan paketlar topilmasdi.
     # Bir vaqtning o'zida dastur kodi turgan papka ham `sys.path` ga
-    # qo'shilishi kerak, aks holda `import chaqimchi_ai` ishlamaydi.
+    # qo'shilishi kerak, aks holda `import enes` ishlamaydi.
     pth = python_dir / "python312._pth"
     if pth.is_file():
         lines = pth.read_text(encoding="utf-8").splitlines()
@@ -264,7 +267,7 @@ def step_code() -> None:
             shutil.copy2(source, config_dst / name)
 
     # Yangilanish imzosini tekshiradigan ochiq kalit.  Usiz masofadan
-    # yangilash **umuman bajarilmaydi** (`chaqimchi_ai/local/updater.py`):
+    # yangilash **umuman bajarilmaydi** (`enes/local/updater.py`):
     # imzosiz `.exe` ni administrator huquqi bilan ishga tushirishdan
     # ko'ra eski versiyada qolgan yaxshiroq.
     public_key = ROOT / "deploy" / "update-public.pem"
@@ -321,7 +324,7 @@ echo   (Kompyuter yonganda avtomatik ishga tushirish yoqilgan bo'lsa,
 echo    kompyuter qayta yonganda nazorat o'zi tiklanadi.)
 echo.
 
-"python\\python.exe" -m chaqimchi_ai.local.app
+"python\\python.exe" -m enes.local.app
 
 REM Bu yerga yetdik degani dastur to'xtadi.  Oyna ochiq qoladi: xato
 REM matni ekranda ko'rinishi kerak.  Eski o'rnatuvchi buni yashirin
@@ -346,7 +349,7 @@ cd /d "%~dp0"
 set CHAQIMCHI_DEFAULT_CLOUD_URL=__CLOUD_URL__
 set CHAQIMCHI_LOCAL_NO_BROWSER=1
 
-"python\\python.exe" -m chaqimchi_ai.local.app
+"python\\python.exe" -m enes.local.app
 """
 
 READ_ME = """Chaqimchi AI - do'kon nazorati
@@ -446,16 +449,16 @@ def step_version() -> None:
     chiqargan: cloud bir versiyani, qurilma boshqasini aytardi va
     yangilash hech qachon "tugallandi" bo'lmasdi.
 
-    Endi manba bitta — `chaqimchi_ai.__version__`.  Qo'lda yozish
+    Endi manba bitta — `enes.__version__`.  Qo'lda yozish
     imkoniyati umuman qoldirilmaydi.
     """
     # Paketni import qilmaymiz: qurish skripti loyihadan tashqarida ham
-    # ishga tushiriladi va o'sha paytda `chaqimchi_ai` yo'lda bo'lmaydi.
+    # ishga tushiriladi va o'sha paytda `enes` yo'lda bo'lmaydi.
     # Faylni o'qish esa har doim ishlaydi.
-    source = (ROOT / "chaqimchi_ai" / "__init__.py").read_text(encoding="utf-8")
+    source = (ROOT / "enes" / "__init__.py").read_text(encoding="utf-8")
     found = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', source, re.M)
     if not found:
-        raise SystemExit("chaqimchi_ai/__init__.py ichida __version__ topilmadi")
+        raise SystemExit("enes/__init__.py ichida __version__ topilmadi")
     version = found.group(1)
 
     # NSIS `VIProductVersion` qat'iy `x.x.x.x` shaklini talab qiladi.
@@ -468,14 +471,14 @@ def step_version() -> None:
     # `api.`→`app.` qoidasi ikki joyda ajralib ketardi.
     panel = ""
     if DEFAULT_CLOUD_URL:
-        from chaqimchi_ai.local.cloud_link import _panel_host
+        from enes.local.cloud_link import _panel_host
 
         panel = f"{_panel_host(DEFAULT_CLOUD_URL)}/owner"
 
     target = BUILD / "version.nsh"
     target.write_text(
         "; Avtomatik yaratilgan — qo'lda tahrirlamang.\n"
-        "; Manba: chaqimchi_ai/__init__.py (`build_windows_payload.py` yozadi).\n"
+        "; Manba: enes/__init__.py (`build_windows_payload.py` yozadi).\n"
         f'!define APP_VERSION "{version}"\n'
         f'!define APP_VERSION_NUMERIC "{numeric}"\n'
         + (f'!define APP_PANEL_URL "{panel}"\n' if panel else ""),

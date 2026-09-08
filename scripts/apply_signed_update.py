@@ -60,7 +60,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from chaqimchi_ai.signed_update import (
+from enes.signed_update import (
     UpdateVerificationError,
     sha256_file,
     verify_release_manifest,
@@ -328,7 +328,7 @@ class Updater:
             source = children[0] if len(children) == 1 and children[0].is_dir() else stage
             product = manifest.get("product", "chaqimchi-lite")
             required = (
-                source / "chaqimchi_ai" / "sotqin_agent.py"
+                source / "enes" / "sotqin_agent.py"
                 if product == "chaqimchi-sotqin"
                 else source / "webapp" / "main.py"
             )

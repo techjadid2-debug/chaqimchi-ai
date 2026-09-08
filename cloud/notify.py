@@ -22,8 +22,8 @@ import threading
 import time
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud import i18n
+from enes.event_models import EdgeEvent
 
 #: Bir xil ogohlantirish shuncha soniyada bir martadan ko'p yuborilmaydi.
 DEFAULT_THROTTLE_SEC = 600
@@ -80,7 +80,7 @@ RECOVERY_EVENTS = frozenset({"camera_recovered"})
 
 #: Qurilma qaysi hodisaga rasm/klip ILADI.
 #:
-#: Haqiqiy manba — `chaqimchi_ai/retail/pipeline.py: SECURITY_MEDIA_EVENTS`,
+#: Haqiqiy manba — `enes/retail/pipeline.py: SECURITY_MEDIA_EVENTS`,
 #: lekin `cloud` uni import qila olmaydi: o'sha modul `cv2` va `numpy`
 #: tortadi va ular serverda o'rnatilmagan.  Shuning uchun ro'yxat shu
 #: yerda TAKRORLANADI, tenglik esa test bilan qulflanadi

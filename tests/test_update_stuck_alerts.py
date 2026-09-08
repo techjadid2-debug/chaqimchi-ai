@@ -2,7 +2,7 @@
 
 Qurilmadagi yangilovchida kamchilik bor: oldingi yangilanish taqdiri
 aniqlanmasa u MUDDATSIZ "kutish" holatida qoladi va yangi versiyani
-umuman tekshirmaydi (`chaqimchi_ai/local/updater.py`).  Ya'ni tuzatishni
+umuman tekshirmaydi (`enes/local/updater.py`).  Ya'ni tuzatishni
 qurilmaga yubora olmaymiz — u aynan yangilanmayapti.
 
 Tashqaridan qaraganda esa manzara aniq: reliz chiqqan, kanal avto,

@@ -36,8 +36,8 @@ def test_soak_measures_the_chain_not_ffprobe(tmp_path) -> None:
     import json
     import time
 
-    import chaqimchi_ai.sotqin_agent as agent
-    from chaqimchi_ai.retail.service import write_status
+    import enes.sotqin_agent as agent
+    from enes.retail.service import write_status
     from scripts.soak_n100 import read_health
 
     status = tmp_path / "retail-status.json"

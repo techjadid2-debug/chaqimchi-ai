@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud import i18n
+from enes.event_models import EdgeEvent
 
 logger = logging.getLogger(__name__)
 
@@ -2121,7 +2121,7 @@ class EventStore:
 
     # ── Issiqlik xaritasi ────────────────────────────────────────────────
 
-    #: To'r o'lchami — qurilmadagi chaqimchi_ai/retail/heatmap.py bilan mos.
+    #: To'r o'lchami — qurilmadagi enes/retail/heatmap.py bilan mos.
     HEATMAP_COLS = 48
     HEATMAP_ROWS = 27
 

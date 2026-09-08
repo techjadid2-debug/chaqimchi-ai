@@ -36,7 +36,7 @@ CLOUD_SYNC = {
 @pytest.fixture
 def local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import cloud_config, cloud_link, config_store, counters, paths
+    from enes.local import cloud_config, cloud_link, config_store, counters, paths
 
     for module in (paths, config_store, counters, cloud_link, cloud_config):
         importlib.reload(module)
@@ -48,7 +48,7 @@ def _write_status(tmp_path: Path, **values: Any) -> None:
     """Retail zanjiri yozadigan holat fayli."""
     import time
 
-    from chaqimchi_ai.local import paths
+    from enes.local import paths
 
     payload = {
         "updated_at": time.time(),
@@ -93,7 +93,7 @@ def test_supervisor_reports_the_numbers_from_the_status_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import config_store, counters, paths, supervisor
+    from enes.local import config_store, counters, paths, supervisor
 
     for module in (paths, config_store, counters, supervisor):
         importlib.reload(module)
@@ -126,8 +126,8 @@ def test_heartbeat_is_not_silently_zero(
     Aynan shu joyda uzilish bor edi va uni hech qanday test ushlamasdi.
     """
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import cloud_config, cloud_link, config_store, counters, paths
-    from chaqimchi_ai.local import supervisor as supervisor_module
+    from enes.local import cloud_config, cloud_link, config_store, counters, paths
+    from enes.local import supervisor as supervisor_module
 
     for module in (paths, config_store, counters, cloud_link, cloud_config, supervisor_module):
         importlib.reload(module)
@@ -151,7 +151,7 @@ def test_crash_counter_survives_a_restart(
 ) -> None:
     """Hisoblagich xotirada bo'lsa, aynan restart paytida yo'qolardi."""
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import counters, paths
+    from enes.local import counters, paths
 
     for module in (paths, counters):
         importlib.reload(module)
@@ -169,7 +169,7 @@ def test_deliberate_restarts_are_counted_separately(
 ) -> None:
     """Mijoz sozlamani o'zgartirib qayta ishga tushirsa — bu nosozlik emas."""
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import counters, paths
+    from enes.local import counters, paths
 
     for module in (paths, counters):
         importlib.reload(module)
@@ -186,7 +186,7 @@ def test_supervisor_exposes_the_crash_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import config_store, counters, paths, supervisor
+    from enes.local import config_store, counters, paths, supervisor
 
     for module in (paths, config_store, counters, supervisor):
         importlib.reload(module)
@@ -200,9 +200,9 @@ def test_supervisor_exposes_the_crash_count(
 
 
 def _outbox_with(tmp_path: Path, *, severity: str = "info", acknowledge: bool = False):
-    from chaqimchi_ai.event_models import EdgeEvent
-    from chaqimchi_ai.local import paths
-    from chaqimchi_ai.outbox import EventOutbox
+    from enes.event_models import EdgeEvent
+    from enes.local import paths
+    from enes.outbox import EventOutbox
 
     outbox = EventOutbox(paths.outbox_path(), max_bytes=1_000_000)
     event = EdgeEvent(event_type="line_crossed", severity=severity, camera_id="cam-1")
@@ -217,7 +217,7 @@ def test_sent_events_are_not_counted_as_pending(
 ) -> None:
     """Yuborilgan yozuv ikki kun saqlanadi — u navbat emas."""
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import cloud_link, paths
+    from enes.local import cloud_link, paths
 
     for module in (paths, cloud_link):
         importlib.reload(module)
@@ -232,7 +232,7 @@ def test_pending_and_critical_are_counted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import cloud_link, paths
+    from enes.local import cloud_link, paths
 
     for module in (paths, cloud_link):
         importlib.reload(module)
@@ -264,7 +264,7 @@ def test_a_missing_outbox_is_not_an_error(
 ) -> None:
     """Yangi o'rnatilgan kompyuterda baza hali yo'q."""
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import cloud_link, paths
+    from enes.local import cloud_link, paths
 
     for module in (paths, cloud_link):
         importlib.reload(module)
@@ -292,7 +292,7 @@ def test_camera_list_goes_up_to_the_cloud(
     jonli ko'rish, xarita, davomat kamerasi va kamera rollari — to'rttasi
     ham jimgina bo'sh turardi.
     """
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.save_camera(
         camera_id="camera-01", stream_url="rtsp://u:p@10.0.0.5/1", label="Kirish"
@@ -355,7 +355,7 @@ def test_camera_health_reaches_the_cloud(
     local, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Panel qaysi kamera o'chganini ko'rsatishi uchun holat kerak."""
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.save_camera(
         camera_id="camera-01", stream_url="rtsp://u:p@10.0.0.5/1", label="Kirish", codec="H265"
@@ -393,7 +393,7 @@ def test_heartbeat_shows_why_events_were_dropped(
     """
     import sqlite3
 
-    from chaqimchi_ai.local import paths
+    from enes.local import paths
 
     db = paths.outbox_path()
     db.parent.mkdir(parents=True, exist_ok=True)
@@ -430,7 +430,7 @@ def test_a_rejected_camera_list_is_not_retried_forever(
     Aynan shu naqsh qurilmadagi `dead_letter` ni to'ldirgan edi: doimiy
     rad javobga cheksiz qayta urinish.
     """
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     config_store.save_camera(camera_id="camera-01", stream_url="rtsp://x/1", label="Kirish")
     calls = []
@@ -461,7 +461,7 @@ def test_heartbeat_carries_the_device_own_clock(
     """Qurilma o'z soatini yuborsin — cloud farqni shundan biladi.
 
     Ish vaqti qoidalari qurilmaning LOKAL soatiga ishonadi
-    (`chaqimchi_ai/retail/pipeline.py`), cloud esa faqat `occurred_at`
+    (`enes/retail/pipeline.py`), cloud esa faqat `occurred_at`
     ni tuzata oladi.  Ya'ni adashgan soat tungi ogohlantirishlarni
     jimgina buzadi va buni boshqa hech qanday hisoblagich ko'rsatmaydi.
     """

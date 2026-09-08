@@ -156,7 +156,7 @@ def test_the_card_does_not_sell_attendance_while_it_is_a_closed_pilot() -> None:
     ikkalasi BIRGA o'zgaradi: `BIZNES_EDGE_FEATURES` ga `davomat`
     qo'shiladi va shundan keyin bu test yangilanadi.
     """
-    from chaqimchi_ai.licensing.plans import BIZNES_EDGE_FEATURES, PLANS
+    from enes.licensing.plans import BIZNES_EDGE_FEATURES, PLANS
 
     for plan_key in ("biznes", "lite", "boshlangich"):
         card = " ".join(PLANS[plan_key].includes).lower()

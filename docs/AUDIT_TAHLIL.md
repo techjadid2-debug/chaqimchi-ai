@@ -25,7 +25,7 @@ yuborilmadi, hujum sinovi qilinmadi.
 
 Tekshirilgan narsalar: 9 ta jonli sahifa, HTTP sarlavhalari, DNS va server
 joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
-`/download-installer`, `/health/deep`), `cloud/`, `chaqimchi_ai/`,
+`/download-installer`, `/health/deep`), `cloud/`, `enes/`,
 `docs/` kodi va `releases/` papkasi.
 
 ### Audit davomida qabul qilingan ikki qaror (2026-08-25)
@@ -90,7 +90,7 @@ pilotdan keyin kengaytirishdan oldin. **O'rta** — yo'l xaritasiga.
 
 > ## ✅ TUZATILDI — 2026-08-25
 >
-> `chaqimchi_ai/licensing/edu.py`: `MODULES` da endi faqat ikkita
+> `enes/licensing/edu.py`: `MODULES` da endi faqat ikkita
 > sotiladigan modul (`faceid`, `branch`). Uchtasi yangi
 > `PLANNED_MODULES` ga ko'chdi — **narxsiz**, sahifada tanlab
 > bo'lmaydigan "rejada" holatida ko'rinadi (butunlay yashirish ham
@@ -128,7 +128,7 @@ pilotdan keyin kengaytirishdan oldin. **O'rta** — yo'l xaritasiga.
 > tekshiradi.
 
 **Qayerda:** `chaqimchi.uz/edu` narx kalkulyatori
-**Fayl:** `chaqimchi_ai/licensing/edu.py:79-85`
+**Fayl:** `enes/licensing/edu.py:79-85`
 
 Kalkulyator mijozga aniq oylik narx bilan quyidagilarni taklif qiladi:
 
@@ -146,7 +146,7 @@ Kalkulyator mijozga aniq oylik narx bilan quyidagilarni taklif qiladi:
   `grep -rn -iE "fight|aggress|violence|janjal|tajovuz" --include="*.py"`
   → faqat `event_models.py:61` dagi izoh matni topildi, detektor emas.
 - Dars monitoringi **yo'q**: `grep -rn -iE "lesson|dars_monitor"` → bo'sh.
-- Mavjud hodisa turlarining to'liq ro'yxati (`chaqimchi_ai/event_models.py`):
+- Mavjud hodisa turlarining to'liq ro'yxati (`enes/event_models.py`):
   `line_crossed`, `occupancy_exceeded`, `dwell_exceeded`,
   `queue_threshold_exceeded`, `loitering`, `zone_entered`,
   `after_hours_presence`, `camera_tampered`, `camera_offline`,
@@ -429,7 +429,7 @@ qaytarsin — test yozilsin.
 > **tarif nima berishiga** bog'langan.
 
 **Dalil:**
-- Sotuv kartasi: `chaqimchi_ai/licensing/plans.py:306-311` — Biznes
+- Sotuv kartasi: `enes/licensing/plans.py:306-311` — Biznes
   tarifida *"Xodim davomati — 10 xodimgacha, yuz orqali."*
 - Tarif funksiyalari: `plans.py:204` →
   `BIZNES_EDGE_FEATURES = ("person_count", "queue_length", "store_security")`
@@ -457,7 +457,7 @@ Ya'ni kod ham saytga moslashadi, teskarisi emas. Bajariladigan ish:
    `faces.MODELS_LICENSED_FOR_COMMERCIAL_USE` shartini olib tashlash —
    faqat `CHAQIMCHI_ATTENDANCE_PILOT` env bayrog'i (va development
    muhiti) ochsin. Litsenziya endi *ruxsat*, lekin *sabab* emas.
-2. `chaqimchi_ai/licensing/plans.py:306-311` — Biznes kartasidan
+2. `enes/licensing/plans.py:306-311` — Biznes kartasidan
    "Xodim davomati" bulletini olib tashlash.
 3. `plans.py:199-202` izohini yangilash: `buffalo_l` yo'q, sabab endi
    litsenziya emas — **hosting hududi va qabul sinovi**.
@@ -772,7 +772,7 @@ backup chastotasini oshirish va bitta yozuvchi jarayonni kafolatlash.
 
 ### O'RTA-7 · Tekshirilishi kerak: JWT kalitlari ajratilgani
 
-`chaqimchi_ai/jwt_auth.py:21-26` — `resolve_jwt_secret()` avval global
+`enes/jwt_auth.py:21-26` — `resolve_jwt_secret()` avval global
 `CHAQIMCHI_JWT_SECRET` ni o'qiydi va u bor bo'lsa
 `CHAQIMCHI_OWNER_JWT_SECRET` / `CHAQIMCHI_PORTAL_JWT_SECRET` ni
 **butunlay e'tiborsiz qoldiradi**.
@@ -840,21 +840,21 @@ yo'q**:
 - Repoda **birorta test videosi yo'q** (`.mp4/.avi/.mkv` — nol dona).
 - Precision / recall / yolg'on ogohlantirish ulushi hech qayerda
   o'lchanmagan va yozilmagan.
-- Yagona raqam — `chaqimchi_ai/retail/detector_ov.py:11` dagi
+- Yagona raqam — `enes/retail/detector_ov.py:11` dagi
   **"AP 88.62%"**, bu **Intel'ning model kartochkasidan** olingan, sizning
   do'koningiz kadrlarida emas.
 - `scripts/benchmark_n100.py` faqat **tezlikni** o'lchaydi (p50/p95/p99),
   aniqlikni umuman o'lchamaydi. Natija fayli repoda yo'q.
 - Jamoa buni o'zi tan olgan: `docs/DOKON_MVP.md:45` — "real do'konlarda
   line/queue/tamper/loitering **aniqlik kalibratsiyasi**" bajarilmagan;
-  `chaqimchi_ai/retail/README.md:305-319` — "Benchmark hali ishlatilmagan",
+  `enes/retail/README.md:305-319` — "Benchmark hali ishlatilmagan",
   "Sig'im hali haqiqiy qurilmada o'lchanmagan".
 
 **Yolg'on ogohlantirish haqida bor bo'lgan yagona dalillar — nosozlik
 izohlari, metrika emas:**
-- `chaqimchi_ai/settings.py:128-136` — *"6×12 pikselli dog' 'odam' bo'lib,
+- `enes/settings.py:128-136` — *"6×12 pikselli dog' 'odam' bo'lib,
   bir kechada **48 ta yolg'on hodisa**"*
-- `chaqimchi_ai/retail/pipeline.py:67-72` — *"**321 hodisadan 300 tasi
+- `enes/retail/pipeline.py:67-72` — *"**321 hodisadan 300 tasi
   loitering (93%)**, 29 MB rasmning 28.9 MB'i shundan"*
 - `scene_analytics.py:552-557` — *"bitta track bir joyda 6354 soniya
   turgan"*
@@ -910,7 +910,7 @@ batareyasi o'lishi odatiy hol, **NTP hech qayerda majburiy emas**"*.
 Cloud himoyasi bor, **lekin u yetarli emas**: `_normalise_occurred_at()`
 (`event_store.py:483-535`) faqat hodisaning *yozilgan vaqtini* tuzatadi.
 Qurilma **qarorlari** esa OS soatiga ishonadi:
-`chaqimchi_ai/retail/pipeline.py:219-221` → `datetime.now().time()`.
+`enes/retail/pipeline.py:219-221` → `datetime.now().time()`.
 
 **Real oqibat:** Do'kon kompyuterining soati 6 soatga adashsa,
 `after_hours_presence` **kunduzi** ishlaydi — har mijoz "ish vaqtidan
@@ -1054,7 +1054,7 @@ sifatida tekshiriladi va yashirin flake o'sha natijani buzadi.
 guaranteed_cameras: 4    # sotiladigan SLA
 max_cameras: 8           # apparat imkoniyati
 ```
-`chaqimchi_ai/sotqin_profile.py:19-20` — `GUARANTEED_CAMERAS =
+`enes/sotqin_profile.py:19-20` — `GUARANTEED_CAMERAS =
 SHOP_MAX_CAMERAS` (4) va `MAX_CAMERAS = 8`. Validatsiya
 (`sotqin_agent.py:272`) apparat shiftiga qaraydi, va bu to'g'ri:
 u konfig qurilmani ko'tarolmaydigan yukka sozlab qo'yishini
@@ -1222,7 +1222,7 @@ Audit davomida tasdiqlangan kuchli tomonlar — bularni saqlash kerak:
 - **OTA imzosi jiddiy:** Ed25519 + sha256, imzodan o'tmagan fayl
   o'chiriladi, rollback nishoni **qayta imzo tekshiruvidan o'tadi**,
   buzuq versiya `blocked_version` bo'lib qoladi
-  (`chaqimchi_ai/local/updater.py:170-178, 200-240, 306-343`).
+  (`enes/local/updater.py:170-178, 200-240, 306-343`).
 - **Yolg'on ogohlantirishga qarshi ishlangan:** loitering Telegramga
   umuman bormaydi va media qabul qilinmaydi
   (`cloud/main.py:1149`), Telegramga faqat `critical` o'tadi
@@ -1267,7 +1267,7 @@ yuborilmasin**.
 
 | # | Ish | Fayl | Kim | Vaqt |
 |---|---|---|---|---|
-| ~~A1~~ | ✅ **BAJARILDI** — `fight`, `monitoring`, `deep` `PLANNED_MODULES` ga ko'chdi | `chaqimchi_ai/licensing/edu.py` | Backend | — |
+| ~~A1~~ | ✅ **BAJARILDI** — `fight`, `monitoring`, `deep` `PLANNED_MODULES` ga ko'chdi | `enes/licensing/edu.py` | Backend | — |
 | ~~A2~~ | ✅ **BAJARILDI** — `LOAD_WEIGHTS` faqat `faceid`, qurilma tavsiyasi qayta hisoblandi | `edu.py` | Backend | — |
 | ~~A3~~ | ✅ **BAJARILDI** — hudud va'dasi o'chirildi, 4 ta ibora `FORBIDDEN_CLAIMS` da qulflandi | `cloud/static/edu.html`, `tests/test_static_pages.py` | Frontend | — |
 | ~~A4~~ | ✅ **BAJARILDI** — ikkita yangi bo'lim: «Ma'lumot qayerda saqlanadi» va «Uchinchi tomon xizmatlari» | `cloud/static/privacy.html` | Product | — |

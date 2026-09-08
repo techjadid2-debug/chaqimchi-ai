@@ -1,6 +1,6 @@
 """Barqarorlik (Resilience) va Statik Tracker testlari."""
 
-from chaqimchi_ai.retail.tracker import MotionTracker
+from enes.retail.tracker import MotionTracker
 
 
 def test_motion_tracker_detects_static_objects():
@@ -37,6 +37,6 @@ def test_motion_tracker_moving_object_is_not_static():
 
 
 # Eslatma: `purge_emergency_if_disk_low` testi olib tashlandi — funksiya
-# `chaqimchi_ai/retention.py` bilan birga arxivlangan (hech qaysi xizmat
+# `enes/retention.py` bilan birga arxivlangan (hech qaysi xizmat
 # uni chaqirmasdi; disk himoyasi edge'da `outbox.prune`, cloudda esa
 # media kvotasi orqali ishlaydi).

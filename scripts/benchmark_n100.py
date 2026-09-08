@@ -46,11 +46,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:  # skript sifatida ishga tushirilganda
     sys.path.insert(0, str(BASE_DIR))
 
-from chaqimchi_ai.sotqin_profile import GUARANTEED_CAMERAS  # noqa: E402
+from enes.sotqin_profile import GUARANTEED_CAMERAS  # noqa: E402
 
 DEFAULT_MODEL = BASE_DIR / "models" / "retail" / "person-detection-retail-0013.xml"
 
-from chaqimchi_ai.local.benchmark import (  # noqa: E402
+from enes.local.benchmark import (  # noqa: E402
     THERMAL_DROP_WARN,
     capacity_verdict,
     frames_from_source,
@@ -125,7 +125,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--json", default=None, help="natijani shu faylga yozish")
     args = parser.parse_args(argv)
 
-    from chaqimchi_ai.retail.detector_ov import OpenVINOPersonDetector
+    from enes.retail.detector_ov import OpenVINOPersonDetector
 
     model_path = Path(args.model)
     if not model_path.is_file():

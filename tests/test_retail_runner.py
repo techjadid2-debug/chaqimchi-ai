@@ -13,13 +13,13 @@ from typing import Any, List, Optional, Tuple
 import numpy as np
 import pytest
 
-from chaqimchi_ai.retail.broker import FrameBroker
-from chaqimchi_ai.retail.budget import InferenceBudget
-from chaqimchi_ai.retail.claims import Priority
-from chaqimchi_ai.retail.pipeline import RetailPipeline
-from chaqimchi_ai.retail.ringbuffer import RingBuffer
-from chaqimchi_ai.retail.rules import RuleEngine
-from chaqimchi_ai.retail.runner import MAX_BACKOFF_SEC, CameraSource, RetailRunner
+from enes.retail.broker import FrameBroker
+from enes.retail.budget import InferenceBudget
+from enes.retail.claims import Priority
+from enes.retail.pipeline import RetailPipeline
+from enes.retail.ringbuffer import RingBuffer
+from enes.retail.rules import RuleEngine
+from enes.retail.runner import MAX_BACKOFF_SEC, CameraSource, RetailRunner
 
 FRAME = np.zeros((8, 8, 3), dtype=np.uint8)
 

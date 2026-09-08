@@ -1018,7 +1018,7 @@ def test_alert_goes_out_with_the_snapshot_photo(production_client, monkeypatch) 
     import asyncio
 
     import cloud.main as main
-    from chaqimchi_ai.event_models import EdgeEvent
+    from enes.event_models import EdgeEvent
 
     client, messages = production_client
     site, _device, headers = _provision(client)

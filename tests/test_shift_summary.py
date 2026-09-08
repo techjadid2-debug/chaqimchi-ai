@@ -15,8 +15,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud.event_store import EventStore
+from enes.event_models import EdgeEvent
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
 SITE = "smena-1"

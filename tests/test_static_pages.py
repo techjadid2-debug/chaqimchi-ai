@@ -125,7 +125,7 @@ def test_pages_do_not_reference_removed_scripts() -> None:
         "run_windows.bat",
         "install_windows.bat",
         "local-onboarding",
-        "chaqimchi_ai.pair_sotqin",
+        "enes.pair_sotqin",
     )
     for page in pages():
         text = page.read_text(encoding="utf-8")
@@ -690,7 +690,7 @@ def test_every_icon_the_pages_ask_for_actually_exists() -> None:
     for path in list(STATIC.rglob("*.html")) + list(STATIC.rglob("*.js")):
         wanted |= set(re.findall(r"icons\.svg#([a-z-]+)", path.read_text(encoding="utf-8")))
     # Tarif punktlari ikonka nomini serverdan oladi.
-    plans = STATIC.parents[1] / "chaqimchi_ai" / "licensing" / "plans.py"
+    plans = STATIC.parents[1] / "enes" / "licensing" / "plans.py"
     wanted |= set(re.findall(r'icon="([a-z-]+)"', plans.read_text(encoding="utf-8")))
 
     missing = sorted(wanted - have)
@@ -792,9 +792,9 @@ def test_the_offer_promises_no_more_than_the_code_delivers() -> None:
     payt oferta jimgina yolg'onga aylanadi va aynan u sud uchun dalil
     bo'ladi.  Shuning uchun bog'liqlik test bilan ushlab turiladi.
     """
-    from chaqimchi_ai.licensing.plans import PLANS
     from cloud.main import MEDIA_RETENTION_HOURS_DEFAULT
     from cloud.store import GRACE_DAYS
+    from enes.licensing.plans import PLANS
 
     offer = (STATIC / "oferta.html").read_text(encoding="utf-8")
 

@@ -27,11 +27,11 @@ Tizim o'g'rilik, jinoyat yoki niyatni **taxmin qilmaydi**.
 
 ## Qattiq qoidalar — buzilmasin
 
-1. **Kamera soni faqat `chaqimchi_ai/limits.py` dan** (`SHOP_MAX_CAMERAS = 4`).
+1. **Kamera soni faqat `enes/limits.py` dan** (`SHOP_MAX_CAMERAS = 4`).
    Ilgari uch joyda alohida yozilgan edi va bir joyni o'zgartirish
    qolganlarini jimgina eskirtirardi.
 
-2. **Versiya ikki joyda:** `chaqimchi_ai/__init__.py` va `pyproject.toml`.
+2. **Versiya ikki joyda:** `enes/__init__.py` va `pyproject.toml`.
    Ikkalasini birga ko'taring — `tests/test_sotqin_release_contract.py`
    mosligini qulflaydi. (`importlib.metadata` ishlatilmaydi: paket
    qurilmada pip bilan o'rnatilmaydi.)
@@ -59,7 +59,7 @@ Tizim o'g'rilik, jinoyat yoki niyatni **taxmin qilmaydi**.
 ## Buyruqlar
 
 ```bash
-make lint                 # ruff: chaqimchi_ai cloud tests scripts
+make lint                 # ruff: enes cloud tests scripts
 make test                 # TS typecheck + pytest (~1 724 test)
 make ui-install           # frontend/node_modules yo'q bo'lsa
 
@@ -72,7 +72,7 @@ make run-retail           # AI zanjiri (kamera kerak)
 qadam yiqiladi):
 
 ```bash
-# 1) versiyani chaqimchi_ai/__init__.py va pyproject.toml da ko'taring
+# 1) versiyani enes/__init__.py va pyproject.toml da ko'taring
 PYTHONPATH="$PWD" CHAQIMCHI_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
   python scripts/build_windows_payload.py
 makensis -V2 scripts/windows_installer.nsi

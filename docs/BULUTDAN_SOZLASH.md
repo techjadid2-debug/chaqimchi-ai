@@ -14,7 +14,7 @@ Kamera qidirish do‘kon tarmog‘idan bajarilishi **shart**: WS-Discovery
 multicast, `/24` sweep va xususiy IP ga SOAP so‘rov. Bulut sahifasi u
 yerga kira olmaydi va kirmasligi ham kerak — lokal API ataylab faqat
 `127.0.0.1` dan keladigan so‘rovni qabul qiladi (DNS-rebinding himoyasi,
-`chaqimchi_ai/local/app.py`).
+`enes/local/app.py`).
 
 Shuning uchun yo‘nalish teskari qilindi: **bulut buyruq beradi, qurilma
 bajaradi**. Bu `live_requested`/`preview_requested` naqshining aynan
@@ -44,7 +44,7 @@ o‘rnatish  →  POST /api/v1/public/device-hello        (qurilma → bulut)
 | `POST /api/v1/owner/devices/claim` | `require_active_owner` | Kutayotgan qurilmani egasining saytiga biriktiradi |
 | `POST /api/v1/public/device-handover` | yo‘q | `pending` / `claimed` (+ hisob ma’lumotlari) / `expired` |
 
-Qurilma tomonida: `chaqimchi_ai/local/cloud_link.py` →
+Qurilma tomonida: `enes/local/cloud_link.py` →
 `hello()`, `handover()`, `poll_connection()`. Holat `connect.json` da,
 `C:\ProgramData\Chaqimchi\` ichida.
 
@@ -89,7 +89,7 @@ heartbeat javobida `job_requested` → qurilma bajaradi → natija bulutga.
 | `channels` | NVR kanallarini topadi | 150 s |
 | `probe` | Bitta kadr oladi (sinov rasmi) | 45 s |
 
-Qurilma tomonida: `chaqimchi_ai/local/cloud_jobs.py`.
+Qurilma tomonida: `enes/local/cloud_jobs.py`.
 
 **Topshiriq ALOHIDA oqimda bajariladi.** Skaner 90 soniyagacha
 cho‘zilishi mumkin, heartbeat esa har 20 soniyada ketishi kerak. Bitta
@@ -144,6 +144,6 @@ qaror).
 | Panel: ulash ekrani | `frontend/src/Connect.tsx` |
 | Panel: kamera sehrgari | `frontend/src/SetupCameras.tsx` |
 | Panel: chiziq va zona | `frontend/src/GeometryEditor.tsx` |
-| Qurilma: ulanish | `chaqimchi_ai/local/cloud_link.py` |
-| Qurilma: topshiriqlar | `chaqimchi_ai/local/cloud_jobs.py` |
-| Qurilma: holat sahifasi | `chaqimchi_ai/local/static/panel.html` |
+| Qurilma: ulanish | `enes/local/cloud_link.py` |
+| Qurilma: topshiriqlar | `enes/local/cloud_jobs.py` |
+| Qurilma: holat sahifasi | `enes/local/static/panel.html` |

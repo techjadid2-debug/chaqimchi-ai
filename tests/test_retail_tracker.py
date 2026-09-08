@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from chaqimchi_ai.retail.tracker import MotionTracker
+from enes.retail.tracker import MotionTracker
 
 
 def box(x: float, *, width: float = 60.0, height: float = 160.0, y: float = 100.0):

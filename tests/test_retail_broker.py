@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pytest
 
-from chaqimchi_ai.retail import FrameBroker, InferenceBudget, Priority
+from enes.retail import FrameBroker, InferenceBudget, Priority
 
 
 def budget(**overrides) -> InferenceBudget:

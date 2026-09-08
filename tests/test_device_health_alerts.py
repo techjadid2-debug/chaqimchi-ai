@@ -373,7 +373,7 @@ def test_an_unmeasured_value_never_replaces_a_measured_one(tmp_path) -> None:
 # hisoblagich o'smaydi.  Qurilma sog'lom, kameralar ulangan, hodisalar
 # yozilyapti — faqat ular NOTO'G'RI VAQTDA baholanadi.  Ish vaqti
 # qoidalari qurilmaning lokal soatiga ishonadi
-# (`chaqimchi_ai/retail/pipeline.py`), cloud esa faqat `occurred_at` ni
+# (`enes/retail/pipeline.py`), cloud esa faqat `occurred_at` ni
 # tuzata oladi, qurilmaning QARORINI emas.
 
 

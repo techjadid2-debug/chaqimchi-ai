@@ -24,7 +24,7 @@ tuzatish hamda ishlatish va qo'llab-quvvatlashni yaxshilash.
 
 ## 2. Local edge va mahalliy sozlash paneli
 
-Asosiy manbalar: `chaqimchi_ai/local/`, `chaqimchi_ai/retail/` va ularga tegishli testlar.
+Asosiy manbalar: `enes/local/`, `enes/retail/` va ularga tegishli testlar.
 
 - [ ] Ishga tushish, portni band qilish, ikkinchi nusxa va to'g'ri yopilish holatlarini tekshirish.
 - [ ] Mahalliy panelning Host/loopback himoyasi va sozlamalarni saqlashini tekshirish.

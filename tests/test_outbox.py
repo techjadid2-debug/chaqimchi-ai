@@ -1,8 +1,8 @@
 import sqlite3
 from pathlib import Path
 
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.outbox import (
+from enes.event_models import EdgeEvent
+from enes.outbox import (
     BASE_RETRY_DELAY_SEC,
     MAX_ATTEMPTS,
     MAX_RETRY_DELAY_SEC,

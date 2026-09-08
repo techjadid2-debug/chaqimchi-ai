@@ -1,7 +1,7 @@
 """Qabul (Acceptance) va Soak skriptlari uchun testlar."""
 
-from chaqimchi_ai.pilot_acceptance import validate_n100_acceptance
-from chaqimchi_ai.sotqin_profile import HARDWARE_PROFILE
+from enes.pilot_acceptance import validate_n100_acceptance
+from enes.sotqin_profile import HARDWARE_PROFILE
 from scripts.soak_n100 import service_restarts, summarize_samples
 
 

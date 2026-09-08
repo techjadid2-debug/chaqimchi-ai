@@ -18,8 +18,8 @@ from typing import List
 import httpx
 import pytest
 
-from chaqimchi_ai import discovery
-from chaqimchi_ai.local import camera_probe, onvif_client
+from enes import discovery
+from enes.local import camera_probe, onvif_client
 
 # ── Real kameralar qaytaradigan javoblar ─────────────────────────────────
 #

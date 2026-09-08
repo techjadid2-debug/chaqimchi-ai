@@ -1,4 +1,4 @@
-from chaqimchi_ai.licensing.plans import PLANS, get_plan
+from enes.licensing.plans import PLANS, get_plan
 
 
 def test_lite_is_20_usd_base_and_uses_configured_rate(monkeypatch) -> None:
@@ -38,7 +38,7 @@ def test_only_the_shop_plans_are_offered_for_sale() -> None:
     Eski tariflar `PLANS` da qoladi — mavjud obyektlar va hisob-fakturalar
     ular orqali hisoblanadi — lekin yangi obyekt yaratishda ko'rinmaydi.
     """
-    from chaqimchi_ai.licensing.plans import SELLABLE_PLANS, is_sellable
+    from enes.licensing.plans import SELLABLE_PLANS, is_sellable
 
     assert SELLABLE_PLANS == frozenset({"boshlangich", "biznes"})
     assert is_sellable("biznes") is True
@@ -59,7 +59,7 @@ def test_legacy_lite_keeps_its_price_and_all_of_its_features() -> None:
        `lite` sotuvdan chiqishi bilan qurilma hamma funksiyani yo'qotib,
        do'kon nazoratsiz qolardi.
     """
-    from chaqimchi_ai.licensing.plans import plan_feature_codes
+    from enes.licensing.plans import plan_feature_codes
 
     lite = PLANS["lite"]
     assert lite.legacy is True
@@ -78,7 +78,7 @@ def test_the_two_sellable_plans_land_on_round_uzbek_prices() -> None:
     """
     import os
 
-    from chaqimchi_ai.licensing.plans import uzs_from_cents
+    from enes.licensing.plans import uzs_from_cents
 
     assert PLANS["boshlangich"].monthly_price() == 149_000
     assert PLANS["biznes"].monthly_price() == 299_000
@@ -113,7 +113,7 @@ def test_admin_panel_offers_exactly_the_sellable_plans() -> None:
     import re
     from pathlib import Path
 
-    from chaqimchi_ai.licensing.plans import SELLABLE_PLANS
+    from enes.licensing.plans import SELLABLE_PLANS
 
     tsx = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "admin.tsx").read_text(
         encoding="utf-8"

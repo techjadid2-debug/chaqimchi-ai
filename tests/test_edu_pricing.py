@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from chaqimchi_ai.licensing import edu
+from enes.licensing import edu
 
 # ── Odam soni bo'yicha bosqichli narx ────────────────────────────────
 

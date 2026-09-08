@@ -1,5 +1,5 @@
-from chaqimchi_ai.jwt_auth import create_access_token, decode_access_token
-from chaqimchi_ai.settings import JwtSettings
+from enes.jwt_auth import create_access_token, decode_access_token
+from enes.settings import JwtSettings
 
 
 def test_jwt_roundtrip() -> None:

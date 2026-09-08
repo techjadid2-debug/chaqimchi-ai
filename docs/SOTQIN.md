@@ -56,11 +56,11 @@ tamper, after-hours person, restricted zone va loitering hodisalariga tayanadi.
 **NVR'da**: to'liq video arxiv. Sotqin uni takrorlamaydi.
 
 Nega shunday bo'lingani va qurilma sig'imi qanday hisoblangani:
-[chaqimchi_ai/retail/README.md](../chaqimchi_ai/retail/README.md).
+[enes/retail/README.md](../enes/retail/README.md).
 
 ## Control plane (hozir implementatsiya qilingan)
 
-- `chaqimchi_ai.sotqin_agent` — yengil agent;
+- `enes.sotqin_agent` — yengil agent;
 - `scripts/install_sotqin.sh` — atomik release katalogiga installer;
 - `scripts/pair_sotqin.py` — pairing va hardware identity;
 - `chaqimchi-sotqin.service` — systemd supervision;

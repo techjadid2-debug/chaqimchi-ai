@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from chaqimchi_ai.pilot_acceptance import (
+from cloud.store import available_feature_codes
+from enes.pilot_acceptance import (
     pilot_acceptance_status,
     validate_n100_acceptance,
 )
-from chaqimchi_ai.sotqin_profile import HARDWARE_PROFILE
-from cloud.store import available_feature_codes
+from enes.sotqin_profile import HARDWARE_PROFILE
 
 
 def valid_acceptance() -> dict:
@@ -76,7 +76,7 @@ def test_production_feature_gate_requires_valid_acceptance(tmp_path: Path, monke
 # Yumshatilgani faqat ikkitasi (GPU va harorat).  Qolgan hamma narsa bir
 # xil, chunki mijozga beriladigan va'da bir xil.
 
-from chaqimchi_ai.pilot_acceptance import WINDOWS_PROFILE  # noqa: E402
+from enes.pilot_acceptance import WINDOWS_PROFILE  # noqa: E402
 
 
 def valid_windows_acceptance() -> dict:

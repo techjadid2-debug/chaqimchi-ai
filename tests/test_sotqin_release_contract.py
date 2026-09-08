@@ -6,9 +6,9 @@ from pathlib import Path
 
 import yaml
 
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.retail.rules import RuleEngine
-from chaqimchi_ai.settings import AppSettings
+from enes.event_models import EdgeEvent
+from enes.retail.rules import RuleEngine
+from enes.settings import AppSettings
 from scripts import fetch_retail_model
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -101,7 +101,7 @@ def test_release_contains_every_runtime_service_and_verified_model() -> None:
 
 def test_retail_service_resolves_release_assets_from_current_symlink() -> None:
     unit = (ROOT / "deploy" / "chaqimchi-retail.service").read_text()
-    service = (ROOT / "chaqimchi_ai" / "retail" / "service.py").read_text()
+    service = (ROOT / "enes" / "retail" / "service.py").read_text()
 
     assert "--base-dir /opt/chaqimchi/current" in unit
     assert "--base-dir /opt/chaqimchi/shared" not in unit
@@ -179,14 +179,14 @@ def test_version_is_declared_in_exactly_one_place() -> None:
     """Ikkita versiya raqami bir-biridan ajralib ketmasin.
 
     `build_sotqin_release.sh:6` tarball nomini `pyproject.toml` dan oladi,
-    qurilma esa heartbeat'da `chaqimchi_ai.__version__` ni yuboradi. Ular
+    qurilma esa heartbeat'da `enes.__version__` ni yuboradi. Ular
     farq qilsa panelda bitta versiya, faylda boshqasi ko'rinardi — va
     `apply_signed_update.py` "bu versiya allaqachon o'rnatilgan" deb
     to'g'ri relizni rad etardi.
     """
     import tomllib
 
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     declared = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert declared["project"]["version"] == __version__
@@ -201,7 +201,7 @@ def test_version_passes_the_updaters_charset_guard() -> None:
     """
     import re
 
-    from chaqimchi_ai import __version__
+    from enes import __version__
 
     assert re.fullmatch(r"[A-Za-z0-9.\-_]+", __version__), __version__
 

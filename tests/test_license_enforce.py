@@ -1,5 +1,5 @@
-from chaqimchi_ai.licensing.enforce import filter_cameras
-from chaqimchi_ai.settings import CameraItem
+from enes.licensing.enforce import filter_cameras
+from enes.settings import CameraItem
 
 
 def test_filter_cameras_limits_enabled() -> None:

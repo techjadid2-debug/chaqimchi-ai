@@ -44,32 +44,6 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from chaqimchi_ai import __version__, announcements, camera_roles
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.jwt_auth import JwtError
-from chaqimchi_ai.licensing.plans import (
-    PLANS,
-    SELLABLE_PLANS,
-    PlanBullet,
-    PlanTier,
-    cheapest_plan_for,
-    get_plan,
-    is_sellable,
-    plan_display_name,
-    plan_feature_codes,
-    usd_rate_uzs,
-    uzs_from_cents,
-)
-from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
-from chaqimchi_ai.pilot_acceptance import pilot_acceptance_status
-from chaqimchi_ai.settings import SceneLineSettings, SceneZoneSettings
-from chaqimchi_ai.sotqin_profile import (
-    BUFFER_MAX_BYTES,
-    BUFFER_RETENTION_DAYS,
-    GUARANTEED_CAMERAS,
-    MIN_FREE_BYTES,
-    product_payload,
-)
 from cloud import (
     botfmt,
     config_health,
@@ -111,6 +85,32 @@ from cloud.portal_auth import (
 )
 from cloud.snapshots import SnapshotStore, snapshot_store_from_env
 from cloud.store import DEFAULT_FEATURES, GRACE_DAYS, CloudStore, available_feature_codes
+from enes import __version__, announcements, camera_roles
+from enes.event_models import EdgeEvent
+from enes.jwt_auth import JwtError
+from enes.licensing.plans import (
+    PLANS,
+    SELLABLE_PLANS,
+    PlanBullet,
+    PlanTier,
+    cheapest_plan_for,
+    get_plan,
+    is_sellable,
+    plan_display_name,
+    plan_feature_codes,
+    usd_rate_uzs,
+    uzs_from_cents,
+)
+from enes.limits import SHOP_MAX_CAMERAS
+from enes.pilot_acceptance import pilot_acceptance_status
+from enes.settings import SceneLineSettings, SceneZoneSettings
+from enes.sotqin_profile import (
+    BUFFER_MAX_BYTES,
+    BUFFER_RETENTION_DAYS,
+    GUARANTEED_CAMERAS,
+    MIN_FREE_BYTES,
+    product_payload,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = Path(os.environ.get("CHAQIMCHI_CLOUD_DB", str(BASE_DIR / "data" / "cloud" / "cloud.db")))
@@ -123,7 +123,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 #: to'xtatadi.  Oldingi 120 chegarasi edge'ning 5 soniyalik sikli (soatiga
 #: 720 so'rov) bilan birga ~10 daqiqada 429 berardi, edge esa 429 ni
 #: tutmasdi va abadiy siklga tushardi.  Edge tarafi ham tuzatildi:
-#: `chaqimchi_ai/cloud_sync.py` endi `Retry-After` ni hurmat qiladi va
+#: `enes/cloud_sync.py` endi `Retry-After` ni hurmat qiladi va
 #: navbat bo'sh bo'lganda oraliqni 60 soniyagacha ko'taradi.
 EVENT_BATCH_HOURLY_LIMIT = 600
 
@@ -2189,9 +2189,9 @@ async def public_site_en(request: Request) -> HTMLResponse:
 
 #: Chiziq/zona muharriri **ikkala** panelga kerak: cloud'dagi o'rnatuvchi
 #: paneliga va mijozning lokal sozlash ustasiga.  Ikki nusxa saqlash bittasini
-#: jimgina eskirtirardi, shuning uchun manba bitta — `chaqimchi_ai/local/static/`.
+#: jimgina eskirtirardi, shuning uchun manba bitta — `enes/local/static/`.
 #: U yerda turgani ham ataylab: Windows o'rnatuvchisi `cloud/` ni ko'chirmaydi.
-ZONE_EDITOR = Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "static"
+ZONE_EDITOR = Path(__file__).resolve().parents[1] / "enes" / "local" / "static"
 
 
 @app.get("/vendor/zone-editor.js", include_in_schema=False)
@@ -2249,7 +2249,7 @@ async def installer_guide_page(request: Request) -> HTMLResponse:
 #   ishlamagan, test esa yashil turgan.
 #
 # Ikkalasining o'rnini mijoz kompyuterida ishlaydigan haqiqiy sozlash ustasi
-# egalladi: `chaqimchi_ai/local/app.py`.  Qidiruv u yerda xatoni yutmaydi.
+# egalladi: `enes/local/app.py`.  Qidiruv u yerda xatoni yutmaydi.
 
 
 @app.get("/downloads/sotqin-installer.sh", include_in_schema=False)
@@ -2858,14 +2858,14 @@ async def public_edu_pricing() -> Dict[str, Any]:
 
     Sahifa hisobni O'ZI qiladi — har bosishda so'rov yuborish
     kalkulyatorni sekin va cheklovlarga bog'liq qilardi.  Lekin
-    RAQAMLAR faqat shu yerdan keladi (`chaqimchi_ai/licensing/edu.py`):
+    RAQAMLAR faqat shu yerdan keladi (`enes/licensing/edu.py`):
     ular ikki joyda saqlansa biri o'zgarib, ikkinchisi eskirib
     qolardi va sayt yolg'on narx ko'rsatardi.
 
     Tannarx yoki marja bu yerda umuman yo'q — Edu modeli faqat
     sotuv narxlaridan iborat.
     """
-    from chaqimchi_ai.licensing import edu
+    from enes.licensing import edu
 
     return edu.catalog()
 
@@ -4468,8 +4468,8 @@ async def admin_request_live(
 # bor edi.  U **VPS konteynerining o'z tarmog'ini** skanerlardi — do'kon
 # tarmog'ini emas, ya'ni hech qachon kamera topa olmasdi; ustiga
 # autentifikatsiyalangan port-scan primitivi edi.  To'g'ri qidiruv
-# qurilmaning o'zida: `chaqimchi_ai/local/app.py` (`/api/setup/auto-find`)
-# va `chaqimchi_ai/sotqin_agent.py` (`/api/v1/discover-cameras`).
+# qurilmaning o'zida: `enes/local/app.py` (`/api/setup/auto-find`)
+# va `enes/sotqin_agent.py` (`/api/v1/discover-cameras`).
 
 
 @app.put("/api/v1/admin/sites/{site_id}/camera-inventory/{camera_id}")
@@ -5061,7 +5061,7 @@ async def admin_benchmark(
     qoida bor edi, lekin uni bajarish mumkin emasdi.  O'lchov ma'noli
     bo'ladigan yagona joy — mijozning o'z kompyuteri — va u yerda na
     terminal, na `scripts/` bor (Windows payload'iga faqat
-    `chaqimchi_ai` ko'chiriladi).  Natijada sig'im raqami taxmin bo'lib
+    `enes` ko'chiriladi).  Natijada sig'im raqami taxmin bo'lib
     qolgan va aynan shu taxminga suyanib mijozga kamera soni va'da
     qilinardi.
 
@@ -5746,7 +5746,7 @@ class EdgeCameraItem(BaseModel):
     source: str = Field(default="", max_length=2_000)
     #: Klip uchun asosiy oqim.  Bo'sh bo'lsa bu kamerada klip yozilmaydi.
     record_url: str = Field(default="", max_length=2_000)
-    #: Kameraning mahsulot vazifasi (`chaqimchi_ai/camera_roles.py`).
+    #: Kameraning mahsulot vazifasi (`enes/camera_roles.py`).
     #: Bo'sh — eski qurilma, rolni BILMAYDI: bulutdagi qiymat saqlanadi
     #: (manzil bilan bir xil no-wipe qoida).  Ochiq "none" — tozalash.
     role: str = Field(default="", max_length=16)
@@ -6243,7 +6243,7 @@ async def edge_site_config(
             "max_cameras": plan_cameras,
         }
         # Windows'da bufer chegaralarini qurilmaning o'zi diskiga qarab
-        # boshqaradi (`chaqimchi_ai/outbox.py` prune + settings).
+        # boshqaradi (`enes/outbox.py` prune + settings).
         config["buffer_policy"] = {
             "critical_priority": True,
             "full_video_storage": "nvr",
@@ -7870,7 +7870,7 @@ def owner_speak(
 def owner_announcements(_: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
     """Karnaydan aytish mumkin bo'lgan iboralar ro'yxati.
 
-    Panel ro'yxatni o'zi yozmaydi — katalog `chaqimchi_ai/announcements.py`
+    Panel ro'yxatni o'zi yozmaydi — katalog `enes/announcements.py`
     da va qurilma ham o'shandan foydalanadi.
     """
     return {
@@ -8354,7 +8354,7 @@ def _check_employee_limit(site_id: str) -> None:
 
     Chegara `plans.py` da yozilgan, ammo bungacha u faqat javoblarda
     qaytardi — hech qayerda majburlanmasdi.  Kamera chegarasi bilan bir
-    xil naqsh (`chaqimchi_ai/local/app.py`): sanoq yaratishdan OLDIN
+    xil naqsh (`enes/local/app.py`): sanoq yaratishdan OLDIN
     tekshiriladi.
     """
     site = get_store().get_site(site_id)

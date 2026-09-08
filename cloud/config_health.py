@@ -1,8 +1,8 @@
 """Chizilgan chiziq va zonalarning YAROQLILIGI.
 
 Panel chizmani 0..1 oralig'ida saqlaydi va qurilma ham aynan shu
-oraliqda ishlaydi (`chaqimchi_ai/retail/lines.py` kesishmani,
-`chaqimchi_ai/scene_analytics.py:_inside` esa nuqtani shu koordinatada
+oraliqda ishlaydi (`enes/retail/lines.py` kesishmani,
+`enes/scene_analytics.py:_inside` esa nuqtani shu koordinatada
 tekshiradi).  Shuning uchun "juda kichik" degan savolga shu yerda,
 qurilma bilan bir xil o'lchovda javob berish mumkin.
 
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from chaqimchi_ai.camera_roles import face_id_check
+from enes.camera_roles import face_id_check
 
 #: Chiziqning eng kam uzunligi (kadr o'lchamiga nisbatan).
 #:

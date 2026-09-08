@@ -29,8 +29,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     # bitta global obyekt — u eski `tmp_path` ni ushlab qolmasligi kerak.
     import importlib
 
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import config_store, paths, supervisor
+    from enes.local import app as app_module
+    from enes.local import config_store, paths, supervisor
 
     importlib.reload(paths)
     importlib.reload(config_store)
@@ -97,7 +97,7 @@ def test_the_local_pages_use_the_same_palette_as_the_cloud(client: TestClient) -
     Eski krem/to'q-yashil palitra qaytib kelmasin: u bitta faylda
     yashaydi va bitta `git revert` bilan tiklanib qolishi mumkin edi.
     """
-    css = (Path(__file__).resolve().parents[1] / "chaqimchi_ai/local/static/local.css").read_text(
+    css = (Path(__file__).resolve().parents[1] / "enes/local/static/local.css").read_text(
         encoding="utf-8"
     )
 
@@ -489,7 +489,7 @@ def test_utc_timestamps_are_converted_to_local_time(client: TestClient, tmp_path
 
 
 def test_known_paths_cover_the_common_uzbek_market_brands() -> None:
-    from chaqimchi_ai.local.camera_probe import KNOWN_PATHS
+    from enes.local.camera_probe import KNOWN_PATHS
 
     joined = " ".join(path for _name, path in KNOWN_PATHS).lower()
     for marker in ("streaming/channels", "realmonitor", "unicast", "h264preview"):
@@ -499,7 +499,7 @@ def test_known_paths_cover_the_common_uzbek_market_brands() -> None:
 def test_substream_is_tried_before_the_main_stream() -> None:
     """Substream yengil (640x360) va oddiy kompyuterda dekodlanadi;
     1080p main stream tahlil uchun og'ir."""
-    from chaqimchi_ai.local.camera_probe import KNOWN_PATHS
+    from enes.local.camera_probe import KNOWN_PATHS
 
     paths = [path for _name, path in KNOWN_PATHS]
     assert paths.index("/Streaming/Channels/{ch}02") < paths.index("/Streaming/Channels/{ch}01")
@@ -519,7 +519,7 @@ def test_substream_is_tried_before_the_main_stream() -> None:
 def test_channel_slot_is_found_in_every_known_format(url: str, expected: str) -> None:
     """Birinchi kanalda topilgan format qolganlariga ham qo'llanadi —
     aks holda har kanal uchun o'nlab variantni qayta sinardik."""
-    from chaqimchi_ai.local.camera_probe import path_template
+    from enes.local.camera_probe import path_template
 
     assert path_template(url, 1) == expected
 
@@ -528,7 +528,7 @@ def test_auto_find_reports_a_usable_reason_when_nothing_works(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Xato xabari mijoz **tuzata oladigan** bo'lishi kerak."""
-    from chaqimchi_ai.local import camera_probe
+    from enes.local import camera_probe
 
     monkeypatch.setattr(camera_probe, "rtsp_describe", lambda url, **kw: (401, ""))
     response = client.post(
@@ -543,7 +543,7 @@ def test_auto_find_reports_a_usable_reason_when_nothing_works(
 def test_unreachable_camera_says_so_plainly(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from chaqimchi_ai.local import camera_probe
+    from enes.local import camera_probe
 
     monkeypatch.setattr(camera_probe, "rtsp_describe", lambda url, **kw: (0, "timeout"))
     body = client.post("/api/setup/auto-find", json={"host": "10.0.0.9"}).json()
@@ -554,7 +554,7 @@ def test_unreachable_camera_says_so_plainly(
 
 def test_codec_problem_is_named(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """RTSP 200 qaytardi-yu kadr kelmadi — bu deyarli doim H.265."""
-    from chaqimchi_ai.local import camera_probe
+    from enes.local import camera_probe
 
     monkeypatch.setattr(camera_probe, "rtsp_describe", lambda url, **kw: (200, ""))
     monkeypatch.setattr(
@@ -577,7 +577,7 @@ def test_codec_problem_is_named(client: TestClient, monkeypatch: pytest.MonkeyPa
 def test_probe_restores_the_capture_options(monkeypatch: pytest.MonkeyPatch) -> None:
     import os
 
-    from chaqimchi_ai.local import camera_probe
+    from enes.local import camera_probe
 
     monkeypatch.setenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", "oldindan;bor")
     camera_probe.grab_frame("rtsp://10.255.255.1:554/x", timeout_sec=1)
@@ -587,7 +587,7 @@ def test_probe_restores_the_capture_options(monkeypatch: pytest.MonkeyPatch) -> 
 def test_probe_leaves_no_trace_when_nothing_was_set(monkeypatch: pytest.MonkeyPatch) -> None:
     import os
 
-    from chaqimchi_ai.local import camera_probe
+    from enes.local import camera_probe
 
     monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
     camera_probe.grab_frame("rtsp://10.255.255.1:554/x", timeout_sec=1)
@@ -598,7 +598,7 @@ def test_probe_never_uses_the_ambiguous_timeout_option() -> None:
     """RTSP demuxer uchun `timeout` "kiruvchi ulanishni kutish" degani va
     `listen` rejimini nazarda tutadi — mijoz ulanishini buzadi."""
     source = (
-        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "camera_probe.py"
+        Path(__file__).resolve().parents[1] / "enes" / "local" / "camera_probe.py"
     ).read_text(encoding="utf-8")
     assert "|timeout;" not in source, "noaniq `timeout` opsiyasi qaytarilmasin"
     assert "stimeout;" in source
@@ -607,7 +607,7 @@ def test_probe_never_uses_the_ambiguous_timeout_option() -> None:
 def test_pipeline_pins_its_own_capture_options() -> None:
     """Zanjir tashqaridan kelgan qiymatga tayanmasligi kerak."""
     source = (
-        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "retail" / "runner.py"
+        Path(__file__).resolve().parents[1] / "enes" / "retail" / "runner.py"
     ).read_text(encoding="utf-8")
     assert 'os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]' in source
     code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
@@ -616,7 +616,7 @@ def test_pipeline_pins_its_own_capture_options() -> None:
 
 def test_supervisor_strips_the_probe_options() -> None:
     source = (
-        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "supervisor.py"
+        Path(__file__).resolve().parents[1] / "enes" / "local" / "supervisor.py"
     ).read_text(encoding="utf-8")
     assert 'env.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS"' in source
 
@@ -640,7 +640,7 @@ def test_old_config_without_rules_is_healed(tmp_path: Path, monkeypatch) -> None
     """Ishlab turgan eski qurilmalar yangilanishdan keyin o'zi tuzalsin."""
     import importlib
 
-    from chaqimchi_ai.local import config_store, paths
+    from enes.local import config_store, paths
 
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
     importlib.reload(paths)
@@ -673,8 +673,8 @@ def test_old_cameras_get_a_record_url_so_clips_start_working(
     BUNGACHA saqlanganlar bo'sh qolardi.  Jonli do'konda aynan shu holat
     (2026-08-21): `camera_tampered` ikki marta chiqqan, klip NOL ta.
     """
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import config_store
+    from enes.local import app as app_module
+    from enes.local import config_store
 
     monkeypatch.setattr(
         app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (200, "OK")
@@ -710,8 +710,8 @@ def test_backfill_never_stores_an_unreachable_guess(
     Bu qoida yangi kamera saqlashda allaqachon bor edi; to'ldirish ham
     unga bo'ysunishi shart.
     """
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import config_store
+    from enes.local import app as app_module
+    from enes.local import config_store
 
     monkeypatch.setattr(
         app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (404, "Not Found")
@@ -733,8 +733,8 @@ def test_backfill_does_not_overwrite_a_url_the_customer_set(
     client: TestClient, tmp_path: Path, monkeypatch
 ) -> None:
     """Mijoz o'zi kiritgan manzil ustiga yozilmasin."""
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import config_store
+    from enes.local import app as app_module
+    from enes.local import config_store
 
     monkeypatch.setattr(app_module, "_record_url_backfilled", False)
     config_store.save_camera(
@@ -758,7 +758,7 @@ def test_backfill_does_not_overwrite_a_url_the_customer_set(
 def test_saving_a_camera_autofills_the_record_url(
     client: TestClient, tmp_path: Path, monkeypatch
 ) -> None:
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     monkeypatch.setattr(
         app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (200, "OK")
@@ -778,7 +778,7 @@ def test_unreachable_main_stream_is_not_stored(
     client: TestClient, tmp_path: Path, monkeypatch
 ) -> None:
     """Ishlamaydigan taxmin yozilsa ffmpeg abadiy xato aylanardi."""
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     monkeypatch.setattr(
         app_module.camera_probe, "rtsp_describe", lambda url, timeout_sec=4.0: (404, "Not Found")
@@ -871,7 +871,7 @@ def test_channel_scan_runs_in_the_background_with_progress(
     """
     import time as time_module
 
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     channels = [
         {
@@ -914,7 +914,7 @@ def test_channel_scan_falls_back_to_templates_without_credentials(
     """Parolsiz ONVIF ishlamaydi — to'g'ri zaxira yo'lga o'tsin."""
     import time as time_module
 
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     calls = {"onvif": 0}
 
@@ -940,7 +940,7 @@ def test_scan_response_carries_onvif_details(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Topilgan ONVIF port/xaddr UI'ga yetsin — so'rov doim 80 ga ketmasin."""
-    from chaqimchi_ai import discovery
+    from enes import discovery
 
     async def fake_discover(timeout_sec=3.0):
         return [
@@ -973,7 +973,7 @@ def test_scan_response_carries_onvif_details(
 def test_the_port_is_reserved_before_anything_else_starts() -> None:
     import socket
 
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     taken = socket.socket()
     taken.bind(("127.0.0.1", 0))
@@ -999,7 +999,7 @@ def test_second_copy_opens_the_panel_instead_of_crashing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     # Log fayli haqiqiy uy katalogiga yozilmasin.
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
@@ -1023,7 +1023,7 @@ def test_service_launcher_does_not_open_a_browser(
 ) -> None:
     """Avtostart vazifasi SYSTEM nomidan ishlaydi — u yerdagi brauzerni
     hech kim ko'rmaydi, jarayon esa osilib qoladi."""
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     monkeypatch.setenv("CHAQIMCHI_LOCAL_NO_BROWSER", "1")
     assert app_module._browser_enabled() is False
@@ -1096,7 +1096,7 @@ def test_the_wizard_honours_the_camera_limit_sent_by_the_cloud(
     2 kameralik tarifni sotgan bo'lsak ham sehrgar to'rttasini qabul
     qilardi va mijoz farqni hech qachon sezmasdi.
     """
-    from chaqimchi_ai.local import cloud_config
+    from enes.local import cloud_config
 
     cloud_config.apply({"product": {"max_cameras": 2}, "cameras": [], "config": {}})
 
@@ -1124,8 +1124,8 @@ def test_a_broken_cloud_limit_cannot_raise_the_hardware_cap(client: TestClient) 
     ketadi.  Cloud xatosi sabab 8 kamera ochilsa do'kon sekinlashadi va
     sababi hech qayerda ko'rinmaydi.
     """
-    from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
-    from chaqimchi_ai.local import cloud_config
+    from enes.limits import SHOP_MAX_CAMERAS
+    from enes.local import cloud_config
 
     cloud_config.apply({"product": {"max_cameras": 99}, "cameras": [], "config": {}})
 
@@ -1134,7 +1134,7 @@ def test_a_broken_cloud_limit_cannot_raise_the_hardware_cap(client: TestClient) 
 
 def test_an_offline_device_keeps_the_hardware_limit(client: TestClient) -> None:
     """Cloud hali gapirmagan qurilma ishlashda davom etsin."""
-    from chaqimchi_ai.limits import SHOP_MAX_CAMERAS
+    from enes.limits import SHOP_MAX_CAMERAS
 
     assert client.get("/api/setup/summary").json()["max_cameras"] == SHOP_MAX_CAMERAS
 
@@ -1155,7 +1155,7 @@ def test_status_keeps_camera_health_and_names_apart(
     import json
     import time
 
-    from chaqimchi_ai.local import paths
+    from enes.local import paths
 
     client.post(
         "/api/setup/cameras",
@@ -1237,7 +1237,7 @@ def test_the_second_copy_is_refused_on_windows_too() -> None:
     """
     from pathlib import Path as _Path
 
-    source = (_Path(__file__).resolve().parents[1] / "chaqimchi_ai/local/app.py").read_text(
+    source = (_Path(__file__).resolve().parents[1] / "enes/local/app.py").read_text(
         encoding="utf-8"
     )
     guard = source.split("def _reserve_panel_port")[1].split("def ")[0]
@@ -1254,7 +1254,7 @@ def test_only_one_panel_can_bind_the_port(tmp_path: Path, monkeypatch: pytest.Mo
     import importlib
 
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import app as app_module
+    from enes.local import app as app_module
 
     importlib.reload(app_module)
 
@@ -1280,7 +1280,7 @@ def test_only_one_panel_can_bind_the_port(tmp_path: Path, monkeypatch: pytest.Mo
 
 def test_ish_vaqti_ozgarishi_sezib_qolinadi(client: TestClient, tmp_path: Path) -> None:
     """Yangi ish vaqti kelsa `changed["hours"]` rost bo'lsin."""
-    from chaqimchi_ai.local import cloud_config
+    from enes.local import cloud_config
 
     # Ish vaqti `config` kalitida keladi (`cloud_config.py`: `site =
     # payload.get("config")`), alohida `site` blokida emas.
@@ -1311,7 +1311,7 @@ def test_ish_vaqti_ozgarsa_zanjir_qayta_yoqiladi() -> None:
     Bungacha shart faqat `applied.get("cameras")` edi.
     """
     source = (
-        Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "local" / "app.py"
+        Path(__file__).resolve().parents[1] / "enes" / "local" / "app.py"
     ).read_text(encoding="utf-8")
     assert 'applied.get("cameras") or applied.get("hours")' in source, (
         "ish vaqti o'zgarganda zanjir qayta ishga tushmaydi — "

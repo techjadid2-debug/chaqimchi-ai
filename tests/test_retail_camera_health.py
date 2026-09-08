@@ -16,12 +16,12 @@ from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.retail.broker import FrameBroker
-from chaqimchi_ai.retail.budget import InferenceBudget
-from chaqimchi_ai.retail.pipeline import RetailPipeline
-from chaqimchi_ai.retail.rules import Rule, RuleEngine
-from chaqimchi_ai.retail.runner import OFFLINE_AFTER_FAILURES, CameraSource, RetailRunner
+from enes.event_models import EdgeEvent
+from enes.retail.broker import FrameBroker
+from enes.retail.budget import InferenceBudget
+from enes.retail.pipeline import RetailPipeline
+from enes.retail.rules import Rule, RuleEngine
+from enes.retail.runner import OFFLINE_AFTER_FAILURES, CameraSource, RetailRunner
 
 FRAME = np.zeros((8, 8, 3), dtype=np.uint8)
 
@@ -313,8 +313,8 @@ def test_health_events_are_never_gated_by_the_licence(tmp_path: Path) -> None:
     """
     import json
 
-    from chaqimchi_ai.retail.service import retail_event_filter
-    from chaqimchi_ai.settings import AppSettings
+    from enes.retail.service import retail_event_filter
+    from enes.settings import AppSettings
 
     cache = tmp_path / "sotqin-config.json"
     cache.write_text(
@@ -344,7 +344,7 @@ class FrozenTamper:
         self.alerted = False
 
     def update(self, _frame, *, now: float):
-        from chaqimchi_ai.retail.tamper import FREEZE, FROZEN, TamperAlert
+        from enes.retail.tamper import FREEZE, FROZEN, TamperAlert
 
         self.calls += 1
         if self.calls != 2:

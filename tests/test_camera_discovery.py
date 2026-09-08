@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from chaqimchi_ai.discovery import (
+from enes.discovery import (
     COMMON_RTSP_TEMPLATES,
     discover_cameras_all,
     get_local_ip_range,
@@ -31,7 +31,7 @@ def test_get_local_ip_range_returns_tuple():
 
 @pytest.mark.asyncio
 async def test_probe_ip_camera_services_mock():
-    with patch("chaqimchi_ai.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
+    with patch("enes.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
         # Port 554 ochiq
         mock_probe.side_effect = lambda ip, port, timeout=0.5: port == 554
         res = await probe_ip_camera_services("192.168.1.120")
@@ -52,11 +52,11 @@ async def test_scan_local_network_mock():
     # internetdan alohida kabelda turadi va faqat standart yo'nalishni
     # tekshirish uni ko'rmasdan qoldirardi.
     with patch(
-        "chaqimchi_ai.discovery.local_ipv4_addresses",
+        "enes.discovery.local_ipv4_addresses",
         return_value=["192.168.1.10"],
     ):
         with patch(
-            "chaqimchi_ai.discovery.probe_ip_camera_services", new_callable=AsyncMock
+            "enes.discovery.probe_ip_camera_services", new_callable=AsyncMock
         ) as mock_probe:
             mock_probe.side_effect = lambda ip: (
                 {"ip": ip, "has_rtsp": True, "rtsp_port": 554} if ip == "192.168.1.20" else None
@@ -72,11 +72,11 @@ async def test_scan_local_network_mock():
 async def test_scan_covers_every_interface():
     """Ikkita tarmoq bo'lsa ikkalasi ham skanerlanadi."""
     with patch(
-        "chaqimchi_ai.discovery.local_ipv4_addresses",
+        "enes.discovery.local_ipv4_addresses",
         return_value=["192.168.1.10", "10.10.0.5"],
     ):
         with patch(
-            "chaqimchi_ai.discovery.probe_ip_camera_services", new_callable=AsyncMock
+            "enes.discovery.probe_ip_camera_services", new_callable=AsyncMock
         ) as mock_probe:
             mock_probe.return_value = None
             await scan_local_network_for_cameras()
@@ -121,11 +121,11 @@ def test_onvif_ws_discovery_mock():
 @pytest.mark.asyncio
 async def test_discover_cameras_all():
     with patch(
-        "chaqimchi_ai.discovery.onvif_ws_discovery",
+        "enes.discovery.onvif_ws_discovery",
         return_value=[{"ip": "192.168.1.55", "has_onvif": True}],
     ):
         with patch(
-            "chaqimchi_ai.discovery.scan_local_network_for_cameras", new_callable=AsyncMock
+            "enes.discovery.scan_local_network_for_cameras", new_callable=AsyncMock
         ) as mock_scan:
             mock_scan.return_value = [{"ip": "192.168.1.55", "has_rtsp": True, "rtsp_port": 554}]
             devices = await discover_cameras_all(timeout_sec=0.1)
@@ -154,8 +154,8 @@ def local_client(tmp_path, monkeypatch):
 
     from fastapi.testclient import TestClient
 
-    from chaqimchi_ai.local import app as app_module
-    from chaqimchi_ai.local import config_store, paths, supervisor
+    from enes.local import app as app_module
+    from enes.local import config_store, paths, supervisor
 
     importlib.reload(paths)
     importlib.reload(config_store)
@@ -169,7 +169,7 @@ def local_client(tmp_path, monkeypatch):
 
 def test_scan_endpoint_calls_the_real_discovery(local_client):
     with patch(
-        "chaqimchi_ai.discovery.discover_cameras_all", new_callable=AsyncMock
+        "enes.discovery.discover_cameras_all", new_callable=AsyncMock
     ) as mock_discover:
         mock_discover.return_value = [
             {
@@ -196,7 +196,7 @@ def test_scan_endpoint_does_not_swallow_failures(local_client):
     """Xato yutilsa mijoz "kamera yo'q" deb o'ylaydi va qo'lda kiritishga
     ham o'tmaydi — eng yomon holat."""
     with patch(
-        "chaqimchi_ai.discovery.discover_cameras_all", new_callable=AsyncMock
+        "enes.discovery.discover_cameras_all", new_callable=AsyncMock
     ) as mock_discover:
         mock_discover.side_effect = OSError("tarmoq yopiq")
         with pytest.raises(OSError):
@@ -205,7 +205,7 @@ def test_scan_endpoint_does_not_swallow_failures(local_client):
 
 def test_main_stream_is_suggested_for_known_brands() -> None:
     """Klip uchun asosiy oqim substream manzilidan chiqariladi."""
-    from chaqimchi_ai.local.camera_probe import suggest_record_url
+    from enes.local.camera_probe import suggest_record_url
 
     cases = {
         "rtsp://u:p@h:554/Streaming/Channels/102": "rtsp://u:p@h:554/Streaming/Channels/101",
@@ -227,7 +227,7 @@ def test_main_stream_is_suggested_for_known_brands() -> None:
 async def test_probe_reports_the_actual_open_rtsp_port():
     """8554-portdagi kamera: ilgari 554 deb taxmin qilinardi va
     suggested_urls ishlamaydigan portga qurilardi."""
-    with patch("chaqimchi_ai.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
+    with patch("enes.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
         mock_probe.side_effect = lambda ip, port, timeout=0.5: port in (8554, 8899)
         res = await probe_ip_camera_services("192.168.1.120")
 
@@ -238,7 +238,7 @@ async def test_probe_reports_the_actual_open_rtsp_port():
 
 @pytest.mark.asyncio
 async def test_probe_omits_rtsp_port_when_rtsp_is_closed():
-    with patch("chaqimchi_ai.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
+    with patch("enes.discovery._probe_tcp_port", new_callable=AsyncMock) as mock_probe:
         mock_probe.side_effect = lambda ip, port, timeout=0.5: port == 80
         res = await probe_ip_camera_services("192.168.1.120")
 
@@ -251,7 +251,7 @@ async def test_probe_omits_rtsp_port_when_rtsp_is_closed():
 async def test_merge_keeps_the_scanned_rtsp_port():
     """WS-Discovery skaner topgan 8554 ni 554 bilan bosib ketmasin."""
     with patch(
-        "chaqimchi_ai.discovery.onvif_ws_discovery",
+        "enes.discovery.onvif_ws_discovery",
         return_value=[
             {
                 "ip": "192.168.1.55",
@@ -262,7 +262,7 @@ async def test_merge_keeps_the_scanned_rtsp_port():
         ],
     ):
         with patch(
-            "chaqimchi_ai.discovery.scan_local_network_for_cameras", new_callable=AsyncMock
+            "enes.discovery.scan_local_network_for_cameras", new_callable=AsyncMock
         ) as mock_scan:
             mock_scan.return_value = [{"ip": "192.168.1.55", "has_rtsp": True, "rtsp_port": 8554}]
             devices = await discover_cameras_all(timeout_sec=0.1)
@@ -303,7 +303,7 @@ def test_onvif_tries_every_stream_until_one_opens(monkeypatch: pytest.MonkeyPatc
     ochilmagach dastur "NVR'ni H.264 ga o'zgartiring" deb to'xtardi —
     holbuki o'sha kamerada ishlaydigan boshqa oqim bor edi.
     """
-    from chaqimchi_ai.local import camera_probe, onvif_client
+    from enes.local import camera_probe, onvif_client
 
     profiles = [
         onvif_client.StreamProfile(
@@ -341,7 +341,7 @@ def test_onvif_tries_every_stream_until_one_opens(monkeypatch: pytest.MonkeyPatc
 
 def test_onvif_explains_the_reason_when_no_stream_opens(monkeypatch: pytest.MonkeyPatch) -> None:
     """Hech biri ochilmasa — sabab H.265+ (Smart Codec) deb aytiladi."""
-    from chaqimchi_ai.local import camera_probe, onvif_client
+    from enes.local import camera_probe, onvif_client
 
     profiles = [
         onvif_client.StreamProfile(

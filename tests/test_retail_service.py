@@ -13,16 +13,16 @@ from typing import Any, Dict, List
 
 import pytest
 
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.outbox import EventOutbox
-from chaqimchi_ai.retail.service import (
+from enes.event_models import EdgeEvent
+from enes.outbox import EventOutbox
+from enes.retail.service import (
     OutboxSink,
     build_runner,
     load_rules,
     prune_event_clips,
     retail_event_filter,
 )
-from chaqimchi_ai.settings import AppSettings
+from enes.settings import AppSettings
 
 
 class FakeDetector:
@@ -372,7 +372,7 @@ def test_build_runner_wires_the_pressure_signal(tmp_path: Path) -> None:
     uzatmasdi — natijada `budget.py` dagi `pressure >= 0.85` tarmog'i
     yozilganidan beri bir marta ham ishlamagan.
     """
-    from chaqimchi_ai.retail.pressure import SystemPressure
+    from enes.retail.pressure import SystemPressure
 
     runner, _outbox = runner_for(tmp_path)
 
@@ -392,7 +392,7 @@ def test_status_file_reports_the_real_camera_state(tmp_path: Path) -> None:
     bir soat backoff'da turishi mumkin."""
     import json
 
-    from chaqimchi_ai.retail.service import write_status
+    from enes.retail.service import write_status
 
     path = tmp_path / "retail-status.json"
     write_status(
@@ -420,7 +420,7 @@ def test_status_file_reports_the_real_camera_state(tmp_path: Path) -> None:
 
 def test_status_file_is_written_atomically(tmp_path: Path) -> None:
     """Agent uni istalgan vaqtda o'qiydi — yarim yozilgan JSON ko'rmasin."""
-    from chaqimchi_ai.retail.service import write_status
+    from enes.retail.service import write_status
 
     path = tmp_path / "retail-status.json"
     write_status(path, {"streams": {}}, now=1.0)
@@ -431,7 +431,7 @@ def test_status_file_is_written_atomically(tmp_path: Path) -> None:
 
 def test_an_unwritable_status_path_does_not_crash_the_service(tmp_path: Path) -> None:
     """Holat fayli yozilmasa ham zanjir ishlashda davom etsin."""
-    from chaqimchi_ai.retail.service import write_status
+    from enes.retail.service import write_status
 
     blocked = tmp_path / "fayl"
     blocked.write_text("men papka emasman", encoding="utf-8")
@@ -451,7 +451,7 @@ def test_live_frame_loop_writes_requested_camera_frames(tmp_path: Path, monkeypa
 
     import numpy as np
 
-    from chaqimchi_ai.retail import service
+    from enes.retail import service
 
     class FakePipeline:
         def latest_frame(self, camera_id):
@@ -520,8 +520,8 @@ def test_ownership_is_claimed_and_recognised(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
     import importlib
 
-    from chaqimchi_ai.local import paths as local_paths
-    from chaqimchi_ai.retail import service
+    from enes.local import paths as local_paths
+    from enes.retail import service
 
     importlib.reload(local_paths)
 
@@ -536,8 +536,8 @@ def test_a_newer_process_takes_ownership_away(tmp_path, monkeypatch) -> None:
     import os
 
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import paths as local_paths
-    from chaqimchi_ai.retail import service
+    from enes.local import paths as local_paths
+    from enes.retail import service
 
     importlib.reload(local_paths)
 
@@ -556,8 +556,8 @@ def test_a_broken_owner_file_never_stops_a_working_chain(tmp_path, monkeypatch) 
     import importlib
 
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import paths as local_paths
-    from chaqimchi_ai.retail import service
+    from enes.local import paths as local_paths
+    from enes.retail import service
 
     importlib.reload(local_paths)
 

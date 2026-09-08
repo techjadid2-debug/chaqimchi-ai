@@ -20,7 +20,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 chaqimchi && useradd --uid 10001 --gid 10001 --no-create-home chaqimchi
 COPY --from=builder /install /usr/local
-COPY chaqimchi_ai ./chaqimchi_ai
+COPY enes ./enes
 COPY cloud ./cloud
 # Til katalogi — `cloud/i18n.py` uni repo ILDIZIDAN o'qiydi.  Usiz
 # konteynerdagi birinchi `t()` chaqiruvi FileNotFoundError beradi va

@@ -155,9 +155,9 @@ def test_completed_job_stores_zero_tokens_as_tracked(tmp_path: Path) -> None:
     Moliya uni "kuzatilmagan" deb adashtirmasin."""
     import asyncio
 
-    from chaqimchi_ai.event_models import EdgeEvent
     from cloud.event_store import EventStore
     from cloud.vision_agent import process_next_job
+    from enes.event_models import EdgeEvent
 
     store = EventStore(sqlite_path=tmp_path / "events.db")
     store.ingest(

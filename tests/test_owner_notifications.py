@@ -243,7 +243,7 @@ def dict_row_store(tmp_path: Path, monkeypatch):
 
 
 def test_bell_works_when_rows_are_dicts(dict_row_store) -> None:
-    from chaqimchi_ai.event_models import EdgeEvent
+    from enes.event_models import EdgeEvent
 
     dict_row_store.ingest(
         "site-1",

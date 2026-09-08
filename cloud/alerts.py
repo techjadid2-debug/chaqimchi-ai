@@ -36,8 +36,8 @@ from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tupl
 
 import httpx
 
-from chaqimchi_ai.limits import STORE_UTC_OFFSET_HOURS
 from cloud import i18n
+from enes.limits import STORE_UTC_OFFSET_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -700,7 +700,7 @@ ANALYSIS_MIN_SAMPLE = 200
 
 #: Do'kon kompyuteri shu haroratdan oshsa — apparat xavf ostida.
 #:
-#: 85°C `chaqimchi_ai/retail/pressure.py:TEMP_CEILING_C` bilan bir xil:
+#: 85°C `enes/retail/pressure.py:TEMP_CEILING_C` bilan bir xil:
 #: N100 va shunga o'xshash protsessorlar ~90°C da tezlikni o'zi
 #: pasaytiradi, ya'ni 85 allaqachon chegara.  Chang bosgan korpus yoki
 #: to'xtagan ventilyator aynan shunday ko'rinadi va uni do'kon egasi
@@ -731,7 +731,7 @@ DEVICE_CLOCK_SKEW_SEC = 300.0
 DEVICE_POISONED_EVENTS = 100
 
 #: Do'kon kompyuterining vaqt mintaqasi shu qiymatda bo'lishi kerak
-#: (Toshkent, UTC+5 → 300 daqiqa).  `chaqimchi_ai.limits.STORE_TZ` bilan
+#: (Toshkent, UTC+5 → 300 daqiqa).  `enes.limits.STORE_TZ` bilan
 #: bir xil manba: ikkalasi ajralib ketmasin.
 STORE_TZ_OFFSET_MIN = STORE_UTC_OFFSET_HOURS * 60
 

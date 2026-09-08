@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import chaqimchi_ai.sotqin_agent as module
+import enes.sotqin_agent as module
 
 
 def test_control_health_is_fail_closed_before_pairing(monkeypatch) -> None:
@@ -167,8 +167,8 @@ def test_health_reports_poisoned_events(tmp_path) -> None:
     """
     from datetime import datetime, timedelta, timezone
 
-    from chaqimchi_ai.event_models import EdgeEvent
-    from chaqimchi_ai.outbox import MAX_ATTEMPTS, EventOutbox
+    from enes.event_models import EdgeEvent
+    from enes.outbox import MAX_ATTEMPTS, EventOutbox
 
     path = tmp_path / "outbox.db"
     outbox = EventOutbox(path, max_bytes=10**7)
@@ -232,7 +232,7 @@ def test_camera_count_comes_from_the_chain_not_from_ffprobe(tmp_path) -> None:
         tmp_path, {"updated_at": time.time(), "cameras_active": 2, "cameras_configured": 4}
     )
     # ffprobe esa to'rttasi ham joyida deb turibdi.
-    from chaqimchi_ai.sotqin_media import StreamProbe
+    from enes.sotqin_media import StreamProbe
 
     control.media.apply_config(
         {

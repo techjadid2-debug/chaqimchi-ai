@@ -21,8 +21,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud.event_store import EventStore
+from enes.event_models import EdgeEvent
 
 TASHKENT_DAY = date(2026, 8, 13)
 

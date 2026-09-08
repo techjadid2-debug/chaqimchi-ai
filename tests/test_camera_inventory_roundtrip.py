@@ -49,7 +49,7 @@ def test_wizard_camera_shows_up_in_the_owner_panel(
 
     # ── Qurilma tomoni: sehrgarda kamera qo'shilgan ────────────────────
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path / "device"))
-    from chaqimchi_ai.local import cloud_config, cloud_link, config_store, paths
+    from enes.local import cloud_config, cloud_link, config_store, paths
 
     for module in (paths, config_store, cloud_link, cloud_config):
         importlib.reload(module)

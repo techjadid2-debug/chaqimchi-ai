@@ -7,9 +7,9 @@ degan hisob sof mantiq — va aynan shu raqamga qarab va'da beriladi.
 from __future__ import annotations
 
 # O'lchov yadrosi endi paket ichida: do'kon kompyuteriga faqat
-# `chaqimchi_ai` ko'chiriladi, `scripts/` esa YO'Q — ya'ni skriptda
+# `enes` ko'chiriladi, `scripts/` esa YO'Q — ya'ni skriptda
 # qolgan yadroni mijozning mashinasida ishlatib bo'lmasdi.
-from chaqimchi_ai.local.benchmark import (
+from enes.local.benchmark import (
     BUDGET_SAFETY,
     Samples,
     capacity_verdict,
@@ -169,7 +169,7 @@ def test_the_real_stream_size_comes_from_the_frame(monkeypatch) -> None:
     """
     import cv2
 
-    from chaqimchi_ai.local import benchmark
+    from enes.local import benchmark
 
     monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **k: _FakeCapture(1280, 720))
 
@@ -184,7 +184,7 @@ def test_a_360p_stream_is_reported_as_such(monkeypatch) -> None:
     """Kamera o'zgartirilmagan bo'lsa eski o'lcham ko'rinsin."""
     import cv2
 
-    from chaqimchi_ai.local import benchmark
+    from enes.local import benchmark
 
     monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **k: _FakeCapture(640, 360))
 
@@ -197,7 +197,7 @@ def test_an_unreadable_stream_does_not_invent_a_size(monkeypatch) -> None:
     """Kadr o'qilmasa o'lcham TAXMIN QILINMASIN."""
     import cv2
 
-    from chaqimchi_ai.local import benchmark
+    from enes.local import benchmark
 
     monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **k: _FakeCapture(640, 360, frames=0))
 

@@ -12,9 +12,9 @@ from typing import Any, Dict, List
 
 import pytest
 
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.outbox import EventOutbox
-from chaqimchi_ai.sotqin_agent import SotqinAgent
+from enes.event_models import EdgeEvent
+from enes.outbox import EventOutbox
+from enes.sotqin_agent import SotqinAgent
 
 
 class FakeResponse:

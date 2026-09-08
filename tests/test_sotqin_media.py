@@ -3,7 +3,7 @@ import subprocess
 
 import pytest
 
-from chaqimchi_ai.sotqin_media import SotqinMediaRuntime, validate_cameras
+from enes.sotqin_media import SotqinMediaRuntime, validate_cameras
 
 
 def _camera(camera_id: str = "camera-01") -> dict:
@@ -125,7 +125,7 @@ def test_preview_rejects_output_that_is_not_a_jpeg() -> None:
 
 
 def test_preview_rejects_an_oversized_frame() -> None:
-    from chaqimchi_ai.sotqin_media import PREVIEW_MAX_BYTES
+    from enes.sotqin_media import PREVIEW_MAX_BYTES
 
     huge = b"\xff\xd8" + b"x" * PREVIEW_MAX_BYTES
     assert _media_with(huge).grab_preview(_camera()) is None

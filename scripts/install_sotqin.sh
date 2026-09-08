@@ -84,7 +84,7 @@ fi
 # ── Reliz nusxasi ─────────────────────────────────────────────────────────
 install -d -o chaqimchi -g chaqimchi "$release" "$install_root/shared/data" "$install_root/shared/logs" "$install_root/shared/models"
 install -d "$release/config" "$release/models" "$release/scripts"
-cp -a "$source_dir/chaqimchi_ai" "$source_dir/requirements-sotqin.txt" "$release/"
+cp -a "$source_dir/enes" "$source_dir/requirements-sotqin.txt" "$release/"
 cp -a "$source_dir/config/sotqin.yaml" "$source_dir/config/rules.yaml" "$release/config/"
 cp -a "$source_dir/models/retail_manifest.json" "$release/models/"
 for script in \

@@ -100,7 +100,9 @@ def test_builder_never_ships_the_cloud_to_customers() -> None:
     """Mijoz kompyuterida admin paneli, lead API va to'lov callbacklari
     ishlashi kerak emas — ilgari NSIS butun `cloud/` ni ko'chirardi."""
     source = BUILDER.read_text(encoding="utf-8")
-    assert 'CODE_DIRS = ["chaqimchi_ai"]' in source
+    # `chaqimchi_ai` — eski nomga ko'prik (o'sha papkadagi izoh): o'rnatilgan
+    # qurilmadagi yangilanish vazifasi hali eski nom bilan chaqiradi.
+    assert 'CODE_DIRS = ["enes", "chaqimchi_ai"]' in source
     assert 'for forbidden in ("cloud", "webapp")' in source, "tekshiruv yo'q"
 
 
@@ -259,7 +261,7 @@ def test_installer_does_not_hardcode_the_version() -> None:
 
 
 def test_build_writes_the_version_from_the_single_source() -> None:
-    """Qurish skripti versiyani `chaqimchi_ai/__init__.py` dan olishi kerak."""
+    """Qurish skripti versiyani `enes/__init__.py` dan olishi kerak."""
     builder = (
         Path(__file__).resolve().parents[1] / "scripts" / "build_windows_payload.py"
     ).read_text(encoding="utf-8")
@@ -277,7 +279,7 @@ def test_numeric_version_has_four_parts() -> None:
 
     version = _re.search(
         r'__version__\s*=\s*["\']([^"\']+)["\']',
-        (Path(__file__).resolve().parents[1] / "chaqimchi_ai" / "__init__.py").read_text(
+        (Path(__file__).resolve().parents[1] / "enes" / "__init__.py").read_text(
             encoding="utf-8"
         ),
     )
@@ -334,7 +336,7 @@ def test_admin_panel_promises_the_same_interval() -> None:
 def test_update_check_is_free_when_not_paired() -> None:
     """Har 15 daqiqada ishlagani uchun ulanmagan qurilmada tekshiruv
     tarmoqqa **umuman** chiqmasligi kerak."""
-    updater = (ROOT / "chaqimchi_ai" / "local" / "updater.py").read_text(encoding="utf-8")
+    updater = (ROOT / "enes" / "local" / "updater.py").read_text(encoding="utf-8")
     body = updater[updater.index("def _cloud(") : updater.index("def check(")]
     assert "raise UpdateError" in body, "ulanmagan qurilma darhol to'xtashi kerak"
     assert "httpx" not in body, "ulanmasdan turib tarmoqqa so'rov yuborilmasin"
@@ -543,14 +545,14 @@ def test_autostart_task_name_matches_the_installer() -> None:
     kompyuterlarda avtostart `Run` kaliti bo'lib, tokdan keyin nazorat
     umuman boshlanmasdi).
     """
-    from chaqimchi_ai.local import autostart
+    from enes.local import autostart
 
     assert f'/TN "{autostart.TASK_NAME}"' in NSIS.read_text(encoding="utf-8")
 
 
 def test_autostart_uses_the_windowless_launcher() -> None:
     """Kassirning ekranida qora oyna turmasin (u yopiladi)."""
-    from chaqimchi_ai.local import autostart
+    from enes.local import autostart
 
     nsis = NSIS.read_text(encoding="utf-8")
     assert autostart.SERVICE_LAUNCHER in nsis
@@ -562,7 +564,7 @@ def test_autostart_is_a_no_op_outside_windows() -> None:
     """Linux/mac'da (CI va ishlab chiqish) hech narsa qilinmasin."""
     import os
 
-    from chaqimchi_ai.local import autostart
+    from enes.local import autostart
 
     if os.name == "nt":  # pragma: no cover - CI Linux/mac
         pytest.skip("bu test Windows bo'lmagan tizim uchun")
@@ -581,11 +583,11 @@ def test_the_installer_stops_copies_started_from_another_folder() -> None:
     nsis = NSIS.read_text(encoding="utf-8")
 
     assert "Win32_Process" in nsis, "buyruq qatori bo'yicha filtr shart"
-    assert "chaqimchi_ai.(local.app|retail.service)" in nsis
+    assert "enes.(local.app|retail.service)" in nsis
     # Yangilovchi FILTRGA tushmasin: u o'rnatuvchini ishga tushirgan
     # jarayon, o'zini o'ldirsa rollback belgisi yozilmay qolardi.
     # (Izohda nomi tilga olinadi — shuning uchun aynan filtr tekshiriladi.)
-    pattern = "chaqimchi_ai.(local.app|retail.service)"
+    pattern = "enes.(local.app|retail.service)"
     assert "updater" not in pattern
 
 
@@ -608,7 +610,7 @@ def test_eski_nusxa_avval_ota_jarayondan_o_ldiriladi() -> None:
 
     `local.app` ichidagi kuzatuvchi har 2 soniyada tekshiradi va zanjir
     20 soniyadan ko'p ishlagan bo'lsa uni darhol qayta ko'taradi
-    (`chaqimchi_ai/local/supervisor.py`: `time.sleep(2)`,
+    (`enes/local/supervisor.py`: `time.sleep(2)`,
     `CRASH_WINDOW_SEC = 20`).
 
     Agar ikkalasi bitta o'tishda o'ldirilsa va `retail.service` birinchi
@@ -620,8 +622,8 @@ def test_eski_nusxa_avval_ota_jarayondan_o_ldiriladi() -> None:
     Ota jarayon birinchi o'lsa, qayta ko'taradigan hech kim qolmaydi.
     """
     text = NSIS.read_text(encoding="utf-8")
-    app = text.find("Kill-Match $\\\"chaqimchi_ai.local.app")
-    service = text.find("Kill-Match $\\\"chaqimchi_ai.retail.service")
+    app = text.find("Kill-Match $\\\"enes.local.app")
+    service = text.find("Kill-Match $\\\"enes.retail.service")
     assert app != -1, "local.app alohida to'xtatilmayapti"
     assert service != -1, "retail.service alohida to'xtatilmayapti"
     assert app < service, (

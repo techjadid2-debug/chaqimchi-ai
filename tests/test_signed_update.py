@@ -7,7 +7,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from chaqimchi_ai.signed_update import (
+from enes.signed_update import (
     UpdateVerificationError,
     canonical_manifest_payload,
     verify_release_manifest,

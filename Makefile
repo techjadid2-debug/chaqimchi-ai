@@ -16,10 +16,10 @@ test: ui-check
 	$(PY) -m pytest -q
 
 lint:
-	$(PY) -m ruff check chaqimchi_ai cloud tests scripts
+	$(PY) -m ruff check enes cloud tests scripts
 
 fmt:
-	$(PY) -m ruff format chaqimchi_ai cloud tests scripts
+	$(PY) -m ruff format enes cloud tests scripts
 
 ui-install:
 	cd frontend && npm install
@@ -33,7 +33,7 @@ ui-build:
 	cd frontend && npm run build
 
 run-sotqin:
-	$(PY) -m uvicorn chaqimchi_ai.sotqin_agent:app --host 127.0.0.1 --port 8742
+	$(PY) -m uvicorn enes.sotqin_agent:app --host 127.0.0.1 --port 8742
 
 run-cloud:
 	$(PY) -m uvicorn cloud.main:app --host 127.0.0.1 --port 8750
@@ -41,10 +41,10 @@ run-cloud:
 # Mijozning o'z kompyuteridagi dastur: sozlash ustasi + do'kon paneli.
 # Windows o'rnatuvchisi aynan shuni ishga tushiradi.
 run-local:
-	$(PY) -m chaqimchi_ai.local.app
+	$(PY) -m enes.local.app
 
 run-retail:
-	$(PY) -m chaqimchi_ai.retail.service
+	$(PY) -m enes.retail.service
 
 PLAN ?= lite
 MONTHS ?= 1
@@ -78,14 +78,14 @@ windows-installer:
 # tuzoqqa duch kelindi (cloud URL unutildi, imzo noto'g'ri mahsulot bilan
 # ketayozdi) — endi hammasi bitta buyruq:
 #   make windows-release CLOUD_URL=https://chaqimchi.example
-# Eslatma: versiyani OLDIN ko'taring (pyproject.toml + chaqimchi_ai/__init__.py)
+# Eslatma: versiyani OLDIN ko'taring (pyproject.toml + enes/__init__.py)
 # va commit qiling; chiqqan .exe/.json ni serverga scp qiling (buyruq oxirida
 # ko'rsatiladi), tarqatish tartibi docs/RELIZ_VA_OTA.md da.
 windows-release:
 	@test -n "$(CLOUD_URL)" || (echo 'Usage: make windows-release CLOUD_URL=https://cloud-manzil' && exit 1)
 	CHAQIMCHI_DEFAULT_CLOUD_URL="$(CLOUD_URL)" $(PY) scripts/build_windows_payload.py
 	makensis -V2 scripts/windows_installer.nsi
-	@VERSION=$$($(PY) -c "import chaqimchi_ai; print(chaqimchi_ai.__version__)"); \
+	@VERSION=$$($(PY) -c "import enes; print(enes.__version__)"); \
 	cp releases/Chaqimchi_AI_Setup.exe "releases/chaqimchi-windows-$$VERSION.exe"; \
 	$(PY) scripts/sign_release.py "releases/chaqimchi-windows-$$VERSION.exe"; \
 	echo ""; \

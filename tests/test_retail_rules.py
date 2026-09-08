@@ -10,8 +10,8 @@ from datetime import time as clock_time
 
 import pytest
 
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.retail.rules import Rule, RuleEngine, Schedule
+from enes.event_models import EdgeEvent
+from enes.retail.rules import Rule, RuleEngine, Schedule
 
 
 def queue_event(**overrides) -> EdgeEvent:
@@ -306,6 +306,6 @@ def test_ai_review_is_not_a_default_action() -> None:
     Qoida yozilmagan hodisa standart yo'ldan ketadi; agar `ai_review` shu
     yerda bo'lsa, har bir hodisa uchun chaqiruv bo'lardi.
     """
-    from chaqimchi_ai.retail.rules import DEFAULT_ACTIONS
+    from enes.retail.rules import DEFAULT_ACTIONS
 
     assert "ai_review" not in DEFAULT_ACTIONS

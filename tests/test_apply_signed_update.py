@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import pytest
 
-from chaqimchi_ai.signed_update import UpdateVerificationError, sha256_file
+from enes.signed_update import UpdateVerificationError, sha256_file
 from scripts import apply_signed_update, generate_update_key, sign_release
 from scripts.apply_signed_update import (
     EXIT_OK,
@@ -81,9 +81,9 @@ def build_release(
     """Haqiqiy, imzolangan reliz paketi."""
     stage = tmp_path / f"stage-{version}"
     top = stage / f"chaqimchi-sotqin-{version}"
-    (top / "chaqimchi_ai").mkdir(parents=True)
-    (top / "chaqimchi_ai" / "sotqin_agent.py").write_text("app = None\n", encoding="utf-8")
-    (top / "chaqimchi_ai" / "__init__.py").write_text(
+    (top / "enes").mkdir(parents=True)
+    (top / "enes" / "sotqin_agent.py").write_text("app = None\n", encoding="utf-8")
+    (top / "enes" / "__init__.py").write_text(
         f'__version__ = "{version}"\n', encoding="utf-8"
     )
     (top / "models").mkdir()
@@ -190,7 +190,7 @@ def test_current_points_at_the_new_release(tmp_path: Path) -> None:
 
     current = (control.root / "current").resolve()
     assert current.name == "0.6.1"
-    assert (current / "chaqimchi_ai" / "sotqin_agent.py").is_file()
+    assert (current / "enes" / "sotqin_agent.py").is_file()
 
 
 def test_data_stays_a_symlink_but_models_does_not(tmp_path: Path) -> None:
@@ -465,7 +465,7 @@ def test_the_script_runs_from_any_directory(tmp_path: Path) -> None:
     """#7 — buni ushlaydigan yagona test.
 
     Skript `/opt/chaqimchi/current/scripts/` dan ishga tushiriladi, ya'ni
-    `sys.path[0]` da `chaqimchi_ai` bo'lmaydi va paket venv'ga hech qachon
+    `sys.path[0]` da `enes` bo'lmaydi va paket venv'ga hech qachon
     o'rnatilmagan.  Ilgari bu `ModuleNotFoundError` berardi.
     """
     result = subprocess.run(

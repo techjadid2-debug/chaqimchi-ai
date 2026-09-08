@@ -21,8 +21,8 @@ import pytest
 @pytest.fixture
 def supervisor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import config_store, counters, paths
-    from chaqimchi_ai.local import supervisor as module
+    from enes.local import config_store, counters, paths
+    from enes.local import supervisor as module
 
     for item in (paths, config_store, counters, module):
         importlib.reload(item)
@@ -78,7 +78,7 @@ def test_a_long_run_resets_the_cooldown(supervisor) -> None:
 
 def test_manual_start_clears_the_cooldown(supervisor, monkeypatch: pytest.MonkeyPatch) -> None:
     """Mijoz "Ishga tushirish" bossa — darhol urinamiz, kutmasdan."""
-    from chaqimchi_ai.local import config_store
+    from enes.local import config_store
 
     instance = supervisor.RetailSupervisor()
     monkeypatch.setattr(supervisor.RetailSupervisor, "_spawn", lambda self: None)
@@ -208,7 +208,7 @@ def test_all_orphans_are_killed_not_just_one(monkeypatch) -> None:
     Ilgari bu yerda holat faylidagi BITTA PID o'ldirilardi — beshta
     yetim bo'lsa har restartda bittadan kamayardi.
     """
-    from chaqimchi_ai.local import chain_processes
+    from enes.local import chain_processes
 
     monkeypatch.setattr(chain_processes.os, "name", "nt")
     monkeypatch.setattr(chain_processes, "_powershell_pids", lambda: [101, 102, 103, 104])
@@ -222,7 +222,7 @@ def test_all_orphans_are_killed_not_just_one(monkeypatch) -> None:
 
 
 def test_our_own_child_is_never_killed(monkeypatch) -> None:
-    from chaqimchi_ai.local import chain_processes
+    from enes.local import chain_processes
 
     monkeypatch.setattr(chain_processes.os, "name", "nt")
     monkeypatch.setattr(chain_processes, "_powershell_pids", lambda: [101, 777])
@@ -240,7 +240,7 @@ def test_surviving_processes_are_reported(monkeypatch) -> None:
     Aynan shu "jim muvaffaqiyatsizlik" beshta zanjirni to'plagan edi:
     o'rnatuvchi urinardi, natijani esa hech kim tekshirmasdi.
     """
-    from chaqimchi_ai.local import chain_processes
+    from enes.local import chain_processes
 
     monkeypatch.setattr(chain_processes.os, "name", "nt")
     monkeypatch.setattr(chain_processes, "_powershell_pids", lambda: [101, 102])
@@ -259,7 +259,7 @@ def test_surviving_processes_are_reported(monkeypatch) -> None:
 
 def test_a_broken_process_listing_is_not_fatal(monkeypatch) -> None:
     """PowerShell yo'q yoki cheklangan bo'lsa zanjir baribir ko'tariladi."""
-    from chaqimchi_ai.local import chain_processes
+    from enes.local import chain_processes
 
     monkeypatch.setattr(chain_processes.os, "name", "nt")
 
@@ -274,7 +274,7 @@ def test_a_broken_process_listing_is_not_fatal(monkeypatch) -> None:
 
 def test_nothing_is_killed_outside_windows(monkeypatch) -> None:
     """Linux'da zanjirni systemd boshqaradi — yetim muammosi yo'q."""
-    from chaqimchi_ai.local import chain_processes
+    from enes.local import chain_processes
 
     monkeypatch.setattr(chain_processes.os, "name", "posix")
     killed = []

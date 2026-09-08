@@ -8,9 +8,9 @@ from typing import Literal
 from fastapi import Header, HTTPException
 from pydantic import BaseModel
 
-from chaqimchi_ai.jwt_auth import JwtError, create_access_token, decode_access_token
-from chaqimchi_ai.settings import JwtSettings
 from cloud.portal_auth import bearer_token, decode_portal_token
+from enes.jwt_auth import JwtError, create_access_token, decode_access_token
+from enes.settings import JwtSettings
 
 
 class OwnerPrincipal(BaseModel):

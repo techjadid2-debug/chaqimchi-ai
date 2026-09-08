@@ -7,9 +7,9 @@ hozirgi mijozlarning narxi o‘zgarmasligi kerak.
 import pytest
 from fastapi.testclient import TestClient
 
-from chaqimchi_ai.licensing.plans import PLANS, cheapest_plan_for, get_plan
 from cloud.payments import PaymentStore
 from cloud.store import CloudStore
+from enes.licensing.plans import PLANS, cheapest_plan_for, get_plan
 
 ADMIN = {"X-Cloud-Admin-Key": "test-admin"}
 

@@ -13,16 +13,16 @@ from typing import Any, List, Optional, Tuple
 import numpy as np
 import pytest
 
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.retail import ringbuffer
-from chaqimchi_ai.retail.broker import FrameBroker
-from chaqimchi_ai.retail.budget import InferenceBudget
-from chaqimchi_ai.retail.claims import Priority
-from chaqimchi_ai.retail.pipeline import MOTION_SATURATION, RetailPipeline
-from chaqimchi_ai.retail.rules import Rule, RuleEngine, Schedule
-from chaqimchi_ai.retail.tamper import TamperAlert
-from chaqimchi_ai.scene_analytics import SceneAnalyzer
-from chaqimchi_ai.settings import SceneSettings
+from enes.event_models import EdgeEvent
+from enes.retail import ringbuffer
+from enes.retail.broker import FrameBroker
+from enes.retail.budget import InferenceBudget
+from enes.retail.claims import Priority
+from enes.retail.pipeline import MOTION_SATURATION, RetailPipeline
+from enes.retail.rules import Rule, RuleEngine, Schedule
+from enes.retail.tamper import TamperAlert
+from enes.scene_analytics import SceneAnalyzer
+from enes.settings import SceneSettings
 
 FRAME = np.zeros((8, 8, 3), dtype=np.uint8)
 WALL = 1_800_000_000.0  # klip vaqti uchun "haqiqiy" soat
@@ -519,7 +519,7 @@ def test_a_failed_ffmpeg_cut_keeps_its_reason(tmp_path: Path) -> None:
 
 
 def test_broken_ffmpeg_does_not_grow_the_queue_forever(tmp_path: Path) -> None:
-    from chaqimchi_ai.retail import pipeline as module
+    from enes.retail import pipeline as module
 
     pipeline, _analyzer, _recorder, _buffer = build(
         tmp_path, events=[line_crossed()], rules=CLIP_RULES
@@ -840,7 +840,7 @@ def test_face_capture_without_a_frame_is_dropped(tmp_path: Path) -> None:
         tmp_path, events=[face_captured()], snapshots=True
     )
     # offer/step'siz to'g'ridan-to'g'ri dispatch — last_frame hali yo'q.
-    from chaqimchi_ai.retail.rules import Decision
+    from enes.retail.rules import Decision
 
     pipeline._dispatch(
         Decision(event=face_captured(), actions=("cloud_sync",), rule_name=None),

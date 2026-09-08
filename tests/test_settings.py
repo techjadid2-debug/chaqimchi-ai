@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from chaqimchi_ai.settings import AppSettings
+from enes.settings import AppSettings
 
 
 def test_settings_defaults_when_file_missing(tmp_path: Path) -> None:

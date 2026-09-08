@@ -34,7 +34,7 @@ Unicode True
 !include "LogicLib.nsh"
 
 ; Versiya `build_windows_payload.py` tomonidan yoziladi (manba —
-; `chaqimchi_ai/__init__.py`).  Bu yerda qo'lda yozilmaydi: ilgari
+; `enes/__init__.py`).  Bu yerda qo'lda yozilmaydi: ilgari
 ; shunday edi va siljib ketgan — dastur 0.6.2, o'rnatuvchi esa "0.7.0"
 ; deb yozardi.  Nomuvofiqlik bir marta cheksiz yangilanish siklini
 ; keltirib chiqargan, chunki cloud va qurilma har xil raqam aytardi.
@@ -230,7 +230,7 @@ SectionEnd
 
 Section "Kompyuter soatini to'g'rilash" SecClock
   ; Ish vaqti qoidalari kompyuterning LOKAL soatiga ishonadi
-  ; (`chaqimchi_ai/retail/pipeline.py` — `datetime.now().time()`).
+  ; (`enes/retail/pipeline.py` — `datetime.now().time()`).
   ; Soat adashsa "ish vaqtidan tashqari odam" ogohlantirishi kunduzi
   ; ishlaydi yoki tunda umuman jim qoladi — va buni hech qanday
   ; hisoblagich ko'rsatmaydi, tizim "sog'lom" bo'lib turaveradi.
@@ -322,7 +322,7 @@ Section "Yangilanishlarni o'zi olsin" SecUpdater
   ; Bu o'rnatuvchi do'kondan ketgandan keyin ham yangilash imkonini beradi.
   ;
   ; Xavfsizlik: yangilovchi paketni Ed25519 imzosi bilan tekshiradi
-  ; (`chaqimchi_ai/local/updater.py`).  Imzo mos kelmasa paket tashlanadi.
+  ; (`enes/local/updater.py`).  Imzo mos kelmasa paket tashlanadi.
   ;
   ; Nega 15 daqiqa (ilgari 6 soat edi): admin paneldan yangilanish
   ; buyurilgach uni olti soat kutish amalda "masofadan boshqarish yo'q"
@@ -334,7 +334,7 @@ Section "Yangilanishlarni o'zi olsin" SecUpdater
   ; yangi versiya bo'lganda boshlanadi.
   DetailPrint "Yangilanish vazifasi qo'shilmoqda..."
   nsExec::ExecToLog 'schtasks /Create /F /TN "Chaqimchi AI Update" \
-    /TR "\"$INSTDIR\python\python.exe\" -m chaqimchi_ai.local.updater" \
+    /TR "\"$INSTDIR\python\python.exe\" -m enes.local.updater" \
     /SC MINUTE /MO 15 /RU SYSTEM /RL HIGHEST'
   Pop $0
   ${If} $0 != 0
@@ -463,7 +463,7 @@ Function .onInit
   ;
   ; Filtr endi BUYRUQ QATORI bo'yicha: qayerdan ishga tushirilganidan
   ; qat'i nazar bizning modulimizni yuklagan Python to'xtaydi.  Yangilovchi
-  ; (`chaqimchi_ai.local.updater`) ataylab ro'yxatda YO'Q — u shu
+  ; (`enes.local.updater`) ataylab ro'yxatda YO'Q — u shu
   ; o'rnatuvchini ishga tushirgan jarayon, o'zini o'ldirsa yangilanish
   ; hisobi va rollback belgisi yozilmay qolardi.
   ; TARTIB MUHIM: avval `local.app` (ota jarayon), keyin `retail.service`.
@@ -482,12 +482,14 @@ Function .onInit
   ; Va kutish endi qat'iy emas: ro'yxat bo'shaguncha tekshiriladi
   ; (ko'pi bilan ~5 soniya).  Qat'iy `Sleep` sekin kompyuterda yetmasdi.
   nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command \
-    "$$pat = $\"chaqimchi_ai.(local.app|retail.service)$\"; \
+    "$$pat = $\"enes.(local.app|retail.service)$\"; \
      function Kill-Match($$rx) { Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
        Where-Object { $$_.CommandLine -match $$rx } | \
        ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue } }; \
+     Kill-Match $\"enes.local.app$\"; \
      Kill-Match $\"chaqimchi_ai.local.app$\"; \
      Start-Sleep -Milliseconds 300; \
+     Kill-Match $\"enes.retail.service$\"; \
      Kill-Match $\"chaqimchi_ai.retail.service$\"; \
      for ($$i = 0; $$i -lt 20; $$i++) { \
        $$left = Get-CimInstance Win32_Process -Filter $\"name=$\'python.exe$\'$\" | \
@@ -576,7 +578,7 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\${APP_NAME}"
 
   RMDir /r "$INSTDIR\python"
-  RMDir /r "$INSTDIR\chaqimchi_ai"
+  RMDir /r "$INSTDIR\enes"
   RMDir /r "$INSTDIR\config"
   RMDir /r "$INSTDIR\models"
   Delete "$INSTDIR\Chaqimchi_AI.bat"

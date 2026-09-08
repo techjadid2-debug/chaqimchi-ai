@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud.event_store import EventStore
+from enes.event_models import EdgeEvent
 
 #: Bir kunlik namuna: 6 ayol, 4 erkak, yosh guruhlari aralash.
 PEOPLE = [

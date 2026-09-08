@@ -127,7 +127,7 @@ rules:
   # ── Javon nazorati (sinov bosqichi) ──────────────────────────────────
   #
   # Usul modelsiz: javon zonasidagi chekka zichligi o'rganilgan etalondan
-  # keskin pasaysa signal (`chaqimchi_ai/retail/shelf.py`).  Hali haqiqiy
+  # keskin pasaysa signal (`enes/retail/shelf.py`).  Hali haqiqiy
   # do'konda sinalmagan, shuning uchun ATAYLAB faqat `cloud_sync`:
   # yolg'on signal bo'lsa u panelda ko'rinadi, lekin telefonni
   # jiringlatmaydi.  Sinovdan o'tgach `telegram_alert` qo'shiladi.

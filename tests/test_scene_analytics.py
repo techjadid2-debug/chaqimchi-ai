@@ -1,9 +1,9 @@
 import numpy as np
 
-from chaqimchi_ai import limits
-from chaqimchi_ai import scene_analytics as scene
-from chaqimchi_ai.scene_analytics import SceneAnalyzer
-from chaqimchi_ai.settings import SceneSettings
+from enes import limits
+from enes import scene_analytics as scene
+from enes.scene_analytics import SceneAnalyzer
+from enes.settings import SceneSettings
 
 
 class FakeDetector:

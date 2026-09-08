@@ -70,7 +70,7 @@ tayyor kontrast.
 | # | Ularda | Bizda holat |
 |---|---|---|
 | 1 | Avtomatik konversiya (tashqi ÷ kirgan) | Faqat **qo'lda chek** (`/chek 100`, `cloud/value.py`). Tashqi/o'tgan sanog'i yo'q. |
-| 2 | Yosh/jins hisobotda | Kod **bor** (`chaqimchi_ai/retail/demography.py`), lekin jonli kamera 360p → topilish **2%**. Feature bor, ishlamayapti. |
+| 2 | Yosh/jins hisobotda | Kod **bor** (`enes/retail/demography.py`), lekin jonli kamera 360p → topilish **2%**. Feature bor, ishlamayapti. |
 | 3 | Excel (XLSX) yuklash | CSV bor (`cloud/main.py`), XLSX yo'q. |
 | 4 | Integratsiya API (kalit + scope) | Yo'q. |
 | 5 | Ko'p filial/tarmoq | Yo'q — bitta do'kon, 4 kamera (`limits.py`). |
@@ -109,9 +109,9 @@ Ikki yo'l bor, ega tanlaydi:
   va do'konda 4 tadan ko'p kamera bo'lishini talab qiladi.
 
 **Qadamlar (A1):**
-1. `chaqimchi_ai/camera_roles.py` — kirish roliga "yaqinlashish
+1. `enes/camera_roles.py` — kirish roliga "yaqinlashish
    zonasi"ni qo'shish (chiziqning tashqi tomoni). Yangi rol shart emas.
-2. `chaqimchi_ai/retail/` — zona ichida ko'ringan noyob trekni sanash
+2. `enes/retail/` — zona ichida ko'ringan noyob trekni sanash
    (kirmaganini ham). Klip/rasm **yozilmaydi** — faqat son.
 3. `cloud/value.py` — `conversion()` ni `receipts` yoniga
    `passed`/`entered` variantini oladigan qilish; chek yo'q bo'lsa
@@ -186,7 +186,7 @@ to'qnashmaydigan tartibda olib boriladi:
 | Bosqich | Holat |
 |---|---|
 | **C — Excel/CSV yuklash** | ✅ **Bajarildi (2026-09-06, faqat cloud+panel).** `GET /api/v1/owner/report.csv` — **kunlik** (`?date=`) va **davriy** (`?start=&end=`, ≤31 kun, kuniga qator + Jami — raqobatchining branch-summary'idek). Ustunlar: kirdi/chiqdi, gavjum soat, konversiya, mijoz portreti, **xavfsizlik** (ularda yo'q). Panelda «Kunlik hisobot», «Oylik» va «14 kunlik CSV» tugmalari. BOM'li CSV, yangi bog'liqliksiz. |
-| **A — avtomatik konversiya** | 🔄 **Yadro yozildi (2026-09-06).** Ega qarori: **moslashuvchan (A1+A2)**. `chaqimchi_ai/retail/conversion.py: SeenCounter` (qurilma: oynada ko'ringan noyob odam, bir kadrlik xatoni kesadi); `cloud/value.py: capture_rate` + `select_passed` (A2 tashqi kamera ustun, bo'lmasa A1 kirish). Testlar to'liq. **Qoladi:** qurilmada SeenCounter'ni pipeline'ga ulash + `seen` ni yuborish (reliz, soak tugagach) va cloudda saqlash+hisobotga chiqarish. |
+| **A — avtomatik konversiya** | 🔄 **Yadro yozildi (2026-09-06).** Ega qarori: **moslashuvchan (A1+A2)**. `enes/retail/conversion.py: SeenCounter` (qurilma: oynada ko'ringan noyob odam, bir kadrlik xatoni kesadi); `cloud/value.py: capture_rate` + `select_passed` (A2 tashqi kamera ustun, bo'lmasa A1 kirish). Testlar to'liq. **Qoladi:** qurilmada SeenCounter'ni pipeline'ga ulash + `seen` ni yuborish (reliz, soak tugagach) va cloudda saqlash+hisobotga chiqarish. |
 | **B — demografiya 720p** | Mijoz kamerasiga bog'liq (kod bor). |
 | **D — sodiqlik (lokal)** | Huquqiy hujjatlar + qurilma relizi kerak. |
 | **E — API + ko'p filial** | Tarmoq mijozi kelganda. |

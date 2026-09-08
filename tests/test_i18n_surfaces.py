@@ -15,10 +15,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from chaqimchi_ai.event_models import EdgeEvent
 from cloud import i18n
 from cloud.digest import build_digest
 from cloud.notify import summarize
+from enes.event_models import EdgeEvent
 from tests.test_cloud_events_owner import (  # noqa: F401 — fixture shu import bilan keladi
     _login_owner,
     _provision,

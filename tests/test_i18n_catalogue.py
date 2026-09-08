@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from chaqimchi_ai.event_models import EventType
 from cloud import i18n
+from enes.event_models import EventType
 from tests.i18n_assert import assert_code, assert_text
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,7 +85,7 @@ def test_value_shapes_match_across_languages() -> None:
 def test_every_event_type_has_a_label() -> None:
     """Har bir hodisa turi uchun nom bo'lsin — uchala tilda ham.
 
-    Hodisa turlari yopiq ro'yxat (`chaqimchi_ai/event_models.py`).
+    Hodisa turlari yopiq ro'yxat (`enes/event_models.py`).
     Yangi tur qo'shilib nomi unutilsa, mijoz panelda `zone_entered`
     kabi xom kod ko'rardi.  Shu test uni qo'shilgan kuniyoq ushlaydi.
     """

@@ -6,15 +6,15 @@ from typing import Optional
 import httpx
 import pytest
 
-from chaqimchi_ai.cloud_sync import (
+from enes.cloud_sync import (
     DEFAULT_RETRY_AFTER_SEC,
     MAX_RETRY_AFTER_SEC,
     CloudEventSync,
     parse_retry_after,
 )
-from chaqimchi_ai.event_models import EdgeEvent
-from chaqimchi_ai.outbox import EventOutbox
-from chaqimchi_ai.settings import CloudSyncSettings
+from enes.event_models import EdgeEvent
+from enes.outbox import EventOutbox
+from enes.settings import CloudSyncSettings
 
 
 class Clock:
@@ -375,7 +375,7 @@ def test_server_error_on_snapshot_still_retries_the_event(tmp_path: Path) -> Non
 
 
 def test_a_long_outage_does_not_empty_the_queue(tmp_path: Path) -> None:
-    from chaqimchi_ai.outbox import MAX_ATTEMPTS
+    from enes.outbox import MAX_ATTEMPTS
 
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("All connection attempts failed", request=request)

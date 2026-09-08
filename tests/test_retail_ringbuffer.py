@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from chaqimchi_ai.retail.ringbuffer import RingBuffer
+from enes.retail.ringbuffer import RingBuffer
 
 BASE = datetime(2026, 8, 13, 14, 0, 0, tzinfo=timezone.utc).timestamp()
 
@@ -182,7 +182,7 @@ def test_invalid_configuration_is_rejected(tmp_path: Path) -> None:
 
 def test_bundled_ffmpeg_is_preferred(tmp_path, monkeypatch) -> None:
     """Do'kon kompyuterida PATH'da ffmpeg yo'q — birga kelgani ishlatiladi."""
-    from chaqimchi_ai.retail.ringbuffer import default_ffmpeg_binary
+    from enes.retail.ringbuffer import default_ffmpeg_binary
 
     monkeypatch.setenv("CHAQIMCHI_FFMPEG", str(tmp_path / "maxsus-ffmpeg"))
     assert default_ffmpeg_binary() == str(tmp_path / "maxsus-ffmpeg")

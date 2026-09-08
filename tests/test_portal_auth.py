@@ -316,8 +316,8 @@ def test_v2_admin_dashboard_reports_real_telemetry(portal_client: TestClient) ->
 
 
 def test_v2_admin_events_are_labelled_and_filterable(portal_client: TestClient) -> None:
-    from chaqimchi_ai.event_models import EdgeEvent
     from cloud.main import get_event_store, get_store
+    from enes.event_models import EdgeEvent
 
     site = portal_client.post(
         "/api/v1/admin/sites",

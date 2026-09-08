@@ -19,7 +19,7 @@ import yaml
 @pytest.fixture()
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CHAQIMCHI_LOCAL_DIR", str(tmp_path))
-    from chaqimchi_ai.local import config_store, paths
+    from enes.local import config_store, paths
 
     importlib.reload(paths)
     importlib.reload(config_store)
@@ -62,7 +62,7 @@ def test_heal_upgrades_relative_paths_from_old_installs(isolated) -> None:
 
 
 def test_resolver_keeps_absolute_paths_untouched(tmp_path: Path) -> None:
-    from chaqimchi_ai.retail.demography import resolve_demography_paths
+    from enes.retail.demography import resolve_demography_paths
 
     face = tmp_path / "install" / "models" / "retail" / "face.xml"
     age = tmp_path / "install" / "models" / "retail" / "age.xml"
@@ -78,7 +78,7 @@ def test_resolver_relative_paths_land_in_base_dir(tmp_path: Path) -> None:
     production config uni hech qachon ishlatmasligini yuqoridagi ikki
     test kafolatlaydi.
     """
-    from chaqimchi_ai.retail.demography import resolve_demography_paths
+    from enes.retail.demography import resolve_demography_paths
 
     scene = SimpleNamespace(
         face_model_path="models/retail/face.xml",
@@ -118,7 +118,7 @@ def test_model_available_checks_demography_models(isolated) -> None:
 
 
 def test_off_reason_says_when_the_feature_is_disabled(tmp_path) -> None:
-    from chaqimchi_ai.retail import demography as demo
+    from enes.retail import demography as demo
 
     class Scene:
         demographics_enabled = False
@@ -132,7 +132,7 @@ def test_off_reason_says_when_the_feature_is_disabled(tmp_path) -> None:
 
 
 def test_off_reason_says_when_paths_are_missing(tmp_path) -> None:
-    from chaqimchi_ai.retail import demography as demo
+    from enes.retail import demography as demo
 
     class Scene:
         demographics_enabled = True
@@ -147,7 +147,7 @@ def test_off_reason_says_when_paths_are_missing(tmp_path) -> None:
 
 
 def test_off_reason_says_when_the_model_will_not_load(tmp_path) -> None:
-    from chaqimchi_ai.retail import demography as demo
+    from enes.retail import demography as demo
 
     class Scene:
         demographics_enabled = True

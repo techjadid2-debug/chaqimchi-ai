@@ -1,6 +1,6 @@
 """Bulutdagi RTSP redaksiyasi qurilmadagisidan ajralib ketmasin.
 
-`cloud/rtsp.py` — `chaqimchi_ai/local/camera_probe.redact()` ning
+`cloud/rtsp.py` — `enes/local/camera_probe.redact()` ning
 nusxasi.  Nusxa ataylab: qurilmadagi modul `cv2` ni import qiladi va
 uni bulut image'iga tortib kirish mumkin emas.
 
@@ -10,9 +10,9 @@ qolishi mumkin — bu test aynan shuni to'sadi.
 
 import pytest
 
-from chaqimchi_ai.local.camera_probe import redact as device_redact
 from cloud.rtsp import redact as cloud_redact
 from cloud.rtsp import safe_streams
+from enes.local.camera_probe import redact as device_redact
 
 CASES = [
     "rtsp://admin:Parol123@192.168.1.64:554/Streaming/Channels/102",

@@ -937,6 +937,49 @@ def test_deep_health_tells_a_stranger_nothing_about_the_business(cloud_client) -
         assert leak not in text, leak
 
 
+def test_deep_health_warns_about_resources_without_crying_503(cloud_client, monkeypatch) -> None:
+    """96% CPU — ogohlantirish, nosozlik emas.
+
+    Resurs holati 503 qilsa UptimeRobot har cho'qqida uyg'onardi va
+    ogohlantirish tez orada e'tibordan qolardi.  Shuning uchun u
+    alohida `warnings` maydonida va status 200 bo'lib qoladi.
+    Chegaralar Telegram ogohlantirishi bilan bitta manbadan
+    (`cloud/alerts.py`) — ikkinchi ro'yxat ajralib ketardi.
+    """
+    import cloud.main as main
+    from cloud.alerts import SERVER_CPU_ALERT_PERCENT
+
+    monkeypatch.setattr(
+        main.server_health, "snapshot", lambda: {"cpu_percent": SERVER_CPU_ALERT_PERCENT + 1}
+    )
+
+    response = cloud_client.get("/health/deep", headers=ADMIN)
+
+    assert response.status_code == 200, "resurs ogohlantirishi nosozlik emas"
+    body = response.json()
+    assert body["ok"] is True
+    assert body["server"]["cpu_percent"] == SERVER_CPU_ALERT_PERCENT + 1
+    assert body["warnings"] == ["protsessor to'lib ishlayapti (96%)"]
+
+    # Tinch serverda ro'yxat bo'sh — "hammasi joyida" ham javob.
+    monkeypatch.setattr(main.server_health, "snapshot", lambda: {"cpu_percent": 12.0})
+    assert cloud_client.get("/health/deep", headers=ADMIN).json()["warnings"] == []
+
+
+def test_deep_health_keeps_the_resource_numbers_for_admins_only(cloud_client, monkeypatch) -> None:
+    """Server sig'imi ham biznes ma'lumoti: begona uni bilmasin."""
+    import cloud.main as main
+
+    monkeypatch.setattr(
+        main.server_health, "snapshot", lambda: {"cpu_percent": 99.0, "free_disk_gb": 3.2}
+    )
+
+    body = cloud_client.get("/health/deep").json()
+
+    assert "server" not in body and "warnings" not in body
+    assert "99" not in str(body)
+
+
 def test_deep_health_reports_503_when_a_dependency_is_down(cloud_client, monkeypatch) -> None:
     """Nosozlik 200 bilan yashirilsa, tashqi monitoring uni hech qachon ko'rmaydi."""
     import cloud.main as main

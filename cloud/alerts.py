@@ -636,6 +636,22 @@ def _server_problem(snapshot: Dict[str, Any], previous: Optional[str]) -> Option
     return None
 
 
+def server_health_warnings(snapshot: Dict[str, Any]) -> List[str]:
+    """`/health/deep` uchun ogohlantirishlar — Telegram xabarisiz.
+
+    Chegaralar Telegram ogohlantirishi bilan AYNAN bir xil
+    (`_server_problem`): ikkinchi ro'yxat yozilsa ular vaqt o'tib
+    ajralib ketardi va «panel jim, bot ogohlantiryapti» degan holat
+    chiqardi.  Histerezis bu yerda kerak emas — bir martalik so'rov
+    uchun "oldingi holat" degan tushuncha yo'q, shuning uchun `None`.
+
+    Bo'sh ro'yxat: yo hammasi joyida, yo server o'zini o'lchay olmadi
+    (`snapshot` bo'sh — masalan macOS'da `/proc` yo'q).
+    """
+    problem = _server_problem(snapshot, None)
+    return [] if problem is None else [problem[1]]
+
+
 def _server_health_text(detail: str) -> str:
     return (
         f"🖥 <b>Cloud server</b> — {detail}\n"
@@ -1274,6 +1290,7 @@ __all__ = [
     "DEVICE_TEMP_ALERT_C",
     "DISK_ALERT_PERCENT",
     "SERVER_CPU_ALERT_PERCENT",
+    "server_health_warnings",
     "SERVER_RAM_ALERT_PERCENT",
     "SERVER_TEMP_ALERT_C",
     "PAIRING_GRACE_HOURS",

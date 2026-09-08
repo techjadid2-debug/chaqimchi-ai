@@ -57,7 +57,7 @@ from cloud import (
     value,
     vision_agent,
 )
-from cloud.alerts import AlertService, OwnerMessage, test_message
+from cloud.alerts import AlertService, OwnerMessage, server_health_warnings, test_message
 from cloud.digest import DailyDigestService, build_digest
 from cloud.errors import ApiError, api_error_handler
 from cloud.event_store import EventStore, event_store_from_env
@@ -2024,11 +2024,19 @@ async def health_deep(
     if not ok:
         response.status_code = 503
     if _is_admin_request(authorization, x_cloud_admin_key):
+        # Resurs holati 503 QILMAYDI: 96% CPU — nosozlik emas,
+        # ogohlantirish, va monitoringni uyg'otish noto'g'ri bo'lardi.
+        # Chegaralar Telegram ogohlantirishi bilan bir manbadan
+        # (`alerts.server_health_warnings`) — ikkinchi ro'yxat vaqt
+        # o'tib undan ajralib ketardi.
+        server = server_health.snapshot()
         return {
             "ok": ok,
             "service": "enes-cloud",
             "version": __version__,
             "checks": checks,
+            "server": server,
+            "warnings": server_health_warnings(server),
             # Chegara tufayli rad etilgan so'rovlar — bucket bo'yicha.
             #
             # 2026-08-26 da bu raqam BO'LMAGANI uchun 6 315 ta rasm 3 soat

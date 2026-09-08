@@ -1218,11 +1218,16 @@ class AlertService:
         store: Any,
         config: Optional[AlertConfig] = None,
         owner_notify: Optional[OwnerNotify] = None,
+        is_leader: Optional[Callable[[], bool]] = None,
     ) -> None:
         self.store = store
         self.config = config or AlertConfig.from_env()
         self.sender = TelegramSender(self.config)
         self.owner_notify = owner_notify
+        # Ogohlantirish har worker'dan emas, faqat YETAKCHIDAN ketsin
+        # (`cloud/leader.py`) — aks holda "kamera o'chdi" xabari worker
+        # soniga ko'payardi.
+        self.is_leader = is_leader
         self.last_run: Optional[AlertRun] = None
         self._task: Optional[asyncio.Task] = None
 
@@ -1233,7 +1238,8 @@ class AlertService:
     async def _loop(self) -> None:
         while True:
             try:
-                await self.check_once()
+                if self.is_leader is None or self.is_leader():
+                    await self.check_once()
             except asyncio.CancelledError:
                 break
             except Exception:

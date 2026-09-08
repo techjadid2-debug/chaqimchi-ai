@@ -526,6 +526,13 @@ class EventStore:
             # ~128 soniyagacha yaxlitlanadi, ya'ni oyna chegarasi
             # taxminiy bo'lib qolardi.
             """
+            CREATE TABLE IF NOT EXISTS cloud_leases (
+                name TEXT PRIMARY KEY,
+                holder TEXT NOT NULL,
+                expires_at BIGINT NOT NULL
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS rate_limit_windows (
                 bucket TEXT NOT NULL,
                 subject TEXT NOT NULL,
@@ -4124,6 +4131,49 @@ class EventStore:
             cursor = conn.execute(self._sql(query), tuple(params))
             return int(cursor.rowcount or 0)
 
+    # ── Yetakchi ijarasi (`cloud/leader.py` uchun) ────────────────────
+
+    def claim_lease(self, name: str, holder: str, *, ttl_sec: int, now: int) -> bool:
+        """Ijarani oladi yoki O'ZINIKINI uzaytiradi.  Yetakchi bo'lsa `True`.
+
+        Ikki statement bitta tranzaksiyada: muddati o'tgan ijara
+        bo'shatiladi, keyin upsert.  `DO UPDATE ... WHERE holder=?` —
+        eng muhim qator: usiz har jarayon birovning tirik ijarasini
+        o'ziniki qilib olardi.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("DELETE FROM cloud_leases WHERE name=? AND expires_at<=?"),
+                (name, int(now)),
+            )
+            row = conn.execute(
+                self._sql(
+                    "INSERT INTO cloud_leases(name,holder,expires_at) VALUES(?,?,?) "
+                    "ON CONFLICT(name) DO UPDATE SET expires_at=? "
+                    "WHERE cloud_leases.holder=? "
+                    "RETURNING holder"
+                ),
+                (name, holder, int(now) + int(ttl_sec), int(now) + int(ttl_sec), holder),
+            ).fetchone()
+        return row is not None
+
+    def release_lease(self, name: str, holder: str) -> None:
+        """Ijarani ataylab bo'shatadi — to'xtatilgan jarayon navbatni tutib turmasin."""
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("DELETE FROM cloud_leases WHERE name=? AND holder=?"),
+                (name, holder),
+            )
+
+    def lease_holder(self, name: str, *, now: int) -> Optional[str]:
+        """Ijara kimda — tashxis va testlar uchun."""
+        with self._connect() as conn:
+            row = conn.execute(
+                self._sql("SELECT holder FROM cloud_leases WHERE name=? AND expires_at>?"),
+                (name, int(now)),
+            ).fetchone()
+        return str(self._dict(row)["holder"]) if row else None
+
     # ── Tezlik cheklovi (`cloud/ratelimit.py` uchun) ──────────────────
     #
     # Hisob bazada turadi, chunki uvicorn bir nechta worker bilan
@@ -4239,6 +4289,18 @@ class EventStore:
                 (site_id, digest_date, _now().isoformat()),
             )
             return bool(cursor.rowcount)
+
+    def unmark_digest_sent(self, site_id: str, digest_date: str) -> None:
+        """Belgini ochadi — yuborish yiqilganda keyingi aylanish qayta ursin.
+
+        `mark_digest_sent` endi YUBORISHDAN OLDIN chaqiriladi (atomik
+        navbat), ya'ni muvaffaqiyatsizlikni qaytarish yo'li kerak.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                self._sql("DELETE FROM daily_digests WHERE site_id=? AND digest_date=?"),
+                (site_id, digest_date),
+            )
 
     def digest_was_sent(self, site_id: str, digest_date: str) -> bool:
         with self._connect() as conn:

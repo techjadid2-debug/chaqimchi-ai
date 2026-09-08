@@ -62,6 +62,7 @@ from cloud.digest import DailyDigestService, build_digest
 from cloud.errors import ApiError, api_error_handler
 from cloud.event_store import EventStore, event_store_from_env
 from cloud.i18n import tg
+from cloud.leader import LeaderLease
 from cloud.notify import DEFAULT_TELEGRAM_LEVEL as notify_default_level
 from cloud.notify import MEDIA_EVENT_TYPES, event_label, select_alert_events
 from cloud.notify import summarize as notify_summarize
@@ -154,6 +155,10 @@ _vision_worker_task: Optional[asyncio.Task[Any]] = None
 _digest_task: Optional[Any] = None
 _maintenance_task: Optional[Any] = None
 _lead_notification_task: Optional[Any] = None
+#: Fon vazifalari uchun yetakchi.  `store=None` — har doim yetakchi,
+#: ya'ni bitta jarayonli ish (lokal, testlar) avvalgidek yuradi.
+_leader: LeaderLease = LeaderLease()
+_leader_task: Optional[Any] = None
 
 
 #: Boshqaruv bazasi (litsenziya, tarif, to'lov, portal parollari).
@@ -213,16 +218,44 @@ def get_event_store() -> EventStore:
 RATE_LIMIT_SHARED_ENV = "ENES_RATELIMIT_SHARED"
 
 
-def _bind_shared_rate_limit() -> None:
+def _is_leader() -> bool:
+    """Shu jarayon fon ishini bajaradimi.
+
+    Funksiya orqali, chunki `_leader` sozlash paytida qayta yaratiladi —
+    obyektga to'g'ridan-to'g'ri bog'langan halqa eski ijarani ushlab
+    qolardi.
+    """
+    return _leader.leading
+
+
+def _shared_state_store() -> Optional[EventStore]:
+    """Umumiy holat qaysi bazada — yoki `None` (bitta jarayon)."""
     store = get_event_store()
     choice = os.environ.get(RATE_LIMIT_SHARED_ENV, "").strip().lower()
     if choice in {"0", "false", "no"}:
-        ratelimit.limiter().unbind()
-        return
+        return None
     if choice in {"1", "true", "yes"} or store.postgres:
-        ratelimit.limiter().bind(store)
+        return store
+    return None
+
+
+def _configure_shared_state() -> None:
+    """Tezlik cheklovi va yetakchi ijarasini bazaga bog'laydi.
+
+    Ikkalasi bitta qarordan yuradi: agar jarayon bittadan ko'p bo'lishi
+    MUMKIN bo'lsa (ya'ni production PostgreSQL), hisob ham, fon ishi ham
+    umumiy bo'lishi kerak.  Ular alohida yoqilsa "cheklov umumiy, hisobot
+    esa ikki marta" degan yarim holat chiqardi.
+    """
+    global _leader
+    store = _shared_state_store()
+    if store is None:
+        ratelimit.limiter().unbind()
+        _leader = LeaderLease()
         return
-    ratelimit.limiter().unbind()
+    ratelimit.limiter().bind(store)
+    _leader = LeaderLease(store)
+    _leader.acquire()
 
 
 def get_snapshot_store() -> SnapshotStore:
@@ -1584,7 +1617,8 @@ async def _history_rollup_loop() -> None:
     """
     while True:
         try:
-            await asyncio.to_thread(_rollup_all_history)
+            if _is_leader():
+                await asyncio.to_thread(_rollup_all_history)
         except asyncio.CancelledError:
             break
         except Exception:
@@ -1755,6 +1789,11 @@ async def _maintenance_loop() -> None:
     step = 0
     while True:
         try:
+            if not _is_leader():
+                # Yetakchi emas: tozalash ham, ogohlantirish ham
+                # ikkinchi nusxada ketmasin.
+                await asyncio.sleep(_MAINTENANCE_STEP_SEC)
+                continue
             if step % _PURGE_EVERY_STEPS == 0:
                 await asyncio.to_thread(_purge_expired_events)
             # Umumiy bazadagi tugagan oynalar: xotira yo'li o'zini o'zi
@@ -1774,7 +1813,8 @@ async def _maintenance_loop() -> None:
 async def _lead_notification_loop() -> None:
     while True:
         try:
-            await _retry_lead_notifications()
+            if _is_leader():
+                await _retry_lead_notifications()
         except asyncio.CancelledError:
             break
         except Exception:
@@ -1791,13 +1831,16 @@ def get_alerts() -> AlertService:
         # ni qurilma yuboradi, kompyuter o'chganda esa uni yuboradigan hech
         # kim qolmaydi.  `_notify_site_members` tarif, chegara va "botga
         # /start bosmagan a'zo" mantiqini o'zi hal qiladi.
-        _alerts = AlertService(store, owner_notify=_notify_site_members)
+        _alerts = AlertService(
+            store, owner_notify=_notify_site_members, is_leader=_is_leader
+        )
     return _alerts
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _digest, _digest_task, _maintenance_task, _lead_notification_task
+    global _leader_task
     global _vision_worker_stop, _vision_worker_task
     if os.environ.get("ENES_ENV", "development") == "production":
         errors = []
@@ -1849,7 +1892,7 @@ async def lifespan(app: FastAPI):
     get_event_store()
     get_snapshot_store()
     get_payments()
-    _bind_shared_rate_limit()
+    _configure_shared_state()
     bootstrap_username = os.environ.get("ENES_BOOTSTRAP_ADMIN_USERNAME", "").strip()
     bootstrap_password = os.environ.get("ENES_BOOTSTRAP_ADMIN_PASSWORD", "")
     if bool(bootstrap_username) != bool(bootstrap_password):
@@ -1864,6 +1907,7 @@ async def lifespan(app: FastAPI):
         _send_owner_telegram,
         panel_url=urls.app_url(),
         renewal_invoice=_renewal_pay_url,
+        is_leader=_is_leader,
     )
     _digest_task = asyncio.create_task(_digest.run())
     _maintenance_task = asyncio.create_task(_maintenance_loop())
@@ -1871,7 +1915,10 @@ async def lifespan(app: FastAPI):
     # yig'ilmagan kunlar 6 soatlik purge'ni kutmasin.
     _demography_rollup_task = asyncio.create_task(_history_rollup_loop())
     _lead_notification_task = asyncio.create_task(_lead_notification_loop())
-    _bot_commands_task = asyncio.create_task(_setup_bot_commands())
+    # Bot menyusi bir marta qo'yiladi — har worker'dan emas.
+    if _is_leader():
+        _bot_commands_task = asyncio.create_task(_setup_bot_commands())
+    _leader_task = asyncio.create_task(_leader.run())
     # Agent joblari DB'da navbatda turadi; Gemini yoki worker qayta yonsa
     # savol yo'qolmaydi. Birinchi relizda shu cloud process ichidagi alohida
     # coroutine ishlaydi, keyingi horizontal worker ham ayni DB claim
@@ -1892,6 +1939,13 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         ratelimit.limiter().unbind()
+        if _leader_task is not None:
+            _leader_task.cancel()
+            _leader_task = None
+        # Ijara ataylab bo'shatiladi: aks holda qayta ishga tushgan
+        # server o'z ijarasining muddati tugashini (90 s) kutib turardi
+        # va shu vaqt ichida hech kim fon ishini bajarmasdi.
+        _leader.release()
         if _digest_task is not None:
             _digest_task.cancel()
             _digest_task = None

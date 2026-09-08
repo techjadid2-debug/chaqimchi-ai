@@ -497,12 +497,16 @@ class DailyDigestService:
         hour: int = 21,
         panel_url: str = "",
         renewal_invoice: Optional[Callable[[str, str], str]] = None,
+        is_leader: Optional[Callable[[], bool]] = None,
     ) -> None:
         self.events = events
         self.sites = sites
         self.sender = sender
         self.hour = hour
         self.panel_url = panel_url.rstrip("/")
+        # Halqa har worker'da yuradi, ish esa faqat YETAKCHIDA bajariladi
+        # (`cloud/leader.py`).  Berilmasa — hammasi avvalgidek.
+        self.is_leader = is_leader
         # `(site_id, davr) -> to'lov sahifasi manzili`.  Chaqiruv orqali,
         # chunki hisob-faktura `cloud/payments/` da va uni bu yerdan
         # import qilish aylanma bog'liqlik bo'lardi (`main` → `digest`).
@@ -664,10 +668,27 @@ class DailyDigestService:
                     lang=lang,
                 )
 
+            # Belgi YUBORISHDAN OLDIN qo'yiladi.  `mark_digest_sent`
+            # `ON CONFLICT DO NOTHING` bilan ishlaydi va "men birinchi
+            # bo'ldim" ni qaytaradi, ya'ni atomik navbat.  Ilgari tartib
+            # teskari edi (tekshir → yubor → belgila) va ikkita worker
+            # bir vaqtda "yuborilmagan" deb ko'rib, mijozga kunlik
+            # hisobot IKKI MARTA ketardi.
+            #
+            # Yuborish yiqilsa belgi ochiladi — keyingi aylanish qayta
+            # uradi.  Yagona ochiq xavf: belgi qo'yilib, jarayon aynan
+            # yuborish paytida qulasa o'sha kunlik hisobot yo'qoladi.
+            # Bu oyna bir necha soniya va yetakchi qulfi (`cloud/leader.py`)
+            # tufayli deyarli yopiq; ikki marta yuborishdan esa
+            # bir marta yubormaslik afzal — takroriy xabar ishonchni
+            # yo'qotadi, kechikkan xabar esa yo'q.
+            if not self.events.mark_digest_sent(site_id, digest_date):
+                continue
             site_sent = await self._deliver(site_id, members, build)
             if site_sent:
-                self.events.mark_digest_sent(site_id, digest_date)
                 sent += site_sent
+            else:
+                self.events.unmark_digest_sent(site_id, digest_date)
         return sent
 
     async def _renewal_once(self, now: datetime) -> int:
@@ -743,10 +764,13 @@ class DailyDigestService:
                     lang=lang,
                 )
 
+            if not self.events.mark_digest_sent(site_id, marker):
+                continue
             site_sent = await self._deliver(site_id, owners, build)
             if site_sent:
-                self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
+            else:
+                self.events.unmark_digest_sent(site_id, marker)
         return sent
 
     async def _weekly_once(self, now: datetime) -> int:
@@ -800,10 +824,13 @@ class DailyDigestService:
                     lang=lang,
                 )
 
+            if not self.events.mark_digest_sent(site_id, marker):
+                continue
             site_sent = await self._deliver(site_id, members, build)
             if site_sent:
-                self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
+            else:
+                self.events.unmark_digest_sent(site_id, marker)
         return sent
 
     async def _monthly_shifts_once(self, now: datetime) -> int:
@@ -840,10 +867,13 @@ class DailyDigestService:
             def build(lang: str, *, site=site, summary=summary) -> str:
                 return build_shifts(str(site["name"]), f"{first_day:%Y-%m}", summary, lang=lang)
 
+            if not self.events.mark_digest_sent(site_id, marker):
+                continue
             site_sent = await self._deliver(site_id, members, build)
             if site_sent:
-                self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
+            else:
+                self.events.unmark_digest_sent(site_id, marker)
         return sent
 
     async def _monthly_value_once(self, now: datetime) -> int:
@@ -900,16 +930,20 @@ class DailyDigestService:
                     lang=lang,
                 )
 
+            if not self.events.mark_digest_sent(site_id, marker):
+                continue
             site_sent = await self._deliver(site_id, members, build)
             if site_sent:
-                self.events.mark_digest_sent(site_id, marker)
                 sent += site_sent
+            else:
+                self.events.unmark_digest_sent(site_id, marker)
         return sent
 
     async def run(self) -> None:
         while True:
             try:
-                await self.check_once()
+                if self.is_leader is None or self.is_leader():
+                    await self.check_once()
             except asyncio.CancelledError:
                 break
             except Exception:

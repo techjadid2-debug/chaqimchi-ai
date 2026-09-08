@@ -20,6 +20,26 @@
   fast-forward (148 commit, `101befd` → `a807983`), `origin/main`
   yangilandi.  Shox tarix uchun QOLDIRILDI, keyingi ish `main` da.
 
+- **🐘 5B — BOSHQARUV BAZASI PostgreSQL'DA HAM ISHLAYDI (2026-09-09,
+  `0045f4a`, `2e2a5c0`, `2e3db31`, `7a30b77`).**  `cloud/store.py` va
+  `cloud/payments/store.py` ikki dialektli; yoqish IXTIYORIY —
+  `ENES_CONTROL_DATABASE_URL` bo'sh bo'lsa hammasi avvalgidek
+  SQLite'da.  **`DATABASE_URL` ATAYLAB ishlatilmadi**: u hodisalar
+  uchun allaqachon qo'yilgan va `CloudStore` ham o'shani o'qiganda
+  deploy litsenziya/to'lovlarni bo'sh sxemaga yo'naltirardi.
+  Ko'chirish: `scripts/migrate_control_db.py` (hech narsa
+  o'chirmaydi, qatorlarni sanab solishtiradi, mos kelmasa to'xtaydi).
+  Tartib va qaytish yo'li: `docs/PRODUCTION_RUNBOOK.md` §1.1.
+  **Naqsh farqi:** `event_store` har so'rovni `_sql()` bilan o'raydi,
+  bu yerda esa ULANISHNING O'ZI o'ralgan (`_PostgresConnection`) —
+  200+ so'rovda bitta unutilgan `_sql()` faqat productionda
+  ko'rinardi.
+  **⚠️ `--workers` HALI KO'TARILMAYDI:** `cloud/ratelimit.py` xotirada
+  va har worker o'z hisobini yuritadi, ya'ni chegara worker soniga
+  ko'payadi.
+  **Qoldi:** rate limitni bazaga ko'chirish, keyin `--workers 2+`;
+  jonli serverda ko'chirish (zaxira bilan).
+
 - **🧮 «TARMOQ» KALKULYATORI (2026-09-09, `cbe7599`).**  Karta
   «so'rov bo'yicha» derdi va tugma to'g'ridan-to'g'ri arizaga olib
   borardi — mijoz kattalik haqida tasavvursiz ketardi.  Endi tugma
@@ -761,6 +781,27 @@ taklif qilish kerak.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
 
+- **Boshqa dialektga ko'chirishda REJA emas, HAQIQIY baza o'rgatadi.**
+  `store.py` ni PostgreSQL'ga tayyorlashda hamma dialekt farqi
+  oldindan sanab chiqilgan edi.  Lokal PostgreSQL 17 esa besh
+  daqiqada beshta narsani ko'rsatdi, va ularning HECH BIRI ro'yxatda
+  yo'q edi: (1) SQL izohi ichidagi `;` skriptni bo'lakka ajratishni
+  buzdi; (2) `LIKE 'ENES Windows%'` dagi literal foiz `%s` o'rin
+  egasiga aralashib ketdi; (3) takroriy login `sqlite3.IntegrityError`
+  emas, psycopg `UniqueViolation` beradi — tutilmasa mijoz 500
+  ko'rardi; (4) `payments/store.py` da yana bitta `rowid`; (5) sxema
+  urug'i tahrirlangan katalog narxini jimgina standartga qaytardi va
+  qatorlar soni BARIBIR mos kelardi.  Xulosa: bunday ishni
+  boshlashdan oldin haqiqiy bazani ko'taring — `createdb` bir
+  soniya, taxmin esa bir hafta.
+
+- **Urug'lanadigan jadvalni ko'chirayotganda AVVAL urug'ni tozalang.**
+  `_init_db` bo'sh bazaga standart katalogni yozadi.  Ko'chirish
+  `ON CONFLICT DO NOTHING` bilan borsa manbadagi HAQIQIY qatorlar
+  o'tkazib yuboriladi — ya'ni admin tahrirlagan narx standartga
+  qaytadi.  Eng yomoni: qatorlar soni mos keladi, ya'ni sanoqqa
+  asoslangan tekshiruv buni ko'rmaydi.
+
 - **Shablondan qurilmaydigan sahifaning kesh tokeni QO'LDA
   yangilanadi.**  `site.css` o'zgarganda `build_site.py` hamma
   shablonli sahifada `?v=` ni qayta hisoblaydi, `installer.html` esa
@@ -1266,6 +1307,25 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-09 — 5B: boshqaruv bazasi PostgreSQL'da (`0045f4a`…`7a30b77`)
+Nima: `cloud/store.py` va `cloud/payments/store.py` ikki dialektli
+bo'ldi, ma'lumot ko'chiradigan skript va zaxira himoyasi qo'shildi.
+Yoqish ixtiyoriy (`ENES_CONTROL_DATABASE_URL`).
+Nega: production `--workers 1` da ishlardi va sababi shu ikki fayl —
+SQLite bitta faylga ko'p jarayondan yozishga yaramaydi.
+Qayerda: `cloud/store.py` (`_PostgresConnection`, `_to_postgres`,
+`_split_statements`, `INTEGRITY_ERRORS`, `device_jobs.seq`),
+`cloud/payments/store.py` (ulanish CloudStore'dan, `invoices.seq`),
+`cloud/main.py` (`control_database_url`), `cloud/vision_worker.py`,
+`scripts/migrate_control_db.py`, `scripts/backup_production.sh`,
+`docs/PRODUCTION_RUNBOOK.md` §1.1.
+Test: `tests/test_store_postgres.py` — SQL tarjimasi bazasiz,
+integratsiya `ENES_TEST_DATABASE_URL` bilan.  SQLite 2 182 passed;
+haqiqiy PostgreSQL 17 da 19 passed.
+Diqqat: **haqiqiy baza beshta xatoni ko'rsatdi** — ular tuzoqlar
+bo'limida.  Jonli ko'chirish hali QILINMAGAN; `--workers` rate limit
+bazaga ko'chmaguncha ko'tarilmaydi.
 
 ### 2026-09-09 — 5A: «Tarmoq» kalkulyatori (`cbe7599`)
 Nima: rasmiy saytda tarmoq uchun taxminiy hisob — do'kon soni,

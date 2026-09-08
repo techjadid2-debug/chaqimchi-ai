@@ -9,6 +9,38 @@
 
 ## HOZIRGI HOLAT · 2026-09-08
 
+- **🌐 F5 — TELEGRAM, HISOBOT, CSV, TARIF UCH TILDA (2026-09-08, `28e2c8b`).**
+  Server chizadigan matn katalogga o'tdi va til ANIQ uzatiladi
+  (`tg(lang, key)`).  `digest.py` builder'lari `lang` oladi; `_deliver`
+  matnni a'zoning `owner_members.language` ustuniga qarab bir marta
+  yasab keshlaydi — bitta do'konda o'zbek ega va ruscha menejer har biri
+  o'z tilida oladi.  `alerts.py`: egaga boradigan matn `OwnerMessage`
+  (til bo'yicha yasovchi), `_notify_site_members` uni har a'zo uchun
+  ochadi; ichki ops ogohlantirishlari ataylab o'zbekcha qoldi.
+  `notify.py`, `trust_score.py`, `botfmt.py`, `value.py` katalogga;
+  «3.2 / 3,2 mln so'm» nomuvofiqligi yopildi.  Bot: javob tili a'zodan,
+  notanish odam uchun Telegram `language_code` dan; `/start` da profil
+  tili a'zoga yozib qo'yiladi (faqat standart `uz` turganda).  CSV:
+  sarlavha va fayl nomi so'rov tilida (`otchet-magazina-…csv`), BOM
+  saqlanadi.  Tarif kartasi: `PlanBullet.key` + `params`, matn
+  `chaqimchi_ai` ichida uz manba, tarjima katalogda; kamera soni
+  `limits` dan (`{count}`).  `tests/test_i18n_surfaces.py` (7 test)
+  qulflaydi.  Katalog: **1 160 kalit**, uch tilda teng.
+- **🌐 F4c — EGA PANELI MATNI UCH TILDA (2026-09-08, `1edc5f3`).**
+  Ega panelining barcha ko'rinadigan matni (12 fayl) `t("panel.*")`
+  bilan chiziladi; ~850 yangi kalit (`panel.common.*` 43 umumiy so'z,
+  `panel.nav/owner/cameras/employees/billing/telegram/traffic/settings/
+  download/home/numbers/demo/heat/evidence/timeline/agent/setup/
+  geometry/connect/login/lock/shell.*`).  `api.ts` sana/pul/«oldin»
+  yordamchilari `format.*`/`money.*` dan, `Intl`siz.  Modul darajasidagi
+  ro'yxatlar (`NAV_ITEMS`, `PERIODS`, `TELEGRAM_LEVELS`, `PRESETS`,
+  `ROLE_CHOICES`) kalit saqlaydi, matn chizishda ochiladi.  Telegram
+  a'zosini o'chirish `ConfirmDialog` bilan.  Testlar kalitga bog'landi
+  (`key_text` yordamchisi `test_connect_ui`/`test_events_ui` da).
+  Admin paneli matni o'zbekcha qoldi (ichki vosita, oxirgi navbat).
+  **Ega ko'rigi kerak:** ruscha/inglizcha tarjima mashina emas, lekin
+  tarjimon ko'rmagan — `i18n/ru.json`, `i18n/en.json` ni bir marta
+  o'qib chiqish (ayniqsa `panel.agent.*`, `bot.*`, `digest.*`).
 - **🎨 F4a — ADMIN VOSITALARI REACT'GA KO'CHDI (2026-09-08, `dc60e2c`).**
   `/admin/customers/{id}` — mijoz tafsiloti: holat banneri, kamera
   ro'yxati (probe/sifat/rol), qurilma health satrlari (tashlangan
@@ -314,14 +346,15 @@
 ## KEYINGI ISH
 
 **REBREND (2026-09-08).** To'liq holat + xatolar + tartib:
-`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F3 va F4a
-tugadi.  Navbat: **F4b — panel dizayni namunaga** (qorong'i sidebar,
-KPI plitkalar, kamera to'ri, hodisa lentasi) va **F4c — ega paneli
-matnini katalogga** (~600 satr, uz/ru/en) (namunadagi ko'rinish +
-matn ajratish + yuqoridagi admin vositalari ro'yxati; ikki `xfail`
-belgisi olinadi; `owner.css`/`panel.css` o'chadi) → F5 Telegram/CSV →
-F6 ichki nomlar → F7 cutover (egadan: DNS, bot @username, yuridik nom,
-Payme/Click) → F8 qurilma relizi (soakdan keyin) → F9 tozalash.
+`~/.claude/plans/loyiha-bo-yicha-nimalar-qilishimiz-*.md`.  F3, F4a,
+F4c va F5 tugadi.  Navbat: **F4b — panel ko'rinishini namunaga
+solishtirish** (ikki tema × uch til skrinshot, farq bo'lsa tuzatish;
+panel allaqachon yaqin) → **F6 ichki nomlar** (`chaqimchi_ai`→`enes`,
+132 `CHAQIMCHI_*` env, xizmat/yo'l nomlari, reliz naqshlari
+`main.py` da ikkala joy bitta commitda, `product_name`, brauzer
+kalitlari) → **F9 tozalash** (CLAUDE.md, docs, og-rasm, favicon,
+`releases/`) → F7 cutover (egadan: DNS, bot @username, yuridik nom,
+Payme/Click) → F8 qurilma relizi (soakdan keyin).
 Rebrendga bog'liq bo'lmagan kichik xatolar parallel, cloud-only:
 `/health` halol (O-1), CSP (O-2), server tomonda chiqish (O-8), rate
 limit (O-9), `geometry-panel.js` da `shelf` yo'q, CI'ga `make ui-check`.
@@ -568,6 +601,26 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Panelda `t()` ni modul yuklanganda chaqirmang.**  `initLang()`
+  `owner.tsx`/`admin.tsx` ichida, modullar importidan KEYIN ishlaydi;
+  `const NAV = [{label: t("…")}]` doim o'zbekcha qolardi.  Ro'yxat
+  kalit saqlaydi, `t(item.key)` render paytida (`NAV_ITEMS`, `PERIODS`,
+  `TELEGRAM_LEVELS` naqshi).
+
+- **Fon vazifasida `i18n.t()` — hech kimning tili.**  `BackgroundTasks`
+  va `create_task` so'rov kontekstini meros oladi: hodisa
+  ogohlantirishi qurilma so'rovining (ya'ni standart) tilida ketardi.
+  Telegram/digest/CSV faqat `tg(lang, key)`; bir necha a'zoga ketadigan
+  matn `OwnerMessage` (alerts) yoki `build(lang)` (digest) — til a'zo
+  qatoridan (`owner_members.language`).  `cloud/main.py` da `t` import
+  qilinmagan — `i18n.t(...)` yozing (HTTP yo'lida).
+
+- **Testni matnga emas, kalitga bog'lang.**  ~70 test aniq o'zbekcha
+  satr tekshirardi; katalogga ko'chganda hammasi bir vaqtda qulardi.
+  Endi `tests/i18n_assert.py::assert_text` (server) va `key_text`
+  (`test_connect_ui`/`test_events_ui`, manba kalitni ishlatadimi +
+  kalit shu ma'noni beradimi).  Yangi test yozganda ham shu.
 
 - **Repo ildiziga yangi papka qo'shsangiz `Dockerfile.cloud` ga ham
   qo'shing.**  `COPY` ro'yxati aniq sanaladi (`chaqimchi_ai`, `cloud`,
@@ -980,6 +1033,41 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-08 — F5: Telegram, hisobot, CSV va tarif matni a'zo tilida (`28e2c8b`)
+Nima: ruscha a'zo kunlik/haftalik hisobotni, ogohlantirishni, bot
+javobini ruscha oladi; `?lang=ru` tarif kartasi va `X-Lang: ru` CSV
+ruscha; o'zbekcha chiqish harfma-harf avvalgidek («3,2 mln so'm»
+bundan mustasno — panel bilan tenglashtirildi).
+Nega: F2 til yadrosi bor edi, lekin server matni hali literal edi va
+`_deliver` bitta matnni hammaga yuborardi.
+Qayerda: `cloud/digest.py` (`TextBuilder`, `_deliver`), `cloud/alerts.py`
+(`OwnerMessage`, `OwnerNotify`), `cloud/main.py` (`_notify_site_members`,
+`_bot_lang`, `_adopt_telegram_language`, `_bullet_text`,
+`_localized_network_card`, CSV funksiyalari), `cloud/notify.py`,
+`cloud/trust_score.py`, `cloud/botfmt.py`, `cloud/value.py`,
+`chaqimchi_ai/licensing/plans.py` (`PlanBullet.key/params`).
+Test: `tests/test_i18n_surfaces.py`, `test_value.py`, `test_cloud_alerts.py`,
+`test_device_health_alerts.py` (kalitga o'tkazildi).
+Diqqat: `owner_text` endi satr emas, `OwnerMessage` — `.for_lang("uz")`.
+Ichki ops matni (`_problem_text` va h.k.) ataylab katalogsiz.
+
+### 2026-09-08 — F4c: ega paneli matni uch tilda (`1edc5f3`)
+Nima: ega paneli UZ/RU/EN — til tanlagich sahifani yangi tilda ochadi,
+serverdan keladigan matn ham (`X-Lang`) o'sha tilda.
+Nega: rebrend rejasining O-3 (rus tili yo'q) topilmasi; matn TSX
+ichida bo'lgani uchun tarjima qilib bo'lmasdi.
+Qayerda: `frontend/src/*.tsx` (12 fayl), `frontend/src/api.ts`
+(`formatDateUz`, `formatMoney`, `relativeMinutes` katalogdan),
+`i18n/{uz,ru,en}.json`, `frontend/src/i18n/catalogue.generated.ts`.
+Test: `test_connect_ui.py`/`test_events_ui.py` (`key_text`),
+`test_panel_v2.py`, `test_i18n_catalogue.py` (uch tilda kalit tengligi,
+o'rinbosarlar).
+Diqqat: ish parallel agentlar bilan qilindi — har agent kalitlarini
+alohida JSON'ga yozdi, birlashtirish `merge_i18n` skripti bilan
+(to'qnashuv → xato).  Sessiya limiti ikki marta uzdi; qoldiq ish qo'lda
+yakunlandi.  Lokal `data/cloud/cloud.db` da skrinshot uchun yaratilgan
+«Surat do'koni»/`shotadmin` qoldi — jonli emas, faqat lokal.
 
 ### 2026-09-08 — F4a: admin support vositalari React adminga ko'chdi (`dc60e2c`)
 

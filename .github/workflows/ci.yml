@@ -16,11 +16,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install
+      # Node CI uchun SHART, chunki `make test` birinchi navbatda TS
+      # typecheck qiladi.  Usiz ish `frontend/node_modules yo'q` deb
+      # yiqiladi — ya'ni bu qadam ixtiyoriy emas.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install (python)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
-      - name: Ruff
-        run: python -m ruff check enes cloud tests scripts
-      - name: Pytest
-        run: python -m pytest -q
+      # `npm ci` (`npm install` emas): lockfile'ni o'zgartirmaydi.
+      # `package.json` da versiyalar `latest` turgani uchun `install`
+      # CI'ni takrorlanmaydigan qilardi.
+      - name: Install (node)
+        run: cd frontend && npm ci
+      - name: Lint
+        run: make lint
+      # Bitta `make test`: TS typecheck → i18n katalogi → sayt HTML →
+      # pytest.  Ilgari CI faqat ruff va pytest chaqirardi, ya'ni
+      # `i18n/*.json` yoki `cloud/site/*` o'zgarib qayta qurilmasa,
+      # CI yashil bo'lardi-yu panel eski matnni ko'rsatardi.
+      - name: Test
+        run: make test

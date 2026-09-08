@@ -19,6 +19,9 @@ releases/*.exe
 # ham yo'q.  (Linux `enes-sotqin-*.json` esa kuzatiladi: u reliz
 # tarixining bir qismi.)
 releases/enes-windows-*.json
+# O'tish relizi (brend almashuvi) eski nom bilan chiqadi — sabab
+# `docs/RELIZ_VA_OTA.md` da.  Qoida o'zgarmaydi: manifest kuzatilmaydi.
+releases/chaqimchi-windows-0.6.30.json
 
 # Ma'lumotlar va modellar
 data/

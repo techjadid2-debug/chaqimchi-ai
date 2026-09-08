@@ -20,6 +20,21 @@
   fast-forward (148 commit, `101befd` → `a807983`), `origin/main`
   yangilandi.  Shox tarix uchun QOLDIRILDI, keyingi ish `main` da.
 
+- **🔒 CSP MAJBURIY REJIMGA TAYYOR (2026-09-09, `e068cf9`, `701ec62`).**
+  Sahifalarda ijro etiladigan inline `<script>` ham, `onclick="…"`
+  atributi ham QOLMADI: sakkiz sahifadan 691 qator JS
+  `cloud/static/*.js` ga chiqdi, server va katalog qo'yadigan
+  qiymatlar esa `application/json` bloklariga (`#page-text`,
+  `#page-links`, `#site-data`, `#bot-url` — ular ijro etilmaydi,
+  ya'ni `script-src` ularga tegmaydi).  10 ta inline ishlov beruvchi
+  `data-act` + delegatsiyaga o'tdi.  Yagona istisno — panel
+  qobig'idagi tema bootstrap'i (birinchi chizishdan oldin ishlashi
+  SHART), u CSP hashiga olindi.  Siyosat hali `-Report-Only`:
+  cutoverdan keyin bir hafta kuzatilib, sarlavha nomi almashadi.
+  Frontend versiyalari ham qotirildi (`latest` → `^19.2.8` va h.k.).
+  To'liq: **2 157 passed, 1 skipped**; lokal serverda 7 sahifa va
+  8 JS fayl 200, uch tilli data blok tekshirildi.
+
 - **🔧 QADAM 3 — CUTOVERGACHA CLOUD TUZATISHLARI TUGADI (2026-09-09,
   `39352a8`, `e58a974`, `a889175`, `1e027f1`, `83c055c`, `a466e06`).**
   Beshtasi ham cutoverga bog'liq emas, hammasi cutover kuni bitta
@@ -420,17 +435,14 @@ cloud tuzatishlari (Qadam 3) ham tugadi.  **Qoldi — egaga va soakka
 bog'liq:**
 
 **⏭ CUTOVERDAN KEYIN, kichik lekin unutilmasin:**
-- **CSP majburiy rejimga.**  Hozir `-Report-Only`.  Enforce'dan oldin
-  inline `<script>` lar tashqi faylga chiqarilsin: `site{,.ru,.en}.html`
-  (3 ta), `installer.html` (4 ta), `dl`, `connect`, `status`, `pay`,
-  `edu`, `install`.  Bir hafta hisobot rejimida kuzatilgach sarlavha
-  nomi almashadi (`deploy/Caddyfile` va `Caddyfile.enes` — IKKALASI).
+- **CSP majburiy rejimga — kod tomoni TAYYOR.**  Qoladigan ish bitta
+  so'z: `Content-Security-Policy-Report-Only` → `Content-Security-Policy`
+  (`deploy/Caddyfile` va `Caddyfile.enes` — IKKALASI).  Shundan oldin
+  jonli trafikda bir hafta kuzating: brauzer konsolida CSP xabari
+  bo'lmasin.  Yangi inline skript qo'shilsa
+  `tests/test_security_headers.py` darhol aytadi va hashni beradi.
 - **UptimeRobot aynan `/health/deep` ni so'rasin** (`/health` ataylab
   doim 200 — Docker HEALTHCHECK uchun).
-- **`frontend/package.json` da hamma versiya `latest`.**  `npm ci`
-  lockfile'dan o'rnatadi, ya'ni CI takrorlanadigan; lekin kimdir
-  `npm install` qilsa lockfile jimgina siljiydi.  Versiyalarni
-  qotirish kerak.
 - **Telegram Mini App va `X-Frame-Options: DENY`.**  `app.` hosti
   `security` snippetini import qiladi, ya'ni panel iframe ichida
   ochilmaydi.  Telegram Desktop/Android'da Mini App WebView (muammo
@@ -722,6 +734,29 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Sahifadan skriptni ko'chirsangiz, unga qaraydigan TESTLAR ham
+  ko'chadi.**  Inline `<script>` lar tashqi faylga chiqarilganda 11 ta
+  test bir vaqtda qulab tushdi — hammasi HTML matnidan JS bo'lagini
+  qidirardi (`html.index("<script>")`, `"release.version" in html`).
+  Ish o'zi to'g'ri edi, test esa sahifa tuzilishiga bog'lanib qolgan
+  edi.  Yangi test yozganda: mazmun QAYERDA turishiga emas, BOR-YO'QLIGIGA
+  bog'laning — kerak bo'lsa sahifa va uning skriptini birga o'qing.
+
+- **CSP `script-src` inline `onclick=` ATRIBUTINI ham bloklaydi.**
+  Faqat `<script>` bloklarini ko'chirish yetarli emas: HTML
+  atributidagi ishlov beruvchi ham inline skript hisoblanadi va
+  jimgina ishlamay qoladi — brauzer xato ko'rsatmaydi, tugma
+  shunchaki bosilmaydi.  Yechim loyihada allaqachon bor edi:
+  `data-act` + bitta delegatsiya tinglovchisi (`geometry-panel.js`).
+  U qayta chizishdan keyin qayta bog'lashdan ham ozod qiladi.
+
+- **Birinchi chizishdan oldin ishlashi kerak bo'lgan skriptni
+  `defer` qilib bo'lmaydi.**  Tema bootstrap'i tashqi faylga
+  chiqarilsa sahifa bir zumga yorug' ochilib, keyin qorayardi.
+  Bunday skript CSP hashida qoladi; hash `tests/test_security_headers.py`
+  da o'zi hisoblanadi, ya'ni skript o'zgarsa test yangi qiymatni
+  aytadi — qo'lda hisoblash kerak emas.
 
 - **O'QILADIGAN-U QAYTA YOZILMAYDIGAN maydon.**  Egizak tuzoq:
   `production_events.line_name` yozilardi-yu hech qayerda o'qilmasdi;
@@ -1197,6 +1232,28 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-09 — Inline skriptlar tashqi faylga: CSP majburiy rejimga tayyor (`701ec62`, `e068cf9`)
+Nima: sakkiz sahifadan 691 qator JS `cloud/static/*.js` ga chiqdi,
+10 ta `onclick`/`onsubmit` atributi `data-act` delegatsiyasiga o'tdi,
+server qo'yadigan qiymatlar `application/json` bloklariga ko'chdi.
+Endi CSP ni majburiy qilish uchun sarlavha nomini almashtirish yetadi.
+Nega: `script-src` da `'unsafe-inline'` yo'q — majburiy rejimda bu
+sahifalar jimgina ishlamay qolardi va brauzer buni ekranda
+ko'rsatmasdi.  Frontend versiyalari ham qotirildi (`latest`
+takrorlanmaydigan qurilish berardi).
+Qayerda: `cloud/static/{status,dl,connect,install,edu,pay,installer,
+print-button}.js` (yangi), `cloud/site/*.html` (shablonlar),
+`cloud/static/installer.html`, `frontend/owner.html`,
+`frontend/src/api.ts` (`telegramBotUrl`), `cloud/static/site.js`,
+`deploy/Caddyfile{,.enes}` (hash), `frontend/package.json`.
+Test: `test_no_page_carries_an_inline_event_handler`,
+`test_every_inline_script_is_covered_by_a_hash`,
+`test_the_shell_theme_script_is_the_only_hashed_one`,
+`test_the_frontend_pins_its_versions`.  To'liq: 2 157 passed.
+Diqqat: sahifaga qaraydigan 11 test yangi joyga yo'naltirildi —
+tuzoqlar bo'limiga qarang.  Panel qobig'idagi tema skripti ataylab
+inline qoldi (hash bilan): u birinchi chizishdan oldin ishlashi shart.
 
 ### 2026-09-09 — Shox `main` ga, Qadam 3: cutovergacha cloud tuzatishlari (`39352a8`…`a466e06`)
 Nima: rebrend `main` ga qo'yildi va cutoverga bog'liq bo'lmagan

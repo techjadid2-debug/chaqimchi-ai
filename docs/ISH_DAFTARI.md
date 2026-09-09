@@ -9,6 +9,87 @@
 
 ## HOZIRGI HOLAT · 2026-09-09
 
+- **🎬 KLIP TUZATILDI — ildiz sabab ORTIQCHA BITTA `%` edi (2026-09-09,
+  `188a7c5`, 0.6.31).**  Recorder aslida hamma vaqt yozib turgan ekan.
+  `record_command()` ffmpegga `camera-01-%%Y%m%d-%H%M%S.mp4` uzatardi
+  (`SEGMENT_TIME_FORMAT` ning o'zida `%` bor, oldiga yana bittasi
+  qo'yilgan edi); `-strftime 1` da `%%` literal `%` bo'ladi va disk
+  fayli `camera-01-%Y0909-041347.mp4` deb yozilardi — `SEGMENT_PATTERN`
+  uni tanimasdi.  Ya'ni `scan()` **doim bo'sh**: har hodisada "buferda
+  segment yo'q" va `prune()` ham hech narsani o'chirmagan (retention
+  ham, 40 GB kvota ham amalda ishlamagan — bufer mijoz diskida
+  cheksiz o'sgan).  Xato funksiya tug'ilgan commitdan beri bor
+  (`7bfa07c`, 13-avgust): klip **hech qachon** ishlamagan.
+  **Ikkinchi, ustma-ust xato:** ffmpeg `-strftime` da MAHALLIY vaqt
+  yozadi, kod esa nomni UTC deb o'qirdi (`pipeline.py` izohi shu
+  noto'g'ri farazni yozib ham qo'ygan edi) — UTC+5 da har segment besh
+  soat "kelajakda" ko'rinardi.  Birinchisi yolg'iz tuzatilsa klip
+  baribir chiqmasdi.  **Ikkalasi ham lokal ffmpeg 8.1.1 bilan qayta
+  ko'rsatildi**, keyin testga aylantirildi.
+  Yo'l-yo'lakay: xom segment oynasi tayyor klip muddatidan ajratildi
+  (`segment_retention_sec` = 10 daqiqa; ilgari ikkalasi 3 kun edi va
+  tuzatishdan keyin har 30 soniyada ~60 000 fayl `stat()` qilinardi),
+  eski nomli fayllarni `prune()` endi o'zi tozalaydi.
+  ⏳ **Pilotda tasdiqlanadi** (0.6.31 yetgach): `clips.written > 0`,
+  `no_segments` o'smaydi, `disk_free_bytes` o'sib ketadi.
+
+- **🚀 0.6.30 NASHR QILINDI — «O'TISH RELIZI» (2026-09-09, `f6cb8fc`).**
+  Fayl ataylab ESKI nom bilan: `chaqimchi-windows-0.6.30.exe`,
+  `product: "chaqimchi-windows"`.  **Sabab — rebrend avto-yangilanish
+  zanjirini uzgan edi** va buni hech narsa aytmasdi: pilotdagi 0.6.25
+  ning `KNOWN_PRODUCTS` ro'yxati faqat eski nomlarni biladi, jonli
+  cloud esa `releases/` dan faqat `chaqimchi-windows-*` juftini
+  qidiradi — ya'ni yangi nomdagi reliz **hech kimga yetmasdi**.
+  Tekshirildi: manifest 0.6.25 KODINING O'ZI bilan (git'dan olib)
+  ochib ko'rildi — qabul qiladi.  Cloud `0.6.30` beryapti, `dl.` dan
+  fayl ochiladi.  ⚠️ **To'g'rilandi (09-sen):** "keyingi relizlar yangi
+  nomda ketaveradi" degan xulosa ERTA edi.  Qurilma tomoni ochiq
+  (0.6.30 ning `KNOWN_PRODUCTS` da `enes-windows` bor), lekin JONLI
+  cloud hali `c0c8cbb` gacha bo'lgan kodda va `releases/` dan faqat
+  `chaqimchi-windows-*` ni qidiradi.  Ya'ni birinchi `enes-windows-*`
+  reliz faqat **cloud deploy qilingandan keyin** (F7) chiqadi;
+  undagacha har reliz `LEGACY_NAME=1` bilan.
+  ⏳ **Pilotda tekshirilsin** (kodda bor, Windows'da sinalmagan): eski
+  `Software\ChaqimchiAI` o'rnatishi olib tashlandimi; «Chaqimchi AI»
+  vazifalari o'chib «ENES Monitoring» BITTA nusxada yaratildimi;
+  `ProgramData\Chaqimchi` papkasi (juftlik) saqlanganmi; heartbeatda
+  `app_version: 0.6.30` va `stale_chains: {}`.
+
+- **🐘 5B TUGADI — `--workers 2+` yo'li ochiq (2026-09-09, `9e80352`,
+  `6f474bc`, `b847b30`).**  Uchta to'siq ham yopildi:
+  1. **Tezlik cheklovi umumiy bazada** (`rate_limit_windows`, hodisa
+     bazasida — u production'da allaqachon PostgreSQL).  Ilgari hisob
+     xotirada edi va har worker o'zinikini yuritardi, ya'ni chegara
+     worker soniga KO'PAYARDI.  Baza javob bermasa so'rov o'tadi.
+  2. **Fon vazifalari faqat YETAKCHIDA** (`cloud/leader.py`,
+     `cloud_leases`).  `lifespan` har worker'da OLTITA fon vazifasini
+     ochardi — ikki worker bilan mijoz kunlik hisobotni ikki marta
+     olardi.  Kunlik hisobotda belgi endi yuborishdan OLDIN qo'yiladi.
+  3. **Worker soni env'dan** (`ENES_CLOUD_WORKERS`, standart 1) va
+     shartlar bajarilmasa server umuman ko'tarilmaydi
+     (`multi_worker_problems`): boshqaruv bazasi + hodisa bazasi
+     PostgreSQL, `ENES_RATELIMIT_SHARED` o'chirilmagan.
+  **Qoldi:** jonli bazani ko'chirish (`scripts/migrate_control_db.py`,
+  zaxira bilan) va shundan keyin `ENES_CLOUD_WORKERS=2` — ikkalasi ham
+  deploy kuni.  Tartib: `docs/PRODUCTION_RUNBOOK.md` §1.1 va §1.2.
+
+- **✅ SOAK TUGADI — jonli dalil bilan (2026-09-09, o'qish tekshiruvi).**
+  Qurilma **9,1 kun** uzluksiz (`uptime_sec: 787 992`), `stale_chains: {}`,
+  `analysis_errors: 0`, `chain_restarts: 2`, fps 17,0, latency 47 ms,
+  CPU 8,2%, RAM 48%, `outbox_pending/poisoned/queue_errors: 0`.
+  Cloud: hamma konteyner healthy (13 kun), 24 soatda **0 ta** 5xx va
+  **0 ta** ERROR, disk 14%.  Kunlik raqamlar yozilyapti (08-sen:
+  169 kirdi / 155 chiqdi; eshik taqsimoti uch chiziq bo'yicha) va
+  kunlik hisobot har kuni 16:00 UTC da ketyapti.
+  **🎉 720p YOQILGAN KO'RINADI:** `face_crops {written: 25, too_small: 4}`
+  — ilgari `{0, 93}` edi, ya'ni yuz kadri endi **rostdan olinyapti**
+  (3 kunda 7 ta `face_captured` hodisasi).  Demografiya esa hali 3,1%
+  (`40/1288`) — o'rtachani `camera-02` (352×288) tushiryapti.
+  **Ochiqligicha qolgani:** klip yozilmaydi (`clips {written: 0,
+  no_segments: 36}`, `clips_last_error: "buferda segment yo'q"`) va
+  bulutdagi kamera probe'i hech qachon ishlamagan
+  (`site_cameras.width/height` NULL, `probe_status: pending`).
+
 - **🚫 DEPLOY TAQIQI — `main` cutover kunigacha SERVERGA CHIQMAYDI.**
   Jonli server hali eski kodda.  Compose fayldagi `${ENES_*}`
   almashtirishlari serverdagi env yangilanmaguncha BO'SH qoladi va
@@ -472,6 +553,24 @@
 
 ## KEYINGI ISH
 
+**BUGUNGI HOLAT (2026-09-09, kechqurun).** 5B tugadi, F8 o'tish relizi
+chiqdi.  Egadan hech narsa kelmagani uchun F7 cutover hali yopiq va
+**deploy taqiqi kuchda**.  Navbatdagi ish, tartib bilan:
+
+1. **Pilotni kuzatish** — 0.6.30 yetdimi (heartbeat `app_version`),
+   yuqoridagi to'rt bandli Windows ro'yxati.  Yiqilsa qurilma 30
+   daqiqada o'zi qaytadi, lekin sabab qo'lda o'qilishi kerak.
+2. **Klip masalasi — KOD TOMONI TUGADI** (`188a7c5`, 0.6.31).  Sabab
+   ortiqcha `%` va vaqt mintaqasi edi (tepaga qarang), tuzatildi va
+   testlar bilan qulflandi.  **Qolgani:** 0.6.31 ni chiqarish —
+   `LEGACY_NAME=1` bilan (cloud hali eski kodda) — va pilotda
+   `clips.written > 0` ni ko'rish.
+3. **Cutovergacha qilinadigan cloud ishi qolmadi** — 5A ning davomi
+   (`cloud/finance.py`, demo muddati qarori) yoki 5C (kamera qo'yish
+   standarti, partnyor komissiyasi) tanlanadi.
+4. **Egadan kutilmoqda:** `enes.uz` DNS, bot @username, Payme/Click,
+   yuridik nom/rekvizit, NS SVG.  Bularsiz F7 boshlanmaydi.
+
 **REBREND (2026-09-09).** To'liq holat + xatolar + tartib:
 `~/.claude/plans/loyihada-nimalar-qilishimiz-kerak-*.md` (avvalgisi:
 `loyiha-bo-yicha-nimalar-qilishimiz-*.md`).  F0–F6 va F9 tugadi
@@ -693,14 +792,17 @@ formuladan (`face_min_bbox_px`, `face_min_bbox_ratio`).
 **Lekin 720p ga o'tmaguncha davomat baribir ishlamaydi** — 360p da
 formula halol javob beradi: 0.76, ya'ni amalda imkonsiz.
 
-**⚠ KLIP YOZILMAYDI — SABAB ANIQLANDI (2026-08-31): recorder segment
-yozmaydi**
+**✅ YOPILDI (2026-09-09, `188a7c5`) — KLIP: sabab fayl NOMIDA edi**
 
-Jonli heartbeat: `clips {written: 0, missing: 6, no_segments: 6,
-cut_failed: 0}` va `clips_last_error: "buferda segment yo'q"`.  Ya'ni
-ffmpeg kesa olmagani emas — **kesish uchun material yo'q**.  Keyingi
-qadam qurilma tomonda: recorder nega buferga yozmayotgani
-(`camera-01` da `record_url_set: true`).
+Tashxis ikki marta noto'g'ri yo'lga burilgan: avval "manzil berilmagan"
+(0.6.22 gacha), keyin "recorder buferga yozmayapti" (31-avgust).
+Ikkalasi ham qurilmani ayblardi, aslida recorder yozib turgan —
+**yozgan faylining nomini o'quvchi tanimasdi**: patternda ortiqcha `%`
+(`%%` → literal `%`), ustiga nomdagi vaqt mahalliy, o'qish esa UTC
+bo'lgan.  Ikkalasi ham lokal ffmpeg bilan ko'rsatildi va testga
+aylantirildi.  Saboq: "recorder yozmayapti" degan xulosa **bufer
+papkasiga qaralmasdan** qo'yilgan edi — bir marta `dir data\buffer`
+qilinsa sabab birinchi kuni ko'rinardi.
 
 Eski tashxis (0.6.22 gacha) — «manzil berilmagan» — noto'g'ri edi:
 `clips {written: 0, missing: 2}`, camera-01 da `record_url_set: true`.
@@ -780,6 +882,32 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **f-string ichidagi `%` formatli patternga YANA `%` qo'shmang.**
+  `f"{cam}-%{SEGMENT_TIME_FORMAT}.mp4"` ffmpegga `%%Y…` beradi,
+  `-strftime 1` esa `%%` ni literal `%` deb yozadi: fayl
+  `camera-01-%Y0909-041347.mp4` bo'lib chiqadi.  Nosozlik jimgina —
+  hisoblagich faqat "buferda segment yo'q" deydi va barmoq recorder'ga
+  ko'rsatiladi.  Ikki oy shu yo'l bilan yo'qotildi.
+
+- **`ffmpeg -strftime 1` MAHALLIY vaqt yozadi, UTC emas.**  Kod nomni
+  UTC deb o'qisa, UTC+5 mashinada har segment besh soat "kelajakda"
+  ko'rinadi va hodisa oynasiga hech qachon tushmaydi.  Bu yerda
+  `STORE_TZ` ham ishlatilmaydi: u «do'kon devoridagi soat», ffmpeg esa
+  MASHINA zonasida yozadi (sinov do'konining kompyuteri bir vaqtlar
+  UTC+3 da turgan edi).
+
+- **`prune()` faqat O'ZI taniydigan nomni o'chiradi.**  Yozuvchi bilan
+  o'quvchi nomda kelishmay qolsa fayllar **abadiy** qoladi: na
+  retention, na kvota ularni ko'radi va papka disk to'lguncha o'sadi.
+  Tozalash ro'yxatida "tanimadim" degan holat ham bo'lsin
+  (`RingBuffer._purge_unknown`).
+
+- **Testda fayl nomini QO'LDA yasamang.**  `test_retail_ringbuffer.py`
+  segment nomini o'zi to'g'ri formatda yozardi, ya'ni yozuvchini
+  (`record_command`) umuman tekshirmasdi va ikkala xato ham 14 ta
+  yashil test ostida yashirinib yotdi.  Nom endi yozuvchining o'z
+  patternidan olinadi — yozuvchi va o'quvchi bitta joyda uchrashadi.
 
 - **Boshqa dialektga ko'chirishda REJA emas, HAQIQIY baza o'rgatadi.**
   `store.py` ni PostgreSQL'ga tayyorlashda hamma dialekt farqi
@@ -1307,6 +1435,29 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-09 — Klip nihoyat yoziladi: ortiqcha `%` va mahalliy vaqt (`188a7c5`)
+Nima: `enes/retail/ringbuffer.py` da ikkita ustma-ust xato tuzatildi va
+yozuvchi↔o'quvchi shartnomasi testga olindi.
+Nega: jonli do'konda klip **hech qachon** yozilmagan
+(`clips {written: 0, no_segments: 36}`), sabab esa ikki marta noto'g'ri
+joyda qidirilgan.
+Sabab: (1) `record_command()` patternida ortiqcha `%` — ffmpeg
+`%%` ni literal `%` deb yozgan va fayl `camera-01-%Y0909-041347.mp4`
+bo'lgan, `SEGMENT_PATTERN` esa uni tanimagan → `scan()` doim bo'sh, ya'ni
+klip ham, tozalash ham ishlamagan; (2) `-strftime` mahalliy vaqt yozadi,
+`_parse_stamp` esa nomni UTC deb o'qigan → UTC+5 da segment besh soat
+"kelajakda".  Ikkalasi lokal ffmpeg 8.1.1 bilan qayta ko'rsatildi.
+Qo'shimcha: `segment_retention_sec` (10 daqiqa) xom segment oynasini
+tayyor klip muddatidan ajratdi — aks holda tuzatishdan keyin bufer
+40 GB gacha o'sib, har 30 soniyada ~60 000 fayl `stat()` qilinardi;
+`prune()` eski nomli fayllarni o'zi tozalaydi; `.gitignore` dagi reliz
+qoidasi brenddan mustaqil bo'ldi (pinlangan nom `test_brand.py` ni
+yiqitib turgan edi).
+Tekshirildi: yangi testlar eski kodda **12 ta yiqiladi**, tuzatilganda
+20/20 o'tadi; to'liq to'plam yashil.  Haqiqiy ffmpeg bilan yozib-o'qish
+testi qo'shildi (ffmpeg bo'lmasa `skip`).
+Qoldi: 0.6.31 relizi (`LEGACY_NAME=1`) va pilotda `clips.written > 0`.
 
 ### 2026-09-09 — 5B: boshqaruv bazasi PostgreSQL'da (`0045f4a`…`7a30b77`)
 Nima: `cloud/store.py` va `cloud/payments/store.py` ikki dialektli

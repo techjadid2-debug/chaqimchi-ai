@@ -212,9 +212,18 @@ class RetailSettings(BaseModel):
     clip_dir: str = "data/clips"
     buffer_dir: str = "data/buffer"
     segment_sec: int = Field(default=4, ge=1, le=60)
-    #: Hodisa buferi: 3 kun / 40 GB (`sotqin_profile`).  Hajm barcha kameralar
-    #: orasida teng bo'linadi.
+    #: Tayyor klip va rasm diskda shuncha turadi: 3 kun (`sotqin_profile`).
     buffer_retention_sec: int = Field(default=3 * 24 * 3600, ge=60)
+    #: XOM segmentlar (ring buffer) oynasi — tayyor klipdan BOSHQA muddat.
+    #:
+    #: Nega alohida: klip hodisadan keyin ko'pi bilan ~1 daqiqada kesiladi
+    #: (`post_sec` 20 s + `housekeeping_sec` 30 s), zanjir qayta ko'tarilsa
+    #: esa kutayotgan ro'yxat xotirada yo'qoladi — ya'ni uzun oyna klipni
+    #: QUTQARMAYDI, faqat mijozning diskini yeydi.  Ilgari bu yerda ham
+    #: 3 kun turardi: 4 soniyalik segmentda kameraga 64 800 fayl, ularning
+    #: har biri har 30 soniyada `stat()` qilinardi.  10 daqiqa = ~150 fayl
+    #: va ~300 MB, ya'ni o'n barobar zaxira.
+    segment_retention_sec: int = Field(default=600, ge=60)
     buffer_max_bytes: int = Field(default=40 * 1024**3, ge=100 * 1024**2)
     pre_sec: float = Field(default=10.0, ge=0, le=300)
     post_sec: float = Field(default=20.0, ge=0, le=300)

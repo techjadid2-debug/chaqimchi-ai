@@ -18,10 +18,11 @@ releases/*.exe
 # ta'riflaydigan `.exe` git'da yo'q — ya'ni yolg'iz manifestning ma'nosi
 # ham yo'q.  (Linux `enes-sotqin-*.json` esa kuzatiladi: u reliz
 # tarixining bir qismi.)
-releases/enes-windows-*.json
-# O'tish relizi (brend almashuvi) eski nom bilan chiqadi — sabab
-# `docs/RELIZ_VA_OTA.md` da.  Qoida o'zgarmaydi: manifest kuzatilmaydi.
-releases/chaqimchi-windows-0.6.30.json
+# Qoida ataylab BREND NOMISIZ: o'tish relizlari eski prefiks bilan chiqadi
+# (`docs/RELIZ_VA_OTA.md`) va har reliz uchun bu yerga yangi qator qo'shish
+# kerak bo'lardi.  Bir marta 0.6.30 shunday pinlangan edi va u brend
+# qo'riqchisini (`tests/test_brand.py`) yiqitdi.
+releases/*-windows-*.json
 
 # Ma'lumotlar va modellar
 data/

@@ -459,7 +459,9 @@ def build_runner(
                 camera.camera_id,
                 buffer_dir,
                 segment_sec=cfg.segment_sec,
-                retention_sec=cfg.buffer_retention_sec,
+                # Xom segment oynasi — tayyor klip muddatidan BOSHQA
+                # (`settings.py: segment_retention_sec` izohi).
+                retention_sec=cfg.segment_retention_sec,
                 max_bytes=per_camera,
             )
             if camera.record_url

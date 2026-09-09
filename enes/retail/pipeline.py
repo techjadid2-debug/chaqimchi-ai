@@ -245,8 +245,12 @@ class RetailPipeline:
         self.post_sec = float(post_sec)
         #: `clock` — model qancha ishlaganini o'lchaydi (monoton bo'lishi shart).
         self._clock = clock
-        #: `wall_clock` — klip qidiriladigan haqiqiy vaqt; segment fayllari
-        #: UTC nomi bilan yoziladi, shuning uchun bu monoton soat emas.
+        #: `wall_clock` — klip qidiriladigan haqiqiy vaqt (epoch), monoton
+        #: soat emas.  Ilgari shu yerda "segment fayllari UTC nomi bilan
+        #: yoziladi" deb yozilgan edi va bu NOTO'G'RI faraz: ffmpeg
+        #: `-strftime` da MAHALLIY vaqt yozadi.  Faraz hech qachon
+        #: tekshirilmagani uchun UTC+5 mashinasida har segment besh soat
+        #: "kelajakda" ko'rinardi (`ringbuffer._parse_stamp` izohi).
         self._wall_clock = wall_clock
         #: Qoida jadvallari do'konning **mahalliy** vaqtiga qaraydi ("09:00 dan
         #: 21:00 gacha").

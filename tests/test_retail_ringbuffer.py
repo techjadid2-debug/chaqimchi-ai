@@ -1,25 +1,45 @@
 """Hodisa klipi uchun ring buffer.
 
-Kamera va ffmpeg binary'siz sinaladi: segment fayllari qo'lda yaratiladi,
+Kamera va ffmpeg binary'siz sinaladi: segment fayllari soxta yaratiladi,
 ffmpeg chaqiruvi esa soxta runner bilan ushlanadi.
+
+DIQQAT — bu faylning eng muhim qoidasi.  Segment nomini **qo'lda**
+yasamang: `make_segment` uni `record_command()` bergan patterndan
+oladi.  Ilgari nom qo'lda va UTC bilan yasalardi, ya'ni testlar
+yozuvchini umuman ko'rmasdi — natijada ffmpegga ortiqcha `%` bilan
+pattern berilayotgani (fayl `camera-01-%Y0909-041347.mp4` deb
+yozilardi) va nomdagi vaqt UTC emas, MAHALLIY ekani ikki oy davomida
+sezilmadi.  Klip esa jonli do'konda hech qachon chiqmadi.
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from enes.retail.ringbuffer import RingBuffer
+from enes.retail.ringbuffer import SEGMENT_PATTERN, RingBuffer, _parse_stamp
 
 BASE = datetime(2026, 8, 13, 14, 0, 0, tzinfo=timezone.utc).timestamp()
 
 
+def segment_name(buffer: RingBuffer, moment: float) -> str:
+    """Nom AYNAN yozuvchi yasagandek — ffmpeg patternini `strftime` dan o'tkazib.
+
+    Nega shunday: nomni bu yerda qo'lda yozsak, test yozuvchining o'zini
+    hech qachon tekshirmaydi va pattern buzilsa ham yashil qolaveradi.
+    `time.localtime` — chunki ffmpeg `-strftime` da mahalliy vaqt yozadi.
+    """
+    pattern = Path(buffer.record_command("rtsp://misol/1")[-1]).name
+    return time.strftime(pattern, time.localtime(moment))
+
+
 def make_segment(buffer: RingBuffer, offset_sec: int, *, size: int = 1024) -> Path:
-    stamp = datetime.fromtimestamp(BASE + offset_sec, tz=timezone.utc).strftime("%Y%m%d-%H%M%S")
-    path = buffer.directory / f"{buffer.camera_id}-{stamp}.mp4"
+    path = buffer.directory / segment_name(buffer, BASE + offset_sec)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"x" * size)
     return path
@@ -44,6 +64,32 @@ def test_recording_never_decodes_the_stream(tmp_path: Path) -> None:
     # UDP paket yo'qotishi buzuq segment beradi.
     assert command[command.index("-rtsp_transport") + 1] == "tcp"
     assert command[command.index("-segment_time") + 1] == "4"
+
+
+def test_the_writer_and_the_reader_agree_on_the_file_name(tmp_path: Path) -> None:
+    """Butun nosozlikning qulfi: ffmpeg yozadigan nomni O'QUVCHI tanisin.
+
+    Aynan shu tekshiruv bo'lmagani uchun ikkita xato ikki oy yashirindi:
+    patternda ortiqcha `%` (`%%` → literal `%`) va nomdagi vaqt UTC deb
+    o'qilishi.  Test mashina zonasidan mustaqil — u konkret sonni emas,
+    "yozib-o'qish aylanasi yopiqmi" xossasini tekshiradi.
+    """
+    buffer = buffer_at(tmp_path)
+    moment = time.time()
+
+    name = Path(buffer.record_command("rtsp://misol/1")[-1]).name
+    written = time.strftime(name, time.localtime(moment))
+    match = SEGMENT_PATTERN.match(written)
+
+    assert match is not None, f"o'quvchi tanimadi: {written}"
+    assert "%" not in written, f"pattern strftime dan o'tmadi: {written}"
+    assert abs(_parse_stamp(match.group("stamp")) - moment) <= 1
+
+
+def test_a_camera_id_with_a_percent_sign_is_rejected(tmp_path: Path) -> None:
+    """Butun nom `strftime` dan o'tadi — id dagi `%` nomni jimgina buzardi."""
+    with pytest.raises(ValueError):
+        RingBuffer("camera-%d", tmp_path)
 
 
 # ── Segmentlarni topish ──────────────────────────────────────────────────
@@ -86,6 +132,50 @@ def test_window_must_be_forward_in_time(tmp_path: Path) -> None:
         buffer_at(tmp_path).segments_for(BASE + 10, BASE)
 
 
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="tzset faqat POSIX'da")
+def test_segments_are_found_when_the_machine_is_not_on_utc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Do'kon kompyuteri UTC+5 da — jonli nosozlikning aynan sharoiti.
+
+    Eski kod nomni UTC deb o'qirdi, ffmpeg esa mahalliy vaqt bilan
+    yozadi: har segment besh soat "kelajakda" ko'rinib, hodisa oynasiga
+    hech qachon tushmasdi va hisoblagich "buferda segment yo'q" derdi.
+    """
+    monkeypatch.setenv("TZ", "Asia/Tashkent")
+    time.tzset()
+    try:
+        buffer = buffer_at(tmp_path, retention_sec=600)
+        moment = time.time()
+        path = buffer.directory / segment_name(buffer, moment)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+
+        selected = buffer.segments_for(moment - 10, moment + 20)
+
+        assert [item.path for item in selected] == [path]
+        # Nom UTC deb o'qilganda xato aynan +5 soat bo'lardi.
+        assert abs(selected[0].started_at - moment) < 60
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+
+
+def test_a_segment_from_the_future_falls_back_to_the_file_time(tmp_path: Path) -> None:
+    """Nom bilan soat yana ajralib qolsa, zanjir to'xtamasin — log aytsin."""
+    buffer = buffer_at(tmp_path, retention_sec=600)
+    now = time.time()
+    path = buffer.directory / segment_name(buffer, now + 5 * 3600)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x")
+
+    segments = buffer.scan(now=now)
+
+    assert len(segments) == 1
+    # Fayl vaqti bo'yicha ishlanadi, ya'ni klip baribir kesiladi.
+    assert abs(segments[0].started_at - (now - buffer.segment_sec)) < 5
+
+
 # ── Tozalash ─────────────────────────────────────────────────────────────
 
 
@@ -109,6 +199,35 @@ def test_quota_deletes_the_oldest_first(tmp_path: Path) -> None:
 
     remaining = [segment.started_at - BASE for segment in buffer.scan()]
     assert remaining == [8, 12, 16]  # 5 tadan 3 tasi qoldi (3 KB kvota)
+
+
+def test_names_nobody_recognises_are_cleaned_up(tmp_path: Path) -> None:
+    """0.6.31 gacha yozilgan `%Y…` fayllarni yangi kod ko'rmaydi.
+
+    Ularni hech kim o'chirmasa papka disk to'lguncha o'saveradi — pilotda
+    aynan shunday bo'lgan.  Qo'shni kamera va hali yozilayotgan fayl esa
+    tegilmasin.
+    """
+    buffer = buffer_at(tmp_path, retention_sec=600)
+    buffer.directory.mkdir(parents=True, exist_ok=True)
+    eski = buffer.directory / "camera-01-%Y0909-041347.mp4"  # pilotdagi aynan nom
+    qoshni = buffer.directory / "camera-02-%Y0909-041347.mp4"
+    begona = buffer.directory / "camera-01-eslatma.txt"
+    yangi = buffer.directory / "camera-01-%Y0909-041351.mp4"
+    for path in (eski, qoshni, begona, yangi):
+        path.write_bytes(b"x")
+    eskirgan = time.time() - 3600
+    for path in (eski, qoshni, begona):
+        import os
+
+        os.utime(path, (eskirgan, eskirgan))
+
+    buffer.prune()
+
+    assert not eski.exists()
+    assert qoshni.exists(), "qo'shni kameraning fayliga tegilmasin"
+    assert begona.exists(), "video bo'lmagan faylga tegilmasin"
+    assert yangi.exists(), "hali yozilayotgan fayl tortib olinmasin"
 
 
 def test_pruning_an_empty_directory_is_safe(tmp_path: Path) -> None:
@@ -178,6 +297,54 @@ def test_invalid_configuration_is_rejected(tmp_path: Path) -> None:
         RingBuffer("c", tmp_path, segment_sec=0)
     with pytest.raises(ValueError):
         RingBuffer("c", tmp_path, segment_sec=10, retention_sec=5)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg o'rnatilmagan")
+def test_a_real_ffmpeg_writes_names_the_scanner_can_read(tmp_path: Path) -> None:
+    """Yagona test HAQIQIY ffmpeg bilan — soxta runner buni ko'ra olmaydi.
+
+    Kamera kerak emas: kirish sifatida oldindan tayyorlangan fayl beriladi,
+    tekshirilayotgani esa NOM — u `-strftime` va pattern bilan hal bo'ladi.
+    Aynan shu yo'l bilan `%%` xatosi productionda tug'ilgan edi.
+    """
+    manba = tmp_path / "manba.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=160x120:rate=10",
+            "-t",
+            "3",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            str(manba),
+        ],
+        check=True,
+        timeout=60,
+    )
+
+    buffer = buffer_at(tmp_path, segment_sec=1, retention_sec=600)
+    command = buffer.record_command(str(manba))
+    # RTSP transportini olib tashlaymiz — fayl kirishi uni tushunmaydi.
+    # Qolgan hammasi (pattern, `-strftime`, `-c copy`) production'dagidek.
+    transport = command.index("-rtsp_transport")
+    command = command[:transport] + command[transport + 2 :]
+    subprocess.run(command, check=True, timeout=60)
+
+    segments = buffer.scan()
+    assert segments, (
+        f"ffmpeg yozgan nomni scan() tanimadi: {sorted(p.name for p in buffer.directory.iterdir())}"
+    )
+    assert abs(segments[-1].started_at - time.time()) < 120
 
 
 def test_bundled_ffmpeg_is_preferred(tmp_path, monkeypatch) -> None:

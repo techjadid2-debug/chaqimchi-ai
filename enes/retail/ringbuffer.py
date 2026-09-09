@@ -9,11 +9,14 @@ Agar main streamni dekodlab, qayta kodlaganimizda bitta kamera ham N100 ni
 to'ldirib qo'yardi va AI uchun quvvat qolmasdi.
 
 To'liq video arxiv NVR da qoladi.  Bu buffer faqat hodisa atrofidagi 30
-soniya uchun: `data/buffer` da 3 kun / 40 GB (`sotqin_profile`).
+soniya uchun kerak, shuning uchun oynasi ham qisqa: `data/buffer` da
+10 daqiqa (`settings.py: segment_retention_sec`), hajm chegarasi esa
+xavfsizlik shifti sifatida qoladi.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
@@ -26,6 +29,12 @@ from typing import Callable, List, Optional, Sequence
 #: tuzatishni talab qiladi — bitta `missing` ostida yashirilmasin.
 NO_SEGMENTS = "no_segments"
 CUT_FAILED = "cut_failed"
+
+#: Nomi tanilmaydigan fayl shuncha vaqt yangilanmasa "hech kim yozmayapti"
+#: degani.  Segment har 4 soniyada yopiladi, 5 daqiqa esa yangilanish
+#: paytida bir necha soniya tirik qoladigan eski ffmpeg jarayonini
+#: tirikdan ajratish uchun yetarli zaxira.
+UNKNOWN_SEGMENT_IDLE_SEC = 300
 
 
 @dataclass(frozen=True)
@@ -64,12 +73,23 @@ def default_ffmpeg_binary() -> str:
 SEGMENT_PATTERN = re.compile(r"^(?P<camera>.+)-(?P<stamp>\d{8}-\d{6})\.(?P<ext>mp4|ts)$")
 SEGMENT_TIME_FORMAT = "%Y%m%d-%H%M%S"
 
+logger = logging.getLogger(__name__)
+
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
 def _parse_stamp(stamp: str) -> float:
-    moment = datetime.strptime(stamp, SEGMENT_TIME_FORMAT).replace(tzinfo=timezone.utc)
-    return moment.timestamp()
+    """Nomdagi vaqt — **mahalliy** zonada, UTC da emas.
+
+    ffmpeg segment muxeri `-strftime` da `localtime` ishlatadi.  Nomni UTC
+    deb o'qish do'kon kompyuterida (UTC+5) har bir segmentni besh soat
+    "kelajakka" surardi va u hodisa oynasi bilan hech qachon kesishmasdi.
+    Naive vaqtni `timestamp()` mashinaning o'z zonasida talqin qiladi,
+    ya'ni yozuvchi (ffmpeg) va o'quvchi (biz) bitta qoidaga bo'ysunadi.
+    O'zbekistonda yozgi vaqt yo'q (`enes/limits.py`), demak talqin bir
+    ma'noli.
+    """
+    return datetime.strptime(stamp, SEGMENT_TIME_FORMAT).timestamp()
 
 
 @dataclass(frozen=True)
@@ -104,6 +124,10 @@ class RingBuffer:
             raise ValueError("segment_sec kamida 1 soniya bo'lishi kerak")
         if retention_sec < segment_sec:
             raise ValueError("retention_sec segment_sec dan kichik bo'lmasin")
+        # Butun fayl nomi `strftime` dan o'tadi: kamera nomidagi `%` jimgina
+        # boshqa matnga aylanib, yozuvchi bilan o'quvchini yana ajratardi.
+        if "%" in camera_id:
+            raise ValueError("camera_id da `%` bo'lmasin — nom strftime dan o'tadi")
         self.camera_id = camera_id
         self.directory = Path(directory)
         self.segment_sec = int(segment_sec)
@@ -112,6 +136,11 @@ class RingBuffer:
         self.container = container
         self.ffmpeg_binary = ffmpeg_binary or default_ffmpeg_binary()
         self.runner = runner
+        #: Ogohlantirishlar bir martadan yozilsin — `prune()` har 30
+        #: soniyada chaqiriladi va takrorlangan qator logni o'qib
+        #: bo'lmaydigan qilardi.
+        self._clock_warned = False
+        self._unknown_warned = False
 
     # ── Yozish ───────────────────────────────────────────────────────────
 
@@ -122,7 +151,14 @@ class RingBuffer:
         chunki UDP paket yo'qotishi buzuq segment beradi.
         """
         self.directory.mkdir(parents=True, exist_ok=True)
-        pattern = str(self.directory / f"{self.camera_id}-%{SEGMENT_TIME_FORMAT}.{self.container}")
+        # DIQQAT: `SEGMENT_TIME_FORMAT` ning O'ZIDA `%` bor.  Ilgari bu yerda
+        # oldiga yana bitta `%` qo'yilgan edi va ffmpeg `%%` ni literal `%`
+        # deb yozardi: fayl `camera-01-%Y0909-041347.mp4` bo'lib chiqardi,
+        # `SEGMENT_PATTERN` esa uni tanimasdi.  Natija — 2026-08-13 dan beri
+        # HAR hodisada "buferda segment yo'q" va hech qachon o'chmaydigan
+        # bufer.  Yozuvchi bilan o'quvchi endi bitta testda uchrashadi
+        # (`tests/test_retail_ringbuffer.py`).
+        pattern = str(self.directory / f"{self.camera_id}-{SEGMENT_TIME_FORMAT}.{self.container}")
         return [
             self.ffmpeg_binary,
             "-nostdin",
@@ -149,25 +185,43 @@ class RingBuffer:
 
     # ── Segmentlar ───────────────────────────────────────────────────────
 
-    def scan(self) -> List[Segment]:
+    def scan(self, *, now: Optional[float] = None) -> List[Segment]:
         """Diskdagi segmentlar, vaqt bo'yicha tartiblangan."""
         if not self.directory.is_dir():
             return []
+        now = datetime.now(timezone.utc).timestamp() if now is None else now
         segments: List[Segment] = []
         for path in self.directory.iterdir():
             match = SEGMENT_PATTERN.match(path.name)
             if not match or match.group("camera") != self.camera_id:
                 continue
             try:
+                stat = path.stat()
                 started = _parse_stamp(match.group("stamp"))
-            except ValueError:
+            except (OSError, ValueError):
+                # Fayl endigina o'chirilgan yoki nomdagi sana yaroqsiz.
                 continue
+            if started > now + self.segment_sec:
+                # Kelajakdagi segment = nom bilan soat boshqa zonada.
+                # Aynan shu holat klipni ikki yil emas, ikki oy yashirgan
+                # edi: hisoblagich "buferda segment yo'q" derdi va sabab
+                # hech qayerda ko'rinmasdi.  Endi log aytadi, ish esa
+                # to'xtamaydi — vaqt fayl o'zgargan paytdan olinadi.
+                if not self._clock_warned:
+                    logger.warning(
+                        "[%s] segment nomi kelajakni ko'rsatyapti (%s) — "
+                        "fayl vaqti bo'yicha ishlanadi",
+                        self.camera_id,
+                        path.name,
+                    )
+                    self._clock_warned = True
+                started = stat.st_mtime - self.segment_sec
             segments.append(
                 Segment(
                     path=path,
                     started_at=started,
                     duration_sec=float(self.segment_sec),
-                    size_bytes=path.stat().st_size,
+                    size_bytes=stat.st_size,
                 )
             )
         return sorted(segments, key=lambda item: item.started_at)
@@ -180,8 +234,8 @@ class RingBuffer:
         Eng eskisi birinchi ketadi.
         """
         now = datetime.now(timezone.utc).timestamp() if now is None else now
-        segments = self.scan()
-        removed: List[Path] = []
+        segments = self.scan(now=now)
+        removed: List[Path] = self._purge_unknown(now)
 
         cutoff = now - self.retention_sec
         keep: List[Segment] = []
@@ -200,6 +254,53 @@ class RingBuffer:
             removed.append(segment.path)
             total -= segment.size_bytes
             index += 1
+        return removed
+
+    def _purge_unknown(self, now: float) -> List[Path]:
+        """Nomi tanilmaydigan, endi hech kim yozmayotgan fayllarni o'chiradi.
+
+        Nega kerak.  `prune()` faqat O'ZI taniydigan nomni o'chiradi, ya'ni
+        yozuvchi bilan o'quvchi nomda kelishmay qolsa fayllar **abadiy**
+        qoladi.  0.6.31 gacha ffmpegga ortiqcha `%` bilan pattern berilardi
+        va do'kon kompyuterida `camera-01-%Y0909-041347.mp4` ko'rinishidagi
+        fayllar oyiga o'nlab gigabayt bo'lib to'planardi — ularni na
+        retention, na kvota ko'rardi.  Bir martalik migratsiya o'rniga
+        shu yerda turibdi: keyingi safar shartnoma buzilsa ham papka
+        o'zini tozalaydi.
+
+        Uch shart ham majburiy: faqat o'z kamerasining prefiksi (bitta
+        papkani hamma kamera bo'lishadi), faqat video kengaytmasi
+        (papkada begona fayl bo'lishi mumkin) va faqat `SEGMENT_PATTERN`
+        ga tushmagani (to'g'ri nomlilar oddiy yo'ldan o'tsin).
+        """
+        if not self.directory.is_dir():
+            return []
+        removed: List[Path] = []
+        cutoff = now - UNKNOWN_SEGMENT_IDLE_SEC
+        prefix = f"{self.camera_id}-"
+        for path in self.directory.iterdir():
+            name = path.name
+            if not name.startswith(prefix) or path.suffix not in (".mp4", ".ts"):
+                continue
+            if SEGMENT_PATTERN.match(name):
+                continue
+            try:
+                if path.stat().st_mtime >= cutoff:
+                    continue  # hali yozilyapti bo'lishi mumkin
+                path.unlink()
+            except OSError:
+                # Windows'da band fayl o'chmaydi — keyingi tsiklda qayta
+                # uriniladi, butun tozalash to'xtab qolmasin.
+                continue
+            removed.append(path)
+        if removed and not self._unknown_warned:
+            logger.warning(
+                "[%s] eski nomdagi %d segment tozalandi (birinchisi: %s)",
+                self.camera_id,
+                len(removed),
+                removed[0].name,
+            )
+            self._unknown_warned = True
         return removed
 
     # ── Klip ─────────────────────────────────────────────────────────────

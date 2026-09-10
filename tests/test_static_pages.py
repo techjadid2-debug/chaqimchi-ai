@@ -917,3 +917,22 @@ def test_the_status_page_asks_the_honest_health_check() -> None:
 
     assert 'fetch("/health/deep"' in source
     assert 'fetch("/health"' not in source, "yengil tekshiruv nosozlikni ko'rmaydi"
+
+
+def test_the_cloud_image_carries_the_chart_fonts() -> None:
+    """`cloud/assets/fonts/` konteynerga kirsin — usiz Telegram grafigi chizilmaydi.
+
+    Shrift `COPY cloud ./cloud` bilan ketadi; `.dockerignore` uni istisno
+    qilib qo'ysa rasm chizish `OSError` bilan yiqilardi (matn baribir
+    ketadi, lekin grafik jimgina yo'qolardi).  i18n katalogi bilan bo'lgan
+    xato sinfi (2026-09-08) shu yerda ham qulflanadi.
+    """
+    root = STATIC.parents[1]
+    fonts = root / "cloud" / "assets" / "fonts"
+    assert (fonts / "DejaVuSans.ttf").exists() and (fonts / "DejaVuSans-Bold.ttf").exists()
+    assert (fonts / "LICENSE_DEJAVU.txt").exists(), "shrift litsenziyasi repoda tursin"
+    dockerfile = (root / "Dockerfile.cloud").read_text(encoding="utf-8")
+    assert "COPY cloud ./cloud" in dockerfile
+    ignored = [line.strip() for line in (root / ".dockerignore").read_text(encoding="utf-8").splitlines()]
+    assert not any(line.startswith("cloud/assets") or line.endswith(".ttf") for line in ignored)
+    assert "Pillow" in (root / "requirements-cloud.txt").read_text(encoding="utf-8")

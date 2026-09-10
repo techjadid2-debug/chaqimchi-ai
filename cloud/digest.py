@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from cloud import botfmt, i18n, trust_score, value
+from cloud import botfmt, chartimg, i18n, trust_score, value
 from cloud.event_store import EventStore
 from cloud.i18n import tg
 from cloud.owner_auth import BIOMETRIC_ROLES
@@ -504,10 +504,14 @@ class DailyDigestService:
         panel_url: str = "",
         renewal_invoice: Optional[Callable[[str, str], str]] = None,
         is_leader: Optional[Callable[[], bool]] = None,
+        photo_sender: Optional[Callable[..., Awaitable[None]]] = None,
     ) -> None:
         self.events = events
         self.sites = sites
         self.sender = sender
+        # Rasmli xabar (`sendPhoto`).  Berilmasa hisobot avvalgidek faqat
+        # matn — testlar va rasm chizilmaydigan muhit uchun.
+        self.photo_sender = photo_sender
         self.hour = hour
         self.panel_url = panel_url.rstrip("/")
         # Halqa har worker'da yuradi, ish esa faqat YETAKCHIDA bajariladi
@@ -520,7 +524,13 @@ class DailyDigestService:
         self.renewal_invoice = renewal_invoice
 
     async def _deliver(
-        self, site_id: str, members: List[Dict[str, Any]], build: TextBuilder
+        self,
+        site_id: str,
+        members: List[Dict[str, Any]],
+        build: TextBuilder,
+        *,
+        image: Optional[Callable[[str], bytes]] = None,
+        caption: Optional[TextBuilder] = None,
     ) -> int:
         """Har a'zoga O'Z tilida yuboradi.
 
@@ -528,10 +538,18 @@ class DailyDigestService:
         keshlanadi: uchta o'zbek a'zoli do'kon uchun `build` uch marta
         emas, bir marta chaqiriladi.  Til a'zo qatoridan (`language`)
         keladi — so'rov kontekstidan emas, chunki bu fon vazifasi.
+
+        `image` berilsa (va rasm yuboruvchi sozlangan bo'lsa) avval
+        rasm + qisqa izoh ketadi, keyin to'liq matn.  Tartib ataylab:
+        Telegram bildirishnomasida rasm ko'rinadi, matn esa 4096 belgigacha
+        — rasm izohining 1024 chegarasiga sig'maydi.  Rasm chizilmasa yoki
+        yuborilmasa matn BARIBIR ketadi: grafik qo'shimcha, hisobot emas.
         """
         sent = 0
         texts: Dict[str, str] = {}
         markups: Dict[str, Dict[str, Any]] = {}
+        images: Dict[str, Optional[bytes]] = {}
+        captions: Dict[str, str] = {}
         for member in members:
             # A'zo hisobotni o'chirib qo'ygan bo'lishi mumkin (panel
             # sozlamasi) — hurmat qilamiz.
@@ -542,8 +560,27 @@ class DailyDigestService:
                 texts[lang] = build(lang)
                 if self.panel_url:
                     markups[lang] = botfmt.panel_button(self.panel_url, lang)
+            if image is not None and self.photo_sender is not None and lang not in images:
+                try:
+                    # Chizish sinxron CPU ishi — halqani to'xtatmasin.
+                    images[lang] = await asyncio.to_thread(image, lang)
+                    captions[lang] = (caption(lang) if caption else "")[:1024]
+                except Exception:  # noqa: BLE001 — rasm xabarni yiqitmasin
+                    logger.warning("Hisobot grafigi chizilmadi: site=%s", site_id, exc_info=True)
+                    images[lang] = None
             text = texts[lang]
             markup = markups.get(lang)
+            photo = images.get(lang)
+            if photo and self.photo_sender is not None:
+                try:
+                    await self.photo_sender(str(member["telegram_id"]), photo, captions.get(lang, ""))
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Hisobot grafigi yuborilmadi: site=%s member=%s",
+                        site_id,
+                        member["id"],
+                        exc_info=True,
+                    )
             try:
                 if markup:
                     await self.sender(str(member["telegram_id"]), text, reply_markup=markup)
@@ -690,7 +727,20 @@ class DailyDigestService:
             # yo'qotadi, kechikkan xabar esa yo'q.
             if not self.events.mark_digest_sent(site_id, digest_date):
                 continue
-            site_sent = await self._deliver(site_id, members, build)
+
+            def image(lang: str, *, site=site, report=report) -> bytes:
+                return chartimg.daily_png(report, lang, site_name=str(site["name"]))
+
+            def caption(lang: str, *, site=site, report=report) -> str:
+                return tg(
+                    lang,
+                    "digest.daily.caption",
+                    site=botfmt.header(str(site["name"])),
+                    day=botfmt.day_title(digest_date + "T12:00:00+05:00", lang) or digest_date,
+                    count=botfmt.number(int((report.get("traffic") or {}).get("entered") or 0), lang),
+                )
+
+            site_sent = await self._deliver(site_id, members, build, image=image, caption=caption)
             if site_sent:
                 sent += site_sent
             else:
@@ -832,7 +882,19 @@ class DailyDigestService:
 
             if not self.events.mark_digest_sent(site_id, marker):
                 continue
-            site_sent = await self._deliver(site_id, members, build)
+
+            def image(lang: str, *, site=site, trend=trend) -> bytes:
+                return chartimg.weekly_png(trend, lang, site_name=str(site["name"]))
+
+            def caption(lang: str, *, site=site, trend=trend) -> str:
+                return tg(
+                    lang,
+                    "digest.weekly.caption",
+                    site=botfmt.header(str(site["name"])),
+                    count=botfmt.number(int(trend.get("total") or 0), lang),
+                )
+
+            site_sent = await self._deliver(site_id, members, build, image=image, caption=caption)
             if site_sent:
                 sent += site_sent
             else:

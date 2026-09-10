@@ -1401,3 +1401,71 @@ def test_the_daily_message_counts_night_events_on_one_line(tmp_path: Path) -> No
         ],
     )
     assert "🌙 Tunda: 2 ta hodisa" in busy
+
+
+# ── Rasmli hisobot ───────────────────────────────────────────────────────
+
+
+def _digest_service_with_photos(store, sent, photos, *, photo_sender=None):
+    from cloud.digest import DailyDigestService
+
+    async def sender(chat_id, text, *, reply_markup=None):
+        sent.append((chat_id, text))
+
+    async def default_photo_sender(chat_id, photo, caption, *, reply_markup=None):
+        photos.append((chat_id, photo, caption))
+
+    return DailyDigestService(
+        store,
+        lambda: [{"id": "site-1", "name": "Oq Saroy"}],
+        sender,
+        photo_sender=photo_sender or default_photo_sender,
+    )
+
+
+def test_the_daily_digest_sends_the_chart_first_then_the_text(tmp_path: Path) -> None:
+    """Rasm + qisqa izoh, keyin to'liq matn (ega qarori, 2026-09-10).
+
+    Izoh 1024 belgidan oshmaydi (Telegram `sendPhoto` chegarasi), matn
+    esa avvalgidek to'liq.  Rasm tilga qarab BIR marta chiziladi.
+    """
+    import asyncio
+
+    store = store_with([crossing(12, "in")], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    store.add_member("site-1", "222", role="manager")
+    sent: List = []
+    photos: List = []
+    service = _digest_service_with_photos(store, sent, photos)
+
+    asyncio.run(service.check_once(_tashkent_evening()))
+
+    assert [chat for chat, *_ in photos] == ["111", "222"]
+    assert [chat for chat, _ in sent] == ["111", "222"]
+    assert photos[0][1].startswith(b"\x89PNG")
+    assert photos[0][1] is photos[1][1], "bir til — bir rasm"
+    assert len(photos[0][2]) <= 1024 and "Oq Saroy" in photos[0][2]
+    assert "Kirdi: <b>1</b> kishi" in sent[0][1]
+
+
+def test_a_broken_chart_does_not_stop_the_text(tmp_path: Path, monkeypatch) -> None:
+    """Grafik qo'shimcha, hisobot emas: chizish yiqilsa matn baribir ketadi."""
+    import asyncio
+
+    from cloud import chartimg
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("shrift yo'q")
+
+    monkeypatch.setattr(chartimg, "daily_png", boom)
+    store = store_with([crossing(12, "in")], tmp_path)
+    store.add_member("site-1", "111", role="owner")
+    sent: List = []
+    photos: List = []
+    service = _digest_service_with_photos(store, sent, photos)
+
+    asyncio.run(service.check_once(_tashkent_evening()))
+
+    assert photos == []
+    assert len(sent) == 1 and "Kirdi: <b>1</b> kishi" in sent[0][1]
+    assert store.digest_was_sent("site-1", DAY.isoformat())

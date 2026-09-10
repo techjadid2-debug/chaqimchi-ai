@@ -46,6 +46,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from cloud import (
     botfmt,
+    chartimg,
     config_health,
     faces,
     i18n,
@@ -1575,6 +1576,18 @@ async def _notify_alert_once(site_id: str, events: List[EdgeEvent]) -> None:
             if attempt + 1 < attempts:
                 await asyncio.sleep(2)
 
+    # Tungi hodisa kadri ustiga vaqt va kamera nomi yoziladi: ega
+    # bildirishnomada rasmning o'zidan «qachon, qayerda» ni ko'rsin.
+    # Kunduzgi kadr o'zgarmaydi.
+    if photo is not None and candidate is not None and (candidate.metadata or {}).get("night"):
+        camera_name = botfmt.camera_name(candidate.camera_id, labels)
+        photo = await asyncio.to_thread(
+            chartimg.annotate_snapshot,
+            photo,
+            botfmt.clock(candidate.occurred_at) or "",
+            camera_name,
+        )
+
     base = urls.app_url().rstrip("/")
     # «Ovoz bering» tugmasi FAQAT o'g'rilikka o'xshash hodisalarda.
     #
@@ -1988,6 +2001,7 @@ async def lifespan(app: FastAPI):
         panel_url=urls.app_url(),
         renewal_invoice=_renewal_pay_url,
         is_leader=_is_leader,
+        photo_sender=_send_owner_photo,
     )
     _digest_task = asyncio.create_task(_digest.run())
     _maintenance_task = asyncio.create_task(_maintenance_loop())
@@ -10055,6 +10069,9 @@ async def owner_telegram_webhook(
             return {"ok": True}
         await _bot_send_camera_photos(telegram_id, members, lang)
     elif command == "/hisobot":
+        # Har so'rovda grafik chiziladi (CPU) — /kamera kabi cheklanadi.
+        if not ratelimit.limiter().hit("tg-hisobot", telegram_id, limit=5, window_sec=600):
+            return {"ok": True}
         await _bot_send_report(telegram_id, members, base, lang)
     elif command == "/chek":
         if not ratelimit.limiter().hit("tg-chek", telegram_id, limit=10, window_sec=600):
@@ -10194,6 +10211,23 @@ async def _bot_send_report(
             expected=detail["cameras_expected"],
             connection=detail["connection"],
         )
+        # Avval grafik + qisqa izoh, keyin to'liq matn — kunlik hisobot
+        # bilan bir tartib (`digest._deliver`).  Rasm chiqmasa matn baribir.
+        try:
+            photo = await asyncio.to_thread(
+                chartimg.daily_png, report, lang, site_name=str(site["name"])
+            )
+            caption = tg(
+                lang,
+                "digest.daily.caption",
+                site=botfmt.header(str(site["name"])),
+                day=botfmt.day_title(str(report["date"]) + "T12:00:00+05:00", lang)
+                or str(report["date"]),
+                count=botfmt.number(int(traffic.get("entered") or 0), lang),
+            )
+            await _send_owner_photo(telegram_id, photo, caption[:1024])
+        except Exception:  # noqa: BLE001 — grafik qo'shimcha, hisobot emas
+            logger.warning("/hisobot grafigi ketmadi: %s", site_id, exc_info=True)
         await _send_owner_telegram(
             telegram_id, text_out, reply_markup=botfmt.panel_button(urls.app_url() or base, lang)
         )

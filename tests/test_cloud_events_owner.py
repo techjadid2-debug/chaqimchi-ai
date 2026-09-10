@@ -2912,3 +2912,84 @@ def test_dashboard_tells_the_owner_whether_night_watch_is_armed(production_clien
 
     after = client.get("/api/v1/owner/dashboard", headers=owner).json()["night_watch"]
     assert after == {"hours_set": True, "open_from": "09:00", "open_to": "22:00"}
+
+
+def test_hisobot_sends_the_chart_before_the_text(bot_member_client, monkeypatch) -> None:
+    """/hisobot — avval grafik rasmi, keyin to'liq matn (kunlik hisobot tartibi)."""
+    import cloud.main as main
+
+    client, messages, _site, headers = bot_member_client
+    photos = []
+
+    async def fake_photo(chat_id, photo, caption, *, reply_markup=None):
+        photos.append((chat_id, photo, caption))
+
+    monkeypatch.setattr(main, "_send_owner_photo", fake_photo)
+    client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={"events": [{"event_id": "evt-h-1", "event_type": "line_crossed", "camera_id": "camera-01", "direction": "in"}]},
+    )
+    messages.clear()
+
+    assert _webhook(client, "/hisobot").status_code == 200
+
+    assert len(photos) == 1 and photos[0][1].startswith(b"\x89PNG")
+    assert len(photos[0][2]) <= 1024
+    assert len(messages) == 1 and "Kirdi: <b>1</b> kishi" in messages[0][1]
+
+
+def test_night_alert_photo_is_annotated(production_client, monkeypatch) -> None:
+    """Tungi hodisa kadri ustiga vaqt va kamera nomi yoziladi; kunduzgi — yo'q.
+
+    Naqsh `test_alert_goes_out_with_the_snapshot_photo` bilan bir xil:
+    batch paytida rasm hali kelmagan, snapshot yetgach alert oqimi
+    qo'lda chaqiriladi.  Ikki hodisa ikki kamerada — bitta kamera bo'lsa
+    ikkinchisini tormoz (`AlertThrottle`, 600 s) yutib yuborardi.
+    """
+    import asyncio
+    from io import BytesIO
+
+    from PIL import Image
+
+    import cloud.main as main
+    from enes.event_models import EdgeEvent
+
+    client, _messages = production_client
+    site, _device, headers = _provision(client)
+    _member(client, site["site_id"], "5476200077")
+    photos = []
+
+    async def fake_photo(chat_id, photo, caption, *, reply_markup=None):
+        photos.append(photo)
+
+    monkeypatch.setattr(main, "_send_owner_photo", fake_photo)
+    buffer = BytesIO()
+    Image.new("RGB", (320, 180), "#222222").save(buffer, format="JPEG")
+    original = buffer.getvalue()
+
+    for event_id, camera, night in (("evt-night-1", "camera-01", True), ("evt-day-1", "camera-02", False)):
+        event = EdgeEvent(
+            event_id=event_id,
+            event_type="zone_entered",
+            severity="critical",
+            camera_id=camera,
+            has_snapshot=True,
+            metadata={"night": night, "alert": True},
+        )
+        client.post(
+            "/api/v1/edge/events/batch",
+            headers=headers,
+            json={"events": [event.model_dump(mode="json")]},
+        )
+        client.put(
+            f"/api/v1/edge/events/{event_id}/snapshot",
+            headers={**headers, "Content-Type": "image/jpeg"},
+            content=original,
+        )
+        asyncio.run(main._notify_alert(site["site_id"], [event]))
+
+    assert len(photos) == 2, "ikkala hodisa ham rasm bilan ketadi"
+    night_photo, day_photo = photos
+    assert night_photo != original and night_photo.startswith(b"\xff\xd8")
+    assert day_photo == original

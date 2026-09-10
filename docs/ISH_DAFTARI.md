@@ -7,31 +7,33 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-09-09
+## HOZIRGI HOLAT · 2026-09-10
 
-- **🔴 PILOT 15 SOAT TO'XTAB QOLDI — ildiz sabab: ma'lumot papkasiga
-  KO'PRIK YO'Q edi (2026-09-09, jonli tekshiruv).**  Avto-yangilanish
-  ISHLADI (0.6.25 → 0.6.30), lekin yangi kod `%PROGRAMDATA%\ENES` ni
-  ko'rdi va u bo'sh edi: sozlama, kamera manzillari, chizmalar, outbox
-  va bufer eski `%PROGRAMDATA%\Chaqimchi` da qolgan.  Dastur o'zini
-  YANGI kompyuter deb tanishtirdi.  Jonli dalil, soat bo'yicha:
-  `01:50:47` oxirgi heartbeat (`0.6.25`, uptime 9,27 kun) →
-  `01:52:42` `pending_devices` ga yangi qator (`DESKTOP-GVOE93B`,
-  `product_name: "ENES Windows"`, `app_version: 0.6.30`,
-  `verify_code: AB4B70`) → o'shandan beri har 21 soniyada
-  `POST /api/v1/public/device-handover`, **2 516 marta**, javob `pending`
-  → eski 0.6.25 zanjiri yetim jarayon sifatida `12:49` gacha hodisa
-  yubordi, keyin u ham to'xtadi.
-  **Signalizatsiya ISHLADI:** `05:05:54` da «jim» ogohlantirishi ketgan
-  (`alert_state.connection = silent`) — javob bo'lmagan.
-  **Ko'prik `enes/paths.py` da bor edi, `enes/local/paths.py` da esa
-  YO'Q**, hujjatlar (CLAUDE.md, NSI izohi, daftar) borligini aytardi.
-  Tuzatildi va qulflandi (`enes/local/paths.py`,
-  `tests/test_local_paths.py`, 0.6.32).
-  ⏳ **Do'kon kompyuterida qilinadi:** `C:\ProgramData\Chaqimchi` →
-  `C:\ProgramData\ENES` NUSXA (ko'chirish emas), keyin «ENES Monitoring»
-  vazifasini qayta ishga tushirish.  Tekshirish: heartbeat qaytadi,
-  `site_id` o'sha eski (`32f65557-89f`).
+- **🔴 PILOT HAMON O'LIK — 33 SOAT (jonli tekshiruv, 2026-09-10 02:58 UTC).**
+  Oxirgi heartbeat `2026-09-09T01:51:09Z`, `app_version 0.6.25` — ya'ni
+  ma'lumot papkasi do'kon kompyuterida HALI nusxalanmagan.
+  `pending_devices` da `DESKTOP-GVOE93B` (`ENES Windows`, `0.6.30`,
+  `verify_code AB4B70`) turibdi va qator bugun `02:29:34` da yangilangan,
+  ya'ni **0.6.30 jarayoni tirik va hamon `device-handover` so'rayapti**.
+  Do'kon xuddi shu muddat davomida ko'r.
+
+- **🔴 KOD BILAN TASDIQLANDI: PILOT O'ZI YANGILANA OLMAYDI.**  Ilgari
+  daftar «papkani nusxalash» va «0.6.32 ni chiqarish» ni ikki mustaqil
+  ish deb yozardi — ular aslida qat'iy tartibda.  Zanjir:
+  `enes/local/updater.py:79` `_cloud()` → `config_store.read_raw()` →
+  `enes/local/paths.py: config_path()` → bo'sh `%PROGRAMDATA%\ENES` →
+  `config.yaml` yo'q → `device_token` yo'q →
+  `UpdateError("Cloudga ulanmagan — yangilanish tekshirilmaydi")`.
+  **Yangilagichning O'ZI o'lgan**, ya'ni nosozlikni masofadan tuzatib
+  bo'lmaydi: reliz qancha chiqarilmasin, do'kon kompyuteriga tushmaydi.
+  ⏳ **Do'kon kompyuterida (yagona yo'l):** «ENES Monitoring» vazifasini
+  to'xtatish → `C:\ProgramData\Chaqimchi` ni `C:\ProgramData\ENES` ga
+  NUSXA (ko'chirish emas) → vazifani qayta ishga tushirish.  Shundan
+  keyin qurilma 0.6.30 da tirilib, 15 daqiqada 0.6.32 ni o'zi oladi.
+  ⚠️ **Panelda ulanish kodini TASDIQLAMANG.**  U yangi papkaga
+  `config.yaml` yozadi va shundan keyin 0.6.32 ko'prigi (`_pick()`
+  belgisi aynan `config.yaml`) eski papkani hech qachon tanlamaydi —
+  outbox navbati va bufer abadiy yetim qoladi.
 
 - **🔴 BIOMETRIK QO'RIQCHI TO'RT MARSHRUTDA YO'Q (topildi, tuzatilmagan).**
   `require_biometric_access()` 8 marshrutda bor, lekin
@@ -589,33 +591,47 @@
 
 ## KEYINGI ISH
 
-**BUGUNGI HOLAT (2026-09-09, kechqurun).** 5B tugadi, 0.6.31 nashr
-qilindi (jonli tekshirildi: `dl.` va cloud uni beryapti).  **Egadan DNS
-va bot @username KELDI**, Payme/Click, yuridik nom/STIR va NS SVG hali
-yo'q — ya'ni F7 cutover yopiq va **deploy taqiqi kuchda**.  Navbatdagi
-ish, tartib bilan:
+**BUGUNGI HOLAT (2026-09-10).** 0.6.32 uch commitga bo'linib commit
+qilindi (`fb42f06`, `23b4cad`, `413aef0`) va nashr etildi
+(`chaqimchi-windows-0.6.32`, `LEGACY_NAME=1`).  **Egadan DNS va bot
+@username KELDI**, Payme/Click, yuridik nom/STIR va NS SVG hali yo'q —
+ya'ni F7 cutover yopiq va **deploy taqiqi kuchda**.  Navbatdagi ish,
+tartib bilan:
 
-1. **🔴 PILOTNI TIKLASH — do'kon kompyuterida, bugun.**
-   `C:\ProgramData\Chaqimchi` → `C:\ProgramData\ENES` NUSXA, keyin
-   «ENES Monitoring» vazifasini qayta ishga tushirish.  Sabab tepada.
-   Zaxira yo'l: ega panelda ulanish kodini tasdiqlaydi — qurilma mavjud
-   saytga (`32f65557-89f`) biriktiriladi va kamera/chizmalar bulutdagi
-   zaxiradan qaytadi (`config_revision 13`), lekin outbox navbati va
-   bufer eski papkada qoladi.
-2. **0.6.32 ni chiqarish** — ma'lumot papkasi ko'prigi (kod tayyor,
-   `LEGACY_NAME=1` bilan).  Shundan keyin pilotda `clips.written > 0`
-   ni ko'rish (klip 0.6.31 da tuzatilgan, lekin pilot 0.6.30 da qolgan).
+1. **🔴 PILOTNI TIKLASH — do'kon kompyuterida, YAGONA YO'L.**
+   «ENES Monitoring» vazifasini to'xtatish → `C:\ProgramData\Chaqimchi`
+   ni `C:\ProgramData\ENES` ga NUSXA (ko'chirish emas) → vazifani qayta
+   ishga tushirish.  Bu ish **masofadan bajarilmaydi**: yangilagich
+   sozlamadan `device_token` o'qiydi, sozlama esa aynan yo'qolgan
+   papkada (sabab tepada).  Shundan keyin qurilma 0.6.30 da tirilib,
+   15 daqiqada 0.6.32 ni o'zi oladi.
+   ⚠️ **Zaxira yo'lini — panelda ulanish kodini tasdiqlashni —
+   TANLAMANG:** u yangi papkaga `config.yaml` yozadi va ko'prik eski
+   papkani boshqa hech qachon tanlamaydi; outbox navbati va bufer
+   abadiy yetim qoladi.
+2. **✅ 0.6.32 NASHR QILINDI (2026-09-10)** — papka ko'prigi, capture
+   rate 1-bosqichi va 0.6.31 dagi klip tuzatmasi ichida.  Pilotga
+   1-qadamdan KEYIN yetadi.  Yetgach tekshirish: `app_version 0.6.32`,
+   `clips.written > 0` va `clips_last_error` bo'sh, `no_segments`
+   o'smasligi, `disk_free_bytes` o'sib ketishi (ikki oy tozalanmagan
+   bufer), `seen.total` — `SEEN_LINE_BAND` ni kalibrlash uchun
+   (`seen ≈ entered × 1,5…4`).
 3. **A1 «avtomatik konversiya» (capture rate)** — reja va bosqichlar:
    `~/.claude/plans/ok-nimalar-qoldi-tugatishimiz-*.md`.
    **1-bosqich BAJARILDI** (0.6.32): maxraj qurilmada sanaladi va
    heartbeatda ko'rinadi.  Qolgani:
    - **2-bosqich (qurilma reliz):** `people_seen` hodisasi
-     `capture.enabled` darvozasi ortida — `enes/event_models.py`,
-     `retail_event_filter`, `_seen_flush_loop` da emit,
+     `capture.enabled` darvozasi ortida — `enes/event_models.py:24-45`,
+     `retail_event_filter` (`enes/retail/service.py:260-322`, oxiri
+     `return False` — shartsiz hodisa jimgina yeyiladi),
+     `_seen_flush_loop` da emit (`:778-794`; u `pipeline` ni chetlab
+     `OutboxSink` ga yozadi, ya'ni `event_filter` avtomatik
+     QO'LLANMAYDI — qo'lda chaqirilsin),
      `local/cloud_config.py: apply()["capture"]` (**unutilsa bayroq
      hech qachon kuchga kirmaydi**).
    - **3-bosqich (deploy kutadi):** cloud `config["capture"]`,
-     `REPORT_EVENT_TYPES`, `TIMELINE_HIDDEN_TYPES`,
+     `REPORT_EVENT_TYPES`, `TIMELINE_HIDDEN_TYPES` (busiz `people_seen`
+     har 10 daqiqada lentaga chiqadi),
      `_retail_report_from_events` → `traffic.seen`,
      `_owner_report_dict` → `capture`.
    - **4-bosqich (deploy kutadi):** `digest.py` 🚶 qatori (faqat foiz
@@ -627,7 +643,7 @@ ish, tartib bilan:
    ni o'qisin, `auth/verify` ga IP cheklovi, bundle eskirish qulfi,
    domen/bot almashuvi (DNS va @username keldi — faqat botning aniq
    nomi kerak).
-4. **Egadan kutilmoqda:** `enes.uz` DNS, bot @username, Payme/Click,
+5. **Egadan kutilmoqda:** `enes.uz` DNS, bot @username, Payme/Click,
    yuridik nom/rekvizit, NS SVG.  Bularsiz F7 boshlanmaydi.
 
 **REBREND (2026-09-09).** To'liq holat + xatolar + tartib:
@@ -949,6 +965,16 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Ma'lumot papkasi yo'qolsa YANGILAGICHNING O'ZI ham o'ladi — nosozlik
+  masofadan tuzatilmaydi.**  Bu papka ko'prigi tuzog'ining ikkinchi
+  qavati va u 2026-09-10 da kod bo'yicha tasdiqlandi:
+  `updater.py:79` `_cloud()` sozlamadan `device_token` o'qiydi, sozlama
+  esa aynan yo'qolgan papkada.  Ya'ni «tuzatmani reliz bilan yuboramiz»
+  degan reja ishlamaydi — tuzatma yetib boradigan kanal ham o'sha
+  papkaga bog'liq.  Saboq: sozlama papkasiga tegadigan o'zgarish
+  **o'zini o'zi tiklay olmaydigan** sinfga kiradi; bunday o'zgarishda
+  ko'prik relizdan OLDIN yozilishi shart, keyin emas.
 
 - **Ma'lumot papkasi nomi o'zgarsa dastur o'zini YANGI kompyuter deb
   tanishtiradi.**  Rebrendda `%PROGRAMDATA%\Chaqimchi` →
@@ -1533,6 +1559,25 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-10 — 0.6.32 commit va reliz; pilot hamon qo'l kutmoqda
+Nima: kechagi ish (papka ko'prigi + capture rate 1-bosqichi) uch commitga
+bo'lindi va 0.6.32 relizi chiqarildi (`fb42f06`, `23b4cad`, `413aef0`).
+Nega uch commit: ikki mustaqil o'zgarish bitta commitga qorishmasin —
+biri nosozlik tuzatmasi (papka ko'prigi), ikkinchisi yangi funksiya
+(maxraj).  `tests/test_local_paths.py` kuzatilmagan fayl bo'lib turgan
+edi: `git add` unutilsa butun tuzatma qulfsiz ketardi.
+Tekshirildi: `make test` to'liq yashil (2 250 test, TS typecheck va
+i18n/sayt `--check` bilan birga), `ruff` toza.
+Jonli tekshiruv: oxirgi heartbeat hamon `2026-09-09T01:51:09Z` /
+`0.6.25`, `pending_devices` dagi qator bugun `02:29:34` da yangilangan —
+qurilma tirik, lekin juftlanmagan.  Ya'ni papka do'kon kompyuterida
+nusxalanmagan.
+Yangi bilim: pilotni MASOFADAN tiklab bo'lmaydi — yangilagich sozlamadan
+`device_token` o'qiydi va sozlama yo'qolgan papkada (tuzoqlarga qo'shildi).
+Qoldi: do'kon kompyuterida papka nusxasi (ega qiladi), keyin pilotda
+`clips.written > 0`, `disk_free_bytes` o'sishi va `seen.total` bo'yicha
+`SEEN_LINE_BAND` kalibrlash.
 
 ### 2026-09-09 — A1 capture rate, 1-bosqich: maxraj qurilmada sanaladi (0.6.32)
 Nima: kirish kamerasida eshikka YAQINLASHGAN noyob odamlar sanaladi va

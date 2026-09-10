@@ -9,6 +9,40 @@
 
 ## HOZIRGI HOLAT · 2026-09-09
 
+- **🔴 PILOT 15 SOAT TO'XTAB QOLDI — ildiz sabab: ma'lumot papkasiga
+  KO'PRIK YO'Q edi (2026-09-09, jonli tekshiruv).**  Avto-yangilanish
+  ISHLADI (0.6.25 → 0.6.30), lekin yangi kod `%PROGRAMDATA%\ENES` ni
+  ko'rdi va u bo'sh edi: sozlama, kamera manzillari, chizmalar, outbox
+  va bufer eski `%PROGRAMDATA%\Chaqimchi` da qolgan.  Dastur o'zini
+  YANGI kompyuter deb tanishtirdi.  Jonli dalil, soat bo'yicha:
+  `01:50:47` oxirgi heartbeat (`0.6.25`, uptime 9,27 kun) →
+  `01:52:42` `pending_devices` ga yangi qator (`DESKTOP-GVOE93B`,
+  `product_name: "ENES Windows"`, `app_version: 0.6.30`,
+  `verify_code: AB4B70`) → o'shandan beri har 21 soniyada
+  `POST /api/v1/public/device-handover`, **2 516 marta**, javob `pending`
+  → eski 0.6.25 zanjiri yetim jarayon sifatida `12:49` gacha hodisa
+  yubordi, keyin u ham to'xtadi.
+  **Signalizatsiya ISHLADI:** `05:05:54` da «jim» ogohlantirishi ketgan
+  (`alert_state.connection = silent`) — javob bo'lmagan.
+  **Ko'prik `enes/paths.py` da bor edi, `enes/local/paths.py` da esa
+  YO'Q**, hujjatlar (CLAUDE.md, NSI izohi, daftar) borligini aytardi.
+  Tuzatildi va qulflandi (`enes/local/paths.py`,
+  `tests/test_local_paths.py`, 0.6.32).
+  ⏳ **Do'kon kompyuterida qilinadi:** `C:\ProgramData\Chaqimchi` →
+  `C:\ProgramData\ENES` NUSXA (ko'chirish emas), keyin «ENES Monitoring»
+  vazifasini qayta ishga tushirish.  Tekshirish: heartbeat qaytadi,
+  `site_id` o'sha eski (`32f65557-89f`).
+
+- **🔴 BIOMETRIK QO'RIQCHI TO'RT MARSHRUTDA YO'Q (topildi, tuzatilmagan).**
+  `require_biometric_access()` 8 marshrutda bor, lekin
+  `GET /api/v1/owner/faces` (`cloud/main.py:9106`),
+  `GET /api/v1/owner/events` (`:7224`, `?event_type=employee_seen` →
+  `person_id`/`person_name`), `GET /api/v1/owner/attendance{,.csv}`
+  (`:8850`, `:8861`) va `GET /api/v1/owner/employees` (`:8623`) faqat
+  `require_attendance()` bilan — ya'ni **`manager` roli ko'radi**.
+  Audit KRITIK-4 yopgan sinfning aynan o'zi, boshqa URL orqali.
+  Faqat cloud, cutover deployi bilan chiqadi.
+
 - **🎬 KLIP TUZATILDI — ildiz sabab ORTIQCHA BITTA `%` edi (2026-09-09,
   `188a7c5`, 0.6.31).**  Recorder aslida hamma vaqt yozib turgan ekan.
   `record_command()` ffmpegga `camera-01-%%Y%m%d-%H%M%S.mp4` uzatardi
@@ -208,7 +242,9 @@
   kompyuteridagi `-m chaqimchi_ai.local.updater` vazifasi uchun,
   payloadga kiradi), `enes/envcompat.py` (eski env nomlari yangisiga
   ko'chiriladi), cloud eski `chaqimchi-windows-*` relizlarni ham
-  tarqatadi, `paths.py` eski ma'lumot papkasini ishlatadi, `autostart`
+  tarqatadi, `paths.py` eski ma'lumot papkasini ishlatadi (2026-09-09
+  gacha bu FAQAT `enes/paths.py` da rost edi — `enes/local/paths.py` da
+  ko'prik yo'q edi va pilot shu sababdan to'xtadi), `autostart`
   va NSI eski vazifa/registrni topib o'chiradi, `sign_release` eski kalit
   yo'lini ham ko'radi.  Hujjatlar (CLAUDE.md, docs/*, README) yangi
   nomda; ISH_DAFTARI/AUDIT_TAHLIL/STRATEGIK tarix sifatida eski nomni
@@ -553,21 +589,44 @@
 
 ## KEYINGI ISH
 
-**BUGUNGI HOLAT (2026-09-09, kechqurun).** 5B tugadi, F8 o'tish relizi
-chiqdi.  Egadan hech narsa kelmagani uchun F7 cutover hali yopiq va
-**deploy taqiqi kuchda**.  Navbatdagi ish, tartib bilan:
+**BUGUNGI HOLAT (2026-09-09, kechqurun).** 5B tugadi, 0.6.31 nashr
+qilindi (jonli tekshirildi: `dl.` va cloud uni beryapti).  **Egadan DNS
+va bot @username KELDI**, Payme/Click, yuridik nom/STIR va NS SVG hali
+yo'q — ya'ni F7 cutover yopiq va **deploy taqiqi kuchda**.  Navbatdagi
+ish, tartib bilan:
 
-1. **Pilotni kuzatish** — 0.6.30 yetdimi (heartbeat `app_version`),
-   yuqoridagi to'rt bandli Windows ro'yxati.  Yiqilsa qurilma 30
-   daqiqada o'zi qaytadi, lekin sabab qo'lda o'qilishi kerak.
-2. **Klip masalasi — KOD TOMONI TUGADI** (`188a7c5`, 0.6.31).  Sabab
-   ortiqcha `%` va vaqt mintaqasi edi (tepaga qarang), tuzatildi va
-   testlar bilan qulflandi.  **Qolgani:** 0.6.31 ni chiqarish —
-   `LEGACY_NAME=1` bilan (cloud hali eski kodda) — va pilotda
-   `clips.written > 0` ni ko'rish.
-3. **Cutovergacha qilinadigan cloud ishi qolmadi** — 5A ning davomi
-   (`cloud/finance.py`, demo muddati qarori) yoki 5C (kamera qo'yish
-   standarti, partnyor komissiyasi) tanlanadi.
+1. **🔴 PILOTNI TIKLASH — do'kon kompyuterida, bugun.**
+   `C:\ProgramData\Chaqimchi` → `C:\ProgramData\ENES` NUSXA, keyin
+   «ENES Monitoring» vazifasini qayta ishga tushirish.  Sabab tepada.
+   Zaxira yo'l: ega panelda ulanish kodini tasdiqlaydi — qurilma mavjud
+   saytga (`32f65557-89f`) biriktiriladi va kamera/chizmalar bulutdagi
+   zaxiradan qaytadi (`config_revision 13`), lekin outbox navbati va
+   bufer eski papkada qoladi.
+2. **0.6.32 ni chiqarish** — ma'lumot papkasi ko'prigi (kod tayyor,
+   `LEGACY_NAME=1` bilan).  Shundan keyin pilotda `clips.written > 0`
+   ni ko'rish (klip 0.6.31 da tuzatilgan, lekin pilot 0.6.30 da qolgan).
+3. **A1 «avtomatik konversiya» (capture rate)** — reja va bosqichlar:
+   `~/.claude/plans/ok-nimalar-qoldi-tugatishimiz-*.md`.
+   **1-bosqich BAJARILDI** (0.6.32): maxraj qurilmada sanaladi va
+   heartbeatda ko'rinadi.  Qolgani:
+   - **2-bosqich (qurilma reliz):** `people_seen` hodisasi
+     `capture.enabled` darvozasi ortida — `enes/event_models.py`,
+     `retail_event_filter`, `_seen_flush_loop` da emit,
+     `local/cloud_config.py: apply()["capture"]` (**unutilsa bayroq
+     hech qachon kuchga kirmaydi**).
+   - **3-bosqich (deploy kutadi):** cloud `config["capture"]`,
+     `REPORT_EVENT_TYPES`, `TIMELINE_HIDDEN_TYPES`,
+     `_retail_report_from_events` → `traffic.seen`,
+     `_owner_report_dict` → `capture`.
+   - **4-bosqich (deploy kutadi):** `digest.py` 🚶 qatori (faqat foiz
+     bo'lsa — sokin kun xabari qisqa qolsin), `Numbers.tsx`, i18n.
+   - **5-bosqich (cutover kuni):** `cloud_feature_revision` ni
+     ko'tarish — busiz qurilma yangi bayroqni ko'rmaydi.
+4. **Cutovergacha qiladigan cloud ishi** (deploy kutadi): biometrik
+   qo'riqchi to'rt marshrutda (tepaga qarang), `status.js` `/health/deep`
+   ni o'qisin, `auth/verify` ga IP cheklovi, bundle eskirish qulfi,
+   domen/bot almashuvi (DNS va @username keldi — faqat botning aniq
+   nomi kerak).
 4. **Egadan kutilmoqda:** `enes.uz` DNS, bot @username, Payme/Click,
    yuridik nom/rekvizit, NS SVG.  Bularsiz F7 boshlanmaydi.
 
@@ -864,14 +923,22 @@ taklif qilish kerak.
   7 kunni muzlatib olardi; to'liq to'plamda oqim kechikib test saytiga
   yetib borib klipni o'chirardi. Fixture endi fon halqalarini no-op
   qiladi (testlar purge'ni sinxron o'zi chaqiradi).
-- **`cloud/store.py` faqat SQLite** — litsenziya, to'lov va portal
-  parollari production'da ham SQLite'da (audit YUQORI-10). Shu sabab
-  `Dockerfile.cloud` da `--workers 1`. (Raqamli qator o'qish naqshi
-  2026-08-28 da profilaktika tariqasida tozalandi.)
-- **Rate limit xotirada** (`cloud/ratelimit.py`) — restart bilan
-  aylanib o'tiladi (audit O'RTA-9).
-- **CSP sarlavhasi yo'q** (audit O'RTA-2).
-- **Token `localStorage` da**, server tomonda "chiqish" yo'q (O'RTA-8).
+- ✅ **YOPILDI (2026-09-09, 5B) — `cloud/store.py` ikki dialektli.**
+  Yoqish ixtiyoriy (`ENES_CONTROL_DATABASE_URL`).  Ochiq qolgani —
+  JONLI bazani ko'chirish (`PRODUCTION_RUNBOOK.md` §1.1) va shundan
+  keyin `ENES_CLOUD_WORKERS=2` (§1.2).  Ikkalasi ham deploy kuni.
+- ✅ **YOPILDI (2026-09-09, 5B) — rate limit umumiy bazada**
+  (`rate_limit_windows`).  Ochiq qolgani: `POST /api/v1/owner/auth/verify`
+  da IP cheklovi yo'q — yonidagi `auth/link` da bor (O'RTA-9 qoldig'i).
+- ⚠️ **CSP bor, lekin `-Report-Only`** (O'RTA-2).  Kod tomoni tayyor;
+  qoladigan ish bitta so'z, cutoverdan keyin bir hafta kuzatib.
+- ✅ **YOPILDI (2026-09-09) — server tomonda chiqish bor**
+  (`owner_members.auth_version`, `POST /api/v1/owner/auth/logout`).
+  Token hamon `localStorage` da, lekin endi uni BEKOR QILISH mumkin.
+- ⚠️ **`/status` sahifasi yengil `/health` ni o'qiydi**
+  (`cloud/static/status.js:12`) — baza o'lgan bo'lsa ham «ishlayapti»
+  deydi.  `/health` ataylab doim 200 (Docker HEALTHCHECK uchun),
+  haqiqiy tekshiruv `/health/deep` da (O'RTA-1 qoldig'i).
 - **AI aniqligi hech qachon o'lchanmagan** (YUQORI-6) — endi asbob bor
   (masofaviy `benchmark` topshirig'i), o'lchov hali olinmagan.
 - **Haqiqiy video/model bilan test yo'q** (YUQORI-8) — chegaralar
@@ -882,6 +949,37 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Ma'lumot papkasi nomi o'zgarsa dastur o'zini YANGI kompyuter deb
+  tanishtiradi.**  Rebrendda `%PROGRAMDATA%\Chaqimchi` →
+  `%PROGRAMDATA%\ENES` bo'ldi; ko'prik `enes/paths.py` da yozildi
+  (Box yo'li), `enes/local/paths.py` da esa **unutildi** — do'kon
+  dasturi aynan ikkinchisini ishlatadi.  Yangilangandan keyin dastur
+  bo'sh papkani ko'rib sozlash sehrgarini ochdi va 15 soat
+  `device-handover` so'rab turdi.  Uch saboq:
+  **(1)** bir xil vazifani ikki modul bajarsa, ko'prik ham IKKALASIGA;
+  **(2)** hujjat «ko'prik bor» deb yozgani ko'prik borligini
+  ISBOTLAMAYDI — CLAUDE.md, NSI izohi va daftar uchalasi ham yolg'on
+  aytardi (CLAUDE.md 7-qoidasi: chaqiruv joyini ham ko'ring);
+  **(3)** `tests/test_brand.py` da «eski papka ishlatiladi» degan test
+  BOR edi, lekin u faqat `enes/paths.py` ning LINUX tarmog'ini
+  tekshirardi — ya'ni yashil test noto'g'ri modulni qo'riqlab turgan edi.
+
+- **Papkaning BORLIGI «bu yerda o'rnatish bor» degani emas.**
+  `data_dir()` papkani har chaqiruvda `mkdir` bilan yaratadi, ya'ni
+  dastur bir marta ishga tushishi bilan yangi nomdagi bo'sh papka
+  paydo bo'ladi va `exists()` ga asoslangan ko'prik shu ondan boshlab
+  hech qachon eski papkani tanlamaydi.  Belgi — papka emas, ichidagi
+  `config.yaml`.  (`enes/paths.py` hali `exists()` ga tayanadi; u yerda
+  papkani boshqa hech kim yaratmagani uchun bugun ishlaydi.)
+
+- **`Path(...)` `os.name` ga qarab tur tanlaydi.**  Testda
+  `monkeypatch.setattr(os, "name", "nt")` qilinsa `Path()` `WindowsPath`
+  qaytaradi va u POSIX mashinada umuman yaratilmaydi (`NotImplementedError`).
+  Shuning uchun platforma tarmog'i patch qilinadigan funksiya orqali
+  tekshiriladi (`enes.paths.is_windows()`) — bu naqsh o'sha modulda
+  ataylab shunday yozilgan va endi `enes/local/paths.py` ham uni
+  ishlatadi.
 
 - **f-string ichidagi `%` formatli patternga YANA `%` qo'shmang.**
   `f"{cam}-%{SEGMENT_TIME_FORMAT}.mp4"` ffmpegga `%%Y…` beradi,
@@ -1435,6 +1533,63 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-09 — A1 capture rate, 1-bosqich: maxraj qurilmada sanaladi (0.6.32)
+Nima: kirish kamerasida eshikka YAQINLASHGAN noyob odamlar sanaladi va
+son heartbeat orqali ko'rinadi — «200 kirdi» yonida «1000 yaqinlashdi»
+degan maxraj paydo bo'ldi.
+Nega: `SeenCounter` (`enes/retail/conversion.py`) va
+`cloud/value.py: capture_rate` ikkalasi ham 09-06 da yozilgan edi, lekin
+**ikkalasi ham yetim**: birinchisi pipeline'ga ulanmagan, ikkinchisi hech
+qayerdan chaqirilmaydi.  Zanjirning o'rtasi butunlay yo'q edi.
+Qayerda: `enes/limits.py` (`SEEN_LINE_BAND = 0.15`),
+`enes/retail/lines.py` (`distance_to_segment`, `LineCounter.near`),
+`enes/retail/conversion.py` (`mark(force=)`),
+`enes/scene_analytics.py` (`count_seen`, trek siklida sanash),
+`enes/retail/pipeline.py` (`drain_seen`, `_stats()["seen"]`),
+`enes/retail/service.py` (`count_seen`, `_seen_flush_loop`, `write_status`),
+`enes/local/supervisor.py`, `enes/local/cloud_config.py`,
+`cloud/main.py` (`EdgeHeartbeatBody.seen`).
+Test: `tests/test_status_chain.py::test_the_capture_rate_denominator_survives_the_whole_chain`
+(to'rt qo'l), `tests/test_scene_retail.py` (tasma: zaldagi odam
+sanalmaydi, `entered ⊆ passed`, bir kadrli kesish),
+`tests/test_retail_lines.py` (kesmagacha masofa, cheksiz chiziqqa emas),
+`tests/test_retail_pipeline.py` (`drain_seen` bo'shatadi),
+`tests/test_retail_service.py` (faqat chiziqli kamerada).
+Diqqat: **`SEEN_LINE_BAND = 0.15` — TAXMIN, pilotda o'lchanadi.**
+Heartbeatda `seen.total` va `entered` solishtiriladi; kutilgan nisbat
+`seen ≈ entered × 1,5…4`.  `seen > entered × 10` — kamera savdo zalini
+ko'ryapti yoki chiziq noto'g'ri; `seen < entered` — xato.
+Hodisa (`people_seen`) HALI YO'Q va bu ataylab: eski cloud noma'lum
+`event_type` ni jimgina tashlamaydi — RAD ETADI, qurilma esa uni
+`permanent=True` bilan o'ldiradi (`outbox_poisoned` o'sadi).  Avval
+cloud tomonidagi `capture.enabled` darvozasi kerak (2-bosqich).
+
+### 2026-09-09 — Pilot yangilanishdan keyin «juftlanmagan» bo'lib qoldi: ma'lumot papkasiga ko'prik (0.6.32)
+Nima: `enes/local/paths.py` endi eski `%PROGRAMDATA%\Chaqimchi` papkasini
+topsa o'shani ishlatadi — yangilangan kompyuter sozlamasini, kamera
+manzillarini va outbox navbatini yo'qotmaydi.
+Nega: pilot do'kon 15 soat to'xtab qoldi.  Avto-yangilanish (0.6.25 →
+0.6.30) o'tdi, yangi kod bo'sh `%PROGRAMDATA%\ENES` ni ko'rdi va o'zini
+YANGI kompyuter deb tanishtirdi: `01:52:42` dan boshlab har 21 soniyada
+`device-handover` (2 516 marta, javob `pending`), heartbeat `01:50:47` da
+uzildi, eski zanjir yetim jarayon sifatida `12:49` gacha hodisa yubordi.
+Ko'prik `enes/paths.py` da bor edi (Box yo'li), do'kon dasturi
+ishlatadigan modulda esa yo'q — CLAUDE.md, NSI izohi va daftar uchalasi
+ham borligini aytardi.
+Qayerda: `enes/local/paths.py:20-90` (`_MARKER`, `_pick`, `data_dir`),
+`scripts/windows_installer.nsi:439`, `CLAUDE.md:105`,
+`docs/ISH_DAFTARI.md:211`, `tests/test_brand.py:30-60`,
+`enes/__init__.py:16` + `pyproject.toml:3` (0.6.32).
+Test: `tests/test_local_paths.py` (8 ta) — eng muhimi
+`test_an_empty_new_folder_does_not_win` (papka BORLIGI belgi emas, chunki
+`data_dir()` uni o'zi yaratadi) va
+`test_the_two_path_modules_agree_on_the_old_vendor_name`.
+Diqqat: ko'prik faqat YANGI o'rnatishlarga yordam beradi — pilot
+allaqachon bo'sh papka bilan qolgan, ya'ni do'kon kompyuterida
+`C:\ProgramData\Chaqimchi` ni `C:\ProgramData\ENES` ga NUSXA qilish
+kerak (ko'chirish emas).  Reliz `LEGACY_NAME=1` bilan chiqadi: jonli
+cloud hali eski kodda va faqat `chaqimchi-windows-*` prefiksini qidiradi.
 
 ### 2026-09-09 — Klip nihoyat yoziladi: ortiqcha `%` va mahalliy vaqt (`188a7c5`)
 Nima: `enes/retail/ringbuffer.py` da ikkita ustma-ust xato tuzatildi va

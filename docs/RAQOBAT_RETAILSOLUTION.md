@@ -177,20 +177,22 @@ arxitekturani tarmoqqa tayyorlab boramiz (ega qarori §4.3):
 
 ## 7. Bajarilish holati
 
-**Muhim cheklov:** 72 soatlik soak ishlab turibdi — soak tugamaguncha
-**qurilma relizi chiqmaydi** (ISH_DAFTARI). A1 (capture rate) qurilmada
-yangi signal talab qiladi ("eshik oldiga kelib kirmagan odam"), ya'ni
-uning **qurilma qismi soakka to'qnashadi**. Shuning uchun bosqichlar
-to'qnashmaydigan tartibda olib boriladi:
+**Muhim cheklov (2026-09-09 da o'zgardi):** soak tugadi, ya'ni qurilma
+relizi yo'li ochiq.  Endi cheklov boshqa tomonda — **cloud deploy taqiqi
+F7 cutover kunigacha kuchda**, ya'ni A1 ning cloud qismi (hisobot,
+digest, panel) commit qilinadi-yu serverga chiqmaydi.  Shuning uchun
+bosqichlar shunday bo'lindi: qurilma qismi bugun chiqadi, cloud qismi
+cutover deployi bilan yonadi.
 
 | Bosqich | Holat |
 |---|---|
 | **C — Excel/CSV yuklash** | ✅ **Bajarildi (2026-09-06, faqat cloud+panel).** `GET /api/v1/owner/report.csv` — **kunlik** (`?date=`) va **davriy** (`?start=&end=`, ≤31 kun, kuniga qator + Jami — raqobatchining branch-summary'idek). Ustunlar: kirdi/chiqdi, gavjum soat, konversiya, mijoz portreti, **xavfsizlik** (ularda yo'q). Panelda «Kunlik hisobot», «Oylik» va «14 kunlik CSV» tugmalari. BOM'li CSV, yangi bog'liqliksiz. |
-| **A — avtomatik konversiya** | 🔄 **Yadro yozildi (2026-09-06).** Ega qarori: **moslashuvchan (A1+A2)**. `enes/retail/conversion.py: SeenCounter` (qurilma: oynada ko'ringan noyob odam, bir kadrlik xatoni kesadi); `cloud/value.py: capture_rate` + `select_passed` (A2 tashqi kamera ustun, bo'lmasa A1 kirish). Testlar to'liq. **Qoladi:** qurilmada SeenCounter'ni pipeline'ga ulash + `seen` ni yuborish (reliz, soak tugagach) va cloudda saqlash+hisobotga chiqarish. |
+| **A — avtomatik konversiya** | 🔄 **1-bosqich bajarildi (2026-09-09, 0.6.32).** Ega qarori: **moslashuvchan (A1+A2)**. Maxraj endi qurilmada ROSTDAN sanaladi: `SceneAnalyzer(count_seen=)` faqat hisoblash chizig'i bor kamerada, odam chiziqdan `limits.SEEN_LINE_BAND` (0,15) masofada bo'lsa; chiziqni kesgan majburiy sanaladi (`entered ⊆ passed`). Son heartbeatda (`seen.total/pending`) — tasmani pilotda kalibrlash uchun. **Qoladi:** `people_seen` hodisasi `capture.enabled` darvozasi ortida (qurilma relizi), keyin cloudda `traffic.seen` ga yig'ish, `_owner_report_dict` da `capture`, digest 🚶 qatori va `Numbers.tsx` — **hammasi cutover deployini kutadi**. A2 (`outer` roli) alohida: rol 7 joyda qo'lda takrorlangan. |
 | **B — demografiya 720p** | Mijoz kamerasiga bog'liq (kod bor). |
 | **D — sodiqlik (lokal)** | Huquqiy hujjatlar + qurilma relizi kerak. |
 | **E — API + ko'p filial** | Tarmoq mijozi kelganda. |
 
-**Keyingi qadam:** soak tugagach A1 qurilma logikasi; parallel — C ni
-haqiqiy `.xlsx` ga ko'tarish (`openpyxl` ni ataylab qo'shib) agar ega
-formatlangan Excel xohlasa.
+**Keyingi qadam:** A1 ning 2-bosqichi (`people_seen` hodisasi) va
+pilotda `SEEN_LINE_BAND` ni o'lchash — kutilgan nisbat
+`seen ≈ entered × 1,5…4`.  Parallel — C ni haqiqiy `.xlsx` ga ko'tarish
+(`openpyxl` ni ataylab qo'shib) agar ega formatlangan Excel xohlasa.

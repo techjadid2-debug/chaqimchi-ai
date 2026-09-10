@@ -13,7 +13,7 @@ git tegida turadi.  Yuz tanish keyinchalik **cloud** tomonda quriladi
 #: o'qish ham mumkin emas: u reliz paketiga kirmaydi.
 #:
 #: Ikkalasining mosligini `tests/test_sotqin_release_contract.py` ushlab turadi.
-__version__ = "0.6.31"
+__version__ = "0.6.32"
 __all__ = ["__version__"]
 
 # Eski `CHAQIMCHI_*` muhit nomlari birinchi importdayoq `ENES_*` ga

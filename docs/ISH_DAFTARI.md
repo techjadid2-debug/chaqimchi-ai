@@ -725,14 +725,19 @@ tartib bilan:
    (apex keshi).  Pochta: `@enes.uz` pochtasi kerak bo'lsa `mail` A →
    185.196.212.52 va MX → `mail.enes.uz` qo'shiladi (hozir MX → enes.uz,
    ya'ni bizning serverga — pochta serveri yo'q).
-3. Pilot egasi yangi botda `/start` — admin paneldan taklif havolasi;
-   kechqurun 21:00 hisobot rasm+matn bo'lib kelishini tekshirish.
-4. Ega: UptimeRobot monitor `https://api.enes.uz/health/deep` + status
-   page `status.enes.uz` (CNAME); Google Search Console yangi mulk
-   `enes.uz` (DNS TXT); GitHub `vars.ENES_DEFAULT_CLOUD_URL=https://api.enes.uz`.
-5. Repo: `.env.production.example` ni qo'lda yangilash (agent uchun yopiq
-   fayl): `ENES_DOMAIN=enes.uz`, `*_URL=https://*.enes.uz`,
-   `ENES_TELEGRAM_BOT_USERNAME=enes_monitoring_bot`.
+3. ✅ Ega yangi botda `/start` bosdi (2026-09-11 02:20): webhook 5×200,
+   xato yo'q, ikki `owner` a'zo (uz, en) o'z joyida, bot menyusi
+   `hisobot/kamera/panel/yordam`.  ⏳ Kechqurun 21:00 hisobot rasm+matn
+   bo'lib kelishini tekshirish.
+4. Ega (agent qila olmaydi — tashqi akkauntlar): UptimeRobot monitor
+   `https://api.enes.uz/health/deep` + status page `status.enes.uz`
+   (CNAME); Google Search Console yangi mulk `enes.uz` (DNS TXT);
+   GitHub `vars.ENES_DEFAULT_CLOUD_URL=https://api.enes.uz` — `gh`
+   tizimga kirmagan (`gh auth login`), lekin workflow standarti allaqachon
+   `api.enes.uz`, ya'ni o'zgaruvchi ixtiyoriy.
+5. Repo: `.env.production.example` — fayl agent uchun to'liq yopiq
+   (o'qish/yozish/git ham); qo'lda: `ENES_DOMAIN=enes.uz`,
+   `*_URL=https://*.enes.uz`, `ENES_TELEGRAM_BOT_USERNAME=enes_monitoring_bot`.
 6. Keyinroq (ega aytganda) — 301 bosqichi: eski domen hostlari
    `enes.uz` ga yo'naltiriladi, `api.chaqimchi.uz` pilot `config.yaml`
    yangilanguncha proxy qoladi; `test_brand.py` dan `chaqimchi\.uz`

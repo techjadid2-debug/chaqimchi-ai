@@ -437,7 +437,10 @@ Function .onInit
   ; kalitida turadi.  Topilsa o'sha uninstaller chaqiriladi — aks holda
   ; ikki nusxa yonma-yon qolib, ikkita vazifa bitta kamerani talashardi.
   ; Ma'lumot papkasi (`ProgramData\Chaqimchi`) tegilmaydi: dastur eski
-  ; papka bor bo'lsa uni ishlatishda davom etadi (`enes/paths.py`).
+  ; papka bor bo'lsa uni ishlatishda davom etadi.  Ko'prik IKKI joyda
+  ; bo'lishi shart — `enes/paths.py` (Box) va `enes/local/paths.py`
+  ; (do'kon dasturi).  2026-09-09 da ikkinchisi yo'q edi va pilot
+  ; yangilangandan keyin o'zini yangi kompyuter deb tanishtirdi.
   ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChaqimchiAI" "UninstallString"
   ${If} $R1 != ""
     ReadRegStr $R2 HKLM "Software\ChaqimchiAI" "InstallDir"

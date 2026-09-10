@@ -102,7 +102,8 @@ Telegram, env nomlari, paket (`chaqimchi_ai` → `enes`) almashdi.
 ro'yxati): `chaqimchi_ai/` (eski paket nomi — pilot kompyuteridagi
 yangilanish vazifasi), `enes/envcompat.py` (`CHAQIMCHI_*` env),
 eski reliz prefiksi (`chaqimchi-windows-*`), eski Windows vazifa/papka
-nomlari (`paths.py`, `autostart.py`, NSI).  **Egadan kutilmoqda (F7):**
+nomlari (`paths.py` — ikkalasi ham: `enes/paths.py` va
+`enes/local/paths.py`; `autostart.py`, NSI).  **Egadan kutilmoqda (F7):**
 `enes.uz` DNS, bot @username, yuridik nom/rekvizit, Payme/Click;
 shundan keyin domen (`chaqimchi.uz`) va `@chaqimchi_ai_bot` almashadi.
 Cutover ro'yxati `docs/ISH_DAFTARI.md` da.

@@ -8,7 +8,11 @@ test ikki narsani qulflaydi:
    Windows vazifa/registr nomlari) — ularning har biri o'rnatilgan
    qurilma yoki jonli server uchun kerak va o'chirilishi alohida qaror.
 2. Ko'priklarning o'zi ishlaydi: eski reliz nomi topiladi, eski
-   ma'lumot papkasi ishlatiladi.
+   ma'lumot papkasi ishlatiladi.  ⚠️ Ma'lumot papkasi ko'prigi IKKI
+   modulda kerak — `enes/paths.py` (Box) va `enes/local/paths.py`
+   (do'kon dasturi).  Bu yerdagi test uzoq vaqt faqat birinchisini
+   tekshirdi va 2026-09-09 da pilot aynan ikkinchisi yo'qligidan
+   to'xtadi; ikkinchisining qulfi `tests/test_local_paths.py` da.
 
 Domen (`chaqimchi.uz`) va bot nomi (`@chaqimchi_ai_bot`) F7 cutover
 kuni almashadi — ular alohida ro'yxatda va o'sha kuni bu ro'yxatdan
@@ -29,7 +33,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_FILES = {
     "chaqimchi_ai/__init__.py",        # eski paket nomi ko'priki (qurilma yangilanishi)
     "enes/envcompat.py",               # CHAQIMCHI_* → ENES_* ko'priki
-    "enes/paths.py",                   # eski ma'lumot papkasi bor bo'lsa ishlatiladi
+    "enes/paths.py",                   # eski ma'lumot papkasi bor bo'lsa ishlatiladi (Box)
+    "enes/local/paths.py",             # xuddi shu ko'prik — do'kon dasturi uchun
+    "tests/test_local_paths.py",       # o'sha ko'prikning qulfi
     "enes/local/autostart.py",         # eski vazifa/Run kaliti o'chiriladi
     "enes/local/chain_processes.py",   # eski nomdagi zanjir ham o'ldiriladi
     "enes/signed_update.py",           # eski `product` nomi (o'tish relizi + orqaga qaytish)

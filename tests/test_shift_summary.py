@@ -233,3 +233,44 @@ def test_a_clean_month_says_so_instead_of_an_empty_table() -> None:
         {"jami": {"kechikish_daq": 0, "kelmagan_kunlar": 0}, "rows": []},
     )
     assert "yo'q" in text
+
+
+def test_the_monthly_shift_report_skips_managers(store: EventStore, monkeypatch) -> None:
+    """Oylik smena hisoboti menejerga BORMAYDI.
+
+    2026-09-10 da `/owner/attendance` va `/owner/employees` menejerdan
+    yopildi (`require_biometric_access`).  Bu xabar esa aynan o'sha
+    ma'lumotni — xodim ismi va uning kechikish daqiqalarini — boshqa
+    kanal orqali olib chiqardi, ya'ni qulf bezakka aylanardi.
+
+    Xodim jadvalini SOXTA qilib beramiz: tekshirilayotgan narsa hisobning
+    o'zi emas (uni yuqoridagi testlar qamraydi), aynan OLUVCHILAR ro'yxati.
+    """
+    import asyncio
+
+    from cloud.digest import DailyDigestService
+
+    store.add_member(SITE, "111", role="owner")
+    store.add_member(SITE, "222", role="manager")
+    monkeypatch.setattr(
+        store,
+        "shift_summary",
+        lambda *args, **kwargs: {
+            "employees": 1,
+            "jami": {"kechikish_daq": 30, "kelmagan_kunlar": 0, "erta_ketish_daq": 0},
+            "rows": [
+                {"employee_name": "Ali", "kechikkan_kunlar": 2, "jami_kechikish_daq": 30}
+            ],
+        },
+    )
+
+    yuborilgan: list = []
+
+    async def sender(chat_id, text):
+        yuborilgan.append(chat_id)
+
+    service = DailyDigestService(store, lambda: [{"id": SITE, "name": "Oq Saroy"}], sender)
+    # Oyning 1-kuni, 10:00 dan keyin — xabar aynan shunda ketadi.
+    asyncio.run(service._monthly_shifts_once(datetime(2026, 9, 1, 11, tzinfo=TASHKENT)))
+
+    assert yuborilgan == ["111"], "menejer bu xabarni olmasin"

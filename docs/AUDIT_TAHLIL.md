@@ -362,11 +362,48 @@ ma'lumot egaligi, nizolarni hal qilish. Yurist ko'rigidan o'tsin.
 > yiqiladi (`assert 200 == 403` — menejer xodim rasmini yuklab olardi),
 > qaytarilganda o'tadi. To'liq to'plam: **1724 passed**, lint toza.
 >
-> **Tuzatilmagan, ataylab:** `GET /owner/faces` va
-> `GET /owner/faces/events` hamon menejerga ochiq. Ular rasm emas,
-> ro'yxat qaytaradi (ism, rasm ID'si, sifat bali) va menejerning
-> davomat ko'rish oqimi shunga tayanadi. Rasm yo'llari yopilgani uchun
-> ID'ning o'zi endi hech narsa bermaydi.
+> ~~**Tuzatilmagan, ataylab:** `GET /owner/faces` va
+> `GET /owner/faces/events` hamon menejerga ochiq.~~  **Bu qaror
+> 2026-09-10 da BEKOR QILINDI** — pastdagi ilovaga qarang.
+>
+> ## ✅ IKKINCHI QATLAM — 2026-09-10
+>
+> Yuqoridagi "ataylab ochiq qoldirdik" qarori xato edi. Rasmni yopib
+> RO'YXATni ochiq qoldirish rozilik shablonini bajarmaydi: xodim
+> "kim ko'rdi" degan savoldan himoyalanadi, "nimani ko'rdi" dan emas —
+> `?event_type=employee_seen` menejerga "kim, qachon, qaysi kamerada
+> tanildi" ni rasmsiz ham to'liq berardi.
+>
+> Yopilganlar (hammasi faqat `require_attendance()` bilan turgan edi, u
+> esa qo'riqchi emas — rolga umuman qaramaydi):
+>
+> | Marshrut | Nima chiqardi |
+> |---|---|
+> | `GET /owner/faces` | Xodim ismi, shablon ID'lari, `det_score` |
+> | `GET /owner/employees` | Ism va tashqi ID |
+> | `GET /owner/attendance` | Kim qachon keldi-ketdi |
+> | `GET /owner/attendance.csv` | O'shaning yuklab olinadigan nusxasi |
+> | `GET /owner/events?event_type=employee_seen` | `person_id`, `person_name` |
+>
+> **`/owner/events` ga marshrut darajasida qo'riqchi QO'YILMADI** va bu
+> ataylab: u «Dalillar» sahifasining yagona manbai va menejerning asosiy
+> ish quroli (`EventEvidence.tsx` `event_type` ni umuman yubormaydi).
+> Qo'riqchi TURGA qo'yildi — menejer yuz hodisalarini ko'rmaydi, qolgan
+> ro'yxat unga o'zgarishsiz keladi.
+>
+> **Yon kanal ham yopildi:** oylik smena hisoboti Telegramda barcha
+> a'zolarga ketardi (`cloud/digest.py`), ya'ni marshrutni yopish
+> qulfni bezakka aylantirardi. Endi oluvchilar `BIOMETRIC_ROLES` bo'yicha
+> filtrlanadi; ro'yxat `cloud/owner_auth.py` da — `main` `digest` ni
+> import qiladi, teskarisi mumkin emas.
+>
+> Test: yuqoridagi `test_a_manager_cannot_open_any_biometric_image`
+> ro'yxati kengaytirildi, ustiga ikkita yangi —
+> `test_a_manager_keeps_the_evidence_page_without_the_face_rows`
+> (noto'g'ri yechimni to'sadi: butun marshrut yopilsa menejerning
+> sahifasi o'ladi) va
+> `tests/test_shift_summary.py::test_the_monthly_shift_report_skips_managers`.
+> Uchalasi ham tuzatma olib qo'yilganda yiqilishi tekshirildi.
 
 Bu **kod xatosi** va tasdiqlangan.
 

@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 from cloud import botfmt, i18n, trust_score, value
 from cloud.event_store import EventStore
 from cloud.i18n import tg
+from cloud.owner_auth import BIOMETRIC_ROLES
 from cloud.payments.store import billable_months
 from cloud.store import GRACE_DAYS
 
@@ -850,7 +851,16 @@ class DailyDigestService:
         sent = 0
         for site in self.sites():
             site_id = str(site["id"])
-            members = self.events.list_members(site_id)
+            # Smena hisobotida xodim ISMLARI va ularning kelish-ketish
+            # vaqti bor — ya'ni `/owner/attendance` qulflaydigan narsaning
+            # o'zi, faqat boshqa kanal orqali.  Marshrutni yopib bu yerni
+            # ochiq qoldirish qulfni bezakka aylantirardi: menejer o'sha
+            # jadvalni har oy Telegramda olaverardi.
+            members = [
+                member
+                for member in self.events.list_members(site_id)
+                if str(member.get("role") or "") in BIOMETRIC_ROLES
+            ]
             if not members:
                 continue
             if self.events.digest_was_sent(site_id, marker):

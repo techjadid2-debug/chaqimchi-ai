@@ -623,9 +623,24 @@ function OwnerApp() {
   const [focusEvent,setFocusEvent] = useState("");
   const [loginError,setLoginError] = useState(""); const [busy,setBusy] = useState(false);
   const {data,error,loading,refresh} = useAdaptiveDashboard(siteId,authenticated);
+  /* Menejer «Xodimlar» bo'limini KO'RMAYDI: server unga `/owner/faces`,
+     `/owner/employees` va `/owner/attendance` ni bermaydi
+     (`cloud/main.py: require_biometric_access`), ya'ni bo'lim ochilsa
+     faqat bo'sh jadval va xato satri chiqardi.  Rol filialga bog'liq —
+     bitta odam bir do'konda ega, boshqasida menejer bo'lishi mumkin. */
+  const role = sites.find(site => site.id === siteId)?.role || "";
+  const visibleNav = useMemo(
+    () => NAV_ITEMS.filter(item => item.id !== "employees" || role !== "manager"),
+    [role],
+  );
   /* Menyu yorliqlari shu yerda ochiladi (`NAV_ITEMS` izohiga qarang).
-     Bir marta yetadi: til almashsa sahifa qayta yuklanadi (`i18n/index.ts`). */
-  const nav: NavItem[] = useMemo(() => NAV_ITEMS.map(({ id, key, icon }) => ({ id, icon, label: t(key) })), []);
+     Til almashsa sahifa qayta yuklanadi (`i18n/index.ts`), shuning uchun
+     `t()` ni qayta hisoblash shart emas — faqat rol o'zgarganda. */
+  const nav: NavItem[] = useMemo(() => visibleNav.map(({ id, key, icon }) => ({ id, icon, label: t(key) })), [visibleNav]);
+  const mobileNav = useMemo(
+    () => MOBILE_NAV.filter(id => id !== "employees" || role !== "manager"),
+    [role],
+  );
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/owner-sw.js").catch(() => undefined);
@@ -715,7 +730,7 @@ function OwnerApp() {
   const today = formatDateUz();
   return <AppShell
     nav={nav}
-    mobileNav={MOBILE_NAV}
+    mobileNav={mobileNav}
     active={active}
     onNavigate={navigate}
     title={selected?.name || data.site.name}

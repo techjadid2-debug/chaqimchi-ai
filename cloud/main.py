@@ -67,6 +67,7 @@ from cloud.notify import DEFAULT_TELEGRAM_LEVEL as notify_default_level
 from cloud.notify import MEDIA_EVENT_TYPES, event_label, select_alert_events
 from cloud.notify import summarize as notify_summarize
 from cloud.owner_auth import (
+    BIOMETRIC_ROLES,
     OwnerPrincipal,
     issue_owner_token,
     require_owner,
@@ -1107,6 +1108,17 @@ def require_attendance() -> None:
         )
 
 
+#: Yuzga tegadigan hodisa turlari.  Ikki ish uchun kerak:
+#:
+#: 1. Platforma admini ularning mediasini ochsa jurnalga yoziladi
+#:    (`_audit_biometric_view`) — u ko'rishga HAQLI, lekin ko'rgani
+#:    izsiz qolmasligi kerak: xodimga imzolatilgan rozilik shabloni
+#:    "kim ko'rdi" degan savolga javob berishni talab qiladi.
+#: 2. `/owner/events` javobidan menejer uchun kesiladi — `person_id` va
+#:    `person_name` aynan shu turlarda keladi.
+BIOMETRIC_EVENT_TYPES = {"face_captured", "employee_seen"}
+
+
 def require_biometric_access(owner: OwnerPrincipal) -> None:
     """Yuz kadri yoki xodim shabloniga tegadigan HAR BIR marshrut shu yerdan o'tsin.
 
@@ -1120,7 +1132,19 @@ def require_biometric_access(owner: OwnerPrincipal) -> None:
     esa unutilgan edi va bitta himoyalangan snapshot yo'li parallel URL
     orqali chetlab o'tilardi.  Endi qidiriladigan yagona nom bor.
     """
-    require_owner_role(owner, "owner", "service_admin")
+    require_owner_role(owner, *BIOMETRIC_ROLES)
+
+
+def may_see_biometrics(owner: OwnerPrincipal) -> bool:
+    """`require_biometric_access` ning gapirmaydigan varianti.
+
+    ARALASH javobni filtrlash uchun: `/owner/events` menejerga ham kerak
+    (u butun «Dalillar» sahifasini ta'minlaydi), lekin undagi yuz
+    hodisalari kerak emas.  403 o'rniga qatorlar olib tashlanadi —
+    butun marshrutga qo'riqchi qo'yilsa menejerning asosiy ish quroli
+    o'lardi.
+    """
+    return owner.role in BIOMETRIC_ROLES
 
 
 class TelegramSendError(HTTPException):
@@ -7235,6 +7259,19 @@ async def owner_events(
     hour: Optional[int] = None,
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
+    # Bu marshrutga BUTUNLAY qo'riqchi qo'yib bo'lmaydi: u «Dalillar»
+    # sahifasining yagona manbai (`EventEvidence.tsx`) va menejer uchun
+    # asosiy ish quroli.  Lekin javobda `person_id` va `person_name` bor
+    # (`_decode_event` faqat media kalitlarini oladi), ya'ni
+    # `?event_type=employee_seen` yopilgan `/owner/faces/events` ning
+    # aynan muqobili edi: rasmsiz, lekin "kim, qachon, qaysi kamerada"
+    # savoliga to'liq javob beradigan.  Shuning uchun qo'riqchi TURGA
+    # qo'yiladi, marshrutga emas.
+    biometrika = may_see_biometrics(owner)
+    if not biometrika and event_type in BIOMETRIC_EVENT_TYPES:
+        # Aynan shu tur so'ralgan bo'lsa jim bo'sh ro'yxat emas, ochiq 403:
+        # "ruxsat yo'q" bilan "bunday hodisa bo'lmagan" bir xil ko'rinmasin.
+        require_biometric_access(owner)
     since, until = _tashkent_window(date, hour)
     events = get_event_store().list_events(
         owner.site_id,
@@ -7244,6 +7281,17 @@ async def owner_events(
         since=since,
         until=until,
     )
+    if not biometrika:
+        # Turi so'ralmagan umumiy ro'yxatda ham ular bor edi — darvoza
+        # faqat `event_type` ga qo'yilsa yon eshik ochiq qolardi.
+        # Kesish `limit` dan KEYIN bo'ladi, ya'ni menejer so'ralganidan
+        # kam qator olishi mumkin; sahifa kun/soat bo'yicha varaqlaydi,
+        # kursor bilan emas, shuning uchun bu sezilmaydi.
+        events = [
+            item
+            for item in events
+            if str(item.get("event_type", "")) not in BIOMETRIC_EVENT_TYPES
+        ]
     # Mijoz `line_crossed` degan so'zni tushunmaydi.  Tarjima serverda
     # qo'shiladi — panel va Telegram bitta manbadan foydalanadi.
     #
@@ -8631,6 +8679,8 @@ async def owner_employees(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     require_attendance()
+    # Xodim ismi va tashqi ID — davomat jadvalining kaliti.
+    require_biometric_access(owner)
     return {
         "mode": "commercial" if faces.MODELS_LICENSED_FOR_COMMERCIAL_USE else "closed_pilot",
         "employees": get_event_store().list_employees(
@@ -8859,6 +8909,8 @@ async def owner_attendance(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Dict[str, Any]:
     require_attendance()
+    # Kim qachon keldi-ketdi: yuzdan olingan xulosaning o'zi.
+    require_biometric_access(owner)
     first, last = _attendance_dates(start, end)
     return get_event_store().attendance_report(owner.site_id, start=first, end=last)
 
@@ -8870,6 +8922,8 @@ async def owner_attendance_csv(
     owner: OwnerPrincipal = Depends(require_active_owner),
 ) -> Response:
     require_attendance()
+    # CSV — yuklab olinadigan nusxa, ya'ni eng oson tarqaladigani.
+    require_biometric_access(owner)
     first, last = _attendance_dates(start, end)
     report = get_event_store().attendance_report(owner.site_id, start=first, end=last)
     output = io.StringIO()
@@ -9111,6 +9165,8 @@ async def admin_face_event_image(
 @app.get("/api/v1/owner/faces")
 async def owner_faces(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
     require_attendance()
+    # Javobda yuz shabloni ID'lari va ularning `det_score` bahosi bor.
+    require_biometric_access(owner)
     store = get_event_store()
     photos: Dict[str, List[Dict[str, Any]]] = {}
     for face in store.list_employee_faces(owner.site_id):
@@ -9553,13 +9609,6 @@ async def owner_clip(
     except FileNotFoundError as exc:
         raise HTTPException(404, "Videoklip topilmadi") from exc
     return Response(content=content, media_type="video/mp4")
-
-
-#: Yuzga tegadigan hodisa turlari.  Platforma admini ularni ko'rishga
-#: HAQLI (`require_biometric_access` da `service_admin` bor), lekin
-#: ko'rgani IZSIZ qolmasligi kerak: xodimga imzolatilgan rozilik
-#: shabloni "kim ko'rdi" degan savolga javob berishni talab qiladi.
-BIOMETRIC_EVENT_TYPES = {"face_captured", "employee_seen"}
 
 
 def _audit_biometric_view(

@@ -459,6 +459,19 @@ def test_a_manager_cannot_open_any_biometric_image(pilot_client) -> None:
         # savolga javob beradi.  Bu marshrut ro'yxatdan tushib qolgan
         # edi va menejer uni bemalol o'qiy olardi.
         "/api/v1/owner/faces/events",
+        # 2026-09-10 da qo'shilganlar.  Ular yuz KADRINI bermaydi, lekin
+        # yuzdan olingan XULOSANI beradi — "kim qachon keldi-ketdi" —
+        # ya'ni rozilik shabloni himoya qilayotgan narsaning o'zini.
+        # To'rttasi ham faqat `require_attendance()` bilan turgan edi, u
+        # esa qo'riqchi emas: rolga umuman qaramaydi.
+        "/api/v1/owner/faces",
+        "/api/v1/owner/employees",
+        "/api/v1/owner/attendance",
+        "/api/v1/owner/attendance.csv",
+        # Ro'yxatning turi bo'yicha so'ralgani ham: bu `/owner/faces/events`
+        # ning aynan muqobili edi.
+        "/api/v1/owner/events?event_type=employee_seen",
+        "/api/v1/owner/events?event_type=face_captured",
     ):
         assert pilot_client.get(path, headers=manager).status_code == 403, path
 
@@ -469,6 +482,58 @@ def test_a_manager_cannot_open_any_biometric_image(pilot_client) -> None:
         pilot_client.delete(f"/api/v1/owner/faces/photos/{photo_id}", headers=manager).status_code
         == 403
     )
+
+
+def test_a_manager_keeps_the_evidence_page_without_the_face_rows(pilot_client) -> None:
+    """Menejerda «Dalillar» sahifasi ISHLAYDI, faqat yuz qatorlarisiz.
+
+    Bu testning maqsadi — noto'g'ri yechimni to'sish.  `/owner/events`
+    javobida `person_name` bor, ya'ni uni yopish kerak edi; lekin butun
+    marshrutga qo'riqchi qo'yilsa menejerning ASOSIY ish quroli o'lardi:
+    `EventEvidence.tsx` kamera o'chishi, chiziq kesilishi va o'g'rilik
+    dalillarini aynan shu marshrutdan oladi va `event_type` ni umuman
+    yubormaydi.  Shuning uchun qo'riqchi turga qo'yilgan, marshrutga emas.
+
+    Darvoza faqat `?event_type=` ga qo'yilsa yetmasdi: turi so'ralmagan
+    umumiy ro'yxatda ham yuz hodisalari qaytardi — yon eshik ochiq
+    qolardi.  Shuni ham tekshiramiz.
+    """
+    site, headers = _site_with_device(pilot_client)
+    _send_face_capture(pilot_client, headers, "evt-yuz", b"kadr")
+    batch = pilot_client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "evt-kamera",
+                    "event_type": "camera_tampered",
+                    "camera_id": "camera-01",
+                    "severity": "critical",
+                }
+            ]
+        },
+    )
+    assert batch.status_code == 200, batch.text
+
+    manager = _member_headers(pilot_client, site["site_id"], "507", "manager")
+    response = pilot_client.get("/api/v1/owner/events?limit=100", headers=manager)
+    assert response.status_code == 200, response.text
+    turlar = {item["event_type"] for item in response.json()["events"]}
+    # Sahifa tirik: xavfsizlik dalili joyida.
+    assert "camera_tampered" in turlar
+    # Yuz hodisasi esa turini so'ramasdan ham kelmaydi.
+    assert "face_captured" not in turlar
+
+    # Ega uchun hech narsa o'zgarmadi — ikkalasi ham ko'rinadi.
+    owner = _owner_headers(pilot_client, site["site_id"])
+    ega_turlari = {
+        item["event_type"]
+        for item in pilot_client.get("/api/v1/owner/events?limit=100", headers=owner).json()[
+            "events"
+        ]
+    }
+    assert {"camera_tampered", "face_captured"} <= ega_turlari
 
 
 # ── Mijoz o'zi rasm qo'shadi ────────────────────────────────────────────

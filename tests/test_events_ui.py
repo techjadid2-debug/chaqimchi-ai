@@ -117,7 +117,11 @@ def test_the_events_page_is_locked_behind_the_business_plan() -> None:
     """Qulf «buzilibdi» emas, «ko'tarish mumkin» degani.
 
     Oddiy ro'yxat esa qulf ostida QOLMAYDI — hech kim funksiya
-    yo'qotmaydi (server tomonda `/owner/events` ga 403 qo'shilmagan).
+    yo'qotmaydi: server tomonda `/owner/events` ga MARSHRUT darajasida
+    403 qo'yilmagan.  2026-09-10 da unga biometrik darvoza qo'shildi,
+    lekin ataylab turga: menejer yuz hodisalarini ko'rmaydi, qolgan
+    ro'yxat esa unga o'zgarishsiz keladi
+    (`tests/test_cloud_faces.py: test_a_manager_keeps_the_evidence_page_...`).
     """
     source = read("EventEvidence.tsx")
 

@@ -81,6 +81,17 @@ def require_owner(authorization: str | None = Header(None)) -> OwnerPrincipal:
             raise HTTPException(401, "Owner token yaroqsiz") from exc
 
 
+#: Yuzni (va undan olingan xulosani) ko'rishga haqli rollar.
+#:
+#: Shu yerda, `require_owner_role` yonida turibdi: ro'yxatga tayanadigan
+#: joylar bittadan ko'p — HTTP qo'riqchisi (`cloud/main.py`) va oylik
+#: smena hisobotining oluvchilari (`cloud/digest.py`).  `main` digest'ni
+#: import qiladi, ya'ni ro'yxat `main` da qolsa digest uni umuman ola
+#: olmasdi va menejer marshrut yopiq bo'lsa ham xodim jadvalini har oy
+#: Telegramda olaverardi.
+BIOMETRIC_ROLES = ("owner", "service_admin")
+
+
 def require_owner_role(principal: OwnerPrincipal, *roles: str) -> None:
     if principal.role not in roles:
         raise HTTPException(403, "Bu amal uchun ruxsat yetarli emas")

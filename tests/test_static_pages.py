@@ -936,3 +936,21 @@ def test_the_cloud_image_carries_the_chart_fonts() -> None:
     ignored = [line.strip() for line in (root / ".dockerignore").read_text(encoding="utf-8").splitlines()]
     assert not any(line.startswith("cloud/assets") or line.endswith(".ttf") for line in ignored)
     assert "Pillow" in (root / "requirements-cloud.txt").read_text(encoding="utf-8")
+
+
+def test_the_cloud_image_can_build_the_panel_bundle() -> None:
+    """Frontend bosqichi `tokens.css` ni ham nusxalasin.
+
+    `frontend/src/styles.css` dizayn tokenlarini `../../cloud/static/tokens.css`
+    dan import qiladi (F1, 2026-09-07).  Dockerfile faqat `frontend/` ni
+    nusxalardi va `npm run build` konteynerda ENOENT bilan yiqilardi —
+    2026-09-11 cutover deployi aynan shunda to'xtab, sayt bir necha
+    daqiqa o'chiq turdi.  Lokal `make ui-build` buni ko'rmaydi (repo
+    to'liq), shuning uchun qulf shu yerda.
+    """
+    root = STATIC.parents[1]
+    styles = (root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+    assert "cloud/static/tokens.css" in styles, "import yo'qolgan bo'lsa test ma'nosini yo'qotadi"
+    dockerfile = (root / "Dockerfile.cloud").read_text(encoding="utf-8")
+    frontend_stage = dockerfile.split("FROM python", 1)[0]
+    assert "COPY cloud/static/tokens.css /cloud/static/tokens.css" in frontend_stage

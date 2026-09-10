@@ -3,6 +3,12 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend ./
+# Dizayn tokenlari `frontend/src/styles.css` da `../../cloud/static/tokens.css`
+# deb import qilinadi (F1, 2026-09-07) — sayt va panel bitta palitra.
+# Bu qator bo'lmasa `npm run build` konteynerda ENOENT bilan yiqiladi
+# (2026-09-11 cutover deployi aynan shunda to'xtadi; lokal `make ui-build`
+# buni ko'rmaydi, chunki repo to'liq).
+COPY cloud/static/tokens.css /cloud/static/tokens.css
 ENV ENES_UI_OUT_DIR=/build/v2
 RUN npm run build
 

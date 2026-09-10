@@ -273,6 +273,33 @@ def test_edge_health_heartbeat_is_visible_to_owner(production_client) -> None:
     assert health["cameras_expected"] == 8
 
 
+def test_otp_verification_is_capped_per_ip(production_client) -> None:
+    """Bitta IP begona akkauntlarni ketma-ket BLOKLAY olmasin.
+
+    Kodning o'zi allaqachon himoyalangan: `verify_otp` urinishlarni
+    sanaydi va beshinchisidan keyin kodni o'lik deb hisoblaydi.  Ochiq
+    qolgani boshqa xavf edi — Telegram ID sir emas, ya'ni hujumchi
+    begona akkauntga beshta noto'g'ri kod yuborib, o'sha odamning
+    HAQIQIY kodini kuydirib qo'yardi; qurbon esa yangi kodni 10
+    daqiqada faqat uch marta so'ray oladi.  Yonidagi `auth/link` da
+    IP cheklovi bor edi, bu yerda esa unutilgan.
+    """
+    client, _messages = production_client
+
+    javoblar = [
+        client.post(
+            "/api/v1/owner/auth/verify",
+            json={"telegram_id": f"9{index:04d}", "site_id": "yo'q", "code": "000000"},
+        ).status_code
+        for index in range(35)
+    ]
+
+    # Cheklovgacha — oddiy "kod noto'g'ri", keyin esa 429.
+    assert javoblar[0] == 401, "haqiqiy urinish cheklovga urilmasin"
+    assert 429 in javoblar, "cheklovsiz IP begona akkauntlarni kuydira olardi"
+    assert javoblar[-1] == 429
+
+
 def test_owner_otp_login_and_tenant_event_access(production_client) -> None:
     client, messages = production_client
     site, _device, headers = _provision(client)

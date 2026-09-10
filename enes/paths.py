@@ -43,6 +43,21 @@ def is_windows() -> bool:
 
 
 def _windows_dir(base_env: str, fallback: str) -> Path:
+    """Yangi nomdagi papka, lekin eski o'rnatish topilsa — o'sha.
+
+    ⚠️ Tanlov papkaning BORLIGIGA tayanadi, ichidagi belgiga emas — va bu
+    faqat shuning uchun ishlaydi: bu modul papkalarni O'ZI yaratmaydi va
+    boshqa hech kim ham yaratmaydi (`enes/paths.py` da bitta ham `mkdir`
+    yo'q, `tests/test_local_paths.py` shuni qulflaydi).
+
+    Do'kon dasturidagi egizak modul (`enes/local/paths.py`) aynan shu
+    naqshdan kuygan: u yerda `data_dir()` papkani har chaqiruvda `mkdir`
+    bilan yaratardi, ya'ni dastur bir marta ishga tushishi bilan yangi
+    nomdagi BO'SH papka paydo bo'lardi va ko'prik o'shandan keyin eski
+    papkani hech qachon tanlamasdi — pilot 2026-09-09 da shu sababdan
+    15 soat to'xtadi.  Agar bu modulga `mkdir` kerak bo'lsa, avval
+    belgiga o'tkazing (`_MARKER` naqshi, `enes/local/paths.py`).
+    """
     base = PureWindowsPath(os.environ.get(base_env, fallback))
     current = Path(base.joinpath(*_WINDOWS_VENDOR))
     legacy = Path(base.joinpath(*_LEGACY_WINDOWS_VENDOR))

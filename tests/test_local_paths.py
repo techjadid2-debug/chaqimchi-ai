@@ -133,3 +133,32 @@ def test_the_two_path_modules_agree_on_the_old_vendor_name() -> None:
     from enes import paths as device_paths
 
     assert paths._LEGACY_WINDOWS_DIR == device_paths._LEGACY_WINDOWS_VENDOR[0]
+
+
+def test_the_box_bridge_stays_safe_because_nothing_creates_its_folders() -> None:
+    """`enes/paths.py` papka YARATMASIN — ko'prigi shunga tayanadi.
+
+    U egizak moduldan farqli o'laroq hali `exists()` ga qarab tanlaydi,
+    ya'ni yangi nomdagi bo'sh papka paydo bo'lsa eski o'rnatish darhol
+    ko'rinmay qoladi.  Bugun bu xavfsiz, chunki papkani hech kim
+    yaratmaydi — lekin bu FARAZ, va aynan shu faraz buzilgani do'kon
+    dasturida pilotni 15 soatga to'xtatgan edi
+    (`enes/local/paths.py` dagi `_MARKER` izohi).
+
+    Shuning uchun tripwire: kimdir bu modulga `mkdir` qo'shsa, test
+    ko'prikni belgiga o'tkazish kerakligini aytadi.
+    """
+    source = (Path(__file__).resolve().parents[1] / "enes" / "paths.py").read_text(
+        encoding="utf-8"
+    )
+
+    # Izohlarda so'z sifatida uchraydi, shuning uchun CHAQIRUV qidiriladi.
+    kod = "\n".join(
+        qator for qator in source.splitlines() if not qator.lstrip().startswith("#")
+    )
+    for chaqiruv in (".mkdir(", "makedirs("):
+        assert chaqiruv not in kod, (
+            f"enes/paths.py papka yaratyapti ({chaqiruv}) — eski nomdagi "
+            "o'rnatish endi topilmay qoladi; ko'prikni `_MARKER` naqshiga "
+            "o'tkazing (`enes/local/paths.py`)"
+        )

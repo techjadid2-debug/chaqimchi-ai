@@ -9,7 +9,12 @@
   const title = document.getElementById("statusTitle");
   const text = document.getElementById("statusText");
 
-  fetch("/health", { cache: "no-store" })
+  /* Ataylab `/health` EMAS: u Docker HEALTHCHECK uchun mo'ljallangan va
+     hech narsani tekshirmasdan doim 200 qaytaradi — Postgres o'lgan
+     bulut ham bu sahifada "ishlayapti" bo'lib ko'rinardi, ya'ni sahifa
+     aynan kerak bo'lgan daqiqada yolg'on gapirardi.  `/health/deep`
+     bazani, MinIO'ni va diskni tekshiradi va nosozlikda 503 beradi. */
+  fetch("/health/deep", { cache: "no-store" })
     .then((r) => {
       if (!r.ok) throw new Error();
       return r.json();

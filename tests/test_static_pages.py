@@ -901,3 +901,19 @@ def test_landing_has_canonical_and_valid_structured_data() -> None:
     for question in data["@graph"][2]["mainEntity"]:
         needle = question["name"].split("?")[0][:24]
         assert needle in html, f"razmetkadagi savol sahifada yo'q: {needle}"
+
+
+def test_the_status_page_asks_the_honest_health_check() -> None:
+    """`/status` yengil `/health` ni O'QIMASIN.
+
+    `/health` Docker HEALTHCHECK uchun va hech narsani tekshirmasdan doim
+    200 qaytaradi — ya'ni Postgres o'lgan bulut ham bu sahifada
+    "ishlayapti" bo'lib ko'rinardi.  Sahifa aynan nosozlik daqiqasida
+    yolg'on gapirardi, ya'ni umuman foydasiz edi.
+
+    Tekshiruv qat'iy: `fetch("/health"` ham qolib ketmasin.
+    """
+    source = (STATIC / "status.js").read_text(encoding="utf-8")
+
+    assert 'fetch("/health/deep"' in source
+    assert 'fetch("/health"' not in source, "yengil tekshiruv nosozlikni ko'rmaydi"

@@ -6914,7 +6914,28 @@ async def owner_request_otp(body: OtpRequestBody) -> Dict[str, Any]:
 
 
 @app.post("/api/v1/owner/auth/verify")
-async def owner_verify_otp(body: OtpVerifyBody) -> Dict[str, Any]:
+async def owner_verify_otp(body: OtpVerifyBody, request: Request) -> Dict[str, Any]:
+    """OTP ni tekshiradi va session beradi.
+
+    Kodning O'ZI allaqachon himoyalangan: `verify_otp` har urinishni
+    sanaydi va beshinchisidan keyin kodni o'lik deb hisoblaydi, ya'ni
+    million variantni sinab ko'rib bo'lmaydi.
+
+    IP cheklovi boshqa narsadan himoya qiladi — BLOKLASHDAN.  Telegram
+    ID sir emas; uni bilgan odam begona akkauntga beshta noto'g'ri kod
+    yuborsa, o'sha odamning HAQIQIY kodi ishlamay qoladi va u panelga
+    kira olmaydi.  Kod so'rash esa o'z navbatida 10 daqiqada uchtaga
+    cheklangan, ya'ni qurbon o'zini o'zi tiklay olmasdi.  Yonidagi
+    `auth/link` da bu cheklov bor edi, bu yerda esa unutilgan.
+    """
+    client_host = request.client.host if request.client else "unknown"
+    ratelimit.check(
+        "owner-verify",
+        client_host,
+        limit=30,
+        window_sec=600,
+        message="Juda ko'p urinish. 10 daqiqadan keyin qayta urinib ko'ring.",
+    )
     secret = _owner_secret()
     if not get_event_store().verify_otp(body.telegram_id, body.code, secret=secret):
         raise HTTPException(401, "Kod noto'g'ri yoki muddati tugagan")

@@ -539,6 +539,16 @@ degan yolg'on ishonch bo'lmasin.
 `tests/test_panel_v2.py`; eski testlardan ko'chirilmaganlari va
 sababi — [ISH_DAFTARI.md](ISH_DAFTARI.md) «PANEL QOIDALARI».
 
+**Ega paneli bo'limlari** (2026-09-10, dizayn-3): menyu 8 bo'lim —
+Bosh sahifa · Kameralar (Jonli | Ulash | Chiziq va zonalar) · Hodisalar
+(Dalillar | AI yordamchi) · Xodimlar · Mijozlar (Oqim | Mijoz portreti |
+Issiqlik xaritasi) · Tahlil (4 grafik, `/api/v1/owner/overview`) ·
+Hisobotlar · Sozlamalar (Do'kon va ish vaqti | Telegram | Tarif |
+Filiallar).  Tab — manzilning ikkinchi segmenti (`/owner/cameras/zones`);
+eski bo'lim nomlari `owner.tsx: LEGACY_ROUTES` orqali yangi joyiga
+yo'naladi (Telegram xabarlaridagi havolalar sinmasin).  Davr tanlovi
+(`overview.tsx`) bosh sahifa va Tahlil o'rtasida umumiy.
+
 **Admin support vositalari** (2026-09-08, F4a): `AdminCustomer.tsx`
 (mijoz tafsiloti — qurilma, kamera, diagnostika, topshiriqlar, funksiya
 biriktirish, login, hisob, obuna, yuz tanish), `AdminTeam.tsx`,
@@ -547,6 +557,9 @@ biriktirish, login, hisob, obuna, yuz tanish), `AdminTeam.tsx`,
 | Qism | Fayl |
 |---|---|
 | v2 manba | `frontend/src/` |
+| Grafiklar (kutubxonasiz SVG) | `frontend/src/charts.tsx`; davr/overview yordamchilari `overview.tsx` |
+| Telegram uchun grafik rasm | `cloud/chartimg.py` (Pillow, shrift `cloud/assets/fonts/`) |
+| Tungi rejim (qurilma) | `enes/retail/nightmode.py`, `pipeline.py: _night_motion`, `tamper.py: relearn` |
 | v2 qurilishi | `frontend/vite.config.ts` → `cloud/static/v2` |
 | Panel qoidalari | `tests/test_panel_v2.py` |
 | Eski CSS (faqat `pay.html` uchun, F3 da ketadi) | `cloud/static/owner.css`, `panel.css` |

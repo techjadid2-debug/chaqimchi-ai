@@ -9,6 +9,39 @@
 
 ## HOZIRGI HOLAT · 2026-09-10
 
+- **🌙📊 TUNGI NAZORAT + YANGI PANEL (dizayn-3) + RASMLI HISOBOT — KODDA
+  TAYYOR, 5 commit (2026-09-10, `ec34ccb`…`b7a1e02`).**  Ega uchta ish
+  so'radi; hammasi kodda, testda va bundle'da, **deploy qilinmagan**.
+  Ikki yo'lga bo'linadi:
+  - **Cloud + panel (cutover deployi bilan chiqadi):** yon menyu 14 → 8
+    bo'lim (bo'lim ichida tab, eski manzillar `LEGACY_ROUTES` orqali o'z
+    joyiga); bosh sahifa mockup tartibida (davr tanlagich Bugun/7/30,
+    KPI rost raqamlar, issiqlik xaritasi kichik ko'rinishi, hodisalar
+    donut, rangli belgili AI hodisalari); yangi **«Tahlil»** sahifasi —
+    4 grafik (`GET /api/v1/owner/overview?days=`, `retail_daily` dan);
+    Sozlamalar → **ish vaqti** maydoni (`open_from/open_to` — bungacha
+    ega panelida YO'Q edi, ya'ni tungi nazorat pilotda o'chiq bo'lishi
+    mumkin; dashboard `night_watch` + bosh sahifada banner); Telegram:
+    kunlik/haftalik hisobot va `/hisobot` avval **grafik rasm** + qisqa
+    izoh, keyin matn (`cloud/chartimg.py`, Pillow, DejaVu shrifti repoda —
+    kirill uchun); tungi hodisa kadri ustiga vaqt/kamera; xabarda 🌙,
+    hisobotda «Tunda: N».  **Yangi bog'liqlik `Pillow`** — Docker image
+    qayta quriladi (deploy skripti buni o'zi qiladi).
+  - **Qurilma (0.6.33, F8 relizi bilan, pilot tirilgach):**
+    `enes/retail/nightmode.py` — IR o'tishini sezish (to'yinganlik < 8),
+    `dark` (yorug'lik < 25) → tamper `relearn()` + MOG2 `reset()`,
+    `dark` da detektorga CLAHE nusxa va ramka 1.5×; yangi hodisa
+    **`night_motion`** (yopiq do'konda 3% harakat 3 s; odam tanilganda
+    jim); har tungi hodisaga `metadata.night`; `rules.yaml` da tungi
+    qoidalar BIRINCHI.  ⚠️ **Deploy tartibi: AVVAL cloud, KEYIN reliz** —
+    eski cloud `night_motion` ni tanimaydi va batchni rad etadi
+    (`outbox_poisoned`), tuzoqlarga qarang.
+  - **Kalibrlanmagan chegaralar** (haqiqiy IR kamerada sinalmagan):
+    `CHROMA_MAX_IR=8`, `DARK_BRIGHTNESS=25`, `NIGHT_MOTION_RATIO=0.03`,
+    `NIGHT_MOTION_SEC=3`.  Pilotda kechqurun heartbeatda
+    `cameras[].night_mode: ir` ko'rinishi va `tamper_alerts` o'smasligi
+    — birinchi tekshiruv.
+
 - **🔴 PILOT HAMON O'LIK — 33 SOAT (jonli tekshiruv, 2026-09-10 02:58 UTC).**
   Oxirgi heartbeat `2026-09-09T01:51:09Z`, `app_version 0.6.25` — ya'ni
   ma'lumot papkasi do'kon kompyuterida HALI nusxalanmagan.
@@ -650,6 +683,20 @@ tartib bilan:
 5. **Egadan kutilmoqda:** `enes.uz` DNS, bot @username, Payme/Click,
    yuridik nom/rekvizit, NS SVG.  Bularsiz F7 boshlanmaydi.
 
+**TUN / PANEL / BOT (2026-09-10) — deploydan KEYIN tekshirish:**
+- Cutover deployi (cloud): 21:00 hisobot rasm+matn bo'lib keladimi,
+  `/hisobot` rasm bilan (5/600 s cheklov), ruscha a'zoda kirill o'qiladimi;
+  panelda 8 bo'lim, eski havola (`/owner/telegram`) o'z joyiga o'tadimi,
+  «Tahlil» 4 grafik, Sozlamalar → ish vaqti saqlanib `GET /owner/config`
+  da qaytadimi; bosh sahifada ish vaqti kiritilmagan banneri.
+- Egadan: pilot do'konining **ish vaqtini panelda kiritish** — usiz
+  `after_hours_presence` ham, `night_motion` ham chiqmaydi.
+- Qurilma 0.6.33 (F8, pilot tirilgach, cloud deploydan KEYIN): kechqurun
+  heartbeat `cameras[].night_mode` (`ir`/`dark`/`day`), tun bo'yi
+  `tamper_alerts` o'smasligi, `night.relearns` 1–2 (kechqurun va tong),
+  birinchi `night_motion` Telegramda 🌙 va kadr ustida vaqt bilan;
+  `night_motion` haddan ko'p bo'lsa `NIGHT_MOTION_RATIO` ni ko'tarish.
+
 **REBREND (2026-09-09).** To'liq holat + xatolar + tartib:
 `~/.claude/plans/loyihada-nimalar-qilishimiz-kerak-*.md` (avvalgisi:
 `loyiha-bo-yicha-nimalar-qilishimiz-*.md`).  F0–F6 va F9 tugadi
@@ -977,6 +1024,22 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Yangi hodisa turi — AVVAL cloud, KEYIN qurilma relizi.**  Cloud
+  `EdgeEvent.model_validate` bilan butun batchni tekshiradi: eski cloud
+  `night_motion` (yoki istalgan yangi `EventType`) ni ko'rsa 422 beradi,
+  qurilma esa rad etilgan batchni `permanent=True` bilan o'ldiradi —
+  hodisalar QAYTARIB BO'LMAS yo'qoladi (`people_seen` bilan bo'lgan
+  `capture.enabled` darvozasi shu sababdan yopiq turadi).  0.6.33 ni
+  cloud deploy qilinmasdan nashr QILMANG.
+- **Ega panelidagi grafik uchun kalit `panel.*` prefiksida bo'lsin.**
+  `scripts/build_i18n.py` faqat `PANEL_PREFIXES` ni TS katalogiga
+  ko'chiradi — `chart.*` (server rasmi) va `digest.*` panelga chiqmaydi,
+  `t("chart.total")` ekranda kalitning o'zini ko'rsatadi.
+- **`.page-actions` 480 px da yashirin.**  Sahifa sarlavhasidagi
+  tugmalar telefonda ko'rinmaydi (ataylab — CSV tugmalari).  Davr
+  tanlagichi `:has(.period-bar)` istisnosi bilan qoladi; sarlavhaga yangi
+  BOSHQARUV qo'shilsa shu istisnoga kiritilsin.
 
 - **`read_sotqin_cache()` kalitlarni OQ RO'YXAT bilan qaytaradi.**  Cloud
   yuborgan yangi kalitni `apply()` keshga yozadi, lekin o'quvchi uni
@@ -1579,6 +1642,48 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-10 — Tungi nazorat, dizayn-3 paneli, Telegramda rasmli hisobot (`ec34ccb`, `05e2b04`, `43dfa99`, `f6897de`, `b7a1e02`)
+
+Nima: ega endi (1) panelda 8 bo'limli menyu, mockupdagi bosh sahifa va
+«Tahlil» sahifasida 4 grafikni (kunlar kesimida, 7/14/30) ko'radi;
+(2) Sozlamalarda ish vaqtini o'zi kiritadi va tungi nazorat shu bilan
+yonadi; (3) Telegramda kunlik/haftalik hisobot va `/hisobot` ni grafik
+rasm bilan oladi, tungi hodisa kadrida vaqt/kamera yozilgan; (4) qurilma
+kamera IR rejimga o'tganini sezib yolg'on «kamera buzildi» bermaydi,
+IR'siz kamerani «tunda ko'rmaydi» deb aytadi va yopiq do'kondagi
+harakatni odam tanilmasa ham xabar qiladi (`night_motion`).
+
+Nega: `after_hours_presence` ish vaqtisiz umuman ishlamas, ish vaqtini
+esa faqat o'rnatuvchining sozlash ustasi yozardi — ega panelida maydon
+yo'q edi.  `tamper.py` o'z izohida IR o'tishini ajrata olmasligini yozib
+qo'ygan edi.  Grafik kutubxonasiz `charts.tsx` bor edi-yu, `Donut`/`Bars`
+ega panelida ishlatilmasdi; cloudda rasm chizadigan kutubxona yo'q edi
+(`cv2.putText` kirillcha yozolmaydi → Pillow + repo ichidagi DejaVu).
+
+Qayerda: `frontend/src/{owner,OwnerHome,Analytics,overview,charts,
+Heatmap,router,components}.tsx`; `cloud/main.py` (`/owner/overview`,
+`night_watch`, `/hisobot`, alert annotatsiyasi, `EdgeCameraHealth.night_mode`);
+`cloud/event_store.py: retail_overview`; `cloud/chartimg.py` (yangi),
+`cloud/assets/fonts/`; `cloud/digest.py` (`photo_sender`, 🌙 qator);
+`cloud/notify.py` (🌙); `enes/retail/nightmode.py` (yangi),
+`pipeline.py` (probe, `night_motion`, `metadata.night`, dark yoritish),
+`tamper.py: relearn`, `scene_analytics.py: MotionGate.reset, size_boost`,
+`service.py`, `runner.py`, `enes/local/cloud_config.py`,
+`config/rules.yaml` (tungi qoidalar birinchi), `enes/event_models.py`.
+
+Test: `tests/test_retail_night.py` (12), `test_retail_nightmode.py` (5),
+`test_chartimg.py` (9), overview (`test_owner_report.py`,
+`test_cloud_events_owner.py`), rasm→matn tartibi va izoh ≤1024,
+`/hisobot` rasm, tungi kadr annotatsiyasi, `night_watch`, menyu/eski
+marshrut qulflari (`test_panel_v2.py`), shrift konteynerga kirishi.
+To'liq to'plam yashil (`make test PY=.venv/bin/python`).
+
+Diqqat: mockupdagi «Shubhali harakat» yorlig'i ATAYLAB yo'q — MVP niyat
+taxmin qilmaydi; «1000+ mijoz», «99.9%» namuna raqamlari ham.
+Diqqat: `make test` tizim `python3` bilan `pytest` topmaydi — `PY=.venv/bin/python`.
+Diqqat: yangi hodisa turi — avval cloud deploy, keyin reliz (tuzoqlar).
+Diqqat: IR/qorong'ilik chegaralari haqiqiy kamerada kalibrlanmagan.
 
 ### 2026-09-10 — Uchta kichik qarz: OTP bloklashi, `/status` yolg'oni, Box tripwire (`e86615a`)
 Nima: `POST /owner/auth/verify` ga IP cheklovi (30/10 daq), `/status`

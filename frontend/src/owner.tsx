@@ -9,6 +9,7 @@ import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
 import { HeatmapPage } from "./Heatmap";
 import { OwnerHome } from "./OwnerHome";
+import { Analytics } from "./Analytics";
 import { SetupCameras } from "./SetupCameras";
 import { VisionAgent } from "./VisionAgent";
 import { EventEvidence } from "./EventEvidence";
@@ -29,7 +30,8 @@ const NAV_ITEMS: Array<{ id: string; key: string; icon: string }> = [
   { id: "cameras", key: "panel.nav.cameras", icon: "camera" },
   { id: "alerts", key: "panel.nav.alerts", icon: "shield" },
   { id: "employees", key: "panel.nav.employees", icon: "users" },
-  { id: "customers", key: "panel.nav.customers", icon: "chart" },
+  { id: "customers", key: "panel.nav.customers", icon: "entry" },
+  { id: "analytics", key: "panel.nav.analytics", icon: "chart" },
   { id: "reports", key: "panel.nav.reports", icon: "report" },
   { id: "settings", key: "panel.nav.settings", icon: "settings" },
 ];
@@ -120,20 +122,13 @@ function useAdaptiveDashboard(siteId: string, authenticated: boolean) {
   return { data, error, loading, refresh };
 }
 
+/** 14 kunlik dinamika — bosh sahifadagi bilan bitta `LineChart`.
+ *  Ilgari bu yerda alohida SVG bor edi: ikkinchi nusxa, qattiq rang
+ *  (`#4285f4`) va tooltip'siz. */
 function TrendChart({ points }: { points: TrendPoint[] }) {
-  const normalized = (points || []).slice(-14).map(point => ({ label: String(point.date || point.day || "").slice(5), value: Number(point.entries ?? point.entered ?? point.count ?? 0) }));
-  if (!normalized.length) return <EmptyState icon="chart" title={t("panel.traffic.trend_empty_title")} detail={t("panel.traffic.trend_empty_detail")} />;
-  const maximum = Math.max(...normalized.map(item => item.value), 1);
-  const coords = normalized.map((item, index) => `${10 + (index * 580) / Math.max(1, normalized.length - 1)},${190 - (item.value / maximum) * 155}`).join(" ");
-  return <div className="chart-wrap">
-    <svg className="chart" viewBox="0 0 600 210" preserveAspectRatio="none" role="img" aria-label={t("panel.traffic.trend_aria")}>
-      <defs><linearGradient id="areaBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4285f4" stopOpacity=".23"/><stop offset="1" stopColor="#4285f4" stopOpacity="0"/></linearGradient></defs>
-      {[35,75,115,155,195].map(y => <line key={y} className="chart-grid" x1="0" y1={y} x2="600" y2={y}/>) }
-      <polygon className="chart-area" points={`10,195 ${coords} 590,195`} />
-      <polyline className="chart-line" points={coords}/>
-    </svg>
-    <div className="chart-labels">{normalized.map((item, index) => <span key={`${item.label}-${index}`}>{item.label || index + 1}</span>)}</div>
-  </div>;
+  const normalized: Point[] = (points || []).slice(-14).map(point => ({ label: String(point.date || point.day || "").slice(5), value: Number(point.entries ?? point.entered ?? point.count ?? 0) }));
+  if (normalized.length < 2 || !normalized.some(point => point.value > 0)) return <EmptyState icon="chart" title={t("panel.traffic.trend_empty_title")} detail={t("panel.traffic.trend_empty_detail")} />;
+  return <LineChart series={[{ name: t("panel.home.flow.series"), points: normalized }]}/>;
 }
 
 type Notification = { event_id: string; event_type: string; label?: string; camera_id?: string; occurred_at?: string; severity?: string; unread?: boolean };
@@ -545,6 +540,7 @@ function SectionPage({ id, tab, dashboard, sites, siteId, onNavigate, onRefresh,
     : tab === "billing" ? <BillingPage dashboard={dashboard} siteId={siteId}/>
     : tab === "branches" ? <BranchesPage sites={sites}/>
     : <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>}</>;
+  if (id === "analytics") return <Analytics dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   if (id === "reports") return <ReportsPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   return <><PageHeader title={t("panel.owner.section_title")} subtitle={t("panel.owner.section_subtitle")}/><Card><EmptyState icon="settings" title={t("panel.owner.section_empty_title")} detail={t("panel.owner.section_empty_detail")}/></Card></>;
 }
@@ -800,10 +796,7 @@ function OwnerApp() {
     </>}>
     {error ? <div className="alert-strip"><Icon name="bell"/><div><strong>{t("panel.owner.refresh_error_title")}</strong> {error}. {t("panel.owner.refresh_error_note")}</div></div> : null}
     {active === "home"
-      ? <>
-          <PageHeader title={t("panel.owner.home_title")} subtitle={today} />
-          <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
-        </>
+      ? <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
       : active === "employees" ? <EmployeesPage siteId={siteId}/>
       : <SectionPage id={active} tab={tab} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} onRefresh={() => void refresh()} focusEventId={focusEvent}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label={t("panel.common.close")}><Icon name="close"/></button></div><nav>{nav.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>{t("panel.common.logout")}</button></nav></aside></div> : null}

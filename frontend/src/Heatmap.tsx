@@ -20,6 +20,85 @@ function heatRgb(ratio: number) {
   return stops[i].map((value, index) => Math.round(value + (stops[i + 1][index] - value) * f));
 }
 
+/** To'rni kadr ustiga chizadi.  Sahifa ham, bosh sahifadagi kichik
+ *  ko'rinish ham AYNAN shu funksiyani ishlatadi — ikki nusxa bo'lsa
+ *  ranglar va cho'qqi qoidasi bir-biridan uzoqlashardi. */
+function paintHeat(ctx: CanvasRenderingContext2D, width: number, height: number, preview: HTMLImageElement | null, grid: number[][] | undefined, rows: number, cols: number, peak: number) {
+  ctx.clearRect(0, 0, width, height);
+  if (preview) {
+    ctx.drawImage(preview, 0, 0, width, height);
+  } else {
+    ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "#64748b"; ctx.font = `600 ${Math.max(11, Math.round(height / 36))}px system-ui`;
+    ctx.fillText(t("panel.heat.no_frame"), 20, height - 20);
+  }
+  // Bo'sh soat BO'SH qoladi: eski to'r ekranda qolib ketsa ega uni
+  // "yangilanmayapti" deb o'qiydi.
+  if (!grid || !rows || !cols) return;
+  ctx.save(); ctx.globalCompositeOperation = "screen";
+  grid.forEach((line, rowIndex) => line.forEach((value, colIndex) => {
+    const strength = Number(value || 0) / peak;
+    if (strength < .1) return;
+    const x = (colIndex + .5) * width / cols, y = (rowIndex + .5) * height / rows;
+    const radius = Math.max(width / cols * 2.8, 28 * width / 960) + strength * Math.max(width / cols * 4, 64 * width / 960);
+    const rgb = heatRgb(strength);
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    glow.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(.42 + strength * .34).toFixed(2)})`);
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  }));
+  ctx.restore();
+}
+
+/** Kamera kadri — xarita foni.  Xatosi ataylab yutiladi: kadr hali
+ *  yuborilmagan bo'lsa (404) xarita baribir chiziladi. */
+function usePreviewFrame(siteId: string, cameraId: string) {
+  const preview = useRef<HTMLImageElement | null>(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!cameraId) return;
+    let stopped = false; let url = "";
+    void (async () => {
+      url = await mediaObjectUrl(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, "owner", siteId).catch(() => "");
+      if (stopped || !url) { if (url) URL.revokeObjectURL(url); return; }
+      const image = new Image(); image.src = url;
+      try { await image.decode(); } catch { return; }
+      if (stopped) return;
+      preview.current = image; setTick(value => value + 1);
+    })();
+    return () => { stopped = true; preview.current = null; if (url) URL.revokeObjectURL(url); };
+  }, [cameraId, siteId]);
+  return [preview, tick] as const;
+}
+
+/** Bosh sahifadagi kichik xarita: bugungi kun, bitta kamera, tugmasiz.
+ *
+ *  `onEmpty` — bugun to'r bo'sh bo'lsa chaqiruvchi o'rniga matn
+ *  ko'rsatadi (bo'sh qora to'rtburchak "buzilgan" ko'rinadi). */
+export function HeatmapThumb({ siteId, cameraId, onState }: { siteId: string; cameraId: string; onState?: (state: "loading" | "ready" | "empty" | "error") => void }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [answer, setAnswer] = useState<DayAnswer | null>(null);
+  const [preview, previewTick] = usePreviewFrame(siteId, cameraId);
+  useEffect(() => {
+    if (!cameraId) return;
+    let stopped = false;
+    onState?.("loading");
+    api<DayAnswer>(`/api/v1/owner/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=1`, "owner", { siteId })
+      .then(data => { if (stopped) return; setAnswer(data); onState?.((data.grid || []).flat().some(value => value > 0) ? "ready" : "empty"); })
+      .catch(() => { if (!stopped) onState?.("error"); });
+    return () => { stopped = true; };
+    // `onState` har renderda yangi funksiya — bog'liqlikka qo'shilsa so'rov takrorlanardi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraId, siteId]);
+  const peak = Math.max(1, ...(answer?.grid || [[0]]).flat());
+  useEffect(() => {
+    const target = canvas.current; const ctx = target?.getContext("2d");
+    if (!target || !ctx) return;
+    paintHeat(ctx, target.width, target.height, preview.current, answer?.grid, answer?.rows || 0, answer?.cols || 0, peak);
+  }, [answer, peak, preview, previewTick]);
+  return <canvas ref={canvas} className="heat-thumb" width="480" height="270" aria-label={t("panel.heat.card_title")}/>;
+}
+
 export function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; siteId: string; onNavigate: (id: string) => void }) {
   const [cameraId, setCameraId] = useState(() => dashboard.cameras[0]?.camera_id || "");
   const [mode, setMode] = useState<"days" | "hour">("days");
@@ -35,30 +114,12 @@ export function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dash
      bog'lanib qolardi. */
   const cache = useRef<Map<string, HoursAnswer>>(new Map());
   const canvas = useRef<HTMLCanvasElement>(null);
-  const preview = useRef<HTMLImageElement | null>(null);
-  const [previewTick, setPreviewTick] = useState(0);
+  /* Effekt A — kamera KADRI, umumiy hook: faqat [cameraId, siteId] ga
+     bog'liq.  Avval u ma'lumot so'rovi bilan bitta effektda edi va
+     `days` o'zgarganda kadr ham qaytadan yuklanardi — soat rejimida bu
+     24 barobar isrof bo'lardi. */
+  const [preview, previewTick] = usePreviewFrame(siteId, cameraId);
 
-  /* Effekt A — kamera KADRI.  Faqat [cameraId, siteId] ga bog'liq:
-     avval u ma'lumot so'rovi bilan bitta effektda edi va `days`
-     o'zgarganda kadr ham qaytadan yuklanardi.  Soat rejimida bu 24
-     barobar isrof bo'lardi.
-     Xatosi ataylab yutiladi: kadr hali yuborilmagan bo'lsa (404)
-     xarita baribir chiziladi — qoraroq fon ustida. */
-  useEffect(() => {
-    if (!cameraId) return;
-    let stopped = false; let url = "";
-    void (async () => {
-      url = await mediaObjectUrl(`/api/v1/owner/cameras/${encodeURIComponent(cameraId)}/preview`, "owner", siteId).catch(() => "");
-      if (stopped || !url) { if (url) URL.revokeObjectURL(url); return; }
-      const image = new Image(); image.src = url;
-      try { await image.decode(); } catch { return; }
-      if (stopped) return;
-      preview.current = image; setPreviewTick(value => value + 1);
-    })();
-    return () => { stopped = true; preview.current = null; if (url) URL.revokeObjectURL(url); };
-  }, [cameraId, siteId]);
-
-  // Effekt B — ma'lumot.
   useEffect(() => {
     if (!cameraId) return;
     let stopped = false;
@@ -98,32 +159,8 @@ export function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dash
   useEffect(() => {
     const target = canvas.current; const ctx = target?.getContext("2d");
     if (!target || !ctx) return;
-    const width = target.width, height = target.height;
-    ctx.clearRect(0, 0, width, height);
-    if (preview.current) {
-      ctx.drawImage(preview.current, 0, 0, width, height);
-    } else {
-      ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, width, height);
-      ctx.fillStyle = "#64748b"; ctx.font = "600 15px system-ui";
-      ctx.fillText(t("panel.heat.no_frame"), 20, height - 20);
-    }
-    // Bo'sh soat BO'SH qoladi: eski to'r ekranda qolib ketsa ega uni
-    // "yangilanmayapti" deb o'qiydi.
-    if (!grid || !rows || !cols) return;
-    ctx.save(); ctx.globalCompositeOperation = "screen";
-    grid.forEach((line, rowIndex) => line.forEach((value, colIndex) => {
-      const strength = Number(value || 0) / peak;
-      if (strength < .1) return;
-      const x = (colIndex + .5) * width / cols, y = (rowIndex + .5) * height / rows;
-      const radius = Math.max(width / cols * 2.8, 28) + strength * Math.max(width / cols * 4, 64);
-      const rgb = heatRgb(strength);
-      const glow = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      glow.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(.42 + strength * .34).toFixed(2)})`);
-      glow.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = glow; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-    }));
-    ctx.restore();
-  }, [grid, rows, cols, peak, previewTick]);
+    paintHeat(ctx, target.width, target.height, preview.current, grid, rows, cols, peak);
+  }, [grid, rows, cols, peak, preview, previewTick]);
 
   /* Ijro faqat ma'lumot BOR soatlar orasida aylanadi: tungi bo'sh
      soatlarni kutish 24 qadamning yarmini bekorga yeyardi. */

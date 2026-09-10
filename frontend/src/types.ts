@@ -154,6 +154,40 @@ export type Dashboard = {
   revision?: string;
 };
 
+/** Davr bo'yicha kunlik qatorlar (`/api/v1/owner/overview`).
+ *
+ * `events` kaliti BUTUNLAY yo'q bo'lishi mumkin — tarifda xavfsizlik
+ * yopiq (demografiya bilan bir xil yo'l).  `receipts: null` — o'sha kun
+ * chek kiritilmagan; nol esa «hech kim sotib olmadi». */
+export type OverviewDay = {
+  date: string;
+  weekday: string;
+  entered: number;
+  exited: number;
+  by_door: DoorCount[];
+  events?: Record<string, number>;
+  receipts: number | null;
+};
+
+export type Overview = {
+  from: string;
+  to: string;
+  days: number;
+  daily: OverviewDay[];
+  totals: {
+    entered: number;
+    exited: number;
+    previous_entered: number;
+    change_percent: number | null;
+    busiest_day?: { date: string; weekday: string; entered: number } | null;
+    receipts: number | null;
+    entered_with_receipts: number;
+    conversion?: Conversion | null;
+  };
+  by_door: DoorCount[];
+  events?: Record<string, number>;
+};
+
 export type Employee = {
   id: string;
   name?: string;

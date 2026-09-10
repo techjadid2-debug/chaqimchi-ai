@@ -35,6 +35,7 @@ OWNER_FILES = (
     "owner.tsx", "OwnerHome.tsx", "components.tsx", "EventEvidence.tsx",
     "Numbers.tsx", "Demography.tsx", "Heatmap.tsx", "VisionAgent.tsx",
     "SetupCameras.tsx", "GeometryEditor.tsx", "Connect.tsx", "EventTimeline.tsx",
+    "Analytics.tsx", "overview.tsx",
 )
 #: Admin paneli fayllari — ichki atamalar mumkin, eski brend esa yo'q.
 ADMIN_FILES = ("admin.tsx", "AdminHome.tsx", "AdminCustomer.tsx", "AdminTeam.tsx", "AdminSettings.tsx")

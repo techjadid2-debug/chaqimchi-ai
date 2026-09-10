@@ -61,11 +61,18 @@ export function LineChart({ series, height = 210 }: { series: { name: string; po
   const width = 600;
   const top = 12;
   const bottom = height - 26;
-  const max = Math.max(1, ...series.flatMap(line => line.points.map(point => point.value)));
+  /* `NaN` — o'sha kunda o'lchov YO'Q (masalan chek kiritilmagan).
+     Bunday nuqta chizilmaydi va cho'qqiga ham kirmaydi; nol deb
+     chizilsa «hech kim sotib olmadi» degan yolg'on bo'lardi. */
+  const known = (points: Point[]) => points.filter(point => Number.isFinite(point.value));
+  const max = Math.max(1, ...series.flatMap(line => known(line.points).map(point => point.value)));
   const xFor = (index: number, total: number) => 12 + (index * (width - 24)) / Math.max(1, total - 1);
   const yFor = (value: number) => bottom - (value / max) * (bottom - top);
 
-  const path = (points: Point[]) => points.map((point, index) => `${xFor(index, points.length).toFixed(1)},${yFor(point.value).toFixed(1)}`).join(" ");
+  const path = (points: Point[]) => points
+    .map((point, index) => Number.isFinite(point.value) ? `${xFor(index, points.length).toFixed(1)},${yFor(point.value).toFixed(1)}` : "")
+    .filter(Boolean)
+    .join(" ");
   const step = Math.max(1, Math.ceil(primary.length / 8));
 
   return (
@@ -80,8 +87,10 @@ export function LineChart({ series, height = 210 }: { series: { name: string; po
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#4285f4" stopOpacity=".22" />
-            <stop offset="1" stopColor="#4285f4" stopOpacity="0" />
+            {/* Rang tokendan — qorong'i temada ham to'g'ri.  `style`
+                orqali: SVG atributi `var()` ni tushunmaydi. */}
+            <stop offset="0" style={{ stopColor: "var(--blue)" }} stopOpacity=".22" />
+            <stop offset="1" style={{ stopColor: "var(--blue)" }} stopOpacity="0" />
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75, 1].map(fraction => (
@@ -116,7 +125,7 @@ export function LineChart({ series, height = 210 }: { series: { name: string; po
           <b>{primary[hover].label}</b>
           {series.map(line => (
             <span key={line.name}>
-              {line.name}: {line.points[hover]?.value ?? "—"}
+              {line.name}: {Number.isFinite(line.points[hover]?.value) ? line.points[hover]?.value : "—"}
             </span>
           ))}
         </div>
@@ -271,6 +280,39 @@ export function Bars({ items, height = 120 }: { items: Point[]; height?: number 
           <span>{index % step === 0 ? item.label : ""}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+
+/** Guruhli ustunlar — har yorliq uchun ikki-uch qiymat yonma-yon
+ *  (eshik bo'yicha kirdi/chiqdi).  Rang ko'rmaydigan foydalanuvchi
+ *  uchun afsona ham, ustun ustidagi son ham bor. */
+export type BarGroup = { label: string; values: { name: string; value: number; tone: string }[] };
+
+export function GroupedBars({ groups, height = 150 }: { groups: BarGroup[]; height?: number }) {
+  if (!groups.length) return null;
+  const max = Math.max(1, ...groups.flatMap(group => group.values.map(item => item.value)));
+  const legend = groups[0].values.map(item => ({ name: item.name, tone: item.tone }));
+  return (
+    <div className="grouped-wrap">
+      <div className="grouped-bars" style={{ height }}>
+        {groups.map((group, index) => (
+          <div className="grouped-col" key={`${group.label}-${index}`}>
+            <div className="grouped-stack">
+              {group.values.map(item => (
+                <i key={item.name} className={`tone-${item.tone}`} style={{ height: `${Math.max(2, (item.value / max) * 100)}%` }} title={`${group.label} · ${item.name}: ${item.value}`}>
+                  <b>{item.value}</b>
+                </i>
+              ))}
+            </div>
+            <span>{group.label}</span>
+          </div>
+        ))}
+      </div>
+      <ul className="chart-legend">
+        {legend.map(item => <li key={item.name}><i className={`tone-${item.tone}`} />{item.name}</li>)}
+      </ul>
     </div>
   );
 }

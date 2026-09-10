@@ -1,23 +1,28 @@
 import { eventLabel, t } from "./i18n";
 import { useEffect, useState } from "react";
-import { api, formatDateShort, formatMoney, formatNumber, formatTimeUz, relativeMinutes, telegramBotUrl } from "./api";
-import { Avatar, Card, EmptyState, Pill, StatCard, StatusDot } from "./components";
-import { LineChart, type Point } from "./charts";
+import { api, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, hasFeature, relativeMinutes, telegramBotUrl } from "./api";
+import { Avatar, Card, EmptyState, PageHeader, Pill, PlanLock, StatCard } from "./components";
+import { Donut, LineChart, type Point } from "./charts";
 import { Demography } from "./Demography";
+import { toneOf } from "./EventTimeline";
+import { HeatmapThumb } from "./Heatmap";
 import { Icon } from "./icons";
+import { PeriodBar, dayLabel, eventSegments, eventTotal, nightCount, periodDays, periodLabel, readPeriod, savePeriod, useOverview, type Period } from "./overview";
 import type { Dashboard, Site } from "./types";
 
-/* "Bugungi nazorat" — do'kon egasining yagona ekrani.
+/* «Bosh sahifa» — do'kon egasining yagona ekrani (dizayn-3 «Overview»).
  *
- * Namunadagi tartib ataylab: yuqorida bugungi beshta raqam, ostida
- * jonli kadrlar va AI hodisalari, keyin oqim/zonalar, pastda xodim,
- * filial, tarif va Telegram.  Egasi panelni kuniga bir necha marta
- * telefondan ochadi va unga "hammasi joyidami?" degan savolga javob
- * kerak — bo'limlar bo'ylab yurish emas.
+ * Tartib ataylab: tepada davr tanlagich va beshta raqam, ostida jonli
+ * kadrlar, keyin mijozlar tahlili va issiqlik xaritasi, hodisalar
+ * taqsimoti va zonalar; o'ngda AI hodisalari, xodim, tarif, qurilma va
+ * Telegram.  Egasi panelni kuniga bir necha marta telefondan ochadi va
+ * unga "hammasi joyidami?" degan savolga javob kerak — bo'limlar
+ * bo'ylab yurish emas.
  *
- * Ma'lumot bitta so'rovdan (`/api/v1/owner/dashboard`) keladi.  Server
- * bermaydigan ko'rsatkich UMUMAN chizilmaydi: yolg'on nol yoki bo'sh
- * grafik "tizim ishlamayapti" degan taassurot qoldiradi. */
+ * «Bugun» bitta so'rovdan (`/api/v1/owner/dashboard`) keladi; 7 va 30
+ * kun uchun `/owner/overview` qo'shiladi.  Server bermaydigan
+ * ko'rsatkich UMUMAN chizilmaydi: yolg'on nol yoki bo'sh grafik
+ * "tizim ishlamayapti" degan taassurot qoldiradi. */
 
 type AttendanceRow = {
   employee_id: string;
@@ -37,6 +42,13 @@ const ATTENDANCE_LABEL: Record<string, { key: string; tone: string }> = {
   early_leave: { key: "panel.home.attendance.early_leave", tone: "stale" },
   unscheduled: { key: "panel.home.attendance.unscheduled", tone: "" },
 };
+
+/* Hodisa belgisi — rang turga qarab (`EventTimeline.toneOf` bilan bir
+   ma'no), belgi rangga qarab: qizil — xavfsizlik, sariq — savdo zali,
+   ko'k — o'tish, yashil — tiklanish, kulrang — noma'lum. */
+const ICON_BY_TONE: Record<string, string> = { red: "shield", yellow: "clock", blue: "users", green: "camera", grey: "pulse" };
+
+const HOME_PERIODS: Period[] = ["today", "7", "30"];
 
 /** Soniyalarni "06:42" ko'rinishiga o'tkazadi. */
 function asDuration(seconds: number | null) {
@@ -107,10 +119,24 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
   const attendance = useAttendance(siteId);
   const members = useTelegramMembers(siteId);
 
-  const entered = num(traffic, "entered");
-  const changePercent = num(traffic, "change_percent");
+  const [period, setPeriod] = useState<Period>(() => readPeriod());
+  const { overview, error: overviewError } = useOverview(siteId, periodDays(period));
+  const choose = (next: Period) => { setPeriod(next); savePeriod(next); };
+  const isToday = period === "today";
+
+  // Bugungi raqamlar dashboard'dan; davr uchun overview'dan.  Overview
+  // hali kelmagan bo'lsa (yuklanmoqda) bugungi raqam turadi — bo'sh
+  // karta emas, eski raqam; yangi so'rov tugagach almashadi.
+  const entered = isToday || !overview ? num(traffic, "entered") : overview.totals.entered;
+  const changePercent = isToday || !overview ? num(traffic, "change_percent") : overview.totals.change_percent;
+  const changeNote = isToday ? t("panel.home.stat.vs_yesterday") : t("panel.period.vs_previous");
+  const series = isToday || !overview ? hourly.map(item => Number(item.entered) || 0) : overview.daily.map(day => day.entered);
+
   const security = (today.security || {}) as Record<string, number>;
-  const alerts = Object.values(security).reduce((sum, value) => sum + (Number(value) || 0), 0) + (num(today, "queue.alerts") || 0);
+  const todayEvents: Record<string, number> = { ...security, queue_alerts: num(today, "queue.alerts") || 0 };
+  const periodEvents = isToday || !overview ? todayEvents : overview.events;
+  const alerts = eventTotal(periodEvents);
+  const night = nightCount(periodEvents);
 
   // O'rtacha to'xtash — zonalar bo'yicha o'lchangan o'rtacha.
   const dwellZones = Array.isArray(today.dwell) ? (today.dwell as { count: number; average_sec: number }[]) : [];
@@ -121,15 +147,30 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
 
   const onDuty = attendance.rows?.filter(row => row.status === "present" || row.status === "late").length;
   const scheduled = attendance.rows?.filter(row => row.status !== "unscheduled").length;
+  const onlineBranches = sites.filter(site => site.connection === "online").length;
 
-  const flowPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2, "0")}:00`, value: Number(item.entered) || 0 }));
+  const flowPoints: Point[] = isToday || !overview
+    ? hourly.map(item => ({ label: `${String(item.hour).padStart(2, "0")}:00`, value: Number(item.entered) || 0 }))
+    : overview.daily.map(day => ({ label: dayLabel(day.date), value: day.entered }));
   const connection = dashboard.site.connection;
   const botUrl = telegramBotUrl();
   const edgeConfig = dashboard.capabilities?.edge_config;
   const geometry = dashboard.capabilities?.geometry;
   const poisoned = dashboard.diagnostics?.payload?.outbox?.poisoned || 0;
+  const heatOpen = hasFeature(dashboard, "xarita");
+  const securityOpen = hasFeature(dashboard, "xavfsizlik");
+  const firstCamera = dashboard.cameras[0]?.camera_id || "";
+  const [heatState, setHeatState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const segments = eventSegments(periodEvents);
+  /* Karta soni 3–5 orasida o'zgaradi (xodim va filial kartalari shartli).
+     To'r ustunlari soniga MOS bo'lsin: 5 ustunli to'rda 4 karta bitta
+     kartani ikkinchi qatorga yolg'iz tashlab qo'yardi. */
+  const showStaff = Boolean(attendance.available && attendance.rows);
+  const showFifth = sites.length > 1 || Boolean(dwellAverage);
+  const cardCount = 3 + (showStaff ? 1 : 0) + (showFifth ? 1 : 0);
 
   return <>
+    <PageHeader title={t("panel.owner.home_title")} subtitle={formatDateUz()} actions={<PeriodBar value={period} options={HOME_PERIODS} onChange={choose}/>}/>
     {connection !== "online" ? <div className={`alert-strip ${connection === "stale" ? "alert-info" : "alert-warning"}`}>
       <Icon name="bell" />
       <div><strong>{t(connection === "stale" ? "panel.home.connection.stale_title" : "panel.home.connection.lost_title")}</strong> {t("panel.home.connection.detail", { since: relativeMinutes(dashboard.site.minutes_since_seen) })}</div>
@@ -144,16 +185,18 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
     </div> : null}
     {edgeConfig && !edgeConfig.ready ? <div className="alert-strip alert-info"><Icon name="pulse"/><div><strong>{t("panel.home.config.pending_title")}</strong> {edgeConfig.reason || t("panel.home.config.pending_detail")}</div></div> : null}
     {poisoned ? <div className="alert-strip alert-info"><Icon name="bell"/><div><strong>{t("panel.home.outbox.title", { count: poisoned })}</strong> {t("panel.home.outbox.detail")}</div></div> : null}
+    {overviewError ? <div className="alert-strip alert-info"><Icon name="bell"/><div>{overviewError}</div></div> : null}
 
-    <div className="metric-grid metric-grid-5">
+    <div className={`metric-grid metric-grid-${cardCount}`}>
       <StatCard
-        label={t("panel.home.stat.visitors")}
+        label={t("panel.home.stat.visitors_period")}
         value={formatNumber(entered)}
-        icon="users"
+        note={periodLabel(period)}
+        icon="entry"
         tone="blue"
-        series={hourly.map(item => Number(item.entered) || 0)}
+        series={series}
         deltaPercent={changePercent}
-        deltaNote={t("panel.home.stat.vs_yesterday")}
+        deltaNote={changeNote}
       />
       <StatCard
         label={t("panel.home.stat.cameras")}
@@ -162,21 +205,27 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
         icon="camera"
         tone={connection === "online" ? "green" : "red"}
       />
-      {attendance.available && attendance.rows ? <StatCard
+      <StatCard
+        label={t("panel.home.stat.events")}
+        value={formatNumber(alerts)}
+        note={night ? t("panel.home.stat.events_night", { count: formatNumber(night) }) : alerts ? periodLabel(period) : t("panel.home.stat.alerts_none")}
+        icon="shield"
+        tone={night ? "red" : alerts ? "yellow" : "green"}
+      />
+      {showStaff ? <StatCard
         label={t("panel.home.stat.staff")}
         value={`${formatNumber(onDuty)} / ${formatNumber(scheduled)}`}
         note={t("panel.home.stat.staff_note")}
         icon="users"
         tone="green"
       /> : null}
-      <StatCard
-        label={t("panel.home.stat.alerts")}
-        value={formatNumber(alerts)}
-        note={alerts ? t("panel.home.stat.alerts_some") : t("panel.home.stat.alerts_none")}
-        icon="bell"
-        tone={alerts ? "red" : "green"}
-      />
-      {dwellAverage ? <StatCard
+      {sites.length > 1 ? <StatCard
+        label={t("panel.home.stat.branches")}
+        value={formatNumber(sites.length)}
+        note={t("panel.home.stat.branches_note", { online: formatNumber(onlineBranches) })}
+        icon="branch"
+        tone={onlineBranches === sites.length ? "green" : "yellow"}
+      /> : dwellAverage ? <StatCard
         label={t("panel.home.stat.dwell")}
         value={String(asDuration(dwellAverage))}
         note={t("panel.home.stat.dwell_note")}
@@ -192,8 +241,8 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
         <div className="split-grid">
           <Card>
             <div className="card-head">
-              <div><h2>{t("panel.home.flow.title")}</h2><p>{t("panel.home.flow.subtitle")}</p></div>
-              <button className="btn" onClick={() => onNavigate("customers", "flow")}>{t("panel.home.details")}</button>
+              <div><h2>{t("panel.home.analysis.title")}</h2><p>{isToday ? t("panel.home.flow.subtitle") : t("panel.home.analysis.daily_subtitle")}</p></div>
+              <button className="btn" onClick={() => onNavigate("analytics")}>{t("panel.home.analysis.open")}</button>
             </div>
             {flowPoints.some(point => point.value > 0)
               ? <LineChart series={[{ name: t("panel.home.flow.series"), points: flowPoints }]} />
@@ -204,8 +253,32 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
 
           <Card>
             <div className="card-head">
+              <div><h2>{t("panel.heat.title")}</h2><p>{t("panel.home.heat.subtitle")}</p></div>
+              <button className="btn" onClick={() => onNavigate("customers", "heatmap")}>{t("panel.home.heat.open")}</button>
+            </div>
+            {!heatOpen
+              ? <PlanLock title={t("panel.heat.lock_title")} detail={t("panel.heat.lock_detail")} onUpgrade={() => onNavigate("settings", "billing")}/>
+              : firstCamera ? <div className={`heat-thumb-wrap${heatState === "empty" || heatState === "error" ? " is-empty" : ""}`}>
+                  <HeatmapThumb siteId={siteId} cameraId={firstCamera} onState={setHeatState}/>
+                  {heatState === "empty" || heatState === "error" ? <EmptyState icon="heat" title={t("panel.home.heat.empty_title")} detail={t("panel.home.heat.empty_detail")}/> : null}
+                </div>
+              : <EmptyState icon="camera" title={t("panel.home.heat.empty_title")} detail={t("panel.home.heat.empty_detail")}/>}
+          </Card>
+        </div>
+
+        <div className="split-grid">
+          <Card>
+            <div className="card-head"><div><h2>{t("panel.home.mix.title")}</h2><p>{periodLabel(period)}</p></div></div>
+            {!securityOpen
+              ? <PlanLock title={t("panel.home.mix.lock_title")} detail={t("panel.home.mix.lock_detail")} onUpgrade={() => onNavigate("settings", "billing")}/>
+              : segments.length
+                ? <Donut segments={segments} centerValue={formatNumber(alerts)} centerLabel={t("panel.home.mix.center")}/>
+                : <EmptyState icon="shield" title={t("panel.home.mix.empty_title")} detail={t("panel.home.mix.empty_detail")}/>}
+          </Card>
+
+          <Card>
+            <div className="card-head">
               <div><h2>{t("panel.home.zones.title")}</h2><p>{t("panel.home.zones.subtitle")}</p></div>
-              <button className="btn" onClick={() => onNavigate("customers", "heatmap")}>{t("panel.home.zones.map")}</button>
             </div>
             {dwellZones.length ? <div className="zone-list">
               {dwellZones.slice(0, 5).map(zone => {
@@ -221,7 +294,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
           </Card>
         </div>
 
-        <Card>
+        {sites.length > 1 ? <Card>
           <div className="card-head"><div><h2>{t("panel.home.branches.title")}</h2><p>{t("panel.home.branches.subtitle")}</p></div><button className="btn" onClick={() => onNavigate("settings", "branches")}>{t("panel.common.all")}</button></div>
           <div className="table-wrap">
             <table>
@@ -235,7 +308,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
               </tbody>
             </table>
           </div>
-        </Card>
+        </Card> : null}
       </div>
 
       <div className="stack">
@@ -249,13 +322,16 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
           </p> : null}
           {dashboard.events.length ? <>
             <div className="event-list">
-              {dashboard.events.slice(0, 6).map((item, index) => <div className="event-row" key={item.id || index}>
-                <div className="event-name">
-                  <StatusDot state={item.event_type?.startsWith("camera") ? "offline" : "online"} />
-                  <div><b>{eventLabel(item.event_type)}</b><small>{item.camera_id || t("panel.home.events.system")}</small></div>
-                </div>
-                <span className="list-value">{formatTimeUz(item.occurred_at || item.created_at)}</span>
-              </div>)}
+              {dashboard.events.slice(0, 6).map((item, index) => {
+                const tone = toneOf(item.event_type);
+                return <div className="event-row" key={item.id || index}>
+                  <div className="event-name">
+                    <span className={`event-icon tone-${tone}`}><Icon name={ICON_BY_TONE[tone] || "pulse"} size={16}/></span>
+                    <div><b>{eventLabel(item.event_type)}</b><small>{formatTimeUz(item.occurred_at || item.created_at)} · {item.camera_id || t("panel.home.events.system")}</small></div>
+                  </div>
+                  <button className="btn btn-icon" aria-label={t("panel.home.details")} onClick={() => onNavigate("alerts", item.id || "")}><Icon name="eye" size={16}/></button>
+                </div>;
+              })}
             </div>
             <button className="btn btn-wide" onClick={() => onNavigate("alerts")}>{t("panel.home.events.view_all")}</button>
           </> : <EmptyState icon="shield" title={t("panel.home.events.empty_title")} detail={t("panel.home.events.empty_detail")} />}

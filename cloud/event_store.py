@@ -2663,6 +2663,100 @@ class EventStore:
             "change_percent": _change_percent(total, previous),
         }
 
+    def retail_overview(
+        self, site_id: str, *, days: int = 7, until: Optional[date] = None
+    ) -> Dict[str, Any]:
+        """Davr bo'yicha kunlik qatorlar — panelning «Tahlil» grafiklari uchun.
+
+        `traffic_trend` faqat kirish sonini beradi; ega esa eshik bo'yicha
+        kirdi/chiqdi, hodisalar taqsimoti va chek sonini ham kunlar kesimida
+        ko'rmoqchi.  Bu hammasi `retail_daily` yozuvida ALLAQACHON bor —
+        tugagan kun uchun shu yerdan, bugun uchun jonli hisobotdan olinadi
+        (`retail_report` bilan bir xil manba: raqamlar hisobot bilan zid
+        bo'lmasin).
+
+        `entered` va oldingi davr bilan taqqoslash `traffic_trend` dan —
+        ikkinchi marta yozilgan sanoq mantiqi muqarrar uzoqlashardi.
+        Chek soni hisobotning o'ziga yozilmaydi (`daily_sales` alohida
+        jadval: ega uni ertasi kuni kiritadi), shuning uchun har kun uchun
+        alohida o'qiladi.
+        """
+        trend = self.traffic_trend(site_id, days=days, until=until)
+        daily: List[Dict[str, Any]] = []
+        doors: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        events_total: Dict[str, int] = {}
+        exited_total = 0
+        receipts_total: Optional[int] = None
+        entered_with_receipts = 0
+        for point in trend["daily"]:
+            day = date.fromisoformat(point["date"])
+            report = self.retail_report(site_id, day=day)
+            traffic = report.get("traffic") or {}
+            day_doors = []
+            for door in traffic.get("by_door") or []:
+                if not isinstance(door, dict):
+                    continue
+                key = (str(door.get("camera_id") or ""), str(door.get("line") or ""))
+                item = {
+                    "camera_id": key[0],
+                    "line": key[1] or None,
+                    "entered": int(door.get("entered") or 0),
+                    "exited": int(door.get("exited") or 0),
+                }
+                day_doors.append(item)
+                total = doors.setdefault(key, {**item, "entered": 0, "exited": 0})
+                total["entered"] += item["entered"]
+                total["exited"] += item["exited"]
+            # Hodisalar: xavfsizlik turlari (hisobotdagi nomlar bilan) va
+            # navbat ogohlantirishi bitta lug'atda — donut uchun.
+            events = {
+                str(kind): int(count or 0)
+                for kind, count in (report.get("security") or {}).items()
+            }
+            events["queue_alerts"] = int((report.get("queue") or {}).get("alerts") or 0)
+            for kind, count in events.items():
+                events_total[kind] = events_total.get(kind, 0) + count
+            sales = self.daily_sales(site_id, day)
+            receipts = sales["receipts"] if sales else None
+            if receipts is not None:
+                receipts_total = (receipts_total or 0) + receipts
+                entered_with_receipts += int(point["entered"] or 0)
+            exited = int(traffic.get("exited") or 0)
+            exited_total += exited
+            daily.append(
+                {
+                    "date": point["date"],
+                    "weekday": point["weekday"],
+                    "entered": int(point["entered"] or 0),
+                    "exited": exited,
+                    "by_door": day_doors,
+                    "events": events,
+                    "receipts": receipts,
+                }
+            )
+        return {
+            "from": trend["from"],
+            "to": trend["to"],
+            "days": trend["days"],
+            "daily": daily,
+            "totals": {
+                "entered": trend["total"],
+                "exited": exited_total,
+                "previous_entered": trend["previous_total"],
+                "change_percent": trend["change_percent"],
+                "busiest_day": trend["busiest_day"],
+                "receipts": receipts_total,
+                # Konversiya faqat chek KIRITILGAN kunlar bo'yicha: kiritilmagan
+                # kun nol emas, «ma'lumot yo'q» (`value.conversion` qoidasi).
+                "entered_with_receipts": entered_with_receipts,
+            },
+            "by_door": sorted(
+                doors.values(),
+                key=lambda item: (-int(item["entered"]), item["camera_id"], item["line"] or ""),
+            ),
+            "events": events_total,
+        }
+
     def _entered_by_day(
         self, site_id: str, start: date, end: date, zone: ZoneInfo
     ) -> Dict[date, int]:

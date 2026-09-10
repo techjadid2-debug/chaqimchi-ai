@@ -81,6 +81,8 @@ h1,h2,h3,p { margin-top: 0; }
 .metric-note { margin-top: 7px; color: var(--muted); font-size: 11px; }
 
 /* ── Ko'rsatkich kartasi: o'zgarish + tendensiya ───────────────────── */
+.metric-grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.metric-grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
 .metric-grid-5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
 .metric-grid-6 { grid-template-columns: repeat(6, minmax(0,1fr)); }
 .stat-card { min-height: 168px; display: flex; flex-direction: column; }
@@ -595,6 +597,10 @@ tr:last-child td { border-bottom: 0; }
   .metric-label { min-height: 34px; font-size: 11px; }
   .metric-note { font-size: 10px; }
   .page-actions { display: none; }
+  /* Davr tanlagichi telefonda ham qoladi — u bezak emas, sahifaning
+     asosiy boshqaruvi.  Sarlavha ostiga tushadi. */
+  .page-header:has(.period-bar) { flex-wrap: wrap; }
+  .page-actions:has(.period-bar) { display: flex; width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -688,3 +694,41 @@ tr:last-child td { border-bottom: 0; }
 /* Jadvaldagi nom — havola-tugma: qator ochiladi. */
 .link-button { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; text-align: left; }
 .link-button:hover { color: var(--accent); text-decoration: underline; }
+
+/* ── Bosh sahifa (dizayn-3): davr, hodisa belgilari, kichik xarita ──── */
+.period-bar button { min-height: 40px; padding: 0 14px; font-size: 12px; }
+.card-figure { display: grid; justify-items: end; gap: 2px; text-align: right; }
+.card-figure b { font-size: 13px; white-space: nowrap; }
+/* Hodisa belgisi — turga qarab rangli doira (`.tone-*` yumshoq fon +
+   rangli belgi).  Noma'lum tur kulrang: yo'qolmaydi, ajralib turmaydi. */
+.event-icon { width: 34px; height: 34px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; }
+.event-icon.tone-grey { background: var(--surface-3); color: var(--muted); }
+.heat-thumb-wrap { padding: 4px 21px 20px; }
+.heat-thumb { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; background: var(--video-bg); }
+.heat-thumb-wrap.is-empty .heat-thumb { display: none; }
+
+/* ── Guruhli ustunlar (eshik bo'yicha kirdi/chiqdi) ──────────────────── */
+.grouped-wrap { padding: 26px 20px 18px; }
+.grouped-bars { display: flex; align-items: stretch; gap: 14px; }
+.grouped-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.grouped-stack { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 4px; }
+.grouped-stack i { position: relative; flex: 0 1 30px; border-radius: 4px 4px 0 0; background: var(--blue); }
+.grouped-stack i.tone-green { background: var(--green); color: var(--green); }
+.grouped-stack i.tone-yellow { background: var(--yellow); color: var(--yellow); }
+.grouped-stack i.tone-red { background: var(--red); color: var(--red); }
+.grouped-stack i.tone-blue { background: var(--blue); color: var(--blue); }
+.grouped-stack i b { position: absolute; left: 50%; top: -17px; transform: translateX(-50%); color: var(--muted); font-size: 10px; font-weight: 700; font-style: normal; }
+.grouped-col > span { color: var(--muted); font-size: 10px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 11px; }
+.chart-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; background: var(--blue); }
+.chart-legend i.tone-green { background: var(--green); }
+.chart-legend i.tone-yellow { background: var(--yellow); }
+.chart-legend i.tone-red { background: var(--red); }
+
+/* ── «Tahlil» sahifasi: ikki ustun, telefonda bitta ─────────────────── */
+.analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 900px) {
+  .analytics-grid { grid-template-columns: minmax(0, 1fr); }
+  .period-bar { width: 100%; }
+  .period-bar button { flex: 1; }
+}

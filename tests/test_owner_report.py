@@ -1322,3 +1322,66 @@ def test_without_the_hook_the_reminder_is_unchanged(tmp_path: Path) -> None:
 
     assert asyncio.run(service._renewal_once(_renewal_noon())) == 1
     assert "panelda" in sent[0][1]
+
+
+# ── Davr bo'yicha ko'rinish (panel «Tahlil») ─────────────────────────────
+
+
+def test_overview_reads_finished_days_from_the_rollup_and_today_live(tmp_path: Path) -> None:
+    """Grafik uch manbani birlashtiradi: yig'indi, jonli kun, chek jadvali.
+
+    Yig'indi eshik va xavfsizlik sanog'ini o'zida saqlaydi — xom hodisalar
+    o'chgandan keyin ham davr grafigi bo'sh qolmasin.
+    """
+    yesterday = DAY - timedelta(days=1)
+    store = store_with(
+        [crossing(10, "in", index, day=yesterday) for index in range(5)]
+        + [crossing(18, "out", index, day=yesterday) for index in range(2)]
+        + [crossing(11, "in", index) for index in range(3)]
+        + [
+            EdgeEvent(
+                event_type="after_hours_presence",
+                camera_id="eshik-01",
+                occurred_at=moment(23, 10, day=yesterday),
+            )
+        ],
+        tmp_path,
+    )
+    store.rollup_retail("site-1", yesterday)
+    store.save_daily_sales("site-1", yesterday, receipts=2)
+    # Yig'indi yozilgach xom hodisalar ketsa ham raqam qoladi.
+    with store._connect() as conn:
+        conn.execute("DELETE FROM production_events WHERE occurred_at < ?", (moment(0),))
+
+    overview = store.retail_overview("site-1", days=2, until=DAY)
+
+    assert [item["date"] for item in overview["daily"]] == [yesterday.isoformat(), DAY.isoformat()]
+    first, second = overview["daily"]
+    assert (first["entered"], first["exited"]) == (5, 2)
+    assert first["by_door"][0]["line"] == "eshik" and first["by_door"][0]["entered"] == 5
+    assert first["events"]["after_hours_presence"] == 1
+    assert first["receipts"] == 2
+    assert (second["entered"], second["exited"]) == (3, 0)
+    assert second["receipts"] is None, "kiritilmagan kun nol emas, bo'sh"
+    assert overview["totals"]["entered"] == 8
+    assert overview["totals"]["receipts"] == 2
+    assert overview["totals"]["entered_with_receipts"] == 5
+    assert overview["by_door"] == [
+        {"camera_id": "eshik-01", "line": "eshik", "entered": 8, "exited": 2}
+    ]
+    assert overview["events"]["after_hours_presence"] == 1
+    assert overview["events"]["queue_alerts"] == 0
+
+
+def test_overview_compares_with_the_previous_period(tmp_path: Path) -> None:
+    """«O'tgan haftaga nisbatan» foizi `traffic_trend` bilan bir xil manbadan."""
+    store = store_with(
+        [crossing(10, "in", index, day=DAY - timedelta(days=3)) for index in range(4)]
+        + [crossing(10, "in", index, day=DAY) for index in range(6)],
+        tmp_path,
+    )
+    overview = store.retail_overview("site-1", days=2, until=DAY)
+    totals = overview["totals"]
+    assert totals["entered"] == 6
+    assert totals["previous_entered"] == 4
+    assert totals["change_percent"] == 50.0

@@ -7567,23 +7567,31 @@ def _name_doors(site_id: str, report: Dict[str, Any]) -> Dict[str, Any]:
     doors = ((report.get("traffic") or {}).get("by_door")) or []
     if not doors:
         return report
+    labels = _door_labels(site_id)
+    for door in doors:
+        if isinstance(door, dict):
+            _label_door(door, labels)
+    return report
+
+
+def _door_labels(site_id: str) -> Dict[str, str]:
+    """Kamera ID → nom.  Bir marta o'qiladi, 30 kunlik davrga ham yetadi."""
     try:
-        labels = {
+        return {
             str(camera.get("camera_id")): str(camera.get("label") or "")
             for camera in get_store().list_cameras(site_id)
         }
     except ValueError:
-        labels = {}
-    for door in doors:
-        if not isinstance(door, dict):
-            continue
-        camera_id = str(door.get("camera_id") or "")
-        # Chiziq nomi bor bo'lsa u aniqroq: bitta kamerada ikkita eshik
-        # bo'lishi mumkin.  Bo'lmasa kamera nomiga, u ham bo'lmasa ID ga
-        # tushamiz — bo'sh sarlavha «qaysi eshik» savolini javobsiz
-        # qoldiradi.
-        door["label"] = str(door.get("line") or "") or labels.get(camera_id) or camera_id
-    return report
+        return {}
+
+
+def _label_door(door: Dict[str, Any], labels: Dict[str, str]) -> None:
+    camera_id = str(door.get("camera_id") or "")
+    # Chiziq nomi bor bo'lsa u aniqroq: bitta kamerada ikkita eshik
+    # bo'lishi mumkin.  Bo'lmasa kamera nomiga, u ham bo'lmasa ID ga
+    # tushamiz — bo'sh sarlavha «qaysi eshik» savolini javobsiz
+    # qoldiradi.
+    door["label"] = str(door.get("line") or "") or labels.get(camera_id) or camera_id
 
 
 #: Bir kunda shundan ko'p chek — deyarli har doim kirish xatosi.
@@ -8053,6 +8061,36 @@ async def owner_trend(
 ) -> Dict[str, Any]:
     """Kunlar bo'yicha kirish oqimi: qaysi kun kuchli, hafta qanday ketdi."""
     return get_event_store().traffic_trend(owner.site_id, days=days)
+
+
+@app.get("/api/v1/owner/overview")
+async def owner_overview(
+    days: int = 7, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Davr bo'yicha kunlik qatorlar: eshik, hodisalar, chek — «Tahlil» grafiklari.
+
+    30 kundan ko'pi panelda so'ralmaydi: har kun uchun bitta hisobot
+    o'qiladi va uzoq davr uchun CSV eksporti bor (`/owner/report.csv`).
+    """
+    days = max(1, min(int(days), 30))
+    overview = get_event_store().retail_overview(owner.site_id, days=days)
+    labels = _door_labels(owner.site_id)
+    for door in overview["by_door"]:
+        _label_door(door, labels)
+    for item in overview["daily"]:
+        for door in item["by_door"]:
+            _label_door(door, labels)
+    totals = overview["totals"]
+    totals["conversion"] = value.conversion(
+        receipts=totals.get("receipts"), entered=int(totals.get("entered_with_receipts") or 0)
+    )
+    # Xavfsizlik hodisalari — Biznes tarifi.  Demografiya bilan bir xil
+    # yo'l: kalit butunlay olib tashlanadi, panel `PlanLock` ko'rsatadi.
+    if not _panel_feature_open(owner.site_id, "xavfsizlik"):
+        overview.pop("events", None)
+        for item in overview["daily"]:
+            item.pop("events", None)
+    return overview
 
 
 @app.get("/api/v1/owner/stats")

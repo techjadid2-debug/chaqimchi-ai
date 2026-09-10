@@ -2840,3 +2840,50 @@ def test_logging_out_kills_the_owner_token_on_the_server(production_client) -> N
     )
     fresh = {"Authorization": f"Bearer {again.json()['access_token']}"}
     assert client.get("/api/v1/owner/events", headers=fresh).status_code == 200
+
+
+def test_overview_names_doors_and_follows_the_plan(production_client) -> None:
+    """«Tahlil» grafiklari: eshik nomi kameradan, xavfsizlik — tarifdan.
+
+    Eshik nomi yig'indiga yozilmaydi (kamera keyin qayta nomlanishi
+    mumkin), shuning uchun har javobda qo'yiladi.  Xavfsizlik hodisalari
+    Boshlang'ich tarifda umuman qaytmaydi — demografiya bilan bir xil yo'l.
+    """
+    client, _messages = production_client
+    site, headers = _site_on(client, "boshlangich")
+    owner = _login_owner(client, site["site_id"], telegram_id="7301")
+    client.put(
+        f"/api/v1/admin/sites/{site["site_id"]}/camera-inventory/camera-01",
+        headers={"X-Cloud-Admin-Key": "test-admin"},
+        json={"label": "Asosiy kirish", "rtsp_url": "rtsp://kamera/1"},
+    )
+    posted = client.post(
+        "/api/v1/edge/events/batch",
+        headers=headers,
+        json={
+            "events": [
+                {
+                    "event_id": "ov-1",
+                    "event_type": "line_crossed",
+                    "camera_id": "camera-01",
+                    "direction": "in",
+                    "line": "Asosiy eshik",
+                },
+                {"event_id": "ov-2", "event_type": "after_hours_presence", "camera_id": "camera-01"},
+            ]
+        },
+    )
+    assert posted.status_code == 200, posted.text
+
+    overview = client.get("/api/v1/owner/overview?days=7", headers=owner).json()
+    assert overview["days"] == 7 and len(overview["daily"]) == 7
+    assert overview["totals"]["entered"] == 1
+    assert overview["by_door"][0]["label"] == "Asosiy eshik", "chiziq nomi kamera nomidan ustun"
+    assert overview["daily"][-1]["by_door"][0]["label"] == "Asosiy eshik"
+    assert "events" not in overview, "Boshlang'ich tarifda xavfsizlik taqsimoti yo'q"
+    assert all("events" not in item for item in overview["daily"])
+    # Chek kiritilmagan — konversiya nol emas, yo'q.
+    assert overview["totals"]["conversion"] is None
+
+    # 30 kundan ko'pi so'ralsa ham 30 ga tushadi: har kun bitta hisobot.
+    assert client.get("/api/v1/owner/overview?days=90", headers=owner).json()["days"] == 30

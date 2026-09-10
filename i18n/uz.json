@@ -161,6 +161,7 @@
   "event.line_crossed": "Kirish/chiqish",
   "event.loitering": "Uzoq turish",
   "event.occupancy_exceeded": "Bandlik chegarasi oshdi",
+  "event.people_seen": "Eshikka yaqinlashdi",
   "event.person_detected": "Odam aniqlandi",
   "event.queue_threshold_exceeded": "Navbat uzun",
   "event.shelf_empty": "Javon bo'shab qolgan",

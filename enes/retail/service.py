@@ -279,6 +279,12 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
         str(camera_id)
         for camera_id in (cache.get("config") or {}).get("attendance_camera_ids") or []
     }
+    # Capture rate maxraji.  Darvoza cloud tomondan keladi va standarti
+    # YOPIQ: eski cloud `people_seen` turini tanimaydi va butun batchni
+    # RAD ETADI (`EdgeEvent.model_validate`), qurilma esa rad etilgan
+    # hodisani `permanent=True` bilan o'ldiradi — ya'ni bayroqsiz yuborish
+    # `outbox_poisoned` ni o'stirardi va hodisa qaytarib bo'lmas yo'qolardi.
+    capture_on = bool((cache.get("capture") or {}).get("enabled"))
     traffic = {"line_crossed", "occupancy_exceeded", "dwell_exceeded"}
     # Kassa nazorati alohida funksiya EMAS: u navbat o'lchovining o'zidan
     # chiqadi va shu paketda sotiladi.  Alohida kod qo'shilsa
@@ -306,6 +312,8 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
             return False
         if event.event_type == "face_captured":
             return attendance_on and str(event.camera_id) in attendance_cameras
+        if event.event_type == "people_seen":
+            return capture_on
         # Kamera sog'ligi litsenziyalanadigan funksiya emas.  Mijoz qaysi
         # paketni olganidan qat'i nazar, kamerasi o'chganini bilishi kerak —
         # aks holda u ishlamayotgan tizim uchun pul to'lab yuraveradi.
@@ -776,19 +784,30 @@ SEEN_FLUSH_INTERVAL_SEC = 600.0
 
 
 def _seen_flush_loop(pipeline: RetailPipeline, stopped: threading.Event) -> None:
-    """Capture rate oynasini yopib turadi.
+    """Capture rate oynasini yopadi va sonni hodisaga aylantiradi.
 
-    Hozircha son faqat hisoblagichga yig'iladi va heartbeat orqali
-    tashxis uchun ko'rinadi.  Hodisa (`people_seen`) keyingi bosqichda
-    shu yerdan chiqadi — eski cloud noma'lum hodisa turini RAD ETADI,
-    ya'ni avval cloud tomonidagi darvoza kerak.
+    Bo'shatish bayroqdan QAT'I NAZAR bajariladi: usiz `SeenCounter`
+    ichidagi track to'plami jarayon umri davomida o'sib boradi.  Hodisa
+    esa `capture.enabled` darvozasidan o'tadi — eski cloud noma'lum
+    turni rad etadi va qurilma uni butunlay yo'qotadi
+    (`retail_event_filter` dagi izoh).
 
-    Bo'shatish HOZIR ham shart: usiz `SeenCounter` ichidagi track
-    to'plami jarayon umri davomida o'sib boradi.
+    Filtr QO'LDA chaqiriladi: bu halqa `pipeline.process()` dan tashqarida
+    ishlaydi, ya'ni u yerdagi avtomatik filtr (`pipeline.py:404`) bu
+    hodisani ko'rmaydi.  Ikkalasi ham bitta funksiyadan o'qiydi, shuning
+    uchun tarif qoidasi bir joyda qoladi.
     """
     while not stopped.wait(SEEN_FLUSH_INTERVAL_SEC):
         try:
-            pipeline.drain_seen()
+            for camera_id, count in pipeline.drain_seen().items():
+                event = EdgeEvent(
+                    event_type="people_seen",
+                    camera_id=camera_id,
+                    severity="info",
+                    metadata={"seen": count, "window_sec": int(SEEN_FLUSH_INTERVAL_SEC)},
+                )
+                if pipeline.event_filter(event):
+                    pipeline.on_action("cloud_sync", event)
         except Exception:
             logger.exception("Capture rate oynasi yopilmadi")
 

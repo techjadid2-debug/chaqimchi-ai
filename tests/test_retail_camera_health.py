@@ -378,3 +378,51 @@ def test_a_frozen_stream_is_a_different_event_than_a_covered_camera(tmp_path: Pa
     stats = pipeline.stats()
     assert stats["freezes"] == 1
     assert stats["tamper_alerts"] == 0
+
+
+def test_people_seen_needs_the_cloud_flag_not_just_a_paid_plan(tmp_path: Path) -> None:
+    """Capture rate hodisasi cloud bayrog'isiz CHIQMASIN.
+
+    Bu shunchaki tarif darvozasi emas, ma'lumot yo'qotishdan himoya.
+    Eski cloud `people_seen` turini tanimaydi va butun batchni RAD ETADI
+    (`EdgeEvent.model_validate`), qurilma esa rad etilgan hodisani
+    `permanent=True` bilan o'ldiradi — ya'ni bayroqsiz yuborilgan har
+    qator qaytarib bo'lmas yo'qoladi va `outbox_poisoned` o'sadi.
+
+    Shuning uchun standart holat YOPIQ: `person_count` sotib olingan
+    bo'lsa ham, cloud aynan `capture.enabled` demaguncha chiqmaydi.
+    """
+    import json
+
+    from enes.retail.service import retail_event_filter
+    from enes.settings import AppSettings
+
+    def filtr(capture: dict | None):
+        cache = tmp_path / f"cache-{'on' if capture else 'off'}.json"
+        payload = {
+            "revision": 7,
+            # Tarif to'langan: bu yolg'iz yetmasligini ko'rsatamiz.
+            "cloud_features": [{"code": "person_count"}],
+            "cameras": [],
+        }
+        if capture is not None:
+            payload["capture"] = capture
+        cache.write_text(json.dumps(payload), encoding="utf-8")
+        settings = AppSettings.model_validate(
+            {
+                "retail": {
+                    "enabled": True,
+                    "cameras_source": "auto",
+                    "sotqin_config_path": str(cache),
+                }
+            }
+        )
+        return retail_event_filter(settings, tmp_path)
+
+    seen = EdgeEvent(event_type="people_seen", camera_id="camera-01")
+    # Eski cloud bu kalitni umuman yubormaydi.
+    assert filtr(None)(seen) is False
+    assert filtr({"enabled": False})(seen) is False
+    assert filtr({"enabled": True})(seen) is True
+    # Maxraj yoqilgani suratga tegmaydi — u o'z darvozasida qoladi.
+    assert filtr({"enabled": True})(EdgeEvent(event_type="line_crossed", camera_id="c1")) is True

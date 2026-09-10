@@ -64,6 +64,7 @@ def test_a_missing_cache_is_normal(tmp_path: Path) -> None:
         "revision": None,
         "config": {},
         "attendance": {},
+        "capture": {},
         "cloud_features": [],
         "cameras": [],
     }

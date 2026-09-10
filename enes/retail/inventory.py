@@ -90,6 +90,7 @@ def read_sotqin_cache(path: Path) -> Dict[str, Any]:
             "revision": None,
             "config": {},
             "attendance": {},
+            "capture": {},
             "cloud_features": [],
             "cameras": [],
         }
@@ -103,6 +104,10 @@ def read_sotqin_cache(path: Path) -> Dict[str, Any]:
         "revision": payload.get("revision"),
         "config": dict(payload.get("config") or {}),
         "attendance": dict(payload.get("attendance") or {}),
+        # Bu funksiya kalitlarni OQ RO'YXAT bilan qaytaradi, ya'ni keshga
+        # yozilgan yangi kalit bu yerga qo'shilmasa filtrgacha yetib
+        # bormaydi va bayroq jimgina ishlamaydi.
+        "capture": dict(payload.get("capture") or {}),
         "cloud_features": list(payload.get("cloud_features") or []),
         "cameras": [
             InventoryCamera(

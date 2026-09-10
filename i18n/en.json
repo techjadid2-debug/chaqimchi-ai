@@ -161,6 +161,7 @@
   "event.line_crossed": "Entry/exit",
   "event.loitering": "Loitering",
   "event.occupancy_exceeded": "Occupancy limit exceeded",
+  "event.people_seen": "Approached the entrance",
   "event.person_detected": "Person detected",
   "event.queue_threshold_exceeded": "Long queue",
   "event.shelf_empty": "Shelf has emptied",

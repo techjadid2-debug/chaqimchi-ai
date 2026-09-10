@@ -1547,14 +1547,17 @@ def _start_config_sync() -> None:
 
                 applied = cloud_config.sync_once()
                 if applied and (
-                    applied.get("cameras") or applied.get("hours") or applied.get("attendance")
+                    applied.get("cameras")
+                    or applied.get("hours")
+                    or applied.get("attendance")
+                    or applied.get("capture")
                 ):
                     # Kamera ro'yxati, ish vaqti YOKI davomat kameralari
                     # o'zgardi — zanjir uchalasini ham faqat startda
                     # o'qiydi (`retail/service.py`: `build_runner`),
                     # shuning uchun qayta ishga tushiramiz.
                     #
-                    # Bu ro'yxat ikki marta to'liqsiz bo'lgan va har safar
+                    # Bu ro'yxat uch marta to'liqsiz bo'lgan va har safar
                     # oqibati BIR XIL: sozlama faylga yozilardi, panel
                     # "saqlandi" derdi, ishlab turgan zanjir esa uni hech
                     # qachon ko'rmasdi.
@@ -1565,6 +1568,10 @@ def _start_config_sync() -> None:
                     #   ro'yxatidan olingan kamera 12 daqiqadan keyin ham
                     #   yuz kadri yuborishda davom etardi va cloud'dagi
                     #   kunlik byudjetni yeb qo'yardi.
+                    # * capture rate (2026-09-10) — bayroq `people_seen`
+                    #   hodisasini ochadi, `retail_event_filter` esa uni
+                    #   FAQAT startda o'qiydi: cloudda yoqilgan konversiya
+                    #   qurilmada jimgina yonmay qolardi.
                     #
                     # Yangi sozlama qo'shsangiz: u zanjir tomonidan
                     # startda o'qiladimi?  Ha bo'lsa — shu ro'yxatga.

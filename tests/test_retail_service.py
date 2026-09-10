@@ -603,3 +603,66 @@ def test_only_cameras_with_a_counting_line_measure_the_denominator(tmp_path: Pat
     cameras = runner.pipeline._cameras
     assert cameras["kassa-01"].analyzer.seen is not None
     assert cameras["zal-01"].analyzer.seen is None
+
+
+def test_the_seen_window_becomes_one_event_per_camera(tmp_path: Path, monkeypatch) -> None:
+    """Oyna yopilganda har kameradan BITTA `people_seen` hodisasi chiqadi.
+
+    Halqa `pipeline.process()` dan tashqarida yuradi, ya'ni u yerdagi
+    avtomatik tarif filtri (`pipeline.py`) bu hodisani KO'RMAYDI — filtr
+    shu sabab qo'lda chaqiriladi.  Test aynan shuni qulflaydi: filtr
+    yo'q bo'lsa bayroq o'chirilgan do'kondan ham hodisa chiqib ketardi
+    va eski cloud uni rad etib, qurilma uni butunlay yo'qotardi.
+
+    Bo'shatish esa bayroqdan QAT'I NAZAR bajarilishi kerak: usiz
+    `SeenCounter` ichidagi track to'plami cheksiz o'sadi.
+    """
+    import threading
+    import time
+
+    from enes.retail import service
+
+    class FakePipeline:
+        def __init__(self, ruxsat: bool) -> None:
+            self.chiqarilgan: list = []
+            self.bo_shatildi = 0
+            self.event_filter = lambda _event: ruxsat
+            self.on_action = lambda action, event: self.chiqarilgan.append((action, event))
+
+        def drain_seen(self):
+            self.bo_shatildi += 1
+            # Uchinchi kamera oynada hech kim ko'rmagan — `drain_seen()`
+            # uni umuman qaytarmaydi, ya'ni nol qatorli hodisa bo'lmaydi.
+            return {"kirish-01": 7, "kirish-02": 3}
+
+    def yurgiz(ruxsat: bool) -> FakePipeline:
+        pipeline = FakePipeline(ruxsat)
+        monkeypatch.setattr(service, "SEEN_FLUSH_INTERVAL_SEC", 0.01)
+        stopped = threading.Event()
+        thread = threading.Thread(
+            target=service._seen_flush_loop, args=(pipeline, stopped), daemon=True
+        )
+        thread.start()
+        deadline = time.time() + 5
+        while time.time() < deadline and pipeline.bo_shatildi == 0:
+            time.sleep(0.01)
+        stopped.set()
+        thread.join(timeout=2)
+        return pipeline
+
+    ochiq = yurgiz(True)
+    turlar = {event.event_type for _action, event in ochiq.chiqarilgan}
+    sonlar = {event.camera_id: event.metadata["seen"] for _action, event in ochiq.chiqarilgan}
+    assert turlar == {"people_seen"}
+    assert sonlar == {"kirish-01": 7, "kirish-02": 3}
+    # Oyna uzunligi hodisaning O'ZIDA: cloud "shu son qancha vaqtga
+    # tegishli" degan savolga qurilma sozlamasiga qaramay javob topsin.
+    # Taqqoslash konstantaning O'ZI bilan — test patch qilgan qiymatni
+    # qaytarib tekshirsa hech narsani qulflamagan bo'lardi.
+    assert {event.metadata["window_sec"] for _a, event in ochiq.chiqarilgan} == {
+        int(service.SEEN_FLUSH_INTERVAL_SEC)
+    }
+
+    yopiq = yurgiz(False)
+    assert yopiq.chiqarilgan == [], "bayroq o'chiq bo'lsa hodisa chiqmasin"
+    assert yopiq.bo_shatildi > 0, "bo'shatish esa baribir bajarilsin"

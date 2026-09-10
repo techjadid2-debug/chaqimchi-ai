@@ -156,6 +156,17 @@ def _attendance_signature(payload: Dict[str, Any]) -> tuple:
     )
 
 
+def _capture_signature(payload: Dict[str, Any]) -> tuple:
+    """Capture rate bayrog'i — taqqoslash uchun.
+
+    Alohida funksiya, `attendance` bilan bir xil sababdan: bayroq
+    zanjir tomonidan FAQAT startda o'qiladi (`retail_event_filter`
+    `build_runner` ichida quriladi), ya'ni o'zgarishni sezmasak
+    paneldagi kalit jonli qurilmada hech qachon ishlamasdi.
+    """
+    return (bool((payload.get("capture") or {}).get("enabled")),)
+
+
 def _cached_cameras() -> Any:
     """Keshda turgan kamera ro'yxati (bo'lmasa `None`).
 
@@ -198,6 +209,11 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
         # davomat ro'yxatini FAQAT startda o'qiydi
         # (`retail/service.py: build_runner`).
         "attendance": False,
+        # Capture rate bayrog'i — XUDDI SHU tuzoq, uchinchi marta.
+        # `retail_event_filter` uni startda o'qiydi, ya'ni bu kalit
+        # bo'lmasa cloudda yoqilgan konversiya qurilmada hech qachon
+        # yonmasdi va hech qanday xato ham chiqmasdi.
+        "capture": False,
     }
 
     # Keshni HAR DOIM yozamiz va yo'lini configga qo'yamiz.
@@ -212,9 +228,9 @@ def apply(payload: Dict[str, Any]) -> Dict[str, Any]:
     # standart **Linux** yo'lini qidiradi va Windows'da hech narsa topmaydi.
     # Davomat o'zgarganini keshni YOZISHDAN OLDIN taqqoslaymiz — keyin
     # eski qiymat yo'qoladi.
-    changed["attendance"] = _attendance_signature(_cached_payload()) != _attendance_signature(
-        payload
-    )
+    oldingi = _cached_payload()
+    changed["attendance"] = _attendance_signature(oldingi) != _attendance_signature(payload)
+    changed["capture"] = _capture_signature(oldingi) != _capture_signature(payload)
 
     cameras = [item for item in (payload.get("cameras") or []) if item.get("source")]
     authoritative = bool(payload.get("cameras_authoritative"))

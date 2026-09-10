@@ -25,6 +25,19 @@ EventType = Literal[
     #: Kirish/chiqish chizig'i kesildi.  `direction` bilan birga keladi —
     #: mijozlar oqimi va konversiya hisobining asosi.
     "line_crossed",
+    #: Oyna davomida eshikka YAQINLASHGAN noyob odamlar soni
+    #: (`metadata.seen`, `metadata.window_sec`) — konversiya maxraji:
+    #: "200 yaqinlashdi → 100 kirdi".
+    #:
+    #: Har odamga emas, OYNAGA bitta hodisa: har yaqinlashgan odam uchun
+    #: qator yozilsa hodisa oqimi ikki barobar oshardi, hisobotga esa
+    #: baribir faqat yig'indi kerak.
+    #:
+    #: Son alohida ustunda emas, `metadata` da — yonidagi retail
+    #: maydonlaridan farqli o'laroq.  Sabab: kunlik hisobot SQL'da emas,
+    #: Python siklida yig'iladi (`_retail_report_from_events`), ya'ni
+    #: ustun tezlik bermaydi-yu cloud sxemasini ko'chirishni talab qilardi.
+    "people_seen",
     #: Mijoz zonada belgilangan vaqtdan uzoq turdi (`dwell_sec`).
     "dwell_exceeded",
     #: Navbatdagi odam soni chegaradan oshdi (`queue_length`).

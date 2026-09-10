@@ -1305,15 +1305,55 @@ def test_ish_vaqti_ozgarishi_sezib_qolinadi(client: TestClient, tmp_path: Path) 
     assert saved["retail"]["open_to"] == "23:00"
 
 
-def test_ish_vaqti_ozgarsa_zanjir_qayta_yoqiladi() -> None:
-    """Sinxronizatsiya sikli soat o'zgarishini ham hisobga olsin.
+def test_capture_bayrogi_ozgarishi_sezib_qolinadi(client: TestClient, tmp_path: Path) -> None:
+    """Cloud `capture.enabled` ni yoqsa `changed["capture"]` rost bo'lsin.
 
-    Bungacha shart faqat `applied.get("cameras")` edi.
+    `retail_event_filter` bayroqni FAQAT zanjir startida o'qiydi, ya'ni
+    bu kalitsiz paneldagi kalit jonli qurilmada hech qachon yonmasdi va
+    hech qanday xato ham chiqmasdi — ish vaqti va davomat kameralarida
+    bir marta yeb bo'lingan tuzoqning aynan o'zi.
+    """
+    from enes.local import cloud_config
+
+    payload = {"product": {"max_cameras": 4}, "cameras": [], "config": {}}
+    # Eski cloud bu kalitni umuman yubormaydi — o'zgarish hisoblanmasin.
+    assert cloud_config.apply(payload)["capture"] is False
+
+    payload["capture"] = {"enabled": True}
+    assert cloud_config.apply(payload)["capture"] is True, "yoqilgani sezilsin"
+    assert cloud_config.apply(payload)["capture"] is False, "o'zgarmagani zanjirni yoqmasin"
+
+    payload["capture"] = {"enabled": False}
+    assert cloud_config.apply(payload)["capture"] is True, "o'chirilgani ham sezilsin"
+
+    # Va bayroq keshgacha YETIB BORSIN: `read_sotqin_cache()` kalitlarni
+    # oq ro'yxat bilan qaytaradi, ya'ni bu yerda yozilgani filtrga
+    # ko'rinishining kafolati emas.
+    payload["capture"] = {"enabled": True}
+    cloud_config.apply(payload)
+    from enes.retail.inventory import read_sotqin_cache
+
+    assert read_sotqin_cache(cloud_config.cache_path())["capture"] == {"enabled": True}
+
+
+def test_zanjir_startda_oqiydigan_har_sozlama_qayta_yoqadi() -> None:
+    """Sinxronizatsiya sikli zanjir startda o'qiydigan HAR sozlamani sezsin.
+
+    Bungacha shart faqat `applied.get("cameras")` edi va ro'yxat uch marta
+    to'liqsiz bo'ldi — har safar oqibati bir xil: sozlama faylga yozilardi,
+    panel "saqlandi" derdi, ishlab turgan zanjir esa uni hech qachon
+    ko'rmasdi.  Shuning uchun test bittasini emas, HAMMASINI sanaydi.
+
+    Shart matni qatorlarga bo'linishi mumkin, shuning uchun tekshiruv
+    formatlashdan mustaqil: kalitlarning borligi muhim, joylashuvi emas.
     """
     source = (
         Path(__file__).resolve().parents[1] / "enes" / "local" / "app.py"
     ).read_text(encoding="utf-8")
-    assert 'applied.get("cameras") or applied.get("hours")' in source, (
-        "ish vaqti o'zgarganda zanjir qayta ishga tushmaydi — "
-        "paneldagi maydon jonli qurilmada ishlamay qoladi"
-    )
+    boshi = source.index("if applied and (")
+    shart = source[boshi : source.index("):", boshi)]
+    for kalit in ("cameras", "hours", "attendance", "capture"):
+        assert f'applied.get("{kalit}")' in shart, (
+            f"«{kalit}» o'zgarganda zanjir qayta ishga tushmaydi — "
+            "paneldagi sozlama jonli qurilmada ishlamay qoladi"
+        )

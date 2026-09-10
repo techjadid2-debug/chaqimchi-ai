@@ -7201,9 +7201,21 @@ async def owner_dashboard(
         # qaysi test ko'rmasdi (`limits.py` dagi yuz chegarasi shundan
         # oylab ishlamagan).
         "media_retention_hours": _media_retention_hours(),
+        # Tungi nazorat ish vaqtisiz ISHLAMAYDI (`pipeline._after_hours_event`
+        # `business_hours is None` bo'lsa jim qaytadi).  Ega buni panelda
+        # ko'rsin — aks holda «tunda hech narsa aytmadi» degan shikoyat
+        # o'rnatuvchining sozlash ustasida qolib ketgan bo'sh maydondan chiqadi.
+        "night_watch": _night_watch(owner.site_id),
         "updated_at": updated_at,
         "revision": f"{owner.site_id}:{updated_at}",
     }
+
+
+def _night_watch(site_id: str) -> Dict[str, Any]:
+    config = (get_event_store().get_site_config(site_id) or {}).get("config") or {}
+    open_from = str(config.get("open_from") or "")
+    open_to = str(config.get("open_to") or "")
+    return {"hours_set": bool(open_from and open_to), "open_from": open_from or None, "open_to": open_to or None}
 
 
 @app.get("/api/v1/owner/diagnostics")

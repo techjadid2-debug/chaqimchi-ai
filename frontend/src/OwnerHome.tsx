@@ -183,6 +183,11 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
       <div><strong>{t("panel.home.lines.title")}</strong> {t("panel.home.lines.detail")}</div>
       <button className="btn btn-primary" onClick={() => onNavigate("cameras", "zones")}>{t("panel.home.lines.action")}</button>
     </div> : null}
+    {dashboard.night_watch && !dashboard.night_watch.hours_set ? <div className="alert-strip alert-info">
+      <Icon name="moon" />
+      <div><strong>{t("panel.home.night.title")}</strong> {t("panel.home.night.detail")}</div>
+      <button className="btn btn-primary" onClick={() => onNavigate("settings", "store")}>{t("panel.home.night.action")}</button>
+    </div> : null}
     {edgeConfig && !edgeConfig.ready ? <div className="alert-strip alert-info"><Icon name="pulse"/><div><strong>{t("panel.home.config.pending_title")}</strong> {edgeConfig.reason || t("panel.home.config.pending_detail")}</div></div> : null}
     {poisoned ? <div className="alert-strip alert-info"><Icon name="bell"/><div><strong>{t("panel.home.outbox.title", { count: poisoned })}</strong> {t("panel.home.outbox.detail")}</div></div> : null}
     {overviewError ? <div className="alert-strip alert-info"><Icon name="bell"/><div>{overviewError}</div></div> : null}

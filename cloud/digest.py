@@ -265,6 +265,11 @@ def build_digest(
         )
 
     security = report["security"]
+    # Tungi hodisalar alohida qator — faqat BO'LSA.  Ega uchun «tunda
+    # nima bo'ldi?» kunduzgi navbat va uzoq turishdan boshqa savol.
+    night = int(security.get("after_hours_presence") or 0) + int(security.get("night_motion") or 0)
+    if night:
+        lines.append(tg(lang, "digest.daily.night", count=night))
     alarms = []
     for field, key in (
         ("camera_tampered", "digest.daily.alarm.camera_tampered"),

@@ -150,6 +150,8 @@ export type Dashboard = {
    *  ikki fayldagi ikki son bir-birini inkor qilishi mumkin va buni
    *  hech qaysi test ko'rmasdi. */
   media_retention_hours?: number;
+  /** Ish vaqti kiritilganmi — tungi nazorat shunga bog'liq. */
+  night_watch?: { hours_set: boolean; open_from?: string | null; open_to?: string | null };
   updated_at: string;
   revision?: string;
 };

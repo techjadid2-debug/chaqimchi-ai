@@ -539,7 +539,7 @@ function SectionPage({ id, tab, dashboard, sites, siteId, onNavigate, onRefresh,
     tab === "telegram" ? <TelegramPage siteId={siteId}/>
     : tab === "billing" ? <BillingPage dashboard={dashboard} siteId={siteId}/>
     : tab === "branches" ? <BranchesPage sites={sites}/>
-    : <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>}</>;
+    : <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate} onRefresh={onRefresh}/>}</>;
   if (id === "analytics") return <Analytics dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   if (id === "reports") return <ReportsPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   return <><PageHeader title={t("panel.owner.section_title")} subtitle={t("panel.owner.section_subtitle")}/><Card><EmptyState icon="settings" title={t("panel.owner.section_empty_title")} detail={t("panel.owner.section_empty_detail")}/></Card></>;
@@ -626,7 +626,60 @@ function TelegramLevelPicker({ siteId }: { siteId: string }) {
 
 /** Sozlamalar: hozircha faqat HAQIQATAN mavjud bo'lgan ma'lumot.
  *  Ilgari bu sahifa bo'sh "ish olib borilmoqda" yozuvi edi. */
-function SettingsPage({ dashboard, sites, siteId, onNavigate }: { dashboard: Dashboard; sites: Site[]; siteId: string; onNavigate: Navigate }) {
+/** Ish vaqti — tungi nazoratning kaliti.
+ *
+ *  Qurilma `open_from/open_to` ni allaqachon tushunadi (`enes/settings.py`),
+ *  lekin 2026-09-10 gacha uni faqat o'rnatuvchining sozlash ustasi
+ *  yozardi — ega panelida maydon YO'Q edi.  Ya'ni o'rnatuvchi
+ *  o'tkazib yuborsa tungi nazorat jimgina o'chiq turardi. */
+function StoreHoursCard({ siteId, onSaved }: { siteId: string; onSaved: () => void }) {
+  const [config, setConfig] = useState<Record<string, unknown> | null>(null);
+  const [from, setFrom] = useState(""); const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    let stopped = false;
+    api<{ config: Record<string, unknown> }>("/api/v1/owner/config", "owner", { siteId })
+      .then(answer => { if (stopped) return; setConfig(answer.config); setFrom(String(answer.config.open_from || "")); setTo(String(answer.config.open_to || "")); })
+      .catch(() => { if (!stopped) setError(t("panel.telegram.level_load_failed")); });
+    return () => { stopped = true; };
+  }, [siteId]);
+  const enabled = Boolean(config?.open_from && config?.open_to);
+  const save = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!config || busy) return;
+    if (Boolean(from) !== Boolean(to)) { setError(t("panel.settings.hours.both_required")); return; }
+    setBusy(true); setError(""); setSaved(false);
+    try {
+      /* `...config` SHART — `TelegramLevelPicker` dagi bilan bir xil tuzoq:
+         validator to'liq hujjatni kutadi. */
+      const next = { ...config, open_from: from || null, open_to: to || null };
+      await api("/api/v1/owner/config", "owner", { method: "PUT", siteId, body: JSON.stringify(next) });
+      setConfig(next); setSaved(true); onSaved();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("panel.settings.hours.save_failed"));
+    } finally { setBusy(false); }
+  };
+  return <Card>
+    <div className="card-head">
+      <div><h2>{t("panel.settings.hours.title")}</h2><p>{t("panel.settings.hours.subtitle")}</p></div>
+      <Pill state={enabled ? "active" : "pending"}>{t(enabled ? "panel.settings.hours.night_on" : "panel.settings.hours.night_off")}</Pill>
+    </div>
+    <form className="card-body" onSubmit={save}>
+      <div className="form-grid">
+        <label>{t("panel.settings.hours.from")}<input className="input" type="time" value={from} disabled={!config} onChange={event => { setFrom(event.target.value); setSaved(false); }}/></label>
+        <label>{t("panel.settings.hours.to")}<input className="input" type="time" value={to} disabled={!config} onChange={event => { setTo(event.target.value); setSaved(false); }}/></label>
+      </div>
+      <p className="metric-note">{t("panel.settings.hours.note")}</p>
+      <div className="page-actions wrap">
+        <button className="btn btn-primary" disabled={!config || busy}>{busy ? t("panel.common.saving") : t("panel.settings.hours.save")}</button>
+        {saved ? <span className="metric-note">{t("panel.settings.hours.saved")}</span> : null}
+      </div>
+      {error ? <p className="media-error">{error}</p> : null}
+    </form>
+  </Card>;
+}
+
+function SettingsPage({ dashboard, sites, siteId, onNavigate, onRefresh }: { dashboard: Dashboard; sites: Site[]; siteId: string; onNavigate: Navigate; onRefresh: () => void }) {
   const site = sites.find(item => item.id === siteId);
   return <>
     <PageHeader title={t("panel.nav.settings")} subtitle={t("panel.settings.subtitle")}/>
@@ -641,6 +694,7 @@ function SettingsPage({ dashboard, sites, siteId, onNavigate }: { dashboard: Das
           <p className="metric-note">{t("panel.settings.store_note")}</p>
         </div>
       </Card>
+      <StoreHoursCard siteId={siteId} onSaved={onRefresh}/>
       <Card>
         <div className="card-head"><div><h2>{t("panel.owner.notifications")}</h2><p>{t("panel.settings.notifications_subtitle")}</p></div></div>
         <div className="card-body">

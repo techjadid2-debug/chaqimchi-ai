@@ -191,10 +191,15 @@ def summarize(
     groups: Dict[Tuple[str, str], int] = {}
     notes: Dict[Tuple[str, str], str] = {}
     latest: Dict[Tuple[str, str], str] = {}
+    # Qurilma ish vaqtidan tashqaridagi hodisaga `metadata.night` qo'yadi.
+    # Cloud soatni qayta hisoblamaydi: qurilmaning jadvali — yagona manba.
+    night: set[Tuple[str, str]] = set()
     critical = 0
     for event in events:
         key = (event.event_type, event.camera_id)
         groups[key] = groups.get(key, 0) + 1
+        if (event.metadata or {}).get("night"):
+            night.add(key)
         if event.severity == "critical":
             critical += 1
         moment = botfmt.clock(event.occurred_at)
@@ -223,7 +228,8 @@ def summarize(
         # Qator shakli katalogda emas: undagi yagona so'zlar hodisa nomi
         # (`event.*`) va kamera nomi, qolgani belgi — tarjima qiladigan
         # narsa yo'q.
-        lines.append(f"• {event_label(event_type, lang)} — {camera}{suffix}{when}")
+        moon = "🌙 " if (event_type, camera_id) in night else ""
+        lines.append(f"• {moon}{event_label(event_type, lang)} — {camera}{suffix}{when}")
         note = notes.get((event_type, camera_id))
         if note:
             lines.append(f"   ↳ {note}")

@@ -2887,3 +2887,28 @@ def test_overview_names_doors_and_follows_the_plan(production_client) -> None:
 
     # 30 kundan ko'pi so'ralsa ham 30 ga tushadi: har kun bitta hisobot.
     assert client.get("/api/v1/owner/overview?days=90", headers=owner).json()["days"] == 30
+
+
+def test_dashboard_tells_the_owner_whether_night_watch_is_armed(production_client) -> None:
+    """Tungi nazorat ish vaqtisiz jim turadi — ega buni panelda ko'rsin.
+
+    2026-09-10 gacha `open_from/open_to` ni faqat o'rnatuvchining sozlash
+    ustasi yozardi; ega panelida maydon yo'q edi va bo'sh qolgani hech
+    qayerda ko'rinmasdi.
+    """
+    client, _messages = production_client
+    site, _device, _headers = _provision(client)
+    owner = _login_owner(client, site["site_id"], telegram_id="7401")
+
+    before = client.get("/api/v1/owner/dashboard", headers=owner).json()["night_watch"]
+    assert before == {"hours_set": False, "open_from": None, "open_to": None}
+
+    config = client.get("/api/v1/owner/config", headers=owner).json()["config"]
+    saved = client.put(
+        "/api/v1/owner/config", headers=owner,
+        json={**config, "open_from": "09:00", "open_to": "22:00"},
+    )
+    assert saved.status_code == 200, saved.text
+
+    after = client.get("/api/v1/owner/dashboard", headers=owner).json()["night_watch"]
+    assert after == {"hours_set": True, "open_from": "09:00", "open_to": "22:00"}

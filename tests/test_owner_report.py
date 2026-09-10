@@ -1385,3 +1385,19 @@ def test_overview_compares_with_the_previous_period(tmp_path: Path) -> None:
     assert totals["entered"] == 6
     assert totals["previous_entered"] == 4
     assert totals["change_percent"] == 50.0
+
+
+def test_the_daily_message_counts_night_events_on_one_line(tmp_path: Path) -> None:
+    """«🌙 Tunda: N» — faqat tungi hodisa BO'LSA.  Sokin kun xabari qisqa qolsin."""
+    quiet = digest_for(tmp_path, [crossing(12, "in")])
+    assert "🌙" not in quiet
+
+    busy = digest_for(
+        tmp_path,
+        [
+            crossing(12, "in"),
+            EdgeEvent(event_type="after_hours_presence", camera_id="eshik-01", occurred_at=moment(23, 30)),
+            EdgeEvent(event_type="after_hours_presence", camera_id="eshik-01", occurred_at=moment(23, 50)),
+        ],
+    )
+    assert "🌙 Tunda: 2 ta hodisa" in busy

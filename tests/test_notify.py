@@ -234,3 +234,18 @@ def test_recovery_reaches_the_owner_at_every_level() -> None:
     """"Buzildi" xabarini olgan mijoz "tuzaldi" ni ham olishi kerak."""
     recovered = event("camera_recovered", "camera-01", severity="info")
     assert build_alert("site-1", [recovered], throttle_service=AlertThrottle())
+
+
+def test_night_events_carry_a_moon_marker() -> None:
+    """Qurilma ish vaqtidan tashqaridagi hodisaga `metadata.night` qo'yadi.
+
+    Cloud soatni QAYTA hisoblamaydi (qurilmaning jadvali yagona manba) —
+    faqat belgini qatorga chiqaradi: ega xabarni ochmasdan ham «bu
+    tunda» ekanini ko'rsin.
+    """
+    night = EdgeEvent(event_type="zone_entered", camera_id="camera-01", severity="critical", metadata={"night": True})
+    day = event("zone_entered", "camera-02")
+    message = summarize([night, day])
+    lines = message.splitlines()
+    assert any(line.startswith("• 🌙 ") and "camera-01" in line for line in lines)
+    assert any(line.startswith("• ") and "🌙" not in line and "camera-02" in line for line in lines)

@@ -209,6 +209,37 @@ kadrdagi odam — mijoz, kechasi — ogohlantirish. Mijoz panelida ham "Odam
 aniqlandi" emas, "Ish vaqtidan tashqari harakat" deb ko'rinadi. Vaqt
 berilmasa hodisa umuman chiqmaydi: noto'g'ri vaqt yolg'on signal beradi.
 
+### Tun: IR rejim va yopiq do'kondagi harakat (`nightmode.py`)
+
+Ko'p IP kamera qorong'ida o'zi infraqizil rejimga o'tadi: kadr oq-qora,
+yorug'lik bir qadamda o'zgaradi.  Dastur IR'ni qo'sha olmaydi — bu
+kameraning apparati; dastur qiladigani uchta:
+
+1. **O'tishni sezish.**  Har 10-kadrda 160×90 nusxada HSV to'yinganligi
+   o'lchanadi: 8 dan past — oq-qora (`ir`); kulrang o'rtachasi 25 dan
+   past — kamera tunda ko'r (`dark`, IR yo'q); qolgani `day`.  Gisterezis
+   30 soniya — oq devor yoki chaqnash rejimni almashtirmasin.  Rejim
+   heartbeatda (`cameras[].night_mode`) va panelda belgi bo'lib chiqadi.
+2. **Me'yorni qayta o'rganish.**  Rejim almashganda buzilish detektori
+   keyingi kadrni me'yor qiladi (`TamperDetector.relearn()`), fon modeli
+   qaytadan boshlaydi (`MotionGate.reset()`).  Usiz yuqoridagi ogohlantirish
+   («chiroq o'chganda kadr qorong'i») aynan tunda yolg'on «kamera buzildi»
+   berardi.  `dark` kamerada detektorga CLAHE bilan yoritilgan nusxa ketadi
+   (rasm va klip asl kadrdan), ramka chegarasi 1.5× — shovqin dog'i odam
+   bo'lib chiqmasin.
+3. **Yopiq do'kondagi harakat** (`night_motion`).  `after_hours_presence`
+   faqat detektor odamni TOPGANDA chiqadi; qorong'i yoki IR shovqinli kadrda
+   u topmasligi mumkin.  Kadrning 3% dan ko'pi 3 soniya uzluksiz o'zgarsa
+   hodisa — odam tanilgan bo'lsa 60 soniya chiqmaydi (bitta odam ikkita
+   xabar bermasin), takror 5 daqiqada.  Niyat taxmin qilinmaydi: «nimadir
+   qimirlayapti» — fakt, ega kadrga qarab hal qiladi.
+
+Yopiq vaqtdagi HAR hodisaga `metadata.night = true` qo'yiladi — cloud
+soatni qayta hisoblamaydi, Telegramda 🌙 va hisobotda «Tunda: N» shundan.
+Ish vaqti (`open_from`/`open_to`) ega panelida kiritiladi; berilmasa tungi
+hodisalar umuman chiqmaydi (`config/rules.yaml` dagi tungi qoidalar esa
+YAML jadvali bilan ishlayveradi).
+
 ### Hodisa qayerga boradi
 
 Xizmat hodisani outbox'ga (`data/outbox.db`) yozadi va o'zining mustaqil sync

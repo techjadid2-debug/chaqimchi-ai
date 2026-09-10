@@ -53,6 +53,7 @@ from enes.retail.inventory import (
     merge_cameras,
     read_sotqin_cache,
 )
+from enes.retail.nightmode import NightModeProbe
 from enes.retail.pipeline import RetailPipeline
 from enes.retail.pressure import SystemPressure
 from enes.retail.ringbuffer import RingBuffer
@@ -305,6 +306,7 @@ def retail_event_filter(settings: AppSettings, base_dir: Path) -> Callable[[Edge
         "zone_entered",
         "loitering",
         "after_hours_presence",
+        "night_motion",
     }
 
     def allowed(event: EdgeEvent) -> bool:
@@ -494,6 +496,9 @@ def build_runner(
                 if cfg.tamper_enabled
                 else None
             ),
+            # Har kamerada: IR o'tishini sezmasa tunda «kamera buzildi»
+            # yolg'on chiqadi.  Arzon — har 10-kadrda 160×90 o'lchov.
+            night=NightModeProbe(),
         )
     return runner
 
@@ -576,6 +581,9 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
                 "offline": bool(item.get("offline")),
                 "frames": int(item.get("frames") or 0),
                 "reconnects": int(item.get("reconnects") or 0),
+                # Tungi rejim (day/ir/dark) — panelda «IR» yoki «tunda
+                # ko'r» belgisi shundan.  Eski zanjirda yo'q — `None`.
+                "night_mode": ((stats.get("night") or {}).get("modes") or {}).get(camera_id),
             }
             for camera_id, item in streams.items()
         },

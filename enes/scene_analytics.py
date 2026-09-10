@@ -145,6 +145,18 @@ class MotionGate:
     def has_motion(self, frame: np.ndarray) -> bool:
         return self.motion_ratio(frame) >= self.min_area_ratio
 
+    def reset(self) -> None:
+        """Fon modelini qaytadan o'rganadi (kamera IR rejimga o'tganda).
+
+        MOG2 `history=300` — eski rangli fon bir daqiqa davomida butun
+        kadrni «harakat» deb ko'rsatardi va broker o'sha kameraga
+        bekorga ulush berardi.  Isinish (`WARMUP_FRAMES`) qaytadan.
+        """
+        self._subtractor = cv2.createBackgroundSubtractorMOG2(
+            history=300, varThreshold=25, detectShadows=False
+        )
+        self._frames = 0
+
 
 def _inside(point: Tuple[float, float], polygon: Sequence[Tuple[float, float]]) -> bool:
     contour = np.asarray(polygon, dtype=np.float32)
@@ -228,6 +240,11 @@ class SceneAnalyzer:
         #: beriladi; natija anonim raqamlar, rasm saqlanmaydi.
         self.demography = demography
         self.pressure = pressure
+        #: Ramka chegarasi ko'paytmasi.  IR'siz kamera tunda ko'r
+        #: (`nightmode.DARK`) bo'lsa zanjir 1.5 qo'yadi: yoritilgan kadrda
+        #: shovqin dog'lari ham «odam» bo'lib chiqmasin (2026-08-21 dagi
+        #: 6×12 pikselli dog' xatosining tungi varianti).
+        self.size_boost = 1.0
         self._track_demography: Dict[int, Dict[str, Any]] = {}
         self._demo_attempts: Dict[int, int] = {}
         #: Issiqlik to'ri: har kadrda oyoq nuqtalari yig'iladi (deyarli
@@ -433,6 +450,7 @@ class SceneAnalyzer:
     def _big_enough(self, detections: List[Dict[str, Any]], height: int) -> List[Dict[str, Any]]:
         """Kadr balandligiga nisbatan juda kichik ramkalarni tashlaydi."""
         ratio = float(getattr(self.settings, "min_person_height_ratio", 0.0) or 0.0)
+        ratio *= float(getattr(self, "size_boost", 1.0) or 1.0)
         if ratio <= 0 or height <= 0:
             return detections
         floor = ratio * height

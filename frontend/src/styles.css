@@ -214,6 +214,10 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
 .camera-overlay-badge { position: absolute; top: 9px; right: 9px; padding: 5px 8px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font-size: 10px; font-weight: 800; }
 .camera-stamp { position: absolute; top: 9px; right: 9px; padding: 4px 8px; border-radius: 7px; background: var(--video-stamp); color: var(--video-fg); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .camera-overlay-badge ~ .camera-stamp { top: 34px; }
+/* Tungi rejim belgisi — kadrning pastki o'ng burchagida, jonli
+   yorlig'i bilan bir qatorda.  `dark` sariq: bu ogohlantirish. */
+.camera-night { position: absolute; right: 9px; bottom: 9px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 7px; background: var(--video-stamp); color: var(--video-fg); font-size: 10px; font-weight: 700; }
+.camera-night.is-dark { background: var(--yellow); color: #1a1400; }
 /* Kadr eskirgani QIZIL bilan aytiladi: "jonli" yozuvi yashil turib,
    rasm muzlagan bo'lishi eng yomon holat — ega eski rasmga qarab
    do'konda hozir nima bo'layotgani haqida qaror qabul qiladi. */

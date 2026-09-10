@@ -366,6 +366,9 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
             # bo'sh).  Manzilning O'ZI emas, faqat bor-yo'qligi: manzilda
             # kamera paroli bo'ladi.
             "record_url_set": bool(record_urls.get(str(camera_id))),
+            # Tungi rejim: `ir` — IR chirog'i yoqiq, `dark` — kamera tunda
+            # ko'r (IR yo'q), `day` — rangli.  Panel belgisi shundan.
+            "night_mode": item.get("night_mode") or None,
         }
         for camera_id, item in (status.get("cameras") or {}).items()
         if isinstance(item, dict)

@@ -274,6 +274,7 @@ def build_digest(
     for field, key in (
         ("camera_tampered", "digest.daily.alarm.camera_tampered"),
         ("after_hours_presence", "digest.daily.alarm.after_hours"),
+        ("night_motion", "digest.daily.alarm.night_motion"),
         ("restricted_zone", "digest.daily.alarm.restricted_zone"),
         ("loitering", "digest.daily.alarm.loitering"),
         ("checkout_unattended", "digest.daily.alarm.checkout_unattended"),

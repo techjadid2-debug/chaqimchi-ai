@@ -618,6 +618,10 @@ class EdgeCameraHealth(BaseModel):
     #: (unda kamera paroli bo'ladi), faqat bor-yo'qligi: `clips.written`
     #: nol bo'lsa birinchi savol shu.  Eski qurilma yubormaydi.
     record_url_set: Optional[bool] = Field(default=None)
+    #: Tungi rejim: `day` / `ir` (oq-qora IR chirog'i) / `dark` (IR yo'q,
+    #: kamera tunda ko'r).  Panelda belgi bo'lib chiqadi.  Eski qurilma
+    #: yubormaydi.
+    night_mode: Optional[str] = Field(default=None, max_length=8)
 
 
 class EdgeHeartbeatBody(BaseModel):
@@ -1495,7 +1499,9 @@ ALERT_SNAPSHOT_WAIT_SEC = 20
 #: kameraga tegildi" degan ma'noda — aynan shunda do'kon karnayidan
 #: eshitiladigan ovoz ish beradi.  Navbat, bo'sh javon yoki kamera
 #: o'chishi bunga kirmaydi.
-SPEAK_WORTHY_EVENTS = frozenset({"after_hours_presence", "camera_tampered", "zone_entered"})
+SPEAK_WORTHY_EVENTS = frozenset(
+    {"after_hours_presence", "camera_tampered", "zone_entered", "night_motion"}
+)
 
 
 #: Bir vaqtda shuncha ogohlantirish tayyorlanadi, ko'p emas.
@@ -8218,6 +8224,7 @@ async def owner_health(owner: OwnerPrincipal = Depends(require_active_owner)) ->
                 "reason": reason,
                 "reported_at": item.get("reported_at") if item else None,
                 "reconnects": int(item.get("reconnects") or 0) if item else 0,
+                "night_mode": (item.get("night_mode") or None) if item else None,
             }
         )
     return {

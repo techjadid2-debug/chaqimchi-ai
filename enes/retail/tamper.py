@@ -149,6 +149,11 @@ class TamperDetector:
         self._same_since: Optional[float] = None
         self._frozen = False
         self._freezes = 0
+        #: Keyingi kadr me'yor bo'lsin (`relearn()`): kamera IR rejimga
+        #: o'tganda yorug'lik ham, imzo ham bir qadamda o'zgaradi va
+        #: `adapt=0.02` uni 10 daqiqa buzilish deb turardi.
+        self._relearn = False
+        self._relearns = 0
 
     # ── O'lchov ──────────────────────────────────────────────────────────
 
@@ -163,6 +168,14 @@ class TamperDetector:
         frozen = self._check_frozen(digest, now)
         if frozen is not None:
             return frozen
+
+        if self._relearn:
+            self._relearn = False
+            self._relearns += 1
+            self._learn(brightness, sharpness, signature, weight=1.0)
+            self._since = None
+            self._alerted = False
+            return None
 
         if self._signature is None or self._frames <= self.warmup_frames:
             self._learn(brightness, sharpness, signature, weight=1.0 / min(self._frames, 10))
@@ -197,6 +210,16 @@ class TamperDetector:
         self._alerted = True
         self._alerts += 1
         return TamperAlert(reason=reason, score=round(score, 3), duration_sec=round(elapsed, 1))
+
+    def relearn(self) -> None:
+        """Keyingi kadrni me'yor deb qabul qiladi — kunduz→IR o'tishi uchun.
+
+        Nega o'tishni bu yerda emas, `nightmode.py` sezadi: buzilish
+        detektori faqat ME'YORDAN FARQNI ko'radi, «bu farq IR chirog'i»
+        degan bilim rangdan (to'yinganlikdan) keladi, u esa bu modulda
+        o'lchanmaydi.
+        """
+        self._relearn = True
 
     def _check_frozen(self, digest: bytes, now: float) -> Optional[TamperAlert]:
         """Oqim qotib qolganmi.
@@ -272,6 +295,7 @@ class TamperDetector:
             "alerted": self._alerted,
             "freezes": self._freezes,
             "frozen": self._frozen,
+            "relearns": self._relearns,
             "brightness": round(self._brightness, 1),
             "sharpness": round(self._sharpness, 1),
         }

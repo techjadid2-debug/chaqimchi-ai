@@ -25,6 +25,10 @@ lokal Face ID davomat to‘plami ham arxivlandi
 - motion gate, inference budget, tracking, line crossing, occupancy, dwell va
   queue hodisalari;
 - kamera tamper, after-hours person, restricted zone va loitering;
+- tungi nazorat (2026-09-10): kamera IR rejimga o'tganini sezish va
+  me'yorni qayta o'rganish, IR'siz kamerani «tunda ko'r» deb ko'rsatish,
+  yopiq do'kondagi harakat (`night_motion` — odam tanilmasa ham), ish vaqti
+  ega panelidan, tungi hodisa 🌙 bilan va kadr ustida vaqt/kamera;
 - qoida engine, cooldown, snapshot va pre/post event MP4 klip;
 - offline SQLite outbox, cloud replay, tenantga ajratilgan media;
 - Windows o‘rnatuvchi: Keyingi→Keyingi→Tayyor, pairing kod fayl nomidan,

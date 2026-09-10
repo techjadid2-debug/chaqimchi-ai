@@ -31,6 +31,7 @@ REPORT_EVENT_TYPES = (
     "occupancy_exceeded",
     "camera_tampered",
     "after_hours_presence",
+    "night_motion",
     "zone_entered",
     "loitering",
     # Kassada hech kim yo'q.  Uzoq vaqt ro'yxatda YO'Q edi va oqibati
@@ -1846,6 +1847,7 @@ class EventStore:
         security = {
             "camera_tampered": 0,
             "after_hours_presence": 0,
+            "night_motion": 0,
             "restricted_zone": 0,
             "loitering": 0,
             "checkout_unattended": 0,

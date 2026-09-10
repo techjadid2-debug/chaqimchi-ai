@@ -52,8 +52,13 @@ EventType = Literal[
     #: deyilmaydi: o'lchanadigan narsa — chekka zichligining etalonga
     #: nisbati, ya'ni "javon ancha bo'shab qolgan".
     "shelf_empty",
-    #: Ish vaqtidan tashqari harakat.
+    #: Ish vaqtidan tashqari harakat (odam TANILGAN).
     "after_hours_presence",
+    #: Yopiq do'konda uzluksiz harakat — odam tanilmagan bo'lsa ham
+    #: (qorong'i, IR shovqini).  `after_hours_presence` ga qo'shimcha
+    #: chiqmaydi (`pipeline.NIGHT_PERSON_GRACE_SEC`).  Niyat taxmin
+    #: qilinmaydi: «nimadir qimirlayapti» — fakt.
+    "night_motion",
     #: Kamera yopildi, burildi yoki ko'rinishi buzildi.
     "camera_tampered",
     # ── Kamera sog'ligi ───────────────────────────────────────────────────

@@ -36,6 +36,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from enes.event_models import EdgeEvent
 from enes.retail.claims import Priority
+from enes.retail.nightmode import NightModeProbe
 from enes.retail.pipeline import RetailPipeline
 from enes.retail.ringbuffer import RingBuffer
 from enes.retail.tamper import TamperDetector
@@ -167,6 +168,7 @@ class RetailRunner:
         *,
         clips: Optional[RingBuffer] = None,
         tamper: Optional[TamperDetector] = None,
+        night: Optional[NightModeProbe] = None,
         now: Optional[float] = None,
     ) -> None:
         if self._running:
@@ -179,6 +181,7 @@ class RetailRunner:
             floor_fps=source.floor_fps,
             clips=clips,
             tamper=tamper,
+            night=night,
             now=self._clock() if now is None else now,
         )
 

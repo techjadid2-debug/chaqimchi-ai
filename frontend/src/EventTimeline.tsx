@@ -22,6 +22,7 @@ import type { TimelineAnswer } from "./types";
 const TONE_BY_TYPE: Record<string, string> = {
   camera_tampered: "red",
   after_hours_presence: "red",
+  night_motion: "red",
   zone_entered: "red",
   queue_threshold_exceeded: "yellow",
   checkout_unattended: "yellow",

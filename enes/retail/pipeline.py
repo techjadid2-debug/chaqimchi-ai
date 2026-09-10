@@ -40,7 +40,7 @@ from enes import limits
 from enes.event_models import EdgeEvent
 from enes.limits import store_now
 from enes.retail import demography as demography_module
-from enes.retail import ringbuffer
+from enes.retail import nightmode, ringbuffer
 from enes.retail.broker import FrameBroker
 from enes.retail.claims import Priority
 from enes.retail.ringbuffer import RingBuffer
@@ -84,8 +84,21 @@ MAX_PENDING_CLIPS = 200
 FACE_MIN_CROP_PX = limits.FACE_MIN_CROP_PX
 
 SECURITY_MEDIA_EVENTS = frozenset(
-    {"camera_tampered", "after_hours_presence", "zone_entered"}
+    {"camera_tampered", "after_hours_presence", "zone_entered", "night_motion"}
 )
+
+#: Yopiq do'konda «harakat» deb sanaladigan kadr ulushi — filtr
+#: chegarasining (`motion_min_area_ratio` = 0.01) uch barobari.  IR
+#: kadrining sensor shovqini va chivin 0.01 atrofida qoladi; odam yoki
+#: eshik ochilishi 0.03 dan oshadi.
+NIGHT_MOTION_RATIO = 0.03
+#: Harakat shuncha soniya UZLUKSIZ davom etsa hodisa.  Bir kadrlik
+#: chaqnash (mashina chirog'i derazadan) hodisa emas.
+NIGHT_MOTION_SEC = 3.0
+#: Odam TANILGAN bo'lsa `after_hours_presence` chiqadi; shundan keyin
+#: shuncha soniya `night_motion` chiqmaydi — bitta odam ikkita xabar
+#: bermasin.
+NIGHT_PERSON_GRACE_SEC = 60.0
 
 
 def write_jpeg(path: Path, frame: Any) -> bool:
@@ -110,6 +123,13 @@ class _Camera:
     analyzer: SceneAnalyzer
     clips: Optional[RingBuffer] = None
     tamper: Optional[TamperDetector] = None
+    #: Tungi rejim kuzatuvchisi (IR / ko'r / kunduz).
+    night: Optional[nightmode.NightModeProbe] = None
+    #: Yopiq do'kondagi uzluksiz harakat qachon boshlandi.
+    night_motion_since: Optional[float] = None
+    night_motion_at: float = float("-inf")
+    #: Oxirgi tanilgan odam — `night_motion` unga qo'shimcha chiqmasin.
+    last_person_at: float = float("-inf")
     offered: int = 0
     gated: int = 0
     analyzed: int = 0
@@ -178,6 +198,9 @@ class _Totals:
     tamper_alerts: int = 0
     freezes: int = 0
     after_hours: int = 0
+    night_motion: int = 0
+    #: Tungi rejim almashuvi sabab me'yor qayta o'rganilgan (tamper + fon).
+    night_relearns: int = 0
     snapshots_written: int = 0
     snapshots_missing: int = 0
     #: Yuz kadri juda mayda bo'lgani uchun yuborilmadi.
@@ -290,16 +313,20 @@ class RetailPipeline:
         floor_fps: Optional[float] = None,
         clips: Optional[RingBuffer] = None,
         tamper: Optional[TamperDetector] = None,
+        night: Optional[nightmode.NightModeProbe] = None,
         now: float = 0.0,
     ) -> None:
         """Kamerani zanjirga qo'shadi va brokerga ro'yxatdan o'tkazadi.
 
         `clips` berilmasa shu kameraning `save_clip` qoidalari bajarilmaydi —
         hodisa baribir yuboriladi, faqat videosiz.  `tamper` berilmasa kamera
-        yopilganini hech kim sezmaydi.
+        yopilganini hech kim sezmaydi.  `night` berilmasa IR o'tishi
+        sezilmaydi va tunda «kamera buzildi» yolg'on chiqishi mumkin.
         """
         with self._lock:
-            self._cameras[camera_id] = _Camera(analyzer=analyzer, clips=clips, tamper=tamper)
+            self._cameras[camera_id] = _Camera(
+                analyzer=analyzer, clips=clips, tamper=tamper, night=night
+            )
             self.broker.register(camera_id, priority=priority, floor_fps=floor_fps, now=now)
 
     # ── Kadr qabul qilish ────────────────────────────────────────────────
@@ -318,6 +345,14 @@ class RetailPipeline:
         # oqim eski yoki yangi kadrni oladi — ikkalasi ham butun kadr.  Har
         # kadr uchun qulf olish 8 kamerani navbatga tizib qo'yardi.
         camera.last_frame = frame
+        # Tungi rejim buzilish tekshiruvidan OLDIN: kamera IR ga o'tgan
+        # bo'lsa buzilish detektori shu kadrdan me'yorni qayta o'rganadi,
+        # aks holda u oq-qora kadrni «ko'rinish o'zgardi» deb 10 daqiqa
+        # trevoga holatida turardi.
+        if camera.night is not None:
+            change = camera.night.update(frame, now=now)
+            if change is not None:
+                self._on_night_change(camera_id, camera, change)
         # Kamera buzilishi **filtrdan oldin** tekshiriladi: yopilgan kamerada
         # harakat yo'q, ya'ni filtr uni o'tkazmasdi va buzilish hech qachon
         # sezilmasdi.
@@ -331,6 +366,8 @@ class RetailPipeline:
         # chunki har kameraning fon modeliga faqat o'z oqimi tegadi.
         gate = camera.analyzer.motion
         ratio = gate.motion_ratio(frame)
+        # Yopiq do'kondagi harakat — odam tanilmasa ham hodisa (`night_motion`).
+        self._night_motion(camera_id, camera, ratio, now=now)
         with self._lock:
             camera.offered += 1
             self._totals.offered += 1
@@ -360,8 +397,14 @@ class RetailPipeline:
         started = self._clock()
         events: List[EdgeEvent] = []
         failed = False
+        # IR'siz kamera tunda ko'r bo'lsa detektorga YORITILGAN nusxa
+        # ketadi.  Faqat tahlilga: `last_frame`, rasm va klip asl kadr —
+        # ega kamera nimani ko'rganini ko'rsin, biz bo'yaganini emas.
+        frame = claim.frame
+        if camera.night is not None and camera.night.mode == nightmode.DARK:
+            frame = nightmode.enhance_for_detection(frame)
         try:
-            events = camera.analyzer.analyze(claim.frame, now=now)
+            events = camera.analyzer.analyze(frame, now=now)
         except Exception:
             failed = True
             logger.exception("[%s] tahlil xatosi", claim.camera_id)
@@ -378,6 +421,9 @@ class RetailPipeline:
 
         decisions: List[Decision] = []
         if events:
+            if any(event.event_type == "person_detected" for event in events):
+                with self._lock:
+                    camera.last_person_at = now
             after_hours = self._after_hours_event(events, claim.camera_id, now=now)
             if after_hours is not None:
                 events.append(after_hours)
@@ -403,6 +449,12 @@ class RetailPipeline:
         original_count = len(events)
         events = [event for event in events if self.event_filter(event)]
         local_time = self._local_time()
+        # Yopiq do'kondagi HAR hodisaga «tun» belgisi.  Cloud soatni qayta
+        # hisoblamaydi — qurilmaning jadvali yagona manba; belgi Telegram
+        # xabarida 🌙, hisobotda alohida qator bo'ladi.
+        if self._closed(local_time):
+            for event in events:
+                event.metadata = {**(event.metadata or {}), "night": True}
         with self._lock:
             self._totals.events += original_count
             self._totals.plan_filtered += original_count - len(events)
@@ -459,6 +511,78 @@ class RetailPipeline:
         sog'ligi hodisalari ham `config/rules.yaml` bilan boshqariladi.
         """
         self._report([event], camera_id=event.camera_id, now=now)
+
+    def _closed(self, local_time: Optional[clock_time]) -> bool:
+        """Do'kon hozir yopiqmi.  Ish vaqti berilmagan bo'lsa — hech qachon."""
+        return (
+            self.business_hours is not None
+            and local_time is not None
+            and not self.business_hours.contains(local_time)
+        )
+
+    def _on_night_change(self, camera_id: str, camera: _Camera, change: tuple) -> None:
+        """Kamera rejimi almashdi (kunduz ↔ IR ↔ ko'r) — me'yorlar qaytadan.
+
+        Uch narsa: buzilish detektori keyingi kadrni me'yor qiladi, fon
+        modeli qaytadan o'rganadi, ko'r kamerada ramka chegarasi
+        ko'tariladi.  Hodisa EMAS: bu kameraning odatiy kechasi.
+        """
+        previous, current = change
+        logger.info("[%s] tungi rejim: %s → %s", camera_id, previous, current)
+        if camera.tamper is not None and callable(getattr(camera.tamper, "relearn", None)):
+            camera.tamper.relearn()
+        reset = getattr(getattr(camera.analyzer, "motion", None), "reset", None)
+        if callable(reset):
+            reset()
+        camera.analyzer.size_boost = 1.5 if current == nightmode.DARK else 1.0
+        with self._lock:
+            self._totals.night_relearns += 1
+
+    def _night_motion(self, camera_id: str, camera: _Camera, ratio: float, *, now: float) -> None:
+        """Yopiq do'konda uzluksiz harakat — odam tanilmasa ham.
+
+        `after_hours_presence` faqat detektor odamni TOPGANDA chiqadi;
+        qorong'i yoki IR shovqinli kadrda u topmasligi mumkin, harakat esa
+        ko'rinib turadi.  Ega uchun bu ham fakt: «yopiq do'konda nimadir
+        qimirlayapti».  Niyat taxmin qilinmaydi.
+        """
+        if not self._closed(self._local_time()):
+            camera.night_motion_since = None
+            return
+        if ratio < NIGHT_MOTION_RATIO:
+            camera.night_motion_since = None
+            return
+        if camera.night_motion_since is None:
+            camera.night_motion_since = now
+            return
+        if now - camera.night_motion_since < NIGHT_MOTION_SEC:
+            return
+        with self._lock:
+            if now - camera.night_motion_at < self.after_hours_debounce_sec:
+                return
+            if now - camera.last_person_at < NIGHT_PERSON_GRACE_SEC:
+                return
+            camera.night_motion_at = now
+            camera.night_motion_since = None
+            self._totals.night_motion += 1
+        local_time = self._local_time()
+        self._report(
+            [
+                EdgeEvent(
+                    event_type="night_motion",
+                    severity="warning",
+                    camera_id=camera_id,
+                    score=round(min(1.0, ratio / MOTION_SATURATION), 3),
+                    metadata={
+                        "local_time": local_time.strftime("%H:%M") if local_time else "",
+                        "motion_ratio": round(ratio, 4),
+                        "night_mode": camera.night.mode if camera.night is not None else "",
+                    },
+                )
+            ],
+            camera_id=camera_id,
+            now=now,
+        )
 
     def _after_hours_event(
         self, events: List[EdgeEvent], camera_id: str, *, now: float
@@ -783,6 +907,19 @@ class RetailPipeline:
             "tamper_alerts": self._totals.tamper_alerts,
             "freezes": self._totals.freezes,
             "after_hours": self._totals.after_hours,
+            # Tun: har kameraning rejimi (day/ir/dark) — heartbeat orqali
+            # panelda «IR rejim» / «tunda ko'r» belgisi; `motion_alerts` —
+            # yopiq do'kondagi harakat hodisalari; `relearns` — IR
+            # o'tishida me'yor qayta o'rganilgani.
+            "night": {
+                "motion_alerts": self._totals.night_motion,
+                "relearns": self._totals.night_relearns,
+                "modes": {
+                    camera_id: camera.night.mode
+                    for camera_id, camera in self._cameras.items()
+                    if camera.night is not None
+                },
+            },
             "actions": dict(sorted(self._totals.actions.items())),
             "action_errors": self._totals.action_errors,
             "snapshots": {

@@ -203,6 +203,7 @@ def test_security_events_are_summarised(tmp_path: Path) -> None:
     assert security == {
         "camera_tampered": 1,
         "after_hours_presence": 1,
+        "night_motion": 0,
         "restricted_zone": 1,
         "loitering": 0,
         "checkout_unattended": 0,

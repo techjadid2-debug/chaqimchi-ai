@@ -22,6 +22,7 @@
     loitering: "Uzoq turish",
     zone_entered: "Taqiqlangan zonaga kirish",
     after_hours_presence: "Ish vaqtidan tashqari harakat",
+    night_motion: "Tunda harakat",
     camera_tampered: "Kamera yopildi yoki burildi",
     camera_offline: "Kamera javob bermayapti",
     camera_recovered: "Kamera tiklandi",

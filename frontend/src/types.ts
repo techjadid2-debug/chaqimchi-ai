@@ -14,7 +14,7 @@ export type Site = {
   role?: string;
 };
 
-export type CameraState = { camera_id: string; state: string; reason?: string; reported_at?: string };
+export type CameraState = { camera_id: string; state: string; reason?: string; reported_at?: string; night_mode?: string | null };
 export type Camera = { camera_id: string; label?: string; enabled?: boolean };
 export type EventItem = {
   id?: string;

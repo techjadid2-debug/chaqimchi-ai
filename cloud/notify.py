@@ -91,7 +91,7 @@ RECOVERY_EVENTS = frozenset({"camera_recovered"})
 #: umuman OLINMAYDI.  Ikkalasi bir xil ko'rinishi — ega uchun jimgina
 #: yolg'on.
 MEDIA_EVENT_TYPES = frozenset(
-    {"camera_tampered", "after_hours_presence", "zone_entered"}
+    {"camera_tampered", "after_hours_presence", "zone_entered", "night_motion"}
 )
 
 #: AI izohi shuncha belgidan uzun bo'lsa qisqartiriladi.  Telegram xabari

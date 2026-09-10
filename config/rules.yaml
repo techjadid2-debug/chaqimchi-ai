@@ -13,6 +13,45 @@ schedules:
   ish-vaqti: {start: "09:00", end: "21:00"}
 
 rules:
+  # ── Tun (ish vaqtidan tashqari) ──────────────────────────────────────
+  #
+  # BIRINCHI turadi: dvigatelda birinchi mos kelgan qoida g'olib, ya'ni
+  # kunduzgi qoida bilan bir xil `event_type` uchun tungisi undan
+  # yuqorida bo'lishi shart.  Jadval — ega panelda kiritgan ish vaqti
+  # (`service.py` `ish-vaqti` ni shu bilan almashtiradi); kiritilmagan
+  # bo'lsa YAML dagi 09:00–21:00 — ya'ni tungi qoidalar baribir ishlaydi,
+  # `night_motion` va `after_hours_presence` esa faqat ish vaqti
+  # KIRITILGANDA chiqadi (`pipeline._closed`).
+
+  # Kunduzgi 10 daqiqa o'rniga 5: tunda kamera yopilishi kutish emas,
+  # darhol xabar.  IR o'tishi bu qoidaga tushmaydi — zanjir uni
+  # buzilishdan OLDIN sezib me'yorni qayta o'rganadi (`nightmode.py`).
+  - name: Tunda kamera buzilishi
+    event_type: camera_tampered
+    schedule: ish-vaqti
+    outside_schedule: true
+    severity: critical
+    cooldown_sec: 300
+    actions: [cloud_sync, telegram_alert, save_clip]
+
+  - name: Tunda kamera javob bermayapti
+    event_type: camera_offline
+    schedule: ish-vaqti
+    outside_schedule: true
+    severity: critical
+    cooldown_sec: 300
+    actions: [cloud_sync, telegram_alert]
+
+  # Yopiq do'konda harakat, odam tanilmagan bo'lsa ham.  `warning`:
+  # sabab noma'lum (mushuk, parda, mashina chirog'i) — lekin botga
+  # boradi (`telegram_alert` bayrog'i darajadan ustun), ega o'zi
+  # kadrga qarab hal qiladi.  Takror 5 daqiqada (`after_hours_debounce_sec`).
+  - name: Tunda harakat
+    event_type: night_motion
+    severity: warning
+    cooldown_sec: 300
+    actions: [cloud_sync, telegram_alert, save_clip]
+
   # ── Kamera sog'ligi ───────────────────────────────────────────────────
   #
   # Bular jadvalga bog'lanmagan: kamera kechasi o'chsa ham ertalab emas,

@@ -399,6 +399,10 @@ function CamerasBlock({ dashboard, siteId, expanded = false, onOpenAll }: { dash
             balandligi kamera nomi uzunligiga bog'liq bo'lmay qoladi. */}
         <span className="camera-title">{index + 1}. {camera.label || camera.camera_id}</span>
         <span className={`camera-live is-${state}`}><i/>{live_label}</span>
+        {/* Tungi rejim: IR — kamera tunda ko'radi; `dark` — ko'rmaydi (IR
+            yo'q).  Ikkinchisi ega uchun harakatga chaqiriq: IR kamera. */}
+        {stateMap.get(camera.camera_id)?.night_mode === "ir" ? <span className="camera-night is-ir"><Icon name="moon" size={12}/>{t("panel.cameras.night_ir")}</span>
+          : stateMap.get(camera.camera_id)?.night_mode === "dark" ? <span className="camera-night is-dark"><Icon name="moon" size={12}/>{t("panel.cameras.night_dark")}</span> : null}
         <div className="camera-meta">
           <div className="camera-name"><StatusDot state={state}/><span>{camera.label || camera.camera_id}</span></div>
           <small>{stateMap.get(camera.camera_id)?.reason || t("panel.cameras.state_loading")}</small>

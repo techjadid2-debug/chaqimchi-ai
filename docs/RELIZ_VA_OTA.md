@@ -58,7 +58,7 @@ Versiya ko'tarilib commit qilingandan keyin hammasi bitta buyruq:
 
 ```bash
 # 1. Quring va imzolang (noutbukda, maxfiy kalit shu yerda)
-make windows-release CLOUD_URL=https://api.chaqimchi.uz
+make windows-release CLOUD_URL=https://api.enes.uz
 
 # 2. Serverga chiqaring — shundan keyingina do'konlar ko'radi
 ENES_RELEASE_HOST=deploy@169.58.198.111 \
@@ -85,7 +85,7 @@ faqat shu nomni taniydi (`latest_windows_release`).
 ### O'TISH RELIZI — brend almashuvida bir marta
 
 ```bash
-LEGACY_NAME=1 make windows-release CLOUD_URL=https://api.chaqimchi.uz
+LEGACY_NAME=1 make windows-release CLOUD_URL=https://api.enes.uz
 ENES_RELEASE_HOST=deploy@169.58.198.111 ENES_RELEASE_LEGACY_NAME=1 \
   scripts/publish_windows_release.sh
 ```

@@ -30,7 +30,7 @@ keyin ro‘yxatdan o‘tgan ega esa kimdan kod so‘rashini bilmasdi.
 
 ```
 o‘rnatish  →  POST /api/v1/public/device-hello        (qurilma → bulut)
-           →  brauzer app.chaqimchi.uz/owner?connect=<token> da ochiladi
+           →  brauzer app.enes.uz/owner?connect=<token> da ochiladi
            →  ega ro‘yxatdan o‘tadi (quick-trial) yoki kiradi
            →  POST /api/v1/owner/devices/claim        (ega → bulut)
            →  POST /api/v1/public/device-handover     (qurilma → bulut)

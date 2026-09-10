@@ -7,8 +7,8 @@ def secure_env() -> dict[str, str]:
     fernet = Fernet.generate_key().decode()
     return {
         "ENES_ENV": "production",
-        "ENES_DOMAIN": "chaqimchi.uz",
-        "ENES_PUBLIC_URL": "https://chaqimchi.uz",
+        "ENES_DOMAIN": "enes.uz",
+        "ENES_PUBLIC_URL": "https://enes.uz",
         "POSTGRES_DB": "enes",
         "POSTGRES_USER": "enes",
         "POSTGRES_PASSWORD": "p" * 64,
@@ -28,7 +28,7 @@ def secure_env() -> dict[str, str]:
         "ENES_TELEGRAM_BOT_USERNAME": "enes_bot",
         "ENES_TELEGRAM_WEBHOOK_SECRET": "w" * 64,
         "ENES_TELEGRAM_LEAD_CHAT_IDS": "5476913898",
-        "ENES_SOTQIN_RELEASE_URL": "https://chaqimchi.uz/releases/sotqin.tar.gz",
+        "ENES_SOTQIN_RELEASE_URL": "https://enes.uz/releases/sotqin.tar.gz",
         "ENES_SOTQIN_RELEASE_SHA256": "a" * 64,
     }
 

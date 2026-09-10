@@ -1405,7 +1405,7 @@ def _bot_start(client, telegram_id: str, payload: str = ""):
 def test_a_customer_connects_telegram_without_typing_any_id(
     production_client, monkeypatch
 ) -> None:
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
@@ -1416,7 +1416,7 @@ def test_a_customer_connects_telegram_without_typing_any_id(
     )
     assert invite.status_code == 200
     url = invite.json()["url"]
-    assert url.startswith("https://t.me/chaqimchi_ai_bot?start=")
+    assert url.startswith("https://t.me/enes_monitoring_bot?start=")
     token = url.split("start=")[1]
 
     # Xodim havolani bosadi — hech qanday raqam yozmaydi.
@@ -1430,7 +1430,7 @@ def test_a_customer_connects_telegram_without_typing_any_id(
 def test_an_invite_works_only_once(production_client, monkeypatch) -> None:
     """Havola credential: uni bosgan odam panelga kiradi.  Bir marta
     ishlatilgach boshqa hech kimni ichkariga kiritmasin."""
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
@@ -1450,7 +1450,7 @@ def test_an_invite_works_only_once(production_client, monkeypatch) -> None:
 def test_an_expired_invite_is_refused(production_client, monkeypatch) -> None:
     import cloud.main as main
 
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
@@ -1478,7 +1478,7 @@ def test_a_random_start_payload_does_not_grant_access(
 ) -> None:
     """Botga tasodifiy matn bilan `/start` bosgan odam a'zo bo'lib
     qolmasin."""
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
@@ -1498,7 +1498,7 @@ def test_a_second_tap_does_not_say_the_link_expired(
     o'sha odam allaqachon ulangan edi.
 
     Ayni holat mijoz havolani ikki marta bosganda ham yuz beradi."""
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, messages = production_client
     site, _device, _headers = _provision(client)
@@ -1523,7 +1523,7 @@ def test_a_failed_telegram_reply_does_not_undo_the_invite(
     qaytarsin — aks holda Telegram cheksiz qayta urinadi."""
     import cloud.main as main
 
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)
@@ -1549,7 +1549,7 @@ def test_the_register_button_still_works(production_client, monkeypatch) -> None
     yuborardi — saytdagi "Ro'yxatdan o'tish" tugmasi javob bermay qolgandi.
 
     Taklif tokeni har doim 32 belgi; `register` esa emas."""
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, messages = production_client
 
@@ -1564,7 +1564,7 @@ def test_the_register_button_still_works(production_client, monkeypatch) -> None
 def test_a_manager_cannot_invite_more_people(production_client, monkeypatch) -> None:
     """Xodim yangi odam taklif qila olmasin — aks holda bitta taklif
     butun do'konni ochib yuborardi."""
-    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "chaqimchi_ai_bot")
+    monkeypatch.setenv("ENES_TELEGRAM_BOT_USERNAME", "enes_monitoring_bot")
     monkeypatch.setenv("ENES_TELEGRAM_WEBHOOK_SECRET", BOT_SECRET)
     client, _messages = production_client
     site, _device, _headers = _provision(client)

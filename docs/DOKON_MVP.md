@@ -68,7 +68,7 @@ ochilmaydi. `ENES_AVAILABLE_FEATURES` ning o‘zi yetarli emas:
 
 ## Xodim davomati (Face ID)
 
-Do‘kon egasi `app.chaqimchi.uz` → **Xodimlar** bo‘limida xodimini o‘zi
+Do‘kon egasi `app.enes.uz` → **Xodimlar** bo‘limida xodimini o‘zi
 qo‘shadi va rasmini telefon kamerasidan oladi (1–3 rasm). Kamera uni
 tanib, kelgan-ketgan vaqtini yozib boradi; jadval "Bugun"/"Shu oy" va CSV
 bo‘lib chiqadi.

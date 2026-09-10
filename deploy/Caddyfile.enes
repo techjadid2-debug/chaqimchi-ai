@@ -1,4 +1,10 @@
-# chaqimchi.uz platformasi — subdomen bo'yicha yo'l-ruxsatnomalar.
+# enes.uz platformasi — subdomen bo'yicha yo'l-ruxsatnomalar.
+#
+# F7 cutover (2026-09-11): har blok IKKI nomli — `X.enes.uz, X.chaqimchi.uz`.
+# Eski domen ataylab ishlayveradi (301 emas): pilot qurilmasi
+# `api.chaqimchi.uz` ga ulangan va manzilini masofadan o'zgartirib
+# bo'lmaydi (u 3xx ni ham tushunmaydi — heartbeat va hodisa to'xtardi).
+# 301 alohida bosqich, ega aytganda; `api.` o'shanda ham proxy qoladi.
 #
 # Hamma subdomen BITTA cloud ilovasiga proxy bo'ladi; ajratish shu yerda:
 # har host faqat o'z bo'limining yo'llarini o'tkazadi.  Panellar API'ni
@@ -98,7 +104,7 @@
 }
 
 # ── Landing (marketing) ──────────────────────────────────────────────────
-chaqimchi.uz {
+enes.uz, chaqimchi.uz {
 	import security
 	import static_cache
 	encode zstd gzip
@@ -117,14 +123,14 @@ chaqimchi.uz {
 	}
 }
 
-www.chaqimchi.uz {
+www.enes.uz, www.chaqimchi.uz {
 	import security
 	import static_cache
-	redir https://chaqimchi.uz{uri} permanent
+	redir https://enes.uz{uri} permanent
 }
 
 # ── API: qurilmalar, to'lov, Telegram (ENG BARQAROR shartnoma) ──────────
-api.chaqimchi.uz {
+api.enes.uz, api.chaqimchi.uz {
 	import security
 	import static_cache
 	import noindex
@@ -154,7 +160,7 @@ api.chaqimchi.uz {
 }
 
 # ── Mijoz paneli ─────────────────────────────────────────────────────────
-app.chaqimchi.uz {
+app.enes.uz, app.chaqimchi.uz {
 	import security
 	import static_cache
 	import noindex
@@ -184,7 +190,7 @@ app.chaqimchi.uz {
 }
 
 # ── Montajchi (hamkor) portali ───────────────────────────────────────────
-partner.chaqimchi.uz {
+partner.enes.uz, partner.chaqimchi.uz {
 	import security
 	import static_cache
 	import noindex
@@ -209,7 +215,7 @@ partner.chaqimchi.uz {
 }
 
 # ── Admin (faqat egasi) ──────────────────────────────────────────────────
-admin.chaqimchi.uz {
+admin.enes.uz, admin.chaqimchi.uz {
 	import security
 	import static_cache
 	import noindex
@@ -237,7 +243,7 @@ admin.chaqimchi.uz {
 }
 
 # ── Yuklab olish (keyin CDN'ga DNS bilan ko'chadi) ───────────────────────
-dl.chaqimchi.uz {
+dl.enes.uz, dl.chaqimchi.uz {
 	import security
 	import static_cache
 	import noindex
@@ -262,7 +268,7 @@ dl.chaqimchi.uz {
 }
 
 # ── Hujjatlar (SEO ochiq, statik) ────────────────────────────────────────
-docs.chaqimchi.uz {
+docs.enes.uz, docs.chaqimchi.uz {
 	import security
 	import static_cache
 	encode zstd gzip
@@ -285,5 +291,5 @@ docs.chaqimchi.uz {
 	}
 }
 
-# Eslatma: status.chaqimchi.uz bu serverga KELMAYDI — u tashqi xizmatda
+# Eslatma: status.enes.uz bu serverga KELMAYDI — u tashqi xizmatda
 # (UptimeRobot status page, DNS'da CNAME) — server o'lsa status tirik qoladi.

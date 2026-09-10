@@ -16,7 +16,7 @@ Shu protsedura shu yerda, bitta buyruqda:
     python3 scripts/rollout.py --toxtat            # favqulodda: hammasini to'xtatish
 
 Muhitdan o'qiladi:
-    ENES_ADMIN_URL        standart https://api.chaqimchi.uz
+    ENES_ADMIN_URL        standart https://api.enes.uz
     ENES_CLOUD_ADMIN_KEY  admin kaliti (majburiy)
 """
 
@@ -29,7 +29,7 @@ from typing import Any, Dict, List
 
 import httpx
 
-DEFAULT_URL = "https://api.chaqimchi.uz"
+DEFAULT_URL = "https://api.enes.uz"
 TIMEOUT_SEC = 30
 
 

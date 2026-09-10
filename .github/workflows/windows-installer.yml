@@ -43,7 +43,7 @@ jobs:
           # qila olmagan.  Endi manzil bo'lmasa qurish to'xtaydi.
           # Repo o'zgaruvchisi (Settings → Variables) bilan boshqa cloudga
           # yo'naltirish mumkin.
-          ENES_DEFAULT_CLOUD_URL: ${{ vars.ENES_DEFAULT_CLOUD_URL || 'https://api.chaqimchi.uz' }}
+          ENES_DEFAULT_CLOUD_URL: ${{ vars.ENES_DEFAULT_CLOUD_URL || 'https://api.enes.uz' }}
         run: python scripts/build_windows_payload.py
 
       - name: Cloud manzili paket ichida ekanini tekshirish

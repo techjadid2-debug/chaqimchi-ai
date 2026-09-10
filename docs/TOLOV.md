@@ -47,7 +47,7 @@ Standart namuna kurs 13 000 bo‘lsa Sotqin Base 1 oy — **260 000 so‘m**,
 ```bash
 ENES_CLOUD_ADMIN_KEY=maxfiy-admin-kalit
 # To'lov havolalari tashqaridan ochilishi uchun — HTTPS domen
-ENES_PUBLIC_URL=https://cloud.chaqimchi.uz
+ENES_PUBLIC_URL=https://enes.uz
 
 # Payme (merchant kabinetidan)
 ENES_PAYME_MERCHANT_ID=xxxxxxxxxxxxxxxxxxxxxxxx
@@ -102,7 +102,7 @@ Misol:
 
 ```bash
 # Hisob ochish
-curl -X POST https://cloud.chaqimchi.uz/api/v1/admin/sites/<site-id>/invoices \
+curl -X POST https://enes.uz/api/v1/admin/sites/<site-id>/invoices \
   -H "X-Cloud-Admin-Key: $ENES_CLOUD_ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{"months": 12}'

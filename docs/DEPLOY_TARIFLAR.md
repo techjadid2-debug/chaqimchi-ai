@@ -176,8 +176,8 @@ image'ni **o'zi qaytaradi**.
 Ko'tarilgach:
 
 ```bash
-curl -s https://api.chaqimchi.uz/health | head
-curl -s https://api.chaqimchi.uz/api/v1/public/pricing | jq '.plans[] | {code, monthly_uzs}'
+curl -s https://api.enes.uz/health | head
+curl -s https://api.enes.uz/api/v1/public/pricing | jq '.plans[] | {code, monthly_uzs}'
 ```
 
 Kutiladigan javob:
@@ -214,7 +214,7 @@ Skript qayta ishga tushirishga chidamli: yarim yo'lda uzilsa davom
 ettirsa bo'ladi. "YUZ TOPILMADI" chiqqan rasmlar bazada eski holicha
 qoladi va moslashda ishlatilmaydi — mijozdan yangi rasm so'rash kerak.
 
-**Tekshirish:** mijoz panelida (`app.chaqimchi.uz` → Xodimlar) xodim
+**Tekshirish:** mijoz panelida (`app.enes.uz` → Xodimlar) xodim
 kamera oldidan o'tsin va "Bugun" jadvalida ko'rinsin.
 
 ---
@@ -241,13 +241,13 @@ masalasi emas, rasm sifati masalasi.
 
 ## 8. Saytni ko'z bilan tekshirish
 
-- `https://chaqimchi.uz` — uchta tarif kartasi, o'rtadagisi "Eng
+- `https://enes.uz` — uchta tarif kartasi, o'rtadagisi "Eng
   ommabop", narxlar 149 000 va 299 000;
 - hero'dagi izometrik sahna qimirlayotgan bo'lsin (nur suriladi,
   Telegram kartasi chiqadi);
 - "Nima ko'rasiz" bo'limida ikkita panel ekrani;
 - telefonda: gorizontal skroll yo'q, Biznes kartasi birinchi turadi;
-- `https://chaqimchi.uz/hamkorlik` va `/rozilik-shabloni` —
+- `https://enes.uz/hamkorlik` va `/rozilik-shabloni` —
   tugmalar uslubli ko'rinsin (ilgari oddiy matn edi).
 
 Brauzer keshi eski CSS ni ko'rsatsa — `?v=` tokeni o'zgargan, ya'ni

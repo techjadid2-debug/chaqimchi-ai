@@ -1,4 +1,4 @@
-# Yangi serverga ko'chirish (chaqimchi.uz platformasi)
+# Yangi serverga ko'chirish (enes.uz platformasi)
 
 Eski VPS to'lovdan uzilgan; bu hujjat noldan yangi serverga qo'yishning
 to'liq ro'yxati. Kod GitHubda tayyor — server + DNS + shu qadamlar qoladi.
@@ -14,13 +14,13 @@ O'zbekistondan ping past, Payme/Click ga yaqin.
 - Muqobil: Hetzner/Contabo — arzonroq spec, lekin valyuta kartasi va
   balandroq ping. Qaysi bo'lsa ham Ubuntu 22.04/24.04 + Docker.
 
-## 1. DNS (aHOST panelida — Mening domenlarim → chaqimchi.uz → DNS)
+## 1. DNS (aHOST panelida — Mening domenlarim → enes.uz → DNS)
 
 Server IP'si ma'lum bo'lgach A yozuvlar (TTL 300):
 
 | Yozuv | Turi | Qiymat |
 |---|---|---|
-| `@` (chaqimchi.uz) | A | SERVER_IP |
+| `@` (enes.uz) | A | SERVER_IP |
 | `www` | A | SERVER_IP |
 | `api` | A | SERVER_IP |
 | `app` | A | SERVER_IP |
@@ -30,7 +30,7 @@ Server IP'si ma'lum bo'lgach A yozuvlar (TTL 300):
 | `docs` | A | SERVER_IP |
 | `status` | CNAME | UptimeRobot bergan manzil (7-qadam) |
 
-DNS tarqalishini tekshirish: `dig +short api.chaqimchi.uz`.
+DNS tarqalishini tekshirish: `dig +short api.enes.uz`.
 
 ## 2. Serverni tayyorlash
 
@@ -48,12 +48,12 @@ Kod: `git clone git@github.com:techjadid2-debug/chaqimchi-ai.git /home/deploy/en
 `.env.production.example` dan nusxa oling va to'ldiring. Yangi/muhim:
 
 ```
-ENES_PUBLIC_URL=https://chaqimchi.uz
-ENES_APP_URL=https://app.chaqimchi.uz
-ENES_API_URL=https://api.chaqimchi.uz
-ENES_DL_URL=https://dl.chaqimchi.uz
-ENES_PARTNER_URL=https://partner.chaqimchi.uz
-ENES_ADMIN_URL=https://admin.chaqimchi.uz
+ENES_PUBLIC_URL=https://enes.uz
+ENES_APP_URL=https://app.enes.uz
+ENES_API_URL=https://api.enes.uz
+ENES_DL_URL=https://dl.enes.uz
+ENES_PARTNER_URL=https://partner.enes.uz
+ENES_ADMIN_URL=https://admin.enes.uz
 # Face ID piloti (o'z do'koningiz uchun):
 ENES_ATTENDANCE_PILOT=true
 ENES_EMBEDDING_KEY=<yangi Fernet kalit>
@@ -76,7 +76,7 @@ export ENES_BACKUP_PASSWORD='YANGI_UZUN_SIR'            # parol menejerga yozing
 
 Birinchi ishga tushishda Caddy barcha subdomenlar uchun sertifikatlarni
 o'zi oladi (DNS tarqalgan bo'lishi shart). Tekshirish:
-`curl -I https://chaqimchi.uz` va `https://api.chaqimchi.uz/health`.
+`curl -I https://enes.uz` va `https://api.enes.uz/health`.
 
 Caddyfile sintaksisini oldindan tekshirish (ixtiyoriy):
 `docker run --rm -v $PWD/deploy/Caddyfile.enes:/etc/caddy/Caddyfile:ro caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile`
@@ -102,14 +102,14 @@ crontab -e   # → 30 3 * * * flock -n /home/deploy/enes-backup.lock /home/deplo
 Ichiga cloud manzili yoziladi — YANGI api manzil bilan qayta build shart:
 
 ```bash
-make windows-release CLOUD_URL=https://api.chaqimchi.uz PY=.venv/bin/python
+make windows-release CLOUD_URL=https://api.enes.uz PY=.venv/bin/python
 scp releases/enes-windows-<VERSIYA>.{exe,json} deploy@SERVER_IP:/home/deploy/enes/releases/
 ```
 
-## 7. status.chaqimchi.uz (UptimeRobot, bepul)
+## 7. status.enes.uz (UptimeRobot, bepul)
 
-1. uptimerobot.com → monitor qo'shing: `https://api.chaqimchi.uz/health` (HTTP, 5 min).
-2. Status Page yarating → Custom domain: `status.chaqimchi.uz` → ko'rsatilgan CNAME'ni aHOST DNS'ga yozing.
+1. uptimerobot.com → monitor qo'shing: `https://api.enes.uz/health` (HTTP, 5 min).
+2. Status Page yarating → Custom domain: `status.enes.uz` → ko'rsatilgan CNAME'ni aHOST DNS'ga yozing.
 3. Landing futeridagi "Tizim holati" havolasi keyin shu manzilga almashtiriladi.
 
 ## 8. Do'kondagi qurilmani yangi manzilga ulash
@@ -120,19 +120,19 @@ Do'kon kompyuteri eski manzilga qarab turibdi (hodisalar diskda yig'ilgan,
 1. Kompyuterda `http://127.0.0.1:8760` → sozlash ustasi → cloud bo'limida
    yangi kod bilan qayta ulang (admin panelda saytga yangi pairing kod
    oching). YOKI `config.yaml` da `cloud_sync.url` va `cloud.url` ni
-   `https://api.chaqimchi.uz` ga almashtirib dasturni qayta ishga tushiring.
+   `https://api.enes.uz` ga almashtirib dasturni qayta ishga tushiring.
 2. Ulangach yig'ilgan hodisalar o'zi yetib boradi.
 3. Yangilanish siyosati `auto` bo'lsa yangi versiyani 15 daqiqada o'zi oladi.
 
 ## 9. Yakuniy tekshiruv ro'yxati
 
-- [ ] https://chaqimchi.uz — landing, narx ko'rinadi
-- [ ] https://app.chaqimchi.uz — panel login ekrani
-- [ ] https://partner.chaqimchi.uz — montajchi portali
-- [ ] https://admin.chaqimchi.uz — admin (parol so'raydi)
-- [ ] https://dl.chaqimchi.uz — yuklab olish sahifasi, versiya ko'rinadi
-- [ ] https://docs.chaqimchi.uz — hujjatlar
-- [ ] https://api.chaqimchi.uz/health — {"ok": true}
+- [ ] https://enes.uz — landing, narx ko'rinadi
+- [ ] https://app.enes.uz — panel login ekrani
+- [ ] https://partner.enes.uz — montajchi portali
+- [ ] https://admin.enes.uz — admin (parol so'raydi)
+- [ ] https://dl.enes.uz — yuklab olish sahifasi, versiya ko'rinadi
+- [ ] https://docs.enes.uz — hujjatlar
+- [ ] https://api.enes.uz/health — {"ok": true}
 - [ ] Botga /start — welcome, tugmalar yangi subdomenlarga
 - [ ] Admin panelda sayt ochish → pairing → qurilma ulanadi
 - [ ] Kechqurun kunlik hisobot keladi

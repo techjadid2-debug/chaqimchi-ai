@@ -21,7 +21,7 @@ uchun qoladi.
 
 1. Faylni ishga tushiradi → Windows ruxsat so‘raydi (UAC) → “Ha”.
 2. Keyingi → Keyingi → O‘rnatish → Tayyor.
-3. Brauzerda **bulut paneli** ochiladi (`app.chaqimchi.uz/owner?connect=…`).
+3. Brauzerda **bulut paneli** ochiladi (`app.enes.uz/owner?connect=…`).
 4. Ro‘yxatdan o‘tadi (telefon + o‘zi tanlagan login/parol) yoki kiradi.
 5. «Bu kompyuterni ulaymizmi?» → tasdiqlash kodini solishtiradi → **Ha**.
 6. Panelda kamerani qidiradi va kirish chizig‘ini joyiga suradi.
@@ -54,7 +54,7 @@ Fayl imzolanmagan, shuning uchun Windows birinchi marta ogohlantiradi:
 |---|---|
 | Dastur | `C:\Program Files\ENES Monitoring` (faqat o‘qish) |
 | Sozlama, log, hodisalar | `C:\ProgramData\ENES` |
-| Boshqaruv paneli | `https://app.chaqimchi.uz/owner` (telefondan ham) |
+| Boshqaruv paneli | `https://app.enes.uz/owner` (telefondan ham) |
 | Qurilma holati | `http://localhost:8760` (faqat shu kompyuterda) |
 | Usta sehrgari | `http://localhost:8760/setup` |
 | Avtostart | Rejalashtirilgan vazifa `ENES Monitoring` (SYSTEM, `ONSTART`) |

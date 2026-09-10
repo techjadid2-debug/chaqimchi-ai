@@ -73,8 +73,8 @@ qadam yiqiladi):
 
 ```bash
 # 1) versiyani enes/__init__.py va pyproject.toml da ko'taring
-# (cloud manzili F7 cutovergacha api.chaqimchi.uz, keyin api.enes.uz)
-PYTHONPATH="$PWD" ENES_DEFAULT_CLOUD_URL=https://api.chaqimchi.uz \
+# (cloud manzili F7 cutoverdan keyin api.enes.uz; eski api.chaqimchi.uz parallel ishlaydi)
+PYTHONPATH="$PWD" ENES_DEFAULT_CLOUD_URL=https://api.enes.uz \
   python scripts/build_windows_payload.py
 makensis -V2 scripts/windows_installer.nsi
 PYTHONPATH="$PWD" ENES_RELEASE_HOST=root@169.58.198.111 \
@@ -103,10 +103,11 @@ ro'yxati): `chaqimchi_ai/` (eski paket nomi — pilot kompyuteridagi
 yangilanish vazifasi), `enes/envcompat.py` (`CHAQIMCHI_*` env),
 eski reliz prefiksi (`chaqimchi-windows-*`), eski Windows vazifa/papka
 nomlari (`paths.py` — ikkalasi ham: `enes/paths.py` va
-`enes/local/paths.py`; `autostart.py`, NSI).  **Egadan kutilmoqda (F7):**
-`enes.uz` DNS, bot @username, yuridik nom/rekvizit, Payme/Click;
-shundan keyin domen (`chaqimchi.uz`) va `@chaqimchi_ai_bot` almashadi.
-Cutover ro'yxati `docs/ISH_DAFTARI.md` da.
+`enes/local/paths.py`; `autostart.py`, NSI).  **F7 cutover (2026-09-11):**
+domen `enes.uz`, bot `@enes_monitoring_bot`; eski `chaqimchi.uz` PARALLEL
+ishlaydi (Caddy ikki nomli bloklar — pilot `api.chaqimchi.uz` da), 301
+alohida bosqich.  **Egadan hali kutilmoqda:** yuridik nom/rekvizit,
+Payme/Click kabineti, NS SVG.  Cutover ro'yxati `docs/ISH_DAFTARI.md` da.
 
 ## Uslub
 

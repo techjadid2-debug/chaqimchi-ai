@@ -14,9 +14,10 @@ test ikki narsani qulflaydi:
    tekshirdi va 2026-09-09 da pilot aynan ikkinchisi yo'qligidan
    to'xtadi; ikkinchisining qulfi `tests/test_local_paths.py` da.
 
-Domen (`chaqimchi.uz`) va bot nomi (`@chaqimchi_ai_bot`) F7 cutover
-kuni almashadi — ular alohida ro'yxatda va o'sha kuni bu ro'yxatdan
-olib tashlanadi.
+F7 cutover (2026-09-11): bot nomi `@enes_monitoring_bot` — eski nom
+taqiqda.  Domen `chaqimchi.uz` esa ATAYLAB ruxsatda qoladi: ikkala
+domen parallel ishlaydi (Caddyfile ikki nomli bloklar, pilot qurilmasi
+eski `api.` da), 301 bosqichida bu ruxsat olib tashlanadi.
 """
 
 from __future__ import annotations
@@ -59,8 +60,9 @@ ALLOWED_FILES = {
     "CLAUDE.md",                       # ko'priklar va eski kalit yo'li hujjatlangan
 }
 
-#: Cutovergacha qoladigan belgilar (F7): domen va bot nomi.
-ALLOWED_TOKENS = re.compile(r"chaqimchi\.uz|chaqimchi_ai_bot|chaqimchi-ai\.git|CHAQIMCHI_")
+#: 301 bosqichigacha qoladigan belgilar: eski domen (parallel rejim),
+#: repo manzili, eski env prefiksi (ko'prik).
+ALLOWED_TOKENS = re.compile(r"chaqimchi\.uz|chaqimchi-ai\.git|CHAQIMCHI_")
 
 #: Butunlay tekshirilmaydigan yo'llar.
 #: Tarix hujjatlari — ular o'sha paytdagi nomni saqlaydi.

@@ -38,7 +38,7 @@ def _vhost_limits(path: Path) -> dict[str, int]:
 
     `Caddyfile.enes` da yettita turli `max_size` bor (1MB dan 60MB
     gacha).  Butun fayl bo'ylab birinchi mos kelganini olish — aynan
-    shu testdagi xato edi: u `chaqimchi.uz` ning 5MB'ini topib,
+    shu testdagi xato edi: u `enes.uz` ning 5MB'ini topib,
     "limit klipdan kichik" deb yiqilardi yoki, aksincha, noto'g'ri
     vhostni tasdiqlardi.  Klip esa `api.` ga yuklanadi.
     """
@@ -50,7 +50,9 @@ def _vhost_limits(path: Path) -> dict[str, int]:
             continue
         # Vhost blokining boshi: chekinishsiz `nom {`.
         if not raw[:1].isspace() and line.endswith("{") and not line.startswith("("):
-            host = line[:-1].strip()
+            # Ikki nomli blok (`api.enes.uz, api.chaqimchi.uz {`) — kalit
+            # BIRINCHI nom: yangi domen asosiy, eskisi parallel (F7).
+            host = line[:-1].strip().split(",")[0].strip()
             continue
         match = re.search(r"max_size\s+(\d+)\s*(KB|MB|GB)", line)
         if match and host:
@@ -62,7 +64,7 @@ def test_klip_yuklanadigan_vhost_limiti_yetarli() -> None:
     """Klip yuklanadigan vhost limiti `CLIP_MAX_BYTES` dan katta bo'lsin.
 
     Klip `PUT /api/v1/edge/events/{id}/clip` ga boradi, ya'ni
-    `api.chaqimchi.uz` ga.  Teng bo'lishi ham yetarli emas: Content-Length
+    `api.enes.uz` ga.  Teng bo'lishi ham yetarli emas: Content-Length
     dan tashqari header va chunk overhead bor.
     """
     for label, path in CADDYFILES.items():
@@ -86,7 +88,7 @@ def test_production_caddyfile_ham_tekshiriladi() -> None:
     faylni tekshiradigan qilib qo'ysa, shu yerda ushlanadi.
     """
     limits = _vhost_limits(CADDYFILES["enes"])
-    assert "api.chaqimchi.uz" in limits, (
+    assert "api.enes.uz" in limits, (
         "Productionda ishlatiladigan Caddyfile'da api vhosti topilmadi — "
         "test noto'g'ri faylga qarayotgan bo'lishi mumkin"
     )
@@ -174,7 +176,7 @@ def test_statik_fayllarda_kesh_muddati_bor() -> None:
 def test_owner_pwa_worker_app_subdomainida_ochiq() -> None:
     """V2 panel worker'ni ro'yxatdan o'tkazadi; Caddy uni 404 qilmasin."""
     text = CADDYFILES["enes"].read_text(encoding="utf-8")
-    app_block = text.split("app.chaqimchi.uz {", 1)[1].split("partner.chaqimchi.uz {", 1)[0]
+    app_block = text.split("app.enes.uz, app.chaqimchi.uz {", 1)[1].split("partner.enes.uz, partner.chaqimchi.uz {", 1)[0]
     assert "/owner-sw.js" in app_block
 
 
@@ -190,11 +192,11 @@ def test_ulash_ekrani_uchun_zarur_yollar_app_subdomainida_ochiq() -> None:
     2026-08-24 da deploy'dan keyin aynan shu bo'ldi.
     """
     text = CADDYFILES["enes"].read_text(encoding="utf-8")
-    app_block = text.split("app.chaqimchi.uz {", 1)[1].split("partner.chaqimchi.uz {", 1)[0]
+    app_block = text.split("app.enes.uz, app.chaqimchi.uz {", 1)[1].split("partner.enes.uz, partner.chaqimchi.uz {", 1)[0]
 
     for path in ("/api/v1/public/device-connect", "/api/v1/public/quick-trial"):
         assert path in app_block, (
-            f"{path} app.chaqimchi.uz ruxsat ro'yxatida yo'q — "
+            f"{path} app.enes.uz ruxsat ro'yxatida yo'q — "
             "qurilmani ulash ekrani ishlamaydi"
         )
     # Tasdiqlash va kirish allaqachon qamrab olingan — ular ham

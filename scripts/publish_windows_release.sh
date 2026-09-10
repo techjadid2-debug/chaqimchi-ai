@@ -23,7 +23,7 @@
 #   ENES_RELEASE_HOST      majburiy — `deploy@IP`
 #   ENES_RELEASE_DIR       serverdagi papka (standart quyida)
 #   ENES_RELEASE_SSH_KEY   SSH kaliti (standart `.deploy_keys/enes_prod`)
-#   ENES_DL_URL            tashqi tekshiruv manzili (standart dl.chaqimchi.uz)
+#   ENES_DL_URL            tashqi tekshiruv manzili (standart dl.enes.uz)
 #   ENES_RELEASE_LEGACY_NAME=1  reliz ESKI nom bilan chiqadi
 #                          (`chaqimchi-windows-<v>`) — pastdagi izohga qarang
 #
@@ -33,7 +33,7 @@ cd "$(dirname "$0")/.."
 
 remote_dir="${ENES_RELEASE_DIR:-/home/deploy/enes/releases}"
 ssh_key="${ENES_RELEASE_SSH_KEY:-.deploy_keys/enes_prod}"
-dl_url="${ENES_DL_URL:-https://dl.chaqimchi.uz}"
+dl_url="${ENES_DL_URL:-https://dl.enes.uz}"
 py="${PY:-python3}"
 
 source_exe=""
@@ -86,7 +86,7 @@ fi
 if [[ ! -f "$exe" ]]; then
   echo "Topilmadi: $exe" >&2
   echo "Avval quring:" >&2
-  echo "  make windows-release CLOUD_URL=https://api.chaqimchi.uz" >&2
+  echo "  make windows-release CLOUD_URL=https://api.enes.uz" >&2
   echo "  (o'tish relizi uchun: LEGACY_NAME=1 make windows-release …)" >&2
   echo "yoki CI qurgan faylni bering: --exe <yuklab olingan .exe>" >&2
   exit 1

@@ -28,8 +28,8 @@ Google jazolaydi.
 1. [search.google.com/search-console](https://search.google.com/search-console)
    ga Google hisobingiz bilan kiring.
 2. **«Domain»** turini tanlang (`URL prefix` emas — domain butun
-   `chaqimchi.uz` ni, jumladan `www.` va subdomenlarni qamraydi).
-3. `chaqimchi.uz` deb yozing → **Continue**.
+   `enes.uz` ni, jumladan `www.` va subdomenlarni qamraydi).
+3. `enes.uz` deb yozing → **Continue**.
 4. Google bitta **TXT yozuv** beradi, masalan:
    `google-site-verification=abc123...`
 5. Uni domen DNS'iga TXT sifatida qo'shing (domen qayerdan olingan
@@ -37,7 +37,7 @@ Google jazolaydi.
 6. DNS tarqalishini kuting (odatda 10-30 daqiqa) → **Verify**.
 
 > **TXT qo'sha olmasangiz** ayting — sahifaga meta-teg qo'yish yo'li
-> ham bor, lekin u faqat `chaqimchi.uz` ni tasdiqlaydi, subdomenlarni
+> ham bor, lekin u faqat `enes.uz` ni tasdiqlaydi, subdomenlarni
 > emas.
 
 ### 2. Sitemap'ni yuborish
@@ -51,7 +51,7 @@ Shundan keyin Google sahifalarni o'zi aylanib chiqadi.
 
 | Vaqt | Nima bo'ladi |
 |---|---|
-| 1-3 kun | `site:chaqimchi.uz` bo'yicha birinchi sahifalar chiqadi |
+| 1-3 kun | `site:enes.uz` bo'yicha birinchi sahifalar chiqadi |
 | 1-2 hafta | "enes" degan brend so'rovda birinchi o'rin |
 | 1-3 oy | "do'kon uchun kamera analitikasi" kabi so'rovlarda ko'rina boshlaydi |
 
@@ -61,15 +61,15 @@ Brend so'rovi esa deyarli har doim ishlaydi.
 ## Tekshirish
 
 ```bash
-curl -sS https://chaqimchi.uz/robots.txt
-curl -sS https://chaqimchi.uz/sitemap.xml | grep -c lastmod   # 9 bo'lsin
-curl -sS https://chaqimchi.uz/ | grep -o 'rel="canonical"'
-curl -sS https://chaqimchi.uz/ | grep -o 'application/ld+json'
+curl -sS https://enes.uz/robots.txt
+curl -sS https://enes.uz/sitemap.xml | grep -c lastmod   # 9 bo'lsin
+curl -sS https://enes.uz/ | grep -o 'rel="canonical"'
+curl -sS https://enes.uz/ | grep -o 'application/ld+json'
 ```
 
 Razmetkani Google o'zi qanday o'qishini ko'rish:
 [Rich Results Test](https://search.google.com/test/rich-results) ga
-`https://chaqimchi.uz` ni kiriting — `FAQ` va `Software App` bloklari
+`https://enes.uz` ni kiriting — `FAQ` va `Software App` bloklari
 ko'rinishi kerak.
 
 ## Keyingi bosqich (hozir rejada YO'Q)

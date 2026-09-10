@@ -35,15 +35,17 @@
   belgisi aynan `config.yaml`) eski papkani hech qachon tanlamaydi —
   outbox navbati va bufer abadiy yetim qoladi.
 
-- **🔴 BIOMETRIK QO'RIQCHI TO'RT MARSHRUTDA YO'Q (topildi, tuzatilmagan).**
-  `require_biometric_access()` 8 marshrutda bor, lekin
-  `GET /api/v1/owner/faces` (`cloud/main.py:9106`),
-  `GET /api/v1/owner/events` (`:7224`, `?event_type=employee_seen` →
-  `person_id`/`person_name`), `GET /api/v1/owner/attendance{,.csv}`
-  (`:8850`, `:8861`) va `GET /api/v1/owner/employees` (`:8623`) faqat
-  `require_attendance()` bilan — ya'ni **`manager` roli ko'radi**.
-  Audit KRITIK-4 yopgan sinfning aynan o'zi, boshqa URL orqali.
-  Faqat cloud, cutover deployi bilan chiqadi.
+- **✅ BIOMETRIK QO'RIQCHI TO'RT MARSHRUTDA HAM YOPILDI (2026-09-10,
+  `1d70c43`).**  `GET /owner/faces`, `/owner/employees`,
+  `/owner/attendance{,.csv}` va `/owner/events?event_type=employee_seen`
+  faqat `require_attendance()` bilan turgan edi — u esa qo'riqchi emas,
+  RUBILNIK: rolga umuman qaramaydi.  Auditning KRITIK-4 sinfi, boshqa
+  URL orqali.  **`/owner/events` ga marshrut darajasida qo'riqchi
+  QO'YILMADI** va bu ataylab: u «Dalillar» sahifasining yagona manbai,
+  ya'ni menejerning asosiy ish quroli o'lardi — qo'riqchi TURGA
+  qo'yildi.  Yon kanal ham yopildi: oylik smena hisoboti Telegramda
+  barcha a'zolarga ketardi.  ⏳ **Faqat cloud — cutover deployi bilan
+  chiqadi.**
 
 - **🎬 KLIP TUZATILDI — ildiz sabab ORTIQCHA BITTA `%` edi (2026-09-09,
   `188a7c5`, 0.6.31).**  Recorder aslida hamma vaqt yozib turgan ekan.
@@ -620,15 +622,16 @@ tartib bilan:
    `~/.claude/plans/ok-nimalar-qoldi-tugatishimiz-*.md`.
    **1-bosqich BAJARILDI** (0.6.32): maxraj qurilmada sanaladi va
    heartbeatda ko'rinadi.  Qolgani:
-   - **2-bosqich (qurilma reliz):** `people_seen` hodisasi
-     `capture.enabled` darvozasi ortida — `enes/event_models.py:24-45`,
-     `retail_event_filter` (`enes/retail/service.py:260-322`, oxiri
-     `return False` — shartsiz hodisa jimgina yeyiladi),
-     `_seen_flush_loop` da emit (`:778-794`; u `pipeline` ni chetlab
-     `OutboxSink` ga yozadi, ya'ni `event_filter` avtomatik
-     QO'LLANMAYDI — qo'lda chaqirilsin),
-     `local/cloud_config.py: apply()["capture"]` (**unutilsa bayroq
-     hech qachon kuchga kirmaydi**).
+   - **✅ 2-bosqich BAJARILDI (2026-09-10, `b268325`)** — oyna
+     yopilganda har kameradan bitta `people_seen` chiqadi
+     (`metadata.seen`, `metadata.window_sec`), `capture.enabled`
+     darvozasi ortida.  **Qurilma tomoni tayyor, keyingi relizni
+     kutadi** (0.6.32 da hali yo'q).
+     Yo'l-yo'lakay uchta bo'shliq topildi: `read_sotqin_cache()`
+     kalitlarni OQ RO'YXAT bilan qaytaradi (yangi kalit u yerga
+     qo'shilmasa keshdagi bayroq filtrgacha yetib bormaydi);
+     hodisaga uch tilda nom kerak edi; zanjirni qayta yoqish testi
+     manba matnini AYNAN grep qilardi.
    - **3-bosqich (deploy kutadi):** cloud `config["capture"]`,
      `REPORT_EVENT_TYPES`, `TIMELINE_HIDDEN_TYPES` (busiz `people_seen`
      har 10 daqiqada lentaga chiqadi),
@@ -638,11 +641,12 @@ tartib bilan:
      bo'lsa — sokin kun xabari qisqa qolsin), `Numbers.tsx`, i18n.
    - **5-bosqich (cutover kuni):** `cloud_feature_revision` ni
      ko'tarish — busiz qurilma yangi bayroqni ko'rmaydi.
-4. **Cutovergacha qiladigan cloud ishi** (deploy kutadi): biometrik
-   qo'riqchi to'rt marshrutda (tepaga qarang), `status.js` `/health/deep`
-   ni o'qisin, `auth/verify` ga IP cheklovi, bundle eskirish qulfi,
-   domen/bot almashuvi (DNS va @username keldi — faqat botning aniq
-   nomi kerak).
+4. **Cutovergacha qiladigan cloud ishi** (hammasi deploy kutadi).
+   ✅ Bajarildi 2026-09-10 da: biometrik qo'riqchi to'rt marshrutda
+   (`1d70c43`), `status.js` endi `/health/deep` ni o'qiydi va
+   `auth/verify` ga IP cheklovi (`e86615a`).
+   ⏳ Qoldi: bundle eskirish qulfi, domen/bot almashuvi (DNS va
+   @username keldi — faqat botning aniq nomi kerak).
 5. **Egadan kutilmoqda:** `enes.uz` DNS, bot @username, Payme/Click,
    yuridik nom/rekvizit, NS SVG.  Bularsiz F7 boshlanmaydi.
 
@@ -944,17 +948,25 @@ taklif qilish kerak.
   JONLI bazani ko'chirish (`PRODUCTION_RUNBOOK.md` §1.1) va shundan
   keyin `ENES_CLOUD_WORKERS=2` (§1.2).  Ikkalasi ham deploy kuni.
 - ✅ **YOPILDI (2026-09-09, 5B) — rate limit umumiy bazada**
-  (`rate_limit_windows`).  Ochiq qolgani: `POST /api/v1/owner/auth/verify`
-  da IP cheklovi yo'q — yonidagi `auth/link` da bor (O'RTA-9 qoldig'i).
+  (`rate_limit_windows`).  ✅ **Qoldig'i ham yopildi (2026-09-10,
+  `e86615a`):** `POST /api/v1/owner/auth/verify` ga IP cheklovi
+  (30/10 daqiqa).  Diqqat — bu kodni sindirishdan emas, **BLOKLASHDAN**
+  himoya: kodning o'zi allaqachon `attempts >= 5` bilan qulflangan edi,
+  ochiq qolgani esa boshqa xavf — Telegram ID sir emas, ya'ni hujumchi
+  begona akkauntga beshta noto'g'ri kod yuborib, qurbonning HAQIQIY
+  kodini kuydirib qo'yardi.
 - ⚠️ **CSP bor, lekin `-Report-Only`** (O'RTA-2).  Kod tomoni tayyor;
   qoladigan ish bitta so'z, cutoverdan keyin bir hafta kuzatib.
 - ✅ **YOPILDI (2026-09-09) — server tomonda chiqish bor**
   (`owner_members.auth_version`, `POST /api/v1/owner/auth/logout`).
   Token hamon `localStorage` da, lekin endi uni BEKOR QILISH mumkin.
-- ⚠️ **`/status` sahifasi yengil `/health` ni o'qiydi**
-  (`cloud/static/status.js:12`) — baza o'lgan bo'lsa ham «ishlayapti»
-  deydi.  `/health` ataylab doim 200 (Docker HEALTHCHECK uchun),
-  haqiqiy tekshiruv `/health/deep` da (O'RTA-1 qoldig'i).
+- ✅ **YOPILDI (2026-09-10, `e86615a`) — `/status` halol tekshiruvni
+  o'qiydi.**  Ilgari yengil `/health` edi va baza o'lgan bo'lsa ham
+  «ishlayapti» derdi — sahifa aynan kerak bo'lgan daqiqada yolg'on
+  gapirardi.  Endi `/health/deep`.  Qarorni test qulflaydi
+  (`test_the_status_page_asks_the_honest_health_check`).
+  ⏳ UptimeRobot ham `/health/deep` ga qaratilishi kerak — u hali
+  qilinmagan (O'RTA-1 qoldig'i).
 - **AI aniqligi hech qachon o'lchanmagan** (YUQORI-6) — endi asbob bor
   (masofaviy `benchmark` topshirig'i), o'lchov hali olinmagan.
 - **Haqiqiy video/model bilan test yo'q** (YUQORI-8) — chegaralar
@@ -965,6 +977,14 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **`read_sotqin_cache()` kalitlarni OQ RO'YXAT bilan qaytaradi.**  Cloud
+  yuborgan yangi kalitni `apply()` keshga yozadi, lekin o'quvchi uni
+  o'tkazmasa u zanjirgacha yetib bormaydi va bayroq JIMGINA ishlamaydi:
+  fayl to'g'ri, kod to'g'ri, natija yo'q.  2026-09-10 da `capture` aynan
+  shunday tutildi va uni faqat test topdi — qo'lda tekshirilganda kesh
+  faylida kalit turgani "ishlayapti" degan taassurot berardi.  Keshga
+  kalit qo'shsangiz `enes/retail/inventory.py` ni ham yangilang.
 
 - **Ma'lumot papkasi yo'qolsa YANGILAGICHNING O'ZI ham o'ladi — nosozlik
   masofadan tuzatilmaydi.**  Bu papka ko'prigi tuzog'ining ikkinchi
@@ -1559,6 +1579,82 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-10 — Uchta kichik qarz: OTP bloklashi, `/status` yolg'oni, Box tripwire (`e86615a`)
+Nima: `POST /owner/auth/verify` ga IP cheklovi (30/10 daq), `/status`
+sahifasi endi `/health/deep` ni o'qiydi, `enes/paths.py` farazi testga
+olindi.
+Nega: uchalasi ham "jimgina yolg'on" sinfidan.  OTP cheklovi kodni
+sindirishdan emas, BLOKLASHDAN himoya qiladi — kodning o'zi allaqachon
+`attempts >= 5` bilan qulflangan, lekin Telegram ID sir emas va hujumchi
+begona akkauntga beshta noto'g'ri kod yuborib qurbonning haqiqiy kodini
+kuydirib qo'yardi (qurbon yangisini 10 daqiqada faqat uch marta so'ray
+oladi).  `/status` esa yengil `/health` ni o'qirdi — u Docker
+HEALTHCHECK uchun va doim 200, ya'ni Postgres o'lgan bulut ham
+"ishlayapti" bo'lib ko'rinardi.
+Qayerda: `cloud/main.py` (`owner_verify_otp`), `cloud/static/status.js`
++ qurilgan `status*.html` (JS ning kesh-hashi ichida), `enes/paths.py`
+(`_windows_dir` izohi).
+Test: `test_otp_verification_is_capped_per_ip`,
+`test_the_status_page_asks_the_honest_health_check`,
+`test_the_box_bridge_stays_safe_because_nothing_creates_its_folders`.
+Uchalasi ham tuzatmasiz yiqilishi tekshirildi.
+Diqqat: **`enes/paths.py` ataylab QAYTA YOZILMADI.**  U hamon papkaning
+borligiga qarab tanlaydi, ya'ni egizak moduldagi tuzoqning o'zi — lekin
+bugun xavfsiz, chunki bu modul papka yaratmaydi.  Belgiga o'tkazish har
+yo'l uchun boshqa belgi tanlashni talab qiladi (`/opt/enes` va
+`/etc/enes` da bir xil fayl yo'q), ya'ni sotuvga chiqmagan yo'lga xavf
+kiritardi.  O'rniga faraz qulflandi: `mkdir` qo'shilsa test aytadi.
+
+### 2026-09-10 — A1 2-bosqichi: `people_seen` hodisasi (`b268325`)
+Nima: oyna yopilganda har kameradan bitta `people_seen` chiqadi
+(`metadata.seen`, `metadata.window_sec`), `capture.enabled` darvozasi
+ortida.  Qurilma tomoni tayyor — keyingi relizni kutadi (0.6.32 da yo'q).
+Nega: maxraj 1-bosqichda sanala boshlagan edi, lekin faqat heartbeatda
+ko'rinardi, ya'ni tashxisga yarardi-yu hisobotga bormasdi.
+Sabab (darvoza nega majburiy): eski cloud noma'lum turni jimgina
+tashlamaydi — RAD ETADI, qurilma esa rad etilgan hodisani
+`permanent=True` bilan o'ldiradi.  Bayroqsiz yuborilgan har qator
+qaytarib bo'lmas yo'qolardi va `outbox_poisoned` o'sardi.
+Qayerda: `enes/event_models.py` (`people_seen`), `enes/retail/service.py`
+(`retail_event_filter` + `_seen_flush_loop`), `enes/retail/inventory.py`
+(oq ro'yxat), `enes/local/cloud_config.py` (`_capture_signature`),
+`enes/local/app.py` (qayta yoqish ro'yxati), `i18n/*.json`.
+Test: `test_people_seen_needs_the_cloud_flag_not_just_a_paid_plan`,
+`test_the_seen_window_becomes_one_event_per_camera`,
+`test_capture_bayrogi_ozgarishi_sezib_qolinadi`.
+Diqqat: son alohida ustunda emas, `metadata` da — kunlik hisobot SQL'da
+emas, Python siklida yig'iladi (`_retail_report_from_events`), ya'ni
+ustun tezlik bermaydi-yu cloud sxemasini ko'chirishni talab qilardi.
+Halqa `pipeline.process()` dan tashqarida yuradi, ya'ni tarif filtri
+QO'LDA chaqiriladi.  Qoldi: 3–5-bosqichlar, hammasi deploy kutadi.
+
+### 2026-09-10 — Yuzdan olingan xulosa ham menejerdan yopildi (`1d70c43`)
+Nima: `GET /owner/faces`, `/owner/employees`, `/owner/attendance{,.csv}`
+va `/owner/events?event_type=employee_seen` endi `require_biometric_access`
+dan o'tadi; oylik smena hisoboti Telegramda menejerga bormaydi.
+Nega: to'rttasi faqat `require_attendance()` bilan turgan edi — u
+qo'riqchi emas, RUBILNIK: "bu serverda davomat yoqilganmi" degan savolga
+javob beradi va rolga umuman qaramaydi.  Auditning KRITIK-4 sinfi, boshqa
+URL orqali.  O'sha auditdagi "rasmni yopdik, ro'yxatni ataylab ochiq
+qoldirdik" qarori xato bo'lib chiqdi: rozilik shabloni xodimni "kim
+ko'rdi" dan himoya qiladi, "nimani ko'rdi" dan emas, va `person_name`
+rasmsiz ham to'liq javob berardi.
+Qayerda: `cloud/main.py` (`may_see_biometrics`, to'rt marshrut,
+`owner_events` filtri), `cloud/owner_auth.py` (`BIOMETRIC_ROLES`),
+`cloud/digest.py` (oluvchilar), `frontend/src/owner.tsx` (menyu),
+`docs/AUDIT_TAHLIL.md`.
+Test: `test_a_manager_cannot_open_any_biometric_image` (ro'yxat
+kengaytirildi), `test_a_manager_keeps_the_evidence_page_without_the_face_rows`,
+`test_the_monthly_shift_report_skips_managers`.  Uchalasi ham tuzatmasiz
+yiqilishi tekshirildi.
+Diqqat: **`/owner/events` ga marshrut darajasida qo'riqchi qo'yilmadi.**
+U «Dalillar» sahifasining yagona manbai va `event_type` ni umuman
+yubormaydi — butun marshrut yopilsa menejerning asosiy ish quroli
+o'lardi.  Qo'riqchi TURGA qo'yildi.  Faqat `?event_type=` ga qo'yish ham
+yetmasdi: turi so'ralmagan umumiy ro'yxatda ham yuz hodisalari qaytardi.
+`BIOMETRIC_ROLES` `cloud/owner_auth.py` da, `main` da emas — `main`
+`digest` ni import qiladi, teskarisi mumkin emas.
 
 ### 2026-09-10 — 0.6.32 commit va reliz; pilot hamon qo'l kutmoqda
 Nima: kechagi ish (papka ko'prigi + capture rate 1-bosqichi) uch commitga

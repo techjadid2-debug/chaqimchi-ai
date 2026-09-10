@@ -20,12 +20,22 @@ function pathMode(base: string) {
   return path === base || path.startsWith(`${base}/`);
 }
 
-function readRoute(base: string, ids: readonly string[], fallback: string): { id: string; param: string } {
+/** Eski bo'lim nomi → yangi bo'lim va ichki tab.
+ *
+ *  Menyu 14 bo'limdan 8 taga qisqarganda (2026-09-10) eski manzillar
+ *  Telegram xabarlarida, xatcho'plarda va bot tugmalarida qolib
+ *  ketgan.  Ular 404 yoki bosh sahifa emas, aynan o'sha joyni ochsin. */
+export type LegacyRoutes = Readonly<Record<string, readonly [string, string]>>;
+
+function readRoute(base: string, ids: readonly string[], fallback: string, legacy: LegacyRoutes = {}): { id: string; param: string } {
   const source = pathMode(base)
     ? window.location.pathname.slice(base.length).replace(/^\/+/, "")
     : window.location.hash.replace(/^#\/?/, "");
-  const [id, param = ""] = source.split(/[?#]/)[0].split("/");
+  const [rawId, param = ""] = source.split(/[?#]/)[0].split("/");
+  const moved = legacy[rawId];
+  const id = moved ? moved[0] : rawId;
   if (!ids.includes(id)) return { id: fallback, param: "" };
+  if (moved) return { id, param: moved[1] };
   // Ikkinchi segment — bo'lim ichidagi obyekt (`customers/<site_id>`).
   // Faqat xavfsiz belgilar: manzil qatoridan kelgan narsa to'g'ridan-
   // to'g'ri API yo'liga qo'yiladi.
@@ -37,14 +47,14 @@ function readRoute(base: string, ids: readonly string[], fallback: string): { id
  *  `param` — chuqur havola uchun: «diqqat talab qiladi» ro'yxatidan
  *  mijozga to'g'ridan-to'g'ri o'tiladi va brauzerning Orqasi ishlaydi
  *  (eski admin qoidasi, `#/mijozlar/<id>`). */
-export function usePanelRoute(base: string, ids: readonly string[], fallback: string) {
-  const [route, setRoute] = useState(() => readRoute(base, ids, fallback));
+export function usePanelRoute(base: string, ids: readonly string[], fallback: string, legacy: LegacyRoutes = {}) {
+  const [route, setRoute] = useState(() => readRoute(base, ids, fallback, legacy));
   const active = route.id;
   const param = route.param;
   const setActive = (id: string, next = "") => setRoute({ id, param: next });
 
   useEffect(() => {
-    const sync = () => setRoute(readRoute(base, ids, fallback));
+    const sync = () => setRoute(readRoute(base, ids, fallback, legacy));
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
     return () => {
@@ -54,7 +64,13 @@ export function usePanelRoute(base: string, ids: readonly string[], fallback: st
   }, [base, ids, fallback]);
 
   const navigate = useCallback(
-    (id: string, param = "") => {
+    (target: string, targetParam = "") => {
+      /* Kod ichidagi eski chaqiruvlar (`onNavigate("billing")`) ham
+         manzil qatoridagi eski havola bilan bir xil yo'ldan o'tadi —
+         xarita bitta, ikki joyda emas. */
+      const moved = legacy[target];
+      const id = moved ? moved[0] : target;
+      const param = moved ? moved[1] : targetParam;
       if (!ids.includes(id)) return;
       setActive(id, param);
       const tail = param ? `/${encodeURIComponent(param)}` : "";
@@ -67,7 +83,7 @@ export function usePanelRoute(base: string, ids: readonly string[], fallback: st
         window.history.pushState({ panel: id, param }, "", `#/${id}${tail}`);
       }
     },
-    [base, ids, fallback],
+    [base, ids, fallback, legacy],
   );
 
   return [active, navigate, param] as const;

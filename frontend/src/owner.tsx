@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { api, clearToken, logout as serverLogout, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
-import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, useConfirm, type NavItem } from "./components";
+import { AppShell, Card, CopyButton, EmptyState, LoginScreen, MetricCard, PageHeader, Pill, Skeleton, StatusDot, Tabs, useConfirm, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
@@ -26,26 +26,43 @@ import "./styles.css";
    chizish paytida ochiladi. */
 const NAV_ITEMS: Array<{ id: string; key: string; icon: string }> = [
   { id: "home", key: "panel.nav.home", icon: "home" },
-  { id: "setup", key: "panel.nav.setup", icon: "search" },
-  { id: "zones", key: "panel.nav.zones", icon: "shapes" },
   { id: "cameras", key: "panel.nav.cameras", icon: "camera" },
-  { id: "traffic", key: "panel.nav.traffic", icon: "chart" },
-  { id: "employees", key: "panel.nav.employees", icon: "users" },
-  { id: "heatmap", key: "panel.nav.heatmap", icon: "heat" },
-  { id: "branches", key: "panel.nav.branches", icon: "branch" },
-  { id: "reports", key: "panel.nav.reports", icon: "report" },
   { id: "alerts", key: "panel.nav.alerts", icon: "shield" },
-  { id: "agent", key: "panel.nav.agent", icon: "pulse" },
-  { id: "billing", key: "panel.nav.billing", icon: "card" },
-  { id: "telegram", key: "panel.nav.telegram", icon: "telegram" },
+  { id: "employees", key: "panel.nav.employees", icon: "users" },
+  { id: "customers", key: "panel.nav.customers", icon: "chart" },
+  { id: "reports", key: "panel.nav.reports", icon: "report" },
   { id: "settings", key: "panel.nav.settings", icon: "settings" },
 ];
 
-/* "Hodisalar" endi menyuda ham bor: rasm/klip galereyasi faqat
-   qo'ng'iroq belgisi orqali topiladigan yashirin sahifa bo'lib qolgan
-   edi — mijoz uni umuman ko'rmasdi. */
+/* Bo'lim ichidagi tablar.  Birinchisi — standart.
+ *
+ * Menyu 14 bo'limdan 8 taga qisqardi (dizayn-3, 2026-09-10): ega
+ * kuniga bir necha marta telefondan ochadi va 14 qatorli menyuda
+ * "Chiziq va zonalar" bilan "Kamerani ulash" qayerdaligini har safar
+ * qidirardi.  Sahifalarning O'ZI o'zgarmadi — faqat manzili. */
+const TABS: Record<string, string[]> = {
+  cameras: ["live", "setup", "zones"],
+  alerts: ["evidence", "agent"],
+  customers: ["flow", "demography", "heatmap"],
+  settings: ["store", "telegram", "billing", "branches"],
+};
+
+/* Eski bo'lim nomi → yangi bo'lim va tab.  Telegram xabarlaridagi
+   havolalar, xatcho'plar va koddagi `onNavigate("billing")` chaqiruvlari
+   shu xarita orqali o'z joyiga boradi (`router.ts`). */
+const LEGACY_ROUTES = {
+  setup: ["cameras", "setup"],
+  zones: ["cameras", "zones"],
+  agent: ["alerts", "agent"],
+  traffic: ["customers", "flow"],
+  heatmap: ["customers", "heatmap"],
+  telegram: ["settings", "telegram"],
+  billing: ["settings", "billing"],
+  branches: ["settings", "branches"],
+} as const;
+
 const ROUTE_IDS = NAV_ITEMS.map(item => item.id);
-const MOBILE_NAV = ["home", "cameras", "traffic", "employees"];
+const MOBILE_NAV = ["home", "cameras", "alerts", "customers"];
 
 function value(report: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
@@ -488,16 +505,47 @@ async function downloadPeriodReportCsv(siteId:string) {
   const link=document.createElement("a");link.href=url;link.download=t("panel.download.period_filename",{start,end});link.click();URL.revokeObjectURL(url);
 }
 
-function GenericPage({ id, dashboard, sites, siteId, onNavigate, focusEventId = "" }: { id:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:(id:string,focus?:string)=>void; focusEventId?:string }) {
-  if (id === "cameras") return <><PageHeader title={t("panel.nav.cameras")} subtitle={t("panel.cameras.page_subtitle")}/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>;
-  if (id === "traffic") return <TrafficPage dashboard={dashboard}/>;
-  if (id === "heatmap") return <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
-  if (id === "branches") return <><PageHeader title={t("panel.nav.branches")} subtitle={t("panel.owner.branches_subtitle")}/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? t("panel.owner.branch_online") : t("panel.owner.branch_check"))} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
-  if (id === "alerts") return <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>;
-  if (id === "reports") return <><PageHeader title={t("panel.nav.reports")} subtitle={t("panel.owner.reports_subtitle")} actions={<><button className="btn btn-primary" onClick={()=>void downloadDailyReportCsv(siteId)}><Icon name="download"/>{t("panel.download.daily_excel")}</button><button className="btn" onClick={()=>void downloadPeriodReportCsv(siteId)}><Icon name="download"/>{t("panel.download.monthly_excel")}</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>{t("panel.download.traffic_csv")}</button></>}/><div className="metric-grid"><MetricCard label={t("panel.owner.metric_visits_today")} value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label={t("panel.owner.metric_queue")} value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label={t("panel.home.stat.cameras")} value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label={t("panel.nav.alerts")} value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>{t("panel.owner.trend_title")}</h2><p>{t("panel.owner.trend_note")}</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
-  if (id === "billing") return <BillingPage dashboard={dashboard} siteId={siteId}/>;
-  if (id === "telegram") return <TelegramPage siteId={siteId}/>;
-  if (id === "settings") return <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>;
+type Navigate = (id: string, param?: string) => void;
+
+/** Bo'lim tablari — faol tab manzildan (`param`), bosilsa manzil o'zgaradi. */
+function SectionTabs({ section, tab, onNavigate }: { section: string; tab: string; onNavigate: Navigate }) {
+  const ids = TABS[section] || [];
+  if (ids.length < 2) return null;
+  return <Tabs items={ids.map(id => ({ id, label: t(`panel.tabs.${id}`) }))} active={tab} onSelect={id => onNavigate(section, id)} />;
+}
+
+function BranchesPage({ sites }: { sites: Site[] }) {
+  return <><PageHeader title={t("panel.nav.branches")} subtitle={t("panel.owner.branches_subtitle")}/><div className="metric-grid">{sites.map(site => <MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.address || (site.connection === "online" ? t("panel.owner.branch_online") : t("panel.owner.branch_check"))} icon="branch" tone={site.connection === "online" ? "green" : "red"}/>)}</div></>;
+}
+
+function ReportsPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; siteId: string; onNavigate: Navigate }) {
+  return <><PageHeader title={t("panel.nav.reports")} subtitle={t("panel.owner.reports_subtitle")} actions={<><button className="btn btn-primary" onClick={()=>void downloadDailyReportCsv(siteId)}><Icon name="download"/>{t("panel.download.daily_excel")}</button><button className="btn" onClick={()=>void downloadPeriodReportCsv(siteId)}><Icon name="download"/>{t("panel.download.monthly_excel")}</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>{t("panel.download.traffic_csv")}</button></>}/><div className="metric-grid"><MetricCard label={t("panel.owner.metric_visits_today")} value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><MetricCard label={t("panel.owner.metric_queue")} value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><MetricCard label={t("panel.home.stat.cameras")} value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><MetricCard label={t("panel.nav.alerts")} value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>{t("panel.owner.trend_title")}</h2><p>{t("panel.owner.trend_note")}</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
+}
+
+/** Bo'lim sahifasi: tab qatori + tanlangan sahifa.
+ *
+ *  Har ichki sahifa o'z `PageHeader`ini chizadi (ular ilgari alohida
+ *  bo'lim edi) — tab qatori undan TEPADA turadi, sahifaning o'zi
+ *  o'zgarmaydi. */
+function SectionPage({ id, tab, dashboard, sites, siteId, onNavigate, onRefresh, focusEventId = "" }: { id:string; tab:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:Navigate; onRefresh:()=>void; focusEventId?:string }) {
+  const tabs = <SectionTabs section={id} tab={tab} onNavigate={onNavigate}/>;
+  if (id === "cameras") return <>{tabs}{
+    tab === "setup" ? <SetupCameras siteId={siteId} onDone={() => { onRefresh(); onNavigate("cameras", "zones"); }}/>
+    : tab === "zones" ? <GeometryEditor siteId={siteId} cameras={dashboard.cameras}/>
+    : <><PageHeader title={t("panel.nav.cameras")} subtitle={t("panel.cameras.page_subtitle")}/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>}</>;
+  if (id === "alerts") return <>{tabs}{
+    tab === "agent" ? <VisionAgent siteId={siteId} onNavigate={onNavigate}/>
+    : <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>}</>;
+  if (id === "customers") return <>{tabs}{
+    tab === "heatmap" ? <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>
+    : tab === "demography" ? <><PageHeader title={t("panel.tabs.demography")} subtitle={t("panel.customers.demography_subtitle")}/><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>
+    : <TrafficPage dashboard={dashboard}/>}</>;
+  if (id === "settings") return <>{tabs}{
+    tab === "telegram" ? <TelegramPage siteId={siteId}/>
+    : tab === "billing" ? <BillingPage dashboard={dashboard} siteId={siteId}/>
+    : tab === "branches" ? <BranchesPage sites={sites}/>
+    : <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate}/>}</>;
+  if (id === "reports") return <ReportsPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   return <><PageHeader title={t("panel.owner.section_title")} subtitle={t("panel.owner.section_subtitle")}/><Card><EmptyState icon="settings" title={t("panel.owner.section_empty_title")} detail={t("panel.owner.section_empty_detail")}/></Card></>;
 }
 
@@ -508,7 +556,7 @@ function TrafficPage({ dashboard }: { dashboard: Dashboard }) {
   const hourPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2,"0")}:00`, value: Number(item.entered) || 0 }));
   const exitPoints: Point[] = hourly.map(item => ({ label: `${String(item.hour).padStart(2,"0")}:00`, value: Number(item.exited) || 0 }));
   return <>
-    <PageHeader title={t("panel.nav.traffic")} subtitle={t("panel.traffic.subtitle")}/>
+    <PageHeader title={t("panel.nav.customers")} subtitle={t("panel.customers.subtitle")}/>
     <Card>
       <div className="card-head"><div><h2>{t("panel.home.flow.subtitle")}</h2><p>{t("panel.traffic.hourly_subtitle")}</p></div></div>
       {hourPoints.some(point => point.value > 0)
@@ -582,7 +630,7 @@ function TelegramLevelPicker({ siteId }: { siteId: string }) {
 
 /** Sozlamalar: hozircha faqat HAQIQATAN mavjud bo'lgan ma'lumot.
  *  Ilgari bu sahifa bo'sh "ish olib borilmoqda" yozuvi edi. */
-function SettingsPage({ dashboard, sites, siteId, onNavigate }: { dashboard: Dashboard; sites: Site[]; siteId: string; onNavigate: (id: string) => void }) {
+function SettingsPage({ dashboard, sites, siteId, onNavigate }: { dashboard: Dashboard; sites: Site[]; siteId: string; onNavigate: Navigate }) {
   const site = sites.find(item => item.id === siteId);
   return <>
     <PageHeader title={t("panel.nav.settings")} subtitle={t("panel.settings.subtitle")}/>
@@ -604,7 +652,7 @@ function SettingsPage({ dashboard, sites, siteId, onNavigate }: { dashboard: Das
           <p className="metric-note">{t("panel.settings.digest_note")}</p>
           {/* `<a href>` EMAS: to'liq sahifa qayta yuklanishi va hash
               rejimida (`router.ts`) 404 beradi.  SPA ichida qolamiz. */}
-          <button className="btn btn-wide" onClick={() => onNavigate("telegram")}>{t("panel.settings.telegram_members")}</button>
+          <button className="btn btn-wide" onClick={() => onNavigate("settings", "telegram")}>{t("panel.settings.telegram_members")}</button>
         </div>
       </Card>
     </div>
@@ -618,7 +666,7 @@ function OwnerApp() {
   const [connectToken,setConnectToken] = useState(() => takeConnectToken());
   const [checkingLink,setCheckingLink] = useState(() => new URLSearchParams(window.location.search).has("key"));
   const [sites,setSites] = useState<Site[]>([]); const [siteId,setSiteId] = useState("");
-  const [active,navigateTo] = usePanelRoute("/owner", ROUTE_IDS, "home");
+  const [active,navigateTo,routeParam] = usePanelRoute("/owner", ROUTE_IDS, "home", LEGACY_ROUTES);
   const [drawer,setDrawer] = useState(false);
   const [focusEvent,setFocusEvent] = useState("");
   const [loginError,setLoginError] = useState(""); const [busy,setBusy] = useState(false);
@@ -687,11 +735,18 @@ function OwnerApp() {
   const logout = () => { void serverLogout("owner");setAuthenticated(false);setSites([]);setSiteId(""); };
   /* Ikkinchi argument — ochilishi kerak bo'lgan aniq hodisa.
      "Dalilni ochish" tugmasi shuni uzatadi. */
-  const navigate = (id:string, focus?:string) => {
+  /* Ikkinchi argument — tab NOMI yoki (Hodisalar uchun) ochilishi kerak
+     bo'lgan hodisa ID'si: "Dalilni ochish" tugmasi `("alerts", eventId)`
+     uzatadi.  Tab nomlari ro'yxatda, hodisa ID'si — yo'q; shundan
+     ajratiladi. */
+  const navigate = (id:string, param?:string) => {
     if (id === "more") { setDrawer(true); return; }
-    setFocusEvent(focus || "");
-    navigateTo(id); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"});
+    const isTab = Boolean(param) && (TABS[id] || []).includes(String(param));
+    setFocusEvent(!isTab && id === "alerts" ? param || "" : "");
+    navigateTo(id, isTab ? param : ""); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"});
   };
+  /* Manzilda tab bo'lmasa — bo'limning birinchi tabi. */
+  const tab = (TABS[active] || []).includes(routeParam) ? routeParam : (TABS[active] || [""])[0];
 
   const splash = (title:string) => <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">{t("panel.login.eyebrow_owner")}</span><h1>{title}</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={54}/><div style={{height:14}}/><Skeleton height={150}/></div></section></div>;
   if (checkingLink) return splash(t("panel.owner.splash_checking_link"));
@@ -702,7 +757,7 @@ function OwnerApp() {
     return <Connect
       token={connectToken}
       authenticated={authenticated}
-      onConnected={() => { setConnectToken(""); setAuthenticated(true); navigateTo("setup"); }}
+      onConnected={() => { setConnectToken(""); setAuthenticated(true); navigateTo("cameras", "setup"); }}
     />;
   }
   if (!authenticated) return <LoginScreen kind="owner" onSubmit={submit} busy={busy} error={loginError} botUrl={telegramBotUrl()}/>;
@@ -750,10 +805,7 @@ function OwnerApp() {
           <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
         </>
       : active === "employees" ? <EmployeesPage siteId={siteId}/>
-      : active === "setup" ? <SetupCameras siteId={siteId} onDone={() => { void refresh(); navigate("zones"); }}/>
-      : active === "zones" ? <GeometryEditor siteId={siteId} cameras={data.cameras}/>
-      : active === "agent" ? <VisionAgent siteId={siteId} onNavigate={navigate}/>
-      : <GenericPage id={active} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} focusEventId={focusEvent}/>}
+      : <SectionPage id={active} tab={tab} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} onRefresh={() => void refresh()} focusEventId={focusEvent}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label={t("panel.common.close")}><Icon name="close"/></button></div><nav>{nav.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>{t("panel.common.logout")}</button></nav></aside></div> : null}
   </AppShell>;
 }

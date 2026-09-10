@@ -137,6 +137,17 @@ export function Skeleton({ height = 80 }: { height?: number }) {
   return <div className="skeleton" style={{ height }} aria-label={t("panel.common.loading")} />;
 }
 
+/** Bo'lim ichidagi tablar (Kameralar → Jonli | Ulash | Chiziq va zonalar).
+ *
+ *  Tab — manzilning ikkinchi segmenti (`/owner/cameras/zones`), ya'ni
+ *  havola qilib bo'ladi va brauzerning «Orqaga»si ishlaydi.  Tugmalar
+ *  44 px: telefonda barmoq bilan bosiladi. */
+export function Tabs({ items, active, onSelect }: { items: { id: string; label: string }[]; active: string; onSelect: (id: string) => void }) {
+  return <div className="tabs" role="tablist">
+    {items.map(item => <button key={item.id} role="tab" aria-selected={active === item.id} className={active === item.id ? "active" : ""} onClick={() => onSelect(item.id)}>{item.label}</button>)}
+  </div>;
+}
+
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle: string; actions?: ReactNode }) {
   return <header className="page-header"><div><h1>{title}</h1><p>{subtitle}</p></div>{actions ? <div className="page-actions">{actions}</div> : null}</header>;
 }

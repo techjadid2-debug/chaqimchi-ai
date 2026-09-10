@@ -97,7 +97,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
   dashboard: Dashboard;
   sites: Site[];
   siteId: string;
-  onNavigate: (id: string) => void;
+  onNavigate: (id: string, param?: string) => void;
   cameras: React.ReactNode;
 }) {
   const today = dashboard.today;
@@ -140,7 +140,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
     {geometry && !geometry.lines_drawn ? <div className="alert-strip alert-warning">
       <Icon name="shapes" />
       <div><strong>{t("panel.home.lines.title")}</strong> {t("panel.home.lines.detail")}</div>
-      <button className="btn btn-primary" onClick={() => onNavigate("zones")}>{t("panel.home.lines.action")}</button>
+      <button className="btn btn-primary" onClick={() => onNavigate("cameras", "zones")}>{t("panel.home.lines.action")}</button>
     </div> : null}
     {edgeConfig && !edgeConfig.ready ? <div className="alert-strip alert-info"><Icon name="pulse"/><div><strong>{t("panel.home.config.pending_title")}</strong> {edgeConfig.reason || t("panel.home.config.pending_detail")}</div></div> : null}
     {poisoned ? <div className="alert-strip alert-info"><Icon name="bell"/><div><strong>{t("panel.home.outbox.title", { count: poisoned })}</strong> {t("panel.home.outbox.detail")}</div></div> : null}
@@ -193,7 +193,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
           <Card>
             <div className="card-head">
               <div><h2>{t("panel.home.flow.title")}</h2><p>{t("panel.home.flow.subtitle")}</p></div>
-              <button className="btn" onClick={() => onNavigate("traffic")}>{t("panel.home.details")}</button>
+              <button className="btn" onClick={() => onNavigate("customers", "flow")}>{t("panel.home.details")}</button>
             </div>
             {flowPoints.some(point => point.value > 0)
               ? <LineChart series={[{ name: t("panel.home.flow.series"), points: flowPoints }]} />
@@ -205,7 +205,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
           <Card>
             <div className="card-head">
               <div><h2>{t("panel.home.zones.title")}</h2><p>{t("panel.home.zones.subtitle")}</p></div>
-              <button className="btn" onClick={() => onNavigate("heatmap")}>{t("panel.home.zones.map")}</button>
+              <button className="btn" onClick={() => onNavigate("customers", "heatmap")}>{t("panel.home.zones.map")}</button>
             </div>
             {dwellZones.length ? <div className="zone-list">
               {dwellZones.slice(0, 5).map(zone => {
@@ -222,7 +222,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
         </div>
 
         <Card>
-          <div className="card-head"><div><h2>{t("panel.home.branches.title")}</h2><p>{t("panel.home.branches.subtitle")}</p></div><button className="btn" onClick={() => onNavigate("branches")}>{t("panel.common.all")}</button></div>
+          <div className="card-head"><div><h2>{t("panel.home.branches.title")}</h2><p>{t("panel.home.branches.subtitle")}</p></div><button className="btn" onClick={() => onNavigate("settings", "branches")}>{t("panel.common.all")}</button></div>
           <div className="table-wrap">
             <table>
               <thead><tr><th>{t("panel.home.branches.col_branch")}</th><th>{t("panel.home.cameras")}</th><th>{t("panel.home.branches.col_connection")}</th></tr></thead>
@@ -288,7 +288,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
               ? <div className="simple-row"><span>{t("panel.home.plan.until")}</span><b>{t("panel.home.plan.until_value", { date: formatDateShort(dashboard.subscription.subscription_until) })}</b></div>
               : null}
             <div className="simple-row"><span>{t("panel.home.cameras")}</span><b>{t("panel.home.plan.cameras_value", { count: formatNumber(dashboard.site.cameras_expected) })}</b></div>
-            <button className="btn btn-wide" onClick={() => onNavigate("billing")}>{t("panel.home.plan.manage")}</button>
+            <button className="btn btn-wide" onClick={() => onNavigate("settings", "billing")}>{t("panel.home.plan.manage")}</button>
           </div>
         </Card>
 
@@ -323,7 +323,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
             {members ? <div className="simple-row"><span>{t("panel.home.telegram.recipients")}</span><b>{t("panel.common.people_count", { count: formatNumber(members) })}</b></div> : null}
             <p className="metric-note">{t("panel.home.telegram.detail")}</p>
             <div className="page-actions">
-              <button className="btn btn-wide" onClick={() => onNavigate("telegram")}>{t(members ? "panel.home.telegram.open_settings" : "panel.home.telegram.connect")}</button>
+              <button className="btn btn-wide" onClick={() => onNavigate("settings", "telegram")}>{t(members ? "panel.home.telegram.open_settings" : "panel.home.telegram.connect")}</button>
               {botUrl ? <a className="btn" href={botUrl} target="_blank" rel="noreferrer">{t("panel.home.telegram.open_bot")}</a> : null}
             </div>
           </div>

@@ -414,3 +414,39 @@ def test_logging_out_asks_the_server_too() -> None:
         # Faqat `clearToken` bilan tugaydigan chiqish qaytib kelmasin.
         assert 'clearToken("owner");setAuthenticated' not in text
         assert 'clearToken("admin");setAuthenticated' not in text
+
+
+# ── Menyu: 8 bo'lim va eski manzillar ─────────────────────────────────────
+
+
+def test_every_old_section_still_opens_from_its_old_link() -> None:
+    """Menyu 14 bo'limdan 8 taga qisqardi (2026-09-10, dizayn-3).
+
+    Eski bo'lim nomlari Telegram xabarlaridagi havolalarda, xatcho'plarda
+    va koddagi `onNavigate("billing")` chaqiruvlarida qolgan.  Har biri
+    yangi bo'lim ichidagi tabga XARITADA bo'lishi shart — bo'lmasa havola
+    jimgina bosh sahifaga tushadi va ega «tugma ishlamayapti» deydi.
+    """
+    text = src("owner.tsx")
+    legacy = re.search(r"const LEGACY_ROUTES = \{(.*?)\} as const;", text, re.S)
+    assert legacy, "LEGACY_ROUTES xaritasi yo'q"
+    mapped = set(re.findall(r"^\s*(\w+): \[", legacy.group(1), re.M))
+    old_sections = {"setup", "zones", "agent", "traffic", "heatmap", "telegram", "billing", "branches"}
+    assert old_sections <= mapped, f"xaritada yo'q: {sorted(old_sections - mapped)}"
+
+    nav_ids = set(re.findall(r'\{ id: "(\w+)", key: "panel\.nav\.', text))
+    tabs = dict(re.findall(r'^\s*(\w+): \[([^\]]*)\]', re.search(r"const TABS[^{]*\{(.*?)\n\};", text, re.S).group(1), re.M))
+    for old, section, tab in re.findall(r'^\s*(\w+): \["(\w+)", "(\w+)"\]', legacy.group(1), re.M):
+        assert section in nav_ids, f"{old} → {section}: bunday bo'lim menyuda yo'q"
+        assert f'"{tab}"' in tabs.get(section, ""), f"{old} → {section}/{tab}: bunday tab yo'q"
+    # Xarita `usePanelRoute` ga uzatilgan — aks holda u shunchaki bezak.
+    assert 'usePanelRoute("/owner", ROUTE_IDS, "home", LEGACY_ROUTES)' in text
+
+
+def test_the_owner_menu_is_short_enough_for_a_phone() -> None:
+    """Sakkiztadan ko'p bo'lim — telefonda «Yana» ichida yo'qoladi."""
+    text = src("owner.tsx")
+    nav = re.search(r"const NAV_ITEMS[^\[]*\[(.*?)\n\];", text, re.S).group(1)
+    assert len(re.findall(r'\{ id: "', nav)) <= 8
+    for tab_id in re.findall(r'"(\w+)"', re.search(r"const TABS[^{]*\{(.*?)\n\};", text, re.S).group(1)):
+        assert f'"panel.tabs.{tab_id}"' in src("i18n/catalogue.generated.ts"), f"panel.tabs.{tab_id} katalogda yo'q"

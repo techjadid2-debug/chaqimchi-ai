@@ -421,6 +421,9 @@ class RetailSupervisor:
             # `analyzed`/`errors` izohi bilan bir xil sabab.
             "face_crops": status_file.get("face_crops") or {},
             "demography": status_file.get("demography") or {},
+            # Capture rate maxraji — tashxis uchun (`SEEN_LINE_BAND` ni
+            # pilotda kalibrlash).  Zanjirdagi to'rt qo'ldan biri.
+            "seen": status_file.get("seen") or {},
             # Tarif faollashtirilmagani sabab tashlangan hodisalar — panel
             # "hisobot cloudga bormayapti" ogohlantirishini shundan chiqaradi.
             "plan_filtered": status_file.get("plan_filtered", 0),

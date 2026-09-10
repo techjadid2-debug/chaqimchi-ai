@@ -189,6 +189,12 @@ class _Totals:
     #: belgi bor edi, sababi esa hech qayerda ko'rinmasdi.
     face_crops_too_small: int = 0
     face_crops_written: int = 0
+    #: Capture rate maxraji — eshikka yaqinlashgan noyob odamlar, jarayon
+    #: boshidan beri.  Oyna sanog'i `SeenCounter` da; bu yerdagi son
+    #: `drain_seen()` da yig'iladi va faqat DIAGNOSTIKA uchun (heartbeat).
+    #: Hisobotga boradigan raqam hodisa orqali ketadi — heartbeat navbatsiz
+    #: surat yuboradi va bir marta yo'qolsa butun oyna yo'qolardi.
+    seen: int = 0
 
 
 class RetailPipeline:
@@ -537,6 +543,24 @@ class RetailPipeline:
                 result[camera_id] = {"grid": cells, "frames": frames}
         return result
 
+    def drain_seen(self) -> Dict[str, int]:
+        """Har kameraning oyna sanog'ini olib bo'shatadi (capture rate maxraji).
+
+        `drain_heatmaps()` bilan bir xil naqsh: sanoq analizatorda yig'iladi,
+        oyna tugaganda bu yerdan olinadi.  Bo'shatish SHART — aks holda
+        `SeenCounter` ichidagi track to'plami jarayon umri davomida o'sadi.
+        """
+        result: Dict[str, int] = {}
+        for camera_id, camera in self._cameras.items():
+            counter = getattr(camera.analyzer, "seen", None)
+            if counter is None:
+                continue
+            count = counter.flush()
+            self._totals.seen += count
+            if count:
+                result[camera_id] = count
+        return result
+
     def latest_frame(self, camera_id: str) -> Optional[Any]:
         """Kameraning oxirgi tahlil qilingan kadri (jonli ko'rish uchun).
 
@@ -768,6 +792,19 @@ class RetailPipeline:
             # Davomat oqimining SIFATI.  `too_small` noldan katta bo'lsa
             # kamera juda uzoqda yoki substream past sifatli — bu
             # "davomat ishlamayapti" savolining birinchi javobi.
+            # Capture rate maxraji — "eshikka nechta odam yaqinlashdi".
+            # `pending` hali oynada turgan, `total` jarayon boshidan beri
+            # yig'ilgan.  Ikkalasi ham TASHXIS uchun: `seen ≈ entered × 1,5…4`
+            # kutiladi; `seen > entered × 10` — chiziq noto'g'ri chizilgan
+            # yoki kamera savdo zalini ko'ryapti (`limits.SEEN_LINE_BAND`).
+            "seen": {
+                "total": self._totals.seen,
+                "pending": sum(
+                    int(getattr(camera.analyzer.seen, "pending", 0))
+                    for camera in self._cameras.values()
+                    if getattr(camera.analyzer, "seen", None) is not None
+                ),
+            },
             "face_crops": {
                 "written": self._totals.face_crops_written,
                 "too_small": self._totals.face_crops_too_small,

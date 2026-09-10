@@ -451,6 +451,9 @@ def build_runner(
             detector,
             settings.scene,
             attendance=attendance_enabled and camera.camera_id in attendance_cameras,
+            # Maxraj faqat kirish kamerasida sanaladi — demografiya bilan
+            # bir xil darvoza (`entrance_cameras`, chiziqdan aniqlanadi).
+            count_seen=camera.camera_id in entrance_cameras,
             demography=demography if camera.camera_id in entrance_cameras else None,
             pressure=read_pressure,
         )
@@ -610,6 +613,12 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # uchun endi `test_status_chain.py` zanjirni qulflaydi.
         "face_crops": stats.get("face_crops") or {},
         "demography": stats.get("demography") or {},
+        # Capture rate maxraji — TASHXIS uchun ("eshikka nechta odam
+        # yaqinlashdi").  Hisobotga boradigan raqam bu yo'ldan EMAS,
+        # hodisa orqali ketadi: heartbeat navbatsiz surat yuboradi va
+        # bir marta yo'qolsa butun oyna yo'qolardi.  Bu yerdagi son
+        # `SEEN_LINE_BAND` ni pilotda kalibrlash uchun kerak.
+        "seen": stats.get("seen") or {},
         # Hodisani navbatga yozib bo'lmadi (odatda disk to'lgan) — bu
         # hodisa butunlay yo'qoldi degani, uni keyin tiklab bo'lmaydi.
         "action_errors": stats.get("action_errors", 0),
@@ -760,6 +769,30 @@ def _heatmap_flush_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threa
             logger.exception("Issiqlik to'ri yozilmadi")
 
 
+#: Capture rate oynasi.  Issiqlik to'ri bilan bir xil: 10 daqiqa —
+#: kunlik hisobot uchun yetarlicha mayda, hodisa oqimi uchun esa
+#: ahamiyatsiz (kuniga ~170 qator, hozirgi oqim ~7 600).
+SEEN_FLUSH_INTERVAL_SEC = 600.0
+
+
+def _seen_flush_loop(pipeline: RetailPipeline, stopped: threading.Event) -> None:
+    """Capture rate oynasini yopib turadi.
+
+    Hozircha son faqat hisoblagichga yig'iladi va heartbeat orqali
+    tashxis uchun ko'rinadi.  Hodisa (`people_seen`) keyingi bosqichda
+    shu yerdan chiqadi — eski cloud noma'lum hodisa turini RAD ETADI,
+    ya'ni avval cloud tomonidagi darvoza kerak.
+
+    Bo'shatish HOZIR ham shart: usiz `SeenCounter` ichidagi track
+    to'plami jarayon umri davomida o'sib boradi.
+    """
+    while not stopped.wait(SEEN_FLUSH_INTERVAL_SEC):
+        try:
+            pipeline.drain_seen()
+        except Exception:
+            logger.exception("Capture rate oynasi yopilmadi")
+
+
 def _live_frame_loop(pipeline: RetailPipeline, base_dir: Path, stopped: threading.Event) -> None:
     """Jonli ko'rish kadrlarini diskka yozib turadi.
 
@@ -888,6 +921,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         target=_heatmap_flush_loop,
         args=(runner.pipeline, base_dir, stopped),
         name="heatmap-flush",
+        daemon=True,
+    ).start()
+    threading.Thread(
+        target=_seen_flush_loop,
+        args=(runner.pipeline, stopped),
+        name="seen-flush",
         daemon=True,
     ).start()
     sync_thread: Optional[threading.Thread] = None

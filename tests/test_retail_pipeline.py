@@ -848,3 +848,34 @@ def test_face_capture_without_a_frame_is_dropped(tmp_path: Path) -> None:
     )
 
     assert recorder.actions == []
+
+
+# ── Capture rate maxraji: oynani bo'shatish ─────────────────────────────
+
+
+def test_draining_the_window_empties_the_counter_and_adds_to_the_total(tmp_path: Path) -> None:
+    """`drain_seen()` — oyna sanog'ini olib, hisoblagichga qo'shadi.
+
+    Bo'shatish SHART: usiz `SeenCounter` ichidagi track to'plami jarayon
+    umri davomida o'sadi (do'kon kompyuteri oylab qayta ishga
+    tushirilmaydi).
+    """
+    from enes.retail.conversion import SeenCounter
+
+    pipeline, analyzer, _, _ = build(tmp_path)
+    analyzer.seen = SeenCounter(min_frames=1)
+    analyzer.seen.mark(1)
+    analyzer.seen.mark(2)
+
+    assert pipeline.drain_seen() == {"kassa-01": 2}
+    assert pipeline.drain_seen() == {}, "ikkinchi bo'shatish bo'sh qaytarishi kerak"
+    assert pipeline._stats()["seen"]["total"] == 2
+
+
+def test_a_camera_without_a_counter_is_skipped(tmp_path: Path) -> None:
+    """Chiziqsiz kamerada `analyzer.seen` yo'q — zanjir yiqilmasin."""
+    pipeline, analyzer, _, _ = build(tmp_path)
+    analyzer.seen = None
+
+    assert pipeline.drain_seen() == {}
+    assert pipeline._stats()["seen"] == {"total": 0, "pending": 0}

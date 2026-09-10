@@ -12,6 +12,7 @@ from enes.retail.lines import (
     CountingLine,
     DwellTracker,
     LineCounter,
+    distance_to_segment,
     segments_intersect,
 )
 
@@ -178,3 +179,37 @@ def test_dwell_state_is_released_with_the_track() -> None:
 def test_dwell_rejects_useless_threshold() -> None:
     with pytest.raises(ValueError):
         DwellTracker({"kassa": 0.0})
+
+
+# ── Yaqinlashish tasmasi (capture rate maxraji) ─────────────────────────
+
+
+def test_distance_is_measured_to_the_segment_not_the_infinite_line() -> None:
+    """Chiziqning DAVOMIDA turgan odam "eshikka yaqin" emas.
+
+    Cheksiz chiziqqa masofa o'lchansa, do'konning narigi burchagidagi
+    odam ham maxrajga tushardi — maxraj shishsa foiz sun'iy pasayadi.
+    """
+    start, end = (0.4, 0.5), (0.6, 0.5)
+
+    assert distance_to_segment((0.5, 0.55), start, end) == pytest.approx(0.05)
+    # Chiziq davomida, undan 0.4 uzoqda: cheksiz chiziqqa masofa NOL bo'lardi.
+    assert distance_to_segment((1.0, 0.5), start, end) == pytest.approx(0.4)
+
+
+def test_a_zero_length_segment_does_not_divide_by_zero() -> None:
+    """`CountingLine` buni rad etadi, lekin funksiya mustaqil ishlatiladi."""
+    assert distance_to_segment((0.0, 0.3), (0.0, 0.0), (0.0, 0.0)) == pytest.approx(0.3)
+
+
+def test_near_answers_for_any_line_on_the_camera() -> None:
+    counter = LineCounter([door(), door(name="ikkinchi", start=(0.0, 0.9), end=(1.0, 0.9))])
+
+    assert counter.near((0.52, 0.2), 0.05)      # birinchi chiziq yonida
+    assert counter.near((0.2, 0.87), 0.05)      # ikkinchisi yonida
+    assert not counter.near((0.2, 0.5), 0.05)   # ikkalasidan ham uzoq
+
+
+def test_a_camera_without_lines_never_reports_anyone_as_near() -> None:
+    """Kassa yoki ombor kamerasi — maxraj u yerdan sanalmasligi kerak."""
+    assert not LineCounter([]).near((0.5, 0.5), 0.5)

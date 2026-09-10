@@ -616,3 +616,78 @@ def test_a_demography_module_never_writes_or_uploads_a_frame() -> None:
 
     for forbidden in ("imwrite", "imencode", "b64encode", "tobytes", "requests", "httpx"):
         assert forbidden not in source, f"kadr moduldan chiqmasin — {forbidden}"
+
+
+# ── Capture rate maxraji: eshikka kim yaqinlashdi ────────────────────────
+
+
+def seen_analyzer(**scene) -> tuple[SceneAnalyzer, ScriptedDetector]:
+    settings = SceneSettings.model_validate({"enabled": True, "burst_fps": 30, **scene})
+    detector = ScriptedDetector()
+    analyzer = SceneAnalyzer("cam-1", detector, settings, count_seen=True)
+    analyzer.motion.has_motion = lambda _frame: True
+    return analyzer, detector
+
+
+def test_a_camera_without_count_seen_has_no_counter() -> None:
+    """Kassa va ombor kamerasi maxrajni sanamaydi — u yerdagi son
+    savolga javob bermaydi, lekin maxrajni shishirardi."""
+    analyzer, _ = analyzer_for(**DOOR)
+
+    assert analyzer.seen is None
+
+
+def test_someone_walking_far_from_the_door_is_not_counted() -> None:
+    """Savdo zalidagi odam «eshikka yaqinlashgan» emas.
+
+    Bu tasmaning butun maqsadi: usiz kadrdagi har bir odam maxrajga
+    tushib, konversiya foizi YOLG'ON pasayardi.
+    """
+    analyzer, detector = seen_analyzer(**DOOR)
+
+    # Chiziq x=0.5 da; odam x=0.05..0.15 oralig'ida yuradi (tasma 0.15).
+    walk(analyzer, detector, start=0.05, stop=0.15, step=0.02)
+
+    assert analyzer.seen.flush() == 0
+
+
+def test_someone_lingering_by_the_door_is_counted_once() -> None:
+    analyzer, detector = seen_analyzer(**DOOR)
+
+    walk(analyzer, detector, start=0.40, stop=0.46, step=0.02)
+
+    assert analyzer.seen.flush() == 1
+
+
+def test_everyone_who_enters_is_also_someone_who_approached() -> None:
+    """`entered ⊆ passed` — invariant.
+
+    Buzilsa konversiya 100% dan oshib ketadi va `cloud/value.py`
+    dagi qo'riqchi foizni umuman ko'rsatmay qo'yadi.
+    """
+    analyzer, detector = seen_analyzer(**DOOR)
+
+    events = walk(analyzer, detector, start=0.30, stop=0.70, step=0.04)
+    entered = len([e for e in events if e.event_type == "line_crossed"])
+
+    assert entered == 1
+    assert analyzer.seen.flush() >= entered
+
+
+def test_a_single_frame_crossing_is_still_counted() -> None:
+    """Bir kadrda kesib o'tgan odam — `min_frames` chegarasidan pastda.
+
+    Chiziq kesilganda sanoq MAJBURIY (`mark(force=True)`), aks holda
+    aynan shu odam maxrajdan tushib qolib, foiz 100% dan oshardi.
+    """
+    analyzer, detector = seen_analyzer(**DOOR)
+
+    # Ikki kadr: 0.48 → 0.52.  Track chegaraga (2 kadr) yetadi-yu, lekin
+    # birinchi kadr tasmadan tashqarida bo'lsa ham kesish sanaydi.
+    detector.people = [(0.48, 0.5)]
+    analyzer.process(FRAME, now=1.0)
+    detector.people = [(0.52, 0.5)]
+    events = analyzer.process(FRAME, now=1.2)
+
+    assert [e.event_type for e in events if e.event_type == "line_crossed"]
+    assert analyzer.seen.flush() == 1

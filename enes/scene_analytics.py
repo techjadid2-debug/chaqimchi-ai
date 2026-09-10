@@ -11,7 +11,8 @@ import cv2
 import numpy as np
 
 from enes.event_models import EdgeEvent
-from enes.limits import face_min_bbox_ratio
+from enes.limits import SEEN_LINE_BAND, face_min_bbox_ratio
+from enes.retail.conversion import SeenCounter
 from enes.retail.lines import CountingLine, DwellTracker, LineCounter
 from enes.retail.shelf import ShelfWatcher, crop_polygon
 from enes.retail.tracker import MotionTracker
@@ -196,6 +197,7 @@ class SceneAnalyzer:
         settings: SceneSettings,
         *,
         attendance: bool = False,
+        count_seen: bool = False,
         demography: Optional[Any] = None,
         pressure: Optional[Callable[[], float]] = None,
     ) -> None:
@@ -233,6 +235,14 @@ class SceneAnalyzer:
         from enes.retail.heatmap import HeatmapGrid
 
         self.heatmap = HeatmapGrid()
+        #: Capture rate maxraji: eshikka YAQINLASHGAN noyob odamlar.
+        #:
+        #: Faqat hisoblash chizig'i bor kamerada yoqiladi — kassa yoki
+        #: ombor kamerasidan keladigan son savolga javob bermaydi, lekin
+        #: maxrajni shishirardi.  Kirish kamerasi ROLDAN emas, CHIZIQDAN
+        #: aniqlanadi (2026-08-22 qarori, `cloud/main.py` izohi).
+        self.count_seen = bool(count_seen)
+        self.seen = SeenCounter() if self.count_seen else None
         self.motion = MotionGate(settings.motion_min_area_ratio)
         # Yuz uchun mo'ljallangan IoU tracker do'kon eshigida ishlamaydi: normal
         # yurgan odam bir kadrda ramkasining yarmidan ko'p siljiydi va track
@@ -547,6 +557,8 @@ class SceneAnalyzer:
 
             center = ((x1 + x2) / 2 / width, y2 / height)
             self.heatmap.add(center[0], center[1])
+            if self.seen is not None and self.lines.near(center, SEEN_LINE_BAND):
+                self.seen.mark(track_id)
             current_zones = {zone.name for zone in self.zones if _inside(center, zone.polygon)}
             for zone_name in current_zones:
                 zone_counts[zone_name] = zone_counts.get(zone_name, 0) + 1
@@ -568,6 +580,13 @@ class SceneAnalyzer:
 
             # Kirish/chiqish — konversiya hisobining maxraji.
             for crossing in self.lines.update(track_id, center):
+                # Kesib o'tgan odam maxrajga TA'RIFIGA KO'RA kiradi: uning
+                # oldingi va yangi nuqtasi chiziqning ikki tomonida, ya'ni
+                # u tasmadan o'tgan.  Chegara kutilmaydi — bir kadrda
+                # kesib o'tgan odam sanalmay qolsa konversiya 100% dan
+                # oshib ketardi.
+                if self.seen is not None:
+                    self.seen.mark(track_id, force=True)
                 metadata: Dict[str, Any] = {"bbox": detection["bbox"]}
                 if crossing.direction == "in":
                     demography = self._estimate_demography(frame, detection, track_id)

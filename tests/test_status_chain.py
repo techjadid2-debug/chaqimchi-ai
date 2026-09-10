@@ -138,6 +138,26 @@ def test_the_diagnostics_that_answer_does_attendance_work_survive_the_whole_chai
             assert key in keys, f"'{key}' zanjirning {step + 1}-bo'g'inida yo'qolgan"
 
 
+def test_the_capture_rate_denominator_survives_the_whole_chain() -> None:
+    """`seen` — "eshikka nechta odam yaqinlashdi" degan TASHXIS raqami.
+
+    Hisobotdagi foiz bu yo'ldan kelmaydi (u `people_seen` hodisasi
+    orqali boradi), lekin `SEEN_LINE_BAND` ni pilotda kalibrlash faqat
+    shu zanjir orqali mumkin: `seen ≈ entered × 1,5…4` kutiladi.
+    Bo'g'inlardan biri unutilsa raqam jimgina nol bo'ladi va tasmani
+    o'lchash o'rniga yana taxmin qilishga to'g'ri kelardi.
+    """
+    chain = [
+        _writes(_function("enes/retail/pipeline.py", "_stats")),
+        _writes(_function("enes/retail/service.py", "write_status")),
+        _writes(_function("enes/local/supervisor.py", "status")),
+        _writes(_function("enes/local/cloud_config.py", "send_heartbeat")),
+    ]
+
+    for step, keys in enumerate(chain):
+        assert "seen" in keys, f"'seen' zanjirning {step + 1}-bo'g'inida yo'qolgan"
+
+
 # ── Teskari yo'nalish: ishlab chiqarilgan kalit YO'QOLMASIN ──────────────
 #
 # Yuqoridagi testlar "so'ralgan kalit bormi" ni tekshiradi va aynan shu

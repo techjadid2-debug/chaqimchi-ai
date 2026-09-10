@@ -12,6 +12,7 @@ mavjud `SceneZoneSettings` bilan bir xil.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -43,6 +44,30 @@ def segments_intersect(a1: Point, a2: Point, b1: Point, b2: Point) -> bool:
     d3 = _cross(a1, a2, b1)
     d4 = _cross(a1, a2, b2)
     return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
+
+
+def distance_to_segment(point: Point, start: Point, end: Point) -> float:
+    """Nuqtadan KESMAgacha bo'lgan eng qisqa masofa.
+
+    Cheksiz chiziqqa emas, aynan kesmaga: eshik chizig'ining davomida,
+    do'konning narigi burchagida turgan odam "eshikka yaqin" emas.
+
+    Masofa normallashtirilgan koordinatada o'lchanadi, ya'ni kadr
+    tomonlari nisbati uni biroz cho'zadi.  Bu ataylab: chiziqning o'zi
+    ham, zonalar ham shu birlikda chiziladi va tasma (`SEEN_LINE_BAND`)
+    aynan shu birlikda kalibrlanadi.
+    """
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length_sq = dx * dx + dy * dy
+    if length_sq == 0.0:
+        # `CountingLine` buni rad etadi, lekin funksiya mustaqil ishlatilishi
+        # mumkin — nolga bo'lish o'rniga nuqtagacha masofa.
+        return math.hypot(point[0] - start[0], point[1] - start[1])
+    # Kesma ustidagi eng yaqin nuqtaning parametri, chetlariga qisilgan.
+    t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_sq
+    t = max(0.0, min(1.0, t))
+    return math.hypot(point[0] - (start[0] + t * dx), point[1] - (start[1] + t * dy))
 
 
 @dataclass(frozen=True)
@@ -97,6 +122,16 @@ class LineCounter:
     def __init__(self, lines: Sequence[CountingLine]) -> None:
         self.lines = list(lines)
         self._previous: Dict[int, Point] = {}
+
+    def near(self, point: Point, band: float) -> bool:
+        """Nuqta biror hisoblash chizig'idan `band` dan yaqinmi.
+
+        Capture rate maxraji shu savol bilan chegaralanadi — izoh
+        `enes/limits.py: SEEN_LINE_BAND` da.
+        """
+        return any(
+            distance_to_segment(point, line.start, line.end) <= band for line in self.lines
+        )
 
     def update(self, track_id: int, point: Point) -> List[Crossing]:
         previous = self._previous.get(track_id)

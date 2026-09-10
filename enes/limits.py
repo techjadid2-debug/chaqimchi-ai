@@ -118,3 +118,24 @@ def face_min_bbox_ratio(frame_height: int) -> float:
         # ko'ra jim turish yaxshiroq: yaroqsiz kesma cloud byudjetini yeydi.
         return 1.0
     return face_min_bbox_px() / frame_height
+
+
+#: Capture rate maxraji uchun "yaqinlashish tasmasi" — hisoblash
+#: chizig'idan shu masofadagi odam «eshikka yaqinlashdi» deb sanaladi.
+#: O'lchov birligi — normallashtirilgan koordinata (0..1), chiziq va
+#: zona muharriri ishlatadigan birlik bilan bir xil.
+#:
+#: Nega tasma kerak: `SeenCounter` kadrdagi HAR noyob trekni sansa,
+#: kirish kamerasi savdo zalini ham ko'rgan do'konda maxraj shishadi va
+#: foiz SUN'IY pasayadi ("1200 yaqinlashdi → 169 kirdi").  Nol emas,
+#: lekin YOLG'ON — mahsulotning eng qattiq taqig'i.  Tasma savolni
+#: "kadrda nechta odam bor" dan "eshikka nechta odam yaqinlashdi" ga
+#: qaytaradi.
+#:
+#: Nega 0,15: kadr enining ~1/7, ya'ni odatiy do'kon eshigi oldidagi
+#: bir-ikki qadamlik maydon.  Bu BOSHLANG'ICH taxmin va pilotda
+#: o'lchanadi: heartbeat `seen` ni beradi, kutilgan nisbat
+#: `seen ≈ entered × 1,5…4`.  `seen > entered × 10` — kamera zalni
+#: ko'ryapti yoki chiziq noto'g'ri chizilgan; `seen < entered` — xato
+#: (chiziqni kesgan odam ta'rifiga ko'ra tasmadan o'tgan).
+SEEN_LINE_BAND = 0.15

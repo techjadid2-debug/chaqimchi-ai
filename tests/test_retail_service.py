@@ -567,3 +567,39 @@ def test_a_broken_owner_file_never_stops_a_working_chain(tmp_path, monkeypatch) 
 
     service.owner_path().unlink()
     assert service._still_the_owner()
+
+
+def test_only_cameras_with_a_counting_line_measure_the_denominator(tmp_path: Path) -> None:
+    """Capture rate maxraji faqat KIRISH kamerasida sanaladi.
+
+    Kirish kamerasi ROLDAN emas, CHIZIQDAN aniqlanadi (2026-08-22
+    qarori) — demografiya bilan bir xil darvoza.  Kassa yoki ombor
+    kamerasidan kelgan son savolga javob bermaydi, lekin maxrajni
+    shishirib, konversiya foizini sun'iy pasaytirardi.
+    """
+    scene = {
+        "enabled": True,
+        "model_path": "models/person.onnx",
+        "lines": [
+            {"name": "eshik", "camera_id": "kassa-01", "start": [0.5, 0.0], "end": [0.5, 1.0]}
+        ],
+    }
+    settings = AppSettings.model_validate(
+        {
+            "scene": scene,
+            "retail": {
+                "enabled": True,
+                "cameras": [
+                    {"id": "kassa-01", "stream_url": "rtsp://nvr/kassa/sub"},
+                    {"id": "zal-01", "stream_url": "rtsp://nvr/zal/sub"},
+                ],
+            },
+        }
+    )
+    outbox = EventOutbox(tmp_path / "outbox.db", max_bytes=10 * 1024**2, retention_days=7)
+
+    runner = build_runner(settings, tmp_path, detector=FakeDetector(), outbox=outbox, on_stats=None)
+
+    cameras = runner.pipeline._cameras
+    assert cameras["kassa-01"].analyzer.seen is not None
+    assert cameras["zal-01"].analyzer.seen is None

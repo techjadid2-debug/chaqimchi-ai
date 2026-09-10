@@ -442,6 +442,14 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
             "found": int((status.get("demography") or {}).get("found") or 0),
             "off_reason": (status.get("demography") or {}).get("off_reason"),
         },
+        # Capture rate maxraji: `total` — jarayon boshidan, `pending` —
+        # hali yopilmagan oynada.  Bu raqam HISOBOTGA bormaydi (u hodisa
+        # orqali ketadi) — bu yerda u faqat "chiziq to'g'ri chizilganmi"
+        # degan savolga javob beradi: `seen ≈ entered × 1,5…4` kutiladi.
+        "seen": {
+            key: int((status.get("seen") or {}).get(key) or 0)
+            for key in ("total", "pending")
+        },
         # Yangilanishdan keyin nechta eski zanjir tirik qolgan.
         #
         # 2026-08-26: do'kon kompyuterida BESHTA zanjir bir vaqtda

@@ -706,6 +706,11 @@ class EdgeHeartbeatBody(BaseModel):
     #: Mijoz portreti: urinish bo'ldimi va yuz topildimi.
     #: `off_reason` bo'sh bo'lmasa funksiya umuman ishga tushmagan.
     demography: Dict[str, Any] = Field(default_factory=dict)
+    #: Capture rate maxraji (`total`, `pending`) — TASHXIS uchun.
+    #: Hisobotdagi raqam bu yerdan OLINMAYDI: u `people_seen` hodisasi
+    #: orqali keladi va `retail_daily` ga yig'iladi.  Heartbeat navbatsiz
+    #: surat yuboradi — bir marta yo'qolsa butun oyna yo'qolardi.
+    seen: Dict[str, int] = Field(default_factory=dict)
     #: Yangilanishdan keyin tirik qolgan eski zanjirlar.  Bo'sh bo'lishi
     #: KERAK: bitta kompyuterda bitta zanjir.
     stale_chains: Dict[str, Any] = Field(default_factory=dict)

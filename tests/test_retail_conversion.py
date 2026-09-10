@@ -63,3 +63,28 @@ def test_half_counted_tracks_do_not_leak_into_the_next_window() -> None:
 def test_min_frames_must_be_positive() -> None:
     with pytest.raises(ValueError):
         SeenCounter(min_frames=0)
+
+
+def test_a_crossing_track_is_counted_even_below_the_threshold() -> None:
+    """Chiziqni kesib o'tgan odam maxrajga TA'RIFIGA KO'RA kiradi.
+
+    `entered ⊆ passed` — kesib o'tgan trekning oldingi va yangi nuqtasi
+    chiziqning ikki tomonida, ya'ni u tasmadan albatta o'tgan.  Bir
+    kadrda kesib o'tgan odam `min_frames=2` sabab sanalmay qolsa
+    konversiya 100% dan oshib ketardi.
+    """
+    counter = SeenCounter(min_frames=2)
+
+    counter.mark(7, force=True)
+
+    assert counter.flush() == 1
+
+
+def test_forcing_a_track_twice_still_counts_it_once() -> None:
+    counter = SeenCounter(min_frames=2)
+
+    counter.mark(7)          # chegaraga yetmadi
+    counter.mark(7, force=True)
+    counter.mark(7, force=True)
+
+    assert counter.flush() == 1

@@ -48,10 +48,21 @@ class SeenCounter:
         #: Chegaradan o'tib, oyna sanog'iga kirgan tracklar.
         self._counted: Set[int] = set()
 
-    def mark(self, track_id: int) -> None:
-        """Track bu kadrda ko'rindi."""
+    def mark(self, track_id: int, *, force: bool = False) -> None:
+        """Track bu kadrda ko'rindi.
+
+        `force=True` — chegara kutilmaydi, track darhol sanaladi.  Bu
+        chiziqni KESIB O'TGAN odam uchun: u ta'rifiga ko'ra maxrajga
+        kiradi (`entered ⊆ passed`), lekin bir kadrda kesib o'tsa
+        `min_frames=2` uni sanamay qolardi va konversiya 100% dan
+        oshib ketardi.
+        """
         tid = int(track_id)
         if tid in self._counted:
+            return
+        if force:
+            self._counted.add(tid)
+            self._frames.pop(tid, None)
             return
         self._frames[tid] = self._frames.get(tid, 0) + 1
         if self._frames[tid] >= self._min_frames:

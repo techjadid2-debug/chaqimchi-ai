@@ -27,12 +27,17 @@
   pilot egasi yangi botda `/start` bosishi kerak (admin paneldan yangi
   taklif havolasi).  Ops/lead boti (`ENES_CLOUD_TELEGRAM_TOKEN`,
   `ENES_SALES_*`) eski bot — tegilmadi.
-  **⏳ EGADAN — aHost DNS hali qo'yilmagan** (tekshirildi: `enes.uz` →
-  185.196.212.52 aHost hosting, `api./app./dl./docs./partner./admin.`
-  YO'Q).  Caddy `*.enes.uz` sertifikatlarini olishga urinib yotibdi
-  (DNS kelgach o'zi oladi).  Shu sabab **`www.chaqimchi.uz` → 301
-  `enes.uz` hozir aHost sahifasiga tushadi** — DNS qo'yilishi bilan
-  to'g'rilanadi.  `tizim.enes.uz` (ERP, 169.58.216.246) ga tegilmaydi.
+  **✅ DNS QO'YILDI (ega, 2026-09-11 02:10):** `@`, `www`(CNAME), `app`,
+  `api`, `dl`, `docs`, `partner`, `admin` → 169.58.198.111; `mail`/`ftp`
+  o'chirildi (nspos'da FTP/SMTP yo'q, tekshirildi); MX/DKIM/SPF/DMARC
+  qoldi; `tizim.enes.uz` (ERP nspos, 169.58.216.246) TEGILMADI va
+  ishlayapti.  aHost paneli TTL 300 ni qabul qilmadi — hammasi 14400.
+  Caddy 8 ta sertifikatni oldi (`certificate obtained successfully` ×8),
+  har host `--resolve` bilan 200 va haqiqiy TLS; webhook
+  `https://api.enes.uz/api/v1/telegram/webhook` ga ko'chirildi (pending 0);
+  `/api/v1/public/urls` → `enes.uz`.  ⏳ `enes.uz`/`www` ommaviy
+  resolverlarda 4 soatgacha eski IP (185.196.212.52) — eski TTL keshi;
+  subdomenlar allaqachon tarqalgan.
   Deploy oldi `tests` bilan tutilmagan xato: Docker frontend bosqichi
   `tokens.css` ni nusxalamasdi (F1 dan beri birinchi Docker qurilishi) —
   sayt ~8 daqiqa o'chiq turdi, tuzatildi va qulflandi.
@@ -714,15 +719,12 @@ tartib bilan:
    yuridik nom/rekvizit, NS SVG.  Bularsiz F7 boshlanmaydi.
 
 **F7 QOLDIG'I (2026-09-11) — tartib bilan:**
-1. **Ega, aHost DNS (`enes.uz` zonasi):** `@` A → 169.58.198.111
-   (185.196.212.52 o'rniga); `www`, `app`, `api`, `dl`, `docs`,
-   `partner`, `admin` A → 169.58.198.111 (TTL 300); `mail` va `ftp`
-   CNAME → **A 185.196.212.52** (pochta aHost'da qoladi); MX/DKIM/SPF/
-   DMARC o'zgarmaydi; `tizim` TEGILMAYDI.  Tekshiruv: `dig +short api.enes.uz`.
-2. DNS tarqalgach (agent): `curl -sI https://{,app.,api.,dl.,docs.,partner.,admin.}enes.uz`
-   → sertifikat va 200; webhookni `api.enes.uz` ga ko'chirish
-   (`docker exec enes-cloud-1 python scripts/set_telegram_webhook.py --env-file /nonexistent`,
-   keyin `--check`); `https://enes.uz` sitemap/canonical.
+1. ✅ DNS qo'yildi (2026-09-11 02:10, ega) — yuqorida.
+2. ✅ Sertifikatlar, host tekshiruvi, webhook `api.enes.uz` — bajarildi.
+   ⏳ 4 soatdan keyin brauzerda `https://enes.uz` ochilishini tekshirish
+   (apex keshi).  Pochta: `@enes.uz` pochtasi kerak bo'lsa `mail` A →
+   185.196.212.52 va MX → `mail.enes.uz` qo'shiladi (hozir MX → enes.uz,
+   ya'ni bizning serverga — pochta serveri yo'q).
 3. Pilot egasi yangi botda `/start` — admin paneldan taklif havolasi;
    kechqurun 21:00 hisobot rasm+matn bo'lib kelishini tekshirish.
 4. Ega: UptimeRobot monitor `https://api.enes.uz/health/deep` + status

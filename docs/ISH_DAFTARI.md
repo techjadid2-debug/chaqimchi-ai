@@ -35,9 +35,14 @@
   Caddy 8 ta sertifikatni oldi (`certificate obtained successfully` ×8),
   har host `--resolve` bilan 200 va haqiqiy TLS; webhook
   `https://api.enes.uz/api/v1/telegram/webhook` ga ko'chirildi (pending 0);
-  `/api/v1/public/urls` → `enes.uz`.  ⏳ `enes.uz`/`www` ommaviy
-  resolverlarda 4 soatgacha eski IP (185.196.212.52) — eski TTL keshi;
-  subdomenlar allaqachon tarqalgan.
+  `/api/v1/public/urls` → `enes.uz`.  **✅ Apex tarqaldi (jonli
+  tekshiruv 2026-09-11 02:37 +05):** `enes.uz`/`www` 1.1.1.1, 8.8.8.8,
+  9.9.9.9, OpenDNS — hammasida 169.58.198.111; serverda apex sertifikati
+  Let's Encrypt `CN=enes.uz` (Dec 9 gacha), 8 host ham olingan, Caddy ACME
+  urinishlari DNS'dan keyin (20:59 UTC) to'xtagan, 0 xato.  Faqat
+  **mahalliy kesh** (masalan, agent Mac'ining mDNSResponder'i) hali eski
+  185.196.212.52 ni beradi — brauzerda `*.ahost.uz` sertifikat xatosi
+  chiqsa, sabab shu; TTL 14400 tugashi bilan o'tadi.
   Deploy oldi `tests` bilan tutilmagan xato: Docker frontend bosqichi
   `tokens.css` ni nusxalamasdi (F1 dan beri birinchi Docker qurilishi) —
   sayt ~8 daqiqa o'chiq turdi, tuzatildi va qulflandi.
@@ -77,13 +82,17 @@
     `cameras[].night_mode: ir` ko'rinishi va `tamper_alerts` o'smasligi
     — birinchi tekshiruv.
 
-- **🔴 PILOT HAMON O'LIK — 33 SOAT (jonli tekshiruv, 2026-09-10 02:58 UTC).**
-  Oxirgi heartbeat `2026-09-09T01:51:09Z`, `app_version 0.6.25` — ya'ni
-  ma'lumot papkasi do'kon kompyuterida HALI nusxalanmagan.
-  `pending_devices` da `DESKTOP-GVOE93B` (`ENES Windows`, `0.6.30`,
-  `verify_code AB4B70`) turibdi va qator bugun `02:29:34` da yangilangan,
-  ya'ni **0.6.30 jarayoni tirik va hamon `device-handover` so'rayapti**.
-  Do'kon xuddi shu muddat davomida ko'r.
+- **🔴 PILOT HAMON O'LIK — 44 SOAT (jonli tekshiruv, 2026-09-10 21:39 UTC,
+  cutoverdan keyin).**  Oxirgi heartbeat `2026-09-09T01:51:09Z`,
+  `app_version 0.6.25` — ya'ni ma'lumot papkasi do'kon kompyuterida HALI
+  nusxalanmagan.  `pending_devices` da `DESKTOP-GVOE93B` (`ENES Windows`,
+  `0.6.30`, `verify_code AB4B70`) turibdi va qator `21:11:22 UTC` da
+  yangilangan, ya'ni **0.6.30 jarayoni tirik va hamon `device-handover`
+  so'rayapti** — cutover unga ta'sir qilmadi (`api.chaqimchi.uz` proxy
+  ishlayapti).  Do'kon xuddi shu muddat davomida ko'r.  Serverdan
+  so'rash: `docker compose exec -T cloud python -` + `sqlite3`
+  `/app/data/cloud/cloud.db` (boshqaruv DB Postgresda EMAS — `devices`,
+  `pending_devices` u yerda yo'q).
 
 - **🔴 KOD BILAN TASDIQLANDI: PILOT O'ZI YANGILANA OLMAYDI.**  Ilgari
   daftar «papkani nusxalash» va «0.6.32 ni chiqarish» ni ikki mustaqil
@@ -721,8 +730,9 @@ tartib bilan:
 **F7 QOLDIG'I (2026-09-11) — tartib bilan:**
 1. ✅ DNS qo'yildi (2026-09-11 02:10, ega) — yuqorida.
 2. ✅ Sertifikatlar, host tekshiruvi, webhook `api.enes.uz` — bajarildi.
-   ⏳ 4 soatdan keyin brauzerda `https://enes.uz` ochilishini tekshirish
-   (apex keshi).  Pochta: `@enes.uz` pochtasi kerak bo'lsa `mail` A →
+   ✅ Apex tarqaldi (02:37) — to'rt ommaviy resolver, server serti
+   `CN=enes.uz`; faqat mahalliy keshlar TTL 14400 tugaguncha eski IP
+   beradi.  Pochta: `@enes.uz` pochtasi kerak bo'lsa `mail` A →
    185.196.212.52 va MX → `mail.enes.uz` qo'shiladi (hozir MX → enes.uz,
    ya'ni bizning serverga — pochta serveri yo'q).
 3. ✅ Ega yangi botda `/start` bosdi (2026-09-11 02:20): webhook 5×200,
@@ -1723,6 +1733,29 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-11 — F7 dan keyingi jonli tekshiruv: apex tarqaldi, pilot 44 soat o'lik (faqat docs)
+
+Nima: `enes.uz`/`www` to'rt ommaviy resolverda yangi IP, serverda apex
+serti Let's Encrypt `CN=enes.uz`, 8 host serti olingan, Caddy ACME
+urinishlari DNS'dan keyin to'xtagan; cloud/worker loglarida 0 xato,
+webhook 200 (Telegram IP'dan 18 ta/soat); pilot o'zgarmagan — 0.6.30
+jarayoni 21:11 UTC da yana handover so'ragan.
+
+Nega: daftardagi ikki «⏳» bandini yopish (apex keshi, cutoverdan keyin
+server holati) va pilot chorasi hali qilinmaganini qayd etish.
+
+Qayerda: `docs/ISH_DAFTARI.md` (HOZIRGI HOLAT, F7 qoldig'i 2-band).
+
+Test: yo'q — kod o'zgarmadi.
+
+Diqqat: `curl https://enes.uz` agent Mac'ida hali `*.ahost.uz` serti
+bilan yiqiladi — bu MAHALLIY mDNSResponder keshi (`dig` yangi IP beradi),
+serverga tegishli emas; `--resolve` bilan 200.
+Diqqat: boshqaruv DB (`devices`, `pending_devices`) cloud konteyneridagi
+SQLite `/app/data/cloud/cloud.db` da; Postgres faqat hodisalar uchun.
+Diqqat: `.deploy_keys/enes_prod` bilan kiring — `~/.ssh/id_ed25519`
+serverda yo'q, `ssh-add` bo'sh.
 
 ### 2026-09-11 — F7 cutover: enes.uz, yangi bot, server yangi kodda (`ea7c7cd`, `7b5686c`)
 

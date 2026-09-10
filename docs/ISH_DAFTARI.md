@@ -7,11 +7,41 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-09-10
+## HOZIRGI HOLAT · 2026-09-11
+
+- **🚀 F7 CUTOVER BAJARILDI — SERVER YANGI KODDA, DEPLOY TAQIQI OLINDI
+  (2026-09-11, `ea7c7cd`, `7b5686c`).**  Jonli server endi `enes` loyihasi:
+  `/home/deploy/enes` (`chaqimchi-ai` → symlink), `/etc/enes`
+  (`/etc/chaqimchi` → symlink), `.env.production` va `backup.env` da
+  `ENES_*` (nusxalar `*.bak-f7` va `/home/deploy/env-backups/`),
+  volume'lar `enes_*` ga NUSXALANDI (eski `chaqimchi_*` rollback uchun
+  turibdi, ~310 MB), backup timer'lari `enes-backup*`, kod **0.6.33** —
+  ya'ni 10-sentabrdagi 6 commit (tungi nazorat cloud qismi, dizayn-3
+  paneli, rasmli hisobot) ham jonli.  Hodisa soni ko'chirishdan oldin va
+  keyin **5 894**, `/health/deep` ok, loglarda 0 xato, hamma konteyner
+  healthy.  Eski domen hostlari 200 (`api.chaqimchi.uz` proxy — pilot
+  shu yerda qoladi), canonical/sitemap `enes.uz`.
+  **Yangi bot `@enes_monitoring_bot`** — webhook hozircha
+  `https://api.chaqimchi.uz/api/v1/telegram/webhook` (yangi token bilan;
+  `api.enes.uz` DNS'siz).  ⚠️ **Eski a'zolarga yangi bot yoza olmaydi** —
+  pilot egasi yangi botda `/start` bosishi kerak (admin paneldan yangi
+  taklif havolasi).  Ops/lead boti (`ENES_CLOUD_TELEGRAM_TOKEN`,
+  `ENES_SALES_*`) eski bot — tegilmadi.
+  **⏳ EGADAN — aHost DNS hali qo'yilmagan** (tekshirildi: `enes.uz` →
+  185.196.212.52 aHost hosting, `api./app./dl./docs./partner./admin.`
+  YO'Q).  Caddy `*.enes.uz` sertifikatlarini olishga urinib yotibdi
+  (DNS kelgach o'zi oladi).  Shu sabab **`www.chaqimchi.uz` → 301
+  `enes.uz` hozir aHost sahifasiga tushadi** — DNS qo'yilishi bilan
+  to'g'rilanadi.  `tizim.enes.uz` (ERP, 169.58.216.246) ga tegilmaydi.
+  Deploy oldi `tests` bilan tutilmagan xato: Docker frontend bosqichi
+  `tokens.css` ni nusxalamasdi (F1 dan beri birinchi Docker qurilishi) —
+  sayt ~8 daqiqa o'chiq turdi, tuzatildi va qulflandi.
 
 - **🌙📊 TUNGI NAZORAT + YANGI PANEL (dizayn-3) + RASMLI HISOBOT — KODDA
   TAYYOR, 5 commit (2026-09-10, `ec34ccb`…`b7a1e02`).**  Ega uchta ish
-  so'radi; hammasi kodda, testda va bundle'da, **deploy qilinmagan**.
+  so'radi; hammasi kodda, testda va bundle'da.  **Cloud qismi 11-sentabr
+  cutoveri bilan deploy qilindi** (yuqoriga qarang); qurilma qismi 0.6.33
+  relizini kutadi.
   Ikki yo'lga bo'linadi:
   - **Cloud + panel (cutover deployi bilan chiqadi):** yon menyu 14 → 8
     bo'lim (bo'lim ichida tab, eski manzillar `LEGACY_ROUTES` orqali o'z
@@ -683,6 +713,34 @@ tartib bilan:
 5. **Egadan kutilmoqda:** `enes.uz` DNS, bot @username, Payme/Click,
    yuridik nom/rekvizit, NS SVG.  Bularsiz F7 boshlanmaydi.
 
+**F7 QOLDIG'I (2026-09-11) — tartib bilan:**
+1. **Ega, aHost DNS (`enes.uz` zonasi):** `@` A → 169.58.198.111
+   (185.196.212.52 o'rniga); `www`, `app`, `api`, `dl`, `docs`,
+   `partner`, `admin` A → 169.58.198.111 (TTL 300); `mail` va `ftp`
+   CNAME → **A 185.196.212.52** (pochta aHost'da qoladi); MX/DKIM/SPF/
+   DMARC o'zgarmaydi; `tizim` TEGILMAYDI.  Tekshiruv: `dig +short api.enes.uz`.
+2. DNS tarqalgach (agent): `curl -sI https://{,app.,api.,dl.,docs.,partner.,admin.}enes.uz`
+   → sertifikat va 200; webhookni `api.enes.uz` ga ko'chirish
+   (`docker exec enes-cloud-1 python scripts/set_telegram_webhook.py --env-file /nonexistent`,
+   keyin `--check`); `https://enes.uz` sitemap/canonical.
+3. Pilot egasi yangi botda `/start` — admin paneldan taklif havolasi;
+   kechqurun 21:00 hisobot rasm+matn bo'lib kelishini tekshirish.
+4. Ega: UptimeRobot monitor `https://api.enes.uz/health/deep` + status
+   page `status.enes.uz` (CNAME); Google Search Console yangi mulk
+   `enes.uz` (DNS TXT); GitHub `vars.ENES_DEFAULT_CLOUD_URL=https://api.enes.uz`.
+5. Repo: `.env.production.example` ni qo'lda yangilash (agent uchun yopiq
+   fayl): `ENES_DOMAIN=enes.uz`, `*_URL=https://*.enes.uz`,
+   `ENES_TELEGRAM_BOT_USERNAME=enes_monitoring_bot`.
+6. Keyinroq (ega aytganda) — 301 bosqichi: eski domen hostlari
+   `enes.uz` ga yo'naltiriladi, `api.chaqimchi.uz` pilot `config.yaml`
+   yangilanguncha proxy qoladi; `test_brand.py` dan `chaqimchi\.uz`
+   olinadi; eski `chaqimchi_*` volume'lar va `chaqimchi-backup*` unit
+   fayllari o'chiriladi.
+7. F8 reliz (pilot tirilgach): `ENES_DEFAULT_CLOUD_URL=https://api.enes.uz`,
+   `LEGACY_NAME` endi shart emas (yangi cloud `enes-windows-*` ni ham
+   tarqatadi) — lekin pilotdagi 0.6.25 hali `chaqimchi-windows-*` ni
+   qidiradi, ya'ni BIRINCHI reliz baribir `LEGACY_NAME=1`.
+
 **TUN / PANEL / BOT (2026-09-10) — deploydan KEYIN tekshirish:**
 - Cutover deployi (cloud): 21:00 hisobot rasm+matn bo'lib keladimi,
   `/hisobot` rasm bilan (5/600 s cheklov), ruscha a'zoda kirill o'qiladimi;
@@ -1024,6 +1082,22 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Docker qurilishi lokal `make ui-build` dan FARQ qiladi.**  Dockerfile
+  frontend bosqichi faqat `frontend/` ni nusxalaydi; `styles.css` esa
+  `../../cloud/static/tokens.css` ni import qiladi (F1).  Lokal build
+  buni ko'rmaydi (repo to'liq), konteynerda ENOENT — 2026-09-11 deployi
+  shunda yiqilib sayt ~8 daqiqa o'chiq turdi.  Frontend yangi tashqi
+  faylni import qilsa Dockerfile'ga `COPY` qo'shilsin
+  (`test_the_cloud_image_can_build_the_panel_bundle`).  Umuman: deploy
+  oldidan `docker build --target frontend-builder -f Dockerfile.cloud .`
+  lokal ham ishlaydi.
+- **Deploy kaliti `.deploy_keys/chaqimchi_prod`** (hujjatlar `enes_prod`
+  deydi — endi symlink, `.env` dagi `ENES_DEPLOY_SSH_KEY` o'z holicha).
+- **Qurilma cloud manzilini masofadan o'zgartirib bo'lmaydi va 3xx ni
+  tushunmaydi** (`cloud_sync.py`, `cloud_config.py` — `follow_redirects`
+  yo'q).  Eski `api.` hosti pilot `config.yaml` qo'lda yangilanguncha
+  PROXY bo'lib qolishi shart; 301 qilinsa heartbeat va hodisa to'xtaydi.
 
 - **Yangi hodisa turi — AVVAL cloud, KEYIN qurilma relizi.**  Cloud
   `EdgeEvent.model_validate` bilan butun batchni tekshiradi: eski cloud
@@ -1642,6 +1716,34 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-11 — F7 cutover: enes.uz, yangi bot, server yangi kodda (`ea7c7cd`, `7b5686c`)
+
+Nima: jonli server `enes` nomida, `enes.uz` asosiy domen (env, canonical,
+sitemap, bot tugmalari), eski `chaqimchi.uz` hostlari PARALLEL ishlaydi
+(Caddy ikki nomli bloklar), yangi bot `@enes_monitoring_bot` webhook
+bilan, 10-sentabrdagi tungi nazorat/panel/rasmli hisobot ishi jonli.
+
+Nega: rebrendning oxirgi tashqi qadami; deploy taqiqi shu kunni kutardi.
+Parallel rejim — pilot qurilmasi `api.chaqimchi.uz` ga ulangan va 3xx
+ni tushunmaydi.
+
+Qayerda: `deploy/Caddyfile.enes` (`X.enes.uz, X.chaqimchi.uz`),
+`Dockerfile.cloud` (`tokens.css`), CI/skript standartlari, sayt/hujjat
+sahifalari, `tests/test_platform_hosts.py` (ikki domen qulfi),
+`test_proxy_limits.py`, `test_brand.py`; serverda: papkalar (symlink),
+`.env.production`/`backup.env` `ENES_*`, `enes_*` volume nusxalari,
+`enes-backup*` timer'lar.
+
+Test: to'plam yashil; serverda `/health/deep` ok, hodisa 5 894 = 5 894,
+eski hostlar 200, `getWebhookInfo` → yangi bot, pending 0.
+
+Diqqat: aHost DNS hali ega tomonidan qo'yilmagan — `enes.uz`
+sertifikatlari DNS kelgach o'zi chiqadi; `www.chaqimchi.uz` → 301
+`enes.uz` shu paytgacha aHost sahifasiga tushadi.
+Diqqat: bot tokeni chatga tushgan edi — ega xohlasa BotFather `/revoke`
++ `.env.production` + `set_telegram_webhook.py` (uch qadam birga).
+Diqqat: `.env.production.example` agent uchun yopiq — qo'lda yangilansin.
 
 ### 2026-09-10 — Tungi nazorat, dizayn-3 paneli, Telegramda rasmli hisobot (`ec34ccb`, `05e2b04`, `43dfa99`, `f6897de`, `b7a1e02`)
 

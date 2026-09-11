@@ -42,8 +42,13 @@
   gorizontal toshish topdi — o'zbekchada ko'rinmasdi (yorliqlar qisqa):
   karta `min-width:auto`, `.segmented`, `.bottom-nav` (`c8f3400`);
   qayta yurgizilganda 0 nuqson, `--fail-api` 0 skelet, sayt 0.
-  ⏳ **Deploy qilinmagan** — `rsync` + `deploy_cloud.sh`, keyin Caddy
-  restart (hash).  ⚠️ **Ikkita test HEAD da allaqachon yiqilardi** (menga
+  ✅ **DEPLOY QILINDI (2026-09-11 ~08:00 UTC):** rsync (85 fayl) →
+  `deploy_cloud.sh` (zaxira, image, cloud+worker healthy) → Caddy
+  `--force-recreate` (bind-mount inode; CSP sarlavhasida yangi hash
+  tasdiqlandi).  Jonli: 8 host 200/301, `enes.uz/narxlar` brendli 404,
+  `/api/*` JSON, hero `hero-lobby-v1.webp`, telefon menyusi ochiladi va
+  «Mijoz kirishi» bor, `app.enes.uz/owner` qora ochiladi, loglarda 0 xato.
+  ⚠️ **Ikkita test HEAD da allaqachon yiqilardi** (menga
   aloqasi yo'q, tuzatilmadi): `test_status_chain.py::…silently_dropped`
   (`night` stat holat fayliga yozilmaydi — 10-sentabr tungi ishi) va
   `test_windows_installer.py::test_ci_gives_the_build_a_cloud_address`
@@ -711,13 +716,9 @@
 ## KEYINGI ISH
 
 **UI/UX (2026-09-11) — qoldiqlar, tartib bilan:**
-1. **Deploy** (cloud + panel bundle + Caddyfile): `rsync` → `deploy_cloud.sh`
-   → **Caddy konteynerini qayta yaratish** (CSP hash o'zgardi, aks holda
-   panel qobig'i CSP-Report-Only da hisobot beradi; majburiy rejimga
-   o'tgach esa qora tema skripti bloklanardi).  Keyin jonli tekshiruv:
-   `curl -H 'Accept: text/html' https://enes.uz/narxlar` → HTML 404;
-   telefonda menyu → «Mijoz kirishi»; `app.enes.uz/owner` qora ochiladi;
-   `/owner/cameras/camera-01/alerts` deep link; hero lobby fotosi.
+1. ✅ Deploy bajarildi (yuqorida).  ⏳ Egadan: panelga kirib bosh sahifa,
+   kamera sahifasi (`/owner/cameras/camera-01`) va telefonda tugmalarni
+   ko'rib chiqishi; haqiqiy ma'lumotda issiqlik xaritasi rangi.
 2. Ikkita eski yiqilgan testni yopish (`night` stat, CI `ENES_DEFAULT_CLOUD_URL`).
 3. NICE (rejada qolgan): issiqlik xaritasi oqarishi — REAL ma'lumotda
    tekshirish (pilot tirilgach), kerak bo'lsa `paintHeat` alfa yig'indi

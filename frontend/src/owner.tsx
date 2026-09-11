@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { api, clearToken, logout as serverLogout, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
-import { AppShell, Card, CopyButton, EmptyState, ErrorStrip, LangSwitch, LoginScreen, PageHeader, Pill, Skeleton, StatCard, Tabs, ThemeToggle, useConfirm, useToast, type NavItem } from "./components";
+import { AppShell, Card, CopyButton, EmptyState, Avatar, ErrorStrip, LangSwitch, LoginScreen, PageHeader, Pill, Skeleton, StatCard, Tabs, ThemeToggle, useConfirm, useToast, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
@@ -690,15 +690,19 @@ function OwnerApp() {
     mobileNav={mobileNav}
     active={active}
     onNavigate={navigate}
-    title={selected?.name || data.site.name}
+    title={nav.find(item => item.id === active)?.label || t("panel.owner.home_title")}
     subtitle={t("panel.owner.updated_at", { time: formatTimeUz(data.updated_at) })}
     onLogout={logout}
-    sidebarFooter={<div className="sidebar-user"><Icon name="store"/><div><b>{selected?.name || data.site.name}</b><small>{selected?.address || data.site.address || t("panel.home.branches.no_address")}</small></div></div>}
     headerActions={<>
-      {sites.length > 1 ? <select className="select" value={siteId} onChange={event => setSiteId(event.target.value)} aria-label={t("panel.owner.select_branch")}>{sites.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : null}
       <span className="topbar-date"><Icon name="calendar" size={16}/>{today}</span>
       <NotificationBell siteId={siteId} onOpenEvent={() => navigate("alerts")}/>
       <button className="btn btn-icon" onClick={() => refresh()} aria-label={t("panel.common.refresh")}><Icon name="pulse"/></button>
+      {/* Do'kon nomi BITTA joyda — namunadagi avatar chipi.  Ilgari u
+          topbar sarlavhasi, tanlagich va yon panel kartasida uch marta
+          turardi.  Bir nechta filial — chip o'rnida tanlagich. */}
+      {sites.length > 1
+        ? <select className="select topbar-store" value={siteId} onChange={event => setSiteId(event.target.value)} aria-label={t("panel.owner.select_branch")}>{sites.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select>
+        : <div className="topbar-user" title={selected?.address || data.site.address || ""}><Avatar name={selected?.name || data.site.name}/><div><b>{selected?.name || data.site.name}</b><small>{role === "manager" ? t("panel.telegram.role_manager") : t("panel.telegram.role_owner")}</small></div></div>}
     </>}>
     {error ? <div className="alert-strip"><Icon name="bell"/><div><strong>{t("panel.owner.refresh_error_title")}</strong> {error}. {t("panel.owner.refresh_error_note")}</div></div> : null}
     {active === "home"

@@ -329,10 +329,11 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
 
 .sidebar-foot { margin-top: auto; display: grid; gap: 6px; }
 .sidebar-logout { margin-top: 0 !important; }
-.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-inset); color: var(--muted); }
-.sidebar-user b { display: block; color: var(--text); font-size: 13px; }
-.sidebar-user small { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sidebar-user > div { min-width: 0; }
+.topbar-user { display: flex; align-items: center; gap: 10px; max-width: 260px; padding: 4px 14px 4px 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-inset); }
+.topbar-user > div { min-width: 0; display: grid; line-height: 1.2; }
+.topbar-user b { color: var(--fg); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-user small { color: var(--muted); font-size: 11px; }
+.topbar-store { max-width: 260px; }
 
 /* ── Jadval: qidiruv, filtr, ism ustuni ──────────────────────────── */
 .table-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 21px 0; }
@@ -553,11 +554,14 @@ tr:last-child td { border-bottom: 0; }
 /* Tor noutbukda oltita karta bir qatorga sig'maydi — uch ustunga. */
 @media (max-width: 1400px) {
   .metric-grid-6 { grid-template-columns: repeat(3,minmax(0,1fr)); }
-  .metric-grid-5 { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  /* Beshta karta 1100 px gacha bir qatorda qoladi (namunadagi qator);
+     3+2 bo'lib sinishi bitta bo'sh katak qoldirardi. */
+  .metric-grid-5 { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; }
 }
 
 @media (max-width: 1100px) {
   .metric-grid, .metric-grid-5, .metric-grid-6 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .metric-grid-5 > :last-child { grid-column: span 2; }
   .dashboard-grid, .home-grid, .split-grid { grid-template-columns: 1fr; }
   .telemetry-grid { grid-template-columns: repeat(2,1fr); }
   .donut-wrap { grid-template-columns: 130px minmax(0,1fr); }
@@ -596,6 +600,9 @@ tr:last-child td { border-bottom: 0; }
      tanlagich esa har kirishda; ilgari tanlagich 60 px ga siqilib
      «Nam⌄» bo'lib qolgan edi. */
   .topbar .lang-switch, .topbar .theme-toggle { display: none; }
+  /* Chip telefonda faqat avatar: nom sarlavhada bor. */
+  .topbar-user { padding: 3px; }
+  .topbar-user > div { display: none; }
   .topbar-actions .select { min-width: 120px; flex: 1; max-width: none; }
   .drawer-tools { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
   .summary-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -738,6 +745,7 @@ tr:last-child td { border-bottom: 0; }
 /* Hodisa belgisi — turga qarab rangli doira (`.tone-*` yumshoq fon +
    rangli belgi).  Noma'lum tur kulrang: yo'qolmaydi, ajralib turmaydi. */
 .event-icon { width: 34px; height: 34px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; }
+.event-thumb { width: 44px; height: 34px; flex-shrink: 0; border-radius: 8px; object-fit: cover; background: var(--video-bg); }
 .event-icon.tone-grey { background: var(--surface-3); color: var(--muted); }
 .heat-thumb-wrap { padding: 4px 21px 20px; }
 .heat-thumb { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; background: var(--video-bg); }

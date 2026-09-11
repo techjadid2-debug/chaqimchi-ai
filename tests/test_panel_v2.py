@@ -220,6 +220,30 @@ def test_live_view_uses_its_own_endpoint() -> None:
     assert "/live-frame" in src("Cameras.tsx")
 
 
+def test_home_shows_five_stat_cards() -> None:
+    """Bosh sahifada DOIM beshta ko'rsatkich (dizayn-3): karta soni
+    3–5 orasida o'zgarsa 5 ustunli to'r bittasini yolg'iz qoldirardi.
+    Yo'q ko'rsatkich o'rnida o'rinbosar (navbat, gavjum soat), yolg'on
+    nol emas — bo'lmasa «—» va izoh."""
+    home = src("OwnerHome.tsx")
+    assert 'className="metric-grid metric-grid-5"' in home
+    assert "metric-grid-${cardCount}" not in home
+    assert home.count("<StatCard") >= 7, "5 karta + o'rinbosarlar"
+    assert "panel.home.stat.no_data_yet" in home
+
+
+def test_event_rows_carry_thumbnails() -> None:
+    """Hodisa ro'yxatida kadr rasmchasi — faqat rasmi BOR hodisada:
+    har qatorga so'rov yuborilsa kirish-chiqishlar 404 bilan jurnalni
+    to'ldiradi.  Do'kon nomi topbarda bitta chipda."""
+    home = src("OwnerHome.tsx")
+    assert "function EventThumb" in home and "/snapshot" in home
+    assert "has_snapshot" in home
+    assert "panel.home.recent.title" in home
+    owner = src("owner.tsx")
+    assert "topbar-user" in owner and "sidebar-user" not in owner
+
+
 def test_camera_detail_is_deep_linkable() -> None:
     """Alohida kamera sahifasi manzildan ochilsin: `/owner/cameras/camera-01/alerts`.
 

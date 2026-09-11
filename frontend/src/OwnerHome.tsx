@@ -1,6 +1,6 @@
 import { eventLabel, t } from "./i18n";
 import { useEffect, useState } from "react";
-import { api, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, hasFeature, relativeMinutes, telegramBotUrl } from "./api";
+import { api, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, hasFeature, mediaObjectUrl, relativeMinutes, telegramBotUrl } from "./api";
 import { Avatar, Card, EmptyState, PageHeader, Pill, PlanLock, StatCard } from "./components";
 import { Donut, LineChart, type Point } from "./charts";
 import { Demography } from "./Demography";
@@ -49,6 +49,34 @@ const ATTENDANCE_LABEL: Record<string, { key: string; tone: string }> = {
 const ICON_BY_TONE: Record<string, string> = { red: "shield", yellow: "clock", blue: "users", green: "camera", grey: "pulse" };
 
 const HOME_PERIODS: Period[] = ["today", "7", "30"];
+
+/* Hodisa rasmchasi — namunadagi ro'yxatdagi kichik kadr.
+ *
+ * Faqat `has_snapshot` bo'lgan hodisa uchun so'raladi: har qatorga
+ * so'rov yuborilsa kirish-chiqishlar 404 bilan jurnalni to'ldirardi.
+ * Blob URL kesh — dashboard 15 soniyada yangilanadi, rasm esa bitta
+ * hodisa uchun bir marta yuklanadi. */
+const THUMBS = new Map<string, Promise<string>>();
+function EventThumb({ id, siteId, tone }: { id: string; siteId: string; tone: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let alive = true;
+    const key = `${siteId}:${id}`;
+    if (!THUMBS.has(key)) {
+      THUMBS.set(key, mediaObjectUrl(`/api/v1/owner/events/${encodeURIComponent(id)}/snapshot`, "owner", siteId).catch(() => ""));
+    }
+    void THUMBS.get(key)?.then(url => { if (alive) setSrc(url); });
+    return () => { alive = false; };
+  }, [id, siteId]);
+  return src
+    ? <img className="event-thumb" src={src} alt=""/>
+    : <span className={`event-icon tone-${tone}`}><Icon name={ICON_BY_TONE[tone] || "pulse"} size={16}/></span>;
+}
+
+/* Ogohlantirish (qizil/sariq) va oddiy qayd (kirish-chiqish, tizim)
+   ikki ro'yxat: namunada «AI hodisalari» va «So'nggi hodisalar» alohida —
+   ega avval xavotirli narsani ko'rsin, keyin oqimni. */
+const ALERT_TONES = new Set(["red", "yellow"]);
 
 /** Soniyalarni "06:42" ko'rinishiga o'tkazadi. */
 function asDuration(seconds: number | null) {
@@ -148,6 +176,17 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
   const onDuty = attendance.rows?.filter(row => row.status === "present" || row.status === "late").length;
   const scheduled = attendance.rows?.filter(row => row.status !== "unscheduled").length;
   const onlineBranches = sites.filter(site => site.connection === "online").length;
+  /* 4- va 5-karta o'rinbosarlari: xodim yoki navbat; filial / to'xtash /
+     gavjum soat.  Karta soni DOIM 5 — 4 karta 5 ustunli to'rda bittasini
+     yolg'iz qoldirardi, 3 karta esa namunadagi qatorni buzardi. */
+  const queueAlerts = isToday || !overview
+    ? num(today, "queue.alerts") || 0
+    : Number(overview.events?.queue_alerts ?? overview.events?.queue_threshold_exceeded ?? 0);
+  const busiestHour = (traffic.busiest_hour || null) as { hour: number; entered: number } | null;
+  const busiestDay = overview?.totals.busiest_day || null;
+  const busiest = isToday || !overview
+    ? (busiestHour && busiestHour.entered ? { value: `${String(busiestHour.hour).padStart(2, "0")}:00`, count: busiestHour.entered, label: t("panel.home.stat.busiest_hour") } : null)
+    : (busiestDay && busiestDay.entered ? { value: dayLabel(busiestDay.date), count: busiestDay.entered, label: t("panel.home.stat.busiest_day") } : null);
 
   const flowPoints: Point[] = isToday || !overview
     ? hourly.map(item => ({ label: `${String(item.hour).padStart(2, "0")}:00`, value: Number(item.entered) || 0 }))
@@ -162,12 +201,20 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
   const firstCamera = dashboard.cameras[0]?.camera_id || "";
   const [heatState, setHeatState] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const segments = eventSegments(periodEvents);
-  /* Karta soni 3–5 orasida o'zgaradi (xodim va filial kartalari shartli).
-     To'r ustunlari soniga MOS bo'lsin: 5 ustunli to'rda 4 karta bitta
-     kartani ikkinchi qatorga yolg'iz tashlab qo'yardi. */
   const showStaff = Boolean(attendance.available && attendance.rows);
-  const showFifth = sites.length > 1 || Boolean(dwellAverage);
-  const cardCount = 3 + (showStaff ? 1 : 0) + (showFifth ? 1 : 0);
+  const alertEvents = dashboard.events.filter(item => ALERT_TONES.has(toneOf(item.event_type)));
+  const recentEvents = dashboard.events.filter(item => !ALERT_TONES.has(toneOf(item.event_type)));
+  const eventRow = (item: Dashboard["events"][number], index: number) => {
+    const tone = toneOf(item.event_type);
+    const hasSnapshot = Boolean((item as { has_snapshot?: boolean }).has_snapshot);
+    return <div className="event-row" key={item.id || index}>
+      <div className="event-name">
+        {item.id && hasSnapshot ? <EventThumb id={item.id} siteId={siteId} tone={tone}/> : <span className={`event-icon tone-${tone}`}><Icon name={ICON_BY_TONE[tone] || "pulse"} size={16}/></span>}
+        <div><b>{eventLabel(item.event_type)}</b><small>{formatTimeUz(item.occurred_at || item.created_at)} · {item.camera_id || t("panel.home.events.system")}</small></div>
+      </div>
+      <button className="btn btn-icon" aria-label={t("panel.home.details")} onClick={() => onNavigate("alerts", item.id || "")}><Icon name="eye" size={16}/></button>
+    </div>;
+  };
 
   return <>
     <PageHeader title={t("panel.owner.home_title")} subtitle={formatDateUz()} actions={<PeriodBar value={period} options={HOME_PERIODS} onChange={choose}/>}/>
@@ -192,7 +239,7 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
     {poisoned ? <div className="alert-strip alert-info"><Icon name="bell"/><div><strong>{t("panel.home.outbox.title", { count: poisoned })}</strong> {t("panel.home.outbox.detail")}</div></div> : null}
     {overviewError ? <div className="alert-strip alert-info"><Icon name="bell"/><div>{overviewError}</div></div> : null}
 
-    <div className={`metric-grid metric-grid-${cardCount}`}>
+    <div className="metric-grid metric-grid-5">
       <StatCard
         label={t("panel.home.stat.visitors_period")}
         value={formatNumber(entered)}
@@ -223,7 +270,13 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
         note={t("panel.home.stat.staff_note")}
         icon="users"
         tone="green"
-      /> : null}
+      /> : <StatCard
+        label={t("panel.owner.metric_queue")}
+        value={formatNumber(queueAlerts)}
+        note={queueAlerts ? periodLabel(period) : t("panel.home.stat.queue_none")}
+        icon="bell"
+        tone={queueAlerts ? "yellow" : "green"}
+      />}
       {sites.length > 1 ? <StatCard
         label={t("panel.home.stat.branches")}
         value={formatNumber(sites.length)}
@@ -236,7 +289,13 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
         note={t("panel.home.stat.dwell_note")}
         icon="clock"
         tone="yellow"
-      /> : null}
+      /> : <StatCard
+        label={busiest ? busiest.label : t("panel.home.stat.busiest_hour")}
+        value={busiest ? busiest.value : "—"}
+        note={busiest ? t("panel.home.stat.busiest_note", { count: formatNumber(busiest.count) }) : t("panel.home.stat.no_data_yet")}
+        icon="clock"
+        tone="blue"
+      />}
     </div>
 
     <div className="home-grid">
@@ -325,21 +384,17 @@ export function OwnerHome({ dashboard, sites, siteId, onNavigate, cameras }: {
           {dashboard.media_dropped ? <p className="metric-note media-error">
             {t("panel.home.events.media_dropped", { count: formatNumber(dashboard.media_dropped) })}
           </p> : null}
-          {dashboard.events.length ? <>
-            <div className="event-list">
-              {dashboard.events.slice(0, 6).map((item, index) => {
-                const tone = toneOf(item.event_type);
-                return <div className="event-row" key={item.id || index}>
-                  <div className="event-name">
-                    <span className={`event-icon tone-${tone}`}><Icon name={ICON_BY_TONE[tone] || "pulse"} size={16}/></span>
-                    <div><b>{eventLabel(item.event_type)}</b><small>{formatTimeUz(item.occurred_at || item.created_at)} · {item.camera_id || t("panel.home.events.system")}</small></div>
-                  </div>
-                  <button className="btn btn-icon" aria-label={t("panel.home.details")} onClick={() => onNavigate("alerts", item.id || "")}><Icon name="eye" size={16}/></button>
-                </div>;
-              })}
-            </div>
+          {alertEvents.length ? <>
+            <div className="event-list">{alertEvents.slice(0, 6).map(eventRow)}</div>
             <button className="btn btn-wide" onClick={() => onNavigate("alerts")}>{t("panel.home.events.view_all")}</button>
           </> : <EmptyState icon="shield" title={t("panel.home.events.empty_title")} detail={t("panel.home.events.empty_detail")} />}
+        </Card>
+
+        <Card>
+          <div className="card-head"><div><h2>{t("panel.home.recent.title")}</h2><p>{t("panel.home.recent.subtitle")}</p></div></div>
+          {recentEvents.length
+            ? <div className="event-list">{recentEvents.slice(0, 5).map(eventRow)}</div>
+            : <EmptyState icon="entry" title={t("panel.home.recent.empty_title")} detail={t("panel.home.recent.empty_detail")} />}
         </Card>
 
         <Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate} />

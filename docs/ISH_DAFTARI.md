@@ -40,7 +40,7 @@
   `scripts/bump_asset_tokens.py` (kesh tokenlari).  Yakuniy matritsa
   (19 marshrut × 3 til × 2 tema × 2 kenglik, 228 surat) RU/EN da 10 ta
   gorizontal toshish topdi — o'zbekchada ko'rinmasdi (yorliqlar qisqa):
-  karta `min-width:auto`, `.segmented`, `.bottom-nav` (`e9` tuzatmasi);
+  karta `min-width:auto`, `.segmented`, `.bottom-nav` (`c8f3400`);
   qayta yurgizilganda 0 nuqson, `--fail-api` 0 skelet, sayt 0.
   ⏳ **Deploy qilinmagan** — `rsync` + `deploy_cloud.sh`, keyin Caddy
   restart (hash).  ⚠️ **Ikkita test HEAD da allaqachon yiqilardi** (menga

@@ -41,7 +41,7 @@ export function ThemeToggle() {
   }
 
   return <button
-    className="btn btn-icon"
+    className="btn btn-icon theme-toggle"
     onClick={toggle}
     title={themeLabel(theme)}
     aria-label={t("panel.theme.switch", { mode: themeLabel(theme) })}
@@ -66,7 +66,11 @@ export function LangSwitch() {
 }
 
 export function StatusDot({ state }: { state: string }) {
-  return <span className={`status-dot status-${state}`} aria-label={state} />;
+  /* Yorliq odam tilida: ekran o'quvchi «stale» emas, «Kechikmoqda» desin.
+     Katalogda bo'lmagan holat uchun kalitning o'zi chiqmasin — umumiy so'z. */
+  const key = `panel.cameras.state_${state}`;
+  const label = t(key);
+  return <span className={`status-dot status-${state}`} aria-label={label === key ? t("panel.cameras.state_unknown") : label} />;
 }
 
 export function Pill({ state, children }: { state?: string; children: ReactNode }) {
@@ -120,6 +124,23 @@ export function EmptyState({ icon = "report", title, detail }: { icon?: string; 
   return <div className="empty-state"><span><Icon name={icon} size={26} /></span><b>{title}</b><p>{detail}</p></div>;
 }
 
+/** Xato chizig'i — panelda BITTA ko'rinishda.
+ *
+ * Ilgari xato to'rt xil chiqardi: ko'k «ma'lumot» chizig'i qo'ng'iroq
+ * bilan (bildirishnomaga o'xshardi), sariq chiziq, kartadan tashqarida
+ * yalang'och qizil matn va karta ichidagi qizil matn.  Ega qaysi biri
+ * xato, qaysi biri eslatma ekanini ajratolmasdi.  Endi xato doim qizil,
+ * `role="alert"` bilan (ekran o'quvchi darhol o'qiydi) va iloji bo'lsa
+ * «Qayta urinish» tugmasi bilan — javobsiz xato tuzatib bo'lmaydigan
+ * xatodek ko'rinadi. */
+export function ErrorStrip({ title, detail, onRetry, className = "" }: { title?: string; detail: string; onRetry?: () => void; className?: string }) {
+  return <div className={`alert-strip alert-warning ${className}`} role="alert">
+    <Icon name="shield"/>
+    <div>{title ? <><strong>{title}</strong> </> : null}{detail}</div>
+    {onRetry ? <button className="btn" onClick={onRetry}>{t("panel.common.retry")}</button> : null}
+  </div>;
+}
+
 /** Tarifda yopiq bo'lim.
  *
  * Bo'lim YO'QOLMAYDI — mijoz nimani ololishini ko'rsin.  Yo'q bo'lib
@@ -143,8 +164,21 @@ export function Skeleton({ height = 80 }: { height?: number }) {
  *  havola qilib bo'ladi va brauzerning «Orqaga»si ishlaydi.  Tugmalar
  *  44 px: telefonda barmoq bilan bosiladi. */
 export function Tabs({ items, active, onSelect }: { items: { id: string; label: string }[]; active: string; onSelect: (id: string) => void }) {
-  return <div className="tabs" role="tablist">
-    {items.map(item => <button key={item.id} role="tab" aria-selected={active === item.id} className={active === item.id ? "active" : ""} onClick={() => onSelect(item.id)}>{item.label}</button>)}
+  const list = useRef<HTMLDivElement>(null);
+  /* Telefonda tablar qatori aylanadi; faol tab o'ngda qolib ketsa ega uni
+     ko'rmaydi — «Tarif va to'lov» sozlamalarda shunday yashirin qolgan edi. */
+  useEffect(() => {
+    const el = list.current?.querySelector<HTMLElement>("button.active");
+    el?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [active]);
+  const move = (event: React.KeyboardEvent, index: number) => {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    onSelect(items[(index + step + items.length) % items.length].id);
+  };
+  return <div className="tabs" role="tablist" ref={list}>
+    {items.map((item, index) => <button key={item.id} role="tab" aria-selected={active === item.id} tabIndex={active === item.id ? 0 : -1} className={active === item.id ? "active" : ""} onClick={() => onSelect(item.id)} onKeyDown={event => move(event, index)}>{item.label}</button>)}
   </div>;
 }
 

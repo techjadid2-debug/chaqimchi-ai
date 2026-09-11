@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, formatTimeUz, tashkentDay, tashkentHour, tashkentToday, tokenFor } from "./api";
-import { Card, EmptyState, PageHeader, Skeleton } from "./components";
+import { Card, EmptyState, ErrorStrip, PageHeader, Skeleton } from "./components";
 import { EventTimeline } from "./EventTimeline";
 import { Icon } from "./icons";
 import { t } from "./i18n";
@@ -38,11 +38,14 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
   const [audioReply, setAudioReply] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
+  /* Sozlama yuklanmadi — skelet o'rniga sabab va «Qayta urinish». */
+  const [settingsFailed, setSettingsFailed] = useState(false);
   const timer = useRef(0);
 
   const loadSettings = useCallback(async () => {
+    setSettingsFailed(false);
     try { setSettings(await api<Settings>("/api/v1/owner/agent/settings", "owner", { siteId })); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("panel.agent.settings_failed")); }
+    catch (reason) { setSettingsFailed(true); setError(reason instanceof Error ? reason.message : t("panel.agent.settings_failed")); }
   }, [siteId]);
   useEffect(() => { void loadSettings(); return () => window.clearTimeout(timer.current); }, [loadSettings]);
 
@@ -109,8 +112,9 @@ export function VisionAgent({ siteId, onNavigate }: { siteId: string; onNavigate
 
   return <>
     <PageHeader title={t("panel.agent.title")} subtitle={t("panel.agent.subtitle")} />
-    {error ? <div className="alert-strip alert-info"><Icon name="bell"/><div>{error}</div></div> : null}
-    {settings === null ? <Card><div className="card-body"><Skeleton height={190}/></div></Card>
+    {error && !settingsFailed ? <ErrorStrip detail={error}/> : null}
+    {settingsFailed && settings === null ? <Card><EmptyState icon="bell" title={t("panel.agent.settings_failed")} detail={error}/><div className="card-body"><button className="btn" onClick={() => void loadSettings()}>{t("panel.common.retry")}</button></div></Card>
+      : settings === null ? <Card><div className="card-body"><Skeleton height={190}/></div></Card>
       : !settings.consented ? <Card><EmptyState icon="shield" title={t("panel.agent.consent_title")} detail={t("panel.agent.consent_detail")}/><div className="card-body agent-composer"><label className="consent-row"><input type="checkbox" checked={audioReply} onChange={event => setAudioReply(event.target.checked)}/><span>{t("panel.agent.consent_audio")}</span></label><button className="btn btn-primary" onClick={() => void consent()}>{t("panel.agent.consent_button")}</button></div></Card>
       : !settings.provider_configured ? <Card><EmptyState icon="pulse" title={t("panel.agent.preparing_title")} detail={t("panel.agent.preparing_detail")}/></Card>
       : <>

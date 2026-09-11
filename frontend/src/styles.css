@@ -96,7 +96,7 @@ h1,h2,h3,p { margin-top: 0; }
    ("48,6 mln so'm") sig'ishi uchun shrift bir oz kichikroq va so'z
    bo'yicha ko'chadi. */
 .stat-card .metric-value { margin-top: 10px; font-size: clamp(20px, 1.8vw, 28px); line-height: 1.15; }
-.delta { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; font-weight: 700; }
+.delta { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .delta em { color: var(--muted); font-style: normal; font-weight: 500; }
 .delta-up { color: var(--green); }
 .delta-down { color: var(--red); }
@@ -217,7 +217,10 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
 /* Tungi rejim belgisi — kadrning pastki o'ng burchagida, jonli
    yorlig'i bilan bir qatorda.  `dark` sariq: bu ogohlantirish. */
 .camera-night { position: absolute; right: 9px; bottom: 9px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 7px; background: var(--video-stamp); color: var(--video-fg); font-size: 10px; font-weight: 700; }
-.camera-night.is-dark { background: var(--yellow); color: #1a1400; }
+/* IR — kamera tunda KO'RADI (yaxshi xabar, sokin rang); `dark` — ko'rmaydi,
+   ya'ni egaga chaqiriq (sariq).  Ilgari ikkalasi bir xil ko'rinar edi. */
+.camera-night.is-ir { background: var(--accent-strong); color: var(--video-fg); }
+.camera-night.is-dark { background: var(--yellow); color: var(--yellow-fg); }
 /* Kadr eskirgani QIZIL bilan aytiladi: "jonli" yozuvi yashil turib,
    rasm muzlagan bo'lishi eng yomon holat — ega eski rasmga qarab
    do'konda hozir nima bo'layotgani haqida qaror qabul qiladi. */
@@ -436,6 +439,12 @@ tr:last-child td { border-bottom: 0; }
 .tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-inset); overflow-x: auto; scrollbar-width: none; }
 .tabs button { flex: 0 0 auto; min-height: 44px; border: 0; border-radius: 9px; padding: 0 16px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .tabs button.active { background: var(--surface); color: var(--blue); box-shadow: var(--shadow); }
+/* Qator aylanadi, lekin scrollbar yo'q — chetlari so'nib «davomi bor»
+   deydi (Sozlamalarda «Tarif va to'lov» kesilib, borligi bilinmasdi). */
+@media (max-width: 760px) {
+  .tabs { scroll-snap-type: x proximity; mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 34px), transparent 100%); }
+  .tabs button { scroll-snap-align: center; }
+}
 .segmented { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-inset); }
 .segmented button { min-height: 34px; border: 0; border-radius: 7px; padding: 0 11px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 700; }
 .segmented button.active { background: var(--surface); color: var(--blue); box-shadow: var(--shadow); }
@@ -556,7 +565,8 @@ tr:last-child td { border-bottom: 0; }
   .page-header { gap: 12px; margin-bottom: 17px; }
   .page-header h1 { font-size: 24px; }
   .page-header p { font-size: 12px; line-height: 1.5; }
-  .page-actions .btn span { display: none; }
+  /* Tugma matni telefonda ham qoladi: ikonka-only tugma nomsiz qoladi
+     (aria-label yo'q edi) va ega «bu nima?» deb taxmin qilardi. */
   .bottom-nav { position: fixed; inset: auto 0 0 0; z-index: 30; height: calc(67px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(5,1fr); padding: 5px 4px env(safe-area-inset-bottom); border-top: 1px solid var(--border); background: var(--surface-blur); backdrop-filter: blur(16px); }
   .bottom-nav button { display: grid; place-items: center; align-content: center; gap: 3px; border: 0; border-radius: 9px; background: transparent; color: var(--dim-2); }
   .bottom-nav button.active { color: var(--blue); }
@@ -575,7 +585,12 @@ tr:last-child td { border-bottom: 0; }
      tor ekranda joyni bekorga egallaydi. */
   .topbar-title { display: none; }
   .topbar-actions { flex: 1; justify-content: flex-end; min-width: 0; }
-  .topbar-actions .select { min-width: 0; flex: 1; max-width: 260px; }
+  /* Til va tema «Yana» menyusida — ular kuniga bir marta kerak, filial
+     tanlagich esa har kirishda; ilgari tanlagich 60 px ga siqilib
+     «Nam⌄» bo'lib qolgan edi. */
+  .topbar .lang-switch, .topbar .theme-toggle { display: none; }
+  .topbar-actions .select { min-width: 120px; flex: 1; max-width: none; }
+  .drawer-tools { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
   .summary-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
   /* Sehrgar qadamlari telefonda ikki qatorda — to'rttasi bir qatorda
      sig'sa har biriga 80px qoladi va matn bo'g'inlab sinadi. */
@@ -600,11 +615,21 @@ tr:last-child td { border-bottom: 0; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .metric-label { min-height: 34px; font-size: 11px; }
   .metric-note { font-size: 10px; }
-  .page-actions { display: none; }
-  /* Davr tanlagichi telefonda ham qoladi — u bezak emas, sahifaning
-     asosiy boshqaruvi.  Sarlavha ostiga tushadi. */
-  .page-header:has(.period-bar) { flex-wrap: wrap; }
-  .page-actions:has(.period-bar) { display: flex; width: 100%; }
+  /* Sahifa tugmalari telefonda YASHIRILMAYDI — ular bezak emas: kamera
+     «Jonli», dalillar «Rasm/Klip», hisobot yuklash.  Ilgari `display:none`
+     edi va ega telefonda shu amallarni topolmasdi.  Sarlavha ostiga
+     tushadi va o'zi ikki qatorga o'raladi. */
+  .page-header { flex-wrap: wrap; }
+  .page-header .page-actions { width: 100%; flex-wrap: wrap; }
+  .page-actions { flex-wrap: wrap; }
+  .page-actions .btn { flex: 1 1 auto; padding: 0 12px; font-size: 12px; }
+  /* Dalil qatori: «Rasm/Klip» tugmalari nomni siqib «Navbat …» qilmasin —
+     nom to'liq, tugmalar pastda. */
+  .event-row { flex-wrap: wrap; }
+  .event-row .event-name { flex: 1 1 100%; }
+  .event-row .page-actions { width: 100%; }
+  /* Delta izohi («kechagiga nisbatan») ikki qatorga sinardi — foiz yetarli. */
+  .delta em { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

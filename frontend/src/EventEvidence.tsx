@@ -1,7 +1,7 @@
 import { eventLabel, t } from "./i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatTimeUz, hoursSince, mediaObjectUrl, hasFeature, tashkentDay, tashkentToday } from "./api";
-import { Card, EmptyState, PageHeader, PlanLock, Skeleton } from "./components";
+import { Card, EmptyState, ErrorStrip, PageHeader, PlanLock, Skeleton } from "./components";
 import { EventTimeline } from "./EventTimeline";
 import { Icon } from "./icons";
 import type { Dashboard } from "./types";
@@ -107,7 +107,10 @@ export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboar
     const path = kind === "owner" ? `/api/v1/owner/events?${query}` : `/api/v1/admin/events${selected ? `?site_id=${encodeURIComponent(selected)}` : ""}`;
     api<{events:Event[]}>(path, kind, { siteId: kind === "owner" ? siteId : undefined })
       .then(result => { setEvents(result.events || []); setError(""); setShown(PAGE); })
-      .catch(reason => setError(reason instanceof Error ? reason.message : t("panel.evidence.load_failed")));
+      // Xatoda ro'yxat BO'SH bo'ladi, `null` emas: `null` — «hali
+      // yuklanmoqda», ya'ni skelet.  Ilgari xato chizig'i bilan yonma-yon
+      // skelet abadiy turib qolardi.
+      .catch(reason => { setEvents([]); setError(reason instanceof Error ? reason.message : t("panel.evidence.load_failed")); });
   }, [day, hour, kind, selected, siteId]);
   useEffect(() => { void load(); }, [load]);
 
@@ -129,7 +132,7 @@ export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboar
     {/* Nima uchun ko'p hodisada tugma yo'qligi ANIQ aytiladi: kirish-chiqish
         qatorlarida rasm bo'lmasligi mijozga "buzilgan"day ko'rinardi. */}
     <div className="alert-strip alert-info"><Icon name="shield"/><div>{t("panel.evidence.privacy_before")} <b>{t("panel.evidence.privacy_bold")}</b> {t("panel.evidence.privacy_after")}</div></div>
-    {error ? <div className="alert-strip alert-info"><Icon name="bell"/>{error}</div> : null}
+    {error ? <ErrorStrip detail={error} onRetry={() => { setEvents(null); void load(); }}/> : null}
     {locked
       ? <Card><PlanLock title={t("panel.evidence.lock_title")} detail={t("panel.evidence.lock_detail")} onUpgrade={() => onNavigate?.("billing")}/></Card>
       : <>

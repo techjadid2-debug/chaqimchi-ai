@@ -92,15 +92,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--themes", default="light,dark")
     parser.add_argument("--langs", default="uz,ru,en")
     parser.add_argument("--widths", default="390,1280")
-    parser.add_argument("--fail-api", action="store_true", help="hamma owner API 500 qaytaradi")
+    parser.add_argument("--fail-api", action="store_true", help="dashboard/sites dan boshqa hamma owner API 500 qaytaradi")
     parser.add_argument("--site", action="store_true", help="panel o'rniga sayt sahifalari")
     return parser.parse_args()
+
+
+#: `--fail-api` rejimida ham javob beradigan yo'llar: ularsiz panel
+#: umuman ochilmaydi («aloqa yo'q» ekrani) va sahifa skeletlari
+#: tekshirilmay qoladi.
+BOOTSTRAP = ("/api/v1/owner/dashboard", "/api/v1/owner/sites")
 
 
 def make_api_router(base: str, fail: bool):
     def route_api(route):
         path = route.request.url.split(base)[-1].split("?")[0]
-        if fail:
+        if fail and path not in BOOTSTRAP:
             route.fulfill(status=500, content_type="application/json",
                           body='{"detail":"Internal Server Error"}')
             return
@@ -163,7 +169,9 @@ def run_panel(play, base: str, args: argparse.Namespace) -> dict:
                     page.screenshot(path=str(args.out / f"panel_{name}.png"), full_page=True)
                     # Service worker `owner-sw.js` statik serverda yo'q — bu
                     # tekshiruvga aloqasi yo'q, shovqin qilmasin.
-                    noise = [c for c in console if "owner-sw" not in c and "404" not in c]
+                    # `--fail-api` da 500 — rejimning o'zi; u nuqson emas.
+                    noise = [c for c in console if "owner-sw" not in c and "404" not in c
+                             and not (args.fail_api and "500" in c)]
                     report[name] = {
                         "overflow": result["overflow"],
                         "raw_keys": sorted(set(RAW_KEY.findall(result["text"]))),

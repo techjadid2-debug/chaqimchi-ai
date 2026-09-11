@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { formatNumber, hasFeature } from "./api";
 import { Bars, Delta, Donut, GroupedBars, LineChart, type Point } from "./charts";
-import { Card, EmptyState, PageHeader, PlanLock, Skeleton } from "./components";
+import { Card, EmptyState, ErrorStrip, PageHeader, PlanLock, Skeleton } from "./components";
 import { t } from "./i18n";
 import { PeriodBar, dayLabel, eventSegments, eventTotal, hasAnyReceipts, periodDays, readPeriod, savePeriod, useOverview, type Period } from "./overview";
 import type { Dashboard } from "./types";
@@ -34,7 +34,7 @@ export function Analytics({ dashboard, siteId, onNavigate }: { dashboard: Dashbo
 
   return <>
     <PageHeader title={t("panel.nav.analytics")} subtitle={t("panel.analytics.subtitle")} actions={<PeriodBar value={period} options={OPTIONS} onChange={choose}/>}/>
-    {error ? <p className="media-error">{error}</p> : null}
+    {error ? <ErrorStrip detail={error}/> : null}
     <div className="analytics-grid">
       <Card>
         <div className="card-head">

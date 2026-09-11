@@ -68,8 +68,15 @@ export async function logout(kind: "owner" | "admin") {
  * chiqardi.  Shuning uchun tur tekshiriladi va tushunarsiz shakl
  * uchun umumiy matn beriladi.
  */
-function errorText(body: unknown): string {
+function errorText(body: unknown, status = 0): string {
   const data = (body ?? {}) as { detail?: unknown; message?: unknown };
+  /* Server 500 bergan yoki FastAPI'ning o'z standart matni («Not Found»,
+     «Internal Server Error») kelgan — bu ega uchun ma'nosiz inglizcha
+     satr; o'rniga umumiy matn va HTTP kodi (qo'llab-quvvatlashga aytish
+     uchun).  Serverning O'Z xabari (`X-Lang` bilan tarjima qilingan
+     `detail`) esa qoladi. */
+  const generic = status >= 500 || (typeof data.detail === "string" && GENERIC_DETAILS.has(data.detail));
+  if (generic) return `${t("panel.error.request_failed")} (HTTP ${status})`;
   if (typeof data.detail === "string" && data.detail) return data.detail;
   if (typeof data.message === "string" && data.message) return data.message;
   if (Array.isArray(data.detail)) {
@@ -78,6 +85,13 @@ function errorText(body: unknown): string {
   }
   return t("panel.error.request_failed");
 }
+
+/** FastAPI/Starlette'ning o'zi yozadigan `detail` matnlari — tarjimasiz. */
+const GENERIC_DETAILS = new Set([
+  "Not Found", "Internal Server Error", "Method Not Allowed", "Unauthorized",
+  "Forbidden", "Not authenticated", "Bad Request", "Service Unavailable",
+  "Bad Gateway", "Gateway Timeout",
+]);
 
 export async function api<T>(path: string, kind: "owner" | "admin", options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
@@ -93,7 +107,7 @@ export async function api<T>(path: string, kind: "owner" | "admin", options: Api
   const response = await fetch(path, { ...options, headers });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(errorText(body)) as Error & { status?: number; code?: string };
+    const error = new Error(errorText(body, response.status)) as Error & { status?: number; code?: string };
     error.status = response.status;
     /* Mashina o'qiydigan kod: matn tarjima qilinsa ham o'zgarmaydi,
        shuning uchun shart tekshiruvi va testlar shunga bog'lanadi. */
@@ -115,7 +129,8 @@ export async function mediaObjectUrl(path: string, kind: "owner" | "admin", site
   const response = await fetch(path, { headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || t("panel.error.media_open_failed"));
+    const text = errorText(body, response.status);
+    throw new Error(text === t("panel.error.request_failed") ? t("panel.error.media_open_failed") : text);
   }
   return URL.createObjectURL(await response.blob());
 }

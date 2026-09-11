@@ -28,8 +28,11 @@ function paintHeat(ctx: CanvasRenderingContext2D, width: number, height: number,
   if (preview) {
     ctx.drawImage(preview, 0, 0, width, height);
   } else {
-    ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = "#64748b"; ctx.font = `600 ${Math.max(11, Math.round(height / 36))}px system-ui`;
+    /* Canvas `var()` ni tushunmaydi — token qiymati o'qib olinadi, shunda
+       «kadr yo'q» foni ikkala temada kamera plitkasi bilan bir xil. */
+    const tokens = getComputedStyle(document.documentElement);
+    ctx.fillStyle = tokens.getPropertyValue("--video-bg").trim() || "#0d1420"; ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = tokens.getPropertyValue("--video-ink").trim() || "#a8b2c2"; ctx.font = `600 ${Math.max(11, Math.round(height / 36))}px system-ui`;
     ctx.fillText(t("panel.heat.no_frame"), 20, height - 20);
   }
   // Bo'sh soat BO'SH qoladi: eski to'r ekranda qolib ketsa ega uni

@@ -134,6 +134,26 @@ def test_tap_targets_are_big_enough() -> None:
     assert css.count("@media") >= 4, "telefon, planshet va kompyuter uchun qoidalar"
 
 
+def test_page_actions_stay_usable_on_phones() -> None:
+    """Sahifa tugmalari telefonda YASHIRILMASIN.
+
+    2026-09-11 QA: `.page-actions { display: none; }` (≤480 px) kamera
+    «Jonli/AI», dalillar «Rasm/Klip», «Xodim qo'shish» va hisobot yuklash
+    tugmalarini telefonda butunlay olib tashlagan edi; `.btn span
+    { display: none; }` (≤760 px) esa tugmani nomsiz ikonkaga aylantirardi.
+    Tugma sarlavha ostiga tushadi, lekin turadi."""
+    css = src("styles.css")
+    assert ".page-actions { display: none; }" not in css
+    assert ".page-actions .btn span { display: none; }" not in css
+    assert ".page-header .page-actions { width: 100%; flex-wrap: wrap; }" in css
+    assert ".event-row .event-name { flex: 1 1 100%; }" in css, "dalil qatorida nom to'liq qolsin"
+    # Til/tema telefonda «Yana» menyusida — filial tanlagichga joy qolsin.
+    assert ".topbar .lang-switch, .topbar .theme-toggle { display: none; }" in css
+    assert "drawer-tools" in src("owner.tsx")
+    # Tablar qatori aylanishini ko'rsatadi (so'nuvchi chet).
+    assert "mask-image" in css[css.index(".tabs {"):]
+
+
 def test_canvas_accepts_touch() -> None:
     """`touch-action` bo'lmasa kanvasni sudrash o'rniga sahifa siljiydi —
     ya'ni pol burchaklarini telefondan to'g'irlab bo'lmaydi."""
@@ -253,6 +273,67 @@ def test_lists_have_empty_states() -> None:
     """Yangi bazada bo'limlar bo'm-bo'sh emas, nima qilish kerakligini
     aytadigan matn bilan ochilsin."""
     assert all_src().count("<EmptyState") >= 10
+
+
+def test_a_failed_request_never_leaves_a_skeleton() -> None:
+    """Xato chizig'i bilan yonma-yon ABADIY skelet turmasin.
+
+    2026-09-11 QA: Dalillar, AI yordamchi va Tarif sahifalarida API
+    yiqilsa `catch` faqat xabarni yozar, ro'yxat esa `null` (= «hali
+    yuklanmoqda») bo'lib qolar edi — ega xato matnini ham, «yuklanmoqda»
+    skeletini ham birga ko'rardi.  Qoida: `catch` ro'yxatni BO'SH holatga
+    o'tkazadi yoki alohida «yiqildi» bayrog'ini ko'taradi."""
+    evidence = src("EventEvidence.tsx")
+    catch_block = evidence[evidence.index(".catch(reason =>"): evidence.index(".catch(reason =>") + 220]
+    assert "setEvents([])" in catch_block, "dalillar: xatoda ro'yxat bo'sh bo'lsin"
+    billing = src("owner.tsx")
+    load = billing[billing.index('api<Invoice[]>("/api/v1/owner/invoices"'):]
+    assert "setInvoices([])" in load[: load.index("[siteId]")], "tarif: xatoda ro'yxat bo'sh bo'lsin"
+    agent = src("VisionAgent.tsx")
+    assert "setSettingsFailed(true)" in agent and "settingsFailed && settings === null" in agent
+    # Xato — bitta komponent, qo'ng'iroqli «ma'lumot» chizig'i emas.
+    # (`media-error` karta ICHIDAGI rasm xatosi uchun qoladi — u sahifa
+    # xatosi emas, bitta kadrning izohi.)
+    assert 'className="media-error"' not in src("Analytics.tsx"), "sahifa xatosi yalang'och qizil matn"
+    for name in ("EventEvidence.tsx", "VisionAgent.tsx", "Analytics.tsx"):
+        assert '"alert-strip alert-info"><Icon name="bell"/>' not in src(name), f"{name}: xato ma'lumot chizig'ida"
+    assert "export function ErrorStrip" in src("components.tsx")
+
+
+def test_report_buttons_do_not_promise_excel() -> None:
+    """Tugma «Excel» desa-yu fayl CSV bo'lsa — yolg'on yorliq.
+
+    2026-09-11 QA: «Kunlik hisobot (Excel)» va «Oylik (Excel)» tugmalari
+    `report.csv` yuklardi; uchinchisi esa halol «14 kunlik CSV» edi."""
+    for key in ("panel.download.daily_csv", "panel.download.period_csv", "panel.download.traffic_csv"):
+        for lang in ("uz", "ru", "en"):
+            text = tg(lang, key)
+            assert text != key, f"{lang}: {key} katalogda yo'q"
+            assert "excel" not in text.lower(), f"{lang}: {key} = {text!r}"
+    assert "daily_excel" not in src("owner.tsx") and "monthly_excel" not in src("owner.tsx")
+
+
+def test_raw_fastapi_detail_is_not_shown() -> None:
+    """«Internal Server Error» va «Not Found» ega ekraniga chiqmasin.
+
+    Bu FastAPI'ning o'z matni — tarjimasiz va ma'nosiz.  O'rniga umumiy
+    matn + HTTP kodi (qo'llab-quvvatlashga aytish uchun).  Serverning O'Z
+    xabari (`X-Lang` bilan tarjima qilingan `detail`) esa qoladi."""
+    api = src("api.ts")
+    assert "GENERIC_DETAILS" in api and '"Internal Server Error"' in api
+    assert "status >= 500" in api
+    media = api[api.index("export async function mediaObjectUrl"):]
+    assert "body.detail ||" not in media, "media xatosi ham umumiy qoidadan o'tsin"
+    assert "errorText(body, response.status)" in media
+
+
+def test_report_downloads_report_their_failure() -> None:
+    """Yuklash tugmasi jim qolmasin: rad etilgan va'da toast bo'lib chiqsin."""
+    reports = src("owner.tsx")
+    page = reports[reports.index("function ReportsPage("):]
+    page = page[: page.index("\n}\n")]
+    assert "useToast()" in page and "panel.download.failed" in page
+    assert "void downloadDailyReportCsv(siteId)" not in page, "yuklash `void` bilan tashlab yuborilmasin"
 
 
 # ── Matn sifati ───────────────────────────────────────────────────────────

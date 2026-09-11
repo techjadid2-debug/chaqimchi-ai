@@ -3,17 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#11161f" />
     <!-- Tema BIRINCHI chizishdan oldin qo'yiladi.  React ichida
-         qilinsa sahifa bir zumga yorug' ochilib, keyin qorayadi —
-         kechasi telefonda bu ko'zni qamashtiradi.  Kalit
-         `frontend/src/theme.ts` dagi `THEME_KEY` bilan bir xil. -->
+         qilinsa sahifa bir zumga boshqa rangda ochilib, keyin almashadi.
+         Standart QORA (`theme.ts` bilan bir xil); «system» saqlangan
+         bo'lsa atribut qo'yilmaydi — tokens.css media so'rovi ishlaydi.
+         Skript ikkala qobiqda AYNAN bir xil: CSP'da bitta hash
+         (`deploy/Caddyfile*`, `tests/test_security_headers.py`). -->
     <script>
       (function () {
         try {
           var t = localStorage.getItem("enes_theme");
-          if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
-        } catch (e) { /* xususiy oyna — tizim rejimi qoladi */ }
+          if (t === "light") document.documentElement.dataset.theme = "light";
+          else if (t !== "system") document.documentElement.dataset.theme = "dark";
+        } catch (e) { document.documentElement.dataset.theme = "dark"; }
       })();
     </script>
     <title>ENES Monitoring — biznes paneli</title>

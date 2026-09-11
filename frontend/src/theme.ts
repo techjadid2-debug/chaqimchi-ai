@@ -8,9 +8,10 @@ import { t } from "./i18n";
  * bo'lardi.  `system` da esa `prefers-color-scheme` o'zi hal qiladi
  * (`cloud/static/tokens.css` dagi media so'rovi).
  *
- * Standart — `system`.  Do'kon egasining kompyuteri odatda yorug'
- * rejimda, ya'ni panel ham yorug' ochiladi; kechasi kamerani
- * telefondan ko'radigan odam esa qorong'i oladi.
+ * Standart — `dark` (2026-09-11, dizayn-3): namuna to'liq qorong'i va
+ * kamera kadri qorong'i sathda yaxshi o'qiladi — kadr atrofidagi oq
+ * maydon ko'zni kadrdan tortadi.  Yorug' rejim va «tizim» qoladi —
+ * egasi bir bosishda almashtiradi.
  *
  * Tanlov `localStorage` da: u brauzerdan chiqmaydi va serverga
  * yuborilmaydi.  Xususiy oynada o'qish xato bersa (ba'zi brauzerlar
@@ -39,7 +40,7 @@ export function readTheme(): Theme {
   } catch {
     /* saqlash yopiq — standart holat */
   }
-  return "system";
+  return "dark";
 }
 
 /** Tanlov `system` bo'lsa tizim nimani xohlayotgani. */
@@ -48,7 +49,7 @@ export function resolveTheme(theme: Theme): "light" | "dark" {
   try {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   } catch {
-    return "light";
+    return "dark";
   }
 }
 

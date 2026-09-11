@@ -48,7 +48,7 @@
 		#
 		# `telegram.org` — Mini App SDK'si (`owner.html`).  `blob:` —
 		# panel kadr va klipni `URL.createObjectURL` bilan ko'rsatadi.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://telegram.org 'sha256-0GOmhbWvbvAgGk4AueWj7EVEA4P9l0+cO+8xcwykeec='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://telegram.org 'sha256-ghJCUYifnPgktv9/+3n+mhCny+E0zD/orjw2KXeD6C0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
 	log {

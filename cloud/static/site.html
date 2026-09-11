@@ -36,7 +36,7 @@
   <!-- `?v=` — fayl mazmunining SHA-256 boshi.  Bu sahifa
        `scripts/build_site.py` bilan quriladi va token o'sha yerda
        hisoblanadi: qo'lda yangilanadigan narsa qolmadi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=45d35045a7">
+  <link rel="stylesheet" href="/assets/site.css?v=0c90a5c915">
 </head>
 <body class="site">
   <!-- Sahifa ritmi namunadan: qorong'i hero → ochiq imkoniyatlar →
@@ -77,6 +77,22 @@
         <details class="lang-menu"><summary aria-label="Til"><span>UZ</span></summary><div class="lang-menu-list"><a href="/" hreflang="uz" lang="uz" aria-current="true">O‘zbekcha</a><a href="/ru/" hreflang="ru" lang="ru">Русский</a><a href="/en/" hreflang="en" lang="en">English</a></div></details>
         <a class="text-link" href="__APP_URL__/owner">Mijoz kirishi</a>
         <a class="nav-cta" href="#aloqa">Demo olish</a>
+        <!-- Telefon menyusi — `<details>`, nav ichida TUGMASIZ (test qoidasi:
+             `<nav>` faqat havolalar).  Tor ekranda `.nav-links` va «Mijoz
+             kirishi» yashirinadi — ularsiz mijoz telefondan panelga kira
+             olmasdi (QA 2026-09-11). -->
+        <details class="nav-menu">
+          <summary aria-label="Menyu"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#menyu"></use></svg></summary>
+          <div class="nav-menu-list">
+            <a href="#imkoniyat">Imkoniyatlar</a>
+            <a href="#qanday">Qanday ishlaydi</a>
+            <a href="#narx">Narxlar</a>
+            <a href="/edu">Ta’lim uchun</a>
+            <a href="#aloqa">Aloqa</a>
+            <a href="__APP_URL__/owner">Mijoz kirishi</a>
+            <a class="nav-cta" href="#aloqa">Demo olish</a>
+          </div>
+        </details>
       </div>
     </nav>
   </header>
@@ -524,6 +540,6 @@
        `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
        manbadan kelgani uchun ajralib ketmaydi. -->
   <script type="application/json" id="site-data">{"lang": "uz", "t": {"calc_cameras": "kamera", "calc_empty": "Kamida bitta funksiyani tanlang.", "calc_failed": "Hisobni olishning iloji bo‘lmadi. Bizga yozing — qo‘lda hisoblab beramiz.", "calc_lead": "Tarmoq: {shops} ta do‘kon, {features}. Taxminiy {monthly} / oy", "calc_total": "Taxminiy: <b>{monthly}</b> / oy · har do‘kon {per_shop}", "calc_yearly": "Yillik to‘lasangiz: {yearly} ({months} oy hisobidan)", "choose": "Tanlash", "currency": "so‘m", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman", "error_generic": "Xatolik yuz berdi. Qayta urinib ko‘ring.", "feature_note": "AI funksiyalari hozir birinchi do‘konlarda sinovdan o‘tmoqda. Hozir so‘rov qoldirsangiz — ishga tushganda birinchi bo‘lib sizga ulanadi.", "from_per_month": "{price}/oydan", "lead_ok": "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Raqamingiz qabul qilindi. Dastur tayyor bo‘lgan kuni birinchilardan bo‘lib sizga yuboramiz.", "on_request": "So‘rov bo‘yicha", "per_month": "/oy", "plan_message": "Tarif: {name} | Oyiga {price}", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman", "pricing_failed": "Narxni yuklab bo‘lmadi. Sahifani yangilang yoki", "send_failed": "So‘rov yuborilmadi", "sending": "So‘rov yuborilmoqda…", "version": "Versiya {version}", "write_to": "ga yozing."}}</script>
-  <script src="/assets/site.js?v=5122a424e9" defer></script>
+  <script src="/assets/site.js?v=3171c14591" defer></script>
 </body>
 </html>

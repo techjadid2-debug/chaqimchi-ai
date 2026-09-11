@@ -95,6 +95,21 @@
     });
   }
 
+  // ── Telefon menyusi ────────────────────────────────────────────────────
+  //
+  // `<details>` JS'siz ochiladi; JS faqat YOPADI: langar sahifa ichida
+  // (`#narx`) — sahifa yangilanmaydi va menyu ochiq qolib kontentni
+  // to'sib turardi.  Escape ham yopadi.
+  const menus = Array.from(document.querySelectorAll("details.nav-menu"));
+  for (const menu of menus) {
+    menu.addEventListener("click", (event) => {
+      if (event.target.closest("a")) menu.removeAttribute("open");
+    });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") for (const menu of menus) menu.removeAttribute("open");
+  });
+
   // ── Yuklab olish holati ───────────────────────────────────────────────
   //
   // Sahifaga qo'lda "115 MB" deb yozib qo'yish aynan shu yerda xatoga olib

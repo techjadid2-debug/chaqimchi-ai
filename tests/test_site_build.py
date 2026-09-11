@@ -37,6 +37,24 @@ def visible(html: str) -> str:
     return re.sub(r"<!--.*?-->", "", html, flags=re.S)
 
 
+def test_the_phone_menu_reaches_the_login_link() -> None:
+    """Telefonda nav havolalari yashirinadi — menyu bo'lmasa «Mijoz kirishi»
+    faqat footerda qolardi va mijoz panelga kira olmasdi (QA 2026-09-11).
+
+    Menyu `<details>`: nav ichida tugma bo'lmasin qoidasi saqlanadi."""
+    pages = [landing(lang) for lang in LANDINGS] + [
+        (STATIC / name).read_text(encoding="utf-8") for name in ("aloqa.html", "aloqa.ru.html", "oferta.html")
+    ]
+    for html in pages:
+        nav = html[html.index("<nav") : html.index("</nav>")]
+        assert 'class="nav-menu"' in nav, "telefon menyusi yo'q"
+        assert nav.count("__APP_URL__/owner") >= 2, "menyuda ham «Mijoz kirishi» bo'lsin"
+        assert "button" not in nav
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    assert ".nav-menu { display: none;" in css and ".nav-menu { display: block; }" in css
+    assert "icons.svg#menyu" in pages[0]
+
+
 def test_generated_pages_are_up_to_date() -> None:
     """Shablon yoki katalog o'zgarsa `build_site.py` qayta yurgizilsin.
 

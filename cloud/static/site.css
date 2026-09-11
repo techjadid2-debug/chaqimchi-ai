@@ -116,6 +116,17 @@ h1, h2, h3 { margin-top: 0; letter-spacing: -.03em; line-height: 1.1; }
 .lang-menu-list a:hover { background: var(--band-surface-2); color: var(--band-fg); }
 .lang-menu-list a[aria-current="true"] { color: var(--accent); }
 
+/* Telefon menyusi — `<details>`, JS'siz ochiladi (JS faqat yopadi).
+ * Kompyuterda ko'rinmaydi: havolalar navning o'zida. */
+.nav-menu { display: none; position: relative; }
+.nav-menu summary { list-style: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--band-border); border-radius: 10px; color: var(--band-fg); cursor: pointer; }
+.nav-menu summary::-webkit-details-marker { display: none; }
+.nav-menu summary .icon { width: 22px; height: 22px; }
+.nav-menu-list { position: absolute; right: 0; top: calc(100% + 10px); z-index: 30; display: grid; min-width: 240px; padding: 8px; border: 1px solid var(--band-border); border-radius: 14px; background: var(--band-surface); box-shadow: var(--band-shadow); }
+.nav-menu-list a { padding: 12px 14px; border-radius: 10px; color: var(--band-fg); font-size: 15px; font-weight: 600; text-decoration: none; }
+.nav-menu-list a:hover { background: var(--band-surface-2); }
+.nav-menu-list .nav-cta { margin-top: 6px; text-align: center; }
+
 /* ── Tugmalar: uch daraja, blokda BITTA asosiy ────────────────────────
  *   .button-light — ASOSIY (ko'k; qorong'i bo'limda OQ — namunadagidek)
  *   .button       — ikkilamchi (to'q)
@@ -392,6 +403,7 @@ footer > div a:hover { color: var(--band-fg); }
 }
 @media (max-width: 900px) {
   .nav-links { display: none; }
+  .nav-menu { display: block; }
   .hero { grid-template-columns: 1fr; gap: 40px; }
   /* Suzuvchi kartalar tor ekranda fotosuratni yopib qo'yadi — ular
      qo'shimcha ma'lumot, asosiy narsa esa kadrning o'zi. */
@@ -410,7 +422,9 @@ footer > div a:hover { color: var(--band-fg); }
 @media (max-width: 620px) {
   .nav { min-height: 64px; }
   .nav-actions .text-link { display: none; }
-  .nav-actions .nav-cta { min-height: 38px; padding: 0 14px; font-size: 12px; }
+  /* Tor ekranda «Demo olish» menyu ichida — sarlavhada belgi va til qoladi. */
+  .nav-actions > .nav-cta { display: none; }
+  .nav-menu-list .nav-cta { min-height: 44px; }
   .brand { gap: 8px; font-size: 15px; }
   .brand-mark { width: 32px; height: 32px; }
   .brand-lockup svg { width: 32px; height: 26px; }

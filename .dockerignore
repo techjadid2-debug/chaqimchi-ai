@@ -23,3 +23,6 @@ secrets/
 *.pfx
 releases/
 frontend/node_modules/
+# Dizayn mockuplari — image'ga kerak emas
+Yangi dizayn-2/
+dizayn-3/

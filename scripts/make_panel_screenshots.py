@@ -212,6 +212,84 @@ DEMO = {
     },
 }
 
+#: Qolgan sahifalarning javoblari — sotuv rasmi uchun kerak emas, lekin
+#: `ui_qa_screenshots.py` HAMMA marshrutni ochadi: mock bo'lmagan sahifa
+#: xato holatini ko'rsatadi va haqiqiy nuqsonni yashirib yuboradi.
+#: Shakllar `frontend/src/types.ts` dagi turlarga mos.
+_EVENTS = [
+    {"id": "e1", "event_type": "queue_threshold_exceeded", "label": "Kassada navbat ortdi",
+     "camera_id": "camera-02", "occurred_at": f"{TODAY}T18:20:00", "media_expected": True},
+    {"id": "e2", "event_type": "loitering", "label": "Zonada uzoq turish",
+     "camera_id": "camera-03", "occurred_at": f"{TODAY}T17:48:00", "media_expected": False},
+    {"id": "e3", "event_type": "line_crossed", "label": "Kirish cho‘qqisi qayd etildi",
+     "camera_id": "camera-01", "occurred_at": f"{TODAY}T17:05:00", "media_expected": False},
+    {"id": "e4", "event_type": "after_hours_presence", "label": "Yopiq do‘konda odam",
+     "camera_id": "camera-01", "occurred_at": f"{TODAY}T06:12:00", "media_expected": True},
+    {"id": "e5", "event_type": "camera_tampered", "label": "Kamera to‘sildi",
+     "camera_id": "camera-04", "occurred_at": f"{TODAY}T05:40:00", "media_expected": True},
+]
+_TIMELINE_HOURS = [
+    {"hour": hour, "total": total, "with_media": media, "by_type": types}
+    for hour, total, media, types in (
+        (5, 1, 1, {"camera_tampered": 1}), (6, 1, 1, {"after_hours_presence": 1}),
+        (13, 1, 0, {"queue_threshold_exceeded": 1}), (17, 2, 0, {"line_crossed": 1, "loitering": 1}),
+        (18, 1, 1, {"queue_threshold_exceeded": 1}),
+    )
+]
+DEMO.update({
+    "/api/v1/owner/events": {"events": _EVENTS},
+    "/api/v1/owner/events/timeline": {
+        "date": TODAY, "camera_id": None, "total": 6,
+        "hours": [next((h for h in _TIMELINE_HOURS if h["hour"] == hour),
+                       {"hour": hour, "total": 0, "with_media": 0, "by_type": {}})
+                  for hour in range(24)],
+        "types": [
+            {"type": "queue_threshold_exceeded", "label": "Kassada navbat", "total": 2},
+            {"type": "loitering", "label": "Uzoq turish", "total": 1},
+            {"type": "line_crossed", "label": "Kirish", "total": 1},
+            {"type": "after_hours_presence", "label": "Yopiq do‘konda odam", "total": 1},
+            {"type": "camera_tampered", "label": "Kamera to‘sildi", "total": 1},
+        ],
+    },
+    "/api/v1/owner/notifications": {"unread": 2, "events": [
+        {"event_id": "e1", "event_type": "queue_threshold_exceeded", "label": "Kassada navbat ortdi",
+         "camera_id": "camera-02", "occurred_at": f"{TODAY}T18:20:00", "severity": "warning", "unread": True},
+        {"event_id": "e4", "event_type": "after_hours_presence", "label": "Yopiq do‘konda odam",
+         "camera_id": "camera-01", "occurred_at": f"{TODAY}T06:12:00", "severity": "critical", "unread": True},
+    ]},
+    "/api/v1/owner/config": {"config": {
+        "open_from": "09:00", "open_to": "21:00", "telegram_min_severity": "warning",
+    }},
+    "/api/v1/owner/invoices": [
+        {"id": "1042", "months": 1, "amount_uzs": 299_000, "state": "paid",
+         "created_at": (NOW - timedelta(days=6)).isoformat(), "paid_at": (NOW - timedelta(days=5)).isoformat()},
+        {"id": "1051", "months": 3, "amount_uzs": 897_000, "state": "pending",
+         "created_at": NOW.isoformat(), "pay_url": "https://example.invalid/pay"},
+    ],
+    "/api/v1/owner/agent/settings": {
+        "consented": False, "audio_reply_enabled": False, "provider_configured": True,
+    },
+    "/api/v1/owner/overview": {
+        "from": (NOW - timedelta(days=6)).date().isoformat(), "to": TODAY, "days": 7,
+        "daily": [
+            {"date": (NOW - timedelta(days=offset)).date().isoformat(), "weekday": "",
+             "entered": entered, "exited": entered - 4,
+             "by_door": [{"camera_id": "camera-01", "label": "Kirish eshigi", "entered": entered, "exited": entered - 4}],
+             "events": {"queue_threshold_exceeded": 2, "loitering": 1}, "receipts": None}
+            for offset, entered in zip(range(6, -1, -1), [221, 238, 259, 244, 271, 233, 268])
+        ],
+        "totals": {"entered": 1734, "exited": 1706, "previous_entered": 1611, "change_percent": 7.6,
+                   "busiest_day": {"date": TODAY, "weekday": "", "entered": 271},
+                   "receipts": None, "entered_with_receipts": 0, "conversion": None},
+        "by_door": [{"camera_id": "camera-01", "label": "Kirish eshigi", "entered": 1734, "exited": 1706}],
+        "events": {"queue_threshold_exceeded": 14, "loitering": 7},
+    },
+    "/api/v1/owner/demography": {"hisoblangan": 0},
+    "/api/v1/owner/faces": {"employees": []},
+    "/api/v1/owner/employees": {"employees": []},
+    "/api/v1/owner/attendance": {"rows": []},
+})
+
 #: Kamera plitkalari uchun haqiqiy kadr o'rniga do'kon fotosuratlari.
 #: Bo'sh plitka ("Kadr kelmadi") sotuv sahifasida tizim ishlamayotgandek
 #: ko'rinardi.

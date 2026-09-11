@@ -52,8 +52,10 @@ config/secrets.yml
 # Frontend (React v2 panel) — bog'liqliklar npm ci bilan tiklanadi
 frontend/node_modules/
 
-# Dizayn namunalari (rasm mockuplari) — repoga kirmaydi
+# Dizayn namunalari (rasm mockuplari) — repoga kirmaydi.  dizayn-3: ega bergan
+# 5 ta PNG (~9 MB), saytga faqat kesilgan WebP nusxasi kiradi (cloud/static/).
 Yangi dizayn-2/
+dizayn-3/
 
 # IDE / OS
 .idea/

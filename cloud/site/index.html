@@ -93,34 +93,7 @@
               <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 10 7-10 7z"></path></svg>
             </a>
 
-            <!-- Dastur nashr qilingan bo'lsa havola, aks holda pastdagi
-                 "xabar bering" formasi.  Qaysi biri — serverdan so'raladi
-                 (`/api/v1/public/windows-release`). -->
-            <div id="downloadReady" class="download-action" hidden>
-              <a class="button button-ghost button-small" id="downloadBtn" href="/api/v1/public/download-installer">
-                <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
-                {{site.hero.download}}
-              </a>
-              <!-- Versiya ko'rinib turishi shart: usiz mijoz (va biz)
-                   yangi fayl chiqqanini bilolmaydi. -->
-              <p class="hint" id="downloadVersion" hidden></p>
-              <p class="hint">{{site.hero.install_hint}} <a href="/install">{{site.hero.install_link}}</a></p>
-            </div>
           </div>
-
-          <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
-          <form id="notifyForm" class="quick-download-form" hidden>
-            <p class="hint">{{site.notify.lead}}</p>
-            <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="{{site.notify.phone_placeholder}}">
-            <label class="consent">
-              <input name="consent" type="checkbox" required>
-              <span>{{site.notify.consent}}</span>
-            </label>
-            <input name="full_name" type="hidden" value="{{site.notify.hidden_name}}">
-            <input name="website" type="hidden" value="">
-            <button class="button button-light" type="submit">{{site.notify.submit}}</button>
-            <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
-          </form>
         </div>
 
         <!-- Hero'da MAHSULOTNING O'ZI: panel ramkasi ichida jonli kamera
@@ -134,9 +107,13 @@
             <span class="panel-date">{{site.frame.today}}</span>
           </div>
           <div class="panel-body">
-            <img class="panel-shot" src="/assets/design2-retail.webp"
+            <!-- Ega bergan foto (dizayn-3): kamera ostidagi kirish zonasi,
+                 «Person» ramkalari — tizim aynan shuni qiladi.  O'ngdagi
+                 «Shaxs aniqlandi… ro'yxatda yo'q» kartasi ATAYLAB kesilgan:
+                 bu yuzni tanish va'dasi, MVP'da yo'q. -->
+            <img class="panel-shot" src="/assets/hero-lobby-v1.webp"
                  alt="{{site.frame.shot_alt}}"
-                 width="1400" height="788" fetchpriority="high">
+                 width="1120" height="941" fetchpriority="high">
             <span class="panel-live"><i></i> {{site.frame.live}}</span>
 
             <div class="panel-card panel-stat">
@@ -149,17 +126,47 @@
               </svg>
             </div>
 
-            <div class="panel-card panel-alerts">
-              <p>{{site.frame.alerts_title}}</p>
-              <ul>
-                <li><i class="bad"></i> {{site.frame.alert_1}} <time>12:45</time></li>
-                <li><i class="warn"></i> {{site.frame.alert_2}} <time>12:30</time></li>
-                <li><i></i> {{site.frame.alert_3}} <time>12:15</time></li>
-              </ul>
+            <!-- Namunadagi suzuvchi hodisa kartasi — lekin ROST hodisa turi:
+                 «Kassada navbat uzun» o'lchanadi va sotiladi; «Shaxs
+                 aniqlandi» esa yo'q. -->
+            <div class="panel-card panel-event">
+              <span class="panel-event-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg></span>
+              <div><b>{{site.frame.event_title}}</b><small>{{site.frame.event_meta}}</small></div>
             </div>
           </div>
           <figcaption class="hint">{{site.frame.caption}}</figcaption>
         </figure>
+      </div>
+
+      <!-- Yuklab olish — hero'ning uchinchi darajali harakati, shuning
+           uchun ikkita asosiy tugma yonida emas, alohida qatorda.  Dastur
+           nashr qilingan bo'lsa havola, aks holda "xabar bering" formasi;
+           qaysi biri — serverdan (`/api/v1/public/windows-release`). -->
+      <div class="download-strip section-pad">
+        <div id="downloadReady" class="download-action" hidden>
+          <a class="button button-ghost button-small" id="downloadBtn" href="/api/v1/public/download-installer">
+            <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
+            {{site.hero.download}}
+          </a>
+          <!-- Versiya ko'rinib turishi shart: usiz mijoz (va biz)
+               yangi fayl chiqqanini bilolmaydi. -->
+          <p class="hint" id="downloadVersion" hidden></p>
+          <p class="hint">{{site.hero.install_hint}} <a href="/install">{{site.hero.install_link}}</a></p>
+        </div>
+
+        <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
+        <form id="notifyForm" class="quick-download-form" hidden>
+          <p class="hint">{{site.notify.lead}}</p>
+          <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="{{site.notify.phone_placeholder}}">
+          <label class="consent">
+            <input name="consent" type="checkbox" required>
+            <span>{{site.notify.consent}}</span>
+          </label>
+          <input name="full_name" type="hidden" value="{{site.notify.hidden_name}}">
+          <input name="website" type="hidden" value="">
+          <button class="button button-light" type="submit">{{site.notify.submit}}</button>
+          <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
+        </form>
       </div>
 
       <!-- Raqamlar qatori — faqat ROST raqamlar. -->

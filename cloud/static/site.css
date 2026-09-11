@@ -149,11 +149,14 @@ h1 span, h1 em { display: block; }
 h1 em { color: var(--accent); font-style: normal; }
 .hero-text { max-width: 560px; margin: 0 0 26px; color: var(--band-muted); font-size: 17px; line-height: 1.7; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-/* Yuklab olish bloki ikkita asosiy tugmadan KEYIN, butun kenglikda:
-   u uchinchi darajali harakat va ular bilan bir qatorda turmasin. */
-.download-action { flex-basis: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 4px; }
+/* Yuklab olish — hero ostida alohida qator: uchinchi darajali harakat
+   ikkita asosiy tugma bilan bir ustunda turib ularni ko'mib yubormasin
+   (namunada hero'da faqat ikki tugma). */
+.download-strip { padding-top: 0; padding-bottom: 28px; }
+.download-action { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.download-action .hint { margin: 0; }
 /* Yuklab olish hali nashr qilinmaganda chiqadigan telefon formasi. */
-.quick-download-form { display: grid; gap: 10px; max-width: 420px; margin-top: 18px; }
+.quick-download-form { display: grid; gap: 10px; max-width: 420px; }
 .quick-download-form input { padding: 12px 14px; border: 1px solid var(--band-border); border-radius: 12px; background: var(--band-surface); color: var(--band-fg); }
 .model-note { max-width: 590px; margin: 24px 0 0; padding-left: 16px; border-left: 3px solid var(--accent); color: var(--band-muted); font-size: 13px; }
 
@@ -167,7 +170,7 @@ h1 em { color: var(--accent); font-style: normal; }
 .panel-tabs i { font-style: normal; white-space: nowrap; }
 .panel-date { margin-left: auto; padding: 6px 11px; border: 1px solid var(--band-border); border-radius: 8px; color: var(--band-muted); font-weight: 650; white-space: nowrap; }
 .panel-body { position: relative; }
-.panel-shot { display: block; width: 100%; height: 470px; object-fit: cover; object-position: 55% 42%; }
+.panel-shot { display: block; width: 100%; height: 470px; object-fit: cover; object-position: 50% 30%; }
 .panel-live { position: absolute; left: 14px; bottom: 14px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: rgba(5,7,10,.78); color: #fff; font-size: 12px; font-weight: 650; backdrop-filter: blur(6px); }
 .panel-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 /* Kartalar kadr ustida QORONG'I — kadrning o'zi to'q, oq karta ko'zni
@@ -178,13 +181,12 @@ h1 em { color: var(--accent); font-style: normal; }
 .panel-stat strong { display: block; font-size: 30px; font-weight: 800; letter-spacing: -.03em; }
 .panel-delta { display: block; margin-top: 2px; color: var(--green); font-size: 11.5px; font-weight: 700; }
 .panel-spark { display: block; width: 100%; height: 46px; margin-top: 8px; color: var(--accent); }
-.panel-alerts { bottom: 14px; }
-.panel-alerts ul { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
-.panel-alerts li { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 9px; font-size: 11.5px; }
-.panel-alerts i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-.panel-alerts .warn { background: var(--yellow); }
-.panel-alerts .bad { background: var(--red); }
-.panel-alerts time { color: #98a4b8; font-variant-numeric: tabular-nums; }
+/* Hodisa kartasi — namunadagi suzuvchi «hodisa» yorlig'i. */
+.panel-event { bottom: 14px; display: flex; align-items: center; gap: 12px; width: 250px; }
+.panel-event-icon { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: rgba(251,188,5,.18); color: var(--yellow); }
+.panel-event-icon .icon { width: 20px; height: 20px; }
+.panel-event b { display: block; font-size: 13px; font-weight: 700; }
+.panel-event small { display: block; margin-top: 2px; color: #98a4b8; font-size: 11.5px; }
 .hero-panel figcaption { padding: 10px 16px; margin: 0; }
 
 /* ── Raqamlar qatori (hero ostida, namunadagi statistika chizig'i) ──── */

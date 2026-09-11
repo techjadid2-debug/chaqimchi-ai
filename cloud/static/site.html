@@ -36,7 +36,7 @@
   <!-- `?v=` — fayl mazmunining SHA-256 boshi.  Bu sahifa
        `scripts/build_site.py` bilan quriladi va token o'sha yerda
        hisoblanadi: qo'lda yangilanadigan narsa qolmadi. -->
-  <link rel="stylesheet" href="/assets/site.css?v=2c0186560c">
+  <link rel="stylesheet" href="/assets/site.css?v=45d35045a7">
 </head>
 <body class="site">
   <!-- Sahifa ritmi namunadan: qorong'i hero → ochiq imkoniyatlar →
@@ -108,34 +108,7 @@
               <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 10 7-10 7z"></path></svg>
             </a>
 
-            <!-- Dastur nashr qilingan bo'lsa havola, aks holda pastdagi
-                 "xabar bering" formasi.  Qaysi biri — serverdan so'raladi
-                 (`/api/v1/public/windows-release`). -->
-            <div id="downloadReady" class="download-action" hidden>
-              <a class="button button-ghost button-small" id="downloadBtn" href="/api/v1/public/download-installer">
-                <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
-                Windows uchun yuklab olish
-              </a>
-              <!-- Versiya ko'rinib turishi shart: usiz mijoz (va biz)
-                   yangi fayl chiqqanini bilolmaydi. -->
-              <p class="hint" id="downloadVersion" hidden></p>
-              <p class="hint">O‘rnatish: Keyingi → Keyingi → Tayyor. <a href="/install">Qadam-baqadam yo‘riqnoma</a></p>
-            </div>
           </div>
-
-          <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
-          <form id="notifyForm" class="quick-download-form" hidden>
-            <p class="hint">Windows dasturi hozir yakuniy sinovdan o‘tmoqda. Raqamingizni qoldiring — tayyor bo‘lgan kuni yuboramiz.</p>
-            <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="Telefoningiz: +998 90 000 00 00">
-            <label class="consent">
-              <input name="consent" type="checkbox" required>
-              <span>Bog‘lanish uchun ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
-            </label>
-            <input name="full_name" type="hidden" value="Windows dasturi kutmoqda">
-            <input name="website" type="hidden" value="">
-            <button class="button button-light" type="submit">Tayyor bo‘lganda xabar bering</button>
-            <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
-          </form>
         </div>
 
         <!-- Hero'da MAHSULOTNING O'ZI: panel ramkasi ichida jonli kamera
@@ -158,10 +131,14 @@
             <span class="panel-date">Bugun</span>
           </div>
           <div class="panel-body">
-            <img class="panel-shot" src="/assets/design2-retail.webp"
-                 alt="Savdo do‘konida odam oqimini AI orqali tahlil qilish namunasi"
-                 width="1400" height="788" fetchpriority="high">
-            <span class="panel-live"><i></i> Jonli · Kamera 03 — Kassa zonasi</span>
+            <!-- Ega bergan foto (dizayn-3): kamera ostidagi kirish zonasi,
+                 «Person» ramkalari — tizim aynan shuni qiladi.  O'ngdagi
+                 «Shaxs aniqlandi… ro'yxatda yo'q» kartasi ATAYLAB kesilgan:
+                 bu yuzni tanish va'dasi, MVP'da yo'q. -->
+            <img class="panel-shot" src="/assets/hero-lobby-v1.webp"
+                 alt="ENES kamerasi ostidagi do‘kon kirish zonasi: odamlar ramka bilan belgilangan"
+                 width="1120" height="941" fetchpriority="high">
+            <span class="panel-live"><i></i> Jonli · Kamera 01 — Kirish</span>
 
             <div class="panel-card panel-stat">
               <p>Bugungi mijozlar</p>
@@ -173,17 +150,47 @@
               </svg>
             </div>
 
-            <div class="panel-card panel-alerts">
-              <p>AI ogohlantirish</p>
-              <ul>
-                <li><i class="bad"></i> Kassa oldida navbat uzun <time>12:45</time></li>
-                <li><i class="warn"></i> Kirishda odam to‘planmoqda <time>12:30</time></li>
-                <li><i></i> Tovar qutilari zonada qoldi <time>12:15</time></li>
-              </ul>
+            <!-- Namunadagi suzuvchi hodisa kartasi — lekin ROST hodisa turi:
+                 «Kassada navbat uzun» o'lchanadi va sotiladi; «Shaxs
+                 aniqlandi» esa yo'q. -->
+            <div class="panel-card panel-event">
+              <span class="panel-event-icon"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#navbat"></use></svg></span>
+              <div><b>Kassada navbat uzun</b><small>12:34 · Kassa zonasi</small></div>
             </div>
           </div>
           <figcaption class="hint">Panel ko‘rinishi · raqamlar namunaviy</figcaption>
         </figure>
+      </div>
+
+      <!-- Yuklab olish — hero'ning uchinchi darajali harakati, shuning
+           uchun ikkita asosiy tugma yonida emas, alohida qatorda.  Dastur
+           nashr qilingan bo'lsa havola, aks holda "xabar bering" formasi;
+           qaysi biri — serverdan (`/api/v1/public/windows-release`). -->
+      <div class="download-strip section-pad">
+        <div id="downloadReady" class="download-action" hidden>
+          <a class="button button-ghost button-small" id="downloadBtn" href="/api/v1/public/download-installer">
+            <svg class="cta-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 20h14"></path></svg>
+            Windows uchun yuklab olish
+          </a>
+          <!-- Versiya ko'rinib turishi shart: usiz mijoz (va biz)
+               yangi fayl chiqqanini bilolmaydi. -->
+          <p class="hint" id="downloadVersion" hidden></p>
+          <p class="hint">O‘rnatish: Keyingi → Keyingi → Tayyor. <a href="/install">Qadam-baqadam yo‘riqnoma</a></p>
+        </div>
+
+        <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
+        <form id="notifyForm" class="quick-download-form" hidden>
+          <p class="hint">Windows dasturi hozir yakuniy sinovdan o‘tmoqda. Raqamingizni qoldiring — tayyor bo‘lgan kuni yuboramiz.</p>
+          <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="Telefoningiz: +998 90 000 00 00">
+          <label class="consent">
+            <input name="consent" type="checkbox" required>
+            <span>Bog‘lanish uchun ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
+          </label>
+          <input name="full_name" type="hidden" value="Windows dasturi kutmoqda">
+          <input name="website" type="hidden" value="">
+          <button class="button button-light" type="submit">Tayyor bo‘lganda xabar bering</button>
+          <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
+        </form>
       </div>
 
       <!-- Raqamlar qatori — faqat ROST raqamlar. -->

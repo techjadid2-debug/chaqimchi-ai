@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="uz" data-theme="light">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{site.notfound.title}} — ENES Monitoring</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.png" type="image/png"><link rel="stylesheet" href="{{asset:site.css}}"></head>
+<!-- Brendli 404 (QA 2026-09-11): ilgari noto'g'ri manzil FastAPI'ning xom
+     JSON'ini ko'rsatardi — mijoz «sayt buzilgan» deb o'ylardi.  Faqat
+     o'zbekcha: sahifa qidiruvga kirmaydi, ikki tilga tarjima ortiqcha. -->
+<body class="utility-page">
+  {{include:partials/nav-sub.html}}
+<main class="utility-main">
+    <p class="eyebrow"><span></span> 404</p><h1>{{site.notfound.title}}</h1>
+    <section class="utility-card">
+      <p>{{site.notfound.text}}</p>
+      <p class="notfound-actions"><a class="button button-light" href="/">{{site.notfound.home}}</a> <a class="button button-ghost" href="/#aloqa">{{site.notfound.contact}}</a></p>
+    </section>
+  </main>
+  {{include:partials/footer.html}}
+</body>
+</html>

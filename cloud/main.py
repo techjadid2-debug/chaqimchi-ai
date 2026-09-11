@@ -40,9 +40,11 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from fastapi.exception_handlers import http_exception_handler as fastapi_http_exception_handler
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cloud import (
     botfmt,
@@ -2731,7 +2733,7 @@ async def tariffs_redirect() -> RedirectResponse:
     return RedirectResponse("/#narx", status_code=301)
 
 
-def _render_public(name: str, request: Request) -> HTMLResponse:
+def _render_public(name: str, request: Request, status_code: int = 200) -> HTMLResponse:
     """Placeholder'li ochiq sahifa: bo'lim manzillari va bot havolasi qo'yiladi.
 
     2026-09-08: shablondan qurilgan HAMMA sahifa shu yerdan o'tadi —
@@ -2757,7 +2759,29 @@ def _render_public(name: str, request: Request) -> HTMLResponse:
         .replace("__PARTNER_URL__", urls.partner_url() or origin)
         .replace("__DL_URL__", urls.dl_url() or origin)
     )
-    return HTMLResponse(content)
+    return HTMLResponse(content, status_code=status_code)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def branded_not_found(request: Request, exc: StarletteHTTPException):
+    """Noma'lum manzil brauzerda brendli 404 sahifa bo'lsin, xom JSON emas.
+
+    QA 2026-09-11: `enes.uz/narxlar` `{"detail":"Not Found"}` ko'rsatardi —
+    mijoz saytni buzilgan deb o'ylaydi.  Faqat apex host, faqat HTML
+    kutgan so'rov va faqat `/api/` dan tashqari yo'llar: API mijozlari
+    (qurilma, panel) va subdomenlar JSON'ini o'zgarishsiz oladi — testlar
+    va qurilma xatoni `detail` bo'yicha o'qiydi.
+    """
+    wants_html = "text/html" in request.headers.get("accept", "")
+    if (
+        exc.status_code == 404
+        and wants_html
+        and _host_section(request) == "apex"
+        and not request.url.path.startswith("/api/")
+        and (STATIC_DIR / "404.html").is_file()
+    ):
+        return _render_public("404.html", request, status_code=404)
+    return await fastapi_http_exception_handler(request, exc)
 
 
 @app.get("/rozilik-shabloni", include_in_schema=False)

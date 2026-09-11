@@ -123,6 +123,8 @@ PAGES: tuple[Page, ...] = (
     _uz("edu"),
     _uz("installer-guide", index=False),
     _uz("pay", index=False),
+    # Brendli 404 — server noma'lum apex manzil uchun beradi (`cloud/main.py`).
+    _uz("404", index=False),
 )
 PAGE_BY_SLUG = {page.slug: page for page in PAGES}
 

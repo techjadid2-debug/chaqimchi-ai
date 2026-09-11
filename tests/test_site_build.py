@@ -145,7 +145,7 @@ def test_cache_tokens_are_computed_not_typed() -> None:
 # ── Ichki sahifalar ─────────────────────────────────────────────────────
 
 SUBPAGES = ("aloqa", "hamkorlik", "status", "connect", "dl")
-UZ_ONLY = ("install", "privacy", "oferta", "rozilik-shabloni", "kuzatuv-eslatmasi", "edu", "installer-guide", "pay")
+UZ_ONLY = ("install", "privacy", "oferta", "rozilik-shabloni", "kuzatuv-eslatmasi", "edu", "installer-guide", "pay", "404")
 
 
 @pytest.mark.parametrize("slug", SUBPAGES)
@@ -230,6 +230,24 @@ def test_localized_subpages_are_served_with_placeholders_filled(client: TestClie
 
 def test_unknown_localized_slug_is_404(client: TestClient) -> None:
     assert client.get("/ru/yo-q-sahifa").status_code == 404
+
+
+def test_unknown_apex_path_gets_a_branded_404(client: TestClient, monkeypatch) -> None:
+    """Brauzer noto'g'ri manzilda brendli sahifa ko'rsin, xom JSON emas;
+    API mijozlari va subdomenlar esa JSON'ini o'zgarishsiz olsin."""
+    monkeypatch.setenv("ENES_PUBLIC_URL", "https://enes.uz")
+    monkeypatch.setenv("ENES_APP_URL", "https://app.enes.uz")
+    html = client.get("/narxlar", headers={"host": "enes.uz", "accept": "text/html"})
+    assert html.status_code == 404
+    assert "text/html" in html.headers["content-type"]
+    assert "brand-lockup" in html.text and "__APP_URL__" not in html.text
+    assert 'name="robots" content="noindex"' in html.text
+    api = client.get("/api/v1/yo-q", headers={"host": "enes.uz", "accept": "text/html"})
+    assert api.status_code == 404 and "application/json" in api.headers["content-type"]
+    sub = client.get("/narxlar", headers={"host": "app.enes.uz", "accept": "text/html"})
+    assert sub.status_code == 404 and "application/json" in sub.headers["content-type"]
+    plain = client.get("/narxlar", headers={"host": "enes.uz"})
+    assert "application/json" in plain.headers["content-type"], "Accept'siz so'rov JSON qoladi"
 
 
 @pytest.mark.parametrize("path", ["/oferta", "/maxfiylik", "/install", "/status", "/connect", "/rozilik-shabloni", "/kuzatuv-eslatmasi"])

@@ -126,6 +126,8 @@ h1, h2, h3 { margin-top: 0; letter-spacing: -.03em; line-height: 1.1; }
 .nav-menu-list a { padding: 12px 14px; border-radius: 10px; color: var(--band-fg); font-size: 15px; font-weight: 600; text-decoration: none; }
 .nav-menu-list a:hover { background: var(--band-surface-2); }
 .nav-menu-list .nav-cta { margin-top: 6px; text-align: center; }
+/* 404 sahifasi — ikki yo'l: bosh sahifa yoki aloqa. */
+.notfound-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
 
 /* ── Tugmalar: uch daraja, blokda BITTA asosiy ────────────────────────
  *   .button-light — ASOSIY (ko'k; qorong'i bo'limda OQ — namunadagidek)

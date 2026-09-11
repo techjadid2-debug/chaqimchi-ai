@@ -522,7 +522,7 @@ koddan olib tashlangan.
 flowchart TB
   REQ(["Brauzer so'rovi<br/>/owner/* · /admin/*"])
   NEW["cloud/static/v2/<br/>React + TypeScript"]
-  SRC["frontend/src/<br/>owner.tsx · admin.tsx · OwnerHome · AdminHome<br/>Connect · GeometryEditor · VisionAgent"]
+  SRC["frontend/src/<br/>owner.tsx · admin.tsx · OwnerHome · AdminHome<br/>Cameras · CameraDetail · Connect · GeometryEditor · VisionAgent"]
 
   REQ --> NEW
   SRC -->|"vite build (make ui-build)<br/>Dockerfile 1-bosqich"| NEW
@@ -558,6 +558,12 @@ biriktirish, login, hisob, obuna, yuz tanish), `AdminTeam.tsx`,
 |---|---|
 | v2 manba | `frontend/src/` |
 | Grafiklar (kutubxonasiz SVG) | `frontend/src/charts.tsx`; davr/overview yordamchilari `overview.tsx` |
+| Kamera plitkalari va jonli oqim keepalive | `frontend/src/Cameras.tsx` (bosh sahifa, «Kameralar», kamera sahifasi — bitta komponent) |
+| Alohida kamera sahifasi `/owner/cameras/camera-NN/{live,analytics,alerts}` | `frontend/src/CameraDetail.tsx`; manzilning 3-segmenti `router.ts` (`sub`) |
+| Xato chizig'i (bitta ko'rinish, «Qayta urinish») | `frontend/src/components.tsx: ErrorStrip` |
+| Skrinshot QA harnesi (toshish, xom kalit, abadiy skelet, `--fail-api`, `--site`) | `scripts/ui_qa_screenshots.py` (Playwright `.venv` da) |
+| Kesh tokenlari (`tokens.css` → `site.css`/`docs.css` → sahifalar) | `scripts/bump_asset_tokens.py` |
+| Brendli 404 (apex, HTML so'rov) | `cloud/main.py: branded_not_found`, shablon `cloud/site/404.html` |
 | Telegram uchun grafik rasm | `cloud/chartimg.py` (Pillow, shrift `cloud/assets/fonts/`) |
 | Tungi rejim (qurilma) | `enes/retail/nightmode.py`, `pipeline.py: _night_motion`, `tamper.py: relearn` |
 | v2 qurilishi | `frontend/vite.config.ts` → `cloud/static/v2` |

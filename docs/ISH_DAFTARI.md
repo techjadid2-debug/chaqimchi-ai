@@ -9,6 +9,46 @@
 
 ## HOZIRGI HOLAT · 2026-09-11
 
+- **🎨 UI/UX QA + DIZAYN-3 — KODDA TAYYOR, DEPLOY KUTADI (2026-09-11,
+  `3c19d63`…`28b73cd`, 9 commit).**  Ega «xatolar ko'p» dedi; jonli sayt
+  va panel Playwright bilan (telefon emulyatsiyasi 390, desktop 1280,
+  ikki tema) QA qilindi — topilmalar va reja
+  `~/.claude/plans/ui-ux-bo-yicha-tahlil-qil-eventual-cat.md`.
+  Qarorlar: sayt + panel; mockupdagi rost bo'lmagan va'dalar
+  («Shubhali harakat», «Shaxs aniqlandi… ro'yxatda yo'q», Face ID,
+  1000+/99.9%/24/7, App Store, ENES Box) OLINMADI — dizayn olindi, matn
+  rost; panel standart temasi QORA.
+  **Tuzatildi (panel):** API yiqilganda xato + abadiy skelet (Dalillar,
+  AI yordamchi, Tarif, Telegram) → `ErrorStrip` + «Qayta urinish»; xom
+  FastAPI matni yashirildi; telefonda `.page-actions` yashirilmaydi
+  (kamera Jonli/AI, Rasm/Klip, Xodim qo'shish, hisobot tugmalari qaytdi);
+  do'kon tanlagich «Nam⌄» → til/tema «Yana» menyusida; tablar so'nuvchi
+  chet + strelkalar; «Excel» yorlig'i → CSV; ish vaqti badge'i sozlama
+  kelgach; bitta do'konda Filiallar bo'sh emas; KPI kartasi bitta
+  komponent; IR belgisi o'z rangi.  **Dizayn-3 (panel):** standart qora
+  tema (CSP hash ikkala Caddyfile'da yangilandi — **deployda Caddy
+  konteyneri qayta yaratilsin**); bosh sahifa 5 doimiy KPI, hodisa
+  rasmchasi (`has_snapshot`), «So'nggi hodisalar», topbar do'kon chipi;
+  **alohida kamera sahifasi** `/owner/cameras/camera-NN/{live|analytics|alerts}`
+  (`Cameras.tsx`, `CameraDetail.tsx`, router 3-segment).  **Sayt:** hero
+  ega bergan lobby fotosi + rost hodisa kartasi «Kassada navbat uzun»,
+  2 ta CTA; telefon menyusi (`<details>`, «Mijoz kirishi» ichida);
+  brendli 404 (apex, HTML so'rov); rasmlar `hero-lobby-v1.webp`,
+  `shop-corridor-v1.webp` (< 200 KB).  **Vositalar:**
+  `scripts/ui_qa_screenshots.py` (toshish / xom kalit / konsol / abadiy
+  skelet / tugma soni; `--fail-api`, `--site`),
+  `scripts/bump_asset_tokens.py` (kesh tokenlari).  Yakuniy matritsa
+  (19 marshrut × 3 til × 2 tema × 2 kenglik, 228 surat) RU/EN da 10 ta
+  gorizontal toshish topdi — o'zbekchada ko'rinmasdi (yorliqlar qisqa):
+  karta `min-width:auto`, `.segmented`, `.bottom-nav` (`e9` tuzatmasi);
+  qayta yurgizilganda 0 nuqson, `--fail-api` 0 skelet, sayt 0.
+  ⏳ **Deploy qilinmagan** — `rsync` + `deploy_cloud.sh`, keyin Caddy
+  restart (hash).  ⚠️ **Ikkita test HEAD da allaqachon yiqilardi** (menga
+  aloqasi yo'q, tuzatilmadi): `test_status_chain.py::…silently_dropped`
+  (`night` stat holat fayliga yozilmaydi — 10-sentabr tungi ishi) va
+  `test_windows_installer.py::test_ci_gives_the_build_a_cloud_address`
+  (workflow'da `ENES_DEFAULT_CLOUD_URL:` yo'q).
+
 - **🚀 F7 CUTOVER BAJARILDI — SERVER YANGI KODDA, DEPLOY TAQIQI OLINDI
   (2026-09-11, `ea7c7cd`, `7b5686c`).**  Jonli server endi `enes` loyihasi:
   `/home/deploy/enes` (`chaqimchi-ai` → symlink), `/etc/enes`
@@ -670,6 +710,25 @@
 
 ## KEYINGI ISH
 
+**UI/UX (2026-09-11) — qoldiqlar, tartib bilan:**
+1. **Deploy** (cloud + panel bundle + Caddyfile): `rsync` → `deploy_cloud.sh`
+   → **Caddy konteynerini qayta yaratish** (CSP hash o'zgardi, aks holda
+   panel qobig'i CSP-Report-Only da hisobot beradi; majburiy rejimga
+   o'tgach esa qora tema skripti bloklanardi).  Keyin jonli tekshiruv:
+   `curl -H 'Accept: text/html' https://enes.uz/narxlar` → HTML 404;
+   telefonda menyu → «Mijoz kirishi»; `app.enes.uz/owner` qora ochiladi;
+   `/owner/cameras/camera-01/alerts` deep link; hero lobby fotosi.
+2. Ikkita eski yiqilgan testni yopish (`night` stat, CI `ENES_DEFAULT_CLOUD_URL`).
+3. NICE (rejada qolgan): issiqlik xaritasi oqarishi — REAL ma'lumotda
+   tekshirish (pilot tirilgach), kerak bo'lsa `paintHeat` alfa yig'indi
+   usuli; `#aloqa` fonida `shop-corridor-v1.webp`; «AI yordamchi» tabini
+   funksiya o'chiq bo'lsa yashirish; Modal fokus tuzog'i; kirish sahifasi
+   standart tili (brauzer EN bo'lsa UZ?); `admin.tsx` literal matnlari;
+   `panel-bugun-v4.webp` (bosh sahifa o'zgardi — sayt skrinshoti eski);
+   EventEvidence kamera sahifasida ikkinchi sarlavhasiz (`embedded`).
+4. Playwright `.venv` da ad-hoc (requirements-dev'da yo'q) — harnes CI'da
+   ishlamaydi; qo'shish alohida qaror.
+
 **BUGUNGI HOLAT (2026-09-10).** 0.6.32 uch commitga bo'linib commit
 qilindi (`fb42f06`, `23b4cad`, `413aef0`) va nashr etildi
 (`chaqimchi-windows-0.6.32`, `LEGACY_NAME=1`).  **Egadan DNS va bot
@@ -1127,10 +1186,42 @@ taklif qilish kerak.
   `scripts/build_i18n.py` faqat `PANEL_PREFIXES` ni TS katalogiga
   ko'chiradi — `chart.*` (server rasmi) va `digest.*` panelga chiqmaydi,
   `t("chart.total")` ekranda kalitning o'zini ko'rsatadi.
-- **`.page-actions` 480 px da yashirin.**  Sahifa sarlavhasidagi
-  tugmalar telefonda ko'rinmaydi (ataylab — CSV tugmalari).  Davr
-  tanlagichi `:has(.period-bar)` istisnosi bilan qoladi; sarlavhaga yangi
-  BOSHQARUV qo'shilsa shu istisnoga kiritilsin.
+- **`.page-actions` telefonda YASHIRILMAYDI (2026-09-11 dan).**  Ilgari
+  ≤480 px da `display:none` edi va kamera «Jonli/AI», Dalillar «Rasm/Klip»,
+  «Xodim qo'shish», hisobot yuklash tugmalari telefonda yo'q edi — QA
+  ushladi.  Endi `.page-header .page-actions` sarlavha ostiga tushadi,
+  `.event-row .page-actions` qator ostiga (aks holda nom «Navbat …» bo'lib
+  siqiladi).  Tugma matni ham yashirilmaydi (`aria-label`siz ikonka).
+  Qulf: `test_page_actions_stay_usable_on_phones`.
+- **Kamera sahifasi — manzilning UCHINCHI segmenti.**  `cameras` bo'limida
+  ikkinchi segment tab nomi (`live|setup|zones`) ham, kamera ID
+  (`camera-NN`, server naqshi bilan bir xil) ham bo'ladi; uchinchisi kamera
+  tabi.  `CAMERA_TABS` ni `TABS` ga QO'SHMANG — `LEGACY_ROUTES` testi
+  `TABS` matnini o'qiydi va menyu tablari bilan aralashib ketadi.
+  Kamera plitkalari `Cameras.tsx` da — `owner.tsx` ga qaytarilsa
+  `test_live_view_uses_its_own_endpoint` boshqa faylni qidiradi.
+- **Tema boot skripti = CSP hash.**  `frontend/owner.html` va `admin.html`
+  dagi inline skript AYNAN bir xil bo'lishi shart (bitta hash); o'zgarsa
+  `make ui-build` → `pytest tests/test_security_headers.py` yangi hashni
+  aytadi → `deploy/Caddyfile` VA `Caddyfile.enes` → deployda Caddy qayta
+  yaratiladi.  Hash qurilgan `cloud/static/v2/*.html` dan hisoblanadi.
+- **`tokens.css`/`site.css` o'zgarsa kesh tokenlari zanjiri.**
+  `scripts/bump_asset_tokens.py` → `build_site.py` → testlar.  Qo'lda
+  yozilgan `installer.html` ni `build_site.py` yangilamaydi — skript
+  yangilaydi.
+- **Chrome `--window-size=390` skrinshoti YOLG'ON toshish ko'rsatadi.**
+  Haqiqiy telefon o'lchovi faqat Playwright `is_mobile` + DPR 2 bilan;
+  `scrollWidth > clientWidth` — yagona ishonchli mezon.  Lazy rasmlar
+  full-page skrinshotda bo'sh katak bo'lib chiqadi — bu ham artefakt.
+- **Harnes `--fail-api` da `dashboard`/`sites` yiqilmasin** — aks holda
+  panel «aloqa yo'q» ekraniga tushadi va sahifa skeletlari tekshirilmaydi.
+- **Yangi owner fayli → `OWNER_FILES`** (`tests/test_panel_v2.py`); aks holda
+  brend/jargon qulflari unga tegmaydi.
+- **UI tekshiruvi FAQAT o'zbekchada yetarli emas.**  Ruscha yorliqlar
+  1.3–1.6 barobar uzun: grid/flex ichidagi karta (`min-width:auto`),
+  `.segmented`, `.bottom-nav` o'zbekchada sig'ib, ruschada sahifani yon
+  tomonga cho'zdi.  Harnesni doim `--langs uz,ru,en` bilan yuriting;
+  yangi konteynerga `min-width: 0` va o'raladigan `flex-wrap`.
 
 - **`read_sotqin_cache()` kalitlarni OQ RO'YXAT bilan qaytaradi.**  Cloud
   yuborgan yangi kalitni `apply()` keshga yozadi, lekin o'quvchi uni
@@ -1733,6 +1824,39 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-11 — UI/UX QA va dizayn-3: sayt + panel (`3c19d63`…`28b73cd`)
+
+Nima: ega endi (1) telefonda ham hamma tugmani ko'radi, xato chizig'i
+bilan yonma-yon abadiy skelet ko'rmaydi, inglizcha server matnini
+o'qimaydi; (2) panel qora ochiladi, bosh sahifada 5 doimiy ko'rsatkich,
+rasmli hodisalar va do'kon chipi, har kamera uchun alohida sahifa
+(jonli/tahlil/hodisalar); (3) saytda hero'da o'z fotosi va rost hodisa
+kartasi, telefon menyusi, brendli 404.
+
+Nega: ega «xatolar ko'p» dedi — jonli QA 30+ nuqson topdi (ro'yxat reja
+faylida); mockup dizayni sotuvga kerak, lekin undagi va'dalar
+kontraktga zid — dizayn olindi, matn rost qoldi.
+
+Qayerda: `frontend/src/{components,api,EventEvidence,VisionAgent,
+Analytics,owner,OwnerHome,Cameras,CameraDetail,router,Heatmap,
+EventTimeline,theme}.tsx|ts`, `styles.css`, `tokens.css`,
+`frontend/{owner,admin}.html`, `deploy/Caddyfile*`,
+`cloud/site/{index,404,partials/nav-sub}.html`, `cloud/static/{site.css,
+site.js,icons.svg,hero-lobby-v1.webp,shop-corridor-v1.webp}`,
+`cloud/main.py` (`branded_not_found`), `scripts/build_site.py`,
+`scripts/{ui_qa_screenshots,bump_asset_tokens,make_panel_screenshots}.py`,
+`i18n/*.json` (+~40 kalit), `.gitignore`/`.dockerignore`/`DEPLOY_TARIFLAR`.
+
+Test: `test_panel_v2.py` (+7: skelet, xom detail, telefon tugmalari, Excel
+yorlig'i, hisobot xatosi, 5 karta, rasmcha, kamera deep link),
+`test_site_build.py` (+2: telefon menyusi, brendli 404); `make test` —
+faqat ikkita ESKI yiqilish (HOZIRGI HOLAT da).
+
+Diqqat: deployda Caddy qayta yaratilsin (CSP hash).  Playwright harnesi
+`.venv` da; skrinshotlar scratchpad'da, repoga kirmaydi.  Mockupdagi
+«Suspicious» yozuvli rasm (`ae4564c2`) ishlatilmadi; `dizayn-3/` git va
+rsync'dan chetlatilgan.
 
 ### 2026-09-11 — F7 dan keyingi jonli tekshiruv: apex tarqaldi, pilot 44 soat o'lik (faqat docs)
 

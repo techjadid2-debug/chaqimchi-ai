@@ -71,12 +71,14 @@ export function EventTimeline({
   selectedHour = null,
   onSelectHour,
   markedHours = [],
+  cameraId = "",
 }: {
   siteId?: string;
   date: string;
   selectedHour?: number | null;
   onSelectHour?: (hour: number | null) => void;
   markedHours?: number[];
+  cameraId?: string;
 }) {
   const [answer, setAnswer] = useState<TimelineAnswer | null>(null);
   const [error, setError] = useState("");
@@ -86,11 +88,12 @@ export function EventTimeline({
     setAnswer(null);
     setError("");
     const query = new URLSearchParams({ date });
+    if (cameraId) query.set("camera_id", cameraId);
     api<TimelineAnswer>(`/api/v1/owner/events/timeline?${query}`, "owner", { siteId })
       .then(result => { if (alive) setAnswer(result); })
       .catch(reason => { if (alive) setError(reason instanceof Error ? reason.message : t("panel.timeline.load_failed")); });
     return () => { alive = false; };
-  }, [date, siteId]);
+  }, [cameraId, date, siteId]);
 
   if (error) return <p className="media-note">{error}</p>;
   if (!answer) return <div className="card-body"><Skeleton height={132} /></div>;

@@ -207,6 +207,11 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
 .mini-metrics span { display: block; color: var(--muted); font-size: 11px; }
 .mini-metrics b { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
 .live-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px; }
+/* «Kameralar» sahifasida to'r kengroq — 4 kamera bir qatorda (namunadagidek). */
+.live-grid.is-wide { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.camera-tile.is-link { cursor: pointer; transition: border-color .15s; }
+.camera-tile.is-link:hover { border-color: var(--accent); }
+.camera-open { margin-left: 4px; }
 .camera-tile { border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: var(--video-bg); }
 .camera-frame { aspect-ratio: 16 / 9; position: relative; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 30% 30%, var(--video-grad-1), var(--video-grad-2) 65%); color: var(--video-ink); }
 .camera-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -235,12 +240,14 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
    balandligi kamera nomi uzunligiga bog'liq bo'lmaydi va to'rt plitka
    bir xil o'lchamda qoladi. */
 .camera-tile { position: relative; }
-.camera-title { position: absolute; top: 9px; left: 9px; max-width: calc(100% - 90px); padding: 4px 9px; border-radius: 7px; background: var(--video-stamp); color: var(--video-fg); font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.camera-live { position: absolute; left: 9px; bottom: 56px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 7px; background: var(--video-stamp); color: var(--video-fg); font-size: 11px; font-weight: 700; }
-.camera-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
-.camera-live.is-online i { background: var(--green); }
-.camera-live.is-stale i { background: var(--yellow); }
-.camera-live.is-offline i, .camera-live.is-unknown i { background: var(--red); }
+/* Kadr ustidagi bitta belgi: jonli oqim — qizil LIVE, aks holda holat. */
+.camera-badge { position: absolute; top: 9px; left: 9px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 7px; background: var(--video-stamp); color: var(--video-fg); font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.camera-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.camera-badge.is-live { background: var(--red); }
+.camera-badge.is-live i { background: var(--video-fg); }
+.camera-badge.is-online i { background: var(--green); }
+.camera-badge.is-stale i { background: var(--yellow); }
+.camera-badge.is-offline i, .camera-badge.is-unknown i { background: var(--red); }
 .camera-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; background: var(--surface); }
 .camera-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; font-weight: 700; }
 .camera-name span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

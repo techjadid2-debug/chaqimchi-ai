@@ -35,7 +35,7 @@ OWNER_FILES = (
     "owner.tsx", "OwnerHome.tsx", "components.tsx", "EventEvidence.tsx",
     "Numbers.tsx", "Demography.tsx", "Heatmap.tsx", "VisionAgent.tsx",
     "SetupCameras.tsx", "GeometryEditor.tsx", "Connect.tsx", "EventTimeline.tsx",
-    "Analytics.tsx", "overview.tsx",
+    "Analytics.tsx", "overview.tsx", "Cameras.tsx", "CameraDetail.tsx",
 )
 #: Admin paneli fayllari — ichki atamalar mumkin, eski brend esa yo'q.
 ADMIN_FILES = ("admin.tsx", "AdminHome.tsx", "AdminCustomer.tsx", "AdminTeam.tsx", "AdminSettings.tsx")
@@ -215,8 +215,26 @@ def test_panel_hides_the_unobservable_occupancy_limit() -> None:
 
 
 def test_live_view_uses_its_own_endpoint() -> None:
-    """Jonli kadr tayanch rasmni — ya'ni xarita fonini — almashtirmasin."""
-    assert "/live-frame" in src("owner.tsx")
+    """Jonli kadr tayanch rasmni — ya'ni xarita fonini — almashtirmasin.
+    (Kamera plitkalari 2026-09-11 da `Cameras.tsx` ga ko'chdi.)"""
+    assert "/live-frame" in src("Cameras.tsx")
+
+
+def test_camera_detail_is_deep_linkable() -> None:
+    """Alohida kamera sahifasi manzildan ochilsin: `/owner/cameras/camera-01/alerts`.
+
+    Ikkinchi segment tab nomi ham, kamera ID ham bo'lishi mumkin —
+    naqsh server bilan bir xil; uchinchi segment kamera tabi.  Kamera
+    tablari `TABS` ga QO'SHILMAYDI (u bo'lim tablari ro'yxati)."""
+    router = src("router.ts")
+    assert "sub" in router and "[active, navigate, param, sub]" in router
+    owner = src("owner.tsx")
+    assert "CAMERA_ID = /^camera-\\d{2}$/" in owner
+    assert "<CameraDetail" in owner and "subRoute" in owner
+    detail = src("CameraDetail.tsx")
+    assert 'CAMERA_TABS = ["live", "analytics", "alerts"]' in detail
+    assert "camera_id" in src("EventEvidence.tsx") and "camera_id" in src("EventTimeline.tsx")
+    assert "CAMERA_TABS" not in owner[owner.index("const TABS"): owner.index("\n};", owner.index("const TABS"))]
 
 
 def test_plan_locked_sections_show_a_lock_not_an_error() -> None:

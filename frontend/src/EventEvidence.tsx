@@ -89,7 +89,7 @@ function Evidence({ item, kind, siteId, focused = false, retentionHours = 0, aut
  * Cheklovsiz ro'yxat gavjum kunda telefon xotirasini yeb qo'yardi. */
 const PAGE = 20;
 
-export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboard, onNavigate }: { kind: "owner" | "admin"; siteId?: string; sites?: Array<{id:string;name:string}>; focusEventId?: string; dashboard?: Dashboard; onNavigate?: (id: string) => void }) {
+export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboard, onNavigate, cameraId = "" }: { kind: "owner" | "admin"; siteId?: string; sites?: Array<{id:string;name:string}>; focusEventId?: string; dashboard?: Dashboard; onNavigate?: (id: string) => void; cameraId?: string }) {
   const [events, setEvents] = useState<Event[] | null>(null); const [error, setError] = useState(""); const [selected, setSelected] = useState(siteId || "");
   /* "" — sanasiz "oxirgi hodisalar" rejimi.  U ikki holatda kerak:
      AI yordamchisi eski kundagi dalilga yo'naltirganda (kun bo'yicha
@@ -104,6 +104,8 @@ export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboar
   const load = useCallback(() => {
     const query = new URLSearchParams({ limit: "100" });
     if (day) { query.set("date", day); if (hour != null) query.set("hour", String(hour)); }
+    // Kamera sahifasi: faqat shu kameraning hodisalari (server filtri).
+    if (cameraId) query.set("camera_id", cameraId);
     const path = kind === "owner" ? `/api/v1/owner/events?${query}` : `/api/v1/admin/events${selected ? `?site_id=${encodeURIComponent(selected)}` : ""}`;
     api<{events:Event[]}>(path, kind, { siteId: kind === "owner" ? siteId : undefined })
       .then(result => { setEvents(result.events || []); setError(""); setShown(PAGE); })
@@ -111,7 +113,7 @@ export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboar
       // yuklanmoqda», ya'ni skelet.  Ilgari xato chizig'i bilan yonma-yon
       // skelet abadiy turib qolardi.
       .catch(reason => { setEvents([]); setError(reason instanceof Error ? reason.message : t("panel.evidence.load_failed")); });
-  }, [day, hour, kind, selected, siteId]);
+  }, [cameraId, day, hour, kind, selected, siteId]);
   useEffect(() => { void load(); }, [load]);
 
   const yesterday = useMemo(() => tashkentDay(new Date(Date.now() - 86_400_000).toISOString()) || "", []);

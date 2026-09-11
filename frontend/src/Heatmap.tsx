@@ -78,7 +78,7 @@ function usePreviewFrame(siteId: string, cameraId: string) {
  *
  *  `onEmpty` — bugun to'r bo'sh bo'lsa chaqiruvchi o'rniga matn
  *  ko'rsatadi (bo'sh qora to'rtburchak "buzilgan" ko'rinadi). */
-export function HeatmapThumb({ siteId, cameraId, onState }: { siteId: string; cameraId: string; onState?: (state: "loading" | "ready" | "empty" | "error") => void }) {
+export function HeatmapThumb({ siteId, cameraId, onState, width = 480, height = 270 }: { siteId: string; cameraId: string; onState?: (state: "loading" | "ready" | "empty" | "error") => void; width?: number; height?: number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [answer, setAnswer] = useState<DayAnswer | null>(null);
   const [preview, previewTick] = usePreviewFrame(siteId, cameraId);
@@ -99,7 +99,7 @@ export function HeatmapThumb({ siteId, cameraId, onState }: { siteId: string; ca
     if (!target || !ctx) return;
     paintHeat(ctx, target.width, target.height, preview.current, answer?.grid, answer?.rows || 0, answer?.cols || 0, peak);
   }, [answer, peak, preview, previewTick]);
-  return <canvas ref={canvas} className="heat-thumb" width="480" height="270" aria-label={t("panel.heat.card_title")}/>;
+  return <canvas ref={canvas} className="heat-thumb" width={width} height={height} aria-label={t("panel.heat.card_title")}/>;
 }
 
 export function HeatmapPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; siteId: string; onNavigate: (id: string) => void }) {

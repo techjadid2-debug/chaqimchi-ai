@@ -3,18 +3,20 @@ import { createRoot } from "react-dom/client";
 import { api, clearToken, logout as serverLogout, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
-import { AppShell, Card, CopyButton, EmptyState, ErrorStrip, LangSwitch, LoginScreen, PageHeader, Pill, Skeleton, StatCard, StatusDot, Tabs, ThemeToggle, useConfirm, useToast, type NavItem } from "./components";
+import { AppShell, Card, CopyButton, EmptyState, ErrorStrip, LangSwitch, LoginScreen, PageHeader, Pill, Skeleton, StatCard, Tabs, ThemeToggle, useConfirm, useToast, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
 import { HeatmapPage } from "./Heatmap";
+import { CamerasBlock } from "./Cameras";
+import { CAMERA_TABS, CameraDetail } from "./CameraDetail";
 import { OwnerHome } from "./OwnerHome";
 import { Analytics } from "./Analytics";
 import { SetupCameras } from "./SetupCameras";
 import { VisionAgent } from "./VisionAgent";
 import { EventEvidence } from "./EventEvidence";
 import { usePanelRoute } from "./router";
-import type { Camera, Dashboard, Employee, Invoice, Site, TelegramMember, TrendPoint } from "./types";
+import type { Dashboard, Employee, Invoice, Site, TelegramMember, TrendPoint } from "./types";
 import { Icon, Logo } from "./icons";
 import { initLang, t } from "./i18n";
 import { applyTheme, readTheme } from "./theme";
@@ -230,187 +232,6 @@ function NotificationBell({ siteId, onOpenEvent }: { siteId: string; onOpenEvent
   </div>;
 }
 
-function CameraImage({ camera, siteId, overlay, live }: { camera: Camera; siteId: string; overlay: boolean; live: boolean }) {
-  const [src, setSrc] = useState("");
-  const [error, setError] = useState(false);
-  const [requested, setRequested] = useState(false);
-  const [stamp, setStamp] = useState("");
-  const [frameAt, setFrameAt] = useState("");
-  useEffect(() => {
-    let timer = 0;
-    let stopped = false;
-    let current = "";
-    /* Tayanch kadrni bir marta SO'RAB olamiz.
-     *
-     * Ilgari bu komponent faqat GET qilardi.  Kadr hali yuborilmagan
-     * do'konda server 404 qaytarardi va panel abadiy "Kadr hozircha
-     * kelmadi" deb turardi — mijozda uni tuzatadigan birorta tugma yo'q
-     * edi.  2026-08-26 da jonli do'konda aynan shu ko'rindi: 6 soatda
-     * 33 ta GET, hammasi 404, birorta POST yo'q.
-     *
-     * Kadrni so'raydigan endpoint allaqachon bor
-     * (`owner_request_camera_preview`) — panel uni chaqirmasdi.
-     * Bir marta: serverda soatiga 30 so'rov chegarasi bor va uni
-     * avtomatik takror so'rov yeb qo'yardi. */
-    let asked = false;
-    const requestFrame = async () => {
-      if (asked || live) return;
-      asked = true;
-      try {
-        await api(`/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/preview`, "owner", { method: "POST", siteId });
-        if (!stopped) setRequested(true);
-      } catch {
-        /* Chegara yoki tarmoq — yozuv baribir "kelmadi" bo'lib qoladi. */
-      }
-    };
-    const load = async () => {
-      const path = live ? `/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/live-frame?t=${Date.now()}` : `/api/v1/owner/cameras/${encodeURIComponent(camera.camera_id)}/preview?t=${Date.now()}`;
-      try {
-        const headers: Record<string,string> = { Authorization: `Bearer ${tokenFor("owner")}`, "X-Owner-Site-Id": siteId };
-        const response = await fetch(path, { headers });
-        if (!response.ok) throw new Error();
-        const next = URL.createObjectURL(await response.blob());
-        if (stopped) { URL.revokeObjectURL(next); return; }
-        if (current) URL.revokeObjectURL(current);
-        current = next; setSrc(next); setError(false);
-        /* Vaqt KADRNING O'ZINIKI (`X-Frame-At`), klient soati emas.
-           Ilgari bu yerda `new Date()` turardi: qurilma kadr yuborishni
-           to'xtatsa ham server oxirgi saqlangan rasmni qaytaraverardi
-           va panel har javobda vaqtni yangilardi — muzlagan rasm ustida
-           soat tikillab turardi va ega uni "jonli" deb o'ylardi. */
-        const frameAt = response.headers.get("X-Frame-At") || "";
-        setStamp(formatTimeUz(frameAt) || "—");
-        setFrameAt(frameAt);
-      } catch {
-        // `current` — shu effektning O'Z holati.  Ilgari bu yerda
-        // `src` tekshirilardi: u effekt yopilmasidan oldingi qiymatni
-        // eslab qolgan edi, shuning uchun birinchi muvaffaqiyatli
-        // kadrdan keyin ham "Kadr kelmadi" yozuvi chiqib ketardi.
-        if (!current) setError(true);
-        if (!current && !asked && !live) {
-          await requestFrame();
-          // Qurilma so'rovni keyingi salomda ko'radi (20 s gacha), keyin
-          // kadr yuklanadi.  Uch marta qaraymiz — ~45 soniya.
-          for (let attempt = 0; attempt < 3 && !stopped && !current; attempt += 1) {
-            await new Promise(resolve => { timer = window.setTimeout(resolve, 15000); });
-            if (!stopped && !current) await load();
-          }
-        }
-      }
-      if (!stopped && live) timer = window.setTimeout(load, 2500);
-    };
-    void load();
-    return () => { stopped = true; window.clearTimeout(timer); if (current) URL.revokeObjectURL(current); };
-  }, [camera.camera_id, live, overlay, siteId]);
-  const emptyLabel = error ? (requested ? t("panel.cameras.frame_requested") : t("panel.cameras.frame_missing")) : t("panel.cameras.frame_loading");
-  /* Jonli rejimda kadr 2-3 soniyada yangilanadi.  25 soniyadan eski
-     bo'lsa oqim uzilgan: buni AYTISH kerak, aks holda ega eski rasmga
-     qarab do'konda hozir nima bo'layotgani haqida qaror qabul qiladi. */
-  const frameAge = live && frameAt ? (Date.now() - new Date(frameAt).getTime()) / 1000 : 0;
-  const frozen = live && frameAt && frameAge > 25;
-  return <div className="camera-frame">
-    {src ? <img src={src} alt={t("panel.cameras.image_alt", { name: camera.label || camera.camera_id })} /> : <div className="camera-empty"><Icon name="camera" size={28}/><span>{emptyLabel}</span></div>}
-    {overlay && src ? <span className="camera-overlay-badge">{t("panel.cameras.ai_badge")}</span> : null}
-    {stamp && src ? <span className={`camera-stamp${frozen ? " is-stale" : ""}`}>{frozen ? t("panel.cameras.stamp_stale", { time: stamp }) : stamp}</span> : null}
-  </div>;
-}
-
-function CamerasBlock({ dashboard, siteId, expanded = false, onOpenAll }: { dashboard: Dashboard; siteId: string; expanded?: boolean; onOpenAll?: () => void }) {
-  const [overlay, setOverlay] = useState(false);
-  const [live, setLive] = useState(false);
-  const cameras = expanded ? dashboard.cameras : dashboard.cameras.slice(0, 4);
-  const stateMap = useMemo(() => new Map(dashboard.camera_states.map(item => [item.camera_id, item])), [dashboard.camera_states]);
-
-  /* Kamera ro'yxati `useEffect` bog'liqligi bo'lib ishlatiladi, lekin
-     `slice()` har renderda YANGI massiv qaytaradi — usiz keepalive
-     taymeri har renderda qayta qurilardi. */
-  const cameraIds = useMemo(() => cameras.map(camera => camera.camera_id).join(","), [cameras]);
-
-  const askLive = useCallback(async (body: Record<string, unknown>) => {
-    const ids = cameraIds ? cameraIds.split(",") : [];
-    await Promise.all(ids.map(id => api(`/api/v1/owner/cameras/${encodeURIComponent(id)}/live`, "owner", { method: "POST", siteId, body: JSON.stringify(body) }).catch(() => null)));
-  }, [cameraIds, siteId]);
-
-  /* JONLI REJIMNI USHLAB TURISH.
-   *
-   * Server so'rovni 90 soniyaga yozadi (`store.request_live`,
-   * `ttl_sec=90`) va uning izohida "panel har 60 soniyada qayta
-   * chaqiradi" deb yozilgan — lekin panel buni HECH QACHON
-   * qilmasdi.  Natijada 90 soniyadan keyin qurilma kadr yuborishni
-   * to'xtatardi, panel esa eski kadrni ko'rsatishda davom etardi va
-   * yonida soat tikillab turardi: ega 5 daqiqa oldingi rasmni
-   * "jonli" deb ko'rardi.
-   *
-   * 60 soniya — 90 lik muddatga nisbatan bitta o'tkazib yuborilgan
-   * so'rovga zaxira qoldiradi. */
-  useEffect(() => {
-    if (!live || !cameraIds) return;
-    let stopped = false;
-    void askLive({ overlay });
-    const timer = window.setInterval(() => { if (!stopped) void askLive({ overlay }); }, 60000);
-    return () => { stopped = true; window.clearInterval(timer); };
-  }, [live, overlay, cameraIds, askLive]);
-
-  /* To'xtatish ALOHIDA effektda va faqat `live` ga bog'liq.
-   *
-   * Yuqoridagi effekt ichida qilinsa `overlay` o'zgarganda ham cleanup
-   * ishlab, "to'xtat" va "yoq" ikkitasi yonma-yon ketardi — ikkalasi
-   * asinxron, ya'ni "to'xtat" keyinroq yetib borsa jonli ko'rish
-   * JIMGINA o'lardi.  Aynan shu tuzatilayotgan xatoning o'zi. */
-  const askLiveRef = useRef(askLive);
-  useEffect(() => { askLiveRef.current = askLive; }, [askLive]);
-  useEffect(() => {
-    if (!live) return;
-    /* Panel yopilganda oqim to'xtatiladi: aks holda qurilma yana
-       90 soniya kadr yuboradi va kunlik byudjetni bekorga yeydi. */
-    return () => { void askLiveRef.current({ stop: true }); };
-  }, [live]);
-
-  const toggleLive = () => setLive(value => !value);
-
-  /* "AI ramkani ko'rsatish" jonli rejimni O'ZI yoqadi.
-   *
-   * Ilgari jonli rejim o'chiq bo'lsa bu tugma faqat rasm ustiga
-   * "AI tahlil" yorlig'ini qo'yardi — ramka esa chizilmasdi, chunki
-   * ramka QURILMADA, faqat jonli kadrga chiziladi.  Ya'ni tugma nomi
-   * va'da qilgan narsani bajarmasdi. */
-  const toggleOverlay = () => {
-    setOverlay(value => !value);
-    if (!live) setLive(true);
-  };
-  return <Card>
-    <div className="card-head">
-      <div><h2>{t("panel.cameras.live_title")}</h2><p>{t("panel.cameras.live_subtitle")}</p></div>
-      <div className="page-actions">
-        <button className="btn" onClick={toggleOverlay}><Icon name="eye"/>{overlay ? t("panel.cameras.overlay_hide") : t("panel.cameras.overlay_show")}</button>
-        <button className={`btn ${live ? "btn-primary" : ""}`} onClick={toggleLive}><Icon name="pulse"/>{live ? t("panel.cameras.live") : t("panel.cameras.live_start")}</button>
-        {!expanded && onOpenAll ? <button className="btn" onClick={onOpenAll}>{t("panel.cameras.open_all")}</button> : null}
-      </div>
-    </div>
-    {cameras.length ? <div className="live-grid">{cameras.map((camera, index) => {
-      const state = stateMap.get(camera.camera_id)?.state || "unknown";
-      // Uch holat uch xil so'z bilan: "eskirgan" va "oflayn" bir xil
-      // qizil "Aloqa yo'q" bo'lib chiqsa, egasi tuzatib bo'ladigan
-      // kechikishni butunlay uzilish deb o'ylaydi.
-      const live_label = state === "online" ? t("panel.cameras.live") : state === "stale" ? t("panel.cameras.state_stale") : t("panel.cameras.state_offline");
-      return <article className="camera-tile" key={camera.camera_id}>
-        <CameraImage camera={camera} siteId={siteId} overlay={overlay} live={live}/>
-        {/* Sarlavha kadr USTIDA: namunadagidek, va shu bilan plitka
-            balandligi kamera nomi uzunligiga bog'liq bo'lmay qoladi. */}
-        <span className="camera-title">{index + 1}. {camera.label || camera.camera_id}</span>
-        <span className={`camera-live is-${state}`}><i/>{live_label}</span>
-        {/* Tungi rejim: IR — kamera tunda ko'radi; `dark` — ko'rmaydi (IR
-            yo'q).  Ikkinchisi ega uchun harakatga chaqiriq: IR kamera. */}
-        {stateMap.get(camera.camera_id)?.night_mode === "ir" ? <span className="camera-night is-ir"><Icon name="moon" size={12}/>{t("panel.cameras.night_ir")}</span>
-          : stateMap.get(camera.camera_id)?.night_mode === "dark" ? <span className="camera-night is-dark"><Icon name="moon" size={12}/>{t("panel.cameras.night_dark")}</span> : null}
-        <div className="camera-meta">
-          <div className="camera-name"><StatusDot state={state}/><span>{camera.label || camera.camera_id}</span></div>
-          <small>{stateMap.get(camera.camera_id)?.reason || t("panel.cameras.state_loading")}</small>
-        </div>
-      </article>;
-    })}</div> : <EmptyState icon="camera" title={t("panel.cameras.empty_title")} detail={t("panel.cameras.empty_detail")} />}
-  </Card>;
-}
 
 function EmployeesPage({ siteId }: { siteId: string }) {
   const [items, setItems] = useState<Employee[] | null>(null); const [error,setError] = useState(""); const [adding,setAdding] = useState(false); const [busy,setBusy] = useState(false); const [uploading,setUploading] = useState("");
@@ -505,7 +326,12 @@ async function downloadPeriodReportCsv(siteId:string) {
   const link=document.createElement("a");link.href=url;link.download=t("panel.download.period_filename",{start,end});link.click();URL.revokeObjectURL(url);
 }
 
-type Navigate = (id: string, param?: string) => void;
+type Navigate = (id: string, param?: string, sub?: string) => void;
+
+/** Kamera ID naqshi — server bilan bir xil (`cloud/main.py`: `^camera-\\d{2}$`).
+ *  `cameras` bo'limida ikkinchi segment tab NOMI ham, kamera ID ham
+ *  bo'lishi mumkin; shundan ajratiladi. */
+const CAMERA_ID = /^camera-\d{2}$/;
 
 /** Bo'lim tablari — faol tab manzildan (`param`), bosilsa manzil o'zgaradi. */
 function SectionTabs({ section, tab, onNavigate }: { section: string; tab: string; onNavigate: Navigate }) {
@@ -540,12 +366,14 @@ function ReportsPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; 
  *  Har ichki sahifa o'z `PageHeader`ini chizadi (ular ilgari alohida
  *  bo'lim edi) — tab qatori undan TEPADA turadi, sahifaning o'zi
  *  o'zgarmaydi. */
-function SectionPage({ id, tab, dashboard, sites, siteId, onNavigate, onRefresh, focusEventId = "" }: { id:string; tab:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:Navigate; onRefresh:()=>void; focusEventId?:string }) {
+function SectionPage({ id, tab, dashboard, sites, siteId, onNavigate, onRefresh, focusEventId = "", cameraId = "", cameraTab = "" }: { id:string; tab:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:Navigate; onRefresh:()=>void; focusEventId?:string; cameraId?:string; cameraTab?:string }) {
   const tabs = <SectionTabs section={id} tab={tab} onNavigate={onNavigate}/>;
+  /* Alohida kamera sahifasi — bo'lim tablarisiz, o'z tablari bilan. */
+  if (id === "cameras" && cameraId) return <CameraDetail dashboard={dashboard} siteId={siteId} cameraId={cameraId} tab={cameraTab || "live"} onNavigate={onNavigate}/>;
   if (id === "cameras") return <>{tabs}{
     tab === "setup" ? <SetupCameras siteId={siteId} onDone={() => { onRefresh(); onNavigate("cameras", "zones"); }}/>
     : tab === "zones" ? <GeometryEditor siteId={siteId} cameras={dashboard.cameras}/>
-    : <><PageHeader title={t("panel.nav.cameras")} subtitle={t("panel.cameras.page_subtitle")}/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded/></>}</>;
+    : <><PageHeader title={t("panel.nav.cameras")} subtitle={t("panel.cameras.page_subtitle")}/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded onOpenCamera={id => onNavigate("cameras", id)}/></>}</>;
   if (id === "alerts") return <>{tabs}{
     tab === "agent" ? <VisionAgent siteId={siteId} onNavigate={onNavigate}/>
     : <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>}</>;
@@ -736,7 +564,7 @@ function OwnerApp() {
   const [connectToken,setConnectToken] = useState(() => takeConnectToken());
   const [checkingLink,setCheckingLink] = useState(() => new URLSearchParams(window.location.search).has("key"));
   const [sites,setSites] = useState<Site[]>([]); const [siteId,setSiteId] = useState("");
-  const [active,navigateTo,routeParam] = usePanelRoute("/owner", ROUTE_IDS, "home", LEGACY_ROUTES);
+  const [active,navigateTo,routeParam,subRoute] = usePanelRoute("/owner", ROUTE_IDS, "home", LEGACY_ROUTES);
   const [drawer,setDrawer] = useState(false);
   const [focusEvent,setFocusEvent] = useState("");
   const [loginError,setLoginError] = useState(""); const [busy,setBusy] = useState(false);
@@ -809,12 +637,16 @@ function OwnerApp() {
      bo'lgan hodisa ID'si: "Dalilni ochish" tugmasi `("alerts", eventId)`
      uzatadi.  Tab nomlari ro'yxatda, hodisa ID'si — yo'q; shundan
      ajratiladi. */
-  const navigate = (id:string, param?:string) => {
+  const navigate = (id:string, param?:string, sub?:string) => {
     if (id === "more") { setDrawer(true); return; }
     const isTab = Boolean(param) && (TABS[id] || []).includes(String(param));
-    setFocusEvent(!isTab && id === "alerts" ? param || "" : "");
-    navigateTo(id, isTab ? param : ""); setDrawer(false); window.scrollTo({top:0,behavior:"smooth"});
+    /* Uchinchi tur parametr — kamera sahifasi: `/owner/cameras/camera-01/alerts`. */
+    const isCamera = id === "cameras" && CAMERA_ID.test(String(param || ""));
+    setFocusEvent(!isTab && !isCamera && id === "alerts" ? param || "" : "");
+    navigateTo(id, isTab || isCamera ? param : "", isCamera && sub && (CAMERA_TABS as readonly string[]).includes(sub) ? sub : "");
+    setDrawer(false); window.scrollTo({top:0,behavior:"smooth"});
   };
+  const cameraId = active === "cameras" && CAMERA_ID.test(routeParam) ? routeParam : "";
   /* Manzilda tab bo'lmasa — bo'limning birinchi tabi. */
   const tab = (TABS[active] || []).includes(routeParam) ? routeParam : (TABS[active] || [""])[0];
 
@@ -870,9 +702,9 @@ function OwnerApp() {
     </>}>
     {error ? <div className="alert-strip"><Icon name="bell"/><div><strong>{t("panel.owner.refresh_error_title")}</strong> {error}. {t("panel.owner.refresh_error_note")}</div></div> : null}
     {active === "home"
-      ? <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")}/>} />
+      ? <OwnerHome dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} cameras={<CamerasBlock dashboard={data} siteId={siteId} onOpenAll={() => navigate("cameras")} onOpenCamera={id => navigate("cameras", id)}/>} />
       : active === "employees" ? <EmployeesPage siteId={siteId}/>
-      : <SectionPage id={active} tab={tab} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} onRefresh={() => void refresh()} focusEventId={focusEvent}/>}
+      : <SectionPage id={active} tab={tab} dashboard={data} sites={sites} siteId={siteId} onNavigate={navigate} onRefresh={() => void refresh()} focusEventId={focusEvent} cameraId={cameraId} cameraTab={subRoute}/>}
     {drawer ? <div className="drawer-backdrop" onClick={() => setDrawer(false)}><aside className="drawer" onClick={event => event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={() => setDrawer(false)} aria-label={t("panel.common.close")}><Icon name="close"/></button></div><nav>{nav.map(item => <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}<button onClick={logout}><Icon name="logout"/>{t("panel.common.logout")}</button></nav><div className="drawer-tools"><LangSwitch/><ThemeToggle/></div></aside></div> : null}
   </AppShell>;
 }

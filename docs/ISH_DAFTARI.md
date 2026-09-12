@@ -9,6 +9,40 @@
 
 ## HOZIRGI HOLAT · 2026-09-12
 
+- **✅ DEPLOY QILINDI VA JONLI TASDIQLANDI (2026-09-12 ~20:40 UTC,
+  `main` = `238e6e6`).**  Sakkiz blok (A, B, C, D, E, F, G, I) jonli
+  serverga chiqdi.  `main` `reja-2026-09-12` dan fast-forward qilindi;
+  `origin/main` ga HALI PUSH QILINMAGAN.
+
+  **Deploy oldi tekshiruvlari:** `2449 passed, 13 skipped`; `ruff`,
+  i18n va sayt `--check` toza; UI QA harnesi **192 surat, 0 nuqson**;
+  majburiy CSP HAQIQIY BRAUZERDA sinaldi (8 marshrut, 0 buzilish) —
+  Docker lokal ishlamagani uchun frontend bosqichi statik tekshirildi
+  (yagona tashqi import `tokens.css`, Dockerfile uni nusxalaydi).
+
+  **Bajarilgan tartib:** rsync (144 fayl) → `deploy_cloud.sh` (zaxira,
+  image, cloud+worker healthy) → Caddy **`--force-recreate`** (CSP
+  bind-mount inode) → `bump_feature_revision.py` (2 sayt, revision 14
+  va 3).
+
+  **Jonli natija:** 8 host javob beradi; `content-security-policy`
+  endi MAJBURIY (`-Report-Only` ketdi) va brauzerda 10 sahifada
+  **0 CSP buzilishi, 0 JS xatosi** — uchala panel ham tema bilan
+  ochildi; forma xatosi uch tilda MATN qaytaradi, qurilma API esa
+  strukturali `detail` ni saqladi; `/health/deep` to'rt tekshiruvni
+  beradi; bot menyusida `chek` bor; yangi skrinshotlar (`v4`/`v5`)
+  200, eskisi 404; saytda sinov «7 kun» (qaytarish bandi 14 kun —
+  BOSHQA son, tegilmadi); usta paneli React bundle'ini beryapti.
+  Deploydan keyingi loglarda **0 xato, 0 ta 5xx**.
+
+  ⏳ **Qolgan ikki ish:**
+  1. **`releases/` birinchi tozalash** — reja tayyor va tekshirilgan:
+     22 ta eski `.exe` (0.6.2–0.6.24), **0.6.25 (pilot) va 0.6.29+
+     himoyalangan**.  Papka konteynerga `:ro` ulangani uchun o'chirish
+     HOSTDA bajariladi — ega tasdig'ini kutadi (2,6 GB).
+  2. **H bloki (admin i18n)** — agentda ishlayapti, keyingi deployga.
+
+
 - **🔧 BOSQICH E — USTA PANELI REACT'DA (2026-09-12, commit qilinmagan,
   shox `worktree-agent-aee520e409d4d0c84`).**  `cloud/static/installer.html`
   — **oxirgi eski statik panel** — o'chdi; o'rniga `frontend/installer.html`

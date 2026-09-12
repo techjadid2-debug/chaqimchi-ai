@@ -194,10 +194,19 @@
           <p class="hint">O‘rnatish: Keyingi → Keyingi → Tayyor. <a href="/install">Qadam-baqadam yo‘riqnoma</a></p>
         </div>
 
-        <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
-        <form id="notifyForm" class="quick-download-form" hidden>
+        <!-- Forma STANDART HOLDA KO'RINADI va JS reliz topilganda uni
+             yashiradi — teskarisi emas.
+             Ilgari `#downloadReady` ham, forma ham `hidden` bilan
+             boshlanardi: JS o'chiq bo'lsa yoki `/api/v1/public/windows-release`
+             javob bermasa hero'da shu joyda BO'SH oq maydon qolardi va
+             mijoz yuklab olish borligini bilmasdi.  `install.html` da
+             naqsh to'g'ri qilingan (`#guideDownloadPending`) — bosh
+             sahifa unutilgan edi.
+
+             Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
+        <form id="notifyForm" class="quick-download-form">
           <p class="hint">Windows dasturi hozir yakuniy sinovdan o‘tmoqda. Raqamingizni qoldiring — tayyor bo‘lgan kuni yuboramiz.</p>
-          <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="Telefoningiz: +998 90 000 00 00">
+          <input type="tel" id="notifyPhone" name="phone" required minlength="5" maxlength="32" inputmode="tel" autocomplete="tel" aria-label="Telefoningiz: +998 90 000 00 00" placeholder="Telefoningiz: +998 90 000 00 00">
           <label class="consent">
             <input name="consent" type="checkbox" required>
             <span>Bog‘lanish uchun ma’lumotlarim qayta ishlanishiga roziman. <a href="/privacy">Maxfiylik</a></span>
@@ -207,6 +216,12 @@
           <button class="button button-light" type="submit">Tayyor bo‘lganda xabar bering</button>
           <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
         </form>
+        <!-- JS butunlay o'chiq bo'lsa forma jo'natilmaydi (uni skript
+             ushlaydi) — shuning uchun ishlaydigan ikkita yo'l aytiladi. -->
+        <noscript>
+          <p class="hint">Brauzeringizda JavaScript o‘chiq. Dasturni yuklab olish va o‘rnatish bo‘yicha yo‘riqnoma:
+            <a href="/install">Qadam-baqadam yo‘riqnoma</a></p>
+        </noscript>
       </div>
 
       <!-- Raqamlar qatori — faqat ROST raqamlar. -->
@@ -421,7 +436,7 @@
         </div>
         <div class="field field-half">
           <label for="phone">Telefon raqamingiz</label>
-          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="+998 90 000 00 00">
+          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required minlength="5" maxlength="32" placeholder="+998 90 000 00 00">
         </div>
         <input id="cameras" name="cameras" type="hidden" value="4">
         <input id="leadMessage" name="message" type="hidden" value="Saytdan so'rov">
@@ -453,9 +468,17 @@
     </section>
   </main>
 
-  <footer class="band-dark">
-    <a class="brand brand-lockup" href="/">
-      <!-- ENES Monitoring — "NS" monogrammasi.
+  <!-- Futer partialdan keladi.  Ilgari bu yerda uning NUSXASI turardi
+       va havolalar qotirilgan edi (`/status`, `/hamkorlik`, `/aloqa`) —
+       ya'ni ruscha va inglizcha bosh sahifada futer o'zbekcha
+       sahifalarga olib borardi.  Partialda esa `page:` o'rinbosari
+       bor va u qurish paytida til bo'yicha almashadi. -->
+  <!-- Umumiy footer — bosh sahifa bilan bir xil.  Uch tilli sahifalarga
+     havola `page:` o'rinbosari bilan (ruscha sahifadan ruscha aloqaga),
+     faqat o'zbekcha sahifalar (oferta, maxfiylik) to'g'ridan-to'g'ri. -->
+<footer class="band-dark">
+  <a class="brand brand-lockup" href="/">
+    <!-- ENES Monitoring — "NS" monogrammasi.
      Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
      oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
      shart emas. -->
@@ -465,25 +488,25 @@
     <path d="M60 16H44l-6 10h16l-6 12H31"/>
   </g>
 </svg>
-      <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
-    </a>
-    <p>
-      Do‘konlar, NVR/IP kameralar va sun’iy intellekt tahlili uchun yagona tizim.<br>
-      Aloqa: Abdulvosit Zokirjonov · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
-    </p>
-    <div>
-      <a href="/status">Tizim holati</a>
-      <a href="/oferta">Ommaviy oferta</a>
-      <a href="/maxfiylik">Maxfiylik</a>
-      <a href="/hamkorlik">Hamkorlik</a>
-      <a href="/aloqa">Aloqa</a>
-      <a href="tel:+998932225070">+998 93 222 50 70</a>
-      <a href="/rozilik-shabloni">Rozilik shabloni</a>
-      <a href="__APP_URL__/owner">Mijoz paneli</a>
-      <a href="__PARTNER_URL__/installer">O‘rnatuvchi paneli</a>
-    </div>
-    <p class="footer-powered">Powered by NS camera</p>
-  </footer>
+    <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+  </a>
+  <p>
+    Do‘konlar, NVR/IP kameralar va sun’iy intellekt tahlili uchun yagona tizim.<br>
+    Aloqa: Abdulvosit Zokirjonov · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
+  </p>
+  <div>
+    <a href="/status">Tizim holati</a>
+    <a href="/oferta">Ommaviy oferta</a>
+    <a href="/maxfiylik">Maxfiylik</a>
+    <a href="/hamkorlik">Hamkorlik</a>
+    <a href="/aloqa">Aloqa</a>
+    <a href="tel:+998932225070">+998 93 222 50 70</a>
+    <a href="/rozilik-shabloni">Rozilik shabloni</a>
+    <a href="__APP_URL__/owner">Mijoz paneli</a>
+    <a href="__PARTNER_URL__/installer">O‘rnatuvchi paneli</a>
+  </div>
+  <p class="footer-powered">Powered by NS camera</p>
+</footer>
 
   <!-- Mashina o'qiydigan ma'lumot.  Uchala blok ham sahifada BOR narsani
        takrorlaydi: razmetkada sahifada yo'q va'da bo'lmasligi kerak.
@@ -540,6 +563,6 @@
        `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
        manbadan kelgani uchun ajralib ketmaydi. -->
   <script type="application/json" id="site-data">{"lang": "uz", "t": {"calc_cameras": "kamera", "calc_empty": "Kamida bitta funksiyani tanlang.", "calc_failed": "Hisobni olishning iloji bo‘lmadi. Bizga yozing — qo‘lda hisoblab beramiz.", "calc_lead": "Tarmoq: {shops} ta do‘kon, {features}. Taxminiy {monthly} / oy", "calc_total": "Taxminiy: <b>{monthly}</b> / oy · har do‘kon {per_shop}", "calc_yearly": "Yillik to‘lasangiz: {yearly} ({months} oy hisobidan)", "choose": "Tanlash", "currency": "so‘m", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman", "error_generic": "Xatolik yuz berdi. Qayta urinib ko‘ring.", "feature_note": "AI funksiyalari hozir birinchi do‘konlarda sinovdan o‘tmoqda. Hozir so‘rov qoldirsangiz — ishga tushganda birinchi bo‘lib sizga ulanadi.", "from_per_month": "{price}/oydan", "lead_ok": "So‘rovingiz qabul qilindi. Tez orada bog‘lanamiz.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Raqamingiz qabul qilindi. Dastur tayyor bo‘lgan kuni birinchilardan bo‘lib sizga yuboramiz.", "on_request": "So‘rov bo‘yicha", "per_month": "/oy", "plan_message": "Tarif: {name} | Oyiga {price}", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman", "pricing_failed": "Narxni yuklab bo‘lmadi. Sahifani yangilang yoki", "send_failed": "So‘rov yuborilmadi", "sending": "So‘rov yuborilmoqda…", "version": "Versiya {version}", "write_to": "ga yozing."}}</script>
-  <script src="/assets/site.js?v=3171c14591" defer></script>
+  <script src="/assets/site.js?v=3509a1a639" defer></script>
 </body>
 </html>

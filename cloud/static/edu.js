@@ -258,6 +258,13 @@
       event.preventDefault();
       var status = $("eduStatus");
       var button = form.querySelector("button[type=submit]");
+      /* Forma `novalidate` — brauzer o'zi tekshirmaydi, ya'ni bo'sh
+         yoki noto'g'ri maydon bilan jo'natilar va odam SABABINI
+         bilmasdi (server 422 beradi, matni esa texnik).  `novalidate`
+         atayin: standart brauzer ko'rsatgichi uslubdan chiqib turadi.
+         Shuning uchun tekshiruv QO'LDA chaqiriladi — u qaysi maydon
+         xato ekanini o'zi ko'rsatadi. */
+      if (typeof form.reportValidity === "function" && !form.reportValidity()) return;
       var body = {};
       new FormData(form).forEach(function (value, key) { body[key] = value; });
       body.consent = true;
@@ -274,13 +281,26 @@
       }).then(function (response) {
         return response.json().then(function (payload) { return { ok: response.ok, payload: payload }; });
       }).then(function (result) {
-        if (!result.ok) throw new Error(result.payload.detail || "Yuborilmadi");
+        /* `detail` SATR bo'lsagina ko'rsatiladi: FastAPI validatsiya
+           xatosida u RO'YXAT qaytaradi va `new Error(list)` ni brauzer
+           `[object Object]` qilib chizardi. */
+        if (!result.ok) {
+          throw new Error(
+            typeof result.payload.detail === "string" ? result.payload.detail : "Yuborilmadi"
+          );
+        }
         status.className = "form-status ok";
         status.textContent = "Qabul qilindi. Tez orada bog‘lanamiz.";
         form.reset();
       }).catch(function (error) {
-        status.className = "form-status err";
-        status.textContent = error.message + " Telegram: @fibotai";
+        /* `err` EMAS, `error`: `site.css` da faqat `.form-status.error`
+           qoidasi bor va xato matni KULRANG chiqardi — muvaffaqiyatdan
+           ajralmasdi.
+           Shaxsiy Telegram nomi ham olib tashlandi: rasmiy kanal
+           futerda va aloqa sahifasida bor, xato matnida esa u
+           «bizga yozib qo'ying» degan taassurot berardi. */
+        status.className = "form-status error";
+        status.textContent = error.message;
       }).then(function () {
         button.disabled = false;
       });
@@ -296,7 +316,11 @@
     bind();
     draw();
   }).catch(function () {
-    $("totalNote").textContent = "Narxlar yuklanmadi. Sahifani yangilang yoki @fibotai ga yozing.";
+    /* Shaxsiy Telegram nomi o'rniga sahifada bor rasmiy yo'l: aloqa
+       bo'limi va futerdagi raqam.  Xato matnida shaxsiy nom «bizga
+       yozib qo'ying» degan noto'g'ri taassurot berardi. */
+    $("totalNote").textContent =
+      "Narxlar yuklanmadi. Sahifani yangilang yoki aloqa bo‘limidagi raqamga qo‘ng‘iroq qiling.";
   });
 
   bindForm();

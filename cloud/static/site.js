@@ -52,7 +52,15 @@
         body: JSON.stringify(payload),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.detail || T("send_failed"));
+      /* `detail` SATR bo'lsagina ko'rsatiladi.  FastAPI validatsiya
+         xatosida u RO'YXAT qaytaradi va `new Error(list)` JavaScriptda
+         **`[object Object]`** bo'lib chiqardi — mijoz shuni o'qirdi.
+         Server tomonda ham handler qo'yilgan
+         (`cloud/main.py: public_validation_error`), bu esa ikkinchi
+         qator himoya: eski javob keshdan kelsa ham matn chiqadi. */
+      if (!response.ok) {
+        throw new Error(typeof body.detail === "string" ? body.detail : T("send_failed"));
+      }
       status.className = "form-status ok";
       status.textContent = successText || body.message;
       form.reset();

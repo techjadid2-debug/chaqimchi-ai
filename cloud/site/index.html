@@ -170,10 +170,19 @@
           <p class="hint">{{site.hero.install_hint}} <a href="/install">{{site.hero.install_link}}</a></p>
         </div>
 
-        <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
-        <form id="notifyForm" class="quick-download-form" hidden>
+        <!-- Forma STANDART HOLDA KO'RINADI va JS reliz topilganda uni
+             yashiradi — teskarisi emas.
+             Ilgari `#downloadReady` ham, forma ham `hidden` bilan
+             boshlanardi: JS o'chiq bo'lsa yoki `/api/v1/public/windows-release`
+             javob bermasa hero'da shu joyda BO'SH oq maydon qolardi va
+             mijoz yuklab olish borligini bilmasdi.  `install.html` da
+             naqsh to'g'ri qilingan (`#guideDownloadPending`) — bosh
+             sahifa unutilgan edi.
+
+             Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
+        <form id="notifyForm" class="quick-download-form">
           <p class="hint">{{site.notify.lead}}</p>
-          <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="{{site.notify.phone_placeholder}}">
+          <input type="tel" id="notifyPhone" name="phone" required minlength="5" maxlength="32" inputmode="tel" autocomplete="tel" aria-label="{{site.notify.phone_placeholder}}" placeholder="{{site.notify.phone_placeholder}}">
           <label class="consent">
             <input name="consent" type="checkbox" required>
             <span>{{site.notify.consent}}</span>
@@ -183,6 +192,12 @@
           <button class="button button-light" type="submit">{{site.notify.submit}}</button>
           <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
         </form>
+        <!-- JS butunlay o'chiq bo'lsa forma jo'natilmaydi (uni skript
+             ushlaydi) — shuning uchun ishlaydigan ikkita yo'l aytiladi. -->
+        <noscript>
+          <p class="hint">{{site.notify.noscript}}
+            <a href="/install">{{site.hero.install_link}}</a></p>
+        </noscript>
       </div>
 
       <!-- Raqamlar qatori — faqat ROST raqamlar. -->
@@ -397,7 +412,7 @@
         </div>
         <div class="field field-half">
           <label for="phone">{{site.contact.phone_label}}</label>
-          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="{{site.contact.phone_placeholder}}">
+          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required minlength="5" maxlength="32" placeholder="{{site.contact.phone_placeholder}}">
         </div>
         <input id="cameras" name="cameras" type="hidden" value="4">
         <input id="leadMessage" name="message" type="hidden" value="{{site.contact.hidden_message}}">
@@ -429,28 +444,12 @@
     </section>
   </main>
 
-  <footer class="band-dark">
-    <a class="brand brand-lockup" href="{{path}}">
-      {{inline:enes-mark.svg}}
-      <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
-    </a>
-    <p>
-      {{site.footer.tagline}}<br>
-      {{site.footer.contact}} {{site.contact.tg_person}} · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
-    </p>
-    <div>
-      <a href="/status">{{site.footer.status}}</a>
-      <a href="/oferta">{{site.footer.offer}}</a>
-      <a href="/maxfiylik">{{site.footer.privacy}}</a>
-      <a href="/hamkorlik">{{site.footer.partners}}</a>
-      <a href="/aloqa">{{site.footer.contact_page}}</a>
-      <a href="tel:+998932225070">+998 93 222 50 70</a>
-      <a href="/rozilik-shabloni">{{site.footer.consent}}</a>
-      <a href="__APP_URL__/owner">{{site.footer.owner_panel}}</a>
-      <a href="__PARTNER_URL__/installer">{{site.footer.installer_panel}}</a>
-    </div>
-    <p class="footer-powered">{{site.footer.powered}}</p>
-  </footer>
+  <!-- Futer partialdan keladi.  Ilgari bu yerda uning NUSXASI turardi
+       va havolalar qotirilgan edi (`/status`, `/hamkorlik`, `/aloqa`) —
+       ya'ni ruscha va inglizcha bosh sahifada futer o'zbekcha
+       sahifalarga olib borardi.  Partialda esa `page:` o'rinbosari
+       bor va u qurish paytida til bo'yicha almashadi. -->
+  {{include:partials/footer.html}}
 
   <!-- Mashina o'qiydigan ma'lumot.  Uchala blok ham sahifada BOR narsani
        takrorlaydi: razmetkada sahifada yo'q va'da bo'lmasligi kerak.

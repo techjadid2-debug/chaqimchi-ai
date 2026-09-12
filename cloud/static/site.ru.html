@@ -194,10 +194,19 @@
           <p class="hint">Установка: Далее → Далее → Готово. <a href="/install">Пошаговая инструкция</a></p>
         </div>
 
-        <!-- Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
-        <form id="notifyForm" class="quick-download-form" hidden>
+        <!-- Forma STANDART HOLDA KO'RINADI va JS reliz topilganda uni
+             yashiradi — teskarisi emas.
+             Ilgari `#downloadReady` ham, forma ham `hidden` bilan
+             boshlanardi: JS o'chiq bo'lsa yoki `/api/v1/public/windows-release`
+             javob bermasa hero'da shu joyda BO'SH oq maydon qolardi va
+             mijoz yuklab olish borligini bilmasdi.  `install.html` da
+             naqsh to'g'ri qilingan (`#guideDownloadPending`) — bosh
+             sahifa unutilgan edi.
+
+             Inline `display` YO'Q: u `hidden` atributini yengib qo'yadi. -->
+        <form id="notifyForm" class="quick-download-form">
           <p class="hint">Программа для Windows проходит финальное тестирование. Оставьте номер — отправим в день выхода.</p>
-          <input type="tel" id="notifyPhone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="Ваш телефон: +998 90 000 00 00">
+          <input type="tel" id="notifyPhone" name="phone" required minlength="5" maxlength="32" inputmode="tel" autocomplete="tel" aria-label="Ваш телефон: +998 90 000 00 00" placeholder="Ваш телефон: +998 90 000 00 00">
           <label class="consent">
             <input name="consent" type="checkbox" required>
             <span>Согласен на обработку данных для связи. <a href="/privacy">Конфиденциальность</a></span>
@@ -207,6 +216,12 @@
           <button class="button button-light" type="submit">Сообщить, когда будет готово</button>
           <p id="notifyStatus" class="form-status" role="status" aria-live="polite"></p>
         </form>
+        <!-- JS butunlay o'chiq bo'lsa forma jo'natilmaydi (uni skript
+             ushlaydi) — shuning uchun ishlaydigan ikkita yo'l aytiladi. -->
+        <noscript>
+          <p class="hint">В вашем браузере отключён JavaScript. Инструкция по загрузке и установке:
+            <a href="/install">Пошаговая инструкция</a></p>
+        </noscript>
       </div>
 
       <!-- Raqamlar qatori — faqat ROST raqamlar. -->
@@ -421,7 +436,7 @@
         </div>
         <div class="field field-half">
           <label for="phone">Ваш телефон</label>
-          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required placeholder="+998 90 000 00 00">
+          <input id="phone" name="phone" autocomplete="tel" inputmode="tel" required minlength="5" maxlength="32" placeholder="+998 90 000 00 00">
         </div>
         <input id="cameras" name="cameras" type="hidden" value="4">
         <input id="leadMessage" name="message" type="hidden" value="Saytdan so'rov">
@@ -453,9 +468,17 @@
     </section>
   </main>
 
-  <footer class="band-dark">
-    <a class="brand brand-lockup" href="/ru/">
-      <!-- ENES Monitoring — "NS" monogrammasi.
+  <!-- Futer partialdan keladi.  Ilgari bu yerda uning NUSXASI turardi
+       va havolalar qotirilgan edi (`/status`, `/hamkorlik`, `/aloqa`) —
+       ya'ni ruscha va inglizcha bosh sahifada futer o'zbekcha
+       sahifalarga olib borardi.  Partialda esa `page:` o'rinbosari
+       bor va u qurish paytida til bo'yicha almashadi. -->
+  <!-- Umumiy footer — bosh sahifa bilan bir xil.  Uch tilli sahifalarga
+     havola `page:` o'rinbosari bilan (ruscha sahifadan ruscha aloqaga),
+     faqat o'zbekcha sahifalar (oferta, maxfiylik) to'g'ridan-to'g'ri. -->
+<footer class="band-dark">
+  <a class="brand brand-lockup" href="/ru/">
+    <!-- ENES Monitoring — "NS" monogrammasi.
      Rang ATAYLAB `currentColor`: belgi yorug' temada to'q, qorong'ida
      oq bo'lishi kerak va buni CSS hal qiladi — ikkita fayl saqlash
      shart emas. -->
@@ -465,25 +488,25 @@
     <path d="M60 16H44l-6 10h16l-6 12H31"/>
   </g>
 </svg>
-      <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
-    </a>
-    <p>
-      Единая система для магазинов, NVR/IP-камер и AI-аналитики.<br>
-      Контакты: Абдулвосит Зокиржонов · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
-    </p>
-    <div>
-      <a href="/status">Статус системы</a>
-      <a href="/oferta">Публичная оферта</a>
-      <a href="/maxfiylik">Конфиденциальность</a>
-      <a href="/hamkorlik">Партнёрство</a>
-      <a href="/aloqa">Контакты</a>
-      <a href="tel:+998932225070">+998 93 222 50 70</a>
-      <a href="/rozilik-shabloni">Шаблон согласия</a>
-      <a href="__APP_URL__/owner">Панель клиента</a>
-      <a href="__PARTNER_URL__/installer">Панель установщика</a>
-    </div>
-    <p class="footer-powered">Powered by NS camera</p>
-  </footer>
+    <span class="brand-text"><b>ENES</b><small>Monitoring</small></span>
+  </a>
+  <p>
+    Единая система для магазинов, NVR/IP-камер и AI-аналитики.<br>
+    Контакты: Абдулвосит Зокиржонов · <a href="https://t.me/fibotai" target="_blank" rel="noopener noreferrer">@fibotai</a>
+  </p>
+  <div>
+    <a href="/ru/status">Статус системы</a>
+    <a href="/oferta">Публичная оферта</a>
+    <a href="/maxfiylik">Конфиденциальность</a>
+    <a href="/ru/hamkorlik">Партнёрство</a>
+    <a href="/ru/aloqa">Контакты</a>
+    <a href="tel:+998932225070">+998 93 222 50 70</a>
+    <a href="/rozilik-shabloni">Шаблон согласия</a>
+    <a href="__APP_URL__/owner">Панель клиента</a>
+    <a href="__PARTNER_URL__/installer">Панель установщика</a>
+  </div>
+  <p class="footer-powered">Powered by NS camera</p>
+</footer>
 
   <!-- Mashina o'qiydigan ma'lumot.  Uchala blok ham sahifada BOR narsani
        takrorlaydi: razmetkada sahifada yo'q va'da bo'lmasligi kerak.
@@ -540,6 +563,6 @@
        `<html lang>` dan emas, shu obyektdan oladi: ikkalasi bitta
        manbadan kelgani uchun ajralib ketmaydi. -->
   <script type="application/json" id="site-data">{"lang": "ru", "t": {"calc_cameras": "камер", "calc_empty": "Выберите хотя бы одну функцию.", "calc_failed": "Не удалось получить расчёт. Напишите нам — посчитаем вручную.", "calc_lead": "Сеть: {shops} магазинов, {features}. Примерно {monthly} / мес", "calc_total": "Примерно: <b>{monthly}</b> / мес · на магазин {per_shop}", "calc_yearly": "При оплате за год: {yearly} (расчёт за {months} мес.)", "choose": "Выбрать", "currency": "сум", "demo_message": "ENES Monitoring biznes paneli bo'yicha demo so'rayman (ru)", "error_generic": "Произошла ошибка. Попробуйте ещё раз.", "feature_note": "AI-функции сейчас проходят проверку в первых магазинах. Оставьте заявку — подключим вас первыми, как только запустим.", "from_per_month": "от {price}/мес", "lead_ok": "Запрос принят. Скоро свяжемся.", "notify_message": "Windows dasturi tayyor bo‘lganda xabar berilsin", "notify_ok": "Номер принят. В день выхода отправим вам одним из первых.", "on_request": "По запросу", "per_month": "/мес", "plan_message": "Tarif: {name} | Oyiga {price} (ru)", "plan_network_message": "Tarif: {name} — bir nechta do‘kon, bog‘lanishingizni so‘rayman (ru)", "pricing_failed": "Не удалось загрузить цены. Обновите страницу или напишите", "send_failed": "Запрос не отправлен", "sending": "Отправляем запрос…", "version": "Версия {version}", "write_to": "."}}</script>
-  <script src="/assets/site.js?v=3171c14591" defer></script>
+  <script src="/assets/site.js?v=3509a1a639" defer></script>
 </body>
 </html>

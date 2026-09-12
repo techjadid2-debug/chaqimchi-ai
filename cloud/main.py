@@ -40,8 +40,10 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import http_exception_handler as fastapi_http_exception_handler
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -2348,7 +2350,7 @@ def _render_landing(request: Request, lang: str = "uz") -> HTMLResponse:
     register_url = (
         f"https://t.me/{bot_username}?start=register"
         if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
-        else f"{origin}/#pilot"
+        else f"{origin}/#aloqa"
     )
     content = (
         page.read_text(encoding="utf-8")
@@ -2766,20 +2768,56 @@ def _render_public(name: str, request: Request, status_code: int = 200) -> HTMLR
         raise HTTPException(404, "Sahifa topilmadi")
     origin = str(request.base_url).rstrip("/")
     bot_username = os.environ.get("ENES_TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+    known_bot = bool(re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username))
     register_url = (
         f"https://t.me/{bot_username}?start=register"
-        if re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username)
-        else f"{urls.public_url() or origin}/#pilot"
+        if known_bot
+        # Bosh sahifada `id="pilot"` YO'Q — bo'lim `#aloqa`.
+        else f"{urls.public_url() or origin}/#aloqa"
     )
+    # Bot NOMI ham serverdan.  Ilgari u sahifada qotirilgan edi
+    # (`aloqa.html`) va F7 cutoverida bot almashganda sahifa eski
+    # nomni ko'rsatib turardi — havola yangi botga, matn esa eskisiga.
+    # Nom noma'lum bo'lsa matn umuman ko'rsatilmaydi.
+    bot_label = f"@{bot_username}" if known_bot else i18n.t("site.telegram.no_bot")
     content = (
         page.read_text(encoding="utf-8")
         .replace("__PUBLIC_ORIGIN__", urls.public_url() or origin)
         .replace("__TELEGRAM_REGISTER_URL__", register_url)
+        .replace("__TELEGRAM_BOT_NAME__", bot_label)
         .replace("__APP_URL__", urls.app_url() or origin)
         .replace("__PARTNER_URL__", urls.partner_url() or origin)
         .replace("__DL_URL__", urls.dl_url() or origin)
     )
     return HTMLResponse(content, status_code=status_code)
+
+
+@app.exception_handler(RequestValidationError)
+async def public_validation_error(request: Request, exc: RequestValidationError):
+    """Saytdagi formada xato bo'lsa foydalanuvchi MATN o'qisin.
+
+    FastAPI `detail` ni RO'YXAT qilib qaytaradi
+    (`[{"loc": …, "msg": …, "type": …}]`).  Sayt skripti esa uni
+    `new Error(body.detail)` ga uzatardi va JavaScript obyektni satrga
+    aylantirib **`[object Object]`** yozardi — ya'ni telefon raqamini
+    qisqa kiritgan mijoz tushunarsiz texnik matn ko'rardi va formani
+    tashlab ketardi.  Triggeri oson edi: maydonda `minlength` yo'q,
+    server esa `min_length=5` talab qiladi.
+
+    Faqat `/api/v1/public/*` uchun: qurilma va panel API'lari
+    STRUKTURALI `detail` ni saqlaydi (`frontend/src/api.ts` uni
+    maydon bo'yicha o'qib qaysi maydon xato ekanini ko'rsatadi) —
+    ularni matnga aylantirish tashxisni yo'qotardi.
+
+    Matn so'rov tilida: `X-Lang`/`?lang=` middleware'da allaqachon
+    o'rnatilgan (`i18n.set_current`).
+    """
+    if request.url.path.startswith("/api/v1/public/"):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": i18n.t("public.error.validation"), "code": "validation"},
+        )
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -3215,7 +3253,7 @@ async def public_quote(body: PublicQuoteBody, request: Request) -> Dict[str, Any
         request.client.host if request.client else "unknown",
         limit=60,
         window_sec=600,
-        message="Juda ko'p so'rov. Bir necha daqiqadan keyin urinib ko'ring.",
+        message=i18n.t("public.error.too_many_requests"),
     )
     try:
         quote = get_store().feature_quote([item.model_dump() for item in body.selections])
@@ -3365,14 +3403,14 @@ async def public_create_lead(
         request.client.host if request.client else "unknown",
         limit=5,
         window_sec=3_600,
-        message="Juda ko'p ariza yuborildi. Bir soatdan keyin urinib ko'ring.",
+        message=i18n.t("public.error.too_many_leads"),
     )
     if not body.consent:
-        raise HTTPException(422, "Bog'lanish uchun rozilik talab qilinadi")
+        raise HTTPException(422, i18n.t("public.error.consent"))
     full_name = " ".join((body.full_name or "").split())
     phone = " ".join(body.phone.split())
     if sum(char.isdigit() for char in phone) < 5:
-        raise HTTPException(422, "Telefon raqami noto'g'ri")
+        raise HTTPException(422, i18n.t("public.error.phone"))
     client_host = request.client.host if request.client else "unknown"
     source_hash = hashlib.sha256(client_host.encode("utf-8")).hexdigest()
     try:
@@ -3469,13 +3507,13 @@ async def public_quick_trial(
         request.client.host if request.client else "unknown",
         limit=3,
         window_sec=3_600,
-        message="Juda ko'p so'rov yuborildi. Bir soatdan keyin urinib ko'ring.",
+        message=i18n.t("public.error.too_many_trials"),
     )
     if not body.consent:
-        raise HTTPException(422, "Bog'lanish uchun rozilik talab qilinadi")
+        raise HTTPException(422, i18n.t("public.error.consent"))
     phone = " ".join(body.phone.split())
     if sum(char.isdigit() for char in phone) < 5:
-        raise HTTPException(422, "Telefon raqami noto'g'ri")
+        raise HTTPException(422, i18n.t("public.error.phone"))
     name = (body.company or "Do'kon").strip()
     full_name = (body.full_name or "Mijoz").strip()
 

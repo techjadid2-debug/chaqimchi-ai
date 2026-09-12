@@ -134,10 +134,29 @@ def test_buy_button_does_not_promise_a_checkout() -> None:
 
 
 def test_pricing_section_has_a_noscript_fallback() -> None:
+    """Tariflar JS bilan chiziladi — JS'siz narx umuman ko'rinmasdi.
+
+    Sahifada bir nechta `<noscript>` bor (yuklab olish qatorida ham),
+    shuning uchun AYNAN tarif bloki qidiriladi: birinchi bloknni olish
+    2026-09-12 da yolg'on qizil bergan edi.
+    """
     html = SITE_HTML.read_text(encoding="utf-8")
-    assert "<noscript>" in html
     assert "JavaScript" in html
-    fallback = html[html.index("<noscript>") : html.index("</noscript>")]
+
+    blocks = [
+        html[start + len("<noscript>") : html.index("</noscript>", start)]
+        for start in [
+            index
+            for index in range(len(html))
+            if html.startswith("<noscript>", index)
+        ]
+    ]
+    assert blocks, "`<noscript>` umuman yo'q"
+    fallback = next(
+        (block for block in blocks if "Boshlang‘ich" in block),
+        "",
+    )
+    assert fallback, "tariflar uchun `<noscript>` bloki yo'q"
     for plan in ("Boshlang‘ich", "Biznes", "Tarmoq"):
         assert plan in fallback, plan
 

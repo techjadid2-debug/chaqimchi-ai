@@ -71,7 +71,7 @@ Kutiladigan javob: `✓ Arxiv butun.` va jadval sanog'i (`sites=…`).
 cd "/Users/abdulvosit/Desktop/ENES Monitoring"
 rsync -az --delete \
   --exclude '.git' --exclude '.venv' --exclude 'build' --exclude 'releases' \
-  --exclude '.deploy_keys' --exclude 'data' \
+  --exclude '.deploy_keys' --exclude 'data' --exclude '.claude' \
   --exclude '.env' --exclude '.env.production' --exclude '.env.production.bak-*' \
   --exclude 'node_modules' --exclude 'Yangi dizayn-2' --exclude 'dizayn-3' \
   --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.ruff_cache' \
@@ -94,6 +94,7 @@ va `deploy` foydalanuvchisi ularga yoza olmaydi.
 | `Yangi dizayn-2`, `dizayn-3` | Dizayn namunalari, ~12 MB + ~9 MB rasm — serverda kerak emas (saytga faqat kesilgan WebP kiradi) |
 | `releases` | 619 MB, bind mount; o'chsa yuklab olish 404 beradi |
 | `data` | Lokal ishlab chiqish ma'lumoti; production `cloud_state` volumeda |
+| `.claude` | **Agent worktree'lari** — repozitoriyning to'liq nusxalari (49 MB va o'sadi).  2026-09-12 da parallel agentlar bilan ishlaganda paydo bo'ldi; ro'yxatga qo'shilmasa serverga uch nusxa kod ketardi |
 
 Birinchi marta ishlatishdan oldin **quruq mashq** qiling — nima
 o'chishini ko'rasiz:

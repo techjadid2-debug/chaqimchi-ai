@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, clearToken, logout as serverLogout, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
+import { api, clearToken, logout as serverLogout, downloadBlobUrl, downloadCsv, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
 import { AppShell, Card, CopyButton, EmptyState, Avatar, ErrorStrip, LangSwitch, LoginScreen, PageHeader, Pill, Skeleton, StatCard, Tabs, ThemeToggle, useConfirm, useToast, type NavItem } from "./components";
@@ -297,8 +297,7 @@ function TelegramPage({siteId}:{siteId:string}) {
 function downloadTrafficCsv(dashboard:Dashboard) {
   const rows = dashboard.trend.map(point=>[point.date||point.day||"",point.entries??point.entered??point.count??0]);
   const csv = [[t("panel.download.csv_col_date"),t("panel.download.csv_col_entered")].join(","),...rows.map(row=>row.join(","))].join("\n");
-  const url=URL.createObjectURL(new Blob([`\uFEFF${csv}`],{type:"text/csv;charset=utf-8"}));
-  const link=document.createElement("a");link.href=url;link.download=t("panel.download.traffic_csv_filename",{site:dashboard.site.id});link.click();URL.revokeObjectURL(url);
+  downloadCsv(csv, t("panel.download.traffic_csv_filename",{site:dashboard.site.id}));
 }
 
 /* Kunning to'liq hisobotini serverdan Excelda ochiladigan CSV qilib oladi.
@@ -310,7 +309,7 @@ function downloadTrafficCsv(dashboard:Dashboard) {
 async function downloadDailyReportCsv(siteId:string) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
   const url = await mediaObjectUrl("/api/v1/owner/report.csv", "owner", siteId);
-  const link=document.createElement("a");link.href=url;link.download=t("panel.download.daily_filename",{date:today});link.click();URL.revokeObjectURL(url);
+  downloadBlobUrl(url, t("panel.download.daily_filename",{date:today}));
 }
 
 /* Oxirgi 30 kunning davriy hisoboti — raqobatchining oylik branch-summary
@@ -323,7 +322,7 @@ async function downloadPeriodReportCsv(siteId:string) {
   const startDate = new Date(); startDate.setDate(startDate.getDate() - 29);
   const start = startDate.toLocaleDateString("en-CA", tz);
   const url = await mediaObjectUrl(`/api/v1/owner/report.csv?start=${start}&end=${end}`, "owner", siteId);
-  const link=document.createElement("a");link.href=url;link.download=t("panel.download.period_filename",{start,end});link.click();URL.revokeObjectURL(url);
+  downloadBlobUrl(url, t("panel.download.period_filename",{start,end}));
 }
 
 type Navigate = (id: string, param?: string, sub?: string) => void;
@@ -358,7 +357,15 @@ function ReportsPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; 
     catch (reason) { toast(reason instanceof Error ? reason.message : t("panel.download.failed"), false); }
     finally { setBusy(""); }
   };
-  return <>{toastNode}<PageHeader title={t("panel.nav.reports")} subtitle={t("panel.owner.reports_subtitle")} actions={<><button className="btn btn-primary" disabled={Boolean(busy)} onClick={()=>void download("daily")}><Icon name="download"/>{t("panel.download.daily_csv")}</button><button className="btn" disabled={Boolean(busy)} onClick={()=>void download("period")}><Icon name="download"/>{t("panel.download.period_csv")}</button><button className="btn" onClick={()=>downloadTrafficCsv(dashboard)}><Icon name="report"/>{t("panel.download.traffic_csv")}</button></>}/><div className="metric-grid"><StatCard label={t("panel.owner.metric_visits_today")} value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><StatCard label={t("panel.owner.metric_queue")} value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><StatCard label={t("panel.home.stat.cameras")} value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><StatCard label={t("panel.nav.alerts")} value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>{t("panel.owner.trend_title")}</h2><p>{t("panel.owner.trend_note")}</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
+  /* Uchinchi tugma toastsiz qolgan edi: u ma'lumotni KLIENTDA yasaydi,
+     ya'ni tarmoq xatosi bo'lmaydi — lekin `trend` bo'sh bo'lsa faqat
+     sarlavhali fayl tushadi va ega nima bo'lganini bilmaydi. */
+  const downloadTrend = () => {
+    if (!dashboard.trend.length) { toast(t("panel.download.empty"), false); return; }
+    try { downloadTrafficCsv(dashboard); }
+    catch (reason) { toast(reason instanceof Error ? reason.message : t("panel.download.failed"), false); }
+  };
+  return <>{toastNode}<PageHeader title={t("panel.nav.reports")} subtitle={t("panel.owner.reports_subtitle")} actions={<><button className="btn btn-primary" disabled={Boolean(busy)} onClick={()=>void download("daily")}><Icon name="download"/>{t("panel.download.daily_csv")}</button><button className="btn" disabled={Boolean(busy)} onClick={()=>void download("period")}><Icon name="download"/>{t("panel.download.period_csv")}</button><button className="btn" onClick={downloadTrend}><Icon name="report"/>{t("panel.download.traffic_csv")}</button></>}/><div className="metric-grid"><StatCard label={t("panel.owner.metric_visits_today")} value={formatNumber(value(dashboard.today,"traffic.entered","entered","entries","visitors"))} icon="users"/><StatCard label={t("panel.owner.metric_queue")} value={formatNumber(value(dashboard.today,"queue.alerts","queue_events","queue_alerts"))} icon="bell" tone="yellow"/><StatCard label={t("panel.home.stat.cameras")} value={formatNumber(dashboard.site.cameras_active)} icon="camera" tone="green"/><StatCard label={t("panel.nav.alerts")} value={formatNumber(dashboard.events.length)} icon="shield" tone="blue"/></div><Numbers dashboard={dashboard} siteId={siteId}/><Card><div className="card-head"><div><h2>{t("panel.owner.trend_title")}</h2><p>{t("panel.owner.trend_note")}</p></div></div><TrendChart points={dashboard.trend}/></Card><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>;
 }
 
 /** Bo'lim sahifasi: tab qatori + tanlangan sahifa.

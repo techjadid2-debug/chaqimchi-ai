@@ -376,7 +376,10 @@ function PairingModal({ name, result, platform, onClose }: { name: string; resul
 function PolicyModal({ siteId, onClose, onDone }: { siteId: string; onClose: () => void; onDone: (message: string) => void }) {
   const [info, setInfo] = useState<{ releases: { version: string; signed?: boolean; size_mb?: number }[]; latest?: string | null } | null>(null);
   const [choice, setChoice] = useState<"auto" | "hold" | "pin">("auto"); const [version, setVersion] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  useEffect(() => { api<{ releases: { version: string; signed?: boolean }[]; latest?: string | null }>("/api/v1/admin/windows-releases", "admin").then(data => { setInfo(data); setVersion(data.latest || data.releases[0]?.version || ""); }).catch(reason => setError(reason instanceof Error ? reason.message : "Relizlar olinmadi")); }, []);
+  /* Xatoda BO'SH ro'yxat, `null` emas: `null` skeletni abadiy
+     ushlab turardi va oynada «Saqlash» tugmasi ham hech qachon
+     ochilmasdi — admin nima bo'lganini bilmasdi. */
+  useEffect(() => { api<{ releases: { version: string; signed?: boolean }[]; latest?: string | null }>("/api/v1/admin/windows-releases", "admin").then(data => { setInfo(data); setVersion(data.latest || data.releases[0]?.version || ""); }).catch(reason => { setInfo({ releases: [] }); setError(reason instanceof Error ? reason.message : "Relizlar olinmadi"); }); }, []);
   const submit = async () => {
     setBusy(true); setError("");
     try {

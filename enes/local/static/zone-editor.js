@@ -187,42 +187,71 @@
     this.draw();
   };
 
+  /* `askName` va `confirm` QIYMAT ham, PROMISE ham qaytarishi mumkin.
+   *
+   * Nega: uchta chaqiruvchi bor va ular boshqa-boshqa muhitda ishlaydi.
+   * Lokal sehrgar (`setup.js`) do'kon kompyuterining brauzerida turadi
+   * va u yerda `prompt()` normal ishlaydi.  Ega/usta paneli esa React
+   * va u Telegram WebView ichida ham ochiladi — u yerda `prompt()`
+   * ko'rsatilmasligi mumkin va zona nomlash JIM O'LADI (`components.tsx`
+   * dagi `ConfirmDialog` izohi shu sababdan yozilgan).
+   *
+   * `Promise.resolve()` orqasida ikkalasi ham ishlaydi: satr qaytargan
+   * eski chaqiruvchi o'zgarmaydi, modal oyna esa promise qaytaradi.
+   */
+  function _ask(editor, title, fallback) {
+    return Promise.resolve(
+      editor.options.askName ? editor.options.askName(title, fallback) : fallback
+    );
+  }
+
   ZoneEditor.prototype._commitLine = function () {
-    var name = this.options.askName
-      ? this.options.askName("Chiziq nomi", "kirish")
-      : "kirish";
-    if (!name) {
-      this.draft = [];
-      return;
-    }
-    this.lines.push({
-      name: String(name).slice(0, 60),
-      camera_id: this.cameraId,
-      start: this.draft[0],
-      end: this.draft[1],
-      swap_direction: false,
-    });
+    var self = this;
+    /* Nuqtalar SO'RASHDAN OLDIN olinadi va qoralama darhol tozalanadi:
+     * oyna ochiq turganda kanvasda osilib qolgan yarim chiziq
+     * ko'rinmasin va ustiga bosilgan yangi nuqta eski qoralamaga
+     * qo'shilib ketmasin. */
+    var start = this.draft[0];
+    var end = this.draft[1];
     this.draft = [];
-    this.onChange();
+    _ask(this, "Chiziq nomi", "kirish").then(function (name) {
+      if (!name) {
+        self.draw();
+        return;
+      }
+      self.lines.push({
+        name: String(name).slice(0, 60),
+        camera_id: self.cameraId,
+        start: start,
+        end: end,
+        swap_direction: false,
+      });
+      self.draw();
+      self.onChange();
+    });
   };
 
   ZoneEditor.prototype._commitZone = function () {
-    var name = this.options.askName ? this.options.askName("Zona nomi", "kassa") : "zona";
-    if (!name) {
-      this.draft = [];
-      return;
-    }
-    this.zones.push({
-      name: String(name).slice(0, 60),
-      camera_id: this.cameraId,
-      polygon: this.draft.slice(),
-      restricted: false,
-      queue: false,
-      shelf: false,
-      dwell_sec: null,
-    });
+    var self = this;
+    var polygon = this.draft.slice();
     this.draft = [];
-    this.onChange();
+    _ask(this, "Zona nomi", "kassa").then(function (name) {
+      if (!name) {
+        self.draw();
+        return;
+      }
+      self.zones.push({
+        name: String(name).slice(0, 60),
+        camera_id: self.cameraId,
+        polygon: polygon,
+        restricted: false,
+        queue: false,
+        shelf: false,
+        dwell_sec: null,
+      });
+      self.draw();
+      self.onChange();
+    });
   };
 
   ZoneEditor.prototype._remove = function (event) {
@@ -236,15 +265,26 @@
     if (!pt) return;
     var hit = this._hit(pt);
     if (!hit) return;
+    var self = this;
     var list = hit.kind === "zone" ? this.zones : this.lines;
     var label = hit.kind === "zone" ? "Zona" : "Chiziq";
-    var confirmed = this.options.confirm
-      ? this.options.confirm(label + ' "' + list[hit.index].name + '" o‘chirilsinmi?')
-      : true;
-    if (!confirmed) return;
-    list.splice(hit.index, 1);
-    this.onChange();
-    this.draw();
+    /* Qaysi shakl o'chirilishini INDEKS emas, OBYEKT bilan eslab
+     * qolamiz: tasdiq oynasi ochiq turganda ro'yxat o'zgarishi mumkin
+     * (boshqa kamera tanlandi, konfig qayta yuklandi) va o'sha indeks
+     * butunlay boshqa shaklga tegib ketardi. */
+    var target = list[hit.index];
+    Promise.resolve(
+      this.options.confirm
+        ? this.options.confirm(label + ' "' + target.name + '" o‘chirilsinmi?')
+        : true
+    ).then(function (confirmed) {
+      if (!confirmed) return;
+      var index = list.indexOf(target);
+      if (index < 0) return;
+      list.splice(index, 1);
+      self.onChange();
+      self.draw();
+    });
   };
 
   ZoneEditor.prototype._grab = function (event) {

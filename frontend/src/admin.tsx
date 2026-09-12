@@ -1,8 +1,8 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, logout as serverLogout, copyText, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
+import { api, logout as serverLogout, copyText, downloadCsv, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
 import { t } from "./i18n";
-import { ActionMenu, AppShell, Avatar, Card, CopyField, EmptyState, LoginScreen, MetricCard, Modal, PageHeader, Pill, SearchPalette, Skeleton, useConfirm, useToast, type NavItem } from "./components";
+import { ActionMenu, AppShell, Avatar, Card, CopyField, EmptyState, ErrorStrip, LoginScreen, MetricCard, Modal, PageHeader, Pill, SearchPalette, Skeleton, useConfirm, useToast, type NavItem } from "./components";
 import { AdminHome } from "./AdminHome";
 import { AdminCustomer } from "./AdminCustomer";
 import { AdminTeam } from "./AdminTeam";
@@ -35,10 +35,16 @@ type AdminDashboard = {
   updated_at:string;
 };
 
-const NAV:NavItem[] = [
+/* Bo'limlar ro'yxati.  Tarjimali yorliq matn emas, katalog KALITI —
+   `owner.tsx: NAV_ITEMS` bilan bir xil sabab: modul yuklanganda til
+   hali tanlanmagan (`initLang()` fayl oxirida chaqiriladi), ya'ni bu
+   yerda `t()` ishlatilsa yorliq doim o'zbekcha qolardi.  `leads` aynan
+   shunday qotib qolgan edi.  Matn `AdminApp` ichida, chizish paytida
+   ochiladi.  Qolgan yorliqlar hali o'zbekcha matn — admin i18n alohida ish. */
+const NAV_ITEMS:Array<{id:string;label?:string;key?:string;icon:string}> = [
   {id:"overview",label:"Umumiy holat",icon:"home"},
   {id:"customers",label:"Mijozlar",icon:"users"},
-  {id:"leads",label:t("panel.nav.leads"),icon:"invoice"},
+  {id:"leads",key:"panel.nav.leads",icon:"invoice"},
   {id:"branches",label:"Filiallar",icon:"branch"},
   {id:"cameras",label:"Kameralar",icon:"camera"},
   {id:"devices",label:"Qurilmalar",icon:"server"},
@@ -52,7 +58,7 @@ const NAV:NavItem[] = [
   {id:"settings",label:"Sozlamalar",icon:"settings"},
 ];
 
-const ROUTE_IDS = NAV.map(item=>item.id);
+const ROUTE_IDS = NAV_ITEMS.map(item=>item.id);
 const MOBILE_NAV = ["overview","customers","payments","monitoring"];
 
 function useAdminDashboard(authenticated:boolean, range:string) {
@@ -71,13 +77,15 @@ function exportSites(sites:Site[]) {
   const header = ["nomi","manzil","aloqa","kameralar_faol","kameralar_jami","tarif","kun_qoldi","oylik_narx"];
   const rows = sites.map(site=>[site.name,site.address||"",site.connection||"",site.cameras_active??"",site.cameras_expected??"",site.plan||"",site.days_left??"",site.monthly_price_uzs??""]);
   const csv = [header, ...rows].map(row=>row.map(cell=>`"${String(cell).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const url = URL.createObjectURL(new Blob([`﻿${csv}`],{type:"text/csv;charset=utf-8"}));
-  const link = document.createElement("a"); link.href = url; link.download = "enes-mijozlar.csv"; link.click(); URL.revokeObjectURL(url);
+  downloadCsv(csv, "enes-mijozlar.csv");
 }
 
 const CONNECTION_LABEL:Record<string,string> = { online:"Aloqada", stale:"Eskirgan", not_paired:"Ulanmagan", offline:"Oflayn" };
 
 function SiteTable({sites,onCreate,onOpen,searchable=false}:{sites:Site[];onCreate?:()=>void;onOpen?:(site:Site)=>void;searchable?:boolean}) {
+  /* Javobsiz tugma buzuq tugmadan farq qilmaydi: bo'sh ro'yxatni
+     eksport qilsa faqat sarlavhali fayl tushardi. */
+  const[toast,toastNode]=useToast();
   /* `onOpen` — mijoz tafsilot sahifasi (`/admin/customers/<id>`): qurilma,
      kamera, diagnostika, funksiya biriktirish, login, hisob.  Eski
      admindagi «Mijozlar → karta» yo'li. */
@@ -97,10 +105,11 @@ function SiteTable({sites,onCreate,onOpen,searchable=false}:{sites:Site[];onCrea
   },[sites,query,status,plan]);
 
   return <Card>
+    {toastNode}
     <div className="card-head">
       <div><h2>Mijoz tizimlari</h2><p>Aloqa, tarif va kamera holati</p></div>
       <div className="page-actions">
-        {searchable ? <button className="btn" onClick={()=>exportSites(shown)}><Icon name="download"/>Eksport</button> : null}
+        {searchable ? <button className="btn" onClick={()=>{if(!shown.length){toast("Eksport qilinadigan mijoz yo‘q",false);return;}exportSites(shown);toast(`${shown.length} ta mijoz eksport qilindi`);}}><Icon name="download"/>Eksport</button> : null}
         {onCreate?<button className="btn btn-primary" onClick={onCreate}><Icon name="branch"/>Yangi mijoz</button>:null}
       </div>
     </div>
@@ -161,14 +170,18 @@ function PaidModal({invoice,onClose,onDone}:{invoice:AdminInvoice;onClose:()=>vo
 function PaymentsPage() {
   const[items,setItems]=useState<AdminInvoice[]|null>(null);const[error,setError]=useState("");const[paying,setPaying]=useState<AdminInvoice|null>(null);const[shown,setShown]=useState<AdminInvoice|null>(null);const[publicUrl,setPublicUrl]=useState("");
   const[confirm,confirmDialog]=useConfirm();const[toast,toastNode]=useToast();
-  const load=useCallback(()=>api<AdminInvoice[]>("/api/v1/admin/invoices","admin").then(data=>{setItems(data);setError("");}).catch(reason=>setError(reason instanceof Error?reason.message:"To‘lovlar olinmadi")),[]);
+  /* Xatoda ro'yxat BO'SH bo'ladi, `null` emas: `null` — «hali
+     yuklanmoqda», ya'ni skelet.  Ilgari xato chizig'i bilan yonma-yon
+     skelet ABADIY turib qolardi va qayta urinish tugmasi yo'q edi —
+     ega panelida bu 2026-09-11 da tuzatilgan, adminga ko'chmagan. */
+  const load=useCallback(()=>api<AdminInvoice[]>("/api/v1/admin/invoices","admin").then(data=>{setItems(data);setError("");}).catch(reason=>{setItems([]);setError(reason instanceof Error?reason.message:"To‘lovlar olinmadi");}),[]);
   useEffect(()=>{void load();api<{public_url?:string}>("/api/v1/admin/payments/providers","admin").then(data=>setPublicUrl(data.public_url||"")).catch(()=>{});},[load]);
   const cancel=async(invoice:AdminInvoice)=>{
     if(!(await confirm({title:"Hisobni bekor qilish",text:`«${invoice.site_name||invoice.site_id}» uchun ${formatMoney(invoice.amount_uzs,{short:false})} hisobi bekor qilinadi. Mijoz havoladan to‘lay olmaydi.`,confirmLabel:"Bekor qilish",danger:true})))return;
     try{await api(`/api/v1/admin/invoices/${encodeURIComponent(invoice.id)}/cancel`,"admin",{method:"POST"});toast("Hisob bekor qilindi");await load();}catch(reason){toast(reason instanceof Error?reason.message:"Bekor qilinmadi",false);}
   };
   const payLink=(invoice:AdminInvoice)=>`${(publicUrl||window.location.origin).replace(/\/$/,"")}/pay/${invoice.id}`;
-  return <><PageHeader title="To‘lovlar" subtitle="Hisob-faktura va operator tasdig‘idagi real obuna jarayoni."/>{error?<div className="alert-strip"><Icon name="bell"/><div><strong>To‘lov bilan muammo:</strong> {error}</div></div>:null}<Card><div className="card-head"><div><h2>Hisob-fakturalar</h2><p>Tasdiqlash obuna muddatini avtomatik uzaytiradi</p></div></div>{items===null?<div className="card-body"><Skeleton height={180}/></div>:items.length?<div className="table-wrap"><table><thead><tr><th>Mijoz</th><th>Hisob</th><th>Muddat</th><th>Summa</th><th>Holat</th><th>Amal</th></tr></thead><tbody>{items.map(invoice=><tr key={invoice.id}><td><div className="table-title">{invoice.site_name||invoice.site_id}</div></td><td><button className="link-button mono" onClick={()=>setShown(invoice)}>#{invoice.id.slice(0,8)}</button></td><td>{invoice.months} oy</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?"To‘langan":invoice.state==="pending"?"Kutilmoqda":"Bekor"}</Pill></td><td>{invoice.state==="pending"?<div className="page-actions"><button className="btn btn-primary btn-small" onClick={()=>setPaying(invoice)}>To‘lovni tasdiqlash</button><button className="btn btn-small btn-danger" onClick={()=>void cancel(invoice)}>Bekor</button></div>:invoice.provider||"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title="Hisob-faktura yo‘q" detail="Mijoz hisob yaratgach u shu ro‘yxatda ko‘rinadi."/>}</Card>
+  return <><PageHeader title="To‘lovlar" subtitle="Hisob-faktura va operator tasdig‘idagi real obuna jarayoni."/>{error?<ErrorStrip title="To‘lov bilan muammo:" detail={error} onRetry={()=>{setItems(null);void load();}}/>:null}<Card><div className="card-head"><div><h2>Hisob-fakturalar</h2><p>Tasdiqlash obuna muddatini avtomatik uzaytiradi</p></div></div>{items===null?<div className="card-body"><Skeleton height={180}/></div>:items.length?<div className="table-wrap"><table><thead><tr><th>Mijoz</th><th>Hisob</th><th>Muddat</th><th>Summa</th><th>Holat</th><th>Amal</th></tr></thead><tbody>{items.map(invoice=><tr key={invoice.id}><td><div className="table-title">{invoice.site_name||invoice.site_id}</div></td><td><button className="link-button mono" onClick={()=>setShown(invoice)}>#{invoice.id.slice(0,8)}</button></td><td>{invoice.months} oy</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?"To‘langan":invoice.state==="pending"?"Kutilmoqda":"Bekor"}</Pill></td><td>{invoice.state==="pending"?<div className="page-actions"><button className="btn btn-primary btn-small" onClick={()=>setPaying(invoice)}>To‘lovni tasdiqlash</button><button className="btn btn-small btn-danger" onClick={()=>void cancel(invoice)}>Bekor</button></div>:invoice.provider||"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title="Hisob-faktura yo‘q" detail="Mijoz hisob yaratgach u shu ro‘yxatda ko‘rinadi."/>}</Card>
     {paying?<PaidModal invoice={paying} onClose={()=>setPaying(null)} onDone={()=>{setPaying(null);toast("To‘lov qayd etildi, obuna uzaytirildi");void load();}}/>:null}
     {shown?<Modal title={`${shown.site_name||"Mijoz"} — hisob-faktura`} onClose={()=>setShown(null)}>
       <div className="simple-list"><div className="simple-row"><span>Summa</span><b>{formatMoney(shown.amount_uzs,{short:false})}</b></div><div className="simple-row"><span>Muddat</span><b>{shown.months} oy</b></div><div className="simple-row"><span>Holat</span><Pill state={shown.state}>{shown.state==="paid"?"To‘langan":shown.state==="pending"?"Kutilmoqda":"Bekor"}</Pill></div></div>
@@ -181,8 +194,11 @@ function PaymentsPage() {
 
 function PlansPage() {
   const[data,setData]=useState<{price_book?:{label?:string;usd_rate_uzs?:number;base_fee_usd_cents?:number};features:Feature[]}|null>(null);const[error,setError]=useState("");
-  useEffect(()=>{api<{price_book?:{label?:string;usd_rate_uzs?:number;base_fee_usd_cents?:number};features:Feature[]}>("/api/v1/admin/features","admin").then(setData).catch(reason=>setError(reason instanceof Error?reason.message:"Katalog olinmadi"));},[]);
-  return <><PageHeader title="Tariflar" subtitle="Versiyalangan narx katalogi; qo‘lda yozilgan soxta qiymat ko‘rsatilmaydi."/>{error?<div className="alert-strip"><Icon name="bell"/>{error}</div>:null}{data?<><div className="metric-grid"><MetricCard label="Faol katalog" value={data.price_book?.label||"—"} note="Serverdagi nashr" icon="card"/><MetricCard label="AI funksiyalar" value={formatNumber(data.features.length)} note="Katalogdagi imkoniyatlar" icon="pulse"/><MetricCard label="USD kursi" value={formatMoney(data.price_book?.usd_rate_uzs)} note="Hisoblash manbasi" icon="chart"/><MetricCard label="Platforma bazasi" value={data.price_book?.base_fee_usd_cents==null?"—":`$${(data.price_book.base_fee_usd_cents/100).toFixed(0)}`} note="Oylik bazaviy haq" icon="server"/></div><Card><div className="card-head"><div><h2>Funksiyalar katalogi</h2><p>Bir kamera uchun oylik qiymat</p></div></div><div className="table-wrap"><table><thead><tr><th>Funksiya</th><th>Tur</th><th>Mijoz narxi</th><th>Ichki qiymat</th></tr></thead><tbody>{data.features.map(feature=><tr key={feature.code}><td><div className="table-title">{feature.name}</div><div className="table-sub">{feature.code}</div></td><td>{feature.category}</td><td>${(feature.monthly_usd_cents/100).toFixed(2)}</td><td>${(feature.cost_usd_cents/100).toFixed(2)}</td></tr>)}</tbody></table></div></Card></>:<Card><div className="card-body"><Skeleton height={190}/></div></Card>}</>;
+  const load=useCallback(()=>{api<{price_book?:{label?:string;usd_rate_uzs?:number;base_fee_usd_cents?:number};features:Feature[]}>("/api/v1/admin/features","admin").then(data=>{setData(data);setError("");})
+    // Bo'sh katalog — «yuklanmadi» dan FARQLI holat: skelet to'xtaydi.
+    .catch(reason=>{setData({features:[]});setError(reason instanceof Error?reason.message:"Katalog olinmadi");});},[]);
+  useEffect(()=>{void load();},[load]);
+  return <><PageHeader title="Tariflar" subtitle="Versiyalangan narx katalogi; qo‘lda yozilgan soxta qiymat ko‘rsatilmaydi."/>{error?<ErrorStrip detail={error} onRetry={()=>{setData(null);void load();}}/>:null}{data?<><div className="metric-grid"><MetricCard label="Faol katalog" value={data.price_book?.label||"—"} note="Serverdagi nashr" icon="card"/><MetricCard label="AI funksiyalar" value={formatNumber(data.features.length)} note="Katalogdagi imkoniyatlar" icon="pulse"/><MetricCard label="USD kursi" value={formatMoney(data.price_book?.usd_rate_uzs)} note="Hisoblash manbasi" icon="chart"/><MetricCard label="Platforma bazasi" value={data.price_book?.base_fee_usd_cents==null?"—":`$${(data.price_book.base_fee_usd_cents/100).toFixed(0)}`} note="Oylik bazaviy haq" icon="server"/></div><Card><div className="card-head"><div><h2>Funksiyalar katalogi</h2><p>Bir kamera uchun oylik qiymat</p></div></div><div className="table-wrap"><table><thead><tr><th>Funksiya</th><th>Tur</th><th>Mijoz narxi</th><th>Ichki qiymat</th></tr></thead><tbody>{data.features.map(feature=><tr key={feature.code}><td><div className="table-title">{feature.name}</div><div className="table-sub">{feature.code}</div></td><td>{feature.category}</td><td>${(feature.monthly_usd_cents/100).toFixed(2)}</td><td>${(feature.cost_usd_cents/100).toFixed(2)}</td></tr>)}</tbody></table></div></Card></>:<Card><div className="card-body"><Skeleton height={190}/></div></Card>}</>;
 }
 
 /* Moliya: platforma va HAR MIJOZ nechchiga tushayapti.  Gemini xarajati
@@ -208,7 +224,10 @@ function FinancePage() {
   const [data,setData]=useState<Finance|null>(null);
   const [error,setError]=useState("");
   useEffect(()=>{let stopped=false;setData(null);api<Finance>(`/api/v1/admin/finance${month?`?month=${month}`:""}`,"admin").then(next=>{if(!stopped){setData(next);setError("");}}).catch(reason=>{if(!stopped)setError(reason instanceof Error?reason.message:"Moliya olinmadi");});return()=>{stopped=true;};},[month]);
-  const t=(n:number)=>Number(n||0).toLocaleString("ru-RU");
+  // `t` EMAS: i18n `t()` ni soyalab qo'yardi va shu funksiyada
+  // keyinchalik tarjima chaqirilsa jimgina son formatlagichga
+  // tushib ketardi.
+  const fmt=(n:number)=>Number(n||0).toLocaleString("ru-RU");
   if(error) return <><PageHeader title="Moliya" subtitle="Xarajat va daromad hisobi."/><Card><EmptyState icon="bell" title="Ma’lumot olinmadi" detail={error}/></Card></>;
   if(!data) return <><PageHeader title="Moliya" subtitle="Xarajat va daromad hisobi."/><Card><div className="card-body"><Skeleton height={190}/></div></Card></>;
   const {fixed,gemini,totals}=data;
@@ -234,7 +253,7 @@ function FinancePage() {
       <Card><div className="card-head"><div><h2>Gemini (AI yordamchi)</h2><p>Token sarfi Google javobidan — taxmin emas</p></div></div><div className="card-body">
         <div className="simple-row"><span>Model</span><b>{gemini.model||"sozlanmagan"}</b></div>
         <div className="simple-row"><span>Savollar</span><b>{gemini.jobs} ta{gemini.untracked_jobs?` (${gemini.untracked_jobs} kuzatilmagan)`:""}</b></div>
-        <div className="simple-row"><span>Tokenlar</span><b>{t(gemini.input_tokens)} kirish · {t(gemini.output_tokens)} chiqish</b></div>
+        <div className="simple-row"><span>Tokenlar</span><b>{fmt(gemini.input_tokens)} kirish · {fmt(gemini.output_tokens)} chiqish</b></div>
         <div className="simple-row"><span>Tarif</span><b>${gemini.input_usd_per_m}/1M · ${gemini.output_usd_per_m}/1M</b></div>
       </div></Card>
     </div>
@@ -245,7 +264,7 @@ function FinancePage() {
           <td><div className="table-title">{s.name||s.site_id}</div><div className="table-sub">{s.plan||"—"}{s.billable?"":" · qurilma ulanmagan"}</div></td>
           <td>{s.billable?formatMoney(s.revenue_uzs):"—"}</td>
           <td>{s.gemini_jobs}{s.gemini_untracked_jobs?<small className="table-sub"> ({s.gemini_untracked_jobs})</small>:null}</td>
-          <td><small>{t(s.gemini_input_tokens)} / {t(s.gemini_output_tokens)}</small></td>
+          <td><small>{fmt(s.gemini_input_tokens)} / {fmt(s.gemini_output_tokens)}</small></td>
           <td>{formatMoney(s.gemini_cost_uzs)}</td>
           <td>{s.billable?formatMoney(s.shared_cost_uzs):"—"}</td>
           <td><b>{formatMoney(s.total_cost_uzs)}</b></td>
@@ -264,7 +283,7 @@ function FinancePage() {
  * (2026-09-07 da rebrending paytida topildi.) */
 function LeadsPage() {
   const[leads,setLeads]=useState<Lead[]|null>(null);const[error,setError]=useState("");const[busy,setBusy]=useState("");
-  const load=useCallback(()=>{api<Lead[]>("/api/v1/admin/leads","admin").then(setLeads).catch(reason=>setError(reason instanceof Error?reason.message:t("panel.lead.load_failed")));},[]);
+  const load=useCallback(()=>{api<Lead[]>("/api/v1/admin/leads","admin").then(data=>{setLeads(data);setError("");}).catch(reason=>{setLeads([]);setError(reason instanceof Error?reason.message:t("panel.lead.load_failed"));});},[]);
   useEffect(load,[load]);
 
   async function act(lead:Lead,path:string,body:unknown){
@@ -277,7 +296,7 @@ function LeadsPage() {
   const convert=(lead:Lead)=>act(lead,`/api/v1/admin/leads/${lead.id}/convert`,{subscription_months:1});
 
   return <><PageHeader title={t("panel.lead.title")} subtitle={t("panel.lead.subtitle")}/>
-    {error?<div className="alert-strip alert-warning"><Icon name="bell"/>{error}</div>:null}
+    {error?<ErrorStrip detail={error} onRetry={()=>{setLeads(null);void load();}}/>:null}
     <Card>{leads===null?<div className="card-body"><Skeleton height={200}/></div>:leads.length?<div className="simple-list">{leads.map(lead=>{
       const open=lead.status!=="closed"&&!lead.site_id;
       return <div className="simple-row" key={lead.id}>
@@ -346,13 +365,16 @@ function AdminApp() {
   const notPaired = data?.stats.not_paired || 0;
   const attention = offline + notPaired;
 
+  /* Menyu yorliqlari shu yerda ochiladi (`NAV_ITEMS` izohiga qarang). */
+  const NAV:NavItem[] = useMemo(()=>NAV_ITEMS.map(({id,label,key,icon})=>({ id, icon, label: key?t(key):label||id })),[]);
+
   /* ⌘K uchun ro'yxat: bo'limlar + mijozlar.  Mijozni tanlash uni
      filtrlash uchun emas, mijozlar sahifasiga olib boradi — u yerda
      qidiruv maydoni bor. */
   const searchEntries = useMemo(()=>[
     ...NAV.map(item=>({ id:`nav-${item.id}`, label:item.label, hint:"Bo‘lim", onSelect:()=>navigate(item.id) })),
     ...(data?.sites || []).map(site=>({ id:`site-${site.id}`, label:site.name, hint:site.address||"Mijoz", onSelect:()=>navigate("customers", site.id) })),
-  ],[data?.sites]);
+  ],[NAV,data?.sites]);
 
   if(!authenticated) return <LoginScreen kind="admin" onSubmit={submit} busy={busy} error={loginError}/>;
   if(loading&&!data) return <div className="login-page"><section className="login-visual"><Logo/><div><span className="eyebrow">ADMIN PANEL</span><h1>Platforma holati olinmoqda.</h1></div></section><section className="login-panel"><div style={{width:"min(390px,100%)"}}><Skeleton height={60}/><div style={{height:14}}/><Skeleton height={180}/></div></section></div>;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, tokenFor } from "./api";
-import { Card, EmptyState, PageHeader, Pill } from "./components";
+import { Card, EmptyState, PageHeader, Pill, useConfirm, usePrompt } from "./components";
 import { t } from "./i18n";
 import { Icon } from "./icons";
 import type { LineShape, ZoneEditorInstance, ZoneShape } from "./zone-editor";
@@ -101,6 +101,8 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [askName, promptDialog] = usePrompt();
+  const [confirm, confirmDialog] = useConfirm();
   const [saved, setSaved] = useState(false);
   /* Server saqlagandan keyin chizmani o'zi tekshiradi
      (`cloud/config_health.py`).  Panel chegaralarni QAYTA HISOBLAMAYDI —
@@ -121,8 +123,23 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
       .then(() => {
         if (stopped || !canvas.current || !window.ZoneEditor) return;
         editor.current = new window.ZoneEditor(canvas.current, {
-          askName: (title, fallback) => window.prompt(title, fallback),
-          confirm: message => window.confirm(message),
+          /* `window.prompt`/`window.confirm` ATAYLAB ishlatilmaydi:
+             Telegram WebView'da ular ko'rsatilmasligi mumkin va zona
+             nomlash JIM O'LADI — foydalanuvchi zonani chizadi, oyna
+             chiqmaydi, shakl saqlanmaydi.  Usta esa obyektda aynan
+             telefondan chizadi.  Muharrir promise ham qabul qiladi
+             (`zone-editor.js: _ask`). */
+          askName: (title, fallback) => askName({
+            title: title === "Chiziq nomi" ? t("panel.geometry.name_line") : t("panel.geometry.name_zone"),
+            initial: fallback,
+            hint: t("panel.geometry.name_hint"),
+          }),
+          confirm: message => confirm({
+            title: t("panel.geometry.delete_title"),
+            text: message,
+            danger: true,
+            confirmLabel: t("panel.common.delete"),
+          }),
           onChange: sync,
         });
         setReady(true);
@@ -299,5 +316,7 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
         </p>
       </div>
     </Card>
+    {promptDialog}
+    {confirmDialog}
   </>;
 }

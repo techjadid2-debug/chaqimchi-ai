@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
-import { Card, EmptyState, PageHeader, Pill, Skeleton, useConfirm, useToast } from "./components";
+import { Card, EmptyState, ErrorStrip, PageHeader, Pill, Skeleton, useConfirm, useToast } from "./components";
 import { Icon } from "./icons";
 
 /* Sozlamalar — tizim tayyorligi, Telegram ogohlantirishi, yangilanish
@@ -21,7 +21,10 @@ export function AdminSettings() {
   const [toast, toastNode] = useToast();
 
   const load = useCallback(() => {
-    api<{ items?: ReadinessItem[] }>("/api/v1/admin/readiness", "admin").then(setReadiness).catch(reason => setError(reason instanceof Error ? reason.message : "Readiness olinmadi"));
+    // Xatoda BO'SH ro'yxat, `null` emas: `null` — «hali yuklanmoqda»,
+    // ya'ni skelet abadiy qolib ketardi (ega panelidagi naqsh,
+    // `EventEvidence.tsx`).
+    api<{ items?: ReadinessItem[] }>("/api/v1/admin/readiness", "admin").then(data => { setReadiness(data); setError(""); }).catch(reason => { setReadiness({ items: [] }); setError(reason instanceof Error ? reason.message : "Readiness olinmadi"); });
     api<Alerts>("/api/v1/admin/alerts", "admin").then(setAlerts).catch(() => setAlerts({}));
     api<Providers>("/api/v1/admin/payments/providers", "admin").then(setProviders).catch(() => setProviders({}));
     api<{ paused: boolean }>("/api/v1/admin/updates-paused", "admin").then(data => setPaused(Boolean(data.paused))).catch(() => setPaused(null));
@@ -57,7 +60,7 @@ export function AdminSettings() {
 
   return <>
     <PageHeader title="Sozlamalar" subtitle="Ishlab chiqarish integratsiyalari, ogohlantirish va yangilanish tarqatish." />
-    {error ? <div className="alert-strip"><Icon name="bell" />{error}</div> : null}
+    {error ? <ErrorStrip detail={error} onRetry={() => { setReadiness(null); load(); }} /> : null}
 
     <Card>
       <div className="card-head"><div><h2>Tizim tayyorligi</h2><p>{readiness ? `${items.length - missing.length}/${items.length} tayyor` : "Yashirilmagan real muhit tekshiruvlari"}</p></div></div>

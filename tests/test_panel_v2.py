@@ -27,6 +27,11 @@ from cloud.i18n import tg
 SRC = Path(__file__).resolve().parents[1] / "frontend" / "src"
 SHELLS = Path(__file__).resolve().parents[1] / "frontend"
 STATIC = Path(__file__).resolve().parents[1] / "cloud" / "static"
+#: Chizish vositasi cloud'dan TASHQARIDA turadi: Windows paketi `cloud/` ni
+#: ko'chirmaydi, ya'ni bundle qilingan nusxa qurilmadagi bilan ajralib ketardi.
+ZONE_EDITOR = (
+    Path(__file__).resolve().parents[1] / "enes" / "local" / "static" / "zone-editor.js"
+)
 
 #: Do'kon egasiga ko'rinadigan fayllar.  `admin.tsx` bu ro'yxatda YO'Q:
 #: admin panelini faqat biz ochamiz va u yerda ichki atamalar bo'lishi
@@ -342,6 +347,47 @@ def test_a_failed_request_never_leaves_a_skeleton() -> None:
     assert "export function ErrorStrip" in src("components.tsx")
 
 
+#: Admin sahifasi → o'sha sahifadagi yuklanish holati.  Har biri API
+#: yiqilganda ro'yxatni BO'SH qilishi va `ErrorStrip onRetry` bilan
+#: qayta urinish taklif qilishi shart.
+ADMIN_LOADERS = {
+    "admin.tsx": ("setItems([])", "setData({features:[]})", "setLeads([])"),
+    "AdminSettings.tsx": ("setReadiness({ items: [] })",),
+    "AdminTeam.tsx": ("setAccounts([])",),
+    "AdminCustomer.tsx": ("setInfo({ releases: [] })",),
+}
+
+
+def test_the_admin_pages_also_recover_from_a_failed_request() -> None:
+    """Ega panelida tuzatilgan naqsh adminga KO'CHMAGAN edi.
+
+    2026-09-11 QA faqat ega panelini qamradi.  Adminda xuddi shu nuqson
+    olti joyda turgan: `catch` xabarni yozardi, ro'yxat esa `null`
+    («hali yuklanmoqda») bo'lib qolardi — xato chizig'i bilan yonma-yon
+    abadiy skelet.  Admin ichki vosita, lekin obuna, to'lov va login
+    aynan shu yerdan boshqariladi: «yuklanmoqda» da qotgan sahifa
+    to'lovni qabul qilishga to'sqinlik qiladi.
+    """
+    for name, markers in ADMIN_LOADERS.items():
+        code = src(name)
+        for marker in markers:
+            assert marker in code, f"{name}: xatoda ro'yxat bo'sh bo'lsin — `{marker}` yo'q"
+
+    # Qayta urinish YUKLANISH xatosida bo'lsin va aynan o'sha
+    # ro'yxatni `null` ga qaytarib qayta so'rasin.  (AMAL xatosi —
+    # «Amal bajarilmadi» — boshqa narsa: u skelet qoldirmaydi va
+    # `alert-strip` bo'lib qolaveradi.)
+    retries = {
+        "admin.tsx": ("setItems(null);void load()", "setData(null);void load()", "setLeads(null);void load()"),
+        "AdminSettings.tsx": ("setReadiness(null); load()",),
+        "AdminTeam.tsx": ("setAccounts(null); load()",),
+    }
+    for name, handlers in retries.items():
+        code = src(name)
+        for handler in handlers:
+            assert handler in code, f"{name}: «Qayta urinish» yo'q yoki qayta so'ramaydi — `{handler}`"
+
+
 def test_report_buttons_do_not_promise_excel() -> None:
     """Tugma «Excel» desa-yu fayl CSV bo'lsa — yolg'on yorliq.
 
@@ -461,18 +507,44 @@ def test_the_admin_can_fix_a_shop_remotely() -> None:
         assert endpoint in admin, f"React adminda yo'q: {endpoint}"
 
 
-def test_the_admin_uses_no_native_dialogs() -> None:
+def test_no_panel_uses_native_dialogs() -> None:
     """`prompt()`/`confirm()` — eski admin qoidasi (2026-08-19).
 
     Brauzer oynasida "auto" yoki "naqd" deb YOZISH kerak edi — bitta harf
     xato, amal bajarilmasdi.  React adminda `window.confirm` 2026-09-07 da
     qaytib kelgan edi (`PaymentsPage`); endi tasdiqlash `ConfirmDialog`,
     tanlov modal ichida tugma bilan.
+
+    Qamrov 2026-09-12 da EGA fayllariga ham kengaytirildi: test faqat
+    adminni tekshirgani uchun `GeometryEditor.tsx` da `window.prompt`
+    va `window.confirm` jimgina qaytib kelgan edi.  Bu eng yomon
+    joyi — zona nomlash Telegram WebView'da umuman ishlamasligi mumkin
+    va usta obyektda aynan telefondan chizadi.
     """
-    admin = admin_src()
-    found = re.search(r"window\.(prompt|confirm|alert)\s*\(", admin)
-    assert found is None, f"brauzer oynasi qaytib kelgan: {found.group(0) if found else ''}"
-    assert "useConfirm(" in admin, "tasdiqlash o'z oynasi bilan bo'lsin"
+    for name in ADMIN_FILES + OWNER_FILES:
+        found = re.search(r"window\.(prompt|confirm|alert)\s*\(", src(name))
+        assert found is None, f"{name}: brauzer oynasi qaytib kelgan: {found.group(0) if found else ''}"
+    assert "useConfirm(" in admin_src(), "tasdiqlash o'z oynasi bilan bo'lsin"
+    assert "usePrompt(" in owner_src(), "chizma nomlash o'z oynasi bilan bo'lsin"
+
+
+def test_the_shape_editor_can_be_named_without_a_browser_dialog() -> None:
+    """Muharrir callbacki PROMISE ham qabul qilsin.
+
+    `zone-editor.js` uchta joyda ishlatiladi: lokal sehrgar (do'kon
+    kompyuterining brauzeri — u yerda `prompt()` normal), eski
+    o'rnatuvchi paneli va React paneli.  React'da modal oyna asinxron,
+    ya'ni sinxron `askName` kontrakti bilan uni ulash IMKONSIZ edi.
+    Kontrakt `Promise.resolve()` orqasiga olindi — satr qaytargan eski
+    chaqiruvchilar o'zgarmadi.
+    """
+    editor = ZONE_EDITOR.read_text(encoding="utf-8")
+
+    assert "Promise.resolve(" in editor, "callback promise qabul qilmaydi"
+    assert "function _ask(" in editor, "nom so'rash bitta joyda bo'lsin"
+    # Tasdiq oynasi ochiq turganda ro'yxat o'zgarishi mumkin — indeks
+    # bo'yicha o'chirish butunlay boshqa shaklga tegib ketardi.
+    assert "list.indexOf(target)" in editor, "o'chirish indeks bo'yicha qolgan"
 
 
 def test_the_customer_page_is_deep_linkable() -> None:
@@ -574,3 +646,47 @@ def test_the_owner_menu_is_short_enough_for_a_phone() -> None:
     assert len(re.findall(r'\{ id: "', nav)) <= 8
     for tab_id in re.findall(r'"(\w+)"', re.search(r"const TABS[^{]*\{(.*?)\n\};", text, re.S).group(1)):
         assert f'"panel.tabs.{tab_id}"' in src("i18n/catalogue.generated.ts"), f"panel.tabs.{tab_id} katalogda yo'q"
+
+
+def test_no_panel_resolves_a_label_at_import_time() -> None:
+    """`t()` MODUL DARAJASIDA chaqirilmasin.
+
+    Modul yuklanganda til hali tanlanmagan (`initLang()` qobiq faylining
+    oxirida chaqiriladi), ya'ni import paytida ochilgan yorliq DOIM
+    o'zbekcha qoladi.  Ega panelida bu 2026-09-08 da tuzatilgan
+    (`NAV_ITEMS` kalit saqlaydi), adminda esa bitta yorliq
+    (`panel.nav.leads`) jimgina qotib qolgan edi.
+
+    Tekshiruv: modul darajasidagi `const` e'lonlari ichida `t(` bo'lmasin.
+    """
+    for name in OWNER_FILES + ADMIN_FILES:
+        code = src(name)
+        for index, line in enumerate(code.splitlines(), start=1):
+            if not line.startswith("const ") and not line.startswith("  {id:"):
+                continue
+            assert "t(\"" not in line and "t(`" not in line, (
+                f"{name}:{index} — yorliq import paytida ochilyapti: {line.strip()[:80]}"
+            )
+
+
+def test_the_csv_download_works_in_safari_too() -> None:
+    """`<a>` DOMga qo'shilsin va manzil darhol bekor qilinmasin.
+
+    To'rtta yuklash joyi bir xil boilerplate'ni alohida yozgan edi va
+    uchtasida ham ikkita xato bor: element hujjatga qo'shilmasdi
+    (Safari va ba'zi WebView'lar bunday `click()` ni jimgina tashlab
+    yuboradi — tugma bosiladi, hech narsa yuklanmaydi, xato ham
+    chiqmaydi) va `revokeObjectURL` sinxron chaqirilardi (brauzer
+    yuklashni boshlashga ulgurmasdan manzil o'chardi).
+    """
+    api_src = src("api.ts")
+    assert "export function downloadBlobUrl" in api_src, "umumiy yordamchi yo'q"
+    assert "document.body.appendChild(link)" in api_src, "`<a>` DOMga qo'shilmaydi"
+    assert "window.setTimeout(" in api_src, "`revokeObjectURL` darhol chaqirilyapti"
+
+    # Chaqiruv joylarida boilerplate QAYTA paydo bo'lmasin.
+    for name in ("owner.tsx", "admin.tsx"):
+        code = src(name)
+        assert "document.createElement(\"a\")" not in code, (
+            f"{name}: yuklash boilerplate'i qaytib kelgan — `downloadBlobUrl()` ishlatilsin"
+        )

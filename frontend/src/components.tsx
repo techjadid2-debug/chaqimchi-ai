@@ -362,6 +362,51 @@ export function ConfirmDialog({ request, onResolve }: { request: ConfirmRequest;
   </Modal>;
 }
 
+export type PromptRequest = {
+  title: string;
+  /** Maydonga oldindan yozib qo'yiladigan taklif (masalan «kirish»). */
+  initial?: string;
+  hint?: string;
+  confirmLabel?: string;
+};
+
+/** Matn so'raydigan oyna — `window.prompt` o'rniga.
+ *
+ * `ConfirmDialog` faqat ha/yo'q beradi, chizma nomlash esa MATN talab
+ * qiladi va `window.prompt` Telegram WebView'da ko'rsatilmasligi
+ * mumkin — u yerda zona nomlash jimgina o'lardi: foydalanuvchi zonani
+ * chizadi, oyna chiqmaydi va shakl saqlanmaydi.  Bo'sh nom bekor
+ * qilish bilan BIR XIL emas: bo'sh qoldirilsa taklif qilingan nom
+ * olinadi (muharrir `null` ni «bekor» deb o'qiydi). */
+export function PromptModal({ request, onResolve }: { request: PromptRequest; onResolve: (value: string | null) => void }) {
+  const [value, setValue] = useState(request.initial || "");
+  const submit = () => onResolve(value.trim() || request.initial || "");
+  return <Modal title={request.title} onClose={() => onResolve(null)} footer={<>
+    <button className="btn" onClick={() => onResolve(null)}>{t("panel.common.cancel")}</button>
+    <button className="btn btn-primary" onClick={submit}>{request.confirmLabel || t("panel.common.save")}</button>
+  </>}>
+    <label className="field-label">{request.title}
+      <input
+        className="input"
+        value={value}
+        maxLength={60}
+        autoFocus
+        onChange={event => setValue(event.target.value)}
+        onKeyDown={event => { if (event.key === "Enter") submit(); }}
+      />
+    </label>
+    {request.hint ? <p className="modal-text">{request.hint}</p> : null}
+  </Modal>;
+}
+
+/** `const [ask, dialog] = usePrompt(); const name = await ask({...});` */
+export function usePrompt(): [(request: PromptRequest) => Promise<string | null>, ReactNode] {
+  const [pending, setPending] = useState<{ request: PromptRequest; resolve: (value: string | null) => void } | null>(null);
+  const ask = (request: PromptRequest) => new Promise<string | null>(resolve => setPending({ request, resolve }));
+  const dialog = pending ? <PromptModal request={pending.request} onResolve={value => { pending.resolve(value); setPending(null); }} /> : null;
+  return [ask, dialog];
+}
+
 /** `const [confirm, dialog] = useConfirm(); if (await confirm({...})) …` */
 export function useConfirm(): [(request: ConfirmRequest) => Promise<boolean>, ReactNode] {
   const [pending, setPending] = useState<{ request: ConfirmRequest; resolve: (ok: boolean) => void } | null>(null);

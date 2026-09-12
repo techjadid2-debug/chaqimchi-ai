@@ -27,6 +27,16 @@ export type LineShape = {
   swap_direction?: boolean;
 };
 
+/* `askName` va `confirm` QIYMAT ham, PROMISE ham qaytarishi mumkin
+   (`enes/local/static/zone-editor.js: _ask`).  React paneli modal oyna
+   ishlatadi va u asinxron; lokal sehrgar esa `prompt()` bilan satr
+   qaytaradi va o'zgarmaydi. */
+export type ZoneEditorOptions = {
+  askName?: (title: string, fallback: string) => string | null | Promise<string | null>;
+  confirm?: (message: string) => boolean | Promise<boolean>;
+  onChange?: () => void;
+};
+
 export type ZoneEditorInstance = {
   load(config: { zones?: unknown[]; lines?: unknown[] }, cameraId: string): void;
   setImage(image: HTMLImageElement | null): void;
@@ -45,11 +55,7 @@ declare global {
   interface Window {
     ZoneEditor?: new (
       canvas: HTMLCanvasElement,
-      options: {
-        askName?: (title: string, fallback: string) => string | null;
-        confirm?: (message: string) => boolean;
-        onChange?: () => void;
-      },
+      options: ZoneEditorOptions,
     ) => ZoneEditorInstance;
   }
 }

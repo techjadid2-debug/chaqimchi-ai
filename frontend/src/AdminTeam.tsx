@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, formatDateShort } from "./api";
-import { Card, EmptyState, PageHeader, Pill, Skeleton, useToast } from "./components";
+import { Card, EmptyState, ErrorStrip, PageHeader, Pill, Skeleton, useToast } from "./components";
 import { Icon } from "./icons";
 import { PasswordModal, generatePassword } from "./AdminCustomer";
 
@@ -27,7 +27,7 @@ export function AdminTeam({ sites }: { sites: Site[] }) {
   const siteName = new Map(sites.map(site => [site.id, site.name]));
 
   const load = useCallback(() => {
-    api<{ accounts: Account[] }>("/api/v1/admin/accounts", "admin").then(data => { setAccounts(data.accounts || []); setError(""); }).catch(reason => setError(reason instanceof Error ? reason.message : "Akkauntlar olinmadi"));
+    api<{ accounts: Account[] }>("/api/v1/admin/accounts", "admin").then(data => { setAccounts(data.accounts || []); setError(""); }).catch(reason => { setAccounts([]); setError(reason instanceof Error ? reason.message : "Akkauntlar olinmadi"); });
     api<{ assignments: Assignment[] }>("/api/v1/admin/installer-assignments", "admin").then(data => setAssignments(data.assignments || [])).catch(() => setAssignments([]));
   }, []);
   useEffect(load, [load]);
@@ -60,7 +60,7 @@ export function AdminTeam({ sites }: { sites: Site[] }) {
 
   return <>
     <PageHeader title="Jamoa" subtitle="Admin, o‘rnatuvchi va mijoz loginlari; o‘rnatuvchi ishlari." actions={<button className="btn btn-primary" onClick={() => setShowAccount(value => !value)}><Icon name="users" />{showAccount ? "Bekor qilish" : "Yangi login"}</button>} />
-    {error ? <div className="alert-strip"><Icon name="bell" />{error}</div> : null}
+    {error ? <ErrorStrip detail={error} onRetry={() => { setAccounts(null); load(); }} /> : null}
 
     {showAccount ? <Card className="section-gap"><form className="card-body" onSubmit={createAccount}>
       <div className="form-grid">

@@ -135,6 +135,42 @@ export async function mediaObjectUrl(path: string, kind: "owner" | "admin", site
   return URL.createObjectURL(await response.blob());
 }
 
+/** Blob'ni faylga saqlaydi.
+ *
+ * Uchta tafsilot muhim va ular to'rtta chaqiruv joyida alohida yozilib
+ * xato bo'lgan edi:
+ *
+ * 1. `<a>` DOMga QO'SHILADI.  Safari va ba'zi WebView'lar hujjatda
+ *    turmagan elementning `click()` ini jimgina tashlab yuboradi —
+ *    tugma bosiladi, hech narsa yuklanmaydi va xato ham chiqmaydi.
+ * 2. `revokeObjectURL` DARHOL chaqirilmaydi.  Brauzer yuklashni
+ *    boshlashga ulgurmasdan manzil bekor qilinsa fayl bo'sh yoki
+ *    umuman kelmaydi; shuning uchun bir soniyadan keyin.
+ * 3. `rel="noopener"` — havola yangi kontekst ochsa ham.
+ */
+export function downloadBlobUrl(url: string, filename: string): void {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  window.setTimeout(() => {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+/** Matnni CSV fayl qilib beradi.  BOM saqlanadi: usiz Excel kirillni
+ *  buzadi (`cloud/main.py` dagi CSV yo'li bilan bir xil sabab). */
+export function downloadCsv(csv: string, filename: string): void {
+  downloadBlobUrl(
+    URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" })),
+    filename,
+  );
+}
+
 export async function login(username: string, password: string, kind: "owner" | "admin") {
   const result = await api<{ access_token: string; account: { role: string; full_name?: string } }>(
     "/api/v1/auth/login",

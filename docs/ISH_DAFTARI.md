@@ -38,8 +38,18 @@
     Face ID belgisi (`face_id_state` — qaror serverda, matn panelda uch
     tilda); yaroqsiz chiziq/zona haqida CHIZGAN ODAMGA aytiladi (uchala
     config PUT javobida, strukturaviy qulf bilan).
-  - **Holat:** `2335 passed, 12 skipped`, `ruff` toza, i18n va sayt
-    `--check` toza, bundle manba bilan bitta commitda.
+  - **Bosqich C (`dbda134`, `5cce2eb`, `1bb740c`):** panel xatolari —
+    zona nomlash `window.prompt` dan o'z oynasiga (Telegram WebView'da
+    u jim o'lardi), admin 6 sahifadagi abadiy skelet, CSV yuklash
+    Safari'da, yoqilmagan bo'lim darvozasi (`capabilities.agent` va
+    `capabilities.attendance`), fokus tuzog'i, telefonda qidiruv,
+    bitta KPI komponenti.  Tafsilot Tarixda.
+  - **Holat:** `2354 passed, 12 skipped`, `ruff` toza, i18n va sayt
+    `--check` toza, bundle manba bilan bitta commitda.  Lokal jonli
+    tekshiruv: `/owner`, `/admin`, `/installer`, `/installer-guide`,
+    `/install` 200; bundle fayllari 200; `capabilities.agent.ready`
+    false va sababli; yaroqsiz chiziq saqlanganda javobda
+    «Chiziq juda qisqa: 3 piksel» keldi; loglarda 0 xato.
   - ⏳ **Deploy qilinmagan.**  Cloud qismi (D1 qabul qilish, D5 javob,
     D6 tekshiruv) deploy talab qiladi; qurilma qismi (D1 yuborish)
     keyingi Windows relizi bilan chiqadi — **tartib: AVVAL cloud**.
@@ -756,21 +766,14 @@ soat bahosi, tuzoqlar) `~/.claude/plans/md-file-ichii-o-qi-linear-tulip.md`
 va topilmalar `docs/REJA_2026-09-12_tugallanmagan_ishlar.md` da.
 Bajarilgani: **A, D1, D2–D6** (yuqoriga qarang).  Qolgani:
 
-1. **B — sayt xatolari** (~6–8 soat).  Foydalanuvchi forma xatosida
+1. **B — sayt xatolari** (~6–8 soat) — **KEYINGI**.  Foydalanuvchi forma xatosida
    `[object Object]` o'qiydi (`cloud/static/site.js:55` + `main.py` da
    `RequestValidationError` handleri YO'Q); JS o'chiq bo'lsa bosh
    sahifada yuklab olish qatori bo'sh; bosh sahifa futeri partialdan
    NUSXA, ya'ni RU/EN sahifada o'zbekcha `/status`, `/hamkorlik`,
    `/aloqa`; `__TELEGRAM_REGISTER_URL__` zaxirasi `/#pilot` — bunday id
    yo'q; edu forma xatosi kulrang va xom `error.message` + `@fibotai`.
-2. **C — panel xatolari** (~8–10 soat).  `GeometryEditor.tsx:113-115`
-   da `window.prompt`/`window.confirm` (Telegram WebView'da jim o'ladi;
-   `useConfirm()` bor, matn oynasi uchun `PromptModal` yozilishi kerak);
-   admin 6 sahifada xato chizig'i ostida abadiy skelet + «Qayta urinish»
-   yo'q (naqsh `EventEvidence.tsx:104-116,137` da tayyor); CSV yuklashda
-   `<a>` DOMga qo'shilmaydi va `revokeObjectURL` darhol (4 joy);
-   `Modal` fokus tuzog'i — izoh bor, kod yo'q; `admin.tsx:41` `t()`
-   modul darajasida, `:211` `t` soyalangan.
+2. ✅ **C — panel xatolari** bajarildi (`dbda134`, `5cce2eb`, `1bb740c`).
 3. **E — usta paneli React'ga** (~12–16 soat).  `/installer` — oxirgi
    eski statik sahifa (faqat o'zbekcha, telefon uchun QA qilinmagan,
    API yiqilsa xato ko'rsatmaydi), usta esa obyektda telefondan
@@ -1232,6 +1235,44 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Panel testi FAQAT adminni tekshirardi.**  `test_the_admin_uses_no_native_dialogs`
+  nomi aynan shunday aytib turgan va `GeometryEditor.tsx` ga
+  `window.prompt`/`window.confirm` jimgina qaytib kelgan edi.  Yangi
+  qulflar `ADMIN_FILES + OWNER_FILES` ustida ishlaydi — yangi ega
+  fayli qo'shilsa `OWNER_FILES` ga ham yozing.
+- **`window.prompt` Telegram WebView'da ko'rsatilmasligi mumkin.**
+  Zona nomlash shu sababdan JIM o'lardi: foydalanuvchi chizadi, oyna
+  chiqmaydi, shakl saqlanmaydi, xato ham yo'q.  `zone-editor.js`
+  callbacklari endi `Promise.resolve()` orqasida — satr ham, promise
+  ham ishlaydi, ya'ni lokal sehrgar (`prompt()` normal ishlaydigan
+  joy) o'zgarmadi.
+- **Modal oynada `aria-modal="true"` klaviaturani TO'SMAYDI.**  U faqat
+  skrinriderga aytadi.  Izoh «fokus oyna ichida» deb yozilgan, kod esa
+  buni qilmasdi — Tab bosgan odam oyna ortidagi ko'rinmas tugmalarni
+  bosardi.  `useFocusTrap` ishlatilsin.  Dropdown'ga (qo'ng'iroq
+  paneli) tuzoq QO'YILMAYDI: u yerda Tab bilan chiqib ketish to'g'ri.
+- **`<a download>` DOMga qo'shilmasa Safari uni jimgina tashlaydi.**
+  Tugma bosiladi, fayl kelmaydi, xato ham chiqmaydi.  `revokeObjectURL`
+  ni sinxron chaqirish ham xuddi shunday: brauzer yuklashni boshlashga
+  ulgurmaydi.  `api.ts: downloadBlobUrl()` ishlatilsin — to'rtta joyda
+  boilerplate takrorlangan va uchtasida ikkala xato ham bor edi.
+- **`t()` MODUL darajasida chaqirilmasin.**  Til `initLang()` dan keyin
+  tanlanadi, ya'ni import paytida ochilgan yorliq doim o'zbekcha
+  qoladi (`admin.tsx` dagi `leads` shunday qotib qolgan edi).  Ro'yxat
+  KALIT saqlaydi, matn chizish paytida ochiladi (`owner.tsx: NAV_ITEMS`).
+- **`t` ni soyalash — tayyor xato.**  `const t=(n:number)=>…` i18n `t()`
+  ni bosib turardi; renomlashning O'ZI ikkita chaqiruvni ochib berdi.
+  Son formatlagichi `fmt` deb nomlanadi.
+- **`useEffect` deps'ga obyekt qo'shsangiz standart qiymatni MODUL
+  darajasiga chiqaring.**  `legacy: LegacyRoutes = {}` har chizishda
+  yangi obyekt yasaydi — shu sababdan `router.ts` da u deps'dan
+  tushirib qoldirilgan va `popstate` eski xaritani ushlab turgan edi.
+- **Kanvas rangini tokendan o'qishda ZAXIRA shart.**  `getComputedStyle`
+  birinchi chizishdan oldin bo'sh satr qaytaradi; buzuq token esa
+  `NaN` beradi va kanvasda ko'rinmas piksel bo'ladi — xarita jimgina
+  bo'sh chiqardi.  `--heat-scale` xom RGB uchligi saqlaydi (kanvas
+  `rgb()` satrini emas, son talab qiladi).
 
 - **`enes/sotqin_agent.py` — Box yo'li, do'kon kompyuteriga TEGISHLI
   EMAS.**  `report_camera_probes()`, `upload_previews()` va qolganlari
@@ -1941,6 +1982,44 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-12 — panel xatolari: ega + admin (`dbda134`, `5cce2eb`, `1bb740c`)
+
+Nima: usta zonani telefondan nomlay oladi; admin API yiqilganda xato
+va «Qayta urinish» ko'radi, abadiy skelet emas; CSV Safari'da ham
+yuklanadi; yoqilmagan bo'lim («AI yordamchi», «Xodimlar») menyuda
+turmaydi; klaviatura bilan ishlash tuzatildi (fokus tuzog'i, tab
+sohalari, fokus halqasi, muhimlik nuqtasi); telefonda qidiruv qaytdi.
+
+Nega: 2026-09-11 QA faqat ega panelini qamradi va ikki tomonlama
+qarz qoldirdi — adminda tuzatilmagan naqshlar, ega panelida esa
+qaytib kelgan brauzer oynalari.  Eng qimmati `GeometryEditor` dagi
+`window.prompt`: Telegram WebView'da u ko'rsatilmasligi mumkin va zona
+nomlash jim o'lardi, usta esa obyektda aynan telefondan chizadi.
+Test buni ushlamagan, chunki nomi ham, qamrovi ham faqat ADMIN edi.
+
+Qayerda: `enes/local/static/zone-editor.js` (callbacklar
+`Promise.resolve()` orqasida), `frontend/src/components.tsx`
+(`useFocusTrap`, `PromptModal`/`usePrompt`, `TabPanel`, `MetricCard`
+o'chdi), `api.ts: downloadBlobUrl/downloadCsv`,
+`admin.tsx`/`AdminSettings.tsx`/`AdminTeam.tsx`/`AdminCustomer.tsx`
+(skelet + `ErrorStrip onRetry`), `owner.tsx` (tab darvozasi, nav
+darvozasi, qo'ng'iroq fokusi), `EventEvidence.tsx` (`embedded`),
+`Heatmap.tsx`/`theme.ts` (ranglar tokendan), `router.ts` (deps),
+`styles.css`, `cloud/main.py` (`capabilities.agent`,
+`capabilities.attendance`), `cloud/static/tokens.css` (`--heat-scale`).
+
+Test: `tests/test_panel_v2.py` (+13 qulf: native oyna ikkala panelda,
+admin skelet tiklanishi, fokus tuzog'i, tab sohalari, telefon
+qidiruvi, fokus halqasi, muhimlik nuqtasi, AI darvozasi, davomat
+darvozasi, kamera sahifasi sarlavhasi, bitta KPI, o'lik CSS,
+tokenlar, router deps), `tests/test_camera_frame_size.py` (darvozalar
+dashboard javobida).
+
+Diqqat: `TABS` va `LEGACY_ROUTES` literallari ATAYLAB o'zgarmadi —
+tab `hidden` propi orqali yashiriladi.  Admin `devices` bo'limi
+o'chdi, eski manzil `LEGACY_ROUTES` orqali `monitoring` ga boradi.
+Deploy: cloud qismi (`capabilities`) deploy talab qiladi.
 
 ### 2026-09-12 — kamera joylashuvi, Face ID darvozasi, qizil testlar (`2a6ece3`, `b11381e`, `3200772`)
 

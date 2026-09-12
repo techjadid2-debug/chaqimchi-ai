@@ -134,6 +134,16 @@ class PaymentStore:
         # baribir `created_at` bo'yicha oldinda.
         if "seq" not in self._columns(conn, "invoices"):
             conn.execute("ALTER TABLE invoices ADD COLUMN seq INTEGER NOT NULL DEFAULT 0")
+        # Avtomatik yechish urinishlari.  Ishlab turgan bazaga
+        # qo'shiladi: jadval `payment_cards` bilan birga yaratilgan
+        # bo'lsa ham, eski nusxalarda bu ustunlar yo'q.
+        card_columns = self._columns(conn, "payment_cards")
+        if "attempts" not in card_columns:
+            conn.execute(
+                "ALTER TABLE payment_cards ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
+            )
+        if "last_attempt_at" not in card_columns:
+            conn.execute("ALTER TABLE payment_cards ADD COLUMN last_attempt_at TEXT")
         conn.commit()
         conn.close()
 
@@ -280,6 +290,59 @@ class PaymentStore:
             "UPDATE payment_cards SET last_error=?,updated_at=? WHERE site_id=? AND active=1",
             (str(message)[:300], now, site_id),
         )
+        conn.commit()
+        conn.close()
+
+    def begin_charge_attempt(self, site_id: str, *, max_attempts: int = 3) -> bool:
+        """Yechishdan OLDIN belgi qo'yadi.  `False` — urinmang.
+
+        Belgi yechishdan OLDIN qo'yiladi va bu ataylab: jarayon
+        yechish O'RTASIDA yiqilsa (provayder javobi kelgan, biz uni
+        yozishga ulgurmagan) keyingi yurishda ikkinchi marta
+        yechilardi — mijozdan ikki barobar pul olish eng qimmat xato.
+        Kunlik hisobotdagi belgi ham aynan shu sababdan avval qo'yiladi.
+
+        Ikki darvoza:
+        * kuniga ko'pi bilan BITTA urinish — provayder tomonidagi
+          vaqtincha nosozlik kun bo'yi takrorlanmasin;
+        * davr uchun `max_attempts` — uchtadan keyin qo'lda to'lovga
+          qaytadi va ega xabar oladi.
+        """
+        card = self.get_card(site_id)
+        if card is None or not card.get("verified"):
+            return False
+        if int(card.get("attempts") or 0) >= max_attempts:
+            return False
+        last = str(card.get("last_attempt_at") or "")
+        today = _iso(_utc_now())[:10]
+        if last[:10] == today:
+            return False
+        now = _iso(_utc_now())
+        conn = self._connect()
+        conn.execute(
+            "UPDATE payment_cards SET attempts=attempts+1,last_attempt_at=?,updated_at=? "
+            "WHERE site_id=? AND active=1",
+            (now, now, site_id),
+        )
+        conn.commit()
+        conn.close()
+        return True
+
+    def finish_charge_attempt(self, site_id: str, *, ok: bool, error: str = "") -> None:
+        """Muvaffaqiyatda hisob NOLLANADI — keyingi davr toza boshlansin."""
+        now = _iso(_utc_now())
+        conn = self._connect()
+        if ok:
+            conn.execute(
+                "UPDATE payment_cards SET attempts=0,last_error=NULL,updated_at=? "
+                "WHERE site_id=? AND active=1",
+                (now, site_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE payment_cards SET last_error=?,updated_at=? WHERE site_id=? AND active=1",
+                (str(error)[:300], now, site_id),
+            )
         conn.commit()
         conn.close()
 

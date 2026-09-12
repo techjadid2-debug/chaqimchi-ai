@@ -1700,6 +1700,10 @@ class CloudStore:
             # `0` — mijoz aytmagan; unda pul qatorlari umuman chiqmaydi
             # (taxminan taxmin qilish — yolg'on).
             "avg_daily_revenue_uzs": "INTEGER NOT NULL DEFAULT 0",
+            # Karta ulangani uchun sinov uzaytirilganmi.  Bir do'konga
+            # BIR MARTA: aks holda kartani qayta ulab sinovni cheksiz
+            # cho'zish mumkin bo'lardi.
+            "trial_bonus_given": "INTEGER NOT NULL DEFAULT 0",
         }
         for name, definition in site_additions.items():
             if name not in site_columns:
@@ -3980,6 +3984,36 @@ class CloudStore:
         conn.commit()
         conn.close()
         return {"site_id": site_id, "subscription_until": _iso(new_until)}
+
+    def grant_trial_bonus(self, site_id: str, days: int) -> Optional[Dict[str, Any]]:
+        """Karta ulangani uchun sinovni uzaytiradi — BIR MARTA.
+
+        `None` — bonus berilmadi: allaqachon berilgan yoki sinov
+        tugagan.  Ikkinchi marta berish kartani qayta ulab sinovni
+        cheksiz cho'zish yo'lini ochib qo'yardi.
+
+        Faqat SINOV davridagi saytga: pullik obunaga tekin kun
+        qo'shish mahsulotni arzonlashtirardi va bonusning ma'nosi
+        boshqa — u kartani ulashga undaydi.
+        """
+        site = self.get_site(site_id)
+        if not site:
+            raise ValueError("Sayt topilmadi")
+        if int(site.get("trial_bonus_given") or 0):
+            return None
+        now_naive = _utc_now().replace(tzinfo=None)
+        until = datetime.strptime(site["subscription_until"], "%Y-%m-%d %H:%M:%S")
+        if until < now_naive:
+            return None
+        new_until = until + timedelta(days=max(0, int(days)))
+        conn = self._connect()
+        conn.execute(
+            "UPDATE sites SET subscription_until=?,trial_bonus_given=1 WHERE id=?",
+            (_iso(new_until), site_id),
+        )
+        conn.commit()
+        conn.close()
+        return {"site_id": site_id, "subscription_until": _iso(new_until), "days": int(days)}
 
     def reduce_subscription(self, site_id: str, months: int) -> Dict[str, Any]:
         """Obunani qisqartirish — to'lov qaytarilganda (refund) `extend`ning teskarisi."""

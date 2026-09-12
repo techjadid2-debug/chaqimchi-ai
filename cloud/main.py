@@ -78,7 +78,7 @@ from cloud.owner_auth import (
     require_owner,
     require_owner_role,
 )
-from cloud.payments import PaymentStore, click_config, payme_config, public_url
+from cloud.payments import PaymentStore, cards, click_config, payme_config, public_url
 from cloud.payments import click as click_api
 from cloud.payments import payme as payme_api
 from cloud.payments.store import billable_months
@@ -1852,6 +1852,11 @@ async def _notify_rate_limited_sites() -> None:
 #: buni kun oxirida emas, o'sha payt bilishimiz kerak).
 _MAINTENANCE_STEP_SEC = 1_800
 _PURGE_EVERY_STEPS = 12
+#: Avtomatik to'lov kuniga bir marta: 48 × 30 daqiqa = 24 soat.
+#: Tez-tez yurish foyda bermaydi — `begin_charge_attempt()` baribir
+#: kuniga bitta urinishga ruxsat beradi, lekin bekorga baza so'rovi
+#: bo'lardi.
+_AUTO_RENEW_EVERY_STEPS = 48
 #: Reliz tozalash — kuniga bir marta (48 × 30 daqiqa).  Tezroq qilishning
 #: ma'nosi yo'q: yangi reliz haftada bir-ikki marta chiqadi, papkada esa
 #: har prefiksda uchta juftlik ataylab turadi.
@@ -1940,6 +1945,11 @@ async def _maintenance_loop() -> None:
             await asyncio.to_thread(ratelimit.limiter().sweep)
             await _notify_rate_limited_sites()
             await _notify_multi_version_sites()
+            # Avtomatik to'lov kuniga bir marta.  `_PURGE_EVERY_STEPS`
+            # bilan bir xil qadamda EMAS: ikkalasi bir yurishda
+            # bajarilsa sekin purge to'lovni kechiktirardi.
+            if step % _AUTO_RENEW_EVERY_STEPS == 2:
+                await _auto_renew_subscriptions()
         except asyncio.CancelledError:
             break
         except Exception:
@@ -3489,7 +3499,19 @@ SELF_SERVICE_LIMIT_DEFAULT = 10
 
 #: Bepul sinov o'rnatish va ma'lumot yig'ishga yetishi, ammo pullik
 # mahsulotni uch oyga bepul almashtirib yubormasligi kerak.
-SELF_SERVICE_TRIAL_DAYS_DEFAULT = 14
+#:
+#: **KARTASIZ 7 kun** (ega qarori 2026-09-12).  Ro'yxatdan o'tishda
+#: karta so'ralmaydi va shu payt hech kimda karta yo'q, ya'ni har
+#: yangi do'kon aynan shu muddat bilan boshlanadi.
+SELF_SERVICE_TRIAL_DAYS_DEFAULT = 7
+
+#: Karta ulanganda sinov shuncha kunga UZAYADI (7 + 7 = 14).
+#:
+#: Nega qo'shimcha, almashtirish emas: karta ro'yxatdan o'tgandan
+#: KEYIN, panelda ulanadi — o'sha paytda sinovning bir qismi allaqachon
+#: sarflangan bo'ladi va «14 kun» ni noldan hisoblash mijozga qarzdor
+#: bo'lib qolardi.  Bir do'konga BIR MARTA (`trial_bonus_given`).
+TRIAL_BONUS_DAYS = 7
 
 
 def _self_service_limit() -> int:
@@ -3507,6 +3529,14 @@ def _self_service_trial_days() -> int:
         return max(1, int(raw)) if raw else SELF_SERVICE_TRIAL_DAYS_DEFAULT
     except ValueError:
         return SELF_SERVICE_TRIAL_DAYS_DEFAULT
+
+
+def _trial_bonus_days() -> int:
+    raw = os.environ.get("ENES_TRIAL_BONUS_DAYS", "").strip()
+    try:
+        return max(0, int(raw)) if raw else TRIAL_BONUS_DAYS
+    except ValueError:
+        return TRIAL_BONUS_DAYS
 
 
 @app.post("/api/v1/public/quick-trial")
@@ -10841,6 +10871,110 @@ def _renewal_pay_url(site_id: str, period: str) -> str:
     return str(_with_links(invoice)["pay_url"])
 
 
+#: Obuna tugashiga shuncha kun qolganda kartadan yechiladi.
+#:
+#: 3 kun: muvaffaqiyatsiz urinishdan keyin qo'lda to'lashga vaqt
+#: qolsin (grace 14 kun, ya'ni zaxira bor), lekin juda erta ham
+#: emas — mijoz hali ishlatmagan davr uchun pul yechilishi
+#: «nega yechildi?» degan savol tug'diradi.
+AUTO_RENEW_DAYS_BEFORE = 3
+
+#: Bir davr uchun ko'pi bilan shuncha urinish.  Keyin qo'lda to'lovga
+#: qaytadi va ega xabar oladi — cheksiz urinish provayderda ham,
+#: mijozda ham shovqin bo'lardi.
+AUTO_RENEW_MAX_ATTEMPTS = 3
+
+
+async def _auto_renew_one(site_id: str) -> bool:
+    """Bitta saytning obunasini kartadan uzaytiradi.
+
+    `True` — pul yechildi.  Xato YUTILADI va `False` qaytadi: bitta
+    saytning kartasi bloklangani qolgan saytlarni to'xtatmasligi kerak.
+    """
+    payments = get_payments()
+    card = payments.get_card(site_id, include_token=True)
+    if card is None:
+        return False
+    provider = str(card.get("provider") or "")
+    config = payme_config() if provider == "payme" else click_config()
+    if not config.configured:
+        # Kalitlar hali yo'q (egadan kutilmoqda) — urinish ham qilinmaydi.
+        return False
+
+    # Mavjud `pending` hisob QAYTA ISHLATILADI: ega qo'lda to'lash
+    # uchun havola ochgan bo'lishi mumkin va ikkinchi hisob ochilsa u
+    # ikkita boshqa summani ko'rardi (`_renewal_pay_url` bilan bir xil
+    # sabab).
+    pending = [
+        item for item in payments.list_invoices(site_id, limit=20) if item["state"] == "pending"
+    ]
+    invoice = pending[0] if pending else payments.create_invoice(site_id, 1, note="avto-to'lov")
+
+    try:
+        txn = await cards.charge(
+            provider,
+            config,
+            token=str(card["token"]),
+            amount_uzs=int(invoice["amount_uzs"]),
+            account={"invoice_id": str(invoice["id"])},
+            description=f"ENES Monitoring — {invoice['months']} oy",
+        )
+    except cards.CardError as exc:
+        payments.finish_charge_attempt(site_id, ok=False, error=exc.message)
+        logger.warning("Avto-to'lov o'tmadi (%s): %s", site_id, exc.message)
+        await _notify_site_members(
+            site_id,
+            OwnerMessage.from_key("digest.autopay.failed", reason=exc.message),
+        )
+        return False
+    except Exception:
+        # Kutilmagan xato kartani «yaroqsiz» qilmasin — ertaga qayta urinadi.
+        payments.finish_charge_attempt(site_id, ok=False, error="kutilmagan xato")
+        logger.exception("Avto-to'lovda kutilmagan xato: %s", site_id)
+        return False
+
+    payments.mark_paid(str(invoice["id"]), provider, provider_txn_id=txn)
+    payments.finish_charge_attempt(site_id, ok=True)
+    await _notify_site_members(
+        site_id,
+        OwnerMessage.from_key(
+            "digest.autopay.ok",
+            amount=value.uzs(int(invoice["amount_uzs"])),
+            months=int(invoice["months"]),
+        ),
+    )
+    return True
+
+
+async def _auto_renew_subscriptions() -> int:
+    """Muddati tugayotgan obunalarni saqlangan kartadan uzaytiradi.
+
+    FAQAT yetakchida chaqiriladi (`_maintenance_loop`): ikki worker
+    bir vaqtda yursa mijozdan ikki barobar pul olinardi.  Ikkinchi
+    darvoza kartaning o'zida — `begin_charge_attempt()` belgini
+    yechishdan OLDIN qo'yadi.
+    """
+    payments = get_payments()
+    store = get_store()
+    charged = 0
+    for site_id in payments.sites_with_active_cards():
+        try:
+            status = store.subscription_status(site_id)
+        except ValueError:
+            continue  # sayt o'chirilgan
+        # `grace` ham olinadi: obuna tugagan, lekin tizim hali
+        # ishlayapti — aynan shu payt to'lash kerak.
+        if status["status"] not in {"active", "grace"}:
+            continue
+        if int(status.get("days_left") or 0) > AUTO_RENEW_DAYS_BEFORE:
+            continue
+        if not payments.begin_charge_attempt(site_id, max_attempts=AUTO_RENEW_MAX_ATTEMPTS):
+            continue
+        if await _auto_renew_one(site_id):
+            charged += 1
+    return charged
+
+
 @app.get("/api/v1/admin/payments/providers")
 async def admin_payment_providers(_: None = Depends(require_admin)) -> Dict[str, Any]:
     """Qaysi provayder sozlangan — panel shunga qarab tugmalarni ko'rsatadi."""
@@ -10863,6 +10997,125 @@ async def admin_create_invoice(
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return _with_links(invoice)
+
+
+class BindCardBody(BaseModel):
+    """Karta raqami SAQLANMAYDI — u faqat provayderga o'tadi."""
+
+    provider: Literal["payme", "click"]
+    # 16-19 raqam (probel va tirelar bilan ham qabul qilinadi).
+    number: str = Field(min_length=12, max_length=32)
+    # `MMYY` yoki `MM/YY`.
+    expire: str = Field(min_length=4, max_length=7)
+
+
+class ConfirmCardBody(BaseModel):
+    code: str = Field(min_length=3, max_length=10)
+
+
+def _card_view(card: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Panelga ko'rsatiladigan karta.  Token HECH QACHON chiqmaydi."""
+    if card is None:
+        return None
+    return {
+        "provider": card.get("provider"),
+        "masked_pan": card.get("masked_pan"),
+        "verified": bool(card.get("verified")),
+        "last_error": card.get("last_error"),
+    }
+
+
+@app.get("/api/v1/owner/card")
+async def owner_card(owner: OwnerPrincipal = Depends(require_active_owner)) -> Dict[str, Any]:
+    """Saqlangan karta va qaysi provayder qabul qila oladi.
+
+    `providers` ikkalasi ham `False` bo'lishi NORMAL: Payme/Click
+    merchant kalitlari hali egadan kelmagan.  Panel shunda karta
+    bo'limini umuman ko'rsatmaydi (`capabilities` naqshi) — ishlamaydigan
+    tugma ko'rsatish «buzuq» degan taassurot beradi.
+    """
+    return {
+        "card": _card_view(get_payments().get_card(owner.site_id)),
+        "providers": cards.available_providers(payme_config(), click_config()),
+        "trial_bonus_days": _trial_bonus_days(),
+    }
+
+
+@app.post("/api/v1/owner/card")
+async def owner_bind_card(
+    body: BindCardBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """Kartani ulaydi va SMS kodi yuborilishini so'raydi."""
+    require_owner_role(owner, "owner", "service_admin")
+    config = payme_config() if body.provider == "payme" else click_config()
+    if not config.configured:
+        raise HTTPException(503, i18n.t("public.error.card_provider_off"))
+    ratelimit.check(
+        "card-bind",
+        owner.site_id,
+        limit=5,
+        window_sec=3_600,
+        message=i18n.t("public.error.too_many_requests"),
+    )
+    try:
+        bound = await cards.bind_start(
+            body.provider, config, number=body.number, expire=body.expire
+        )
+    except cards.CardError as exc:
+        raise HTTPException(422, exc.message) from exc
+    get_payments().save_card(
+        owner.site_id,
+        provider=body.provider,
+        token=bound.token,
+        masked_pan=bound.masked_pan,
+        verified=bound.verified,
+    )
+    return {"ok": True, "verified": bound.verified, "masked_pan": bound.masked_pan}
+
+
+@app.post("/api/v1/owner/card/confirm")
+async def owner_confirm_card(
+    body: ConfirmCardBody, owner: OwnerPrincipal = Depends(require_active_owner)
+) -> Dict[str, Any]:
+    """SMS kodini tasdiqlaydi.  Shundan keyingina yechish mumkin."""
+    require_owner_role(owner, "owner", "service_admin")
+    payments = get_payments()
+    card = payments.get_card(owner.site_id, include_token=True)
+    if card is None:
+        raise HTTPException(404, i18n.t("public.error.card_missing"))
+    provider = str(card["provider"])
+    config = payme_config() if provider == "payme" else click_config()
+    try:
+        confirmed = await cards.bind_confirm(
+            provider, config, token=str(card["token"]), code=body.code
+        )
+    except cards.CardError as exc:
+        raise HTTPException(422, exc.message) from exc
+    # Payme tasdiqlangandan keyin YANGI token beradi — eskisini saqlab
+    # qolish keyingi yechishni jimgina rad ettirardi.
+    payments.save_card(
+        owner.site_id,
+        provider=provider,
+        token=confirmed.token,
+        masked_pan=confirmed.masked_pan or str(card["masked_pan"]),
+        verified=True,
+    )
+    # Karta ulangani uchun sinov uzayadi — bir marta.
+    bonus = get_store().grant_trial_bonus(owner.site_id, _trial_bonus_days())
+    return {
+        "ok": True,
+        "card": _card_view(payments.get_card(owner.site_id)),
+        "bonus_days": (bonus or {}).get("days", 0),
+    }
+
+
+@app.delete("/api/v1/owner/card")
+async def owner_forget_card(
+    owner: OwnerPrincipal = Depends(require_active_owner),
+) -> Dict[str, Any]:
+    """Kartani butunlay o'chiradi — token bazada qolmaydi."""
+    require_owner_role(owner, "owner", "service_admin")
+    return {"ok": get_payments().forget_card(owner.site_id)}
 
 
 @app.get("/api/v1/owner/invoices")

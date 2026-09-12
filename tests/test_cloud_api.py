@@ -551,12 +551,22 @@ def test_the_trial_seats_are_limited(cloud_client, monkeypatch) -> None:
     assert "raqamingizni qoldiring" in second.json()["detail"], "berk ko'cha bo'lmasin"
 
 
-def test_self_service_trial_is_fourteen_days(cloud_client) -> None:
+def test_the_self_service_trial_matches_what_the_site_promises(cloud_client) -> None:
     """Sinov qiymatni ko'rishga yetadi, ammo pullik mahsulotni uch oy
-    bepul qilib qo'ymaydi."""
+    bepul qilib qo'ymaydi.
+
+    2026-09-12: 14 kundan **7 kunga** tushdi (ega qarori) — karta
+    ulagan mijoz yana 7 kun oladi (`TRIAL_BONUS_DAYS`).  Son shu
+    yerda qo'lda yozilmaydi: sayt matni ham, oferta ham AYNAN shu
+    konstantaga bog'langan (`tests/test_payment_cards.py`), ya'ni
+    ikkisi ajralib keta olmaydi.
+    """
+    from cloud.main import SELF_SERVICE_TRIAL_DAYS_DEFAULT
+
     data = cloud_client.post("/api/v1/public/quick-trial", json=QUICK_TRIAL).json()
 
-    assert data["trial_days"] == 14
+    assert data["trial_days"] == SELF_SERVICE_TRIAL_DAYS_DEFAULT
+    assert SELF_SERVICE_TRIAL_DAYS_DEFAULT == 7
 
 
 def test_windows_release_is_honest_about_availability(cloud_client, monkeypatch) -> None:

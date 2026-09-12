@@ -169,9 +169,25 @@
 
       <h2>6. Bepul sinov</h2>
       <p>
-        <b>14 kun</b>, karta talab qilinmaydi. Sinov davrida xizmat to‘liq
+        <b>7 kun</b>, karta talab qilinmaydi. Sinov davrida xizmat to‘liq
         hajmda ishlaydi. Sinov tugagach to‘lov qilinmasa xizmat to‘xtaydi.
       </p>
+      <!-- --------------------------------------------------------------
+           DIQQAT (jamoa uchun): kartadan TAKRORIY yechish bandi bu
+           yerga HALI YOZILMAGAN va bu ataylab.
+
+           Kod tayyor (`cloud/payments/cards.py`, avtomatik uzaytirish),
+           lekin u ikki narsagacha O'CHIQ turadi:
+             1. Payme/Click merchant kalitlari (egadan) — ularsiz
+                karta bo'limi panelda umuman ko'rinmaydi;
+             2. YURIST KO'RIGI — takroriy yechishga rozilik bandi
+                shartnomaviy talab, va uni yozib qo'yib keyin
+                to'g'rilash sud uchun eng yomon holat.
+
+           Karta ulash yoqilgan kuni shu yerga qo'shiladi: rozilik
+           matni, yechish sanasi, bekor qilish tartibi va
+           7-band (qaytarish) bilan ziddiyat yo'qligi.
+           -------------------------------------------------------------- -->
 
       <h2>7. To‘lov</h2>
       <p>

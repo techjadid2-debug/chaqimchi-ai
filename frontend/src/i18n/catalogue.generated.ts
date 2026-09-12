@@ -2328,7 +2328,7 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "panel.admin.team.empty_detail": "Создайте логин для помощника или монтажника.",
   "panel.admin.team.empty_title": "Только вы",
   "panel.admin.team.full_name": "Имя",
-  "panel.admin.team.guide": "Иллюстрированная инструкция",
+  "panel.admin.team.guide": "Инструкция с фото",
   "panel.admin.team.installer": "Монтажник",
   "panel.admin.team.jobs_subtitle": "Кто какой магазин устанавливает",
   "panel.admin.team.jobs_title": "Работы монтажников",

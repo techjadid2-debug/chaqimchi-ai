@@ -44,7 +44,7 @@ ENES Monitoring
 - Botga kirib `/start` bosing — yangi xush kelibsiz xabari va tugmalar
   chiqadi.
 - Xabar maydonidagi `/` tugmasini bosing — menyuda `/hisobot`,
-  `/kamera`, `/panel`, `/yordam` ko'rinadi (cloud qayta ishga
+  `/chek`, `/kamera`, `/panel`, `/yordam` ko'rinadi (cloud qayta ishga
   tushgandan keyin).
 - Bot profilini oching — avatar va tavsif ko'rinadi.
 

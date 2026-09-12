@@ -373,7 +373,11 @@ def test_ci_gives_the_build_a_cloud_address() -> None:
     assert "ENES_DEFAULT_CLOUD_URL:" in workflow, (
         "CI qurishga cloud manzilini bermasa, reliz cloudsiz chiqadi"
     )
-    assert "https://api.chaqimchi.uz" in workflow, "zaxira qiymat bo'lsin"
+    # Zaxira qiymat AYNAN joriy domen bo'lsin.  Qurilma cloud manzilini
+    # masofadan o'zgartira olmaydi va 3xx ga ham ergashmaydi — CI eski
+    # domen bilan reliz chiqarsa, o'sha manzil o'rnatuvchiga qotib
+    # tushadi va mijoz keyin faqat qo'lda tuzatiladi (F7 cutover saboqi).
+    assert "https://api.enes.uz" in workflow, "zaxira qiymat bo'lsin"
 
 
 def test_ci_checks_the_address_landed_in_the_package() -> None:

@@ -80,7 +80,7 @@ bo‘lib chiqadi.
 | Qaysi kamera | mijoz panelda o‘zi tanlaydi, ko‘pi bilan 2 ta |
 | Rasm | brauzerda JPEG ga aylantiriladi (iPhone HEIC beradi), ≤ 2 MB |
 | Biometrika | embedding Fernet bilan shifrlanadi; xodim ro‘yxatdan
-chiqarilsa rasm ham, embedding ham o‘chadi; yuz kadri 14 kun yashaydi |
+chiqarilsa rasm ham, embedding ham o‘chadi; yuz kadri **48 soat** yashaydi (`cloud/main.py: MEDIA_RETENTION_HOURS_DEFAULT`) |
 
 **Litsenziya bandi YOPILDI (2026-08-21).** Modellar OpenVINO Open Model
 Zoo'ga ko'chirildi va uchalasi ham **Apache-2.0** — tijoratga ochiq:

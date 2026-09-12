@@ -412,6 +412,10 @@ class RetailSupervisor:
             # Klip hisoblagichlari: "hodisa bor, klip yo'q" holatini panel
             # ham, cloud ham ko'rsin.
             "clips": status_file.get("clips") or {},
+            # Tungi nazorat hisoblagichlari — klip bilan bir xil sabab:
+            # holat faylida bor, heartbeat kutadi, o'rtada shu qator
+            # bo'lmasa cloudga jimgina nol boradi.
+            "night": status_file.get("night") or {},
             # Rasm yozildimi — klip bilan bir xil sabab.
             "snapshots": status_file.get("snapshots") or {},
             # Davomat va mijoz portreti sifati.  Holat faylida bor

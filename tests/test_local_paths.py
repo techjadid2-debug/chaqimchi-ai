@@ -135,18 +135,85 @@ def test_the_two_path_modules_agree_on_the_old_vendor_name() -> None:
     assert paths._LEGACY_WINDOWS_DIR == device_paths._LEGACY_WINDOWS_VENDOR[0]
 
 
-def test_the_box_bridge_stays_safe_because_nothing_creates_its_folders() -> None:
-    """`enes/paths.py` papka YARATMASIN — ko'prigi shunga tayanadi.
+def test_the_box_bridge_ignores_an_empty_new_folder(tmp_path: Path) -> None:
+    """Box ko'prigi ham endi BO'SHLIKKA qaraydi, borlikka emas.
 
-    U egizak moduldan farqli o'laroq hali `exists()` ga qarab tanlaydi,
-    ya'ni yangi nomdagi bo'sh papka paydo bo'lsa eski o'rnatish darhol
-    ko'rinmay qoladi.  Bugun bu xavfsiz, chunki papkani hech kim
-    yaratmaydi — lekin bu FARAZ, va aynan shu faraz buzilgani do'kon
-    dasturida pilotni 15 soatga to'xtatgan edi
+    Ilgari `enes/paths.py` `exists()` bilan tanlardi va bu faqat bitta
+    FARAZ ustida turardi: papkani hech kim yaratmaydi.  Faraz esa
+    tekshirib bo'lmaydigan joyda buzilishi mumkin — `mkdir -p` qiladigan
+    deploy skripti, yarim uzilgan o'rnatuvchi yoki ochilgan arxiv.  Xuddi
+    shu faraz do'kon dasturida buzilgani pilotni 15 soatga to'xtatgan edi
     (`enes/local/paths.py` dagi `_MARKER` izohi).
+    """
+    from enes import paths as device_paths
 
-    Shuning uchun tripwire: kimdir bu modulga `mkdir` qo'shsa, test
-    ko'prikni belgiga o'tkazish kerakligini aytadi.
+    current = tmp_path / "enes"
+    legacy = tmp_path / "chaqimchi"
+    current.mkdir()
+    (legacy / "current").mkdir(parents=True)
+
+    assert device_paths._has_installation(current) is False
+    assert device_paths._has_installation(legacy) is True
+
+
+def test_the_box_bridge_prefers_the_new_folder_once_it_is_installed(tmp_path: Path) -> None:
+    """Ko'chirilgandan keyin ikkala papka ham qoladi — yangisi ishlaydi."""
+    from enes import paths as device_paths
+
+    current = tmp_path / "enes"
+    legacy = tmp_path / "chaqimchi"
+    (current / "current").mkdir(parents=True)
+    (legacy / "current").mkdir(parents=True)
+
+    monkey = {str(current): str(legacy)}
+    original = device_paths._LINUX_LEGACY
+    device_paths._LINUX_LEGACY = monkey
+    try:
+        assert device_paths._linux_dir(str(current)) == current
+    finally:
+        device_paths._LINUX_LEGACY = original
+
+
+def test_the_box_bridge_falls_back_to_the_old_folder(tmp_path: Path) -> None:
+    """Yangi nomdagi papka bo'sh — eski o'rnatish tanlansin."""
+    from enes import paths as device_paths
+
+    current = tmp_path / "enes"
+    legacy = tmp_path / "chaqimchi"
+    current.mkdir()
+    (legacy / "current").mkdir(parents=True)
+
+    original = device_paths._LINUX_LEGACY
+    device_paths._LINUX_LEGACY = {str(current): str(legacy)}
+    try:
+        assert device_paths._linux_dir(str(current)) == legacy
+    finally:
+        device_paths._LINUX_LEGACY = original
+
+
+def test_the_box_bridge_survives_an_unreadable_folder(tmp_path: Path) -> None:
+    """Huquq yo'q bo'lsa "o'rnatish yo'q" deyiladi, xato tashlanmaydi.
+
+    `iterdir()` `exists()` dan farqli o'laroq `PermissionError` tashlashi
+    mumkin — va u yo'l hisoblashda ushlanmasa butun zanjir ko'tarilmaydi.
+    """
+    from enes import paths as device_paths
+
+    closed = tmp_path / "yopiq"
+    closed.mkdir()
+    closed.chmod(0o000)
+    try:
+        assert device_paths._has_installation(closed) is False
+    finally:
+        closed.chmod(0o755)
+
+
+def test_the_box_path_module_still_creates_no_folders() -> None:
+    """Yo'lni HISOBLAYDIGAN modul yon ta'sir qilmasin.
+
+    Ko'prik endi bo'shlikka qaragani uchun bu hayot-mamot emas, lekin
+    papka yaratish baribir bu modulning ishi emas: `data_dir()` ni
+    tashxis uchun chaqirgan skript diskda papka qoldirib ketmasin.
     """
     source = (Path(__file__).resolve().parents[1] / "enes" / "paths.py").read_text(
         encoding="utf-8"
@@ -158,7 +225,6 @@ def test_the_box_bridge_stays_safe_because_nothing_creates_its_folders() -> None
     )
     for chaqiruv in (".mkdir(", "makedirs("):
         assert chaqiruv not in kod, (
-            f"enes/paths.py papka yaratyapti ({chaqiruv}) — eski nomdagi "
-            "o'rnatish endi topilmay qoladi; ko'prikni `_MARKER` naqshiga "
-            "o'tkazing (`enes/local/paths.py`)"
+            f"enes/paths.py papka yaratyapti ({chaqiruv}) — yo'l hisoblash "
+            "yon ta'sirsiz bo'lsin"
         )

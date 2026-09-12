@@ -127,22 +127,35 @@ def test_a_versioned_legacy_release_is_found(tmp_path: Path, monkeypatch) -> Non
     assert main.latest_windows_release()["version"] == "0.6.29"
 
 
-def test_the_old_data_folder_is_used_when_the_new_one_does_not_exist(
+def test_the_old_data_folder_is_used_when_the_new_one_is_empty(
     tmp_path: Path, monkeypatch
 ) -> None:
     """Yangilangan kompyuterda sozlama, token va bufer eski papkada —
     yangi nom bilan bo'sh papkaga o'tib ketsa qurilma «juftlanmagan»
-    bo'lib qolardi."""
+    bo'lib qolardi.
+
+    Bu test ilgari teskarisini qulflab turardi: bo'sh `opt/enes` paydo
+    bo'lishi bilan ko'prik o'shanga o'tardi.  Aynan shu xatti-harakat
+    do'kon dasturida pilotni 15 soatga to'xtatgan edi, shuning uchun
+    2026-09-12 da ko'prik `exists()` dan `_has_installation()` ga
+    o'tkazildi — belgi papkaning BORLIGI emas, BO'SH EMASLIGI.
+    """
     from enes import paths
 
-    monkeypatch.setattr(paths, "_LINUX_LEGACY", {str(tmp_path / "opt/enes"): str(tmp_path / "opt/chaqimchi")})
+    current = tmp_path / "opt/enes"
     legacy = tmp_path / "opt/chaqimchi"
-    legacy.mkdir(parents=True)
+    monkeypatch.setattr(paths, "_LINUX_LEGACY", {str(current): str(legacy)})
+    (legacy / "current").mkdir(parents=True)
 
-    assert paths._linux_dir(str(tmp_path / "opt/enes")) == legacy
+    assert paths._linux_dir(str(current)) == legacy
 
-    (tmp_path / "opt/enes").mkdir()
-    assert paths._linux_dir(str(tmp_path / "opt/enes")) == tmp_path / "opt/enes"
+    # Bo'sh papka o'rnatish EMAS — ko'prik hamon eskisini tanlaydi.
+    current.mkdir()
+    assert paths._linux_dir(str(current)) == legacy
+
+    # Ichida nimadir paydo bo'lgach — bu haqiqiy o'rnatish.
+    (current / "current").mkdir()
+    assert paths._linux_dir(str(current)) == current
 
 
 @pytest.mark.parametrize("name", ["Chaqimchi AI", "Chaqimchi AI Update"])

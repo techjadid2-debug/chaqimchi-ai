@@ -610,6 +610,18 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
         # kameraga `record_url` berilmagan, `missing` — ffmpeg fayl
         # yozmadi, `dropped` — navbat to'lgan.
         "clips": stats.get("clips") or {},
+        # Tungi nazorat ISHLAYAPTIMI.  `modes` bu yerda ATAYLAB
+        # takrorlanmaydi — u yuqorida har kameraning `night_mode` iga
+        # tarqatilgan.  `relearns` eng muhimi: IR chirog'i yonganda
+        # me'yor qayta o'rganiladi va pilotda kechasiga 1-2 marta
+        # kutiladi.  Nol bo'lsa IR o'tishi umuman sezilmayapti, ya'ni
+        # tungi qoidalar kunduzgi me'yor bilan ishlayapti — bu aynan
+        # ertalabki yolg'on trevoga (2026-08-27, bir kunda 26 ta)
+        # takrorlanishining sharti.
+        "night": {
+            "motion_alerts": int((stats.get("night") or {}).get("motion_alerts") or 0),
+            "relearns": int((stats.get("night") or {}).get("relearns") or 0),
+        },
         # Rasm YOZILDIMI.  Klip uchun hisoblagich bor edi, rasm uchun
         # esa yo'q — holbuki "hodisa keldi, rasm yo'q" holati 2026-08-26
         # da uch soat sezilmadi va uni faqat server logidan topish

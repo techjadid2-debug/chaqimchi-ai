@@ -410,6 +410,13 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
         # ffmpeg nima deganini — raqam "nechta" ga, matn "nega" ga javob
         # beradi.  Ilgari `stderr` jimgina tashlanardi.
         "clips_last_error": str((status.get("clips") or {}).get("last_error") or "")[:200],
+        # Tungi nazorat: yopiq do'kondagi harakat hodisalari va IR
+        # o'tishida me'yor qayta o'rganilgani.  `modes` bu yerda YO'Q —
+        # u `cameras[].night_mode` da kamera boshiga boradi.
+        "night": {
+            key: int((status.get("night") or {}).get(key) or 0)
+            for key in ("motion_alerts", "relearns")
+        },
         # Rasm yozildimi.  Klip uchun hisoblagich bor edi, rasm uchun yo'q.
         "snapshots": {
             key: int((status.get("snapshots") or {}).get(key) or 0)

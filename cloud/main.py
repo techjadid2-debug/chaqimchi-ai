@@ -682,6 +682,12 @@ class EdgeHeartbeatBody(BaseModel):
     #: (ffmpeg segmentni kesa olmadi).  Ular boshqa-boshqa tuzatishni
     #: talab qiladi, shuning uchun 0.6.22 dan boshlab alohida keladi.
     clips: Dict[str, int] = Field(default_factory=dict)
+    #: Tungi nazorat: `motion_alerts` — yopiq do'konda sezilgan
+    #: harakat, `relearns` — IR chirog'i yonganda me'yor qayta
+    #: o'rganilgani.  `relearns` nol bo'lsa qurilma IR o'tishini
+    #: umuman ko'rmayapti va tungi qoidalar kunduzgi me'yor bilan
+    #: ishlayapti.  Eski qurilma yubormaydi — bo'sh lug'at.
+    night: Dict[str, int] = Field(default_factory=dict)
     #: ffmpeg nima degani.  Raqam "nechta" ga, matn "nega" ga javob beradi.
     clips_last_error: str = Field(default="", max_length=200)
     #: Zanjir nechta hodisa YARATGANI.  Cloud faqat o'ziga yetib
@@ -1295,6 +1301,11 @@ async def _send_owner_photo(
 #: "/" bosganda ro'yxatdan tanlaydi.
 BOT_COMMANDS = [
     {"command": "hisobot", "description": "Bugungi hisobot"},
+    # `/chek` yordam matnida (`bot.help`) 2026-08-31 dan beri bor, menyuda
+    # esa yo'q edi — ya'ni konversiyani kirituvchi yagona yo'lni faqat
+    # yordamni o'qigan ega topardi.  `tests/test_bot_commands.py` endi
+    # ikkala ro'yxatni bir-biriga qulflaydi.
+    {"command": "chek", "description": "Bugungi chek sonini kiritish"},
     {"command": "kamera", "description": "Kameralardan jonli rasm"},
     {"command": "panel", "description": "Mijoz paneliga kirish"},
     {"command": "yordam", "description": "Buyruqlar ro'yxati"},

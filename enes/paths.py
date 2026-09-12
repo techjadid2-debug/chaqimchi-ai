@@ -29,7 +29,8 @@ _WINDOWS_VENDOR = ("ENES", "Sotqin")
 #: Rebrenddan oldingi papka.  O'rnatilgan kompyuterda sozlama, token va
 #: bufer shu yerda turadi va yangi nomga KO'CHIRILMAYDI: ko'chirish
 #: yangilanish o'rtasida uzilsa ikkala papka ham yarim bo'lardi.  Eski
-#: papka bor bo'lsa u ishlatiladi; yangi o'rnatish yangi nomni oladi.
+#: papkada O'RNATISH bo'lsa (bo'sh papka emas — `_has_installation`) u
+#: ishlatiladi; yangi o'rnatish yangi nomni oladi.
 _LEGACY_WINDOWS_VENDOR = ("Chaqimchi", "Sotqin")
 
 #: Linux (Box) uchun ham xuddi shu qoida.
@@ -42,26 +43,43 @@ def is_windows() -> bool:
     return os.name == "nt"
 
 
-def _windows_dir(base_env: str, fallback: str) -> Path:
-    """Yangi nomdagi papka, lekin eski o'rnatish topilsa — o'sha.
+def _has_installation(path: Path) -> bool:
+    """Shu papkada HAQIQIY o'rnatish bormi.
 
-    ⚠️ Tanlov papkaning BORLIGIGA tayanadi, ichidagi belgiga emas — va bu
-    faqat shuning uchun ishlaydi: bu modul papkalarni O'ZI yaratmaydi va
-    boshqa hech kim ham yaratmaydi (`enes/paths.py` da bitta ham `mkdir`
-    yo'q, `tests/test_local_paths.py` shuni qulflaydi).
+    Papkaning BORLIGI belgi emas.  Bo'sh papka yon ta'sir sifatida paydo
+    bo'ladi — deploy skripti `mkdir -p` qilsa, o'rnatuvchi yarim yo'lda
+    uzilsa, yoki arxiv ochilsa.  Shundan keyin ko'prik eski o'rnatishni
+    HECH QACHON tanlamaydi va qurilma o'zini yangi mashina deb
+    tanishtiradi.  Do'kon dasturidagi egizak modulda aynan shu bo'ldi:
+    bo'sh `ProgramData\\ENES` paydo bo'ldi va pilot 15 soat
+    `device-handover` so'rab turdi (`enes/local/paths.py` dagi `_MARKER`
+    izohi).  U yerda ko'prik nom bo'yicha belgiga (`config.yaml`)
+    o'tkazilgan edi, bu yerda esa yozilmay qolgan.
 
-    Do'kon dasturidagi egizak modul (`enes/local/paths.py`) aynan shu
-    naqshdan kuygan: u yerda `data_dir()` papkani har chaqiruvda `mkdir`
-    bilan yaratardi, ya'ni dastur bir marta ishga tushishi bilan yangi
-    nomdagi BO'SH papka paydo bo'lardi va ko'prik o'shandan keyin eski
-    papkani hech qachon tanlamasdi — pilot 2026-09-09 da shu sababdan
-    15 soat to'xtadi.  Agar bu modulga `mkdir` kerak bo'lsa, avval
-    belgiga o'tkazing (`_MARKER` naqshi, `enes/local/paths.py`).
+    Nega bu yerda nom bo'yicha belgi emas: ikki daraxtning ichi
+    butunlay boshqa — `install_root()` da `current`/`releases`/`venv`,
+    `config_dir()` da `sotqin.env`/`update-public.pem`.  Bitta fayl
+    nomini tanlash ikkalasi uchun ham noto'g'ri bo'lardi va yangi fayl
+    qo'shilganda jimgina eskirardi.  Shuning uchun belgi — papkaning
+    BO'SH EMASLIGI: o'rnatuvchi u yerga nimadir yozgan bo'lsa,
+    o'rnatish bor.
     """
+    try:
+        return any(path.iterdir())
+    except OSError:
+        # Papka yo'q, fayl, yoki o'qish huquqi yo'q.  Hammasida "o'rnatish
+        # yo'q" deymiz: yangi nomni noto'g'ri tanlash qaytariladigan xato
+        # (papka bo'sh, ma'lumot yo'qolmaydi), eski papkani noto'g'ri
+        # tanlash esa yangi o'rnatishni begona ma'lumotga bog'lab qo'yadi.
+        return False
+
+
+def _windows_dir(base_env: str, fallback: str) -> Path:
+    """Yangi nomdagi papka, lekin eski o'rnatish topilsa — o'sha."""
     base = PureWindowsPath(os.environ.get(base_env, fallback))
     current = Path(base.joinpath(*_WINDOWS_VENDOR))
     legacy = Path(base.joinpath(*_LEGACY_WINDOWS_VENDOR))
-    if not current.exists() and legacy.exists():
+    if not _has_installation(current) and _has_installation(legacy):
         return legacy
     return current
 
@@ -70,7 +88,7 @@ def _linux_dir(path: str) -> Path:
     """`/opt/enes` — lekin eski `/opt/chaqimchi` turgan qurilmada o'sha."""
     current = Path(path)
     legacy = _LINUX_LEGACY.get(path)
-    if legacy and not current.exists() and Path(legacy).exists():
+    if legacy and not _has_installation(current) and _has_installation(Path(legacy)):
         return Path(legacy)
     return current
 

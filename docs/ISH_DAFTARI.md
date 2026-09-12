@@ -7,7 +7,43 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-09-11
+## HOZIRGI HOLAT · 2026-09-12
+
+- **📷 KAMERA JOYLASHUVI + FACE ID DARVOZASI — KODDA TAYYOR, DEPLOY
+  KUTADI (2026-09-12, shox `reja-2026-09-12`: `2a6ece3`, `b11381e`,
+  `3200772`).**  Ega uchta yangi ish so'radi (kamera o'rnatish
+  yo'riqnomasi, o'rnatishni maksimal qulay qilish, demo 7/14 kun +
+  kartadan oylik yechish) va to'liq reja
+  `~/.claude/plans/md-file-ichii-o-qi-linear-tulip.md` da; bajarilgani
+  quyidagi uch commit.  **Qolgan bloklar hali boshlanmagan:** B (sayt
+  xatolari), C (panel xatolari), E (usta paneli React'ga), F (demo +
+  karta), G (A1 capture-rate), H (admin i18n), I (ops).
+  - **Bosqich A (`2a6ece3`):** ikkita oylik qizil test yashil — `night`
+    statistikasi zanjirning to'rt bo'g'inidan o'tkazildi, CI testi
+    eskirgan domenni kutardi.  `/chek` bot menyusiga qo'shildi (yordam
+    matnida bor edi, menyuda yo'q — ya'ni konversiyani kiritishning
+    yagona yo'lini faqat yordamni o'qigan ega topardi); yangi
+    `tests/test_bot_commands.py` menyu bilan `bot.help` ni uch tilda
+    qulflaydi.  Box ko'prigi (`enes/paths.py`) `exists()` dan
+    `_has_installation()` ga o'tdi.  `docs/DOKON_MVP.md` dagi «yuz
+    kadri 14 kun» → 48 soat.
+  - **Bosqich D1 (`b11381e`):** kamera kadrining HAQIQIY o'lchami endi
+    cloudda — `runner` → holat fayli → heartbeat `cameras[]` →
+    `site_cameras.width/height`.  Bungacha Windows yo'lida bu son
+    printsipial yo'q edi (pastdagi TUZOQLARga qarang).
+  - **Bosqich D2–D6 (`3200772`):** `docs/KAMERA_JOYLASHUVI.md` (usta va
+    jamoa uchun texnik manba, har son koddan va testga qulflangan);
+    `/installer-guide` Windows yo'liga o'tkazildi + «Kamerani qayerga
+    qo'yish» bo'limi; `/install` da mijoz uchun qisqa versiya; panelda
+    Face ID belgisi (`face_id_state` — qaror serverda, matn panelda uch
+    tilda); yaroqsiz chiziq/zona haqida CHIZGAN ODAMGA aytiladi (uchala
+    config PUT javobida, strukturaviy qulf bilan).
+  - **Holat:** `2335 passed, 12 skipped`, `ruff` toza, i18n va sayt
+    `--check` toza, bundle manba bilan bitta commitda.
+  - ⏳ **Deploy qilinmagan.**  Cloud qismi (D1 qabul qilish, D5 javob,
+    D6 tekshiruv) deploy talab qiladi; qurilma qismi (D1 yuborish)
+    keyingi Windows relizi bilan chiqadi — **tartib: AVVAL cloud**.
+
 
 - **🎨 UI/UX QA + DIZAYN-3 — KODDA TAYYOR, DEPLOY KUTADI (2026-09-11,
   `3c19d63`…`28b73cd`, 9 commit).**  Ega «xatolar ko'p» dedi; jonli sayt
@@ -715,11 +751,48 @@
 
 ## KEYINGI ISH
 
-**UI/UX (2026-09-11) — qoldiqlar, tartib bilan:**
-1. ✅ Deploy bajarildi (yuqorida).  ⏳ Egadan: panelga kirib bosh sahifa,
+**REJA 2026-09-12 — qolgan bloklar.**  To'liq reja (bog'liqliklar,
+soat bahosi, tuzoqlar) `~/.claude/plans/md-file-ichii-o-qi-linear-tulip.md`
+va topilmalar `docs/REJA_2026-09-12_tugallanmagan_ishlar.md` da.
+Bajarilgani: **A, D1, D2–D6** (yuqoriga qarang).  Qolgani:
+
+1. **B — sayt xatolari** (~6–8 soat).  Foydalanuvchi forma xatosida
+   `[object Object]` o'qiydi (`cloud/static/site.js:55` + `main.py` da
+   `RequestValidationError` handleri YO'Q); JS o'chiq bo'lsa bosh
+   sahifada yuklab olish qatori bo'sh; bosh sahifa futeri partialdan
+   NUSXA, ya'ni RU/EN sahifada o'zbekcha `/status`, `/hamkorlik`,
+   `/aloqa`; `__TELEGRAM_REGISTER_URL__` zaxirasi `/#pilot` — bunday id
+   yo'q; edu forma xatosi kulrang va xom `error.message` + `@fibotai`.
+2. **C — panel xatolari** (~8–10 soat).  `GeometryEditor.tsx:113-115`
+   da `window.prompt`/`window.confirm` (Telegram WebView'da jim o'ladi;
+   `useConfirm()` bor, matn oynasi uchun `PromptModal` yozilishi kerak);
+   admin 6 sahifada xato chizig'i ostida abadiy skelet + «Qayta urinish»
+   yo'q (naqsh `EventEvidence.tsx:104-116,137` da tayyor); CSV yuklashda
+   `<a>` DOMga qo'shilmaydi va `revokeObjectURL` darhol (4 joy);
+   `Modal` fokus tuzog'i — izoh bor, kod yo'q; `admin.tsx:41` `t()`
+   modul darajasida, `:211` `t` soyalangan.
+3. **E — usta paneli React'ga** (~12–16 soat).  `/installer` — oxirgi
+   eski statik sahifa (faqat o'zbekcha, telefon uchun QA qilinmagan,
+   API yiqilsa xato ko'rsatmaydi), usta esa obyektda telefondan
+   ishlaydi.  **C dan KEYIN**: naqshlar avval ega panelida tuzatiladi.
+4. **F — demo 7/14 kun + karta** (~14–18 soat).  Ega qarori: kartasiz
+   7 kun, karta ulasa 14 kun va birinchi oyga chegirma; kartadan oylik
+   avtomatik yechish.  `cloud/payments/` da recurring kodi UMUMAN yo'q.
+   Oferta recurring bandi — yuridik matn, yurist ko'rigi shart.
+   Payme/Click merchant kaliti kelmaguncha yoqilmaydi.
+5. **G — A1 capture-rate** (~5–6 soat).  Cloud `config["capture"]`
+   yubormaydi, ya'ni qurilmadagi 0.6.33 kodi abadiy yopiq;
+   `people_seen` `REPORT_EVENT_TYPES` da ham, `TIMELINE_HIDDEN_TYPES`
+   da ham yo'q (`MEDIALESS_EVENTS` esa `cloud/main.py:1478` da, event_store'da EMAS).
+6. **I — ops** (~2 soat).  CSP `-Report-Only` dan majburiyga; `releases/`
+   server tomonda hech qachon tozalanmaydi (~1,9 GB).
+7. **H — admin i18n** (~8–10 soat, eng kam shoshilinch, E dan keyin).
+
+**UI/UX (2026-09-11) — qoldiqlar:**
+1. ✅ Deploy bajarildi.  ⏳ Egadan: panelga kirib bosh sahifa,
    kamera sahifasi (`/owner/cameras/camera-01`) va telefonda tugmalarni
    ko'rib chiqishi; haqiqiy ma'lumotda issiqlik xaritasi rangi.
-2. Ikkita eski yiqilgan testni yopish (`night` stat, CI `ENES_DEFAULT_CLOUD_URL`).
+2. ✅ Ikkita eski yiqilgan test yopildi (`2a6ece3`).
 3. NICE (rejada qolgan): issiqlik xaritasi oqarishi — REAL ma'lumotda
    tekshirish (pilot tirilgach), kerak bo'lsa `paintHeat` alfa yig'indi
    usuli; `#aloqa` fonida `shop-corridor-v1.webp`; «AI yordamchi» tabini
@@ -1159,6 +1232,49 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **`enes/sotqin_agent.py` — Box yo'li, do'kon kompyuteriga TEGISHLI
+  EMAS.**  `report_camera_probes()`, `upload_previews()` va qolganlari
+  `control = SotqinAgent()` orqali FAQAT Box/R1 xizmatida ishlaydi.
+  Windows yo'lida (`enes/local/`) chaqiruvchi yo'q.  Oqibati 2026-09-12
+  da topildi: `site_cameras.width/height` pilotda oylab NULL turgan,
+  `probe_status: pending` qotib qolgan va `camera_roles.face_id_check()`
+  «o'lcham noma'lum» dan boshqa javob bera olmagan — ya'ni yuz tanish
+  darvozasi ko'r edi.  Sabab kamera emas, YO'Q KOD.  Yangi telemetriya
+  qo'shsangiz: bu modulda emas, `enes/local/cloud_config.py:
+  send_heartbeat()` da yozing va zanjirning to'rt bo'g'inini tekshiring.
+- **`benchmark.FRAME_WIDTH/FRAME_HEIGHT` (640x360) — TAHLIL o'lchami
+  EMAS.**  U `enes/local/benchmark.py` da `rng.integers` bilan yasaladigan
+  SUN'IY kadr o'lchami (o'lchov uchun).  Haqiqiy zanjir
+  (`retail/pipeline.py`) RTSP dan kelgan kadrni kichraytirmaydi.
+  `cloud_jobs.py:334` dagi izoh «kadr har doim shunga keltiriladi» deb
+  yozilgan edi va xulosani TESKARISIGA o'girardi («720p ga o'tishning
+  foydasi yo'q» — aslida bor).  Admin UI ham shu sonni «tahlil» deb
+  ko'rsatardi.  Kamera rostdan nima berayotganini `native_size` yoki
+  heartbeatdagi `cameras[].width/height` aytadi.
+- **Yo'riqnomadagi son koddan ajralib ketadi.**  `docs/DOKON_MVP.md`
+  «yuz kadri 14 kun yashaydi» deb turardi, kod esa 48 soatga o'tgan —
+  kontrakt hujjati o'z mahsuloti haqida yolg'on gapirardi.  Shuning
+  uchun `docs/KAMERA_JOYLASHUVI.md` dagi har son testga qulflangan
+  (`tests/test_camera_placement_doc.py`) va u darhol foyda berdi:
+  hujjatdagi arifmetik xatoni o'zi topdi.  Yangi texnik hujjat yozsangiz
+  sonlarni qulflang.
+- **Saytga emoji qo'ymang** (⚠️ ✅ ❌).  Har qurilmada boshqacha
+  chiziladi (Windows'da rangsiz kvadrat) va brend ranglarini bermaydi.
+  `tests/test_static_pages.py: test_public_pages_use_the_icon_sprite_not_emoji`
+  qulflaydi — ikonka spraytidan foydalaning yoki so'z bilan yozing.
+- **Panel uch tilda, server matni o'zbekcha.**  Yangi qaror qo'shsangiz
+  QARORNI va MATNNI ajrating: `face_id_state()` mashina o'qiydigan
+  qiymat qaytaradi (`ok`/`edge`/`low`/`unknown`), matnni har sahifa
+  `panel.*` kalitidan chizadi.  `bool` yetarli emasligiga misol:
+  «chegarada» va «720p kerak» ikkalasi ham `False`, lekin usta uchun
+  BOSHQA ish.
+- **Chizmani UCH xil odam saqlaydi** — ega, admin va o'rnatuvchi, uchta
+  alohida endpoint (`/owner/config`, `/admin/sites/{id}/config`,
+  `/installer/sites/{id}/config`).  Tekshiruv yoki yangi maydon
+  qo'shsangiz uchalasini ham ko'ring; `tests/test_geometry_feedback.py`
+  strukturaviy qulf qo'yadi (`SiteConfigBody` olgan har funksiya).
+  Xuddi shu tarqalish funksiya darvozasida ham bo'lgan (uch joy).
 
 - **Docker qurilishi lokal `make ui-build` dan FARQ qiladi.**  Dockerfile
   frontend bosqichi faqat `frontend/` ni nusxalaydi; `styles.css` esa
@@ -1825,6 +1941,46 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-12 — kamera joylashuvi, Face ID darvozasi, qizil testlar (`2a6ece3`, `b11381e`, `3200772`)
+
+Nima: usta endi kamerani qayerga qo'yishni BILADI (yo'riqnomada rol
+bo'yicha, Face ID chegarasi obyektda o'lchanadigan qoida bilan), panel
+har kamera uchun «yuz tanish uchun yetarli / chegarada / 720p kerak»
+deb aniq aytadi, yaroqsiz chiziq yoki zona haqida esa chizgan odamning
+o'ziga darhol aytiladi.  Yo'l-yo'lakay ikkita oylik qizil test yashil
+bo'ldi va `/chek` bot menyusiga chiqdi.
+
+Nega: kamera noto'g'ri qo'yilgani DARHOL ko'rinmaydi — tizim
+ishlayotgandek turadi va nosozlik oylar o'tib, `face_crops.too_small`
+dan topiladi (pilotda 93 kesmadan 93 tasi tashlangan).  Bungacha kamera
+joylashuvi haqida hech qayerda bitta ham qator yo'q edi, usta
+yo'riqnomasi esa Ubuntu o'rnatishni o'rgatardi — sotuv Windows'da.
+Eng muhimi: **kamera o'lchami cloudga hech qachon yubormasdi**, ya'ni
+Face ID tekshiruvining mantig'i bor-u kirish ma'lumoti yo'q edi.
+
+Qayerda: `enes/retail/runner.py:108,233,445`,
+`enes/retail/service.py: write_status`, `enes/local/supervisor.py: status`,
+`enes/local/cloud_config.py: send_heartbeat`, `cloud/main.py:
+EdgeCameraHealth` + `edge_health_heartbeat` + `_with_geometry_problems`,
+`cloud/store.py: record_camera_frame_size` + `list_cameras`,
+`enes/camera_roles.py: face_id_state`, `enes/paths.py: _has_installation`,
+`docs/KAMERA_JOYLASHUVI.md`, `cloud/site/installer-guide.html`,
+`cloud/site/install.html`, `frontend/src/{Cameras,CameraDetail,GeometryEditor,types}.tsx|ts`.
+
+Test: `tests/test_camera_frame_size.py` (zanjir + eski qurilma
+o'chirmasligi + qaror holatlari), `tests/test_camera_placement_doc.py`
+(hujjat sonlari kodga qulflangan), `tests/test_geometry_feedback.py`
+(uchala config PUT + strukturaviy qulf), `tests/test_bot_commands.py`,
+`tests/test_static_pages.py` (yo'riqnoma Windows yo'lida va kamera
+bo'limi bor), `tests/test_status_chain.py`, `tests/test_local_paths.py`.
+
+Diqqat: **deploy tartibi — AVVAL cloud, KEYIN qurilma relizi.**  Cloud
+`cameras[].width/height` ni qabul qila olmasa qurilma yuborgan
+heartbeat 422 oladi.  Reja bo'yicha keyingi bloklar: B (sayt), C
+(panel), E (usta paneli React'ga), F (demo + karta), G (A1), I (ops),
+H (admin i18n) — tartib va bog'liqliklar
+`~/.claude/plans/md-file-ichii-o-qi-linear-tulip.md` da.
 
 ### 2026-09-11 — UI/UX QA va dizayn-3: sayt + panel (`3c19d63`…`28b73cd`)
 

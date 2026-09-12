@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { api, clearToken, logout as serverLogout, downloadBlobUrl, downloadCsv, formatDateShort, formatDateUz, formatMoney, formatNumber, formatTimeUz, login, loginWithLinkKey, loginWithTelegram, mediaObjectUrl, relativeMinutes, takeConnectToken, telegramBotUrl, toJpeg, tokenFor } from "./api";
 import { Demography } from "./Demography";
 import { Numbers } from "./Numbers";
-import { AppShell, Card, CopyButton, EmptyState, Avatar, ErrorStrip, LangSwitch, LoginScreen, PageHeader, Pill, Skeleton, StatCard, Tabs, ThemeToggle, useConfirm, useToast, type NavItem } from "./components";
+import { AppShell, Card, CopyButton, EmptyState, Avatar, ErrorStrip, LangSwitch, LoginScreen, PageHeader, Pill, Skeleton, StatCard, TabPanel, Tabs, ThemeToggle, useConfirm, useToast, type NavItem } from "./components";
 import { LineChart, type Point } from "./charts";
 import { Connect } from "./Connect";
 import { GeometryEditor } from "./GeometryEditor";
@@ -184,6 +184,20 @@ function NotificationBell({ siteId, onOpenEvent }: { siteId: string; onOpenEvent
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
   }, [open]);
 
+  /* Fokus panelga KIRADI va yopilganda qo'ng'iroqqa QAYTADI.
+     `Modal` dagi `useFocusTrap` bu yerda ATAYLAB ishlatilmaydi: bu
+     modal emas, ochiladigan menyu — Tab bilan undan chiqib ketish
+     TO'G'RI xatti-harakat.  Yetishmagani faqat ikkita: ochilganda
+     klaviatura paneldan boshlanishi va yopilganda fokus yo'qolmasligi
+     (Escape'dan keyin odam sahifa boshiga tashlanardi). */
+  useEffect(() => {
+    if (!open) return;
+    const bell = box.current?.querySelector<HTMLElement>("button.topbar-bell");
+    const first = box.current?.querySelector<HTMLElement>(".notif-panel button, .notif-panel a");
+    first?.focus();
+    return () => { if (bell?.isConnected) bell.focus(); };
+  }, [open]);
+
   const markRead = async () => {
     /* Son DARHOL nolga tushadi, server javobini kutmasdan: tugma
        bosilganda hech narsa o'zgarmasa foydalanuvchi uni yana bosadi.
@@ -217,7 +231,10 @@ function NotificationBell({ siteId, onOpenEvent }: { siteId: string; onOpenEvent
       {items === null ? <div className="notif-empty"><Skeleton height={60}/></div>
         : items.length ? <ul className="notif-list">
             {items.map(item => <li key={item.event_id} className={item.unread ? "is-unread" : ""}>
-              <span className={`notif-dot sev-${item.severity || "info"}`}/>
+              {/* Nuqta faqat RANG bilan gapirardi: rang ko'rmaydigan
+                  odam uchun muhim va oddiy xabar bir xil ko'rinardi.
+                  Matn ko'rinmas, lekin skrinrider o'qiydi. */}
+              <span className={`notif-dot sev-${item.severity || "info"}`} aria-label={t(`panel.owner.severity_${item.severity || "info"}`)} role="img"/>
               <div>
                 <b>{item.label || item.event_type}</b>
                 <small>{item.camera_id || t("panel.home.events.system")} · {formatTimeUz(item.occurred_at)}</small>
@@ -333,10 +350,14 @@ type Navigate = (id: string, param?: string, sub?: string) => void;
 const CAMERA_ID = /^camera-\d{2}$/;
 
 /** Bo'lim tablari — faol tab manzildan (`param`), bosilsa manzil o'zgaradi. */
-function SectionTabs({ section, tab, onNavigate }: { section: string; tab: string; onNavigate: Navigate }) {
-  const ids = TABS[section] || [];
+function SectionTabs({ section, tab, onNavigate, hidden = [] }: { section: string; tab: string; onNavigate: Navigate; hidden?: string[] }) {
+  /* `TABS` ro'yxatining O'ZI o'zgarmaydi — tab shu yerda chiqarib
+     tashlanadi.  Sabab: manzil xaritasi (`LEGACY_ROUTES`) va testlar
+     o'sha literalga bog'langan, ya'ni ro'yxatni tahrirlash eski
+     havolalarni uzardi. */
+  const ids = (TABS[section] || []).filter(id => !hidden.includes(id));
   if (ids.length < 2) return null;
-  return <Tabs items={ids.map(id => ({ id, label: t(`panel.tabs.${id}`) }))} active={tab} onSelect={id => onNavigate(section, id)} />;
+  return <Tabs items={ids.map(id => ({ id, label: t(`panel.tabs.${id}`) }))} active={tab} onSelect={id => onNavigate(section, id)} panelId="section-panel" />;
 }
 
 function BranchesPage({ sites }: { sites: Site[] }) {
@@ -374,25 +395,40 @@ function ReportsPage({ dashboard, siteId, onNavigate }: { dashboard: Dashboard; 
  *  bo'lim edi) — tab qatori undan TEPADA turadi, sahifaning o'zi
  *  o'zgarmaydi. */
 function SectionPage({ id, tab, dashboard, sites, siteId, onNavigate, onRefresh, focusEventId = "", cameraId = "", cameraTab = "" }: { id:string; tab:string; dashboard:Dashboard; sites:Site[]; siteId:string; onNavigate:Navigate; onRefresh:()=>void; focusEventId?:string; cameraId?:string; cameraTab?:string }) {
-  const tabs = <SectionTabs section={id} tab={tab} onNavigate={onNavigate}/>;
+  /* AI yordamchi Gemini kaliti qo'yilmagan do'konda YASHIRINADI.
+     Bungacha tab ochilar, har savol xato bilan tugar va ega
+     «buzuq» deb o'ylardi — jonli bazada `vision_observations` = 0.
+     Qaror serverda (`capabilities.agent`), panelda ikkinchi shart
+     yozilmaydi. */
+  const agentReady = dashboard.capabilities?.agent?.ready !== false;
+  const tabs = <SectionTabs section={id} tab={tab} onNavigate={onNavigate} hidden={agentReady ? [] : ["agent"]}/>;
+  /* Tab tarkibi `role="tabpanel"` ichida: skrinrider tugmani «tab» deb
+     o'qib, bosilgandan keyin qayerga borganini aytmasdi.  `Panel`
+     yordamchisi shu faylda — `tab` har branchda bir xil. */
+  const Panel = ({ children }: { children: React.ReactNode }) => <TabPanel id="section-panel" activeTab={tab}>{children}</TabPanel>;
   /* Alohida kamera sahifasi — bo'lim tablarisiz, o'z tablari bilan. */
   if (id === "cameras" && cameraId) return <CameraDetail dashboard={dashboard} siteId={siteId} cameraId={cameraId} tab={cameraTab || "live"} onNavigate={onNavigate}/>;
-  if (id === "cameras") return <>{tabs}{
+  if (id === "cameras") return <>{tabs}<Panel>{
     tab === "setup" ? <SetupCameras siteId={siteId} onDone={() => { onRefresh(); onNavigate("cameras", "zones"); }}/>
     : tab === "zones" ? <GeometryEditor siteId={siteId} cameras={dashboard.cameras}/>
-    : <><PageHeader title={t("panel.nav.cameras")} subtitle={t("panel.cameras.page_subtitle")}/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded onOpenCamera={id => onNavigate("cameras", id)}/></>}</>;
-  if (id === "alerts") return <>{tabs}{
-    tab === "agent" ? <VisionAgent siteId={siteId} onNavigate={onNavigate}/>
-    : <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>}</>;
-  if (id === "customers") return <>{tabs}{
+    : <><PageHeader title={t("panel.nav.cameras")} subtitle={t("panel.cameras.page_subtitle")}/><CamerasBlock dashboard={dashboard} siteId={siteId} expanded onOpenCamera={id => onNavigate("cameras", id)}/></>}</Panel></>;
+  if (id === "alerts") return <>{tabs}<Panel>{
+    /* Manzilga TO'G'RIDAN-TO'G'RI kirilsa (eski havola, xatcho'p)
+       bo'sh holat ko'rsatiladi — tab yashiringani sahifani ochib
+       bo'lmaydi degani emas, sababini aytish kerak. */
+    tab === "agent" ? (agentReady
+      ? <VisionAgent siteId={siteId} onNavigate={onNavigate}/>
+      : <><PageHeader title={t("panel.tabs.agent")} subtitle={t("panel.agent.subtitle")}/><Card><EmptyState icon="pulse" title={t("panel.agent.off_title")} detail={dashboard.capabilities?.agent?.reason || t("panel.agent.off_detail")}/></Card></>)
+    : <EventEvidence kind="owner" siteId={siteId} focusEventId={focusEventId} dashboard={dashboard} onNavigate={onNavigate}/>}</Panel></>;
+  if (id === "customers") return <>{tabs}<Panel>{
     tab === "heatmap" ? <HeatmapPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>
     : tab === "demography" ? <><PageHeader title={t("panel.tabs.demography")} subtitle={t("panel.customers.demography_subtitle")}/><Demography dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/></>
-    : <TrafficPage dashboard={dashboard}/>}</>;
-  if (id === "settings") return <>{tabs}{
+    : <TrafficPage dashboard={dashboard}/>}</Panel></>;
+  if (id === "settings") return <>{tabs}<Panel>{
     tab === "telegram" ? <TelegramPage siteId={siteId}/>
     : tab === "billing" ? <BillingPage dashboard={dashboard} siteId={siteId}/>
     : tab === "branches" ? <BranchesPage sites={sites}/>
-    : <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate} onRefresh={onRefresh}/>}</>;
+    : <SettingsPage dashboard={dashboard} sites={sites} siteId={siteId} onNavigate={onNavigate} onRefresh={onRefresh}/>}</Panel></>;
   if (id === "analytics") return <Analytics dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   if (id === "reports") return <ReportsPage dashboard={dashboard} siteId={siteId} onNavigate={onNavigate}/>;
   return <><PageHeader title={t("panel.owner.section_title")} subtitle={t("panel.owner.section_subtitle")}/><Card><EmptyState icon="settings" title={t("panel.owner.section_empty_title")} detail={t("panel.owner.section_empty_detail")}/></Card></>;
@@ -582,17 +618,22 @@ function OwnerApp() {
      faqat bo'sh jadval va xato satri chiqardi.  Rol filialga bog'liq —
      bitta odam bir do'konda ega, boshqasida menejer bo'lishi mumkin. */
   const role = sites.find(site => site.id === siteId)?.role || "";
+  /* «Xodimlar» ikki sababdan yashirinadi: menejerga ko'rsatilmaydi
+     (biometrika) va davomat serverda yoqilmagan bo'lsa umuman yo'q —
+     bungacha bo'lim menyuda turar, ochilsa har so'rov 403 berardi va
+     ega buni «buzuq» deb o'qirdi. */
+  const attendanceReady = data?.capabilities?.attendance?.ready !== false;
   const visibleNav = useMemo(
-    () => NAV_ITEMS.filter(item => item.id !== "employees" || role !== "manager"),
-    [role],
+    () => NAV_ITEMS.filter(item => item.id !== "employees" || (role !== "manager" && attendanceReady)),
+    [role, attendanceReady],
   );
   /* Menyu yorliqlari shu yerda ochiladi (`NAV_ITEMS` izohiga qarang).
      Til almashsa sahifa qayta yuklanadi (`i18n/index.ts`), shuning uchun
      `t()` ni qayta hisoblash shart emas — faqat rol o'zgarganda. */
   const nav: NavItem[] = useMemo(() => visibleNav.map(({ id, key, icon }) => ({ id, icon, label: t(key) })), [visibleNav]);
   const mobileNav = useMemo(
-    () => MOBILE_NAV.filter(id => id !== "employees" || role !== "manager"),
-    [role],
+    () => MOBILE_NAV.filter(id => id !== "employees" || (role !== "manager" && attendanceReady)),
+    [role, attendanceReady],
   );
 
   useEffect(() => {

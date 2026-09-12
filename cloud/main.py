@@ -7234,6 +7234,25 @@ async def owner_dashboard(
         # cloud config bo'sh, sanash esa ishlayapti.  Yaqin kunlarda
         # kirish-chiqish kelgan bo'lsa "chizilmagan" ogohlantirishi yolg'on.
         lines_drawn = events_store.has_recent_line_crossings(owner.site_id)
+    # AI yordamchi ULANGANMI.  Panel tabini shu darvoza yashiradi:
+    # Gemini kaliti qo'yilmagan do'konda tab ochilar, har savol xato
+    # bilan tugar va ega «buzuq» deb o'ylardi (jonli bazada
+    # `vision_observations` = 0).  Manba BITTA —
+    # `vision_agent.configured()` kalit va model nomini birga
+    # tekshiradi; panelda ikkinchi shart yozilmaydi.
+    agent_ready = vision_agent.configured()
+    capabilities["agent"] = {
+        "ready": agent_ready,
+        "reason": None if agent_ready else i18n.t("capability.agent.not_configured"),
+    }
+    # Davomat YOPIQ PILOT (`_attendance_enabled`).  Yoqilmagan serverda
+    # «Xodimlar» bo'limi menyuda turar, ochilsa esa har so'rov 403
+    # berardi — ega buni «buzuq» deb o'qiydi.  Darvoza serverda, chunki
+    # javob env va litsenziyadan chiqadi va panel uni bilmaydi.
+    capabilities["attendance"] = {
+        "ready": _attendance_enabled(),
+        "reason": None if _attendance_enabled() else i18n.t("capability.attendance.closed"),
+    }
     capabilities["geometry"] = {
         "ready": lines_drawn,
         "lines_drawn": lines_drawn,

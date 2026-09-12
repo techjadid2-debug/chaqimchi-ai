@@ -163,7 +163,7 @@ export function Skeleton({ height = 80 }: { height?: number }) {
  *  Tab — manzilning ikkinchi segmenti (`/owner/cameras/zones`), ya'ni
  *  havola qilib bo'ladi va brauzerning «Orqaga»si ishlaydi.  Tugmalar
  *  44 px: telefonda barmoq bilan bosiladi. */
-export function Tabs({ items, active, onSelect }: { items: { id: string; label: string }[]; active: string; onSelect: (id: string) => void }) {
+export function Tabs({ items, active, onSelect, panelId }: { items: { id: string; label: string }[]; active: string; onSelect: (id: string) => void; panelId?: string }) {
   const list = useRef<HTMLDivElement>(null);
   /* Telefonda tablar qatori aylanadi; faol tab o'ngda qolib ketsa ega uni
      ko'rmaydi — «Tarif va to'lov» sozlamalarda shunday yashirin qolgan edi. */
@@ -177,9 +177,20 @@ export function Tabs({ items, active, onSelect }: { items: { id: string; label: 
     event.preventDefault();
     onSelect(items[(index + step + items.length) % items.length].id);
   };
+  /* `aria-controls` — tab qaysi sohani boshqaradi.  Usiz skrinrider
+     tugmani «tab» deb o'qiydi-yu, bosilgandan keyin qayerga borganini
+     aytmaydi.  `panelId` berilmasa atribut ham qo'yilmaydi: bo'sh
+     havola noto'g'ri id ga ishora qilishdan yaxshiroq. */
   return <div className="tabs" role="tablist" ref={list}>
-    {items.map((item, index) => <button key={item.id} role="tab" aria-selected={active === item.id} tabIndex={active === item.id ? 0 : -1} className={active === item.id ? "active" : ""} onClick={() => onSelect(item.id)} onKeyDown={event => move(event, index)}>{item.label}</button>)}
+    {items.map((item, index) => <button key={item.id} id={panelId ? `${panelId}-tab-${item.id}` : undefined} role="tab" aria-selected={active === item.id} aria-controls={panelId} tabIndex={active === item.id ? 0 : -1} className={active === item.id ? "active" : ""} onClick={() => onSelect(item.id)} onKeyDown={event => move(event, index)}>{item.label}</button>)}
   </div>;
+}
+
+/** Tab tarkibi — `Tabs` bilan juftlik.  `role="tabpanel"` va
+ *  `aria-labelledby` ikkalasi ham SHART: biri sohani e'lon qiladi,
+ *  ikkinchisi uni qaysi tab ochganini aytadi. */
+export function TabPanel({ id, activeTab, children }: { id: string; activeTab: string; children: ReactNode }) {
+  return <div id={id} role="tabpanel" aria-labelledby={`${id}-tab-${activeTab}`}>{children}</div>;
 }
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle: string; actions?: ReactNode }) {
@@ -244,7 +255,6 @@ export function SearchPalette({ entries, placeholder = `${t("panel.common.search
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setOpen(true); }
-      if (event.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -255,8 +265,7 @@ export function SearchPalette({ entries, placeholder = `${t("panel.common.search
     <button className="search-trigger" onClick={() => setOpen(true)}>
       <Icon name="search" size={16} /><span>{placeholder}</span><kbd>⌘K</kbd>
     </button>
-    {open ? <div className="palette-backdrop" onClick={() => setOpen(false)}>
-      <div className="palette" onClick={event => event.stopPropagation()}>
+    {open ? <PaletteBox onClose={() => setOpen(false)}>
         <div className="palette-input">
           <Icon name="search" size={18} />
           <input autoFocus value={query} placeholder={placeholder} onChange={event => setQuery(event.target.value)} />
@@ -268,9 +277,21 @@ export function SearchPalette({ entries, placeholder = `${t("panel.common.search
             </button>
           </li>)}
         </ul> : <p className="palette-empty">{t("panel.shell.search_empty")}</p>}
-      </div>
-    </div> : null}
+    </PaletteBox> : null}
   </>;
+}
+
+/* Palitra qutisi ALOHIDA komponent: `useFocusTrap` hook, ya'ni u faqat
+   qutining O'ZI chizilganda ishga tushishi kerak.  `SearchPalette`
+   ichida `open` shartida chaqirib bo'lmaydi — hook shartli
+   chaqirilmaydi. */
+function PaletteBox({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const box = useFocusTrap(onClose);
+  return <div className="palette-backdrop" onClick={onClose}>
+    <div ref={box} className="palette" role="dialog" aria-modal="true" aria-label={t("panel.common.search")} onClick={event => event.stopPropagation()}>
+      {children}
+    </div>
+  </div>;
 }
 
 export function AppShell({ nav, active, onNavigate, title, subtitle, headerActions, children, onLogout, mobileNav, sidebarFooter }: {
@@ -317,20 +338,68 @@ export function AppShell({ nav, active, onNavigate, title, subtitle, headerActio
  *  Telefon klaviaturasida xato terish oson, xatoni ko'rmasdan tuzatib
  *  bo'lmaydi.  Statik sahifalar uchun xuddi shu naqsh
  *  `enes/local/static/pw-eye.js` da. */
+/** Fokusni element ICHIDA ushlab turadi va yopilganda qaytaradi.
+ *
+ * Izoh bir vaqtlar «fokus oyna ichida» deb YOZILGAN edi, kod esa buni
+ * qilmasdi: `aria-modal="true"` faqat skrinriderga aytadi, klaviaturani
+ * to'smaydi.  Ya'ni Tab bosgan odam oyna ortidagi sahifaga chiqib
+ * ketardi va u yerda ko'rinmas tugmalarni bosardi.  Yopilganda fokus
+ * hech qayerga qaytmasdi — klaviatura bilan ishlayotgan odam sahifa
+ * boshiga tashlanardi.
+ *
+ * Telegram WebView'da bu ayniqsa muhim: u yerda brauzer oynalari yo'q
+ * va butun panel shu modal oynalarga tayanadi. */
+export function useFocusTrap(onClose: () => void) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    /* Birinchi fokuslanadigan element.  `autoFocus` bo'lsa React uni
+       o'zi qo'yadi — o'shani buzmaymiz. */
+    const focusables = () => Array.from(
+      box.current?.querySelectorAll<HTMLElement>(
+        'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+      ) || [],
+    ).filter(el => el.offsetParent !== null);
+    if (!box.current?.contains(document.activeElement)) focusables()[0]?.focus();
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { onClose(); return; }
+      if (event.key !== "Tab") return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      /* Halqa: oxirgidan Tab — birinchisiga, birinchisidan Shift+Tab —
+         oxirgisiga.  Fokus butunlay tashqarida bo'lsa ham qaytariladi
+         (masalan sichqoncha bilan fonga bosilgan). */
+      if (event.shiftKey ? active === first || !box.current?.contains(active) : active === last) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      /* Fokus chaqirgan elementga qaytadi.  `isConnected` tekshiriladi:
+         element o'zi o'chgan bo'lishi mumkin (ro'yxatdagi qatorni
+         o'chirish oynasi). */
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [onClose]);
+  return box;
+}
+
 /** Modal oyna — brauzerning `prompt`/`confirm` o'rniga.
  *
  * Eski admin qoidasi (2026-08-19): brauzer oynasida "auto" yoki "naqd"
  * deb YOZISH kerak edi — bitta harf xato, amal bajarilmasdi.  Modal
  * ichida esa tanlov tugma va ro'yxat bilan.  Escape va orqa fon yopadi;
- * fokus oyna ichida. */
+ * fokus oyna ichida qoladi (`useFocusTrap`). */
 export function Modal({ title, children, onClose, wide = false, footer }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean; footer?: ReactNode }) {
-  useEffect(() => {
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", escape);
-    return () => document.removeEventListener("keydown", escape);
-  }, [onClose]);
+  const box = useFocusTrap(onClose);
   return <div className="modal-backdrop" onClick={onClose}>
-    <div className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} onClick={event => event.stopPropagation()}>
+    <div ref={box} className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} onClick={event => event.stopPropagation()}>
       <div className="modal-head"><h2>{title}</h2><button className="btn btn-icon" aria-label={t("panel.common.close")} onClick={onClose}><Icon name="close" /></button></div>
       <div className="modal-body">{children}</div>
       {footer ? <div className="modal-foot">{footer}</div> : null}

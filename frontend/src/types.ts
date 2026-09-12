@@ -154,6 +154,13 @@ export type Dashboard = {
     features?: { panel?: string[]; edge?: string[] };
     /** Chiziq/zona chizilganmi — "nega 0?" savolining eng keng javobi. */
     geometry?: { ready?: boolean; lines_drawn?: boolean; zones_drawn?: boolean; reason?: string };
+    /** AI yordamchi (Gemini) ulanganmi.  Qaror serverda bir marta
+     *  chiqadi (`vision_agent.configured()` kalit va model nomini birga
+     *  tekshiradi) — panel ikkinchi shart yozmaydi. */
+    agent?: { ready?: boolean; reason?: string };
+    /** Xodim davomati — yopiq pilot.  Yoqilmagan serverda bo'lim
+     *  menyuda turar, ochilsa esa har so'rov 403 berardi. */
+    attendance?: { ready?: boolean; reason?: string };
   };
   diagnostics?: { created_at?: string; payload?: { outbox?: { pending?: number; poisoned?: number }; cloud?: { dns_ok?: boolean } } } | null;
   /** Chegara tufayli saqlanmagan rasm soni — 0 dan katta bo'lsa egaga aytiladi. */

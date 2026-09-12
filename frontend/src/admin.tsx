@@ -403,7 +403,7 @@ function AdminApp() {
     {active==="overview"
       ? <><PageHeader title="Platforma boshqaruvi" subtitle={today} actions={<button className="btn btn-primary" onClick={()=>navigate("customers")}><Icon name="users"/>Mijoz qo‘shish</button>}/><AdminHome data={data} onNavigate={navigate}/></>
       : <GenericAdmin id={active} param={param} data={data} onRefresh={refresh} onSelect={site=>navigate("customers", site)}/>}
-    {drawer?<div className="drawer-backdrop" onClick={()=>setDrawer(false)}><aside className="drawer" onClick={event=>event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" onClick={()=>setDrawer(false)}><Icon name="close"/></button></div><nav>{NAV.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav></aside></div>:null}
+    {drawer?<div className="drawer-backdrop" onClick={()=>setDrawer(false)}><aside className="drawer" onClick={event=>event.stopPropagation()}><div className="drawer-head"><Logo/><button className="btn btn-icon" aria-label={t("panel.common.close")} onClick={()=>setDrawer(false)}><Icon name="close"/></button></div><nav>{NAV.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav></aside></div>:null}
   </AppShell>;
 }
 

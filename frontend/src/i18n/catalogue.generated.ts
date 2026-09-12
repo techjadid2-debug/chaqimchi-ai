@@ -12,6 +12,8 @@ export type CatalogueEntry = string | string[];
 
 export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   uz: {
+  "capability.agent.not_configured": "AI yordamchi hali ulanmagan",
+  "capability.attendance.closed": "Xodim davomati yopiq pilotda — sizning do‘koningizda yoqilmagan",
   "capability.cameras.partial": "{expected} kameradan {active} tasi faol",
   "capability.edge_config.pending": "Qurilma yangi sozlamani hali tasdiqlamagan",
   "capability.geometry.no_line": "Kirish chizig'i chizilmagan — chiziqsiz mijozlar sanalmaydi",
@@ -114,6 +116,8 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "panel.agent.listen": "Ovozda tinglash",
   "panel.agent.no_sources_detail": "Tanlangan vaqt oralig‘ida saqlangan event yo‘q.",
   "panel.agent.no_sources_title": "Dalil topilmadi",
+  "panel.agent.off_detail": "Bu funksiya sizning do‘koningizda yoqilmagan. Yoqish uchun biz bilan bog‘laning.",
+  "panel.agent.off_title": "AI yordamchi hali ulanmagan",
   "panel.agent.open_evidence": "Dalilni ochish",
   "panel.agent.preparing_detail": "Filial roziligi saqlandi. Administrator Gemini providerini sozlagach savollar qabul qilinadi.",
   "panel.agent.preparing_title": "Agent tayyorlanmoqda",
@@ -672,6 +676,9 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "panel.owner.section_title": "Bo‘lim",
   "panel.owner.select_branch": "Filialni tanlash",
   "panel.owner.server_unreachable": "Server bilan aloqa bo‘lmadi. Internetni tekshirib, qayta urinib ko‘ring.",
+  "panel.owner.severity_critical": "muhim",
+  "panel.owner.severity_info": "ma’lumot",
+  "panel.owner.severity_warning": "ogohlantirish",
   "panel.owner.sites_load_failed": "Filiallar olinmadi",
   "panel.owner.splash_checking_link": "Havola tekshirilmoqda.",
   "panel.owner.splash_preparing": "Ko‘rsatkichlar tayyorlanmoqda.",
@@ -882,6 +889,8 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "trust.unavailable.silent": "Do'kon kompyuteri {hours} soatdan beri jim — ma'lumot to'liq emas"
 },
   ru: {
+  "capability.agent.not_configured": "AI-помощник пока не подключён",
+  "capability.attendance.closed": "Учёт сотрудников — закрытый пилот, для вашего магазина не включён",
   "capability.cameras.partial": "Из {expected} камер работают {active}",
   "capability.edge_config.pending": "Устройство ещё не подтвердило новые настройки",
   "capability.geometry.no_line": "Линия входа не нарисована — без неё посетители не считаются",
@@ -984,6 +993,8 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "panel.agent.listen": "Прослушать",
   "panel.agent.no_sources_detail": "За выбранный промежуток времени сохранённых событий нет.",
   "panel.agent.no_sources_title": "Доказательства не найдены",
+  "panel.agent.off_detail": "Эта функция не включена для вашего магазина. Свяжитесь с нами, чтобы включить.",
+  "panel.agent.off_title": "AI-помощник пока не подключён",
   "panel.agent.open_evidence": "Открыть доказательство",
   "panel.agent.preparing_detail": "Согласие филиала сохранено. Как только администратор настроит подключение к Gemini, вопросы будут приниматься.",
   "panel.agent.preparing_title": "Помощник готовится",
@@ -1542,6 +1553,9 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "panel.owner.section_title": "Раздел",
   "panel.owner.select_branch": "Выбрать филиал",
   "panel.owner.server_unreachable": "Нет связи с сервером. Проверьте интернет и попробуйте снова.",
+  "panel.owner.severity_critical": "важно",
+  "panel.owner.severity_info": "информация",
+  "panel.owner.severity_warning": "предупреждение",
   "panel.owner.sites_load_failed": "Не удалось получить список филиалов",
   "panel.owner.splash_checking_link": "Проверяем ссылку.",
   "panel.owner.splash_preparing": "Готовим показатели.",
@@ -1752,6 +1766,8 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "trust.unavailable.silent": "Компьютер магазина молчит уже {hours} ч. — данные неполные"
 },
   en: {
+  "capability.agent.not_configured": "The AI assistant is not connected yet",
+  "capability.attendance.closed": "Staff attendance is a closed pilot — not enabled for your shop",
   "capability.cameras.partial": "{active} of {expected} cameras active",
   "capability.edge_config.pending": "The device has not confirmed the new settings yet",
   "capability.geometry.no_line": "No entrance line is drawn — visitors are not counted without it",
@@ -1854,6 +1870,8 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "panel.agent.listen": "Listen",
   "panel.agent.no_sources_detail": "There are no saved events in the selected time range.",
   "panel.agent.no_sources_title": "No evidence found",
+  "panel.agent.off_detail": "This feature is not enabled for your shop. Contact us to turn it on.",
+  "panel.agent.off_title": "The AI assistant is not connected yet",
   "panel.agent.open_evidence": "Open evidence",
   "panel.agent.preparing_detail": "Your branch's consent is saved. Questions will be accepted once the administrator sets up the Gemini connection.",
   "panel.agent.preparing_title": "The assistant is being set up",
@@ -2412,6 +2430,9 @@ export const CATALOGUE: Record<string, Record<string, CatalogueEntry>> = {
   "panel.owner.section_title": "Section",
   "panel.owner.select_branch": "Select a branch",
   "panel.owner.server_unreachable": "Could not reach the server. Check your internet connection and try again.",
+  "panel.owner.severity_critical": "critical",
+  "panel.owner.severity_info": "info",
+  "panel.owner.severity_warning": "warning",
   "panel.owner.sites_load_failed": "Could not load branches",
   "panel.owner.splash_checking_link": "Checking the link.",
   "panel.owner.splash_preparing": "Preparing your numbers.",

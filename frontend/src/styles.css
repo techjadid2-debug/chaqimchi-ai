@@ -286,7 +286,13 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
 .palette-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; justify-items: center; align-content: start; padding: 12vh 20px 20px; background: var(--scrim); }
 .palette { width: min(560px, 100%); border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-lg); overflow: hidden; }
 .palette-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--muted); }
+/* `outline: none` maydonning O'ZIDA qoladi — halqa O'RAMGA chiziladi,
+   aks holda u ikki marta (maydon + o'ram) ko'rinardi.  Halqasiz
+   qoldirish esa klaviatura bilan ishlaydigan odamdan kursor qayerda
+   ekanini butunlay yashirardi: global `:focus-visible` bu maydonga
+   tegmaydi, chunki ko'rinadigan chegara o'ramda. */
 .palette-input input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text); font-size: 15px; }
+.palette-input:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; border-radius: 8px; }
 .palette ul { display: grid; margin: 0; padding: 6px; list-style: none; max-height: 46vh; overflow-y: auto; }
 .palette li button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; border: 0; border-radius: 9px; padding: 0 12px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 600; }
 .palette li button:hover { background: var(--surface-2); }
@@ -341,6 +347,8 @@ button.timeline-col:hover .timeline-stack { opacity: .78; }
 .table-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 21px 0; }
 .table-search { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 9px; min-height: 44px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; background: var(--surface); color: var(--muted); }
 .table-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text); font-size: 13px; }
+/* `.palette-input` bilan bir xil sabab: halqa o'ramda. */
+.table-search:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .table-name { display: flex; align-items: center; gap: 11px; }
 
 /* ── Bosh sahifa bloklari ────────────────────────────────────────── */
@@ -590,10 +598,15 @@ tr:last-child td { border-bottom: 0; }
   .metric-icon { width: 34px; height: 34px; right: 13px; top: 13px; }
   .metric-value { font-size: 25px; }
   .dashboard-grid, .home-grid, .split-grid, .stack { gap: 13px; }
-  /* Topbar telefonda tor: qidiruv, sana va holat chipi sig'maydi —
-     ularning har biri boshqa joyda takrorlanadi (qidiruv ⌘K bilan,
-     holat esa bosh sahifadagi ogohlantirish chizig'ida). */
-  .search-trigger, .topbar-date, .status-chip { display: none; }
+  /* Topbar telefonda tor: sana va holat chipi sig'maydi — ular boshqa
+     joyda takrorlanadi (holat bosh sahifadagi ogohlantirish
+     chizig'ida).  QIDIRUV esa yashirilmaydi: telefonda `⌘K` yo'q,
+     ya'ni tugmani olib tashlash qidiruvni umuman yetib bo'lmaydigan
+     qilib qo'yardi — admin 60+ mijozni faqat aylantirib topardi.
+     Tugma ixchamlashadi: matn va `kbd` ketadi, ikonka qoladi. */
+  .topbar-date, .status-chip { display: none; }
+  .search-trigger { min-width: 44px; padding: 0 11px; }
+  .search-trigger span, .search-trigger kbd { display: none; }
   /* Filial nomi yonidagi ro'yxatda ham turadi — topbarda takrorlash
      tor ekranda joyni bekorga egallaydi. */
   .topbar-title { display: none; }

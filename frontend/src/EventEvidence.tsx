@@ -89,7 +89,12 @@ function Evidence({ item, kind, siteId, focused = false, retentionHours = 0, aut
  * Cheklovsiz ro'yxat gavjum kunda telefon xotirasini yeb qo'yardi. */
 const PAGE = 20;
 
-export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboard, onNavigate, cameraId = "" }: { kind: "owner" | "admin"; siteId?: string; sites?: Array<{id:string;name:string}>; focusEventId?: string; dashboard?: Dashboard; onNavigate?: (id: string) => void; cameraId?: string }) {
+/* `embedded` — komponent BOSHQA sahifa ichida turibdi (alohida kamera
+   sahifasi).  U holda o'z `PageHeader`ini, kun tanlagichini va
+   maxfiylik chizig'ini CHIZMAYDI: sahifada ular allaqachon bor va
+   ikkinchi sarlavha «ikki sahifa ustma-ust» bo'lib ko'rinardi
+   (2026-09-11 QA topilmasi). */
+export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboard, onNavigate, cameraId = "", embedded = false }: { kind: "owner" | "admin"; siteId?: string; sites?: Array<{id:string;name:string}>; focusEventId?: string; dashboard?: Dashboard; onNavigate?: (id: string) => void; cameraId?: string; embedded?: boolean }) {
   const [events, setEvents] = useState<Event[] | null>(null); const [error, setError] = useState(""); const [selected, setSelected] = useState(siteId || "");
   /* "" — sanasiz "oxirgi hodisalar" rejimi.  U ikki holatda kerak:
      AI yordamchisi eski kundagi dalilga yo'naltirganda (kun bo'yicha
@@ -130,10 +135,15 @@ export function EventEvidence({ kind, siteId, sites, focusEventId = "", dashboar
 
   const visible = (events || []).slice(0, shown);
 
-  return <><PageHeader title={t("panel.evidence.title")} subtitle={t("panel.evidence.subtitle")} actions={kind === "admin" ? <select className="select" value={selected} onChange={event => setSelected(event.target.value)}><option value="">{t("panel.evidence.all_sites")}</option>{sites?.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : <>{dayPicker}<button className="btn" onClick={load}>{t("panel.common.refresh")}</button></>}/>
+  return <>{embedded ? null : <PageHeader title={t("panel.evidence.title")} subtitle={t("panel.evidence.subtitle")} actions={kind === "admin" ? <select className="select" value={selected} onChange={event => setSelected(event.target.value)}><option value="">{t("panel.evidence.all_sites")}</option>{sites?.map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select> : <>{dayPicker}<button className="btn" onClick={load}>{t("panel.common.refresh")}</button></>}/>}
     {/* Nima uchun ko'p hodisada tugma yo'qligi ANIQ aytiladi: kirish-chiqish
-        qatorlarida rasm bo'lmasligi mijozga "buzilgan"day ko'rinardi. */}
-    <div className="alert-strip alert-info"><Icon name="shield"/><div>{t("panel.evidence.privacy_before")} <b>{t("panel.evidence.privacy_bold")}</b> {t("panel.evidence.privacy_after")}</div></div>
+        qatorlarida rasm bo'lmasligi mijozga "buzilgan"day ko'rinardi.
+        Ichma-ich chizilganda takrorlanmaydi — sahifada bir marta yetadi. */}
+    {embedded ? null : <div className="alert-strip alert-info"><Icon name="shield"/><div>{t("panel.evidence.privacy_before")} <b>{t("panel.evidence.privacy_bold")}</b> {t("panel.evidence.privacy_after")}</div></div>}
+    {/* Sarlavha ketdi, KUN TANLAGICH esa qoladi: usiz kamera
+        sahifasida faqat bugunni ko'rish mumkin bo'lardi — funksiya
+        yo'qolishi sarlavha takrorlanishidan yomonroq. */}
+    {embedded && dayPicker ? <div className="page-actions wrap section-gap">{dayPicker}<button className="btn" onClick={load}>{t("panel.common.refresh")}</button></div> : null}
     {error ? <ErrorStrip detail={error} onRetry={() => { setEvents(null); void load(); }}/> : null}
     {locked
       ? <Card><PlanLock title={t("panel.evidence.lock_title")} detail={t("panel.evidence.lock_detail")} onUpgrade={() => onNavigate?.("billing")}/></Card>

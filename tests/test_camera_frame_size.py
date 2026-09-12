@@ -314,3 +314,55 @@ def test_the_two_false_cases_are_told_apart() -> None:
 
     assert face_id_check(480)[0] is False and face_id_state(480) == "edge"
     assert face_id_check(288)[0] is False and face_id_state(288) == "low"
+
+
+# ── 5) Darvozalar: yoqilmagan funksiya sotilgan bo'lib ko'rinmasin ─────
+
+
+def test_the_dashboard_says_whether_the_ai_assistant_is_connected(
+    client, shop: Dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gemini kaliti yo'q do'konda «AI yordamchi» tabi ochilar, har savol
+    xato bilan tugar va ega «buzuq» deb o'ylardi — jonli bazada
+    `vision_observations` = 0.  Panel darvozani shu javobdan oladi;
+    qaror `vision_agent.configured()` da bir marta chiqadi."""
+    trial = client.post(
+        "/api/v1/auth/login", json={"username": "dokonchi", "password": "parol12345"}
+    ).json()
+    headers = {"Authorization": f"Bearer {trial['access_token']}"}
+
+    payload = client.get("/api/v1/owner/dashboard", headers=headers).json()
+    assert payload["capabilities"]["agent"]["ready"] is False
+    assert payload["capabilities"]["agent"]["reason"], "sabab matni bo'lsin"
+
+    monkeypatch.setenv("ENES_GEMINI_API_KEY", "kalit")
+    monkeypatch.setenv("ENES_GEMINI_VISION_MODEL", "gemini-2.5-flash")
+    payload = client.get("/api/v1/owner/dashboard", headers=headers).json()
+    assert payload["capabilities"]["agent"]["ready"] is True
+    assert payload["capabilities"]["agent"]["reason"] is None
+
+
+def test_the_dashboard_says_whether_attendance_is_open(
+    client, shop: Dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Davomat — yopiq pilot.  Yoqilmagan serverda «Xodimlar» bo'limi
+    menyuda turar, ochilsa har so'rov 403 berardi.
+
+    `_attendance_enabled()` dev/test muhitida ATAYLAB ochiq (aks holda
+    har test env qo'yishi kerak bo'lardi) — shuning uchun yopiq holat
+    `ENES_ENV=production` bilan sinaladi, ya'ni aynan mijoz ko'radigan
+    sozlamada.
+    """
+    login = client.post(
+        "/api/v1/auth/login", json={"username": "dokonchi", "password": "parol12345"}
+    ).json()
+    headers = {"Authorization": f"Bearer {login['access_token']}"}
+
+    payload = client.get("/api/v1/owner/dashboard", headers=headers).json()
+    assert payload["capabilities"]["attendance"]["ready"] is True, "dev muhitida ochiq"
+
+    monkeypatch.setenv("ENES_ENV", "production")
+    payload = client.get("/api/v1/owner/dashboard", headers=headers).json()
+    attendance = payload["capabilities"]["attendance"]
+    assert attendance["ready"] is False, "production'da pilot ruxsatisiz yopiq"
+    assert attendance["reason"], "sabab matni bo'lsin"

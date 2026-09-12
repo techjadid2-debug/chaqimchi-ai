@@ -1,6 +1,6 @@
 import { formatNumber, tashkentToday } from "./api";
 import { CamerasBlock } from "./Cameras";
-import { Card, EmptyState, PageHeader, StatCard, Tabs } from "./components";
+import { Card, EmptyState, PageHeader, StatCard, TabPanel, Tabs } from "./components";
 import { EventEvidence } from "./EventEvidence";
 import { EventTimeline } from "./EventTimeline";
 import { HeatmapThumb } from "./Heatmap";
@@ -47,8 +47,8 @@ export function CameraDetail({ dashboard, siteId, cameraId, tab, onNavigate }: {
 
   return <>
     <PageHeader title={label} subtitle={state?.reason || t("panel.cameras.state_loading")} actions={back}/>
-    <Tabs items={CAMERA_TABS.map(id => ({ id, label: t(`panel.camera.tab_${id}`) }))} active={tab} onSelect={id => onNavigate("cameras", cameraId, id)}/>
-    {tab === "analytics" ? <>
+    <Tabs items={CAMERA_TABS.map(id => ({ id, label: t(`panel.camera.tab_${id}`) }))} active={tab} onSelect={id => onNavigate("cameras", cameraId, id)} panelId="camera-panel"/>
+    <TabPanel id="camera-panel" activeTab={tab}>{tab === "analytics" ? <>
       <div className="metric-grid metric-grid-3">
         <StatCard label={t("panel.numbers.entered")} value={door ? formatNumber(door.entered) : "—"} note={door ? t("panel.camera.last_7_days") : t("panel.camera.no_door_note")} icon="entry" tone="blue"/>
         <StatCard label={t("panel.numbers.exited")} value={door ? formatNumber(door.exited) : "—"} note={door ? t("panel.camera.last_7_days") : t("panel.camera.no_door_note")} icon="entry" tone="green"/>
@@ -66,11 +66,11 @@ export function CameraDetail({ dashboard, siteId, cameraId, tab, onNavigate }: {
         <EventTimeline siteId={siteId} date={tashkentToday()} cameraId={cameraId}/>
       </Card>
     </>
-    : tab === "alerts" ? <EventEvidence kind="owner" siteId={siteId} cameraId={cameraId} dashboard={dashboard} onNavigate={onNavigate}/>
+    : tab === "alerts" ? <EventEvidence kind="owner" siteId={siteId} cameraId={cameraId} dashboard={dashboard} onNavigate={onNavigate} embedded/>
     : <>
       <CamerasBlock dashboard={dashboard} siteId={siteId} only={cameraId} expanded/>
       <FaceIdNote camera={camera}/>
-    </>}
+    </>}</TabPanel>
   </>;
 }
 

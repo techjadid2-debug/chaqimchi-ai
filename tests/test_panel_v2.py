@@ -690,3 +690,105 @@ def test_the_csv_download_works_in_safari_too() -> None:
         assert "document.createElement(\"a\")" not in code, (
             f"{name}: yuklash boilerplate'i qaytib kelgan — `downloadBlobUrl()` ishlatilsin"
         )
+
+
+def test_modal_windows_really_trap_the_focus() -> None:
+    """Izoh «fokus oyna ichida» deb YOZILGAN, kod esa qilmasdi.
+
+    `aria-modal="true"` faqat skrinriderga aytadi, klaviaturani
+    to'smaydi — Tab bosgan odam oyna ortidagi sahifaga chiqib ketardi
+    va u yerda ko'rinmas tugmalarni bosardi.  Yopilganda fokus hech
+    qayerga qaytmasdi.  Telegram WebView'da bu ayniqsa muhim: u yerda
+    brauzer oynalari yo'q va butun panel modal oynalarga tayanadi.
+    """
+    code = src("components.tsx")
+
+    assert "export function useFocusTrap" in code, "fokus tuzog'i yo'q"
+    assert 'event.key !== "Tab"' in code, "Tab halqasi yo'q"
+    assert "previous.focus()" in code, "yopilganda fokus qaytmaydi"
+    # `Modal` ham, buyruq palitrasi ham shu bitta hook'ni ishlatsin.
+    assert code.count("useFocusTrap(onClose)") >= 2, (
+        "oynalardan biri hamon tuzoqsiz — `Modal` va palitra ikkalasi ham"
+    )
+
+
+def test_the_tabs_say_which_panel_they_open() -> None:
+    """`role="tab"` yetarli emas: tugma qayerga olib borishini ham aytsin."""
+    components = src("components.tsx")
+    assert "aria-controls={panelId}" in components
+    assert 'role="tabpanel"' in components and "aria-labelledby" in components
+
+    for name in ("owner.tsx", "CameraDetail.tsx"):
+        assert "panelId=" in src(name), f"{name}: tab qatori panelga bog'lanmagan"
+        assert "<TabPanel" in src(name), f"{name}: tab tarkibi `tabpanel` emas"
+
+
+def test_search_stays_reachable_on_a_phone() -> None:
+    """Telefonda `⌘K` yo'q — tugma yashirilsa qidiruv umuman yo'qoladi.
+
+    Admin 60+ mijozni faqat aylantirib topardi.
+    """
+    css = (SRC / "styles.css").read_text(encoding="utf-8")
+    phone = css[css.index("@media (max-width: 760px)"):]
+
+    assert ".search-trigger, .topbar-date, .status-chip { display: none; }" not in phone, (
+        "qidiruv tugmasi telefonda yashirilgan"
+    )
+    assert ".search-trigger span, .search-trigger kbd { display: none; }" in phone, (
+        "tugma ixchamlashmagan — tor topbarda joy yetmaydi"
+    )
+
+
+def test_focus_is_visible_in_the_search_boxes() -> None:
+    """`outline: none` o'ram halqasi bilan QOPLANSIN.
+
+    Global `:focus-visible` bu maydonlarga tegmaydi: ko'rinadigan
+    chegara maydonda emas, o'ramda (`.palette-input`, `.table-search`).
+    """
+    css = (SRC / "styles.css").read_text(encoding="utf-8")
+
+    for wrapper in (".palette-input", ".table-search"):
+        assert f"{wrapper}:focus-within {{ outline:" in css, f"{wrapper}: fokus ko'rinmaydi"
+
+
+def test_the_severity_dot_does_not_speak_only_in_colour() -> None:
+    """Rang ko'rmaydigan odam uchun muhim va oddiy xabar bir xil edi."""
+    owner = src("owner.tsx")
+    dot = owner[owner.index("notif-dot sev-") - 60: owner.index("notif-dot sev-") + 260]
+
+    assert "aria-label" in dot, "muhimlik faqat rang bilan aytilyapti"
+
+
+def test_the_ai_assistant_hides_when_it_is_not_connected() -> None:
+    """Gemini kaliti yo'q do'konda tab ochilar, har savol xato berardi.
+
+    Jonli bazada `vision_observations` = 0 — ya'ni funksiya amalda
+    o'lik, lekin panel uni sotilgan bo'lim sifatida ko'rsatardi.
+    Qaror SERVERDA: `capabilities.agent` `vision_agent.configured()`
+    dan keladi va panelda ikkinchi shart yozilmaydi.
+    """
+    owner = src("owner.tsx")
+    assert "capabilities?.agent?.ready" in owner, "darvoza panelda o'qilmaydi"
+    assert 'hidden={agentReady ? [] : ["agent"]}' in owner, "tab yashirilmaydi"
+    # `TABS` ro'yxatining O'ZI o'zgarmasin: manzil xaritasi unga bog'langan.
+    assert 'alerts: ["evidence", "agent"]' in owner, "`TABS` literali o'zgargan"
+    # To'g'ridan-to'g'ri kirilsa sabab aytilsin, oq sahifa emas.
+    assert "panel.agent.off_title" in owner
+
+
+def test_the_employees_section_hides_when_attendance_is_closed() -> None:
+    """Davomat yopiq pilot: yoqilmagan serverda har so'rov 403 berardi."""
+    owner = src("owner.tsx")
+    assert "capabilities?.attendance?.ready" in owner
+    assert "attendanceReady" in owner
+
+
+def test_the_camera_page_has_only_one_heading() -> None:
+    """`EventEvidence` o'z `PageHeader`ini chizib, ikki sahifa ustma-ust
+    bo'lib ko'rinardi (2026-09-11 QA).  Kun tanlagich esa QOLADI —
+    funksiya yo'qolishi sarlavha takrorlanishidan yomonroq."""
+    evidence = src("EventEvidence.tsx")
+    assert "embedded = false" in evidence, "`embedded` propi yo'q"
+    assert "{embedded ? null : <PageHeader" in evidence, "ichma-ich sarlavha chizilyapti"
+    assert "embedded && dayPicker" in evidence, "kun tanlagich yo'qolgan"
+    assert "embedded/>" in src("CameraDetail.tsx"), "kamera sahifasi propni bermaydi"

@@ -301,7 +301,7 @@ CAMERA_FRAMES = ["design2-retail.webp", "design2-aisle.webp", "design2-warehouse
 SHOTS = (
     {
         "name": "panel-bugun",
-        "version": "v3",
+        "version": "v4",
         "route": "#/home",
         "selector": ".content",
         # Saytda rasm ~570 px kenglikda ko'rinadi: uzun ustun mayda va
@@ -324,7 +324,7 @@ SHOTS = (
     },
     {
         "name": "panel-xarita",
-        "version": "v4",
+        "version": "v5",
         "route": "#/heatmap",
         "selector": ".content",
         "hide": [".sidebar", ".topbar", ".bottom-nav"],

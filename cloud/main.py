@@ -1845,6 +1845,15 @@ async def _notify_rate_limited_sites() -> None:
 #: buni kun oxirida emas, o'sha payt bilishimiz kerak).
 _MAINTENANCE_STEP_SEC = 1_800
 _PURGE_EVERY_STEPS = 12
+#: Reliz tozalash — kuniga bir marta (48 × 30 daqiqa).  Tezroq qilishning
+#: ma'nosi yo'q: yangi reliz haftada bir-ikki marta chiqadi, papkada esa
+#: har prefiksda uchta juftlik ataylab turadi.
+_PRUNE_RELEASES_EVERY_STEPS = 48
+#: ...lekin NOL-qadamda emas, bittada: ilova hozir ko'tarildi va "qaysi
+#: versiya hali kerak" ro'yxati aynan shu paytda bo'sh bo'lishi mumkin
+#: (yangi yoki ko'chirilgan baza — qurilmalar hali heartbeat yubormagan).
+#: Qurilma har daqiqada aloqa qiladi, ya'ni 30 daqiqada ro'yxat to'ladi.
+_PRUNE_RELEASES_AT_STEP = 1
 
 
 #: Ko'p versiya ogohlantirishi shu obyekt uchun oxirgi marta qachon ketgani.
@@ -1913,6 +1922,11 @@ async def _maintenance_loop() -> None:
                 continue
             if step % _PURGE_EVERY_STEPS == 0:
                 await asyncio.to_thread(_purge_expired_events)
+            if step % _PRUNE_RELEASES_EVERY_STEPS == _PRUNE_RELEASES_AT_STEP:
+                # Yetakchi darvozasi tepada: ikki worker bir vaqtda
+                # o'chirishga urinsa ikkinchisi `FileNotFoundError` ni
+                # xato deb jurnalga yozardi.
+                await asyncio.to_thread(prune_windows_releases)
             # Umumiy bazadagi tugagan oynalar: xotira yo'li o'zini o'zi
             # tozalaydi, jadvalda esa qaytib so'ralmagan kalit abadiy
             # qolib ketardi (har qurilma, har IP uchun bitta qator).
@@ -3695,6 +3709,202 @@ def latest_windows_release() -> Optional[Dict[str, Any]]:
             if best is None or _version_key(version) > _version_key(best["version"]):
                 best = candidate
     return best
+
+
+# ── `releases/` tozalanishi ──────────────────────────────────────────────
+#
+# Papka HECH QACHON tozalanmasdi: har nashr qilingan `.exe` (~100 MB)
+# abadiy qolar edi va serverda 19 ta eski reliz bilan 1,9 GB ga o'sdi.
+# Diskning to'lishi esa bu yerda faqat "joy tugadi" degani emas —
+# Postgres va MinIO o'sha diskda.
+
+#: Har prefiks bo'yicha shuncha JUFTLIK (`.exe` + `.json`) qoladi.
+#:
+#: Uchta, chunki uchtasining ham kerak bo'ladigan holati bor: joriy
+#: reliz (qurilma shuni oladi), undan oldingisi (qurilma yangilanish
+#: oldidan O'Z joriy versiyasini rollback nishoni qilib yuklab oladi —
+#: `enes/local/updater.py: _ensure_rollback_target`) va yana bittasi —
+#: rollout to'xtatilgan yoki sekin ketayotgan oraliq versiya uchun.
+WINDOWS_RELEASE_KEEP = 3
+
+#: Reliz juftligining har ikki a'zosi (`.exe` va manifest) bitta
+#: qoidada.  `WINDOWS_RELEASE_PATTERN` faqat `.exe` ni biladi, tozalash
+#: esa manifestni ham nomi bo'yicha tanishi kerak: yolg'on qolgan
+#: manifest ham papkada abadiy yashab qolardi.
+WINDOWS_RELEASE_MEMBER_PATTERN = re.compile(
+    r"^(?P<prefix>enes|chaqimchi)-windows-(?P<version>[A-Za-z0-9.\-_]+)\.(?P<ext>exe|json)$"
+)
+
+#: Versiyasiz o'rnatuvchi nomlari — tozalash ularga TEGMAYDI.  Ular
+#: reliz juftligi emas, lekin `_windows_installer_file()` relizlar
+#: topilmaganda aynan shu faylni saytga beradi; "tanimadim" qoidasiga
+#: qo'shib o'chirilsa yuklab olish tugmasi 503 ga aylanardi.
+_INSTALLER_FILE_NAMES = frozenset(path.name for path in WINDOWS_INSTALLER_PATHS)
+
+
+def _protected_release_versions() -> set[str]:
+    """Hech qanday holatda o'chirilmaydigan versiyalar.
+
+    Uch manba — uch xil "hali kerak":
+
+    * `device_health` dagi oxirgi heartbeat (`app_version`) — qurilma
+      HOZIR ishlatayotgan versiya.  Yangilanish paytida u aynan shu
+      versiyaning o'rnatuvchisini rollback nishoni qilib serverdan
+      yuklab oladi;
+    * `devices.app_version` (boshqaruv bazasi) — AYNI faktning ikkinchi
+      nusxasi va ataylab ikkalasi o'qiladi: ikki jadval ikki BOSHQA
+      bazada turadi (hodisa bazasi PostgreSQL, boshqaruv bazasi
+      SQLite), ya'ni bittasi ko'chirish oynasida bo'shab turgan
+      paytda ham ro'yxat bo'sh qolmaydi;
+    * `pin` kanalida qotirilgan versiya (`sites.update_version`) —
+      fayli yo'q bo'lsa `/api/v1/edge/update` o'sha obyektga
+      "qotirilgan versiya topilmadi" deb javob beradi va do'kon
+      yangilanishdan butunlay tushib qoladi.
+
+    Xato bo'lsa **ko'tariladi** va tozalash umuman bajarilmaydi:
+    ortiqcha fayl faqat joy yeydi, kerakli faylning o'chishi esa
+    do'konni masofadan tuzatib bo'lmaydigan holga soladi.
+    """
+    versions = set(get_event_store().reported_app_versions())
+    store = get_store()
+    versions.update(
+        str(item.get("version") or "") for item in store.device_versions().values()
+    )
+    versions.update(store.pinned_update_versions())
+    versions.discard("")
+    return versions
+
+
+def _release_prune_plan(
+    directory: Path, *, keep: int, protected: set[str]
+) -> Dict[str, List[Path]]:
+    """Papkada nima qolishini hal qiladi — hech narsa o'chirmaydi."""
+    # prefiks → versiya → {"exe": …, "json": …}
+    families: Dict[str, Dict[str, Dict[str, Path]]] = {}
+    strangers: List[Path] = []
+    for entry in sorted(directory.iterdir()):
+        if not entry.is_file():
+            continue
+        member = WINDOWS_RELEASE_MEMBER_PATTERN.match(entry.name)
+        if member:
+            slot = families.setdefault(member.group("prefix"), {}).setdefault(
+                member.group("version"), {}
+            )
+            slot[member.group("ext")] = entry
+            continue
+        # "Tanimadim" holati — loyihada bir marta yeyilgan tuzoq:
+        # yozuvchi bilan o'quvchi nomda kelishmasa fayl na retentionga,
+        # na kvotaga ko'rinmay papkada ABADIY qolib ketadi.  Faqat
+        # `.exe` olinadi: `releases/` da Box/R1 yo'lining `sotqin`/`lite`
+        # arxiv va manifestlari ham turadi va ular bizning ishimiz emas.
+        if entry.suffix.lower() == ".exe" and entry.name not in _INSTALLER_FILE_NAMES:
+            strangers.append(entry)
+
+    keepers: List[Path] = []
+    doomed: List[Path] = list(strangers)
+    for versions in families.values():
+        # Tanlov faqat TO'LIQ juftliklar orasidan: manifestsiz `.exe` ni
+        # qurilma baribir rad etadi, ya'ni uni "eng yangi uchta" ichiga
+        # kiritish jonli relizni o'z o'rnidan siqib chiqarardi.
+        complete = sorted(
+            (version for version, files in versions.items() if len(files) == 2),
+            key=_version_key,
+            reverse=True,
+        )
+        survivors = set(complete[:keep])
+        for version, files in versions.items():
+            if version in protected or version in survivors:
+                keepers.extend(files.values())
+            else:
+                doomed.extend(files.values())
+    return {"keep": keepers, "delete": doomed}
+
+
+def prune_windows_releases(
+    keep: int = WINDOWS_RELEASE_KEEP, *, dry_run: bool = False
+) -> Dict[str, Any]:
+    """Eski Windows relizlarini o'chiradi va nima qilganini qaytaradi.
+
+    Qoida: har prefiks bo'yicha eng yangi `keep` juftlik qoladi, ustiga
+    qurilmalar hali so'rayotgan versiyalar (`_protected_release_versions`)
+    qancha bo'lsa shuncha qoladi.  Manifestsiz yolg'iz `.exe`, yolg'on
+    qolgan manifest va reliz qoidasiga tushmagan `.exe` tozalanadi.
+
+    `dry_run=True` — faqat reja (skript uchun: konteynerda `releases/`
+    **faqat o'qish** uchun ulangan, ya'ni o'chirishni host bajaradi).
+    """
+    # Kamida bitta juftlik.  `keep=0` bilan chaqirilsa JONLI reliz ham
+    # o'chib ketardi va hech bir qurilma boshqa yangilanmasdi.
+    keep = max(1, int(keep))
+
+    try:
+        protected = _protected_release_versions()
+    except Exception:  # noqa: BLE001 - sabab jurnalda, qarori bitta
+        logger.exception(
+            "releases/ tozalanmadi: qurilma versiyalarini o'qib bo'lmadi "
+            "(kerakli faylni o'chirish xavfi bor)"
+        )
+        return {"deleted": [], "planned": [], "failed": [], "freed_bytes": 0, "skipped": True}
+
+    deleted: List[str] = []
+    planned: List[str] = []
+    failed: List[str] = []
+    freed = 0
+    seen: set[Path] = set()
+    for directory in _release_dirs():
+        if not directory.is_dir():
+            continue
+        # Konteynerda `BASE_DIR/releases` va `/app/releases` bitta papka:
+        # ikki marta aylanib chiqish xatoni ikki marta jurnalga yozardi.
+        resolved = directory.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+
+        plan = _release_prune_plan(directory, keep=keep, protected=protected)
+        for path in plan["delete"]:
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = 0
+            if dry_run:
+                planned.append(path.name)
+                continue
+            try:
+                path.unlink()
+            except OSError as exc:
+                failed.append(path.name)
+                logger.warning("Reliz fayli o'chmadi: %s (%s)", path.name, exc)
+                continue
+            deleted.append(path.name)
+            freed += size
+
+    if deleted:
+        logger.info(
+            "releases/ tozalandi: %d fayl, %d MB bo'shadi (qoldi: har prefiksda %d juftlik)",
+            len(deleted),
+            freed // (1024 * 1024),
+            keep,
+        )
+    if failed:
+        # Production'da papka konteynerga `:ro` bilan ulangan
+        # (`docker-compose.enes.yml`) va ilova o'zi o'chira olmaydi —
+        # bu ataylab shunday.  Tozalash host tomonda bajariladi.
+        logger.warning(
+            "releases/ dagi %d fayl o'chmadi (konteynerda papka faqat o'qish "
+            "uchun ulangan).  Ro'yxatni oling — `docker compose exec -T cloud "
+            "python scripts/prune_releases.py --reja` — va HOST tomonda "
+            "releases/ ichida o'chiring (yoki keyingi nashrda "
+            "publish_windows_release.sh ikkalasini o'zi bajaradi)",
+            len(failed),
+        )
+    return {
+        "deleted": deleted,
+        "planned": planned,
+        "failed": failed,
+        "freed_bytes": freed,
+        "skipped": False,
+    }
 
 
 def _windows_installer_url() -> str:

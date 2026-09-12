@@ -3106,6 +3106,28 @@ class CloudStore:
             "version": site.get("update_version"),
         }
 
+    def pinned_update_versions(self) -> List[str]:
+        """`pin` kanalida qotirilgan versiyalar.
+
+        Nega kerak: `releases/` tozalanganda qotirilgan versiyaning fayli
+        o'chib ketmasin.  O'chsa `/api/v1/edge/update` o'sha obyektga
+        "qotirilgan versiya topilmadi" deb javob beradi va do'kon
+        yangilanishdan ABADIY tushib qoladi — bu holat panelda ham
+        ogohlantirish bo'lib chiqmaydi, faqat jurnalda ko'rinadi.
+        """
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT update_version FROM sites"
+            " WHERE update_channel = 'pin' AND update_version IS NOT NULL"
+        ).fetchall()
+        conn.close()
+        out: List[str] = []
+        for row in rows:
+            version = str(row["update_version"] or "").strip()
+            if version and version not in out:
+                out.append(version)
+        return out
+
     def set_cameras_expected(self, site_id: str, expected: int) -> Dict[str, Any]:
         """O‘rnatilgan kamera sonini qo‘lda belgilash.
 

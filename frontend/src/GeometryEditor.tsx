@@ -49,17 +49,26 @@ type GeometryProblem = { kind: string; name: string; camera_id: string; problem:
  * uchun kadr `fetch` bilan olinib, blob URL sifatida beriladi —
  * `CameraImage` dagi bilan bir xil yechim.
  */
-type Kind = "owner" | "admin";
+type Kind = "owner" | "admin" | "installer";
 
-/** Bir xil muharrir ikki panel uchun.  Farq faqat manzil va tokenda:
+/** Bir xil muharrir UCH panel uchun.  Farq faqat manzil va tokenda:
  *  admin do'konni MASOFADAN tuzatadi (2026-08-21 qarori — jonli
  *  do'konda `lines: []` bo'lib qolgan va kuniga 5 ta kirish sanalgan),
- *  ega esa o'zinikini.  Server tomonda tekshiruv va saqlash bitta. */
+ *  o'rnatuvchi obyektda birinchi chiziqni chizadi, ega esa o'zinikini
+ *  to'g'irlaydi.  Server tomonda tekshiruv va saqlash bitta. */
 function paths(kind: Kind, siteId: string) {
   const site = encodeURIComponent(siteId);
-  return kind === "admin"
-    ? { config: `/api/v1/admin/sites/${site}/config`, preview: (id: string) => `/api/v1/admin/sites/${site}/cameras/${encodeURIComponent(id)}/preview` }
-    : { config: "/api/v1/owner/config", preview: (id: string) => `/api/v1/owner/cameras/${encodeURIComponent(id)}/preview` };
+  if (kind === "admin") {
+    return { config: `/api/v1/admin/sites/${site}/config`, preview: (id: string) => `/api/v1/admin/sites/${site}/cameras/${encodeURIComponent(id)}/preview` };
+  }
+  /* O'rnatuvchi bir vaqtda bir necha obyektda ishlaydi, shuning uchun
+     `site_id` YO'LDA turadi — `X-Owner-Site-Id` sarlavhasi u yerda
+     yo'q va serverda biriktirilganlik alohida tekshiriladi
+     (`_require_installer_site`). */
+  if (kind === "installer") {
+    return { config: `/api/v1/installer/sites/${site}/config`, preview: (id: string) => `/api/v1/installer/sites/${site}/cameras/${encodeURIComponent(id)}/preview` };
+  }
+  return { config: "/api/v1/owner/config", preview: (id: string) => `/api/v1/owner/cameras/${encodeURIComponent(id)}/preview` };
 }
 
 async function loadFrame(cameraId: string, siteId: string, kind: Kind = "owner"): Promise<HTMLImageElement | null> {
@@ -90,7 +99,7 @@ const PRESETS: { type: "entrance" | "queue" | "shelf" | "restricted"; key: strin
   { type: "restricted", key: "panel.geometry.preset.restricted" },
 ];
 
-export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { siteId: string; cameras: Camera[]; kind?: Kind; onSaved?: () => void }) {
+export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved, embedded = false }: { siteId: string; cameras: Camera[]; kind?: Kind; onSaved?: () => void; embedded?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const url = paths(kind, siteId);
   const siteHeader = kind === "owner" ? { siteId } : {};
@@ -229,9 +238,40 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
     }
   };
 
+  /* Shaklni O'CHIRISH tugmasi.
+   *
+   * Muharrirda o'chirish faqat SICHQONCHANING O'NG tugmasiga bog'langan
+   * (`contextmenu`) — telefonda bunday tugma YO'Q, ya'ni usta obyektda
+   * xato chizilgan zonani umuman olib tashlay olmasdi va uning yagona
+   * yo'li chizmani shu holda saqlab ketish edi.  Ro'yxatdagi tugma shu
+   * teshikni yopadi; tasdiq oynasi kanvasdagi bilan bir xil matnda. */
+  const removeShape = async (target: "line" | "zone", name: string) => {
+    const instance = editor.current;
+    if (!instance) return;
+    const ok = await confirm({
+      title: t("panel.geometry.delete_title"),
+      text: t("panel.geometry.delete_text", { name }),
+      danger: true,
+      confirmLabel: t("panel.common.delete"),
+    });
+    if (!ok) return;
+    /* Indeks emas, OBYEKT bo'yicha: tasdiq oynasi ochiq turganda
+       ro'yxat o'zgarishi mumkin (`zone-editor.js: _remove` dagi bilan
+       bir xil mulohaza). */
+    if (target === "zone") {
+      const found = instance.zones.find(item => item.name === name && item.camera_id === cameraId);
+      if (found) instance.zones.splice(instance.zones.indexOf(found), 1);
+    } else {
+      const found = instance.lines.find(item => item.name === name && item.camera_id === cameraId);
+      if (found) instance.lines.splice(instance.lines.indexOf(found), 1);
+    }
+    instance.draw();
+    sync();
+  };
+
   if (!cameras.length) {
     return <>
-      <PageHeader title={t("panel.geometry.title")} subtitle={t("panel.geometry.no_camera.subtitle")} />
+      {embedded ? null : <PageHeader title={t("panel.geometry.title")} subtitle={t("panel.geometry.no_camera.subtitle")} />}
       <Card>
         <EmptyState
           icon="camera"
@@ -243,21 +283,23 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
   }
 
   const total = shapes.lines.length + shapes.zones.length;
+  const cameraPicker = <select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)} aria-label={t("panel.common.camera")}>
+    {cameras.map(camera => (
+      <option key={camera.camera_id} value={camera.camera_id}>
+        {camera.label || camera.camera_id}
+      </option>
+    ))}
+  </select>;
 
   return <>
-    <PageHeader
+    {/* `embedded` — sarlavha CHAQIRUVCHIDA bor (usta panelidagi obyekt
+        sahifasi).  Usiz ikki sarlavha ustma-ust chiziladi: aynan shu
+        xato 2026-09-11 QA da kamera sahifasida topilgan. */}
+    {embedded ? null : <PageHeader
       title={t("panel.geometry.title")}
       subtitle={t("panel.geometry.subtitle")}
-      actions={
-        <select className="select" value={cameraId} onChange={event => setCameraId(event.target.value)} aria-label={t("panel.common.camera")}>
-          {cameras.map(camera => (
-            <option key={camera.camera_id} value={camera.camera_id}>
-              {camera.label || camera.camera_id}
-            </option>
-          ))}
-        </select>
-      }
-    />
+      actions={cameraPicker}
+    />}
 
     <Card>
       <div className="card-head">
@@ -266,6 +308,7 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
           <p>{t("panel.geometry.draw.subtitle")}</p>
         </div>
         <div className="page-actions">
+          {embedded ? cameraPicker : null}
           <button className="btn" onClick={() => void refreshFrame()}><Icon name="camera" />{t("panel.geometry.refresh_frame")}</button>
         </div>
       </div>
@@ -282,14 +325,32 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
         <p className="metric-note">
           {t("panel.geometry.draw.hint")}
         </p>
+        {/* TELEFON UCHUN TUGMALAR.  Muharrirda zonani yakunlash
+            `dblclick` ga, bekor qilish esa o'ng tugmaga bog'langan —
+            teginishli ekranda ikkalasi ham ishonchsiz (iOS'da
+            `touch-action: none` ostida `contextmenu` umuman
+            chiqmaydi).  Ya'ni usta obyektda nuqtalarni qo'yib, zonani
+            YOPA OLMASDI.  Metodlar `zone-editor.js` da allaqachon bor
+            edi (`finishDraft`/`cancelDraft`) — hech kim chaqirmagan. */}
+        <div className="page-actions">
+          <button className="btn" onClick={() => { editor.current?.finishDraft(); sync(); }}>{t("panel.geometry.finish_zone")}</button>
+          <button className="btn" onClick={() => { editor.current?.cancelDraft(); sync(); }}>{t("panel.geometry.cancel_draft")}</button>
+        </div>
+        <p className="metric-note">{t("panel.geometry.touch_hint")}</p>
 
         <div className="shape-summary">
+          {/* Har shakl yonida «×»: o'chirish telefonda faqat shu yo'l
+              bilan mumkin (yuqoridagi `removeShape` izohiga qarang). */}
           {shapes.lines.map(line => (
-            <Pill key={`line-${line.name}`} state="active">{line.name || t("panel.geometry.line")}</Pill>
+            <Pill key={`line-${line.name}`} state="active">
+              {line.name || t("panel.geometry.line")}
+              <button className="link-button" aria-label={t("panel.geometry.delete_shape", { name: line.name })} onClick={() => void removeShape("line", line.name)}>×</button>
+            </Pill>
           ))}
           {shapes.zones.map(zone => (
             <Pill key={`zone-${zone.name}`} state={zone.restricted ? "offline" : zone.queue ? "grace" : undefined}>
               {zone.name || t("panel.geometry.zone")}
+              <button className="link-button" aria-label={t("panel.geometry.delete_shape", { name: zone.name })} onClick={() => void removeShape("zone", zone.name)}>×</button>
             </Pill>
           ))}
           {!total ? <span className="metric-note">{t("panel.geometry.nothing_drawn")}</span> : null}

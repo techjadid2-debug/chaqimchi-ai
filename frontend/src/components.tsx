@@ -525,11 +525,25 @@ export function PasswordInput({ className, ...rest }: InputHTMLAttributes<HTMLIn
   </span>;
 }
 
-export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "owner" | "admin"; onSubmit: (username: string, password: string) => void; busy: boolean; error: string; botUrl?: string }) {
+/* Kirish ekranidagi sarlavha va yorliq — panel turi bo'yicha.  Matn
+   emas, katalog KALITI: modul yuklanganda til hali tanlanmagan
+   (`owner.tsx: NAV_ITEMS` bilan bir xil sabab). */
+const LOGIN_HEADLINE: Record<string, string> = {
+  owner: "panel.login.headline_owner",
+  admin: "panel.login.headline_admin",
+  installer: "panel.installer.login.headline",
+};
+const LOGIN_EYEBROW: Record<string, string> = {
+  owner: "panel.login.eyebrow_owner",
+  admin: "panel.login.eyebrow_admin",
+  installer: "panel.installer.login.eyebrow",
+};
+
+export function LoginScreen({ kind, onSubmit, busy, error, botUrl, extra }: { kind: "owner" | "admin" | "installer"; onSubmit: (username: string, password: string) => void; busy: boolean; error: string; botUrl?: string; extra?: ReactNode }) {
   return <main className="login-page">
     <section className="login-visual">
       <Logo />
-      <div><span className="eyebrow">ENES CLOUD</span><h1>{t(kind === "owner" ? "panel.login.headline_owner" : "panel.login.headline_admin")}</h1><p>{t("panel.login.tagline")}</p></div>
+      <div><span className="eyebrow">ENES CLOUD</span><h1>{t(LOGIN_HEADLINE[kind])}</h1><p>{t("panel.login.tagline")}</p></div>
       <div className="login-proof"><Icon name="shield"/><span>{t("panel.login.secure_note")}</span></div>
     </section>
     <section className="login-panel">
@@ -539,7 +553,7 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
       <div className="login-tools"><LangSwitch/><ThemeToggle/></div>
       <form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onSubmit(String(data.get("username") || ""), String(data.get("password") || "")); }}>
         <div className="login-mobile-logo"><Logo /></div>
-        <span className="eyebrow">{t(kind === "owner" ? "panel.login.eyebrow_owner" : "panel.login.eyebrow_admin")}</span>
+        <span className="eyebrow">{t(LOGIN_EYEBROW[kind])}</span>
         <h2>{t("panel.login.welcome")}</h2><p>{t("panel.login.intro")}</p>
         <label>{t("panel.login.username")}<input name="username" autoComplete="username" required /></label>
         <label>{t("panel.login.password")}<PasswordInput name="password" autoComplete="current-password" required /></label>
@@ -548,6 +562,12 @@ export function LoginScreen({ kind, onSubmit, busy, error, botUrl }: { kind: "ow
         {/* Parolsiz yo'l: bot bir martalik havola yuboradi.  Do'kon
             egasi uchun ko'pincha bu yagona qulay kirish usuli. */}
         {botUrl ? <p className="login-alt">{t("panel.login.forgot")} <a href={botUrl} target="_blank" rel="noreferrer">{t("panel.login.bot_link")}</a></p> : null}
+        {/* Forma ICHIDA: `.login-panel form` kengligi 390 px bilan
+            chegaralangan, tashqarida esa qo'shimcha blok butun ustunga
+            cho'zilib, tugmalar formadan kengroq bo'lib ko'rinardi.
+            O'rnatuvchi paneli shu joyga «Ro'yxatdan o'tish» va
+            «Yo'riqnoma» ni qo'yadi. */}
+        {extra}
       </form>
     </section>
   </main>;

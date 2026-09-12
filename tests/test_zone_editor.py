@@ -165,33 +165,25 @@ def test_the_installer_tool_loads_the_editor() -> None:
     Chiziq kadr ustida, kamera o'rnatilgan joydan turib chiziladi — bu ish
     do'kon egasiga tushmasligi kerak.  Ega paneli uchun bu qoida
     `tests/test_panel_v2.py::test_panel_has_no_raw_json_editors` da.
-    Adminning masofadan sozlashi (2026-08-21 qarori: jonli do'konda
-    `lines: []` bo'lib qolgan va kirish soni kuniga 5 ta ko'rsatilgan)
-    React adminga hali ko'chirilmagan — o'sha fayldagi
-    `test_the_admin_can_fix_a_shop_remotely` buni kutib turibdi.
+
+    2026-09-12: usta paneli React'ga ko'chdi, ya'ni muharrir endi
+    UCHALA panelda bitta komponent (`GeometryEditor.tsx`) —
+    `cloud/static/installer.js` va `geometry-panel.js` o'chirildi.
+    Ilgari bu ikki nusxa aynan shu sababdan uzoqlashib ketgan edi:
+    «javon» belgisi bir joyda bor, boshqasida yo'q (pastdagi test).
     """
-    installer = (ROOT / "cloud" / "static" / "installer.html").read_text(encoding="utf-8")
-    panel = (ROOT / "cloud" / "static" / "geometry-panel.js").read_text(encoding="utf-8")
-    # Sahifa mantig'i 2026-09-09 da `installer.js` ga chiqdi (CSP:
-    # `script-src` da `'unsafe-inline'` yo'q), kadr va tugmalar esa
-    # HTML'da qoldi — shuning uchun ikkalasi ham o'qiladi.
-    script = (ROOT / "cloud" / "static" / "installer.js").read_text(encoding="utf-8")
+    editor = (ROOT / "frontend" / "src" / "GeometryEditor.tsx").read_text(encoding="utf-8")
+    site = (ROOT / "frontend" / "src" / "InstallerJobs.tsx").read_text(encoding="utf-8")
 
-    # Chizish vositasi va uning atrofidagi panel — ikkalasi ham ulangan.
-    assert "zone-editor.js" in installer
-    assert "geometry-panel.js" in installer
-    assert 'id="geoCanvas"' in script
+    # Chizish vositasi ish vaqtida yuklanadi (bundle'ga kirmaydi) —
+    # manba qurilmadagi bilan bitta bo'lib qolishi uchun.
+    assert "/vendor/zone-editor.js" in editor
 
-    # Manzil endi `base` o'zgaruvchisidan yig'iladi (bir joyda), shuning
-    # uchun to'liq satr o'rniga uning ikki qismi tekshiriladi.
-    assert "/api/v1/installer/sites/${activeSite}" in script
-    assert "config:`${base}/config`" in script.replace(" ", "")
-
-    # Mantiq bitta joyda: ikki nusxa bo'lsa ular uzoqlashardi.
-    assert "GeometryPanel" in panel
-    # `onclick=` ATRIBUTI bo'lmasin.  Izohda so'zning o'zi uchrashi
-    # mumkin — shu sabab tenglik belgisi bilan qidiriladi.
-    assert "onclick=" not in panel, "admin panelida inline ishlov beruvchi taqiqlangan"
+    # O'rnatuvchining O'Z manzillari: `site_id` yo'lda turadi, chunki
+    # usta bir vaqtda bir necha obyektda ishlaydi.
+    assert 'kind === "installer"' in editor
+    assert "/api/v1/installer/sites/" in editor
+    assert 'kind="installer"' in site, "usta paneli muharrirni o'z turi bilan chaqirmaydi"
 
 
 def test_wizard_offers_one_click_presets_and_camera_roles() -> None:
@@ -246,16 +238,19 @@ def test_the_shelf_flag_survives_a_save() -> None:
 
 
 def test_both_editors_offer_the_same_zone_flags() -> None:
-    """O'rnatuvchi paneli va lokal usta bir xil belgilarni ko'rsatsin.
+    """Muharrir va panel bir xil belgilarni taklif qilsin.
 
-    Ikkalasi bitta `zone-editor.js` ni ishlatadi, lekin belgilar
-    ro'yxati ikki joyda alohida yozilgan: lokal ustada andoza tugmasi
-    (`addPreset`), o'rnatuvchida esa ro'yxatdagi checkbox
-    (`data-act`).  `shelf` aynan shu yerda ajralib qolgan edi —
-    andozasi bor, checkboxi yo'q.  Ro'yxatni RUXSAT emas, TENGLIK
-    qilib tekshiramiz: yangi belgi qo'shilsa test o'zi aytadi.
+    Belgilar ro'yxati ikki joyda yashaydi: `zone-editor.js` dagi andoza
+    (`addPreset`) va panelning tugmalari.  `shelf` aynan shu yerda
+    ajralib qolgan edi — andozasi bor, tugmasi yo'q, ya'ni «javon»
+    zonasini chizishning YO'LI yo'q edi.  Ro'yxatni RUXSAT emas,
+    TENGLIK qilib tekshiramiz: yangi belgi qo'shilsa test o'zi aytadi.
+
+    2026-09-12: usta paneli React'ga ko'chgach tugmalar ham bitta
+    joyda — `GeometryEditor.tsx: PRESETS` (ega, admin va usta uchun).
     """
-    panel = (ROOT / "cloud" / "static" / "geometry-panel.js").read_text(encoding="utf-8")
+    editor = EDITOR.read_text(encoding="utf-8")
+    panel = (ROOT / "frontend" / "src" / "GeometryEditor.tsx").read_text(encoding="utf-8")
 
     # `SceneZoneSettings` dagi mantiqiy belgilar — yagona manba.
     flags = {
@@ -266,5 +261,5 @@ def test_both_editors_offer_the_same_zone_flags() -> None:
     assert flags == {"restricted", "queue", "shelf"}, "yangi belgi: panelga ham qo'shing"
 
     for flag in flags:
-        assert f'data-act="{flag}"' in panel, f"o'rnatuvchi panelida «{flag}» belgisi yo'q"
-        assert f'act === "{flag}"' in panel, f"«{flag}» belgisi saqlanmaydi"
+        assert f'type === "{flag}"' in editor, f"muharrirda «{flag}» andozasi yo'q"
+        assert f'type: "{flag}"' in panel, f"panelda «{flag}» tugmasi yo'q"

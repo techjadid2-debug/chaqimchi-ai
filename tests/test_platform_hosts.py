@@ -91,11 +91,26 @@ def test_each_subdomain_serves_its_own_section(client: TestClient) -> None:
     assert "admin" in admin_page.text.lower()
 
 
+#: Panel qobiqlari — QURILISH artefakti (`npm run build` →
+#: `cloud/static/v2/`).  Bundle qurilmagan ishchi nusxada ular yo'q va
+#: marshrut halol 404 beradi (`error.*_panel_missing`), shuning uchun
+#: kutilgan kod fayl borligiga qarab tanlanadi.  Marshrutning O'ZI
+#: `tests/test_panel_v2.py` da manba bo'yicha qulflangan.
+V2 = Path(__file__).resolve().parents[1] / "cloud" / "static" / "v2"
+
+
+def _panel_code(shell: str) -> int:
+    return 200 if (V2 / shell).is_file() else 404
+
+
 def test_without_subdomain_envs_the_old_paths_still_work(client: TestClient) -> None:
     """Orqaga moslik: envsiz /owner /installer /admin apexda ochiladi."""
-    assert client.get("/owner").status_code == 200
-    assert client.get("/installer").status_code == 200
-    assert client.get("/admin").status_code == 200
+    assert client.get("/owner").status_code == _panel_code("owner.html")
+    assert client.get("/installer").status_code == _panel_code("installer.html")
+    assert client.get("/admin").status_code == _panel_code("admin.html")
+    # Eng muhimi: apexda QOLDI — subdomenga 3xx bilan ketmadi.
+    for path in ("/owner", "/installer", "/admin"):
+        assert not 300 <= client.get(path, follow_redirects=False).status_code < 400, path
 
 
 def test_apex_panel_paths_redirect_to_subdomains_preserving_query(

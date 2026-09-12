@@ -2307,6 +2307,23 @@ def _static_page(name: str) -> FileResponse:
     return FileResponse(page)
 
 
+def _installer_panel() -> FileResponse:
+    """O'rnatuvchi paneli — React qobig'i (`frontend/installer.html`).
+
+    2026-09-12 gacha bu qo'lda yozilgan `cloud/static/installer.html`
+    edi: faqat o'zbekcha, telefon uchun QA qilinmagan va API yiqilsa
+    xato ko'rsatmasdi.  Usta esa aynan obyektda, telefondan ishlaydi.
+
+    Qobiq QURILISH artefakti (`npm run build` → `cloud/static/v2/`), ya'ni
+    bundle qurilmagan ishchi nusxada bu fayl yo'q va marshrut halol 404
+    beradi — `_render_owner()`/`/admin` dagi bilan bir xil xulq.
+    """
+    page = STATIC_DIR / "v2/installer.html"
+    if not page.is_file():
+        raise ApiError("error.installer_panel_missing", 404)
+    return FileResponse(page)
+
+
 #: Subdomen prefikslari → bo'lim.  Domenga bog'lanmagan (prefiks bo'yicha):
 #: chaqimchi.uz ham, test.example ham bir xil ishlaydi.
 _HOST_SECTIONS = ("app", "partner", "admin", "dl", "docs", "api")
@@ -2375,7 +2392,7 @@ async def public_site(request: Request) -> Any:
     if section == "app":
         return _render_owner()
     if section == "partner":
-        return _static_page("installer.html")
+        return _installer_panel()
     if section == "admin":
         return _static_page("v2/admin.html")
     if section == "dl":
@@ -2482,13 +2499,31 @@ async def installer_page(request: Request) -> Any:
     redirect = _apex_redirect(request, "ENES_PARTNER_URL")
     if redirect is not None:
         return redirect
-    return _static_page("installer.html")
+    return _installer_panel()
 
 
 @app.get("/installer-guide", include_in_schema=False)
 async def installer_guide_page(request: Request) -> HTMLResponse:
     """Bo'sh mini-kompyuterdan mijozga topshirishgacha rasmli yo'riqnoma."""
     return _render_public("installer-guide.html", request)
+
+
+@app.get("/installer/{panel_path:path}", include_in_schema=False)
+async def installer_panel_route(panel_path: str, request: Request) -> Any:
+    """Usta panelining ichki yo'llari — hammasi bitta qobiqqa tushadi.
+
+    Usiz `/installer/jobs/<site_id>/cameras` ni yangilash 404 berardi:
+    manzil brauzer tarixiga `pushState` bilan yoziladi (`router.ts`),
+    ya'ni usta sahifani yangilasa yoki havolani hamkasbiga yuborsa
+    server o'sha yo'lni ham tanishi kerak.  `/installer-guide` bu
+    marshrutga TUSHMAYDI — u boshqa yo'l (chiziqcha, `/` emas).
+    """
+    redirect = _apex_redirect(
+        request, "ENES_PARTNER_URL", f"/{panel_path}" if panel_path else "/"
+    )
+    if redirect is not None:
+        return redirect
+    return _installer_panel()
 
 
 # Eslatma: bu yerda `/onboarding` sahifasi va `/api/v1/agent/discovery/scan`

@@ -9,6 +9,34 @@
 
 ## HOZIRGI HOLAT · 2026-09-12
 
+- **🔧 BOSQICH E — USTA PANELI REACT'DA (2026-09-12, commit qilinmagan,
+  shox `worktree-agent-aee520e409d4d0c84`).**  `cloud/static/installer.html`
+  — **oxirgi eski statik panel** — o'chdi; o'rniga `frontend/installer.html`
+  + `frontend/src/installer.tsx`, `InstallerJobs.tsx`, `InstallerCamera.tsx`.
+  Usta endi ega va admin bilan BITTA dizayn tizimida: uch til, qora tema,
+  telefon (390 px), `ErrorStrip` + «Qayta urinish», fokus tuzog'i,
+  brauzer oynalari o'rniga modal.  Obyekt endi modal emas, MANZIL:
+  `/installer/jobs/<site_id>/<tab>` (steps · cameras · zones) — havola
+  qilinadi va «orqaga» ishlaydi.
+  - **Teginish tuzatildi:** muharrirda zonani yakunlash `dblclick` ga,
+    o'chirish esa sichqonchaning O'NG tugmasiga bog'langan edi — ya'ni
+    usta telefonda nuqtalarni qo'yib, zonani UMUMAN yopa olmasdi.
+    `finishDraft`/`cancelDraft` muharrirda 2026-08-17 dan bor edi,
+    faqat hech kim chaqirmagan (tipda ham e'lon qilinmagan).  Endi
+    tugma bor; har shakl yonida «×» (o'chirish).
+  - **Face ID belgisi** kamera ro'yxatida — qaror SERVERDA
+    (`camera_roles.face_id_state`, `list_cameras` javobida), panel
+    faqat matn tanlaydi.
+  - ⚠️ **Qobiq qurilmagan:** `cloud/static/v2/installer.html` — build
+    artefakti va u `npm run build` dan keyin paydo bo'ladi.  Shu
+    sababdan LOKAL `/installer` hozir 404 beradi va ikki test buni FAYL
+    BORLIGIGA qarab kutadi (`test_platform_hosts.py: _panel_code`).
+    Jonli deployda xavf YO'Q: `Dockerfile.cloud` bundle'ni o'zi quradi
+    (`frontend-builder` bosqichi).  Lekin repodagi nusxa ham
+    yangilansin — lokal ishga tushirish va testlar o'shanga qaraydi.
+  - **Holat:** `2360 passed, 12 skipped`, `ruff` toza, `tsc --noEmit`
+    toza, i18n va sayt `--check` toza.
+
 - **📷 KAMERA JOYLASHUVI + FACE ID DARVOZASI — KODDA TAYYOR, DEPLOY
   KUTADI (2026-09-12, shox `reja-2026-09-12`: `2a6ece3`, `b11381e`,
   `3200772`).**  Ega uchta yangi ish so'radi (kamera o'rnatish
@@ -774,10 +802,11 @@ Bajarilgani: **A, D1, D2–D6** (yuqoriga qarang).  Qolgani:
    `/aloqa`; `__TELEGRAM_REGISTER_URL__` zaxirasi `/#pilot` — bunday id
    yo'q; edu forma xatosi kulrang va xom `error.message` + `@fibotai`.
 2. ✅ **C — panel xatolari** bajarildi (`dbda134`, `5cce2eb`, `1bb740c`).
-3. **E — usta paneli React'ga** (~12–16 soat).  `/installer` — oxirgi
-   eski statik sahifa (faqat o'zbekcha, telefon uchun QA qilinmagan,
-   API yiqilsa xato ko'rsatmaydi), usta esa obyektda telefondan
-   ishlaydi.  **C dan KEYIN**: naqshlar avval ega panelida tuzatiladi.
+3. ✅ **E — usta paneli React'ga** bajarildi (commit qilinmagan,
+   yuqoriga qarang).  ⏳ Qolgani: **`npm run build`** (qobiq
+   `cloud/static/v2/installer.html` shundan keyin paydo bo'ladi) va
+   jonli tekshiruv — usta oqimi telefonda uchidan uchiga sinalmagan
+   (ro'yxatdan o'tish → obyekt → kamera → chizma).
 4. **F — demo 7/14 kun + karta** (~14–18 soat).  Ega qarori: kartasiz
    7 kun, karta ulasa 14 kun va birinchi oyga chegirma; kartadan oylik
    avtomatik yechish.  `cloud/payments/` da recurring kodi UMUMAN yo'q.
@@ -1235,6 +1264,30 @@ taklif qilish kerak.
 - **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **Panel qobig'i — BUILD ARTEFAKTI, marshrut esa unga tayanadi.**
+  `/owner`, `/admin` va (2026-09-12 dan) `/installer` `cloud/static/v2/*.html`
+  ni beradi.  Jonli serverda uni Docker o'zi quradi (`Dockerfile.cloud`
+  `frontend-builder`), LEKIN repodagi nusxa ham commit qilinadi va
+  **testlar hamda lokal `make run-cloud` aynan o'shanga qaraydi**:
+  manbani commit qilib bundle'ni qurmasdan qoldirsangiz, lokalda panel
+  404 beradi va `/installer` ni tekshiradigan test qulaydi.  CI
+  `npm run build` QILMAYDI — u faqat `typecheck`.  Yangi panel kirish
+  nuqtasi qo'shsangiz: `frontend/vite.config.ts` ga yozing, bundle'ni
+  bir marta quring va marshrut bilan BIR commitda chiqaring.
+
+- **Muharrirda zonani telefonda YAKUNLAB bo'lmasdi.**  `zone-editor.js`
+  da zonani yopish `dblclick` ga, qoralamani tashlash va shaklni
+  o'chirish esa `contextmenu` ga (sichqonchaning o'ng tugmasi)
+  bog'langan — teginishli ekranda ikkalasi ham yo'q (iOS'da
+  `touch-action: none` ostida `contextmenu` umuman chiqmaydi).  Usta
+  esa obyektda AYNAN telefondan chizadi: u nuqtalarni qo'yardi, zona
+  esa hech qachon saqlanmasdi va sababi ekranda ko'rinmasdi.
+  `finishDraft()`/`cancelDraft()` metodlari muharrirda 2026-08-17 dan
+  BOR edi — ular `zone-editor.d.ts` da e'lon qilinmagani uchun panelda
+  chaqirib bo'lmasdi va hech kim yo'qligini sezmagan.  Saboq:
+  sichqonchaga bog'langan har amalning teginish yo'li ham bo'lsin,
+  aks holda funksiya telefonda JIMGINA yo'q.
 
 - **Panel testi FAQAT adminni tekshirardi.**  `test_the_admin_uses_no_native_dialogs`
   nomi aynan shunday aytib turgan va `GeometryEditor.tsx` ga
@@ -1982,6 +2035,45 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-12 — E bosqichi: usta paneli React'da (`commit qilinmagan`)
+
+Nima: o'rnatuvchi obyektda telefondan ishlaydigan panelni oldi — uch
+til, qora tema, xato holatlari, teginish bilan chiziladigan zona.
+Oxirgi eski statik panel (`cloud/static/installer.html`) o'chdi.
+
+Nega: usta paneli mustaqil yashagani uchun 2026-09-11 dagi UI/UX
+ishidan ham, 2026-09-12 dagi panel tuzatishlaridan ham HECH NARSA
+olmagan edi: faqat o'zbekcha, API yiqilsa xato ko'rsatmasdi (bo'sh
+ekran), har tasdiq `confirm()` da — Telegram WebView'da u jim o'lishi
+mumkin.  Obyekt modal oynada ochilardi: havola qilib bo'lmasdi va
+«orqaga» panelni tark etardi.
+
+Qayerda: yangi `frontend/installer.html`, `frontend/src/installer.tsx`,
+`InstallerJobs.tsx`, `InstallerCamera.tsx`; `frontend/vite.config.ts`
+(uchinchi kirish nuqtasi); `frontend/src/api.ts` (`PanelKind` —
+`installer` tokeni `localStorage` da, `whoAmI`, `registerInstaller`);
+`components.tsx: LoginScreen` (uchinchi tur + `extra`);
+`GeometryEditor.tsx` (`kind="installer"`, `embedded`, teginish
+tugmalari, shaklni o'chirish); `zone-editor.d.ts`
+(`finishDraft`/`cancelDraft`); `cloud/main.py: _installer_panel()` +
+`/installer/{panel_path:path}`; o'chdi: `cloud/static/installer.html`,
+`installer.js`, `geometry-panel.js`.  119 ta yangi `panel.installer.*`
+va `panel.geometry.*` kaliti uch tilda.
+
+Test: `tests/test_panel_v2.py` — `INSTALLER_FILES` ro'yxati va oltita
+yangi qulf (React marshruti, uchala qobiqdagi bir xil tema skripti,
+skeletsiz xato, uch til, Face ID qarori serverdan, barmoq bilan zona
+yakunlash); `test_zone_editor.py` ikkita testi React manbasiga
+ko'chirildi; `test_platform_hosts.py` va `test_portal_auth.py` qobiq
+build artefakti ekanini hisobga oladi.  `2360 passed, 12 skipped`.
+
+Diqqat: **bundle qurilmagan** — `cloud/static/v2/installer.html` yo'q va
+lokal `/installer` shu sababdan 404.  `npm run build` (asosiy sessiya)
+shart: jonli deployni Docker o'zi quradi, lekin testlar va lokal ishga
+tushirish repodagi nusxaga qaraydi.  Tema bootstrap skripti
+uchala qobiqda BAYT-BAMA-BAYT bir xil bo'lib qoldi — CSP hashi
+o'zgarmadi, Caddyfile'larga tegilmadi.
 
 ### 2026-09-12 — panel xatolari: ega + admin (`dbda134`, `5cce2eb`, `1bb740c`)
 

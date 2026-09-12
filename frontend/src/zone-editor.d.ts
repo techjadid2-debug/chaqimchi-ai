@@ -43,6 +43,13 @@ export type ZoneEditorInstance = {
   setCamera(cameraId: string): void;
   setMode(mode: "zone" | "line"): void;
   addPreset(type: "queue" | "shelf" | "restricted" | "entrance", customName?: string): boolean;
+  /* TEGINISH uchun: zonani yopish `dblclick` ga, qoralamani tashlash
+     esa sichqonchaning o'ng tugmasiga bog'langan — telefonda ikkalasi
+     ham yo'q.  Metodlar muharrirda 2026-08-17 dan bor edi, lekin
+     tipda e'lon qilinmagani uchun panelda chaqirib bo'lmasdi va
+     usta obyektda zonani umuman yakunlay olmasdi. */
+  finishDraft(): boolean;
+  cancelDraft(): void;
   serialise(): { zones: ZoneShape[]; lines: LineShape[] };
   visibleZones(): ZoneShape[];
   visibleLines(): LineShape[];

@@ -88,8 +88,6 @@ FORBIDDEN_CLAIMS = (
 
 def test_public_pages_make_no_unproven_guarantees() -> None:
     for page in pages():
-        if page.name == "installer.html":
-            continue  # o'rnatuvchi paneli — mijozga sotuv va'dasi bermaydi
         text = page.read_text(encoding="utf-8").lower()
         for claim in FORBIDDEN_CLAIMS:
             assert claim not in text, (
@@ -138,10 +136,12 @@ def test_pages_do_not_reference_removed_scripts() -> None:
 ICONS = STATIC / "icons.svg"
 
 
-#: Ichki panellar — admin, o'rnatuvchi va mijoz kabineti.  Ular sotuv
-#: sahifasi emas va u yerda emoji ishlatilishi muammo emas: foydalanuvchisi
-#: bizning xodim yoki tanish mijoz, brend ko'rinishi esa hal qiluvchi emas.
-INTERNAL_PAGES = {"admin.html", "installer.html", "owner.html"}
+#: Ichki panellar — admin va mijoz kabineti.  Ular sotuv sahifasi emas
+#: va u yerda emoji ishlatilishi muammo emas: foydalanuvchisi bizning
+#: xodim yoki tanish mijoz, brend ko'rinishi esa hal qiluvchi emas.
+#: (O'rnatuvchi paneli 2026-09-12 da React'ga ko'chdi va bu jildda
+#: umuman qolmadi.)
+INTERNAL_PAGES = {"admin.html", "owner.html"}
 
 #: Bular emoji emas, tipografik belgilar — hamma joyda bir xil chiziladi.
 TYPOGRAPHIC = {"─", "✓", "○", "★", "☑", "→", "←", "·"}

@@ -2,9 +2,9 @@
 """`site.css` / `docs.css` kesh tokenini HAMMA sahifada yangilaydi.
 
 Nega kerak: `scripts/build_site.py` `?v=` ni faqat shablondan qurilgan
-sahifalarda hisoblaydi; qo'lda yozilgan `installer.html` va `docs/*.html`
-eski token bilan qolib, brauzer eski uslubni keshdan olardi (13 sahifa
-oylab eskirgan — docs/ISH_DAFTARI.md tuzoqlari).  `tokens.css`
+sahifalarda hisoblaydi; qo'lda yozilgan `docs/*.html` eski token bilan
+qolib, brauzer eski uslubni keshdan olardi (13 sahifa oylab eskirgan —
+docs/ISH_DAFTARI.md tuzoqlari).  `tokens.css`
 o'zgarganda esa zanjir uzunroq: avval `site.css`/`docs.css` ichidagi
 `@import "tokens.css?v=…"` yangilanadi, keyin ularning o'z tokeni.
 

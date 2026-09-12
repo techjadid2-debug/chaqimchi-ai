@@ -71,8 +71,8 @@ async function copyText(elemId, statusId) {
 }
 
 // Ishlov beruvchilar HTML atributida emas: CSP `script-src` ostida
-// `onclick="…"` ishlamaydi.  Naqsh `geometry-panel.js` dagi bilan
-// bir xil — tugma NIMA qilishini `data-act` da aytadi.
+// `onclick="…"` ishlamaydi.  Tugma NIMA qilishini `data-act` da aytadi
+// va tinglovchi bitta — hujjat darajasida.
 document.addEventListener("click", (event) => {
   const el = event.target.closest("[data-act]");
   if (!el) return;

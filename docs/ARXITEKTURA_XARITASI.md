@@ -573,7 +573,7 @@ biriktirish, login, hisob, obuna, yuz tanish), `AdminTeam.tsx`,
 | Ommaviy sayt — matn | `i18n/{uz,ru,en}.json`, `site.*` kalitlari (o'zbekcha qoladigan sahifalarda matn shablonning o'zida) |
 | Ommaviy sayt — qurilish | `scripts/build_site.py` (`PAGES` reyestri) → `cloud/static/*.html` (26 fayl, commit qilinadi, `--check` `make test` da) |
 | Ommaviy sayt — marshrutlar | `cloud/main.py`: `_render_public` (o'rinbosarlar), `/ru/{slug}`, `/en/{slug}`, `_localized_landing` |
-| Partner paneli (shablon emas) | `cloud/static/installer.html` |
+| O'rnatuvchi (partner) paneli | `frontend/installer.html` + `frontend/src/installer.tsx`, `InstallerJobs.tsx`, `InstallerCamera.tsx` (2026-09-12 da React'ga ko'chdi) |
 | Hujjatlar (docs.) | `cloud/static/docs/*.html`, `docs.css` (`tokens.css` ni import qiladi) |
 | Sayt qulflari | `tests/test_site_build.py`, `tests/test_static_pages.py` |
 | Sayt va'dalari qulfi | `tests/test_static_pages.py` |

@@ -185,8 +185,8 @@ def test_shared_navigation_reaches_every_templated_page() -> None:
     """Umumiy nav va footer — bitta partial; sahifa uni chaqirmasa brend
     o'zgarganda o'sha sahifa eski qolardi."""
     for page in sorted(STATIC.glob("*.html")):
-        if page.name.startswith(("dl.", "pay.", "installer.html")):
-            continue  # o'z qobig'i bor: karta / to'lov ekrani / partner paneli
+        if page.name.startswith(("dl.", "pay.")):
+            continue  # o'z qobig'i bor: karta va to'lov ekrani
         html = page.read_text(encoding="utf-8")
         assert 'class="brand brand-lockup"' in html, f"{page.name}: yangi brend belgisi yo'q"
         assert 'class="footer-powered"' in html, f"{page.name}: umumiy footer yo'q"

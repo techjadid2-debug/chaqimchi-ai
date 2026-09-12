@@ -185,6 +185,26 @@ def build_digest(
         # konversiyasi o'lchov emas, tasodif.
         lines.append(tg(lang, "digest.daily.ask_receipts"))
 
+    # AVTOMATIK konversiya — chek so'ramay, faqat kameradan: «eshikkacha
+    # kelganning nechtasi kirdi».  Yuqoridagi chekli konversiyadan
+    # BOSHQA savolga javob beradi va uning o'rnini bosmaydi.
+    #
+    # FAQAT foiz chiqqanda ko'rsatiladi.  `capture_rate()` foizni
+    # namuna kichik bo'lsa yoki sanoq buzuq bo'lsa (kirgan «o'tgan»dan
+    # ko'p) `None` qiladi — o'shanda faqat ikki son qolardi va sokin
+    # kun xabariga yana bitta tushunarsiz qator qo'shilardi.  Har
+    # qo'shilgan qator xabarni kamroq o'qiladigan qiladi
+    # (`test_a_calm_day_message_stays_short`).
+    capture = report.get("capture") or {}
+    if capture.get("percent") is not None:
+        capture_line = value.capture_rate_line(
+            entered=int(capture.get("entered") or 0),
+            passed=int(capture.get("passed") or 0),
+            lang=lang,
+        )
+        if capture_line:
+            lines.append(capture_line)
+
     # Demografiya — ma'lumot yig'ilgan har kunda chiqadi (xodimlar
     # hisobga kirmaydi, ular davomatda).  Ega bu qatorni kutadi
     # (2026-08-29 qarori: butunlay yashirish mahsulotni kambag'allashtirdi);

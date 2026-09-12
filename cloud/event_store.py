@@ -40,6 +40,10 @@ REPORT_EVENT_TYPES = (
     # bormasdi (`telegram_min_severity: critical`) va hisobotdan ham
     # filtrlanib tashlanardi — ya'ni ega buni HECH QAYERDA ko'rmasdi.
     "checkout_unattended",
+    # Capture rate MAXRAJI: «eshikka nechta odam yaqinlashdi».  Bu
+    # ruxsat ro'yxati bo'lgani uchun tur bu yerga yozilmasa hisobot
+    # maxrajni umuman ko'rmaydi va foiz hech qachon chiqmaydi.
+    "people_seen",
 )
 
 #: Vaqt lentasidan CHIQARIB tashlanadigan turlar.
@@ -58,6 +62,10 @@ TIMELINE_HIDDEN_TYPES = (
     "person_detected",
     "face_captured",
     "employee_seen",
+    # Har 10 daqiqada kamera boshiga bitta yig'ma yozuv — ega uchun
+    # «hodisa» emas, hisobot maxraji.  Lentada qoldirilsa u kuniga
+    # ~150 qator bilan axlatlanardi va haqiqiy hodisalar ko'rinmasdi.
+    "people_seen",
 )
 
 
@@ -1862,6 +1870,13 @@ class EventStore:
         age_buckets = {"<18": 0, "18-30": 0, "31-45": 0, "46-60": 0, "60+": 0}
         demo_total = 0
         staff_crossings = 0
+        # Capture rate MAXRAJI — «eshikka nechta odam yaqinlashdi».
+        # Qurilma har 10 daqiqada kamera boshiga bitta yig'ma yozuv
+        # yuboradi (`metadata.seen`), ya'ni bu yerda faqat qo'shiladi.
+        # Kamera bo'yicha ham saqlanadi: maxraj shishgan bo'lsa aybdor
+        # kamerani topish kerak (kirish kamerasi savdo zalini ko'rsa
+        # foiz sun'iy pasayadi — `limits.SEEN_LINE_BAND`).
+        seen_by_camera: Dict[str, int] = {}
 
         for row in rows:
             kind = row["event_type"]
@@ -1911,6 +1926,11 @@ class EventStore:
                 security[kind] += 1
             elif kind == "zone_entered" and (row.get("metadata") or {}).get("restricted"):
                 security["restricted_zone"] += 1
+            elif kind == "people_seen":
+                count = (row.get("metadata") or {}).get("seen")
+                if isinstance(count, (int, float)) and count > 0:
+                    camera = str(row.get("camera_id") or "")
+                    seen_by_camera[camera] = seen_by_camera.get(camera, 0) + int(count)
 
         busiest = max(hourly.values(), key=lambda item: (item["entered"], -item["hour"]))
         longest = max(queue_lengths, default=None, key=lambda item: item[0])
@@ -1941,6 +1961,22 @@ class EventStore:
                         str(item["camera_id"]),
                         str(item["line"] or ""),
                     ),
+                ),
+                #: Capture rate maxraji.  Kalit hodisa KELMAGAN kunda
+                #: umuman qo'yilmaydi — `0` bilan to'ldirish "hech kim
+                #: yaqinlashmagan" degan YOLG'ON javob bo'lardi, holbuki
+                #: to'g'ri javob "o'lchov yo'q" (eski kunlar, funksiya
+                #: yoqilmagan do'konlar).  Bo'shlik va nol boshqa
+                #: javoblar — `by_door` bilan bir xil qoida.
+                **(
+                    {
+                        "seen": {
+                            "total": sum(seen_by_camera.values()),
+                            "by_camera": dict(sorted(seen_by_camera.items())),
+                        }
+                    }
+                    if seen_by_camera
+                    else {}
                 ),
             },
             "queue": {

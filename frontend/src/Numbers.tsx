@@ -44,6 +44,11 @@ export function Numbers({ dashboard, siteId }: { dashboard: Dashboard; siteId: s
   const staff = Number(traffic.xodim_chiqarilgan || 0);
   const doors = traffic.by_door;
   const busiest = traffic.busiest_hour;
+  /* `capture` KALITI BO'LMASA blok umuman chizilmaydi.  Nol bilan
+     to'ldirish «hech kim yaqinlashmadi» degan yolg'on javob bo'lardi;
+     to'g'ri javob — «o'lchov yo'q» (funksiya yoqilmagan, eski kun,
+     yoki qurilma hali yubormagan). */
+  const capture = dashboard.today.capture || null;
 
   return <Card>
     <div className="card-head">
@@ -65,6 +70,23 @@ export function Numbers({ dashboard, siteId }: { dashboard: Dashboard; siteId: s
         <b>{busiest ? `${String(busiest.hour).padStart(2, "0")}:00` : "—"}</b>
       </div>
     </div>
+
+    {capture ? <>
+      <div className="card-head section-gap">
+        <div>
+          <h2>{t("panel.numbers.capture_title")}</h2>
+          <p>{t("panel.numbers.capture_note")}</p>
+        </div>
+      </div>
+      <div className="summary-strip">
+        <div><span>{t("panel.numbers.capture_passed")}</span><b>{formatNumber(capture.passed)}</b></div>
+        <div><span>{t("panel.numbers.capture_entered")}</span><b>{formatNumber(capture.entered)}</b></div>
+        {/* Foiz `null` bo'lsa «—»: kichik namunadan chiqarilgan foiz
+            o'lchov emas, tasodif — va bu qoida SERVERDA, panelda
+            takrorlanmaydi. */}
+        <div><span>{t("panel.numbers.capture_percent")}</span><b>{capture.percent == null ? "—" : `${capture.percent}%`}</b></div>
+      </div>
+    </> : null}
 
     <ReceiptsBlock
       siteId={siteId}

@@ -82,6 +82,13 @@ export type Demografiya = {
  * ko'rsatish uchun tayyor nom: chiziq nomi, bo'lmasa kamera nomi.  Nom
  * hisobotning O'ZIDA saqlanmaydi (yig'indi uch yil yashaydi, kamera esa
  * qayta nomlanishi mumkin) — server uni har javobda qo'shadi. */
+/** Avtomatik konversiya — «eshikkacha kelganning nechtasi kirdi».
+ *
+ *  `percent` `null` bo'lishi MUMKIN va bu xato emas: namuna kichik
+ *  yoki sanoq buzuq (kirgan «o'tgan»dan ko'p).  Foizni panel
+ *  hisoblamaydi — qoida serverda bitta joyda (`cloud/value.py`). */
+export type Capture = { entered: number; passed: number; percent: number | null };
+
 export type DoorCount = {
   camera_id: string;
   line?: string | null;
@@ -129,6 +136,9 @@ export type Dashboard = {
     demografiya?: Demografiya;
     sales?: DailySales | null;
     conversion?: Conversion | null;
+    /** Kalit YO'Q bo'lishi ham javob: o'lchov umuman olinmagan
+     *  (funksiya yoqilmagan, eski kun).  `null` bilan to'ldirilmaydi. */
+    capture?: Capture;
   };
   /** Do'kon kompyuterining holati.  Hali heartbeat kelmagan bo'lsa
    *  `null`; o'lchanmagan ko'rsatkich esa kalit sifatida ham kelmaydi. */

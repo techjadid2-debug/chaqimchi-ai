@@ -1497,7 +1497,14 @@ async def _notify_site_members(
 #:
 #: Hodisaning O'ZI saqlanadi — issiqlik xaritasi va "eng ko'p turilgan joy"
 #: hisoboti unga tayanadi.
-MEDIALESS_EVENTS = frozenset({"loitering"})
+MEDIALESS_EVENTS = frozenset(
+    {
+        "loitering",
+        # Yig'ma son, ko'rinadigan voqea emas: rasm so'ralsa panel
+        # «rasm bor» deb ko'rsatib, mijoz bosganda 404 olardi.
+        "people_seen",
+    }
+)
 
 
 def _telegram_level(site_id: str) -> str:
@@ -4120,6 +4127,26 @@ async def admin_save_feature_draft(
         raise HTTPException(422, str(exc)) from exc
 
 
+def bump_feature_revision(site_id: str) -> Dict[str, Any]:
+    """Qurilma keyingi «salom»da yangi konfigni oladi.
+
+    Qurilma konfigni KESHLAYDI va faqat revision o'zgarganda qayta
+    tortadi (`enes/local/cloud_config.py`).  Ya'ni serverga yangi
+    bayroq qo'shilishi o'zi yetarli emas: revision ko'tarilmasa dalada
+    turgan dastur eski keshdagi konfigda qolib ketadi va yangi funksiya
+    jimgina o'chiq turadi.
+
+    Funksiya ALOHIDA chiqarilgan, chunki ikki chaqiruvchisi bor:
+    admin panelidagi «tasdiqlash» va deploydan keyin bir marta
+    yurgiziladigan `scripts/bump_feature_revision.py`.  Ilgari mantiq
+    faqat endpoint ichida edi va skript uni takrorlashi kerak bo'lardi.
+    """
+    current = get_event_store().get_site_config(site_id)
+    config = dict(current["config"])
+    config["cloud_feature_revision"] = int(current["revision"]) + 1
+    return get_event_store().update_site_config(site_id, config)
+
+
 @app.post("/api/v1/admin/sites/{site_id}/features/approve")
 async def admin_approve_feature_draft(
     site_id: str,
@@ -4130,10 +4157,7 @@ async def admin_approve_feature_draft(
         summary = get_store().approve_feature_draft(site_id)
         # Edge polling revision orqali yangi vazifalarni ko'radi. Asosiy
         # konfiguratsiya owner sozlamalarini saqlagan holda faqat revision oladi.
-        current = get_event_store().get_site_config(site_id)
-        config = dict(current["config"])
-        config["cloud_feature_revision"] = int(current["revision"]) + 1
-        summary["edge_config"] = get_event_store().update_site_config(site_id, config)
+        summary["edge_config"] = bump_feature_revision(site_id)
         return summary
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -6732,6 +6756,24 @@ async def edge_site_config(
             get_event_store().edge_employees(device["site_id"]) if _attendance_enabled() else []
         ),
     }
+    # Capture rate maxraji: «eshikka nechta odam yaqinlashdi».
+    #
+    # Bu darvoza BO'LMAGANI uchun qurilmadagi kod (0.6.33) abadiy yopiq
+    # turgan: `enes/retail/service.py` `capture.enabled` ni o'qiydi va
+    # standarti YOPIQ — ataylab, chunki eski cloud `people_seen` turini
+    # tanimaydi va butun batchni rad etadi, qurilma esa rad etilgan
+    # hodisani `permanent=True` bilan o'ldiradi.  Ya'ni bayroq SERVER
+    # tomonda bo'lishi shart: faqat yangi cloud uni yoqadi.
+    #
+    # Shart `person_count` funksiyasiga bog'langan — maxraj o'sha
+    # funksiyaning o'lchovidan chiqadi, ya'ni u sotilmagan do'konda
+    # hodisa ham yuborilmasligi kerak.
+    # `cloud_features` — lug'atlar ro'yxati (`code`, `camera_count`,
+    # `queue_kind`), satrlar emas.
+    capture_codes = {
+        str(item.get("code") or "") for item in (config.get("cloud_features") or [])
+    }
+    config["capture"] = {"enabled": "person_count" in capture_codes and not expired}
     # Bulut panelining manzili.  Qurilma buni birinchi ishga tushganda
     # brauzerni ochish uchun ishlatadi — build vaqtida yozilgan
     # konstanta emas, chunki domen o'zgarsa dala'dagi dastur uni
@@ -7852,7 +7894,50 @@ def _owner_report_dict(site_id: str, day: date_type) -> Dict[str, Any]:
     # o'rtasidan boshlanadigan doimiy teshik qolardi.
     if not _panel_feature_open(site_id, "demografiya"):
         report.pop("demografiya", None)
-    return _with_sales(site_id, _name_doors(site_id, report), day)
+    return _with_capture(site_id, _with_sales(site_id, _name_doors(site_id, report), day))
+
+
+def _with_capture(site_id: str, report: Dict[str, Any]) -> Dict[str, Any]:
+    """Avtomatik konversiya — «eshikkacha kelganning nechtasi kirdi».
+
+    Maxraj KIRISH rolidagi kameralardan yig'iladi.  Hamma kameraning
+    «yaqinlashdi» sonini qo'shish xato bo'lardi: savdo zali kamerasi
+    ham odam ko'radi va maxraj ikki-uch barobar shishib, foiz SUN'IY
+    pasayardi — nol emas, lekin YOLG'ON, ya'ni mahsulotning eng qattiq
+    taqig'i.
+
+    A2 (ko'cha kamerasi) hozir yo'q, shuning uchun `outer_seen=None` —
+    `select_passed()` o'zi A1 ga tushadi.  Tashqi kamera qo'shilganda
+    faqat shu argument to'ladi.
+    """
+    traffic = report.get("traffic") or {}
+    seen = traffic.get("seen")
+    # Kalit UMUMAN bo'lmasa o'lchov yo'q (eski kun, funksiya yoqilmagan)
+    # — bu «nol odam yaqinlashdi» dan boshqa javob va hisobotga
+    # `capture` qo'shilmaydi.
+    if not isinstance(seen, dict):
+        return report
+    by_camera = seen.get("by_camera") or {}
+    entrance = {
+        str(camera["camera_id"])
+        for camera in get_store().list_cameras(site_id)
+        if str(camera.get("role") or "") == "entrance"
+    }
+    # Rol hech qayerda qo'yilmagan bo'lsa jami olinadi: ro'yxatni bo'sh
+    # qoldirish «hech kim yaqinlashmadi» degan yolg'on javob berardi.
+    # Bu holat admin panelda ko'rinadi (`role_problems`).
+    entrance_seen = (
+        sum(int(value) for key, value in by_camera.items() if key in entrance)
+        if entrance
+        else int(seen.get("total") or 0)
+    )
+    capture = value.capture_rate(
+        entered=int((traffic.get("entered") or 0)),
+        passed=value.select_passed(entrance_seen=entrance_seen, outer_seen=None),
+    )
+    if capture is not None:
+        report["capture"] = capture
+    return report
 
 
 @app.get("/api/v1/owner/report")

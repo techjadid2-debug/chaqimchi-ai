@@ -24,9 +24,10 @@ import pytest
 
 from cloud.i18n import tg
 
-SRC = Path(__file__).resolve().parents[1] / "frontend" / "src"
-SHELLS = Path(__file__).resolve().parents[1] / "frontend"
-STATIC = Path(__file__).resolve().parents[1] / "cloud" / "static"
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "frontend" / "src"
+SHELLS = ROOT / "frontend"
+STATIC = ROOT / "cloud" / "static"
 #: Chizish vositasi cloud'dan TASHQARIDA turadi: Windows paketi `cloud/` ni
 #: ko'chirmaydi, ya'ni bundle qilingan nusxa qurilmadagi bilan ajralib ketardi.
 ZONE_EDITOR = (
@@ -44,6 +45,13 @@ OWNER_FILES = (
 )
 #: Admin paneli fayllari — ichki atamalar mumkin, eski brend esa yo'q.
 ADMIN_FILES = ("admin.tsx", "AdminHome.tsx", "AdminCustomer.tsx", "AdminTeam.tsx", "AdminSettings.tsx")
+#: O'rnatuvchi (usta) paneli.  2026-09-12 da `cloud/static/installer.html`
+#: dan ko'chdi — u oxirgi eski statik panel edi va shu sababdan ikki UI
+#: ishidan hech narsa olmagan: faqat o'zbekcha, telefon uchun QA
+#: qilinmagan, xato holatlari yo'q.  Usta OBYEKTDA, telefonda ishlaydi,
+#: ya'ni umumiy qulflar (brauzer oynasi, modul darajasidagi `t()`,
+#: yuklash boilerplate'i) unga ham tegishli.
+INSTALLER_FILES = ("installer.tsx", "InstallerJobs.tsx", "InstallerCamera.tsx")
 
 
 def src(name: str) -> str:
@@ -56,6 +64,10 @@ def all_src() -> str:
 
 def owner_src() -> str:
     return "\n".join(src(name) for name in OWNER_FILES)
+
+
+def installer_src() -> str:
+    return "\n".join(src(name) for name in INSTALLER_FILES)
 
 
 # ── Kirish ────────────────────────────────────────────────────────────────
@@ -439,7 +451,7 @@ def test_the_old_brand_stays_off_the_panels() -> None:
     """Rebrend (2026-09-08): mijoz va admin ko'radigan matnda «ENES»
     qolmasin.  Brauzer kalitlari (`enes_owner_token`) va env
     nomlari (`ENES_*`) F6 da o'zgaradi — ular istisno."""
-    for name in OWNER_FILES + ADMIN_FILES + ("Connect.tsx",):
+    for name in OWNER_FILES + ADMIN_FILES + INSTALLER_FILES + ("Connect.tsx",):
         found = re.search(r"Chaqimchi(?![_A-Z])", src(name))
         assert found is None, f"{name}: eski brend matni — {found.group(0) if found else ''}"
 
@@ -520,12 +532,18 @@ def test_no_panel_uses_native_dialogs() -> None:
     va `window.confirm` jimgina qaytib kelgan edi.  Bu eng yomon
     joyi — zona nomlash Telegram WebView'da umuman ishlamasligi mumkin
     va usta obyektda aynan telefondan chizadi.
+
+    O'sha kuni USTA paneli ham ro'yxatga kirdi: eski
+    `cloud/static/installer.js` butunlay `alert()` va `confirm()` ustiga
+    qurilgan edi — kamera o'chirish, yangi pairing kodi va har xato
+    xabari.
     """
-    for name in ADMIN_FILES + OWNER_FILES:
+    for name in ADMIN_FILES + OWNER_FILES + INSTALLER_FILES:
         found = re.search(r"window\.(prompt|confirm|alert)\s*\(", src(name))
         assert found is None, f"{name}: brauzer oynasi qaytib kelgan: {found.group(0) if found else ''}"
     assert "useConfirm(" in admin_src(), "tasdiqlash o'z oynasi bilan bo'lsin"
     assert "usePrompt(" in owner_src(), "chizma nomlash o'z oynasi bilan bo'lsin"
+    assert "useConfirm(" in installer_src(), "usta paneli tasdiqni o'z oynasida so'rasin"
 
 
 def test_the_shape_editor_can_be_named_without_a_browser_dialog() -> None:
@@ -570,9 +588,12 @@ def test_the_geometry_editor_serves_both_panels() -> None:
 
 
 def test_both_panels_share_one_design_system() -> None:
-    """Mijoz paneli va admin bitta uslub faylidan kelsin — aks holda
-    ikkisi asta-sekin ajralib ketadi."""
-    for entry in ("owner.tsx", "admin.tsx"):
+    """Uchala panel bitta uslub faylidan kelsin — aks holda ular
+    asta-sekin ajralib ketadi.
+
+    Usta paneli buning jonli isboti: u 2026-08-24 dan o'z CSS'i bilan
+    yashadi va shu sababdan ikki dizayn ishidan ham chetda qoldi."""
+    for entry in ("owner.tsx", "admin.tsx", "installer.tsx"):
         assert 'import "./styles.css"' in src(entry), f"{entry}: umumiy uslub yo'q"
 
 
@@ -584,7 +605,7 @@ def test_the_stylesheet_has_no_unterminated_comment() -> None:
         assert text.count("/*") == text.count("*/"), f"{path.name}: izoh yopilmagan"
 
 
-@pytest.mark.parametrize("shell", ["owner.html", "admin.html"])
+@pytest.mark.parametrize("shell", ["owner.html", "admin.html", "installer.html"])
 def test_shells_carry_the_new_brand(shell: str) -> None:
     """Qobiqda eski brend qoldig'i bo'lmasin."""
     text = (SHELLS / shell).read_text(encoding="utf-8")
@@ -659,7 +680,7 @@ def test_no_panel_resolves_a_label_at_import_time() -> None:
 
     Tekshiruv: modul darajasidagi `const` e'lonlari ichida `t(` bo'lmasin.
     """
-    for name in OWNER_FILES + ADMIN_FILES:
+    for name in OWNER_FILES + ADMIN_FILES + INSTALLER_FILES:
         code = src(name)
         for index, line in enumerate(code.splitlines(), start=1):
             if not line.startswith("const ") and not line.startswith("  {id:"):
@@ -685,7 +706,7 @@ def test_the_csv_download_works_in_safari_too() -> None:
     assert "window.setTimeout(" in api_src, "`revokeObjectURL` darhol chaqirilyapti"
 
     # Chaqiruv joylarida boilerplate QAYTA paydo bo'lmasin.
-    for name in ("owner.tsx", "admin.tsx"):
+    for name in ("owner.tsx", "admin.tsx") + INSTALLER_FILES:
         code = src(name)
         assert "document.createElement(\"a\")" not in code, (
             f"{name}: yuklash boilerplate'i qaytib kelgan — `downloadBlobUrl()` ishlatilsin"
@@ -718,7 +739,7 @@ def test_the_tabs_say_which_panel_they_open() -> None:
     assert "aria-controls={panelId}" in components
     assert 'role="tabpanel"' in components and "aria-labelledby" in components
 
-    for name in ("owner.tsx", "CameraDetail.tsx"):
+    for name in ("owner.tsx", "CameraDetail.tsx", "InstallerJobs.tsx"):
         assert "panelId=" in src(name), f"{name}: tab qatori panelga bog'lanmagan"
         assert "<TabPanel" in src(name), f"{name}: tab tarkibi `tabpanel` emas"
 
@@ -805,7 +826,7 @@ def test_there_is_only_one_metric_card_component() -> None:
     assert "export function MetricCard" not in src("components.tsx")
     # Izohda nom sifatida uchraydi (nega o'chirilgani yozilgan), shuning
     # uchun ISHLATILISHI qidiriladi: `<MetricCard`.
-    for name in ADMIN_FILES + OWNER_FILES:
+    for name in ADMIN_FILES + OWNER_FILES + INSTALLER_FILES:
         assert "<MetricCard" not in src(name), f"{name}: eski karta qaytib kelgan"
 
 
@@ -827,6 +848,119 @@ def test_the_colours_come_from_the_tokens() -> None:
         encoding="utf-8"
     )
     assert "--heat-scale:" in tokens, "issiqlik shkalasi tokenlarda yo'q"
+
+
+# ── O'rnatuvchi (usta) paneli ────────────────────────────────────────────
+#
+# 2026-09-12: `cloud/static/installer.html` — oxirgi eski statik panel —
+# React'ga ko'chdi.  Quyidagi qulflar aynan shu ko'chishda yo'qolishi
+# oson bo'lgan narsalarni ushlab turadi.
+
+
+def test_the_installer_panel_is_react_now() -> None:
+    """Marshrut React qobig'iga tushsin va eski fayllar qaytmasin.
+
+    Eski panel mustaqil yashagani uchun ikki UI ishidan ham chetda
+    qoldi.  Uchta fayl o'chdi: `installer.html` (qo'lda yozilgan qobiq),
+    `installer.js` (sahifa mantig'i) va `geometry-panel.js` (chizish
+    panelining IKKINCHI nusxasi — «javon» belgisi aynan shu yerda
+    tushib qolgan edi).
+    """
+    main = (ROOT / "cloud" / "main.py").read_text(encoding="utf-8")
+    assert '"v2/installer.html"' in main, "marshrut React qobig'iga bormaydi"
+    assert '_static_page("installer.html")' not in main, "eski qobiq qaytib kelgan"
+    # SPA ning ichki yo'llari ham qobiqqa tushsin: usta sahifani
+    # yangilaganda yoki havolani ulashganda 404 chiqmasin.
+    assert '@app.get("/installer/{panel_path:path}"' in main, "SPA yo'llari yo'q"
+
+    for gone in ("installer.html", "installer.js", "geometry-panel.js"):
+        assert not (STATIC / gone).is_file(), f"eski fayl qaytib kelgan: {gone}"
+
+    vite = (SHELLS / "vite.config.ts").read_text(encoding="utf-8")
+    assert "installer.html" in vite, "qobiq Vite kirish nuqtalarida yo'q"
+
+
+def test_every_shell_carries_the_same_theme_script() -> None:
+    """Tema bootstrap'i uchala qobiqda AYNAN bir xil bo'lsin.
+
+    CSP'da bitta hash bor (`deploy/Caddyfile*`) va u shu skriptdan
+    hisoblangan.  Bir belgi farq qilsa yangi qobiq CSP ostida
+    TEMASIZ ochiladi — kechasi telefonda ko'zni qamashtiradigan oq
+    ekran, va brauzer buni hech qayerda aytmaydi.
+    """
+    blocks = re.compile(r"<script(?![^>]*\bsrc=)([^>]*)>(.*?)</script>", re.S)
+    bodies = set()
+    for shell in ("owner.html", "admin.html", "installer.html"):
+        text = (SHELLS / shell).read_text(encoding="utf-8")
+        bodies |= {body for attrs, body in blocks.findall(text) if "json" not in attrs}
+    assert len(bodies) == 1, "qobiqlardagi inline skript ajralib ketdi — hash buziladi"
+    assert "localStorage.getItem" in next(iter(bodies))
+
+
+def test_the_installer_never_leaves_a_skeleton() -> None:
+    """API yiqilsa xato KO'RINSIN, skelet esa yo'qolsin.
+
+    Eski panelda kamera ro'yxati xatosi `cameraList.textContent` ga
+    yozilardi, obyekt ro'yxatiniki esa umuman yo'q edi: so'rov
+    yiqilsa usta bo'sh ekranga qarab qolardi.  Qoida (2026-09-11 QA):
+    `catch` ro'yxatni BO'SH holatga o'tkazadi — `null` «hali
+    yuklanmoqda» degani.
+    """
+    for name in ("installer.tsx", "InstallerCamera.tsx", "InstallerJobs.tsx"):
+        code = src(name)
+        for index, line in enumerate(code.splitlines(), start=1):
+            if "catch (reason)" not in line:
+                continue
+            block = "\n".join(code.splitlines()[index - 1 : index + 8])
+            if "setJobs(" in block or "setCameras(" in block:
+                assert "([])" in block, f"{name}:{index} — xatoda ro'yxat bo'shatilmagan"
+    assert "<ErrorStrip" in installer_src(), "xato chizig'i yo'q"
+    assert "onRetry=" in installer_src(), "qayta urinish tugmasi yo'q"
+
+
+def test_the_installer_speaks_three_languages() -> None:
+    """Har ko'rinadigan matn katalogdan kelsin — uchala tilda ham.
+
+    Eski panel FAQAT o'zbekcha edi: matn HTML ichida yozilgan va uni
+    tarjima qilishning yo'li yo'q edi.
+    """
+    used = set(re.findall(r't\("(panel\.[a-z0-9_.]+)"', installer_src()))
+    assert len(used) > 60, "matn hamon kodda qotib turibdi"
+    for key in sorted(used):
+        for lang in ("uz", "ru", "en"):
+            assert tg(lang, key) != key, f"{lang}: {key} katalogda yo'q"
+
+
+def test_the_installer_reads_the_face_id_verdict_from_the_server() -> None:
+    """Chegara panelda QAYTA HISOBLANMAYDI.
+
+    Qaror bitta joyda chiqadi (`enes/camera_roles.py: face_id_state`) va
+    panel faqat matn tanlaydi.  Ikkinchi manba yasalsa ular bir-biridan
+    ajralib ketardi — `FACE_MIN_BBOX_RATIO` bilan bir marta shunday
+    bo'lgan.
+    """
+    camera = src("InstallerCamera.tsx")
+    assert "face_id_state" in camera, "server qarori o'qilmayapti"
+    # Panelda piksel chegarasi bo'lmasin: `720`, `480` kabi sonlar
+    # ikkinchi manbaning birinchi belgisi.
+    assert not re.search(r"\b(720|480|288)\b", camera), "chegara panelda qayta hisoblanyapti"
+
+
+def test_a_zone_can_be_finished_with_a_finger() -> None:
+    """Zonani yakunlash faqat `dblclick` da qolmasin.
+
+    Muharrirda zonani yopish ikki marta bosishga, qoralamani tashlash
+    esa sichqonchaning O'NG tugmasiga bog'langan — telefonda ikkalasi
+    ham yo'q.  Ya'ni usta obyektda nuqtalarni qo'yib, zonani UMUMAN
+    yopa olmasdi.  Metodlar muharrirda bor edi, faqat hech kim
+    chaqirmagan.
+    """
+    editor = src("GeometryEditor.tsx")
+    assert "finishDraft()" in editor, "«Zonani yakunlash» tugmasi yo'q"
+    assert "cancelDraft()" in editor, "«Bekor qilish» tugmasi yo'q"
+    assert "removeShape(" in editor, "shaklni o'chirish faqat o'ng tugmada qolgan"
+    types = (SRC / "zone-editor.d.ts").read_text(encoding="utf-8")
+    assert "finishDraft(): boolean" in types and "cancelDraft(): void" in types
 
     heat = src("Heatmap.tsx")
     assert '--heat-scale' in heat, "xarita shkalani tokendan o'qimaydi"

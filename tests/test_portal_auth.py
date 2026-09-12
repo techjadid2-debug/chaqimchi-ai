@@ -6,8 +6,6 @@ from fastapi.testclient import TestClient
 from cloud.portal_auth import hash_password, verify_password
 from cloud.store import CloudStore
 
-STATIC = Path(__file__).resolve().parents[1] / "cloud" / "static"
-
 ADMIN_KEY = {"X-Cloud-Admin-Key": "test-admin"}
 
 
@@ -212,11 +210,18 @@ def test_password_reset_revokes_existing_token(portal_client: TestClient) -> Non
 def test_public_site_exposes_customer_and_installer_entry_points(
     portal_client: TestClient,
 ) -> None:
+    """Sayt ikkala kirish nuqtasini ham ko'rsatadi, yo'riqnoma esa
+    rasmlari bilan to'liq.
+
+    Usta paneli 2026-09-12 da React'ga ko'chdi: uning matni endi
+    HTML'da emas, katalogda va `frontend/src/` da.  Shu sababdan
+    panelning O'ZI bu yerda tekshirilmaydi (qobiq — qurilish
+    artefakti); qulflar `tests/test_panel_v2.py` da.
+    """
     homepage = portal_client.get("/")
     guide = portal_client.get("/installer-guide")
-    panel = portal_client.get("/installer")
 
-    assert homepage.status_code == guide.status_code == panel.status_code == 200
+    assert homepage.status_code == guide.status_code == 200
     assert "/owner" in homepage.text
     assert "/installer" in homepage.text
     assert "connect-hardware-v1.webp" in guide.text
@@ -226,13 +231,6 @@ def test_public_site_exposes_customer_and_installer_entry_points(
     assert "Dahua" in guide.text
     assert "Nimani qayerga ulash kerak" in guide.text
     assert "Windows 11 x64" in guide.text
-    assert "Ro‘yxatdan o‘tish" in panel.text
-    # RTSP shabloni 2026-09-09 da inline `<script>` dan `installer.js`
-    # ga chiqdi (CSP: `script-src` da `'unsafe-inline'` yo'q).
-    assert '<script src="/assets/installer.js"' in panel.text
-    script = (STATIC / "installer.js").read_text(encoding="utf-8")
-    assert "/Streaming/Channels/${channel}02" in script
-    assert "/cam/realmonitor?channel=${channel}&subtype=1" in script
 
 
 def test_customer_can_switch_only_between_granted_sites(portal_client: TestClient) -> None:

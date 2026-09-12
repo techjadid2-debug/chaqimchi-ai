@@ -5,18 +5,31 @@ export type ApiOptions = RequestInit & { siteId?: string };
 
 const OWNER_TOKEN = "enes_owner_token";
 const ADMIN_TOKEN = "enes_admin_token";
+const INSTALLER_TOKEN = "enes_installer_token";
 
-/* Do'kon egasi tokeni `localStorage` da, admin tokeni `sessionStorage` da.
+/** Panel turi.  Uchta panel bitta `api()` dan o'tadi; farq faqat
+ *  tokenning qayerda yashashi va chiqish manzilida. */
+export type PanelKind = "owner" | "admin" | "installer";
+
+/* Do'kon egasi va o'rnatuvchi tokeni `localStorage` da, admin tokeni
+ * `sessionStorage` da.
  *
  * Farq ataylab.  Egasi panelga Telegram botdagi havoladan va telefon
  * ekranidan kiradi; `sessionStorage` da token yorliq yopilishi bilan
- * o'chib, u har safar qaytadan kirishi kerak bo'lardi.  Admin esa
- * kompyuterda, ko'pincha begona bo'lmagan joyda ishlaydi va uning
- * huquqi kengroq — qisqa sessiya xavfsizroq. */
-const storeFor = (kind: "owner" | "admin") => (kind === "owner" ? localStorage : sessionStorage);
-const keyFor = (kind: "owner" | "admin") => (kind === "owner" ? OWNER_TOKEN : ADMIN_TOKEN);
+ * o'chib, u har safar qaytadan kirishi kerak bo'lardi.  O'rnatuvchi
+ * ham xuddi shunday ishlaydi — obyektda, telefon brauzerida, NVR
+ * parolini terib turib: yorliq almashtirilganda qaytadan kirish uni
+ * ishning o'rtasida to'xtatardi.  Admin esa kompyuterda va huquqi
+ * kengroq — qisqa sessiya xavfsizroq.
+ *
+ * Kalit nomi eski statik panel bilan AYNAN bir xil
+ * (`enes_installer_token`): React'ga ko'chish usta uchun qaytadan
+ * kirishni talab qilmasin. */
+const storeFor = (kind: PanelKind) => (kind === "admin" ? sessionStorage : localStorage);
+const keyFor = (kind: PanelKind) =>
+  kind === "owner" ? OWNER_TOKEN : kind === "admin" ? ADMIN_TOKEN : INSTALLER_TOKEN;
 
-export function tokenFor(kind: "owner" | "admin") {
+export function tokenFor(kind: PanelKind) {
   try {
     return storeFor(kind).getItem(keyFor(kind)) || "";
   } catch {
@@ -24,7 +37,7 @@ export function tokenFor(kind: "owner" | "admin") {
   }
 }
 
-export function saveToken(kind: "owner" | "admin", token: string) {
+export function saveToken(kind: PanelKind, token: string) {
   try {
     storeFor(kind).setItem(keyFor(kind), token);
   } catch {
@@ -33,7 +46,7 @@ export function saveToken(kind: "owner" | "admin", token: string) {
   }
 }
 
-export function clearToken(kind: "owner" | "admin") {
+export function clearToken(kind: PanelKind) {
   try {
     storeFor(kind).removeItem(keyFor(kind));
     // Eski versiya tokeni sessionStorage'da qolgan bo'lishi mumkin.
@@ -51,7 +64,10 @@ export function clearToken(kind: "owner" | "admin") {
  * ham kalit baribir o'chadi: odam «chiqdim» deb turganda ekranda
  * qolib ketmasin.
  */
-export async function logout(kind: "owner" | "admin") {
+export async function logout(kind: PanelKind) {
+  /* O'rnatuvchi ham portal hisobi (`portal_accounts`) — chiqish yo'li
+     admin bilan bitta; faqat do'kon egasining sessiyasi alohida
+     jadvalda yashaydi. */
   const path = kind === "owner" ? "/api/v1/owner/auth/logout" : "/api/v1/auth/logout";
   try {
     await api(path, kind, { method: "POST" });
@@ -93,7 +109,7 @@ const GENERIC_DETAILS = new Set([
   "Bad Gateway", "Gateway Timeout",
 ]);
 
-export async function api<T>(path: string, kind: "owner" | "admin", options: ApiOptions = {}): Promise<T> {
+export async function api<T>(path: string, kind: PanelKind, options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   const token = tokenFor(kind);
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -121,7 +137,7 @@ export async function api<T>(path: string, kind: "owner" | "admin", options: Api
 /** Himoyalangan rasm/video endpointini brauzerga xavfsiz Blob URL qilib beradi.
  * `<img src>` Authorization header yubora olmaydi; shu sabab kamera scan va
  * hodisa dalillari ilgari 401 bilan jim bo'sh ko'rinardi. */
-export async function mediaObjectUrl(path: string, kind: "owner" | "admin", siteId?: string): Promise<string> {
+export async function mediaObjectUrl(path: string, kind: PanelKind, siteId?: string): Promise<string> {
   const headers = new Headers();
   const token = tokenFor(kind);
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -171,15 +187,68 @@ export function downloadCsv(csv: string, filename: string): void {
   );
 }
 
-export async function login(username: string, password: string, kind: "owner" | "admin") {
+/** Hisob roli qaysi panelga tegishli.  Rol paneldan BOSHQA bo'lsa
+ *  token saqlanmaydi: aks holda odam «kirdim» deb o'ylab, keyin har
+ *  so'rovda 403 ko'rardi. */
+const ROLE_FOR: Record<PanelKind, string> = { owner: "customer", admin: "admin", installer: "installer" };
+const WRONG_ROLE_KEY: Record<PanelKind, string> = {
+  owner: "panel.login.not_owner_account",
+  admin: "panel.login.admin_required",
+  installer: "panel.installer.login.wrong_account",
+};
+
+export async function login(username: string, password: string, kind: PanelKind) {
   const result = await api<{ access_token: string; account: { role: string; full_name?: string } }>(
     "/api/v1/auth/login",
     kind,
     { method: "POST", body: JSON.stringify({ username, password }) },
   );
-  const allowed = kind === "owner" ? result.account.role === "customer" : result.account.role === "admin";
-  if (!allowed) throw new Error(t(kind === "owner" ? "panel.login.not_owner_account" : "panel.login.admin_required"));
+  if (result.account.role !== ROLE_FOR[kind]) throw new Error(t(WRONG_ROLE_KEY[kind]));
   saveToken(kind, result.access_token);
+  return result;
+}
+
+export type PortalAccount = {
+  id: string;
+  username: string;
+  full_name?: string;
+  role: string;
+  status: string;
+  company?: string;
+};
+
+/** «Men kimman?» — panel har ochilishda so'raydi.
+ *
+ * Nega token yetarli emas: o'rnatuvchi hisobi `pending` holatida ham
+ * token oladi (u yo'riqnomani darhol ko'rishi kerak), lekin vazifalar
+ * ro'yxati unga BERILMAYDI.  Ikkalasini ajratmasa panel bo'sh ro'yxat
+ * ko'rsatib «obyekt yo'q» deb yolg'on aytardi. */
+export async function whoAmI(kind: PanelKind) {
+  const result = await api<{ account: PortalAccount }>("/api/v1/auth/me", kind);
+  return result.account;
+}
+
+export type InstallerRegistration = {
+  full_name: string;
+  phone: string;
+  company: string;
+  username: string;
+  password: string;
+  consent: boolean;
+};
+
+/** O'rnatuvchi o'zini ro'yxatdan o'tkazadi.
+ *
+ * Hisob `pending` bo'lib tushadi — obyekt biriktirishni admin qiladi.
+ * Token darhol beriladi: usta yo'riqnomani va o'z holatini tasdiqni
+ * kutib turib ham ko'rishi kerak. */
+export async function registerInstaller(body: InstallerRegistration) {
+  const result = await api<{ access_token: string; message?: string }>(
+    "/api/v1/auth/installer/register",
+    "installer",
+    { method: "POST", body: JSON.stringify({ ...body, company: body.company || null }) },
+  );
+  saveToken("installer", result.access_token);
   return result;
 }
 

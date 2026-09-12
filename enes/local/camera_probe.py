@@ -82,9 +82,12 @@ def build_rtsp(
 ) -> str:
     """Brend shabloni bo'yicha substream manzilini yig'adi.
 
-    O'rnatuvchi panelidagi (`installer.html`) mantiq bilan bir xil — mijoz
-    ham, usta ham bitta qoidadan foydalanadi.  Substream ataylab: 640×360
-    oqim oddiy ofis kompyuterida ham dekodlanadi, main stream esa yo'q.
+    O'rnatuvchi panelidagi (`frontend/src/InstallerCamera.tsx: buildRtsp`)
+    mantiq bilan bir xil — mijoz ham, usta ham bitta qoidadan
+    foydalanadi.  Ikki nusxa ataylab: u yerdagi hisob BRAUZERDA
+    bajariladi va NVR paroli serverga faqat tayyor manzil tarkibida
+    boradi.  Substream ham ataylab: 640×360 oqim oddiy ofis
+    kompyuterida ham dekodlanadi, main stream esa yo'q.
     """
     clean_host = re.sub(r"^rtsps?://", "", host.strip(), flags=re.I).split("/")[0]
     if not clean_host:

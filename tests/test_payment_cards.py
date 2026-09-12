@@ -491,3 +491,22 @@ def test_the_offer_does_not_yet_promise_recurring_charges() -> None:
 
     for promise in ("avtomatik yechil", "takroriy to‘lov", "kartadan yechil"):
         assert promise not in offer, f"oferta yurist ko'rigisiz va'da beryapti: {promise}"
+
+
+def test_the_card_block_hides_when_no_provider_is_connected() -> None:
+    """Ishlamaydigan tugma «buzuq» degan taassurot beradi.
+
+    Payme/Click kalitlari hali egadan kelmagan, ya'ni bugun hech bir
+    mijozda bu bo'lim ko'rinmaydi — va bu TO'G'RI holat.
+    """
+    owner = (
+        Path(__file__).resolve().parents[1] / "frontend" / "src" / "owner.tsx"
+    ).read_text(encoding="utf-8")
+    block = owner[owner.index("function CardBlock"):]
+    block = block[: block.index("function BillingPage")]
+
+    assert "if (!providers.length) return null;" in block, "darvoza yo'q"
+    # Karta raqami komponent holatida QOLMASIN.
+    assert 'setNumber(""); setExpire("");' in block, "raqam xotirada qolyapti"
+    # Native oyna emas — Telegram WebView'da u ishlamasligi mumkin.
+    assert "window.confirm" not in block

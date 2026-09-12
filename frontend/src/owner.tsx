@@ -289,13 +289,122 @@ function EmployeesPage({ siteId }: { siteId: string }) {
   return <><PageHeader title={t("panel.nav.employees")} subtitle={t("panel.employees.subtitle")} actions={<button className="btn btn-primary" onClick={()=>setAdding(value=>!value)}><Icon name="users"/><span>{adding?t("panel.common.cancel"):t("panel.employees.add")}</span></button>}/>{adding?<Card className="employee-form"><form className="card-body" onSubmit={create}><div className="form-grid"><label>{t("panel.employees.full_name")}<input className="input" name="name" minLength={2} required/></label><label>{t("panel.employees.external_id_optional")}<input className="input" name="external_id"/></label></div><label className="consent-row"><input type="checkbox" name="consent" required/><span>{t("panel.employees.consent_text")}</span></label><button className="btn btn-primary" disabled={busy}>{busy?t("panel.common.saving"):t("panel.employees.save")}</button></form></Card>:null}{error?<div className="alert-strip"><Icon name="bell"/><div><strong>{t("panel.employees.error_prefix")}</strong> {error}</div></div>:null}<Card><div className="card-head"><div><h2>{t("panel.employees.list_title")}</h2><p>{t("panel.employees.list_subtitle")}</p></div></div>{items === null ? <div className="card-body"><Skeleton height={180}/></div> : items.length ? <div className="table-wrap"><table><thead><tr><th>{t("panel.employees.col_employee")}</th><th>{t("panel.employees.col_external_id")}</th><th>{t("panel.employees.col_face_id")}</th><th>{t("panel.employees.col_status")}</th><th>{t("panel.employees.col_action")}</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><div className="table-title">{item.name || t("panel.employees.unnamed")}</div></td><td>{item.external_id || "—"}</td><td>{item.enrollment_status==="enrolled"?t("panel.employees.templates_count",{count:item.photos?.length || 1}):t("panel.employees.not_enrolled")}</td><td><Pill state={item.active === false ? "offline" : "active"}>{item.active === false ? t("panel.employees.inactive") : t("panel.employees.active")}</Pill></td><td><label className={`btn upload-btn ${uploading===item.id?"disabled":""}`}>{uploading===item.id?t("panel.common.loading"):t("panel.employees.upload_photo")}<input type="file" accept="image/*" capture="user" disabled={Boolean(uploading)} onChange={event=>{void uploadFace(item,event.target.files?.[0]);event.currentTarget.value="";}}/></label></td></tr>)}</tbody></table></div> : <EmptyState icon="users" title={t("panel.employees.empty_title")} detail={t("panel.employees.empty_detail")}/>}</Card></>;
 }
 
+type CardState = {
+  card: { provider?: string; masked_pan?: string; verified?: boolean; last_error?: string | null } | null;
+  providers: Record<string, boolean>;
+  trial_bonus_days: number;
+};
+
+/* Saqlangan karta.
+ *
+ * Bo'lim FAQAT provayder sozlangan bo'lsa chiziladi.  Payme/Click
+ * merchant kalitlari hali egadan kelmagan va ikkalasi ham `false`
+ * bo'lishi NORMAL holat — ishlamaydigan tugma ko'rsatish mijozga
+ * «buzuq» degan taassurot beradi (`capabilities` naqshi bilan bir xil
+ * sabab).
+ *
+ * Karta raqami serverga bir marta ketadi va HECH QAYERDA
+ * saqlanmaydi — na bazada, na bu komponentning holatida: `bind()`
+ * tugagach maydonlar tozalanadi. */
+function CardBlock({ siteId }: { siteId: string }) {
+  const [state, setState] = useState<CardState | null>(null);
+  const [number, setNumber] = useState("");
+  const [expire, setExpire] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [toast, toastNode] = useToast();
+  const [confirm, confirmDialog] = useConfirm();
+
+  const load = useCallback(
+    () => api<CardState>("/api/v1/owner/card", "owner", { siteId })
+      .then(data => { setState(data); setError(""); })
+      /* Xatoda bo'sh holat: `null` skelet degani va u abadiy qolardi. */
+      .catch(reason => { setState({ card: null, providers: {}, trial_bonus_days: 0 }); setError(reason instanceof Error ? reason.message : t("panel.card.failed")); }),
+    [siteId],
+  );
+  useEffect(() => { void load(); }, [load]);
+
+  const providers = Object.entries(state?.providers || {}).filter(([, on]) => on).map(([name]) => name);
+  if (state === null) return null;
+  if (!providers.length) return null;
+
+  const bind = async () => {
+    setBusy(true); setError("");
+    try {
+      await api("/api/v1/owner/card", "owner", {
+        method: "POST", siteId,
+        body: JSON.stringify({ provider: providers[0], number, expire }),
+      });
+      /* Raqam holatdan DARHOL o'chiriladi: u endi kerak emas va
+         brauzer xotirasida qolishi shart emas. */
+      setNumber(""); setExpire(""); setSent(true);
+      toast(t("panel.card.code_sent"));
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("panel.card.failed"));
+    } finally { setBusy(false); }
+  };
+
+  const confirmCode = async () => {
+    setBusy(true); setError("");
+    try {
+      const answer = await api<{ bonus_days?: number }>("/api/v1/owner/card/confirm", "owner", {
+        method: "POST", siteId, body: JSON.stringify({ code }),
+      });
+      setCode(""); setSent(false);
+      if (answer.bonus_days) toast(t("panel.card.bonus", { days: answer.bonus_days }));
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("panel.card.failed"));
+    } finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    if (!(await confirm({ title: t("panel.card.remove_title"), text: t("panel.card.remove_text"), confirmLabel: t("panel.card.remove"), danger: true }))) return;
+    await api("/api/v1/owner/card", "owner", { method: "DELETE", siteId }).catch(() => {});
+    await load();
+  };
+
+  const card = state.card;
+  return <Card className="section-gap">
+    {toastNode}
+    <div className="card-head"><div><h2>{t("panel.card.title")}</h2><p>{t("panel.card.subtitle")}</p></div>
+      {card ? <Pill state={card.verified ? "active" : "pending"}>{card.verified ? t("panel.card.verified") : t("panel.card.unverified")}</Pill> : null}</div>
+    <div className="card-body">
+      {error ? <ErrorStrip detail={error} onRetry={() => { setState(null); void load(); }}/> : null}
+      {card ? <>
+        <div className="metric-value mono">{card.masked_pan}</div>
+        {card.last_error ? <p className="metric-note">{card.last_error}</p> : null}
+        {card.verified ? null : <div className="form-grid">
+          <label>{t("panel.card.code")}<input className="input" inputMode="numeric" value={code} maxLength={10} onChange={event => setCode(event.target.value)}/></label>
+        </div>}
+        <div className="page-actions wrap">
+          {card.verified ? null : <button className="btn btn-primary" disabled={busy || !code} onClick={() => void confirmCode()}>{t("panel.card.confirm")}</button>}
+          <button className="btn btn-danger" disabled={busy} onClick={() => void remove()}>{t("panel.card.remove")}</button>
+        </div>
+      </> : <>
+        <p className="metric-note">{t("panel.card.none_detail", { days: state.trial_bonus_days })}</p>
+        <div className="form-grid">
+          <label>{t("panel.card.number")}<input className="input" inputMode="numeric" autoComplete="cc-number" value={number} maxLength={23} onChange={event => setNumber(event.target.value)}/></label>
+          <label>{t("panel.card.expire")}<input className="input" inputMode="numeric" autoComplete="cc-exp" placeholder={t("panel.card.expire_hint")} value={expire} maxLength={7} onChange={event => setExpire(event.target.value)}/></label>
+        </div>
+        <button className="btn btn-primary" disabled={busy || number.length < 12 || expire.length < 4} onClick={() => void bind()}>{t("panel.card.bind")}</button>
+        {sent ? <p className="metric-note">{t("panel.card.code_sent")}</p> : null}
+      </>}
+    </div>
+    {confirmDialog}
+  </Card>;
+}
+
 function BillingPage({dashboard,siteId}:{dashboard:Dashboard;siteId:string}) {
   const [invoices,setInvoices]=useState<Invoice[]|null>(null);const[months,setMonths]=useState(1);const[busy,setBusy]=useState(false);const[error,setError]=useState("");
   // Xatoda ro'yxat BO'SH: `null` skelet degani va u abadiy qolardi.
   const load=useCallback(()=>api<Invoice[]>("/api/v1/owner/invoices","owner",{siteId}).then(data=>{setInvoices(data);setError("");}).catch(reason=>{setInvoices([]);setError(reason instanceof Error?reason.message:t("panel.billing.load_failed"));}),[siteId]);
   useEffect(()=>{void load();},[load]);
   const create=async()=>{setBusy(true);setError("");try{const invoice=await api<Invoice>("/api/v1/owner/invoices","owner",{method:"POST",siteId,body:JSON.stringify({months})});setInvoices(current=>[invoice,...(current||[])]);}catch(reason){setError(reason instanceof Error?reason.message:t("panel.billing.create_failed"));}finally{setBusy(false);}};
-  return <><PageHeader title={t("panel.nav.billing")} subtitle={t("panel.billing.subtitle")}/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>{dashboard.site.plan?.name || t("panel.billing.current_plan")}</h2><p>{t("panel.billing.plan_note")}</p></div><Pill state={dashboard.subscription?.status}>{dashboard.subscription?.status || "—"}</Pill></div><div className="card-body"><div className="metric-value">{formatMoney(dashboard.subscription?.monthly_price_uzs)}</div><p className="metric-note">{t("panel.billing.per_month")} · {dashboard.subscription?.days_left==null?t("panel.billing.term_unknown"):t("panel.billing.days_left",{count:dashboard.subscription.days_left})}</p><div className="invoice-create"><select className="select" value={months} onChange={event=>setMonths(Number(event.target.value))} aria-label={t("panel.billing.term_aria")}>{[1,3,6,12].map(count=><option value={count} key={count}>{t("panel.shell.months_count",{count})}</option>)}</select><button className="btn btn-primary" disabled={busy} onClick={()=>void create()}>{busy?t("panel.billing.creating"):t("panel.billing.create_invoice")}</button></div></div></Card><Card><div className="card-head"><div><h2>{t("panel.billing.how_title")}</h2><p>{t("panel.billing.how_subtitle")}</p></div></div><div className="card-body"><p className="metric-note">{t("panel.billing.how_note")}</p></div></Card></div>{error?<ErrorStrip className="section-gap" title={t("panel.billing.error_prefix")} detail={error} onRetry={()=>{setInvoices(null);void load();}}/>:null}<Card className="section-gap"><div className="card-head"><div><h2>{t("panel.billing.invoices_title")}</h2><p>{t("panel.billing.invoices_subtitle")}</p></div></div>{invoices===null?<div className="card-body"><Skeleton height={140}/></div>:invoices.length?<div className="table-wrap"><table><thead><tr><th>{t("panel.billing.col_number")}</th><th>{t("panel.billing.col_term")}</th><th>{t("panel.billing.col_amount")}</th><th>{t("panel.billing.col_state")}</th><th>{t("panel.billing.col_date")}</th><th>{t("panel.billing.col_action")}</th></tr></thead><tbody>{invoices.map(invoice=><tr key={invoice.id}><td><div className="table-title">#{invoice.id}</div></td><td>{t("panel.shell.months_count",{count:invoice.months})}</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?t("panel.billing.state_paid"):invoice.state==="pending"?t("panel.billing.state_pending"):t("panel.billing.state_cancelled")}</Pill></td><td>{formatDateShort(invoice.created_at)}</td><td>{invoice.state==="pending"&&invoice.pay_url?<a className="btn" href={invoice.pay_url} target="_blank" rel="noreferrer">{t("panel.common.open")}</a>:"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title={t("panel.billing.empty_title")} detail={t("panel.billing.empty_detail")}/>}</Card></>;
+  return <><PageHeader title={t("panel.nav.billing")} subtitle={t("panel.billing.subtitle")}/><div className="dashboard-grid"><Card><div className="card-head"><div><h2>{dashboard.site.plan?.name || t("panel.billing.current_plan")}</h2><p>{t("panel.billing.plan_note")}</p></div><Pill state={dashboard.subscription?.status}>{dashboard.subscription?.status || "—"}</Pill></div><div className="card-body"><div className="metric-value">{formatMoney(dashboard.subscription?.monthly_price_uzs)}</div><p className="metric-note">{t("panel.billing.per_month")} · {dashboard.subscription?.days_left==null?t("panel.billing.term_unknown"):t("panel.billing.days_left",{count:dashboard.subscription.days_left})}</p><div className="invoice-create"><select className="select" value={months} onChange={event=>setMonths(Number(event.target.value))} aria-label={t("panel.billing.term_aria")}>{[1,3,6,12].map(count=><option value={count} key={count}>{t("panel.shell.months_count",{count})}</option>)}</select><button className="btn btn-primary" disabled={busy} onClick={()=>void create()}>{busy?t("panel.billing.creating"):t("panel.billing.create_invoice")}</button></div></div></Card><Card><div className="card-head"><div><h2>{t("panel.billing.how_title")}</h2><p>{t("panel.billing.how_subtitle")}</p></div></div><div className="card-body"><p className="metric-note">{t("panel.billing.how_note")}</p></div></Card></div>{error?<ErrorStrip className="section-gap" title={t("panel.billing.error_prefix")} detail={error} onRetry={()=>{setInvoices(null);void load();}}/>:null}<CardBlock siteId={siteId}/><Card className="section-gap"><div className="card-head"><div><h2>{t("panel.billing.invoices_title")}</h2><p>{t("panel.billing.invoices_subtitle")}</p></div></div>{invoices===null?<div className="card-body"><Skeleton height={140}/></div>:invoices.length?<div className="table-wrap"><table><thead><tr><th>{t("panel.billing.col_number")}</th><th>{t("panel.billing.col_term")}</th><th>{t("panel.billing.col_amount")}</th><th>{t("panel.billing.col_state")}</th><th>{t("panel.billing.col_date")}</th><th>{t("panel.billing.col_action")}</th></tr></thead><tbody>{invoices.map(invoice=><tr key={invoice.id}><td><div className="table-title">#{invoice.id}</div></td><td>{t("panel.shell.months_count",{count:invoice.months})}</td><td>{formatMoney(invoice.amount_uzs,{short:false})}</td><td><Pill state={invoice.state}>{invoice.state==="paid"?t("panel.billing.state_paid"):invoice.state==="pending"?t("panel.billing.state_pending"):t("panel.billing.state_cancelled")}</Pill></td><td>{formatDateShort(invoice.created_at)}</td><td>{invoice.state==="pending"&&invoice.pay_url?<a className="btn" href={invoice.pay_url} target="_blank" rel="noreferrer">{t("panel.common.open")}</a>:"—"}</td></tr>)}</tbody></table></div>:<EmptyState icon="invoice" title={t("panel.billing.empty_title")} detail={t("panel.billing.empty_detail")}/>}</Card></>;
 }
 
 function TelegramPage({siteId}:{siteId:string}) {

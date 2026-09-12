@@ -7,7 +7,29 @@
 
 ---
 
-## HOZIRGI HOLAT · 2026-09-12
+## HOZIRGI HOLAT · 2026-09-13
+
+- **✅ H BLOKI DEPLOY QILINDI — REJA TO'LIQ TUGADI (2026-09-13 ~00:10
+  UTC, `main` = `30ce070`).**  To'qqizala blok (A, B, C, D, E, F, G,
+  H, I) jonli serverda.
+
+  Bu deploy yengil edi: faqat panel bundle'i o'zgardi, ya'ni Caddy'ga
+  tegilmadi (CSP hashi o'zgarmadi — tema bootstrapga tegilmagan) va
+  `bump_feature_revision` ham kerak emas (qurilma konfigi o'zgarmagan).
+
+  **Tekshiruv:** `2451 passed, 13 skipped`; admin paneli **78 ta
+  ko'rinishda** (13 marshrut × 3 til × 2 kenglik) — toshish yo'q,
+  xom kalit yo'q, konsol toza.  Jonli: 5 host 200, CSP hamon
+  majburiy, brauzerda 10 sahifada 0 buzilish, loglarda 0 xato.
+
+  ⚠️ **BILIB QO'YING — panel bundle'i o'sdi.**  i18n katalogi BITTA
+  faylda va har panel UCHALA tildagi BARCHA kalitlarni yuklaydi, ya'ni
+  ega paneli endi admin tarjimalarini ham tortadi: umumiy chunk
+  `124 KB → 156 KB` (gzip).  Buzilish emas, lekin do'kon egasi uni
+  telefonda, mobil internetda ochadi.  Tuzatish yo'li: `build_i18n.py`
+  ni panel bo'yicha bo'lish (`panel.admin.*` faqat adminga).
+  Alohida ish sifatida qoldirildi.
+
 
 - **🌐 BOSQICH H — ADMIN PANELI UCH TILDA (2026-09-12, shox
   `reja-2026-09-12`: `446a0e9`, `4c51611`).**  Admin paneli ~460 ta

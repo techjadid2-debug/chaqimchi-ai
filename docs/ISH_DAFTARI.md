@@ -43,10 +43,28 @@
   yo'riqnomasi, o'rnatishni maksimal qulay qilish, demo 7/14 kun +
   kartadan oylik yechish) va to'liq reja
   `~/.claude/plans/md-file-ichii-o-qi-linear-tulip.md` da; bajarilgani
-  quyidagi uch commit.  **Qolgan bloklar hali boshlanmagan:** E (usta
-  paneli React'ga), F (demo + karta), G (A1 capture-rate), H (admin
-  i18n).  (C — panel xatolari, B1 — sayt formasi va I — ops tugadi;
-  pastdagi bandlarga qarang.)
+  quyidagi commitlar.
+
+  **HOLAT (2026-09-12 kechqurun): A, B, C, D, E, F, G, I — TUGADI.
+  Qolgan yagona blok — H (admin i18n).**  To'plam `2449 passed,
+  13 skipped`, `ruff` toza, i18n va sayt `--check` toza, bundle manba
+  bilan bitta commitda.
+
+  Lokal jonli tekshiruv o'tdi: 8 marshrut 200 (`/owner`, `/admin`,
+  `/installer`, `/installer-guide`, `/install`, `/`, `/status`,
+  `/oferta`); forma xatosi uch tilda MATN qaytardi va qurilma API
+  strukturali `detail` ni saqladi; `capabilities.agent.ready` false va
+  sababli; yaroqsiz chiziq saqlanganda «Chiziq juda qisqa: 3 piksel»;
+  `trial_days: 7`; karta API provayder kalitisiz 503 va tushunarli
+  matn; usta paneli React bundle'ini beryapti; loglarda 0 xato.
+
+  **Qo'shimcha bloklar (yuqoridagi uchtadan tashqari):**
+  - **B — sayt xatolari** (`ac30722`, `921572a`, `34acb91`)
+  - **C — panel xatolari** (`dbda134`, `5cce2eb`, `1bb740c`)
+  - **E — usta paneli React'da** (`9828021`, `d7e57c4`)
+  - **F — karta va demo 7/14 kun** (`6c0d1bb`, `3d01088`, `c8eb1f0`)
+  - **G — avtomatik konversiya** (`3434619`)
+  - **I — CSP va `releases/`** (`e4200fd`, `6647341`, `5a111d8`)
   - **Bosqich A (`2a6ece3`):** ikkita oylik qizil test yashil — `night`
     statistikasi zanjirning to'rt bo'g'inidan o'tkazildi, CI testi
     eskirgan domenni kutardi.  `/chek` bot menyusiga qo'shildi (yordam
@@ -1283,6 +1301,41 @@ taklif qilish kerak.
 
 ## TUZOQLAR — bir marta yeb bo'lingan
 
+- **FastAPI validatsiya xatosida `detail` — RO'YXAT, satr emas.**
+  `new Error(body.detail)` brauzerda `[object Object]` bo'lib
+  chiqadi.  Ochiq API (`/api/v1/public/*`) uchun handler matn
+  qaytaradi, panel va qurilma API'lari esa STRUKTURALI `detail` ni
+  saqlaydi — `frontend/src/api.ts` uni maydon bo'yicha o'qib qaysi
+  maydon xato ekanini ko'rsatadi va matnga aylantirish tashxisni
+  yo'qotardi.
+- **Brauzer tekshiruvi server qoidasi bilan TENG bo'lsin.**  Telefon
+  maydonida `minlength` yo'q edi, server esa `min_length=5` talab
+  qilardi — forma jo'natilar, server 422 berar va mijoz sababini
+  bilmasdi.
+- **JS bilan ko'rsatiladigan blok STANDART HOLDA ko'rinishi kerak.**
+  Ikkala variant ham `hidden` bilan boshlansa, JS o'chiq yoki API
+  javob bermaganda sahifada bo'sh oq maydon qoladi.  To'g'ri naqsh:
+  «kutish» holati ko'rinadi, JS muvaffaqiyatda uni yashiradi.
+- **Yuridik hujjatga raqam YOZMANG, havola qiling.**  Ofertadagi narx
+  test bilan katalogga bog'langan edi, lekin bu hujjatni har narx
+  o'zgarishida tahrirlashni talab qilardi va bir kun unutilishi
+  muqarrar.  Endi oferta `/#narx` ga havola qiladi.
+- **Telefonda `dblclick` va o'ng tugma YO'Q.**  Zona chizishni
+  yakunlash `dblclick` ga, o'chirish `contextmenu` ga bog'langan edi
+  — usta obyektda zona chiza olmasligi mumkin edi va buni hech narsa
+  aytmasdi.  `.d.ts` da e'lon qilinmagan metod ham shunday yashirinadi
+  (`finishDraft()` 2026-08-17 dan bor edi, paneldan chaqirib
+  bo'lmasdi).
+- **Karta tokeni — «pul yechish huquqi».**  Kamera parolidan
+  qimmatroq: ALOHIDA Fernet kaliti (`ENES_CARD_SECRET_KEY`), javobga
+  chiqmaydi, «o'chir» deganda `active=0` emas — butunlay o'chadi.
+  Yechishdan OLDIN belgi qo'yiladi (jarayon o'rtada yiqilsa ikkinchi
+  marta yechilardi) va vazifa FAQAT yetakchida ishlaydi.
+- **Sinov muddati uch joyda: kod, sayt matni, oferta.**  Ular testga
+  bog'langan bo'lsin — sayt 14 kun deb turaverса mijoz bir hafta
+  keyin «vaqt tugadi» xabarini olardi.  Qaytarish muddati (14 kun)
+  BOSHQA son va u bilan adashtirmaslik kerak.
+
 - **`releases/` konteynerga `:ro` bilan ulangan — ilova o'zi
   tozalay olmaydi.**  Uchala compose faylida `./releases:/app/releases:ro`
   va ustiga `read_only: true`.  Ya'ni `prune_windows_releases()`
@@ -2089,6 +2142,46 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-12 — sayt, konversiya, karta va usta paneli (`ac30722`…`d7e57c4`)
+
+Nima: (1) saytdagi forma xatosi endi O'QILADIGAN matn va so'rov
+tilida; (2) holat sahifasi qaysi qism yiqilganini aytadi; (3)
+avtomatik konversiya ishlaydi — qurilmadagi kod tiriltirildi; (4)
+CSP majburiy, `releases/` o'zini tozalaydi; (5) usta paneli React'da
+va telefonda zona chizish ROSTDAN ishlaydi; (6) demo 7 kun, karta
+ulasa 14, obuna kartadan o'zi uzayadi.
+
+Nega: bular birgalikda «mijoz birinchi ko'radigan joy» dan «pul
+kelishi» gacha bo'lgan zanjirning uzilgan bo'g'inlari edi.  Eng
+qimmatlari jimgina turgan: cloud `config["capture"]` yubormagani
+uchun qurilmadagi 0.6.33 kodi abadiy yopiq turgan; zona chizish
+telefonda `dblclick` va o'ng tugmaga bog'langan, ya'ni usta obyektda
+zona chiza olmasligi mumkin edi; forma validatsiyasida mijoz
+`[object Object]` o'qirdi.
+
+Qayerda: `cloud/main.py` (validatsiya handleri, `config["capture"]`,
+`_with_capture`, `bump_feature_revision`, karta endpointlari,
+`_auto_renew_*`, `prune_windows_releases`), `cloud/event_store.py`
+(`people_seen` uchta ro'yxatda), `cloud/payments/{cards,store}.py`,
+`cloud/static/{site,status,edu}.js`, `cloud/site/*`,
+`frontend/src/{installer,InstallerJobs,InstallerCamera}.tsx` (yangi),
+`enes/local/static/zone-editor.js`, `deploy/Caddyfile*`,
+`scripts/{bump_feature_revision,prune_releases}.py`.
+
+Test: `tests/test_public_form_errors.py` (27), `test_capture_rate_chain.py`
+(13), `test_payment_cards.py` (30), `test_release_prune.py` (18),
+`test_panel_v2.py` (+6), `test_security_headers.py` (+1).
+Jami **2449 passed, 13 skipped**.
+
+Diqqat: **deploy tartibi — AVVAL cloud, KEYIN qurilma relizi.**
+Deploydan keyin `scripts/bump_feature_revision.py` bir marta (usiz
+qurilma eski keshdagi konfigda qoladi va `capture` yonmaydi).  Caddy
+`restart` EMAS, `--force-recreate` (CSP).  `releases/` birinchi
+tozalash `--reja` + hostda `rm` (papka konteynerga `:ro` ulangan).
+Karta bo'limi Payme/Click kalitlari kelmaguncha panelda ko'rinmaydi,
+oferta bandi esa yurist ko'rigini kutadi.
+
 
 ### 2026-09-12 — I bloki: CSP majburiy, `releases/` o'zini tozalaydi (`e4200fd`, `afbfe3c`)
 

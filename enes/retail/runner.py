@@ -117,6 +117,21 @@ class _Stream:
     frames: int = 0
     reconnects: int = 0
     recorder_starts: int = 0
+    #: Oxirgi dekodlangan kadrning HAQIQIY o'lchami.
+    #:
+    #: `CAP_PROP_FRAME_WIDTH` ATAYLAB ishlatilmaydi: RTSP da u kamera
+    #: sozlamasidagi sonni emas, drayver taxminini qaytaradi va 720p ga
+    #: o'tilgan-o'tilmagani savoliga yolg'on javob beradi (shu sababdan
+    #: `benchmark` ham `native_size` ni kadrning o'zidan oladi).
+    #:
+    #: Nega umuman kerak: yuz tanish chegarasi kadr balandligidan
+    #: hisoblanadi (`limits.face_min_bbox_ratio`) — 360p da odam kadrning
+    #: 76% ini egallashi kerak bo'ladi, ya'ni amalda imkonsiz.  Bu son
+    #: cloudga chiqmasa panel "bu kamera Face ID uchun yaraydimi" degan
+    #: savolga javob bera olmaydi va usta buni faqat oylar o'tib,
+    #: `face_crops.too_small` dan bilib qoladi.
+    width: int = 0
+    height: int = 0
     #: Kamera qachondan beri javob bermayapti.  `None` — hodisa hali
     #: e'lon qilinmagan (yo ishlayapti, yo urinishlar soni yetmagan).
     offline_since: Optional[float] = None
@@ -232,6 +247,9 @@ class RetailRunner:
 
         stream.last_sample = now
         stream.frames += 1
+        shape = getattr(frame, "shape", None)
+        if shape is not None and len(shape) >= 2:
+            stream.height, stream.width = int(shape[0]), int(shape[1])
         self.pipeline.offer(camera_id, frame, now=now)
         return True
 
@@ -451,6 +469,9 @@ class RetailRunner:
                 "offline": stream.offline_since is not None,
                 "recorder": stream.recorder is not None,
                 "recorder_starts": stream.recorder_starts,
+                # Kadrning haqiqiy o'lchami — nol "hali kadr kelmagan".
+                "width": stream.width,
+                "height": stream.height,
             }
             for camera_id, stream in sorted(self._streams.items())
         }

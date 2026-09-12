@@ -624,6 +624,15 @@ class EdgeCameraHealth(BaseModel):
     #: kamera tunda ko'r).  Panelda belgi bo'lib chiqadi.  Eski qurilma
     #: yubormaydi.
     night_mode: Optional[str] = Field(default=None, max_length=8)
+    #: Dekodlangan kadrning HAQIQIY o'lchami.  Yuz tanish chegarasi
+    #: shundan hisoblanadi (`camera_roles.face_id_check`): 360p da odam
+    #: kadrning 76% ini egallashi kerak bo'ladi — amalda imkonsiz.
+    #:
+    #: Nol yoki yo'q — "qurilma hali aytmadi".  Bu "yaroqsiz" degani
+    #: EMAS va mavjud qiymatni O'CHIRMAYDI: eski qurilma bu maydonni
+    #: umuman yubormaydi va uning jimligi bilgan narsamizni yo'qotmasin.
+    width: Optional[int] = Field(default=None, ge=0, le=16_384)
+    height: Optional[int] = Field(default=None, ge=0, le=16_384)
 
 
 class EdgeHeartbeatBody(BaseModel):
@@ -6034,6 +6043,27 @@ async def edge_health_heartbeat(
     # admin panelda "qaysi do'kon qaysi versiyada" ko'rinishi kerak,
     # aks holda rolloutni kuzatib bo'lmaydi.
     get_store().record_device_version(device["device_id"], body.app_version)
+    # Kamera o'lchami — "bu kamera Face ID uchun yaraydimi" savolining
+    # yagona manbai.  Faqat qurilma ROSTDAN aytgan bo'lsa yoziladi:
+    # nol/yo'q "bilmayman" degani va bazadagi qiymatni o'chirmasligi
+    # kerak (eski qurilma bu maydonni umuman yubormaydi).
+    for camera in body.cameras:
+        if camera.width and camera.height:
+            try:
+                get_store().record_camera_frame_size(
+                    device["site_id"],
+                    camera.camera_id,
+                    width=int(camera.width),
+                    height=int(camera.height),
+                )
+            except ValueError:
+                # Kamera bulutda ro'yxatdan o'tmagan — heartbeat shu
+                # sababdan yiqilmasin, qolgan telemetriya qimmatroq.
+                logger.debug(
+                    "Kamera o'lchami yozilmadi (kamera topilmadi): %s/%s",
+                    device["site_id"],
+                    camera.camera_id,
+                )
     # Qurilma har daqiqada `/config` ni to'liq tortib olardi — kuniga 1440 ta
     # og'ir so'rov, javob esa deyarli har doim bir xil. Endi javobdagi shu
     # bitta son qurilmaga o'zgarish bor-yo'qligini aytadi.

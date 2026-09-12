@@ -584,6 +584,11 @@ def write_status(path: Path, stats: Dict[str, Any], *, now: Optional[float] = No
                 # Tungi rejim (day/ir/dark) — panelda «IR» yoki «tunda
                 # ko'r» belgisi shundan.  Eski zanjirda yo'q — `None`.
                 "night_mode": ((stats.get("night") or {}).get("modes") or {}).get(camera_id),
+                # Kadrning haqiqiy o'lchami (`runner.py` dekodlangan
+                # kadrdan oladi).  Nol — hali kadr kelmagan; cloud buni
+                # "noma'lum" deb o'qiydi va mavjud qiymatni o'chirmaydi.
+                "width": int(item.get("width") or 0),
+                "height": int(item.get("height") or 0),
             }
             for camera_id, item in streams.items()
         },

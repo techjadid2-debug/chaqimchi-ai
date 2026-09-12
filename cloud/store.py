@@ -1300,6 +1300,48 @@ class CloudStore:
         if not cursor.rowcount:
             raise ValueError("Kamera topilmadi")
 
+    def record_camera_frame_size(
+        self,
+        site_id: str,
+        camera_id: str,
+        *,
+        width: int,
+        height: int,
+    ) -> None:
+        """Heartbeatdan kelgan kadr o'lchamini yozadi.
+
+        `record_camera_probe()` dan ATAYLAB alohida: u `probe_status`,
+        `codec`, `fps` va `probe_error` ni ham qayta yozadi, ya'ni
+        heartbeatdan chaqirilsa RTSP probe'i topgan narsalarni har
+        daqiqada `NULL` ga aylantirardi.  Bu yerda faqat o'lcham
+        yangilanadi.
+
+        `probe_status` ga TEGILMAYDI: u "RTSP probe'i o'tdimi" degan
+        savolga javob beradi va Windows yo'lida probe hech qachon
+        ishlamaydi.  Uni bu yerdan `online` qilish holat maydonini
+        yolg'onga aylantirardi — o'lcham esa baribir to'ladi va yuz
+        tanish tekshiruvi shuni o'qiydi.
+        """
+        if width <= 0 or height <= 0:
+            raise ValueError("Kamera o'lchami musbat bo'lsin")
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE site_cameras SET width=?,height=?,last_probed_at=?,updated_at=? "
+            "WHERE site_id=? AND camera_id=?",
+            (
+                int(width),
+                int(height),
+                _iso(_utc_now()),
+                _iso(_utc_now()),
+                site_id,
+                camera_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Kamera topilmadi")
+
     def _seed_feature_catalog(self, conn: sqlite3.Connection) -> None:
         """Bo'sh bazaga sotiladigan katalogning birinchi nashrini yozadi."""
         now = _iso(_utc_now())

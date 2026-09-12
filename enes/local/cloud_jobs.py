@@ -331,10 +331,17 @@ def _run_benchmark(params: Dict[str, Any], report: Callable[[int, str], None]) -
     )
     return {
         "device": device,
-        # Tahlil SHU o'lchamda ketadi (kadr har doim shunga keltiriladi).
+        # O'LCHOV shu o'lchamdagi sun'iy kadrlarda ketdi
+        # (`benchmark.py: FRAME_WIDTH/FRAME_HEIGHT` — `rng.integers` bilan
+        # yasaladi).  Bu TAHLIL oqimining o'lchami EMAS: haqiqiy zanjir
+        # (`retail/pipeline.py: analyze`) RTSP dan kelgan kadrni
+        # kichraytirmaydi, ya'ni kamerani 720p ga o'tkazish yuz tanish
+        # chegarasiga rostdan ta'sir qiladi (`limits.face_min_bbox_ratio`).
+        # Ilgari bu yerda "kadr har doim shunga keltiriladi" deb yozilgan
+        # edi va u xulosani teskarisiga o'girardi.
         "frame_size": [benchmark.FRAME_WIDTH, benchmark.FRAME_HEIGHT],
-        # Kameraning O'ZI nima berayotgani — bu boshqa savol va aynan u
-        # "720p ga o'tdimi" degan savolga javob beradi.
+        # Kameraning O'ZI nima berayotgani — aynan u "720p ga o'tdimi"
+        # degan savolga javob beradi.
         "native_size": (
             [decode.get("native_width"), decode.get("native_height")]
             if decode.get("native_width")

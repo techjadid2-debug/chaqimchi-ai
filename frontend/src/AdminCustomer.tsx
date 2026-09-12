@@ -402,7 +402,7 @@ function BenchmarkBlock({ job }: { job: { status?: string; error?: string; updat
   const result = (job.result || {}) as { device?: string; frame_size?: number[]; native_size?: number[]; detector?: { throughput_fps?: number; p95_ms?: number }; verdict?: { supported_cameras?: number; cameras?: number; ok?: boolean } };
   const native = (result.native_size || []).filter(Boolean).join("×");
   return <div className="note ok"><b>Sig‘im o‘lchovi — {job.updated_at || ""}</b>
-    <div>Qurilma: {result.device || "—"} · tahlil {(result.frame_size || []).join("×") || "—"}{native ? <> · <b>kamera beryapti {native}</b></> : null}</div>
+    <div>Qurilma: {result.device || "—"} · o‘lchov kadri {(result.frame_size || []).join("×") || "—"}{native ? <> · <b>kamera beryapti {native}</b></> : null}</div>
     <div>Detektor: {Number(result.detector?.throughput_fps || 0).toFixed(1)} inferens/s, p95 {Number(result.detector?.p95_ms || 0).toFixed(0)} ms</div>
     <div>Xulosa: <b>{Number(result.verdict?.supported_cameras || 0)} kamera ko‘taradi</b> (so‘ralgan {Number(result.verdict?.cameras || 0)}){result.verdict?.ok === false ? " — zaxira yetarli emas" : ""}</div>
   </div>;

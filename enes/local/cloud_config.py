@@ -369,6 +369,15 @@ def send_heartbeat(status: Dict[str, Any]) -> bool:
             # Tungi rejim: `ir` — IR chirog'i yoqiq, `dark` — kamera tunda
             # ko'r (IR yo'q), `day` — rangli.  Panel belgisi shundan.
             "night_mode": item.get("night_mode") or None,
+            # Oqimning haqiqiy o'lchami.  Windows yo'lida buni cloudga
+            # yuboradigan yagona kanal shu: `report_camera_probes()`
+            # faqat Box agentida (`enes/sotqin_agent.py`) va do'kon
+            # kompyuterida hech qachon chaqirilmaydi — shuning uchun
+            # `site_cameras.width/height` pilotda oylab NULL turgan va
+            # `camera_roles.face_id_check()` "o'lcham noma'lum" dan
+            # boshqa javob bera olmagan.
+            "width": int(item.get("width") or 0),
+            "height": int(item.get("height") or 0),
         }
         for camera_id, item in (status.get("cameras") or {}).items()
         if isinstance(item, dict)

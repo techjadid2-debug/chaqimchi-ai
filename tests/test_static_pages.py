@@ -388,12 +388,65 @@ def test_the_internal_codename_stays_off_customer_pages() -> None:
 
 
 def test_the_installer_guide_is_not_offered_to_search_engines() -> None:
-    """U ichki hujjat: mahsulotni 16 marta «Sotqin» deb ataydi va
-    `systemctl` buyruqlarini ko'rsatadi.  Brend nomini qidirgan mijoz
-    unga tushib qolmasin."""
+    """U ichki hujjat: usta uchun NVR paroli, RTSP manzili va nosozlik
+    jadvalini ko'rsatadi.  Brend nomini qidirgan mijoz unga tushib
+    qolmasin.
+
+    (Ichki kod nomi «Sotqin» 2026-09-12 da olib tashlandi — usta «ENES
+    Monitoring» ni o'rnatadi va yo'riqnoma boshqa nom bilan gapirsa
+    qaysi dastur haqida ekani tushunarsiz bo'lardi.  `noindex` esa
+    qoladi: sabab nom emas, MAZMUN.)
+    """
     html = (STATIC / "installer-guide.html").read_text(encoding="utf-8")
     assert "index,follow" not in html
     assert "noindex" in html
+
+
+def test_the_installer_guide_teaches_where_to_put_the_camera() -> None:
+    """Ustaning eng qimmat qarori — kamerani qayerga qo'yish.
+
+    Bungacha yo'riqnomada bu haqda bitta ham qator yo'q edi: sahifa
+    kabel ulashni va Ubuntu o'rnatishni tushuntirardi, kamera joyini
+    esa usta o'zi taxmin qilardi.  Xato darhol ko'rinmaydi — tizim
+    ishlayotgandek turadi va faqat oylar o'tib `face_crops.too_small`
+    dan bilinadi.
+    """
+    from cloud import config_health
+    from enes import camera_roles, limits
+
+    html = (STATIC / "installer-guide.html").read_text(encoding="utf-8")
+
+    assert 'id="kamera-joylashuvi"' in html, "bo'limning o'zi yo'q"
+    for role in camera_roles.CAMERA_ROLES:
+        label = camera_roles.ROLE_LABELS_UZ[role].split()[0]
+        assert label in html, f"'{role}' roli yo'riqnomada tushuntirilmagan"
+
+    # Face ID zanjiridagi sonlar — hujjat bilan bitta manbadan.
+    assert f"{limits.FACE_MIN_CROP_PX} piksel" in html
+    assert f"{limits.face_min_bbox_px()} piksel" in html
+    assert f"{round(limits.face_min_bbox_ratio(720) * 100)}%" in html
+
+    # Chizma chegaralari — usta aynan shu piksellarni ko'radi.
+    assert f"{round(config_health.MIN_LINE_LENGTH * 1280)} piksel" in html
+    assert f"{round(config_health.MIN_ZONE_SIDE * 1280)}×{round(config_health.MIN_ZONE_SIDE * 720)}" in html
+
+    # Eng ko'p uchraydigan xato ochiq aytilgan bo'lsin.
+    assert "substream" in html.lower()
+    assert "1280×720" in html
+
+
+def test_the_installer_guide_leads_with_the_windows_path() -> None:
+    """Sotuv fokusi Windows'da, yo'riqnoma esa Ubuntu o'rnatishni
+    o'rgatardi — usta boshqa mahsulotni o'rnatayotgandek bo'lardi."""
+    html = (STATIC / "installer-guide.html").read_text(encoding="utf-8")
+    windows = html.find("Windows 11 x64")
+    ubuntu = html.find("Ubuntu Server 24.04")
+
+    assert windows != -1 and ubuntu != -1
+    assert windows < ubuntu, "Windows kartasi Ubuntu'dan oldin turishi kerak"
+    assert "Ubuntu Server 24.04 LTS o‘rnating" not in html, (
+        "2-qadam hamon Ubuntu o'rnatishni so'rayapti"
+    )
 
 
 def test_one_sku_has_one_name() -> None:

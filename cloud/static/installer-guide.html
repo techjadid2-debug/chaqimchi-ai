@@ -6,11 +6,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <!-- Ichki hujjat: mahsulotni ichki kod nomi bilan ataydi va
-     systemctl buyruqlarini ko'rsatadi. Brend nomini qidirgan
-     mijoz bunga tushib qolmasin. -->
+  <!-- Ichki hujjat: usta uchun.  `noindex` ATAYLAB qoladi — sahifa
+     mijozga emas, o'rnatuvchiga gapiradi (NVR paroli, RTSP manzil,
+     nosozlik jadvali) va brend nomini qidirgan mijoz bunga tushib
+     qolmasin.  Ichki kod nomi («Sotqin») 2026-09-12 da olib tashlandi:
+     usta «ENES Monitoring» ni o'rnatadi va yo'riqnoma boshqa nom bilan
+     gapirsa, u qaysi dastur haqida ekanini o'ylab qolardi. -->
 <meta name="robots" content="noindex">
-  <title>Sotqin o‘rnatuvchi yo‘riqnomasi — ENES Monitoring</title>
+  <title>O‘rnatuvchi yo‘riqnomasi — ENES Monitoring</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/assets/favicon.png" type="image/png">
   <link rel="stylesheet" href="/assets/site.css?v=a0857d8ceb">
@@ -62,10 +65,10 @@
 </header>
 <main class="utility-main">
     <section class="guide-hero">
-      <p class="eyebrow"><span></span> Sotqin R1 · o‘rnatuvchi qo‘llanmasi</p>
-      <h1>Bo‘sh mini-kompyuterdan ishlaydigan do‘kongacha.</h1>
-      <p class="hero-text">Uskunani ulang, rasmiy paketni checksum bilan o‘rnating, pairing kod orqali cloudga bog‘lang, kameralarni tekshiring va mijozga topshiring.</p>
-      <div class="guide-meta"><span>Windows 10/11 — asosiy yo‘l</span><span>Linux/N100 — keyingi bosqich</span><span>1–4 kamera</span><span>45–90 daqiqa</span></div>
+      <p class="eyebrow"><span></span> ENES Monitoring · o‘rnatuvchi qo‘llanmasi</p>
+      <h1>Kamerani to‘g‘ri joyga qo‘yishdan mijozga topshirishgacha.</h1>
+      <p class="hero-text">Eng ko‘p xato kamerani qayerga qo‘yishda qilinadi va u darhol ko‘rinmaydi: tizim ishlayotgandek turadi, faqat davomat tanimaydi va konversiya yolg‘on bo‘ladi. Shuning uchun yo‘riqnoma kameradan boshlanadi.</p>
+      <div class="guide-meta"><span>Windows 10/11 — asosiy yo‘l</span><span>Ubuntu / ENES Box — keyingi bosqich</span><span>1–4 kamera</span><span>45–90 daqiqa</span></div>
     </section>
 
     <section class="guide-block" id="compatibility">
@@ -77,17 +80,57 @@
         <article class="compat-card"><span class="guide-status planned">Probe shart</span><h3>ONVIF / boshqa brend</h3><p>RTSP yoki ONVIF Profile S/T stream URI bo‘lsa ulash mumkin. Avtomatik ONVIF qidiruv hali tayyor emas; hozir RTSP manzil qo‘lda kiritiladi.</p></article>
         <article class="compat-card"><span class="guide-status planned">Mos emas yoki adapter kerak</span><h3>Faqat cloud/USB/koaksial</h3><p>Lokal RTSP bermaydigan cloud-kamera mos emas. Analog kamera faqat RTSP chiqaradigan DVR/NVR orqali ulanadi; USB kamera hozir qo‘llanmaydi.</p></article>
       </div>
-      <div class="safe-note"><b>Qabul profili:</b> H.264 substream, 1280×720 gacha, RTSP over TCP, alohida faqat ko‘rish huquqidagi kamera foydalanuvchisi. H.265+, Smart Codec va ishlab chiqaruvchining yopiq protokoli kafolatlanmaydi.</div>
+      <div class="safe-note"><b>Qabul profili:</b> H.264 substream, <b>1280×720</b>, RTSP over TCP, alohida faqat ko‘rish huquqidagi kamera foydalanuvchisi. H.265+, Smart Codec va ishlab chiqaruvchining yopiq protokoli kafolatlanmaydi.
+        <p style="margin-top:10px"><b>Eng ko‘p uchraydigan xato:</b> tahlil <b>substream</b>dan ketadi, asosiy oqimdan emas. NVR‘lar substreamni zavod sozlamasida CIF yoki D1 da qoldiradi — ya‘ni asosiy oqim 4K bo‘lsa ham, substream 352×288 bo‘lib qoladi va yuz tanish <b>printsipial ishlamaydi</b>. Kirish kamerasining substreamini 1280×720 ga qo‘ying.</p></div>
+    </section>
+
+    <section class="guide-block" id="kamera-joylashuvi">
+      <h2>Kamerani qayerga qo‘yish</h2>
+      <p>Har kameraga <b>rol</b> beriladi va rol nima ishlashini belgilaydi. Tizim rolni kanal nomi va odam oqimiga qarab taklif qiladi, tasdiqlashni odam qiladi. Bitta do‘konda ko‘pi bilan <b>4 kamera</b>.</p>
+      <div class="compat-grid">
+        <article class="compat-card"><span class="guide-status">Eng talabchan</span><h3>Kirish eshigi</h3><p>Kirdi/chiqdi, konversiya, <b>yuz tanish (davomat)</b>, ish vaqtidan tashqari harakat.</p><p><b>Substream 1280×720 shart.</b> Eshik oynasiga qaratmang — orqadan tushgan yorug‘lik yuzni qoraytiradi.</p></article>
+        <article class="compat-card"><span class="guide-status">Navbat</span><h3>Kassa</h3><p>Navbat uzunligi, «kassada uzoq vaqt hech kim yo‘q» hodisasi.</p><p>Kassa oldidagi maydon kadrga to‘liq sig‘sin — navbat zonasi shu yerga chiziladi.</p></article>
+        <article class="compat-card"><span class="guide-status">Zal</span><h3>Savdo zali</h3><p>Issiqlik xaritasi, uzoq turish, sig‘im, javon nazorati.</p><p>Balandroq va kengroq qo‘yiladi: odamlar bir-birini to‘smasin.</p></article>
+        <article class="compat-card"><span class="guide-status">Ombor</span><h3>Ombor / xizmat xonasi</h3><p>Taqiqlangan zona, kamera buzilishi, tungi harakat.</p><p>Eshik va o‘tish yo‘li kadrda bo‘lsin.</p></article>
+      </div>
+
+      <h2 style="margin-top:34px">Yuz tanish uchun bitta qattiq qoida</h2>
+      <p>Yuz kesmasi kamida 96 piksel bo‘lishi kerak va u odam ramkasining yuqori 35% idan olinadi — ya‘ni <b>odam ramkasi kamida 275 piksel</b> balandlikda bo‘lsin. Kadr balandligiga nisbatan bu quyidagini beradi:</p>
+      <table class="port-table"><thead><tr><th>Oqim</th><th>Odam kadrning shunchasini egallasin</th><th>Amalda</th></tr></thead><tbody>
+        <tr><td>352×288 (CIF)</td><td>95%</td><td>Imkonsiz</td></tr>
+        <tr><td>640×360</td><td>76%</td><td>Imkonsiz</td></tr>
+        <tr><td>854×480</td><td>57%</td><td>Chegarada — odam juda yaqin kelsin</td></tr>
+        <tr><td><b>1280×720</b></td><td><b>38%</b></td><td><b>Ishlaydi</b></td></tr>
+        <tr><td>1920×1080</td><td>25%</td><td>Bemalol</td></tr>
+      </tbody></table>
+      <div class="safe-note"><b>Obyektda qanday tekshiriladi:</b> obyektiv burchagini bilish shart emas. Panelda kadrni oching, eshik oldida odam tursin — <b>bo‘yi kadr balandligining uchdan biridan baland bo‘lsin</b>. Choragini egallasa, kamerani yaqinlashtiring yoki pastroq qo‘ying.
+        <p style="margin-top:10px">Masofaga aylantirsak: 1,70 m bo‘yli odam kadrning 38% ini egallashi kerak bo‘lsa, kadrda ko‘rinadigan vertikal maydon <b>4,5 metrdan katta bo‘lmasin</b> (1080p da 6,7 m).</p></div>
+      <p style="margin-top:16px">Panel bu javobni o‘zi aytadi: kamera o‘lchami kelgach kartada uchta holatdan biri ko‘rinadi — <b>yuz tanish uchun yetarli</b>, <b>chegarada</b> yoki <b>720p kerak</b>. «O‘lcham noma‘lum» — qurilma hali birinchi kadrni yubormagan, bir daqiqa kuting.</p>
+
+      <h2 style="margin-top:34px">Chiziq va zona: juda kichik chizilsa jim nol beradi</h2>
+      <p>Yaroqsiz chizma <b>saqlanadi va qurilma uni qabul qiladi</b> — faqat hodisa chiqmaydi. Pilot do‘konida aynan shunday bo‘lgan: 4 piksellik chiziq va 29×20 piksellik zona oylab nol hodisa bergan. Panel endi saqlashdan oldin ogohlantiradi.</p>
+      <table class="port-table"><thead><tr><th>Nima</th><th>Eng kam o‘lcham</th><th>1280×720 da</th></tr></thead><tbody>
+        <tr><td>Kirish chizig‘i uzunligi</td><td>kadr enining 5% i</td><td>64 piksel</td></tr>
+        <tr><td>Zona yuzasi</td><td>kadr yuzasining 1% i</td><td>9 216 piksel²</td></tr>
+        <tr><td>Zonaning eng qisqa tomoni</td><td>8%</td><td>102×58 piksel</td></tr>
+      </tbody></table>
+      <p style="margin-top:16px"><b>Chiziq eshikning o‘ziga emas, undan bir qadam ichkariga chizilsin</b> — qaror odam ramkasining markazi bo‘yicha qabul qilinadi, ya‘ni odam chiziqni butunlay kesib o‘tishi kerak.</p>
+      <p><b>Kirish kamerasi savdo zalini ko‘rmasin.</b> Konversiya maxraji chiziq atrofidagi tasmada sanaladi; kamera zalni ham ko‘rsa maxraj shishadi va foiz sun‘iy pasayadi. Birinchi ish kunidan keyin tekshiriladi: «eshikka yaqinlashgan» soni kirganlarning 1,5–4 barobari bo‘lsin.</p>
+
+      <h2 style="margin-top:34px">Tunda</h2>
+      <p>Tungi rejim kadrning o‘zidan aniqlanadi: <b>IR</b> — chiroq yoqilgan (oq-qora tasvir), <b>qorong‘i</b> — kamera tunda ko‘r. Panelda kamera yonida belgi bo‘lib chiqadi. «Qorong‘i» chiqsa kamerada IR yoritgich yo‘q yoki o‘chiq — do‘kon egasiga aytilsin, chunki bunday kamera tungi nazorat uchun ishonchsiz.</p>
+      <div class="danger-note"><b>Muhim:</b> do‘konning <b>ish vaqti</b> panelda kiritilmasa tungi nazorat umuman ishlamaydi — na «ish vaqtidan tashqari harakat», na tungi harakat hodisasi. Topshirishdan oldin Sozlamalar → ish vaqtini to‘ldiring.</div>
+      <p style="margin-top:16px">Tungi chegaralar haqiqiy IR kamerada hali kalibrlanmagan. Birinchi kechada heartbeatda kamera «IR» rejimida ko‘rinishi va buzilish ogohlantirishlari o‘smasligi tekshiriladi.</p>
     </section>
 
     <section class="guide-block" id="wiring">
       <h2>Nimani qayerga ulash kerak</h2>
-      <p>Kameralar va Sotqin bitta lokal tarmoqda bo‘ladi. Internetga NVR portini ochish shart emas: faqat Sotqin cloud’ga chiqadi.</p>
+      <p>Kameralar va do‘kon kompyuteri bitta lokal tarmoqda bo‘ladi. Internetga NVR portini ochish shart emas: faqat do‘kon kompyuteri cloud’ga chiqadi.</p>
       <figure aria-labelledby="wiring-title wiring-description">
         <div class="diagram-scroll">
           <svg class="wiring-diagram" viewBox="0 0 1120 450" role="img">
-            <title id="wiring-title">Kamera, NVR, router, Sotqin va ENES Cloud ulanish chizmasi</title>
-            <desc id="wiring-description">IP kameralar PoE kabel bilan NVRga, NVR va Sotqin LAN kabel bilan bitta router yoki switchga ulanadi. Sotqin internet orqali HTTPS bilan cloudga chiqadi. Monitor NVRga HDMI bilan ixtiyoriy ulanadi.</desc>
+            <title id="wiring-title">Kamera, NVR, router, do‘kon kompyuteri va ENES Cloud ulanish chizmasi</title>
+            <desc id="wiring-description">IP kameralar PoE kabel bilan NVRga, NVR va do‘kon kompyuteri LAN kabel bilan bitta router yoki switchga ulanadi. Do‘kon kompyuteri internet orqali HTTPS bilan cloudga chiqadi. Monitor NVRga HDMI bilan ixtiyoriy ulanadi.</desc>
             <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--blue)"></path></marker></defs>
             <rect class="node" x="20" y="55" width="190" height="105" rx="18"></rect><text class="node-title" x="115" y="94" text-anchor="middle">IP kameralar</text><text class="node-note" x="115" y="122" text-anchor="middle">CAM 1…4 · PoE RJ45</text>
             <rect class="node" x="315" y="55" width="190" height="105" rx="18"></rect><text class="node-title" x="410" y="94" text-anchor="middle">NVR / PoE</text><text class="node-note" x="410" y="122" text-anchor="middle">video arxiv shu yerda</text>
@@ -98,52 +141,59 @@
             <path class="wire" d="M800 107 H905"></path><text class="wire-label" x="852" y="91" text-anchor="middle">Internet</text>
             <rect class="node" x="315" y="300" width="190" height="105" rx="18"></rect><text class="node-title" x="410" y="339" text-anchor="middle">Monitor</text><text class="node-note" x="410" y="367" text-anchor="middle">ixtiyoriy · sozlash uchun</text>
             <path class="wire local" d="M410 160 V300"></path><text class="wire-label" x="430" y="236">HDMI</text>
-            <rect class="node" x="610" y="300" width="190" height="105" rx="18"></rect><text class="node-title" x="705" y="339" text-anchor="middle">Sotqin N100</text><text class="node-note" x="705" y="367" text-anchor="middle">AI · Ethernet LAN</text>
+            <rect class="node" x="610" y="300" width="190" height="105" rx="18"></rect><text class="node-title" x="705" y="339" text-anchor="middle">Do‘kon PC</text><text class="node-note" x="705" y="367" text-anchor="middle">Windows · AI · LAN</text>
             <path class="wire local" d="M705 300 V160"></path><text class="wire-label" x="725" y="236">LAN · RJ45</text>
           </svg>
         </div>
-        <figcaption class="topology-caption">Asosiy qoida: NVR va Sotqinning LAN portlari bir switch/routerga. Kameralar NVR PoE portlariga. NVR’ni internetdan ochmang.</figcaption>
+        <figcaption class="topology-caption">Asosiy qoida: NVR va do‘kon kompyuterining LAN portlari bir switch/routerga. Kameralar NVR PoE portlariga. NVR’ni internetdan ochmang.</figcaption>
       </figure>
-      <table class="port-table"><thead><tr><th>Qayerdan</th><th>Qayerga</th><th>Kabel / port</th><th>Vazifa</th></tr></thead><tbody><tr><td>IP kamera</td><td>NVR PoE yoki PoE switch</td><td>Cat5e/6 · RJ45 PoE</td><td>Video va elektr</td></tr><tr><td>NVR LAN</td><td>Router/switch LAN</td><td>Cat5e/6 · RJ45</td><td>Sotqin RTSP oqimini lokal oladi</td></tr><tr><td>Sotqin LAN</td><td>Router/switch LAN</td><td>Cat5e/6 · RJ45</td><td>NVR va cloud bilan aloqa</td></tr><tr><td>Router WAN</td><td>Internet</td><td>Provayder kabeli</td><td>Cloud’ga chiqish</td></tr><tr><td>NVR HDMI</td><td>Monitor</td><td>HDMI · ixtiyoriy</td><td>Kamerani joyida tekshirish</td></tr></tbody></table>
+      <table class="port-table"><thead><tr><th>Qayerdan</th><th>Qayerga</th><th>Kabel / port</th><th>Vazifa</th></tr></thead><tbody><tr><td>IP kamera</td><td>NVR PoE yoki PoE switch</td><td>Cat5e/6 · RJ45 PoE</td><td>Video va elektr</td></tr><tr><td>NVR LAN</td><td>Router/switch LAN</td><td>Cat5e/6 · RJ45</td><td>Do‘kon kompyuteri RTSP oqimini lokal oladi</td></tr><tr><td>Do‘kon PC LAN</td><td>Router/switch LAN</td><td>Cat5e/6 · RJ45</td><td>NVR va cloud bilan aloqa</td></tr><tr><td>Router WAN</td><td>Internet</td><td>Provayder kabeli</td><td>Cloud’ga chiqish</td></tr><tr><td>NVR HDMI</td><td>Monitor</td><td>HDMI · ixtiyoriy</td><td>Kamerani joyida tekshirish</td></tr></tbody></table>
     </section>
 
     <section class="guide-block" id="operating-systems">
       <h2>Linux va Windows o‘rnatish holati</h2>
       <div class="platform-grid">
         <article class="platform-card">
-          <span class="guide-status">Tayyor</span>
-          <h3>Ubuntu Server 24.04 LTS</h3>
-          <p>Rasmiy bir qatorli <code>curl</code> buyrug‘i, <code>systemd</code> avtomatik xizmati va Cloud pairing to‘liq ishlaydi.</p>
-        </article>
-        <article class="platform-card">
-          <span class="guide-status">Tayyor</span>
+          <span class="guide-status">Asosiy yo‘l</span>
           <h3>Windows 11 x64 / Windows 10</h3>
           <p>Rasmiy o‘rnatuvchi (<code>enes-windows-&lt;versiya&gt;.exe</code>): Keyingi → Keyingi → Tayyor. Python va AI modeli ichida, o‘rnatish uchun internet talab qilinmaydi. O‘rnatgach brauzerda <b>bulut paneli</b> ochiladi — kamera qidirish, kadrni tekshirish va chiziq chizish endi o‘sha yerda, ya’ni do‘kon kompyuteri oldida o‘tirish shart emas. Lokal sehrgar (<code>localhost:8760/setup</code>) usta rejimi sifatida qoladi: internetsiz o‘rnatishda va murakkab NVR uchun.</p>
         </article>
-
+        <article class="platform-card">
+          <span class="guide-status planned">Keyingi bosqich</span>
+          <h3>Ubuntu Server 24.04 LTS / ENES Box</h3>
+          <p>Kodi ishlaydi: bir qatorli <code>curl</code> buyrug‘i, <code>systemd</code> xizmati va cloud pairing. Lekin <b>sotuv fokusi hozir Windows yo‘lida</b> — Box alohida mahsulot sifatida keyin chiqadi. Ubuntu yo‘li faqat oldindan kelishilgan obyektlarda ishlatiladi.</p>
+        </article>
       </div>
     </section>
 
 
     <section class="guide-step">
-      <img class="guide-photo" src="/assets/installer/connect-hardware-v1.webp" alt="O‘rnatuvchi NVR, router va Sotqin mini-kompyuterini Ethernet orqali ulamoqda">
-      <div class="guide-copy"><span>1</span><h2>Uskuna va tarmoqni ulang</h2><ol><li>NVR, router va N100 mini-kompyuterni uzluksiz elektr manbaiga ulang.</li><li>NVR hamda Sotqinni bir router yoki switch’ga Ethernet kabel bilan ulang.</li><li>NVR monitorida barcha kameralar ishlayotganini tekshiring.</li><li>Router internetga chiqishini va DHCP manzil berayotganini tekshiring.</li><li>NVR’da alohida faqat live-view huquqiga ega ENES foydalanuvchisini yarating.</li></ol><div class="danger-note"><b>Muhim:</b> NVR paroli va RTSP manzilini oddiy chatga yubormang. Ular faqat o‘rnatuvchi panelidagi himoyalangan forma orqali kiritiladi.</div></div>
+      <img class="guide-photo" src="/assets/installer/connect-hardware-v1.webp" alt="O‘rnatuvchi NVR, router va do‘kon kompyuterini Ethernet orqali ulamoqda">
+      <div class="guide-copy"><span>1</span><h2>Kamerani joylashtiring va tarmoqni ulang</h2><ol><li>Kameralarni <a href="#kamera-joylashuvi">rol bo‘yicha</a> joylashtiring — kirish kamerasi eng talabchan.</li><li>NVR’da har kameraning <b>substreamini 1280×720</b> ga qo‘ying (ayniqsa kirish kamerasi).</li><li>NVR, router va do‘kon kompyuterini uzluksiz elektr manbaiga ulang.</li><li>NVR hamda do‘kon kompyuterini bir router yoki switch’ga Ethernet kabel bilan ulang.</li><li>NVR monitorida barcha kameralar ishlayotganini tekshiring.</li><li>Router internetga chiqishini va DHCP manzil berayotganini tekshiring.</li><li>NVR’da alohida faqat live-view huquqiga ega ENES foydalanuvchisini yarating.</li></ol><div class="danger-note"><b>Muhim:</b> NVR paroli va RTSP manzilini oddiy chatga yubormang. Ular faqat o‘rnatuvchi panelidagi himoyalangan forma orqali kiritiladi.</div></div>
     </section>
 
     <section class="guide-step">
-      <img class="guide-photo" src="/assets/installer/install-software-v1.webp" alt="O‘rnatuvchi Ubuntu terminalida Sotqin dasturini o‘rnatmoqda">
-      <div class="guide-copy"><span>2</span><h2>Ubuntu va rasmiy paketni o‘rnating</h2><ol><li>Mini-kompyuterga Ubuntu Server 24.04 LTS o‘rnating.</li><li>O‘rnatishda kuchli lokal parol yarating va avtomatik vaqt mintaqasini tekshiring.</li><li>Terminalda zarur paketlarni tayyorlang:</li></ol><code class="guide-command">sudo apt update
-sudo apt install -y curl ca-certificates python3 python3-venv</code><p>So‘ng paneldagi obyektni oching. Panel siz uchun cloud manzili va 6 xonali pairing kodi qo‘shilgan tayyor buyruq beradi.</p><code class="guide-command">curl -fsSL https://CLOUD/downloads/sotqin-installer.sh | sudo bash -s -- --cloud https://CLOUD --code ABC123</code></div>
+      <img class="guide-photo" src="/assets/installer/install-software-v1.webp" alt="O‘rnatuvchi do‘kon kompyuteriga ENES dasturini o‘rnatmoqda">
+      <div class="guide-copy"><span>2</span><h2>Dasturni do‘kon kompyuteriga o‘rnating</h2><ol><li>Kompyuterning <b>soati va vaqt mintaqasi</b> to‘g‘riligini tekshiring (Toshkent, UTC+5). Noto‘g‘ri mintaqa tungi nazoratni jimgina buzadi va buni keyin masofadan sezib bo‘lmaydi.</li><li><a href="/install">Yuklab olish sahifasi</a>dan rasmiy o‘rnatuvchini oling.</li><li>Ishga tushiring: Keyingi → Keyingi → O‘rnatish. Python va AI modeli ichida — o‘rnatish uchun internet talab qilinmaydi.</li><li>O‘rnatgach brauzerda panel ochiladi.</li></ol><div class="danger-note"><b>Vaqt mintaqasi haqida:</b> kompyuter mintaqasi o‘zgartirilsa ishlab turgan jarayon buni <b>ko‘rmaydi</b> — dasturni qayta ishga tushirish kerak. Shuning uchun mintaqa o‘rnatishdan OLDIN to‘g‘rilanadi.</div><p>Ubuntu / ENES Box yo‘li keyingi bosqich va faqat oldindan kelishilgan obyektlarda ishlatiladi.</p></div>
     </section>
 
     <section class="guide-step">
       <img class="guide-photo" src="/assets/installer/handoff-customer-v1.webp" alt="O‘rnatuvchi mijozga to‘rtta kameraning cloud holatini ko‘rsatmoqda">
-      <div class="guide-copy"><span>3</span><h2>Cloud, kameralar va mijozni bog‘lang</h2><ol><li>O‘rnatuvchi panelida kamera-01…kamera-04 nomi va NVR substream RTSP manzilini kiriting.</li><li>Pairing buyrug‘ini bajaring; kod bir marta ishlaydi va 48 soatda eskiradi.</li><li>Panelda Sotqin <b>online</b>, kameralar esa <b>online</b> bo‘lguncha kuting.</li><li>Mijoz loginini admin yaratadi. Mijoz o‘z panelida qurilma, kamera, hodisa va obuna holatini ko‘radi.</li></ol><div class="checklist"><label><input type="checkbox"> Sotqin online</label><label><input type="checkbox"> Barcha kameralar online</label><label><input type="checkbox"> Mijoz login qildi</label><label><input type="checkbox"> Test hodisa ko‘rindi</label><label><input type="checkbox"> Kabel va qurilma mahkamlandi</label><label><input type="checkbox"> Ish “Yakunlandi” qilindi</label></div></div>
+      <div class="guide-copy"><span>3</span><h2>Cloud, kameralar va mijozni bog‘lang</h2><ol><li>O‘rnatuvchi panelida kamera-01…kamera-04 nomi va NVR <b>substream</b> RTSP manzilini kiriting.</li><li>Ulanish kodini kiriting; kod bir marta ishlaydi va 48 soatda eskiradi.</li><li>Panelda qurilma <b>online</b>, kameralar esa <b>online</b> bo‘lguncha kuting.</li><li>Har kameraga <b>rol</b> qo‘ying va kirish kamerasida yuz tanish belgisini tekshiring.</li><li>Mijoz loginini admin yaratadi. Mijoz o‘z panelida qurilma, kamera, hodisa va obuna holatini ko‘radi.</li></ol><div class="checklist"><label><input type="checkbox"> Qurilma online</label><label><input type="checkbox"> Barcha kameralar online</label><label><input type="checkbox"> Kirish kamerasida «yuz tanish uchun yetarli» belgisi</label><label><input type="checkbox"> Eshik oldidagi odam kadrning 1/3 idan baland</label><label><input type="checkbox"> Kirish chizig‘i chizildi, ogohlantirish yo‘q</label><label><input type="checkbox"> Kassa/zal zonalari chizildi, ogohlantirish yo‘q</label><label><input type="checkbox"> Har kameraga rol qo‘yildi</label><label><input type="checkbox"> Do‘kon ish vaqti kiritildi</label><label><input type="checkbox"> Mijoz login qildi</label><label><input type="checkbox"> Test hodisa ko‘rindi</label><label><input type="checkbox"> Kabel va qurilma mahkamlandi</label><label><input type="checkbox"> Ish “Yakunlandi” qilindi</label></div></div>
     </section>
 
     <section class="utility-card">
       <h2>Nosozlikni tez aniqlash</h2>
-      <div class="install-flow"><article><span>01</span><h3>Installer to‘xtadi</h3><p>Internet, DNS va vaqtni tekshiring. Buyruqni yana ishga tushirish xavfsiz.</p></article><i></i><article><span>02</span><h3>Pairing o‘tmadi</h3><p>Kod ishlatilgan yoki eskirgan. Paneldan yangi kod yarating.</p></article><i></i><article><span>03</span><h3>Kamera offline</h3><p>RTSP substream, NVR IP, login/parol va lokal tarmoqni tekshiring.</p></article><i></i><article><span>04</span><h3>Cloud offline</h3><p>Ethernet, internet va <code>systemctl status enes-sotqin</code> holatini tekshiring.</p></article></div>
+      <div class="install-flow"><article><span>01</span><h3>O‘rnatuvchi to‘xtadi</h3><p>Antivirus yoki «Windows kompyuteringizni himoya qildi» oynasi. Faylni qayta ishga tushirish xavfsiz.</p></article><i></i><article><span>02</span><h3>Ulanish kodi o‘tmadi</h3><p>Kod ishlatilgan yoki eskirgan. Paneldan yangi kod yarating.</p></article><i></i><article><span>03</span><h3>Kamera offline</h3><p>RTSP substream, NVR IP, login/parol va lokal tarmoqni tekshiring.</p></article><i></i><article><span>04</span><h3>Cloud offline</h3><p>Ethernet, internet va «ENES Monitoring» vazifasi ishlayotganini tekshiring (Task Scheduler).</p></article></div>
+      <table class="port-table" style="margin-top:24px"><thead><tr><th>Belgi</th><th>Eng ehtimolli sabab</th><th>Nima qilinadi</th></tr></thead><tbody>
+        <tr><td>Davomat hech kimni tanimaydi</td><td>Substream 720p emas</td><td>NVR’da substreamni 1280×720 ga qo‘ying</td></tr>
+        <tr><td>Kirdi/chiqdi nol</td><td>Chiziq juda qisqa yoki noto‘g‘ri joyda</td><td>Chiziqni eshikdan bir qadam ichkariga, uzunroq chizing</td></tr>
+        <tr><td>Konversiya juda past</td><td>Kirish kamerasi savdo zalini ko‘ryapti</td><td>Kamerani eshik oldiga toraytiring</td></tr>
+        <tr><td>Navbat hodisasi yo‘q</td><td>Navbat zonasi chizilmagan yoki mayda</td><td>Kassa oldiga kattaroq zona chizing</td></tr>
+        <tr><td>Tunda hech narsa yo‘q</td><td>Ish vaqti kiritilmagan</td><td>Sozlamalar → ish vaqti</td></tr>
+        <tr><td>Panelda «qorong‘i» belgisi</td><td>Kamerada IR yoritgich yo‘q/o‘chiq</td><td>Kamera sozlamasini tekshiring, egaga aytilsin</td></tr>
+        <tr><td>Klip yozilmaydi</td><td>Asosiy oqim manzili berilmagan</td><td>Kameraga <code>record_url</code> qo‘shing</td></tr>
+      </tbody></table>
       <div class="guide-actions"><a class="button" href="/installer">Panelga kirish</a><a class="button button-ghost" href="/install">Mijoz yo‘riqnomasi</a></div>
     </section>
   </main>

@@ -274,3 +274,43 @@ def test_an_old_device_does_not_wipe_the_known_size(client, shop: Dict[str, Any]
 def test_an_unknown_camera_does_not_break_the_heartbeat(client, shop: Dict[str, Any]) -> None:
     """Telemetriya kamera ro'yxatga olinmagani uchun yo'qolmasin."""
     _beat(client, shop, [{"camera_id": "camera-04", "width": 640, "height": 360}])
+
+
+# ── 4) Panel uchun QAROR: matn emas, holat ─────────────────────────────
+
+
+def test_the_camera_list_carries_the_face_id_decision(store: CloudStore) -> None:
+    """Panel uch tilda — server matni esa o'zbekcha.
+
+    Shuning uchun QAROR (`face_id_state`) va MATN (`face_id_reason`)
+    ajratilgan: qaror `enes/camera_roles.py` da bir marta chiqadi,
+    matnni har sahifa o'z tilida chizadi.  Ega paneli, usta paneli va
+    admin kartasi uchtasi ham shu bitta javobni o'qiydi — chegara uch
+    joyda qayta hisoblanmaydi.
+    """
+    site_id = _camera(store)
+
+    assert store.list_cameras(site_id)[0]["face_id_state"] == "unknown"
+
+    for width, height, expected in (
+        (352, 288, "low"),
+        (854, 480, "edge"),
+        (1280, 720, "ok"),
+        (1920, 1080, "ok"),
+    ):
+        store.record_camera_frame_size(site_id, "camera-01", width=width, height=height)
+        camera = store.list_cameras(site_id)[0]
+        assert camera["face_id_state"] == expected, f"{height}p → {expected} kutilgan"
+        assert camera["face_id_reason"], "sabab matni ham berilsin (usta va admin uchun)"
+
+
+def test_the_two_false_cases_are_told_apart() -> None:
+    """«Chegarada» va «720p kerak» ikkalasi ham `False` — lekin BOSHQA ish.
+
+    Birinchisida kamerani yaqinlashtirish yetadi, ikkinchisida NVR
+    sozlamasi o'zgaradi.  `bool` bu farqni yo'qotardi.
+    """
+    from enes.camera_roles import face_id_check, face_id_state
+
+    assert face_id_check(480)[0] is False and face_id_state(480) == "edge"
+    assert face_id_check(288)[0] is False and face_id_state(288) == "low"

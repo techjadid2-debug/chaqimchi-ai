@@ -15,7 +15,19 @@ export type Site = {
 };
 
 export type CameraState = { camera_id: string; state: string; reason?: string; reported_at?: string; night_mode?: string | null };
-export type Camera = { camera_id: string; label?: string; enabled?: boolean };
+export type Camera = {
+  camera_id: string;
+  label?: string;
+  enabled?: boolean;
+  role?: string;
+  width?: number | null;
+  height?: number | null;
+  /* Yuz tanish yaroqliligi — QAROR serverda bir marta chiqadi
+     (`enes/camera_roles.py: face_id_state`), matnni panel o'z tilida
+     chizadi.  `unknown` — qurilma hali kadr yubormagan; bu "yaroqsiz"
+     degani EMAS. */
+  face_id_state?: "unknown" | "ok" | "edge" | "low";
+};
 export type EventItem = {
   id?: string;
   event_type: string;

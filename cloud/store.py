@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional
 from cryptography.fernet import Fernet, InvalidToken
 
 from cloud.portal_auth import hash_password, normalize_username, verify_password
-from enes.camera_roles import CAMERA_ROLES, ROLE_NONE
+from enes.camera_roles import CAMERA_ROLES, ROLE_NONE, face_id_check, face_id_state
 from enes.licensing.plans import (
     DEFAULT_USD_RATE_UZS,
     LITE_MONTHLY_PRICE_USD_CENTS,
@@ -813,6 +813,18 @@ class CloudStore:
             item.setdefault("origin", "panel")
             # NULL ham, eski qurilmadan qolgan bo'sh satr ham — "tanlanmagan".
             item["role"] = str(item.get("role") or "") or ROLE_NONE
+            # Yuz tanish uchun yaroqlimi — SHU YERDA hisoblanadi, chunki
+            # javobni ega paneli, usta paneli va admin kartasi ham
+            # so'raydi.  Uch joyda alohida hisoblansa ular bir-biridan
+            # ajralib ketardi (funksiya darvozasi ilgari AYNAN shunday
+            # uch joyga tarqalgan edi).
+            #
+            # `None` — o'lcham noma'lum, ya'ni "qurilma hali aytmadi".
+            # Bu "yaroqsiz" degani EMAS va panel ikkalasini boshqacha
+            # ko'rsatishi shart.
+            height = int(item.get("height") or 0)
+            item["face_id_state"] = face_id_state(height)
+            item["face_id_ok"], item["face_id_reason"] = face_id_check(height)
             # Qurilmadan kelgan qatorda manzil yo'q.  `source` ni bo'sh satr
             # bilan qaytarish MUMKIN EMAS: `cloud_config.apply()` aynan
             # `if item.get("source")` bo'yicha ishlaydi va bo'sh manzil

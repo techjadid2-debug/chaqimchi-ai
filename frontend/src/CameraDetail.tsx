@@ -6,7 +6,7 @@ import { EventTimeline } from "./EventTimeline";
 import { HeatmapThumb } from "./Heatmap";
 import { t } from "./i18n";
 import { useOverview } from "./overview";
-import type { Dashboard } from "./types";
+import type { Camera, Dashboard } from "./types";
 
 /* Alohida kamera sahifasi — dizayn-3 «Camera 01» ekrani: jonli kadr,
  * shu kameraning tahlili va hodisalari.  Manzil: `/owner/cameras/<id>/<tab>`.
@@ -67,6 +67,41 @@ export function CameraDetail({ dashboard, siteId, cameraId, tab, onNavigate }: {
       </Card>
     </>
     : tab === "alerts" ? <EventEvidence kind="owner" siteId={siteId} cameraId={cameraId} dashboard={dashboard} onNavigate={onNavigate}/>
-    : <CamerasBlock dashboard={dashboard} siteId={siteId} only={cameraId} expanded/>}
+    : <>
+      <CamerasBlock dashboard={dashboard} siteId={siteId} only={cameraId} expanded/>
+      <FaceIdNote camera={camera}/>
+    </>}
   </>;
+}
+
+
+/* Yuz tanish yaroqliligi — "nima qilish kerak" bilan birga.
+ *
+ * Plitkadagi belgi faqat NIMA ekanini aytadi; bu yerda joy bor, shuning
+ * uchun NEGA va NIMA QILISH ham aytiladi.  Chegaralar serverdan keladi
+ * (`face_id_state`) — panel ularni qayta hisoblamaydi, aks holda ikki
+ * manba bir-biridan ajralib ketardi (`FACE_MIN_BBOX_RATIO` saboqi). */
+function FaceIdNote({ camera }: { camera: Camera }) {
+  const state = camera.face_id_state;
+  /* Kirish kamerasi bo'lmasa jim turadi: davomat faqat shu rolda
+     ishlaydi va boshqa kameraga «720p kerak» yozish shovqin. */
+  if (camera.role !== "entrance" || !state) return null;
+  const size = camera.width && camera.height ? `${camera.width}×${camera.height}` : "";
+  if (state === "ok") {
+    return <Card className="section-gap"><div className="card-body">
+      <div className="note ok"><b>{t("panel.cameras.face_id_ok")}</b>{size ? ` · ${t("panel.cameras.stream_size", { size })}` : ""}</div>
+    </div></Card>;
+  }
+  if (state === "unknown") {
+    return <Card className="section-gap"><div className="card-body">
+      <div className="note">{t("panel.cameras.face_id_unknown")}</div>
+    </div></Card>;
+  }
+  return <Card className="section-gap"><div className="card-body">
+    <div className={state === "low" ? "note warn" : "note"}>
+      <b>{t(state === "low" ? "panel.cameras.face_id_low" : "panel.cameras.face_id_edge")}</b>
+      {size ? ` · ${t("panel.cameras.stream_size", { size })}` : ""}
+      <p>{t(state === "low" ? "panel.cameras.face_id_hint" : "panel.cameras.face_id_edge_hint")}</p>
+    </div>
+  </div></Card>;
 }

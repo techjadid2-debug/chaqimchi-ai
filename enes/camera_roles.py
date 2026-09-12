@@ -144,14 +144,43 @@ class RoleSuggestion:
     keep: bool = True
 
 
-def face_id_check(height: int) -> tuple:
-    """(face_id_ok, sabab) — oqim balandligidan yuz tanish imkoni."""
+#: Yuz tanish yaroqliligining TO'RT holati — mashina o'qiydigan qiymat.
+#:
+#: Nega `bool` yetarli emas: "chegarada" va "720p kerak" ikkalasi ham
+#: `False`, lekin usta uchun ular BOSHQA ish.  Birinchisida kamerani
+#: yaqinlashtirish yetadi, ikkinchisida NVR sozlamasi o'zgaradi.
+#: Sabab matni o'zbekcha va panel uch tilda — shuning uchun QAROR
+#: (holat) va MATN ajratilgan: qaror bu yerda bir marta chiqadi, matnni
+#: har sahifa o'z tilida chizadi (`panel.cameras.face_id_*`).
+FACE_ID_UNKNOWN = "unknown"
+FACE_ID_OK = "ok"
+FACE_ID_EDGE = "edge"
+FACE_ID_LOW = "low"
+
+
+def face_id_state(height: int) -> str:
+    """Oqim balandligidan yuz tanish holati — yagona qaror nuqtasi."""
     if height <= 0:
-        return None, "O'lcham noma'lum — yuz tanish imkonini aytib bo'lmaydi"
+        return FACE_ID_UNKNOWN
     ratio = face_min_bbox_ratio(height)
     if ratio <= _FACE_RATIO_OK:
-        return True, f"{height}p oqim — yuz tanish uchun yetarli"
+        return FACE_ID_OK
     if ratio <= _FACE_RATIO_LIMIT:
+        return FACE_ID_EDGE
+    return FACE_ID_LOW
+
+
+def face_id_check(height: int) -> tuple:
+    """(face_id_ok, sabab) — o'zbekcha matn bilan (usta va admin uchun).
+
+    Qaror `face_id_state()` dan keladi; bu yerda faqat matn yasaladi.
+    """
+    state = face_id_state(height)
+    if state == FACE_ID_UNKNOWN:
+        return None, "O'lcham noma'lum — yuz tanish imkonini aytib bo'lmaydi"
+    if state == FACE_ID_OK:
+        return True, f"{height}p oqim — yuz tanish uchun yetarli"
+    if state == FACE_ID_EDGE:
         return False, (
             f"{height}p oqim yuz tanish uchun chegarada — odam kameraga "
             "juda yaqin kelishi kerak bo'ladi"

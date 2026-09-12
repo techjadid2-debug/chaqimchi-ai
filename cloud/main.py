@@ -4763,6 +4763,7 @@ async def admin_update_config(
     updated = get_event_store().update_site_config(
         site_id, _preserve_server_config_flags(site_id, body.model_dump())
     )
+    checked = _with_geometry_problems(updated)
     get_store().audit_portal_action(
         "admin.config.saved",
         # `require_admin` statik kalit ishlatilganda `None` qaytaradi —
@@ -4772,7 +4773,7 @@ async def admin_update_config(
         target_id=site_id,
         detail={"zones": len(body.zones), "lines": len(body.lines)},
     )
-    return updated
+    return checked
 
 
 @app.post("/api/v1/admin/sites/{site_id}/cameras/{camera_id}/preview")
@@ -5131,6 +5132,7 @@ async def installer_update_config(
     updated = get_event_store().update_site_config(
         site_id, _preserve_server_config_flags(site_id, body.model_dump())
     )
+    checked = _with_geometry_problems(updated)
     get_store().audit_portal_action(
         "installer.config.saved",
         actor_id=installer.account_id,
@@ -5138,7 +5140,7 @@ async def installer_update_config(
         target_id=site_id,
         detail={"zones": len(body.zones), "lines": len(body.lines)},
     )
-    return updated
+    return checked
 
 
 @app.get("/api/v1/installer/sites/{site_id}/cameras/{camera_id}/preview")
@@ -8424,6 +8426,29 @@ async def owner_get_config(
     return get_event_store().get_site_config(owner.site_id)
 
 
+def _with_geometry_problems(saved: Dict[str, Any]) -> Dict[str, Any]:
+    """Saqlangan chizmani darhol tekshirib javobga qo'shadi.
+
+    Nega umuman kerak: yaroqsiz chizma muvaffaqiyatli saqlanadi, revizya
+    ko'tariladi va qurilma uni qabul qiladi — faqat hodisa hech qachon
+    chiqmaydi.  Pilot do'konida 4 piksellik chiziq va 29x20 piksellik
+    zona aynan shunday oylab jim turgan, nosozlik esa faqat ADMIN
+    kartasida ko'rinardi — ya'ni chizmani chizgan odam hech narsa
+    bilmasdi.
+
+    Tekshiruv qayta yozilmaydi: `config_health.geometry_problems()` ning
+    o'zi chaqiriladi.  Panelda takrorlansa ikki chegara vaqt o'tib
+    bir-biridan ajralib ketardi (`FACE_MIN_BBOX_RATIO` saboqi).
+
+    Uchta chaqiruvchi ham shu yerdan o'tadi (ega, admin, o'rnatuvchi) —
+    funksiya darvozasi ilgari aynan shunday uch joyga tarqalib ketgan edi.
+    """
+    return {
+        **saved,
+        "geometry_problems": config_health.geometry_problems(saved.get("config") or {}),
+    }
+
+
 def _validate_site_config(body: SiteConfigBody) -> None:
     """Do'kon sozlamasining umumiy tekshiruvi.
 
@@ -8825,9 +8850,10 @@ async def owner_update_config(
 ) -> Dict[str, Any]:
     require_owner_role(owner, "owner", "service_admin")
     _validate_site_config(body)
-    return get_event_store().update_site_config(
+    saved = get_event_store().update_site_config(
         owner.site_id, _preserve_server_config_flags(owner.site_id, body.model_dump())
     )
+    return _with_geometry_problems(saved)
 
 
 @app.get("/api/v1/owner/employees")

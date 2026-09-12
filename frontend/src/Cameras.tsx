@@ -195,6 +195,14 @@ export function CamerasBlock({ dashboard, siteId, expanded = false, only = "", o
             yo'q).  Ikkinchisi ega uchun harakatga chaqiriq: IR kamera. */}
         {stateMap.get(camera.camera_id)?.night_mode === "ir" ? <span className="camera-night is-ir"><Icon name="moon" size={12}/>{t("panel.cameras.night_ir")}</span>
           : stateMap.get(camera.camera_id)?.night_mode === "dark" ? <span className="camera-night is-dark"><Icon name="moon" size={12}/>{t("panel.cameras.night_dark")}</span> : null}
+        {/* Yuz tanish ogohlantirishi FAQAT kirish kamerasida va faqat
+            oqim yetmasa chiziladi.  Omborga «720p kerak» yozish shovqin:
+            u yerda davomat ishlatilmaydi.  `unknown` ham chizilmaydi —
+            qurilma birinchi kadrni bir daqiqada yuboradi va o'shangacha
+            ogohlantirish yolg'on bo'lardi. */}
+        {camera.role === "entrance" && (camera.face_id_state === "low" || camera.face_id_state === "edge")
+          ? <span className={`camera-night is-${camera.face_id_state === "low" ? "dark" : "ir"}`}><Icon name="users" size={12}/>{t(camera.face_id_state === "low" ? "panel.cameras.face_id_low" : "panel.cameras.face_id_edge")}</span>
+          : null}
         <div className="camera-meta">
           <div className="camera-name"><StatusDot state={state}/><span>{name}</span></div>
           <small>{stateMap.get(camera.camera_id)?.reason || t("panel.cameras.state_loading")}</small>

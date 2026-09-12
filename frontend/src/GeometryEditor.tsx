@@ -37,6 +37,11 @@ function loadEditor(): Promise<void> {
 type Camera = { camera_id: string; label?: string };
 type SiteConfig = Record<string, unknown> & { zones?: ZoneShape[]; lines?: LineShape[] };
 
+/* Serverdagi `config_health.geometry_problems()` qaytaradigan yozuv.
+   `problem` — tayyor o'zbekcha matn (piksel bilan): usta va ega uchun
+   bitta manba, panelda qayta yozilmaydi. */
+type GeometryProblem = { kind: string; name: string; camera_id: string; problem: string };
+
 /** Kadrni yuklaydi.
  *
  * `<img src=…>` ishlamaydi: preview endpointi Bearer token talab
@@ -97,6 +102,11 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  /* Server saqlagandan keyin chizmani o'zi tekshiradi
+     (`cloud/config_health.py`).  Panel chegaralarni QAYTA HISOBLAMAYDI —
+     ikki manba bir-biridan ajralib ketishi shu loyihada allaqachon
+     bir marta qimmatga tushgan. */
+  const [problems, setProblems] = useState<GeometryProblem[]>([]);
 
   const sync = useCallback(() => {
     if (!editor.current) return;
@@ -184,13 +194,16 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
       // `...config` SHART: usiz ish vaqti, odam chegarasi va davomat
       // sozlamalari standart qiymatga qaytardi — validator to'liq
       // hujjatni kutadi.
-      await api(url.config, kind, {
+      const result = await api<{ geometry_problems?: GeometryProblem[] }>(url.config, kind, {
         method: "PUT",
         ...siteHeader,
         body: JSON.stringify({ ...config, zones: current.zones, lines: current.lines }),
       });
       setConfig({ ...config, zones: current.zones, lines: current.lines });
-      setSaved(true);
+      setProblems(result?.geometry_problems || []);
+      /* Nosozlik bo'lsa yashil «Saqlandi ✓» chizilmaydi: chizma
+         saqlangan, lekin ISHLAMAYDI va odam ketib qolmasligi kerak. */
+      setSaved(!(result?.geometry_problems || []).length);
       onSaved?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("panel.geometry.save_failed"));
@@ -268,6 +281,17 @@ export function GeometryEditor({ siteId, cameras, kind = "owner", onSaved }: { s
         <button className="btn btn-primary btn-wide" disabled={saving || !total} onClick={() => void save()}>
           {saving ? t("panel.common.saving") : saved ? `${t("panel.common.saved")} ✓` : t("panel.geometry.save_and_start")}
         </button>
+        {/* Yaroqsiz chizma: SAQLANGAN, lekin hodisa bermaydi.  Matn
+            serverdan keladi va piksel bilan aytadi («Chiziq juda qisqa:
+            4 piksel») — pilotda aynan shu holat oylab jim turgan va
+            faqat admin kartasida ko'rinardi. */}
+        {problems.length ? <div className="note warn" role="status">
+          <b>{t("panel.geometry.problems_title")}</b>
+          <ul>{problems.map((item, index) => (
+            <li key={`${item.kind}-${item.camera_id}-${index}`}>{item.camera_id} · {item.name}: {item.problem}</li>
+          ))}</ul>
+          <p>{t("panel.geometry.problems_hint")}</p>
+        </div> : null}
         {/* Matn kamera sehrgaridagi bilan bir xil — bitta kalit, ikki
             joyda takrorlanmaydi. */}
         <p className="metric-note">

@@ -9,6 +9,29 @@
 
 ## HOZIRGI HOLAT · 2026-09-12
 
+- **🌐 BOSQICH H — ADMIN PANELI UCH TILDA (2026-09-12, shox
+  `reja-2026-09-12`: `446a0e9`, `4c51611`).**  Admin paneli ~460 ta
+  qotirilgan o'zbekcha satr bilan yashagan edi (atigi 19 ta `t()`, ular
+  ham faqat `LeadsPage` da) — ega va usta panellari esa 2026-09-08 dan
+  UZ/RU/EN.  Endi beshala fayl ham katalogdan o'qiydi: **624 ta
+  `panel.admin.*` kaliti**, 715 ta `t()` chaqiruvi, uchala tilda teng.
+  - **Ikki commit:** `446a0e9` — `admin.tsx` + `AdminHome` + `AdminTeam`
+    + `AdminSettings` (356 kalit); `4c51611` — `AdminCustomer.tsx`
+    (268 kalit, faylning o'zi 640 qator).
+  - **Ro'yxatlar KALIT saqlaydi, matn emas** (`NAV_ITEMS`,
+    `CONNECTION_KEY`, `ACCOUNT_STATUS_KEY`, `ROLE_KEY`, `STATUS_KEY`,
+    `ASSIGN_KEY`, `CONN_KEY`, `LICENSE_KEY`, `PROBE_KEY`, `CONFIG_KEY`,
+    `PLAN_KEY`) — modul yuklanganda til hali tanlanmagan.
+  - **Yangi qulflar** `tests/test_i18n_surfaces.py` da: manbada
+    o'zbekcha apostrof, tarjimasiz JSX matn tuguni yoki tarjimasiz
+    `placeholder`/`aria-label` qolmasin; chaqirilgan har kalit uchala
+    katalogda bo'lsin.
+  - ⚠️ **Qobiq qurilmagan:** `cloud/static/v2/*.html` bundle'i qayta
+    qurilmadi (`npm run build` asosiy sessiyada) — matn brauzerga faqat
+    shundan keyin yetadi.
+  - **Holat:** `2451 passed, 13 skipped`, `ruff` toza, `tsc --noEmit`
+    toza, `build_i18n.py --check` toza.
+
 - **✅ DEPLOY QILINDI VA JONLI TASDIQLANDI (2026-09-12 ~20:40 UTC,
   `main` = `238e6e6`).**  Sakkiz blok (A, B, C, D, E, F, G, I) jonli
   serverga chiqdi.  `main` `reja-2026-09-12` dan fast-forward qilindi;
@@ -885,7 +908,11 @@ Bajarilgani: **A, D1, D2–D6** (yuqoriga qarang).  Qolgani:
    serverdagi 1,9 GB birinchi tozalashdan keyin o'lchansin
    (`scripts/prune_releases.py --reja` → host tomonda `rm`);
    UptimeRobot `/health/deep`; `.env.production`.
-7. **H — admin i18n** (~8–10 soat, eng kam shoshilinch, E dan keyin).
+7. ✅ **H — admin i18n bajarildi** (`446a0e9`, `4c51611`).  ⏳ Qolgani:
+   **`npm run build`** (bundle'siz matn brauzerga yetmaydi) va ruscha
+   yorliqlarning ekranda toshib ketmasligini ko'z bilan tekshirish —
+   RU matni UZ dan 1,3–1,6 barobar uzun.  Usta paneli (`panel.installer.*`)
+   allaqachon uch tilda, ya'ni H bloki to'liq yopildi.
 
 **UI/UX (2026-09-11) — qoldiqlar:**
 1. ✅ Deploy bajarildi.  ⏳ Egadan: panelga kirib bosh sahifa,
@@ -896,7 +923,8 @@ Bajarilgani: **A, D1, D2–D6** (yuqoriga qarang).  Qolgani:
    tekshirish (pilot tirilgach), kerak bo'lsa `paintHeat` alfa yig'indi
    usuli; `#aloqa` fonida `shop-corridor-v1.webp`; «AI yordamchi» tabini
    funksiya o'chiq bo'lsa yashirish; Modal fokus tuzog'i; kirish sahifasi
-   standart tili (brauzer EN bo'lsa UZ?); `admin.tsx` literal matnlari;
+   standart tili (brauzer EN bo'lsa UZ?); ✅ `admin.tsx` literal matnlari
+   (H bloki, `446a0e9`);
    `panel-bugun-v4.webp` (bosh sahifa o'zgardi — sayt skrinshoti eski);
    EventEvidence kamera sahifasida ikkinchi sarlavhasiz (`embedded`).
 4. Playwright `.venv` da ad-hoc (requirements-dev'da yo'q) — harnes CI'da
@@ -1463,6 +1491,15 @@ taklif qilish kerak.
 - **`t` ni soyalash — tayyor xato.**  `const t=(n:number)=>…` i18n `t()`
   ni bosib turardi; renomlashning O'ZI ikkita chaqiruvni ochib berdi.
   Son formatlagichi `fmt` deb nomlanadi.
+- **Matnni katalogga ko'chirish MANBAGA qaraydigan testni jimgina
+  yo'qotadi.**  `test_admin_panel_promises_the_same_interval`
+  `AdminCustomer.tsx` ichidan «15 daqiqa ichida» ni qidirardi — jumla
+  `panel.admin.camera_modal.saved` ga ko'chgach test yiqildi, lekin
+  `in` o'rniga `not in` yozilganida JIMGINA o'tib ketardi va o'rnatuvchi
+  jadvali bilan panel va'dasi ajralib ketardi.  Shunday testni
+  ko'chirayotganda: qidiruvni KATALOGGA yo'naltiring va **uchala tilni**
+  tekshiring — tarjimon «10 минут» deb yozsa, va'da tildan tilga
+  o'zgarardi.
 - **`useEffect` deps'ga obyekt qo'shsangiz standart qiymatni MODUL
   darajasiga chiqaring.**  `legacy: LegacyRoutes = {}` har chizishda
   yangi obyekt yasaydi — shu sababdan `router.ts` da u deps'dan
@@ -2182,6 +2219,42 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 
 # Tarix
 
+### 2026-09-12 — H bloki: admin paneli uch tilda (`446a0e9`, `4c51611`)
+
+Nima: jamoa admin panelini o'z tilida ochadi — menyu, jadval,
+diagnostika qatorlari va 13 ta modal oyna UZ/RU/EN.  624 ta yangi
+`panel.admin.*` kaliti, admin fayllarida 715 ta `t()` chaqiruvi.
+
+Nega: ega va usta panellari 2026-09-08 dan uch tilda edi, admin esa
+~460 ta qotirilgan o'zbekcha satr bilan qolgan (19 ta `t()`, ular ham
+faqat `LeadsPage` da).  Bu ichki vosita, lekin uni jamoa ishlatadi va
+qarz jimgina o'sardi: yangi tugmani `t()` siz yozish har doim osonroq.
+
+Qayerda: `frontend/src/admin.tsx`, `AdminHome.tsx`, `AdminTeam.tsx`,
+`AdminSettings.tsx` (1-commit); `AdminCustomer.tsx` (2-commit);
+`i18n/{uz,ru,en}.json` + `frontend/src/i18n/catalogue.generated.ts`.
+
+Test: `tests/test_i18n_surfaces.py:
+test_the_admin_panel_keeps_no_hardcoded_uzbek` (manbada o'zbekcha
+apostrof, tarjimasiz JSX matn tuguni yoki tarjimasiz
+`placeholder`/`aria-label` qolmasin) va
+`test_the_admin_panel_really_uses_the_catalogue` (chaqirilgan har kalit
+uchala katalogda).  `tests/test_panel_v2.py:
+test_no_panel_resolves_a_label_at_import_time` avvalgidek qulflaydi.
+
+Diqqat: `test_admin_panel_promises_the_same_interval`
+(`tests/test_windows_installer.py`) matnni katalogda qidiradigan qilib
+qayta yozildi — «15 daqiqa ichida» va'dasi endi `AdminCustomer.tsx` da
+emas, ya'ni eski tekshiruv uni butunlay yo'qotgan edi.  Yangi qulf
+uchala tilni tekshiradi.  **Bundle qurilmagan:** matn brauzerga faqat
+`npm run build` dan keyin yetadi.  Aloqa holati uchun katalogda uch xil
+o'zbekcha matn saqlandi (`conn.online` «Aloqada», `conn.online_plain`
+«Onlayn», `conn.stale` «Eskirgan», `conn.stale_long` «Aloqa eskirgan») —
+uchala matn kodda bor edi va bu ish o'zbekchani o'zgartirmasligi kerak.
+Ataylab tarjima QILINMAGANI: `PASSWORD_WORDS` (telefonda aytib
+beriladigan parol lug'ati — server bilan bir xil bo'lishi shart) va
+`consent_note` (audit yozuvi bazada qoladi; admin tiliga qarab
+o'zgarsa, bitta jurnalda uch til yig'ilardi).
 ### 2026-09-12 — sayt, konversiya, karta va usta paneli (`ac30722`…`d7e57c4`)
 
 Nima: (1) saytdagi forma xatosi endi O'QILADIGAN matn va so'rov

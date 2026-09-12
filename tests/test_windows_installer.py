@@ -9,6 +9,7 @@ Har bir tekshiruv oldin haqiqatan yuz bergan xatodan kelib chiqqan.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -319,18 +320,29 @@ def test_update_task_runs_with_admin_rights() -> None:
     assert "/RL HIGHEST" in source
 
 
+#: Panel «15 daqiqa ichida» deb va'da beradigan kalitlar: kamera saqlash
+#: va yangilanish siyosati.  2026-09-12 dan matn `AdminCustomer.tsx` da
+#: emas, katalogda — ya'ni endi TARJIMADA ham raqam adashishi mumkin edi.
+PROMISE_KEYS = ("panel.admin.camera_modal.saved", "panel.admin.policy.saved")
+
+
 def test_admin_panel_promises_the_same_interval() -> None:
     """Panel aytgan vaqt o'rnatuvchidagi jadval bilan mos bo'lsin.
 
     Eski `admin.html` uch joyda «15 daqiqa ichida» deb va'da berardi
     (reliz, kamera saqlash, sozlama saqlash).  2026-09-08 dan bu matn
-    React adminda (`AdminCustomer.tsx`: yangilanish siyosati va kamera
-    saqlash) — raqam o'rnatuvchi jadvali bilan bir joyda tekshiriladi.
+    React adminga, 2026-09-12 dan esa til katalogiga ko'chdi — shuning
+    uchun qulf UCHALA tilni tekshiradi: tarjimon «10 минут» deb yozib
+    qo'ysa, mijozga berilgan va'da tildan tilga o'zgarardi.
     """
-    admin = (ROOT / "frontend" / "src" / "AdminCustomer.tsx").read_text(encoding="utf-8")
-    assert f"{UPDATE_CHECK_MINUTES} daqiqa ichida" in admin, (
-        "admin paneldagi va'da o'rnatuvchidagi jadvalga mos kelmayapti"
-    )
+    for lang in ("uz", "ru", "en"):
+        catalogue = json.loads((ROOT / "i18n" / f"{lang}.json").read_text(encoding="utf-8"))
+        for key in PROMISE_KEYS:
+            assert key in catalogue, f"{lang}: «{key}» katalogdan yo'qolgan"
+            assert str(UPDATE_CHECK_MINUTES) in catalogue[key], (
+                f"{lang}/{key}: va'da o'rnatuvchidagi jadvalga mos kelmayapti — "
+                f"{catalogue[key]}"
+            )
 
 
 def test_update_check_is_free_when_not_paired() -> None:

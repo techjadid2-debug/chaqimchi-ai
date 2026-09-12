@@ -4,6 +4,7 @@ import { Avatar, Card, EmptyState, Pill, StatCard, StatusDot } from "./component
 import { Percent } from "./admin";
 import { Bars, Donut, LineChart, type Point, type Segment } from "./charts";
 import { Icon } from "./icons";
+import { t } from "./i18n";
 
 /* "Platforma boshqaruvi" — admin bosh ekrani.
  *
@@ -21,13 +22,15 @@ type AdminEvent = { event_id?: string; id?: string; event_type: string; label?: 
 type AdminInvoice = { id: string; site_name?: string; site_id: string; months: number; amount_uzs: number; state: string; provider?: string; created_at?: string; paid_at?: string };
 type Account = { id: string; username: string; full_name?: string; role: string; status: string; company?: string; site_id?: string };
 
-/* Akkaunt holati o'zbekchada.  Server inglizcha kalit qaytaradi va u
-   panelga to'g'ridan-to'g'ri chiqib qolgan edi ("pending"). */
-const ACCOUNT_STATUS: Record<string, string> = {
-  active: "Faol",
-  pending: "Tasdiq kutmoqda",
-  suspended: "To‘xtatilgan",
-  blocked: "Bloklangan",
+/* Akkaunt holati a'zoning tilida.  Server inglizcha KOD qaytaradi va u
+   panelga to'g'ridan-to'g'ri chiqib qolgan edi ("pending").  Yorliq
+   matn emas, katalog kaliti: modul yuklanganda til hali tanlanmagan
+   (`admin.tsx: NAV_ITEMS` izohiga qarang). */
+const ACCOUNT_STATUS_KEY: Record<string, string> = {
+  active: "panel.admin.account_status.active",
+  pending: "panel.admin.account_status.pending",
+  suspended: "panel.admin.account_status.suspended",
+  blocked: "panel.admin.account_status.blocked",
 };
 
 const EVENT_WINDOW_DAYS = 7;
@@ -102,7 +105,7 @@ export function AdminHome({ data, onNavigate }: {
   const eventsToday = eventDays.length ? eventDays[eventDays.length - 1].value : 0;
 
   const connectionSegments: Segment[] = Object.entries(stats.by_connection || {}).map(([state, count]) => ({
-    label: state === "online" ? "Onlayn" : state === "stale" ? "Aloqa eskirgan" : state === "not_paired" ? "Ulanmagan" : "Oflayn",
+    label: t(state === "online" ? "panel.admin.conn.online_plain" : state === "stale" ? "panel.admin.conn.stale_long" : state === "not_paired" ? "panel.admin.conn.not_paired" : "panel.admin.conn.offline"),
     value: Number(count) || 0,
     tone: state === "online" ? "green" : state === "stale" ? "yellow" : "red",
   }));
@@ -136,69 +139,69 @@ export function AdminHome({ data, onNavigate }: {
   return <>
     {problems ? <div className="alert-strip alert-info">
       <Icon name="bell" />
-      <div><strong>{problems} ta tizim e’tibor talab qiladi.</strong> {stats.offline || 0} ta oflayn, {stats.not_paired || 0} ta hali qurilmaga ulanmagan.</div>
+      <div><strong>{t("panel.admin.home.attention", { count: problems })}</strong> {t("panel.admin.home.attention_detail", { offline: stats.offline || 0, not_paired: stats.not_paired || 0 })}</div>
     </div> : null}
 
     <div className="metric-grid metric-grid-6">
-      <StatCard label="Faol mijozlar" value={formatNumber(stats.active)} note={`${formatNumber(stats.total_sites)} ta jami`} icon="users" tone="blue" />
-      <StatCard label="Filiallar" value={formatNumber(stats.total_sites)} note="Ro‘yxatdagi savdo nuqtalari" icon="branch" tone="blue" />
-      <StatCard label="Onlayn kameralar" value={`${formatNumber(cameras.active)} / ${formatNumber(cameras.expected)}`} note="Barcha filiallar bo‘yicha" icon="camera" tone={cameras.active >= cameras.expected ? "green" : "yellow"} />
-      <StatCard label="Edge qurilmalar" value={formatNumber(stats.total_devices)} note={`${formatNumber(stats.offline)} ta oflayn`} icon="server" tone={stats.offline ? "red" : "green"} />
-      <StatCard label="Oylik tushum" value={formatMoney(stats.monthly_revenue_uzs)} note="Faol va grace obunalar" icon="invoice" tone="green" />
-      <StatCard label="AI hodisalari" value={formatNumber(eventsToday)} note="Bugun qayd etilgan" icon="pulse" tone="blue" />
+      <StatCard label={t("panel.admin.home.stat_active")} value={formatNumber(stats.active)} note={t("panel.admin.home.stat_active_note", { count: formatNumber(stats.total_sites) })} icon="users" tone="blue" />
+      <StatCard label={t("panel.nav.branches")} value={formatNumber(stats.total_sites)} note={t("panel.admin.home.stat_branches_note")} icon="branch" tone="blue" />
+      <StatCard label={t("panel.admin.home.stat_cameras")} value={`${formatNumber(cameras.active)} / ${formatNumber(cameras.expected)}`} note={t("panel.admin.home.stat_cameras_note")} icon="camera" tone={cameras.active >= cameras.expected ? "green" : "yellow"} />
+      <StatCard label={t("panel.admin.home.stat_devices")} value={formatNumber(stats.total_devices)} note={t("panel.admin.home.stat_devices_note", { count: formatNumber(stats.offline) })} icon="server" tone={stats.offline ? "red" : "green"} />
+      <StatCard label={t("panel.admin.home.stat_revenue")} value={formatMoney(stats.monthly_revenue_uzs)} note={t("panel.admin.home.stat_revenue_note")} icon="invoice" tone="green" />
+      <StatCard label={t("panel.admin.home.stat_events")} value={formatNumber(eventsToday)} note={t("panel.admin.home.stat_events_note")} icon="pulse" tone="blue" />
     </div>
 
     <div className="home-grid">
       <div className="stack">
         <Card>
           <div className="card-head">
-            <div><h2>Platforma faolligi</h2><p>AI hodisalari, oxirgi {EVENT_WINDOW_DAYS} kun</p></div>
-            <button className="btn" onClick={() => onNavigate("events")}>Hodisalar</button>
+            <div><h2>{t("panel.admin.home.activity_title")}</h2><p>{t("panel.admin.home.activity_subtitle", { days: EVENT_WINDOW_DAYS })}</p></div>
+            <button className="btn" onClick={() => onNavigate("events")}>{t("panel.admin.home.events_button")}</button>
           </div>
           {events === null
             ? <div className="card-body"><div className="skeleton" style={{ height: 190 }} /></div>
             : eventDays.some(point => point.value > 0)
               ? <>
-                  <LineChart series={[{ name: "Hodisalar", points: eventDays }]} />
-                  {events.length >= EVENT_LIMIT ? <p className="metric-note">Grafik oxirgi {EVENT_LIMIT} ta hodisa bo‘yicha tuzilgan.</p> : null}
+                  <LineChart series={[{ name: t("panel.admin.home.events_button"), points: eventDays }]} />
+                  {events.length >= EVENT_LIMIT ? <p className="metric-note">{t("panel.admin.home.limit_note", { count: EVENT_LIMIT })}</p> : null}
                 </>
-              : <EmptyState icon="pulse" title="Hodisa qayd etilmadi" detail="Qurilmalar AI hodisa yuborgach kunlik dinamika shu yerda ko‘rinadi." />}
+              : <EmptyState icon="pulse" title={t("panel.admin.home.events_empty_title")} detail={t("panel.admin.home.events_empty_detail")} />}
         </Card>
 
         <div className="split-grid">
           <Card>
-            <div className="card-head"><div><h2>Tizimlar holati</h2><p>Aloqa bo‘yicha taqsimot</p></div></div>
+            <div className="card-head"><div><h2>{t("panel.admin.home.systems_title")}</h2><p>{t("panel.admin.home.systems_subtitle")}</p></div></div>
             {connectionSegments.some(segment => segment.value > 0)
-              ? <Donut segments={connectionSegments} centerValue={formatNumber(stats.total_sites)} centerLabel="tizim" />
-              : <EmptyState icon="server" title="Ma’lumot yo‘q" detail="Mijoz tizimlari ulangach taqsimot shu yerda ko‘rinadi." />}
+              ? <Donut segments={connectionSegments} centerValue={formatNumber(stats.total_sites)} centerLabel={t("panel.admin.home.systems_center")} />
+              : <EmptyState icon="server" title={t("panel.admin.section.empty_title")} detail={t("panel.admin.home.systems_empty_detail")} />}
           </Card>
 
           <Card>
-            <div className="card-head"><div><h2>Resurslar</h2><p>Qurilmalar bo‘yicha o‘rtacha</p></div></div>
+            <div className="card-head"><div><h2>{t("panel.admin.home.resources_title")}</h2><p>{t("panel.admin.home.resources_subtitle")}</p></div></div>
             <div className="mini-metrics">
               <div><span>CPU</span><b>{cpu == null ? "—" : `${cpu.toFixed(0)}%`}</b></div>
               <div><span>NPU</span><b>{npu == null ? "—" : `${npu.toFixed(0)}%`}</b></div>
-              <div><span>Kechikish</span><b>{latency == null ? "—" : `${latency.toFixed(0)} ms`}</b></div>
-              <div><span>Ishlash muddati</span><b>{uptime == null ? "—" : `${Math.floor(uptime / 86400)} kun`}</b></div>
+              <div><span>{t("panel.admin.home.latency")}</span><b>{latency == null ? "—" : `${latency.toFixed(0)} ms`}</b></div>
+              <div><span>{t("panel.admin.home.uptime")}</span><b>{uptime == null ? "—" : t("panel.common.days_count", { count: Math.floor(uptime / 86400) })}</b></div>
             </div>
-            <p className="metric-note">Qiymatlar oxirgi heartbeat’lardan olingan. Tarixiy egri chiziq uchun server hali seriya bermaydi.</p>
+            <p className="metric-note">{t("panel.admin.home.resources_note")}</p>
           </Card>
         </div>
 
         <Card>
           <div className="card-head">
-            <div><h2>To‘lovlar</h2><p>Joriy oy, tasdiqlangan tushum (ming so‘m)</p></div>
-            <button className="btn" onClick={() => onNavigate("payments")}>Hisob-fakturalar</button>
+            <div><h2>{t("panel.admin.home.payments_title")}</h2><p>{t("panel.admin.home.payments_subtitle")}</p></div>
+            <button className="btn" onClick={() => onNavigate("payments")}>{t("panel.admin.home.invoices_button")}</button>
           </div>
           {invoices === null
             ? <div className="card-body"><div className="skeleton" style={{ height: 120 }} /></div>
             : <>
-                {paymentBars.length ? <Bars items={paymentBars} /> : <EmptyState icon="invoice" title="Bu oyda to‘lov yo‘q" detail="Operator hisobni tasdiqlagach kunlik tushum shu yerda ko‘rinadi." />}
+                {paymentBars.length ? <Bars items={paymentBars} /> : <EmptyState icon="invoice" title={t("panel.admin.home.payments_empty_title")} detail={t("panel.admin.home.payments_empty_detail")} />}
                 <div className="summary-strip">
-                  <div><span>Kutilayotgan</span><b>{formatMoney(pendingSum)}</b></div>
-                  <div><span>Undirilgan</span><b>{formatMoney(paidSum)}</b></div>
-                  <div><span>Hisoblar</span><b>{formatNumber(paid.length + pending.length)}</b></div>
-                  <div><span>Muvaffaqiyat</span><b>{successRate == null ? "—" : `${successRate}%`}</b></div>
+                  <div><span>{t("panel.admin.home.pending")}</span><b>{formatMoney(pendingSum)}</b></div>
+                  <div><span>{t("panel.admin.home.collected")}</span><b>{formatMoney(paidSum)}</b></div>
+                  <div><span>{t("panel.admin.home.invoices")}</span><b>{formatNumber(paid.length + pending.length)}</b></div>
+                  <div><span>{t("panel.admin.home.success")}</span><b>{successRate == null ? "—" : `${successRate}%`}</b></div>
                 </div>
               </>}
         </Card>
@@ -206,7 +209,7 @@ export function AdminHome({ data, onNavigate }: {
 
       <div className="stack">
         <Card>
-          <div className="card-head"><div><h2>Muhim hodisalar</h2><p>So‘nggi qayd etilganlar</p></div><button className="btn btn-icon" aria-label="Barchasi" onClick={() => onNavigate("events")}><Icon name="pulse" /></button></div>
+          <div className="card-head"><div><h2>{t("panel.admin.home.top_events_title")}</h2><p>{t("panel.admin.home.top_events_subtitle")}</p></div><button className="btn btn-icon" aria-label={t("panel.admin.home.all_aria")} onClick={() => onNavigate("events")}><Icon name="pulse" /></button></div>
           {events === null
             ? <div className="card-body"><div className="skeleton" style={{ height: 150 }} /></div>
             : events.length
@@ -214,20 +217,20 @@ export function AdminHome({ data, onNavigate }: {
                   {events.slice(0, 6).map((item, index) => <div className="event-row" key={item.event_id || item.id || index}>
                     <div className="event-name">
                       <StatusDot state={item.event_type?.startsWith("camera") || item.event_type?.includes("offline") ? "offline" : "online"} />
-                      <div><b>{item.label || item.event_type}</b><small>{item.site_name || "—"} · {item.camera_id || "Tizim"}</small></div>
+                      <div><b>{item.label || item.event_type}</b><small>{item.site_name || "—"} · {item.camera_id || t("panel.admin.home.system")}</small></div>
                     </div>
                     <span className="list-value">{formatTimeUz(item.occurred_at)}</span>
                   </div>)}
                 </div>
-              : <EmptyState icon="pulse" title="Hodisa yo‘q" detail="Qurilmalar hodisa yuborgach ular shu yerda ko‘rinadi." />}
+              : <EmptyState icon="pulse" title={t("panel.admin.home.event_empty_title")} detail={t("panel.admin.home.event_empty_detail")} />}
         </Card>
 
         <Card>
-          <div className="card-head"><div><h2>Operatsion eslatma</h2><p>Navbatdagi ishlar</p></div></div>
+          <div className="card-head"><div><h2>{t("panel.admin.home.ops_title")}</h2><p>{t("panel.admin.home.ops_subtitle")}</p></div></div>
           <div className="simple-list">
-            <div className="simple-row"><span>Ulanmagan qurilmalar</span><b>{stats.not_paired || 0}</b></div>
-            <div className="simple-row"><span>Oflayn mijozlar</span><b>{stats.offline || 0}</b></div>
-            <div className="simple-row"><span>Muddati yaqin</span><b>{stats.expiring_soon || 0}</b></div>
+            <div className="simple-row"><span>{t("panel.admin.home.not_paired")}</span><b>{stats.not_paired || 0}</b></div>
+            <div className="simple-row"><span>{t("panel.admin.home.offline_sites")}</span><b>{stats.offline || 0}</b></div>
+            <div className="simple-row"><span>{t("panel.admin.home.expiring")}</span><b>{stats.expiring_soon || 0}</b></div>
           </div>
         </Card>
 
@@ -236,27 +239,27 @@ export function AdminHome({ data, onNavigate }: {
             sekinlashadi va hodisalar kechikadi.  Har qator FAQAT
             o'lchov bo'lsa chiziladi: "0%" yozish yolg'on bo'lardi. */}
         {server && Object.keys(server).length ? <Card>
-          <div className="card-head"><div><h2>Server holati</h2><p>ENES buluti ishlab turgan kompyuter</p></div></div>
+          <div className="card-head"><div><h2>{t("panel.admin.home.server_title")}</h2><p>{t("panel.admin.home.server_subtitle")}</p></div></div>
           <div className="telemetry-grid">
-            {typeof server.cpu_percent === "number" ? <div className="telemetry"><span>Protsessor</span><Percent value={server.cpu_percent} /></div> : null}
-            {typeof server.ram_percent === "number" ? <div className="telemetry"><span>Xotira</span><Percent value={server.ram_percent} /></div> : null}
-            {typeof server.disk_percent === "number" ? <div className="telemetry"><span>Disk</span><Percent value={server.disk_percent} /></div> : null}
+            {typeof server.cpu_percent === "number" ? <div className="telemetry"><span>{t("panel.admin.home.cpu")}</span><Percent value={server.cpu_percent} /></div> : null}
+            {typeof server.ram_percent === "number" ? <div className="telemetry"><span>{t("panel.admin.home.ram")}</span><Percent value={server.ram_percent} /></div> : null}
+            {typeof server.disk_percent === "number" ? <div className="telemetry"><span>{t("panel.admin.telemetry.disk")}</span><Percent value={server.disk_percent} /></div> : null}
           </div>
           <div className="simple-list">
-            {typeof server.load_1m === "number" ? <div className="simple-row"><span>Yuklama</span><b>{server.load_1m.toFixed(2)}{server.cores ? ` / ${server.cores} yadro` : ""}</b></div> : null}
-            {typeof server.free_disk_gb === "number" ? <div className="simple-row"><span>Bo‘sh joy</span><b>{server.free_disk_gb.toFixed(1)} GB</b></div> : null}
-            {typeof server.temperature_c === "number" ? <div className="simple-row"><span>Harorat</span><b className={server.temperature_c >= 80 ? "is-hot" : undefined}>{server.temperature_c.toFixed(0)}°C</b></div> : null}
+            {typeof server.load_1m === "number" ? <div className="simple-row"><span>{t("panel.admin.home.load")}</span><b>{server.load_1m.toFixed(2)}{server.cores ? ` / ${t("panel.admin.home.cores", { count: server.cores })}` : ""}</b></div> : null}
+            {typeof server.free_disk_gb === "number" ? <div className="simple-row"><span>{t("panel.admin.home.free_space")}</span><b>{server.free_disk_gb.toFixed(1)} GB</b></div> : null}
+            {typeof server.temperature_c === "number" ? <div className="simple-row"><span>{t("panel.admin.telemetry.temperature")}</span><b className={server.temperature_c >= 80 ? "is-hot" : undefined}>{server.temperature_c.toFixed(0)}°C</b></div> : null}
           </div>
         </Card> : null}
 
         {team.length ? <Card>
-          <div className="card-head"><div><h2>Jamoa</h2><p>Platforma akkauntlari</p></div><button className="btn btn-icon" aria-label="Rollar" onClick={() => onNavigate("roles")}><Icon name="shield" /></button></div>
+          <div className="card-head"><div><h2>{t("panel.admin.home.team_title")}</h2><p>{t("panel.admin.home.team_subtitle")}</p></div><button className="btn btn-icon" aria-label={t("panel.admin.home.roles_aria")} onClick={() => onNavigate("roles")}><Icon name="shield" /></button></div>
           <div className="team-row">
             {team.map(account => <div className="team-member" key={account.id}>
               <Avatar name={account.full_name || account.username} />
               <b>{(account.full_name || account.username).split(" ")[0]}</b>
-              <small>{account.role === "admin" ? "Admin" : account.role === "installer" ? "O‘rnatuvchi" : account.role}</small>
-              <Pill state={account.status}>{ACCOUNT_STATUS[account.status] || account.status}</Pill>
+              <small>{account.role === "admin" ? t("panel.admin.role.admin") : account.role === "installer" ? t("panel.admin.role.installer") : account.role}</small>
+              <Pill state={account.status}>{ACCOUNT_STATUS_KEY[account.status] ? t(ACCOUNT_STATUS_KEY[account.status]) : account.status}</Pill>
             </div>)}
           </div>
         </Card> : null}

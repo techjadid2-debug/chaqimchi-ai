@@ -13,6 +13,8 @@ olingan kalit matni yoki tilning ko'rinadigan belgisi tekshiriladi.
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from pathlib import Path
 
 from cloud import i18n
@@ -235,3 +237,140 @@ def test_a_stranger_is_answered_in_their_telegram_language(production_client, mo
 
     assert len(messages) == 1
     assert messages[0][1] == i18n.tg("en", "bot.welcome.guest")
+
+
+# ── Admin paneli: qotirilgan matn qaytib kelmasin ────────────────────────
+#
+# Panel o'z matnini BRAUZERDA chizadi, ya'ni yuqoridagi testlar uni
+# ko'rmaydi: server javobida bu matn umuman yo'q.  Shuning uchun qulf
+# manba faylining o'ziga qo'yiladi — sirt bitta bo'lgani uchun bu yerda.
+
+ROOT = Path(__file__).resolve().parents[1]
+PANEL_SRC = ROOT / "frontend" / "src"
+CATALOGUES = {
+    lang: json.loads((ROOT / "i18n" / f"{lang}.json").read_text(encoding="utf-8"))
+    for lang in i18n.LANGS
+}
+
+#: Admin panelining manba fayllari — `tests/test_panel_v2.py: ADMIN_FILES`
+#: bilan bir xil ro'yxat; yangi admin fayli IKKALASIGA ham qo'shilsin.
+ADMIN_SOURCES = (
+    "admin.tsx",
+    "AdminHome.tsx",
+    "AdminCustomer.tsx",
+    "AdminTeam.tsx",
+    "AdminSettings.tsx",
+)
+
+#: Tarjima qilinMAYdigan matn: qisqartma, brend va texnik nom.  Uchala
+#: tilda aynan shunday yoziladi, ya'ni katalog kaliti faqat ortiqcha
+#: qatlam bo'lardi.
+ALLOWED_LITERALS = {
+    "CPU",
+    "RAM",
+    "FPS",
+    "NPU",
+    "Inference",
+    "Payme",
+    "Click",
+    "ENES Cloud",
+}
+
+#: Odam o'qiydigan atributlar: bu yerda qolgan satr — tarjimasiz yorliq.
+VISIBLE_ATTRS = (
+    "placeholder",
+    "aria-label",
+    "title",
+    "subtitle",
+    "detail",
+    "label",
+    "hint",
+    "text",
+    "confirmLabel",
+    "submitLabel",
+    "note",
+    "centerLabel",
+)
+
+#: Atributdagi istisnolar — namuna manzil va namuna raqam: telefon
+#: prefiksi, RTSP manzili va Telegram ID har tilda bir xil ko'rinadi.
+ALLOWED_ATTRS = {
+    "+998…",
+    "rtsp://login:parol@192.168.1.10:554/stream/sub",
+    "123456789",
+}
+
+#: JSX matn tuguni: ochiluvchi teg yopilgandan keyingi, yopiluvchi tegdan
+#: oldingi matn.  Oxiridagi `</` SHART — usiz `Promise<string>` kabi
+#: TypeScript generiklari ham "matn" bo'lib chiqardi, chunki bitta
+#: qatorga yig'ilgan JSX'da `=>` ham `>` beradi.
+JSX_TEXT = re.compile(r">([^<>{}\n]*[A-Za-z][^<>{}\n]*)</")
+VISIBLE_ATTR = re.compile(r'\b(' + "|".join(VISIBLE_ATTRS) + r')="([^"]*[A-Za-z][^"]*)"')
+
+#: `t("panel.…")` chaqiruvlari.  Prefikslar `scripts/build_i18n.py:
+#: PANEL_PREFIXES` bilan bir xil oilalardan.
+PANEL_KEY_CALL = re.compile(r't\(\s*"((?:panel|event|format|money)\.[^"]+)"')
+
+#: Shablonli kalit: `t(`panel.admin.policy.${code}`)`.  O'zgaruvchan qismi
+#: yopiq ro'yxatdan keladi, shuning uchun faqat prefiksi tekshiriladi.
+PANEL_KEY_PREFIX = re.compile(r"t\(\s*`([^`$]+)\$\{")
+
+
+def test_the_admin_panel_keeps_no_hardcoded_uzbek() -> None:
+    """Admin paneli matni katalogdan kelsin, fayl ichidan emas.
+
+    Ega va usta panellari 2026-09-08 dan uch tilda, admin esa ~460 ta
+    qotirilgan o'zbekcha satr bilan qolgan edi.  Bunday qarz jimgina
+    o'sadi: yangi tugmani `t()` siz yozish har doim osonroq.  Qulf uni
+    yozilgan kuniyoq ushlaydi.
+
+    Tarjima SIFATI bu yerda tekshirilmaydi (buni odam qiladi) — faqat
+    matn QAYERDAN kelayotgani.
+    """
+    for name in ADMIN_SOURCES:
+        for index, line in enumerate(
+            (PANEL_SRC / name).read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            # O'zbekcha tipografik apostrof (o‘, g‘, ma’lumot) — katalog
+            # matnining eng ishonchli belgisi.  Manbada uchrasa, demak
+            # jumla fayl ichida qolib ketgan.
+            assert "‘" not in line and "’" not in line, (
+                f"{name}:{index} — o'zbekcha matn faylda qolgan: {line.strip()[:90]}"
+            )
+
+            for found in JSX_TEXT.findall(line):
+                text = found.strip()
+                assert text in ALLOWED_LITERALS, (
+                    f"{name}:{index} — qotirilgan yorliq «{text}»: `t()` ishlatilsin"
+                )
+
+            for attr, value in VISIBLE_ATTR.findall(line):
+                assert value in ALLOWED_ATTRS, (
+                    f"{name}:{index} — `{attr}` tarjimasiz: «{value}»"
+                )
+
+
+def test_the_admin_panel_really_uses_the_catalogue() -> None:
+    """Chaqirilgan kalit ROSTDAN katalogda bo'lsin.
+
+    Topilmagan kalit uchun `t()` kalitning O'ZINI qaytaradi — ekranda
+    «panel.admin.nav.team» degan yozuv paydo bo'lardi va uni faqat o'sha
+    sahifani ochgan odam ko'rardi.  Imlo xatosi shu yerda tutiladi.
+
+    `panel.admin.*` `scripts/build_i18n.py: PANEL_PREFIXES` dagi
+    `panel.` ga tushadi, ya'ni kalit brauzerga yetib boradi; boshqa
+    prefiks bilan u TS katalogiga umuman chiqmasdi.
+    """
+    keys: set[str] = set()
+    for name in ADMIN_SOURCES:
+        code = (PANEL_SRC / name).read_text(encoding="utf-8")
+        keys |= set(PANEL_KEY_CALL.findall(code))
+        for prefix in PANEL_KEY_PREFIX.findall(code):
+            assert any(key.startswith(prefix) for key in CATALOGUES[i18n.DEFAULT_LANG]), (
+                f"{name}: «{prefix}…» bilan boshlanadigan kalit katalogda yo'q"
+            )
+
+    assert len(keys) > 300, f"admin panelida atigi {len(keys)} kalit — almashtirish chala"
+    for key in sorted(keys):
+        for lang in i18n.LANGS:
+            assert key in CATALOGUES[lang], f"{lang}: «{key}» katalogda yo'q"

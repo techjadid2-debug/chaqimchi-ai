@@ -66,3 +66,6 @@ dizayn-3/
 # Log va vaqtinchalik
 *.log
 /tmp/
+
+# Agent worktree'lari — vaqtincha ish papkalari, loyihaga tegishli emas.
+.claude/worktrees/

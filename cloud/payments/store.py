@@ -6,8 +6,13 @@ Payme ham, Click ham, "naqd" ham shu bitta yo'ldan o'tadi — `mark_paid()`.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import os
 import uuid
 from typing import Any, Dict, List, Optional
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from cloud.store import CloudStore, _iso, _utc_now
 
@@ -97,6 +102,32 @@ class PaymentStore:
                 FOREIGN KEY (invoice_id) REFERENCES invoices(id)
             );
             CREATE INDEX IF NOT EXISTS idx_click_invoice ON click_transactions(invoice_id);
+
+            -- Saqlangan karta.  KARTA RAQAMI SAQLANMAYDI: bazada faqat
+            -- provayderning tokeni (shifrlangan) va oxirgi to'rt raqam
+            -- turadi.  Token o'zi ham «pul yechish huquqi», shuning
+            -- uchun u kamera RTSP manzili bilan bir xil yo'ldan
+            -- o'tadi — Fernet (`_card_cipher`).
+            --
+            -- Har saytda ko'pi bilan BITTA faol karta: ikkita bo'lsa
+            -- «qaysi biridan yechildi» degan savol paydo bo'ladi va
+            -- avtomatik to'lov uchun bu javobsiz qolardi.  Yangi karta
+            -- ulanganda eskisi `active=0` bo'ladi.
+            CREATE TABLE IF NOT EXISTS payment_cards (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                token_ciphertext TEXT NOT NULL,
+                masked_pan TEXT NOT NULL,
+                expires_at TEXT,
+                verified_at TEXT,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_error TEXT,
+                FOREIGN KEY (site_id) REFERENCES sites(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cards_site ON payment_cards(site_id, active);
             """
         )
         # Ishlab turgan bazaga `seq`.  Eski qatorlarga 0 tushadi — ular
@@ -115,6 +146,151 @@ class PaymentStore:
             ).fetchall()
             return {str(dict(row)["column_name"]) for row in rows}
         return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+    # ── Saqlangan karta ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _card_cipher() -> Fernet:
+        """Provayder tokenini shifrlaydi.
+
+        Token — «pul yechish huquqi», ya'ni kamera parolidan ham
+        qimmatroq: bazaning nusxasi sizib ketsa u bilan to'lov
+        qilish mumkin.  Shuning uchun ALOHIDA kalit
+        (`ENES_CARD_SECRET_KEY`) — kamera kaliti bilan bir xil emas:
+        ikkalasi bitta kalitda bo'lsa bittasining almashtirilishi
+        ikkinchisini ham buzardi.
+        """
+        key = os.environ.get("ENES_CARD_SECRET_KEY", "").strip()
+        if not key:
+            if os.environ.get("ENES_ENV", "development") == "production":
+                raise RuntimeError("ENES_CARD_SECRET_KEY sozlanmagan")
+            key = base64.urlsafe_b64encode(
+                hashlib.sha256(b"enes-development-card-key").digest()
+            ).decode("ascii")
+        try:
+            return Fernet(key.encode("ascii"))
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("ENES_CARD_SECRET_KEY Fernet kaliti noto'g'ri") from exc
+
+    def save_card(
+        self,
+        site_id: str,
+        *,
+        provider: str,
+        token: str,
+        masked_pan: str,
+        expires_at: Optional[str] = None,
+        verified: bool = False,
+    ) -> Dict[str, Any]:
+        """Kartani saqlaydi va saytdagi eskisini o'chiradi (bittadan ortiq emas)."""
+        if provider not in {"payme", "click"}:
+            raise ValueError(f"Noma'lum to'lov provayderi: {provider}")
+        if not token:
+            raise ValueError("Karta tokeni bo'sh")
+        now = _iso(_utc_now())
+        conn = self._connect()
+        conn.execute(
+            "UPDATE payment_cards SET active=0,updated_at=? WHERE site_id=? AND active=1",
+            (now, site_id),
+        )
+        card_id = uuid.uuid4().hex
+        conn.execute(
+            "INSERT INTO payment_cards"
+            "(id,site_id,provider,token_ciphertext,masked_pan,expires_at,verified_at,"
+            "active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,1,?,?)",
+            (
+                card_id,
+                site_id,
+                provider,
+                self._card_cipher().encrypt(token.encode("utf-8")).decode("ascii"),
+                masked_pan[:32],
+                expires_at,
+                now if verified else None,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return self.get_card(site_id) or {}
+
+    def mark_card_verified(self, site_id: str) -> Dict[str, Any]:
+        """SMS kodi tasdiqlandi — kartadan pul yechish mumkin."""
+        now = _iso(_utc_now())
+        conn = self._connect()
+        cursor = conn.execute(
+            "UPDATE payment_cards SET verified_at=?,last_error=NULL,updated_at=? "
+            "WHERE site_id=? AND active=1",
+            (now, now, site_id),
+        )
+        conn.commit()
+        conn.close()
+        if not cursor.rowcount:
+            raise ValueError("Saqlangan karta topilmadi")
+        return self.get_card(site_id) or {}
+
+    def get_card(self, site_id: str, *, include_token: bool = False) -> Optional[Dict[str, Any]]:
+        """Saytning faol kartasi.
+
+        `include_token` ATAYLAB standart holda `False`: token javobga,
+        logga yoki panelga HECH QACHON chiqmasligi kerak va uni
+        so'rash ongli qaror bo'lsin (`charge()` dan tashqari
+        chaqiruvchi yo'q).
+        """
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT * FROM payment_cards WHERE site_id=? AND active=1", (site_id,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        ciphertext = str(item.pop("token_ciphertext", ""))
+        item["active"] = bool(item["active"])
+        item["verified"] = bool(item.get("verified_at"))
+        if include_token:
+            try:
+                item["token"] = self._card_cipher().decrypt(ciphertext.encode("ascii")).decode("utf-8")
+            except (InvalidToken, UnicodeDecodeError) as exc:
+                raise RuntimeError(f"{site_id}: karta tokeni o'qilmadi") from exc
+        return item
+
+    def forget_card(self, site_id: str) -> bool:
+        """Kartani butunlay o'chiradi.
+
+        `active=0` YETARLI EMAS: mijoz «kartani o'chir» deganda token
+        bazada qolib ketmasligi kerak — u pul yechish huquqi.
+        """
+        conn = self._connect()
+        cursor = conn.execute("DELETE FROM payment_cards WHERE site_id=?", (site_id,))
+        conn.commit()
+        conn.close()
+        return bool(cursor.rowcount)
+
+    def record_card_error(self, site_id: str, message: str) -> None:
+        """Oxirgi yechish xatosi — panel va admin uchun.
+
+        Kartani O'CHIRMAYDI: bir marta muvaffaqiyatsiz yechish
+        (mablag' yetmadi) kartani yaroqsiz qilmaydi va uni o'chirish
+        mijozni qayta ulashga majburlardi.
+        """
+        now = _iso(_utc_now())
+        conn = self._connect()
+        conn.execute(
+            "UPDATE payment_cards SET last_error=?,updated_at=? WHERE site_id=? AND active=1",
+            (str(message)[:300], now, site_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def sites_with_active_cards(self) -> List[str]:
+        """Avtomatik yechish uchun nomzodlar — tasdiqlangan kartalar."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT site_id FROM payment_cards WHERE active=1 AND verified_at IS NOT NULL"
+        ).fetchall()
+        conn.close()
+        return [str(dict(row)["site_id"]) for row in rows]
 
     # ── Hisob-faktura ────────────────────────────────────────────────────
 

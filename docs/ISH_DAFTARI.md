@@ -35,12 +35,17 @@
   BOSHQA son, tegilmadi); usta paneli React bundle'ini beryapti.
   Deploydan keyingi loglarda **0 xato, 0 ta 5xx**.
 
-  ⏳ **Qolgan ikki ish:**
-  1. **`releases/` birinchi tozalash** — reja tayyor va tekshirilgan:
-     22 ta eski `.exe` (0.6.2–0.6.24), **0.6.25 (pilot) va 0.6.29+
-     himoyalangan**.  Papka konteynerga `:ro` ulangani uchun o'chirish
-     HOSTDA bajariladi — ega tasdig'ini kutadi (2,6 GB).
-  2. **H bloki (admin i18n)** — agentda ishlayapti, keyingi deployga.
+  **✅ `releases/` tozalandi (ega tasdig'i bilan):** 44 fayl (22 `.exe`
+  + manifestlari, 0.6.2–0.6.24) o'chdi, **2,6 GB → 491 MB**.  Qoldi:
+  0.6.25 (pilot), 0.6.30, 0.6.31, 0.6.32 va o'rnatuvchi zaxira nomi.
+  O'chirishdan oldin ro'yxat himoyalanganlar bo'yicha tekshirildi;
+  keyin yuklab olish zanjiri sinaldi — `/windows-release` `0.6.32`
+  beradi, `download-installer` 206 va to'g'ri MIME qaytaradi.
+  Papka konteynerga `:ro` ulangani uchun o'chirish HOSTDA bajarildi.
+
+  **✅ `origin/main` ga push qilindi** (`5124b80..d2c3797`).
+
+  ⏳ **Qolgan yagona ish — H bloki (admin i18n)**, agentda ishlayapti.
 
 
 - **🔧 BOSQICH E — USTA PANELI REACT'DA (2026-09-12, commit qilinmagan,

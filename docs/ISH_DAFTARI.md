@@ -15,9 +15,10 @@
   yo'riqnomasi, o'rnatishni maksimal qulay qilish, demo 7/14 kun +
   kartadan oylik yechish) va to'liq reja
   `~/.claude/plans/md-file-ichii-o-qi-linear-tulip.md` da; bajarilgani
-  quyidagi uch commit.  **Qolgan bloklar hali boshlanmagan:** B (sayt
-  xatolari), C (panel xatolari), E (usta paneli React'ga), F (demo +
-  karta), G (A1 capture-rate), H (admin i18n), I (ops).
+  quyidagi uch commit.  **Qolgan bloklar hali boshlanmagan:** E (usta
+  paneli React'ga), F (demo + karta), G (A1 capture-rate), H (admin
+  i18n).  (C — panel xatolari, B1 — sayt formasi va I — ops tugadi;
+  pastdagi bandlarga qarang.)
   - **Bosqich A (`2a6ece3`):** ikkita oylik qizil test yashil — `night`
     statistikasi zanjirning to'rt bo'g'inidan o'tkazildi, CI testi
     eskirgan domenni kutardi.  `/chek` bot menyusiga qo'shildi (yordam
@@ -44,7 +45,13 @@
     Safari'da, yoqilmagan bo'lim darvozasi (`capabilities.agent` va
     `capabilities.attendance`), fokus tuzog'i, telefonda qidiruv,
     bitta KPI komponenti.  Tafsilot Tarixda.
-  - **Holat:** `2354 passed, 12 skipped`, `ruff` toza, i18n va sayt
+  - **Bosqich I (`e4200fd`, `afbfe3c`):** CSP majburiy rejimda (faqat
+    sarlavha nomi — mazmun va hash o'sha holda); `releases/` o'zini
+    tozalaydi (`prune_windows_releases(keep=3)`), qurilmalar hali
+    so'rayotgan va `pin` bilan qotirilgan versiya o'chmaydi.
+    **Deployda diqqat:** Caddy `--force-recreate`, serverdagi 1,9 GB
+    esa ikki qadamda tozalanadi (konteynerda `:ro`).  Tafsilot Tarixda.
+  - **Holat:** `2387 passed, 13 skipped`, `ruff` toza, i18n va sayt
     `--check` toza, bundle manba bilan bitta commitda.  Lokal jonli
     tekshiruv: `/owner`, `/admin`, `/installer`, `/installer-guide`,
     `/install` 200; bundle fayllari 200; `capabilities.agent.ready`
@@ -362,8 +369,8 @@
   ya'ni `script-src` ularga tegmaydi).  10 ta inline ishlov beruvchi
   `data-act` + delegatsiyaga o'tdi.  Yagona istisno — panel
   qobig'idagi tema bootstrap'i (birinchi chizishdan oldin ishlashi
-  SHART), u CSP hashiga olindi.  Siyosat hali `-Report-Only`:
-  cutoverdan keyin bir hafta kuzatilib, sarlavha nomi almashadi.
+  SHART), u CSP hashiga olindi.  Siyosat o'sha paytda `-Report-Only`
+  edi; **2026-09-12 da majburiy qilindi** (I bloki).
   Frontend versiyalari ham qotirildi (`latest` → `^19.2.8` va h.k.).
   To'liq: **2 157 passed, 1 skipped**; lokal serverda 7 sahifa va
   8 JS fayl 200, uch tilli data blok tekshirildi.
@@ -390,11 +397,10 @@
     `POST /api/v1/auth/logout`, panelda `api.ts: logout()`.  Versiya
     **tokenni bergan** a'zolik qatoriga nisbatan tekshiriladi (ko'p
     filialli egada tanlangan filial boshqa qator).
-  - **CSP (O-2)** — ikkala Caddyfile'da, lekin `-Report-Only`.
-    `script-src` da `'unsafe-inline'` yo'q, eski statik sahifalarda esa
-    inline `<script>` bor, shuning uchun darhol majburiy qilib
-    bo'lmaydi.  Qulf: `tests/test_security_headers.py` (ikki fayldagi
-    siyosat TENG + siyosat bo'shab ketmasin).
+  - **CSP (O-2)** — ikkala Caddyfile'da; o'sha paytda `-Report-Only`
+    edi, **2026-09-12 da majburiy** bo'ldi.  Qulf:
+    `tests/test_security_headers.py` (ikki fayldagi siyosat TENG,
+    siyosat bo'shab ketmasin, kuzatuv rejimi qaytmasin).
   - **`/health/deep` resurs ogohlantirishi (O-1)** — `server` va
     `warnings` maydonlari, **503 qilmasdan**; chegaralar Telegram
     ogohlantirishi bilan bitta manbadan (`alerts.server_health_warnings`).
@@ -787,8 +793,12 @@ Bajarilgani: **A, D1, D2–D6** (yuqoriga qarang).  Qolgani:
    yubormaydi, ya'ni qurilmadagi 0.6.33 kodi abadiy yopiq;
    `people_seen` `REPORT_EVENT_TYPES` da ham, `TIMELINE_HIDDEN_TYPES`
    da ham yo'q (`MEDIALESS_EVENTS` esa `cloud/main.py:1478` da, event_store'da EMAS).
-6. **I — ops** (~2 soat).  CSP `-Report-Only` dan majburiyga; `releases/`
-   server tomonda hech qachon tozalanmaydi (~1,9 GB).
+6. ✅ **I — ops KOD TOMONI TUGADI (2026-09-12).**  CSP majburiy;
+   `releases/` o'zini tozalaydi (`prune_windows_releases`).  **Qoldi —
+   deploy va ega:** Caddy `--force-recreate` + jonli konsol tekshiruvi;
+   serverdagi 1,9 GB birinchi tozalashdan keyin o'lchansin
+   (`scripts/prune_releases.py --reja` → host tomonda `rm`);
+   UptimeRobot `/health/deep`; `.env.production`.
 7. **H — admin i18n** (~8–10 soat, eng kam shoshilinch, E dan keyin).
 
 **UI/UX (2026-09-11) — qoldiqlar:**
@@ -917,12 +927,13 @@ cloud tuzatishlari (Qadam 3) ham tugadi.  **Qoldi — egaga va soakka
 bog'liq:**
 
 **⏭ CUTOVERDAN KEYIN, kichik lekin unutilmasin:**
-- **CSP majburiy rejimga — kod tomoni TAYYOR.**  Qoladigan ish bitta
-  so'z: `Content-Security-Policy-Report-Only` → `Content-Security-Policy`
-  (`deploy/Caddyfile` va `Caddyfile.enes` — IKKALASI).  Shundan oldin
-  jonli trafikda bir hafta kuzating: brauzer konsolida CSP xabari
-  bo'lmasin.  Yangi inline skript qo'shilsa
-  `tests/test_security_headers.py` darhol aytadi va hashni beradi.
+- ✅ **CSP majburiy rejimda (2026-09-12).**  Ikkala Caddyfile'da
+  `Content-Security-Policy`; siyosat mazmuni va hash o'zgarmadi.
+  `tests/test_security_headers.py` endi `-Report-Only` ning qaytishini
+  ham bloklaydi (`REQUIRED` dagi oddiy "matn ichida bormi" tekshiruvi
+  eski nomni o'tkazib yuborardi — yangi nom uning ichida turadi).
+  **Deployda:** Caddy `--force-recreate`, keyin jonli konsolda bitta
+  ham `Refused to …` bo'lmasin (`docs/PRODUCTION_RUNBOOK.md` §3.1).
 - **UptimeRobot aynan `/health/deep` ni so'rasin** (`/health` ataylab
   doim 200 — Docker HEALTHCHECK uchun).
 - **Telegram Mini App va `X-Frame-Options: DENY`.**  `app.` hosti
@@ -1213,8 +1224,10 @@ taklif qilish kerak.
   ochiq qolgani esa boshqa xavf — Telegram ID sir emas, ya'ni hujumchi
   begona akkauntga beshta noto'g'ri kod yuborib, qurbonning HAQIQIY
   kodini kuydirib qo'yardi.
-- ⚠️ **CSP bor, lekin `-Report-Only`** (O'RTA-2).  Kod tomoni tayyor;
-  qoladigan ish bitta so'z, cutoverdan keyin bir hafta kuzatib.
+- ✅ **YOPILDI (2026-09-12, I bloki) — CSP MAJBURIY** (O'RTA-2).  Ikkala
+  Caddyfile'da `Content-Security-Policy`; mazmun o'zgarmadi.  ⏳ Deploy
+  paytida Caddy **`--force-recreate`** bilan qayta yaratilsin
+  (`docs/PRODUCTION_RUNBOOK.md` §3.1) va jonli konsol tekshirilsin.
 - ✅ **YOPILDI (2026-09-09) — server tomonda chiqish bor**
   (`owner_members.auth_version`, `POST /api/v1/owner/auth/logout`).
   Token hamon `localStorage` da, lekin endi uni BEKOR QILISH mumkin.
@@ -1232,9 +1245,51 @@ taklif qilish kerak.
 - **Faqat o'zbek tili** — rus tili yo'q (O'RTA-3).
 - **Vision agent (Gemini) deyarli ishlatilmagan** — `vision_observations`
   0 ta. Saytda va'da qilinmagan, lekin funksiya sifatida o'lik.
-- **`releases/` da ~1.9 GB eski `.exe`** — 19 ta fayl.
+- ⏳ **`releases/` da ~1,9 GB eski `.exe`** — 19 ta fayl.  Kod tomoni
+  tayyor (`prune_windows_releases`, 2026-09-12), lekin konteynerda
+  papka `:ro` — **jonli tozalash hali bajarilmagan**: deploydan keyin
+  `docker compose exec -T cloud python scripts/prune_releases.py --reja`
+  → ro'yxatni host tomonda `rm` qilish (yoki `publish_windows_release.sh`
+  ni keyingi nashrda ishlatish — u shu ikki qadamni o'zi bajaradi).
 
 ## TUZOQLAR — bir marta yeb bo'lingan
+
+- **`releases/` konteynerga `:ro` bilan ulangan — ilova o'zi
+  tozalay olmaydi.**  Uchala compose faylida `./releases:/app/releases:ro`
+  va ustiga `read_only: true`.  Ya'ni `prune_windows_releases()`
+  konteynerda ishlaganda REJA tuzadi, lekin `unlink()` EROFS bilan
+  yiqiladi.  Shu sabab tozalash ikki qadamli: QAROR konteynerda
+  (`--reja` — qurilma versiyalari bazadan o'qiladi, baza esa faqat
+  docker tarmog'i ichidan ko'rinadi), O'CHIRISH hostda.  Mount'ni
+  `:rw` qilish yechim EMAS — internetga qaragan ilova qurilmalar
+  o'rnatadigan faylni o'zgartira olmasligi ataylab shunday.
+- **Reliz papkasida bizning ishimiz bo'lmagan fayllar ham turadi.**
+  `ENES_Setup.exe` (relizlar topilmaganda saytga beriladigan zaxira,
+  `_windows_installer_file`) va Box/R1 yo'lining `enes-sotqin-*` /
+  `enes-lite-*` arxiv-manifestlari.  "Tanimadim" qoidasiga qo'shib
+  o'chirilsa yuklab olish 503, Box yangilanishi 404 berardi — shuning
+  uchun "tanimadim" faqat `.exe` ga va o'rnatuvchi nomlaridan
+  tashqarisiga tegadi.
+- **Versiya `device_health` da USTUN emas.**  `app_version`
+  `payload_json` ichidagi kalit (`EdgeHeartbeatBody`), ya'ni uni SQL
+  bilan olish dialektga bog'lanib qolardi (`json_extract` ↔ `->>`).
+  JSON Python'da ochiladi.  Xuddi shu fakt boshqaruv bazasida ham bor
+  (`devices.app_version`) — tozalash IKKALASINI o'qiydi: ikki jadval
+  ikki BOSHQA bazada va bittasi ko'chirish oynasida bo'shab turishi
+  mumkin, bo'sh ro'yxat esa "hech kim ishlatmayapti" degani emas.
+- **Fon vazifasi NOL-qadamda o'chirmasin.**  `_maintenance_loop`
+  birinchi aylanishi ilova ko'tarilgan zahoti ketadi va o'sha payt
+  "qaysi versiya hali kerak" ro'yxati bo'sh bo'lishi mumkin (yangi yoki
+  ko'chirilgan baza).  Reliz tozalash shuning uchun 1-qadamdan
+  boshlanadi (30 daqiqa): qurilma har daqiqada aloqa qiladi.  Yon
+  foyda — `TestClient` bilan ketadigan testlar halqaning faqat nol
+  qadamini ko'radi, ya'ni test repodagi `releases/` ni o'chira olmaydi.
+- **`fetchone()[0]` qo'riqchisi IZOHGA ham ilinadi.**
+  `test_the_store_never_reads_a_row_by_number` faqat `#` bilan
+  boshlanadigan qatorni tashlab ketadi — docstring ichida `row[0]`
+  deb YOZISH ham testni yiqitadi (loyihada «test o'z izohiga ilindi»
+  tuzog'ining takrori).  Naqshning o'zini so'z bilan ta'riflang
+  («pozitsion indeks»).
 
 - **Panel testi FAQAT adminni tekshirardi.**  `test_the_admin_uses_no_native_dialogs`
   nomi aynan shunday aytib turgan va `GeometryEditor.tsx` ga
@@ -1982,6 +2037,41 @@ Diqqat: keyingi agent bilishi kerak bo'lgan narsa (bo'lsa)
 ---
 
 # Tarix
+
+### 2026-09-12 — I bloki: CSP majburiy, `releases/` o'zini tozalaydi (`e4200fd`, `afbfe3c`)
+
+Nima: sayt va panelda CSP endi kuzatmaydi — **bloklaydi**; reliz
+papkasi o'zini tozalaydi va qurilmalar hali so'rayotgan versiya
+saqlanadi.
+
+Nega: (1) `-Report-Only` hech narsani to'xtatmaydi — XSS yo'li bir
+hafta kuzatuv ostida ochiq turdi; (2) `releases/` hech qachon
+tozalanmasdi va serverda 19 ta eski `.exe` bilan 1,9 GB ga o'sdi —
+Postgres va MinIO o'sha diskda turadi.
+
+Qayerda: `deploy/Caddyfile:45`, `deploy/Caddyfile.enes:58` (faqat
+sarlavha nomi; hash va `style-src` o'sha holda);
+`docs/PRODUCTION_RUNBOOK.md` §3.1 (Caddy `--force-recreate`);
+`cloud/main.py: prune_windows_releases` / `_protected_release_versions`
+/ `_release_prune_plan` (+ `_maintenance_loop` da kuniga bir marta,
+yetakchi darvozasi ortida), `cloud/event_store.py:
+reported_app_versions`, `cloud/store.py: pinned_update_versions`,
+`scripts/prune_releases.py`, `scripts/publish_windows_release.sh`
+(nashrdan keyin).
+
+Test: `tests/test_security_headers.py`
+(`test_the_policy_is_enforced_not_report_only` + `REQUIRED`),
+`tests/test_release_prune.py` (18 ta: ishlatilayotgan va qotirilgan
+versiya o'chmaydi, baza o'qilmasa umuman o'chmaydi, har prefiks o'z
+uchtasini saqlaydi, juftsiz `.exe`/yetim manifest/tanilmagan nom
+tozalanadi, `ENES_Setup.exe` va `sotqin`/`lite` fayllari tegilmaydi,
+`keep=0` da ham jonli reliz qoladi).
+
+Diqqat: konteynerda papka `:ro` — jonli serverda tozalash IKKI
+qadamli (`--reja` konteynerda, `rm` hostda; nashr skripti buni o'zi
+qiladi).  Deployda Caddy **`restart` emas, `--force-recreate`**, aks
+holda eski inode qolib ketadi va sarlavha o'zgarmaydi.  Serverdagi
+1,9 GB hali tozalanmagan.
 
 ### 2026-09-12 — panel xatolari: ega + admin (`dbda134`, `5cce2eb`, `1bb740c`)
 

@@ -44,6 +44,7 @@ ALLOWED_FILES = {
     "Makefile",                        # o'tish relizi bayrog'i (LEGACY_NAME)
     "docs/RELIZ_VA_OTA.md",            # o'tish relizi tartibi hujjatlangan
     "tests/test_rollout.py",           # o'tish relizi nomining qulfi
+    "tests/test_release_prune.py",     # tozalash IKKALA prefiksni ham hisoblaydi
     "scripts/windows_installer.nsi",   # eski o'rnatishni topib olib tashlaydi
     "scripts/build_windows_payload.py",  # ko'prik papkasi payloadga kiradi
     "scripts/sign_release.py",         # eski arxivni qayta imzolash, eski kalit yo'li

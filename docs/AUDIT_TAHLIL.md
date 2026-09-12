@@ -69,7 +69,7 @@ joylashuvi, 4 ta public API (`/pricing`, `/edu-pricing`,
 | Y-12 | ~~Saytda klip 30 kun, kodda 7 kun~~ | Yuqori | ✅ **TUZATILDI** |
 | ~~O-0~~ | ~~`config/sotqin.yaml` hali 8 kamera deydi~~ | — | ❌ **NOTO'G'RI TOPILMA** |
 | O-1 | `/health` haqiqatni ko'rsatmaydi | O'rta | M |
-| O-2 | CSP sarlavhasi yo'q | O'rta | M |
+| O-2 | ~~CSP sarlavhasi yo'q~~ | O'rta | ✅ **TUZATILDI** |
 | O-3 | Faqat o'zbek tili — rus tili yo'q | O'rta | L |
 | O-4 | Analitika yo'q — konversiya o'lchanmaydi | O'rta | S |
 
@@ -1154,6 +1154,12 @@ Panel (`app.`) XSS bo'lsa himoya qatlami yetishmaydi.
 **Tuzatish:** Avval `Content-Security-Policy-Report-Only` bilan
 boshlash, keyin majburlash. **Egasi:** DevOps · **Hajmi:** M
 
+✅ **TUZATILDI.** 2026-09-09: siyosat ikkala Caddyfile'ga qo'yildi
+(inline `<script>` va `onclick=` lar tashqi faylga chiqarildi, tema
+bootstrap'i hashga olindi).  2026-09-12: bir haftalik kuzatuvdan keyin
+`-Report-Only` olib tashlandi — siyosat endi bloklaydi.  Qulf:
+`tests/test_security_headers.py`.
+
 ---
 
 ### O'RTA-3 · Faqat o'zbek tili — rus tili yo'q
@@ -1409,7 +1415,7 @@ odam tomonidan tasdiqlangan; yuqoridagi jadval raqam bilan to'ldirilgan.
   (`scripts/make_panel_screenshots.py`). Hozir "raqamlar namunaviy".
 - D2 · `/health` ni chuqurlashtirish + `/status` komponent bo'yicha
   (O'RTA-1).
-- D3 · CSP `Report-Only` → majburiy (O'RTA-2).
+- D3 · ✅ CSP `Report-Only` → majburiy (O'RTA-2) — 2026-09-12.
 - D4 · Yengil analitika + konversiya o'lchovi (O'RTA-4).
 - D5 · Narx valyutasi bo'yicha qaror (O'RTA-5).
 - D6 · Rus tili: landing + narx + o'rnatish (O'RTA-3).

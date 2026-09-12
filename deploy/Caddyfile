@@ -37,7 +37,12 @@
         # eski tuzoq: `test_proxy_limits.py` uzoq vaqt faqat shu faylni
         # o'qib, productionda ishlatiladigan `Caddyfile.enes` ga umuman
         # qaramagan edi.
-        Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://telegram.org 'sha256-ghJCUYifnPgktv9/+3n+mhCny+E0zD/orjw2KXeD6C0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        #
+        # 2026-09-12 dan MAJBURIY (avval bir hafta `-Report-Only` bilan
+        # kuzatildi).  Faylni o'zgartirgandan keyin Caddy konteyneri
+        # `--force-recreate` bilan qayta yaratilsin — bind-mount inode'ga
+        # bog'lanadi (`docs/DEPLOY_TARIFLAR.md` §3).
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org 'sha256-ghJCUYifnPgktv9/+3n+mhCny+E0zD/orjw2KXeD6C0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         -Server
     }
     # Klip limiti (cloud/main.py CLIP_MAX_BYTES = 50MB) dan katta bo'lishi

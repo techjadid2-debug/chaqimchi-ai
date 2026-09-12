@@ -3147,6 +3147,44 @@ class EventStore:
                     current[key] = max(values)
         return result
 
+    def reported_app_versions(self) -> List[str]:
+        """Qurilmalar oxirgi heartbeatda aytgan dastur versiyalari.
+
+        Nega kerak: `releases/` tozalanganda qurilma HALI ishlatayotgan
+        versiyaning o'rnatuvchisi qolishi shart.  Qurilma yangilanish
+        paytida aynan o'z joriy versiyasini reliz serveridan rollback
+        nishoni qilib yuklab oladi
+        (`enes/local/updater.py: _ensure_rollback_target`) — fayl
+        o'chirilgan bo'lsa buzuq reliz chiqqanda do'kon qo'lda tiklashni
+        kutib qoladi, ya'ni usta borishi kerak.
+
+        Versiya `device_health` da alohida USTUN emas — u
+        `payload_json` ichidagi kalit (`app_version`,
+        `EdgeHeartbeatBody`).  JSON shu yerda Python'da ochiladi, SQL
+        bilan emas: `json_extract` (SQLite) va `->>` (PostgreSQL) ikki
+        xil yozuv, bu modul esa ikkala dialektda ham ishlaydi.  Ustun
+        NOM bilan o'qiladi: pozitsion indeks psycopg'ning `dict_row` i
+        bilan `KeyError` beradi va buni SQLite'da ketadigan test
+        ko'rsatmaydi.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(self._sql("SELECT payload_json FROM device_health")).fetchall()
+        versions: List[str] = []
+        for row in rows:
+            item = self._dict(row)
+            try:
+                payload = json.loads(item["payload_json"])
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            version = str(payload.get("app_version") or "").strip()
+            # `unknown` — `EdgeHeartbeatBody` ning standart qiymati, ya'ni
+            # qurilma versiyasini aytmagan.  Bunday nomdagi fayl yo'q.
+            if version and version != "unknown" and version not in versions:
+                versions.append(version)
+        return versions
+
     def get_site_config(self, site_id: str) -> Dict[str, Any]:
         with self._connect() as conn:
             row = conn.execute(

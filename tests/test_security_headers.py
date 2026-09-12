@@ -27,7 +27,7 @@ REQUIRED = (
     "X-Frame-Options",
     "Referrer-Policy",
     "Permissions-Policy",
-    "Content-Security-Policy-Report-Only",
+    "Content-Security-Policy",
 )
 
 
@@ -47,6 +47,25 @@ def test_both_caddyfiles_send_the_same_security_headers() -> None:
     assert _csp(CADDYFILES["prod"]) == _csp(CADDYFILES["enes"]), (
         "ikki Caddyfile'dagi CSP ajralib ketdi"
     )
+
+
+def test_the_policy_is_enforced_not_report_only() -> None:
+    """`-Report-Only` qaytib kelmasin.
+
+    Kuzatuv rejimi hech narsani bloklamaydi — faqat konsolga yozadi.
+    2026-09-12 da siyosat majburiy qilindi; sarlavha nomiga qo'shilgan
+    bitta so'z butun himoyani jimgina o'chiradi va `REQUIRED` dagi
+    `"Content-Security-Policy" in text` tekshiruvi buni KO'RMAYDI
+    (u ham `-Report-Only` nomining ichida turadi).
+    """
+    for name, path in CADDYFILES.items():
+        text = path.read_text(encoding="utf-8")
+        offending = [
+            line.strip()
+            for line in text.splitlines()
+            if "Content-Security-Policy-Report-Only" in line and not line.lstrip().startswith("#")
+        ]
+        assert not offending, f"{name}: siyosat kuzatuv rejimida qolib ketdi: {offending}"
 
 
 def test_the_policy_still_blocks_the_dangerous_sources() -> None:

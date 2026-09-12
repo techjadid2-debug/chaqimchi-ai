@@ -37,9 +37,16 @@
 		# hashga olingan.  Skript o'zgarsa hash ham o'zgaradi va
 		# `tests/test_security_headers.py` buni darhol aytadi.
 		#
-		# Hali `-Report-Only`: siyosat jonli trafikda bir hafta
-		# kuzatilsin (deploy cutover kuni bo'ladi), keyin sarlavha nomi
-		# `Content-Security-Policy` ga almashadi.  Bitta so'z.
+		# 2026-09-12: siyosat MAJBURIY rejimga o'tdi.  Bir hafta
+		# `-Report-Only` bilan jonli trafikda kuzatildi — konsolda
+		# birorta buzilish xabari chiqmadi, ya'ni bloklash mijozga
+		# ko'rinadigan narsani sindirmaydi.  Siyosat MAZMUNI o'sha
+		# holda qoldi, faqat sarlavha nomi almashdi.
+		#
+		# Bu faylni o'zgartirgandan keyin Caddy konteyneri
+		# `--force-recreate` bilan qayta yaratilsin: fayl bind-mount'i
+		# inode'ga bog'lanadi, `rsync` esa yangi inode yozadi va oddiy
+		# `restart` ESKI nusxani ushlab qoladi (`docs/DEPLOY_TARIFLAR.md` §3).
 		#
 		# `style-src` da `'unsafe-inline'` ataylab QOLADI: React
 		# `style={{…}}` atributlari (22 o'rin) va sahifalardagi
@@ -48,7 +55,7 @@
 		#
 		# `telegram.org` — Mini App SDK'si (`owner.html`).  `blob:` —
 		# panel kadr va klipni `URL.createObjectURL` bilan ko'rsatadi.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://telegram.org 'sha256-ghJCUYifnPgktv9/+3n+mhCny+E0zD/orjw2KXeD6C0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org 'sha256-ghJCUYifnPgktv9/+3n+mhCny+E0zD/orjw2KXeD6C0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
 	log {

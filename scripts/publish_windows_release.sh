@@ -139,6 +139,50 @@ if [[ "$remote_size" != "$size_bytes" ]]; then
 fi
 curl -fsS "$dl_url/releases/$(basename "$manifest")" > /dev/null
 
+# ── Eski relizlarni tozalash ────────────────────────────────────────────
+#
+# `releases/` hech qachon tozalanmasdi: har nashr ~100 MB qoldirardi va
+# papka serverda 19 ta eski `.exe` bilan 1,9 GB ga o'sdi.  Diskning
+# to'lishi bu yerda faqat "joy tugadi" degani emas — Postgres va MinIO
+# o'sha diskda turadi.
+#
+# Nashrdan KEYIN: yangi juftlik joyida turganda "eng yangi uchta"
+# hisobi to'g'ri chiqadi.  Tozalash yiqilsa nashr BUZILMAYDI — reliz
+# allaqachon jonli, tozalash esa ertaga fon vazifasida qaytadi.
+#
+# Ikki qadam, chunki konteynerda papka `:ro` bilan ulangan (ataylab:
+# internetga qaragan ilova qurilmalar o'rnatadigan faylni o'zgartira
+# olmasligi kerak).  QAROR konteynerda qabul qilinadi — u qurilmalar
+# hali so'rayotgan versiyani bazadan o'qiydi, baza esa faqat docker
+# tarmog'i ichidan ko'rinadi.  O'CHIRISH hostda.
+prune_remote() {
+  local remote_root compose env_file plan
+  remote_root="$(dirname "$remote_dir")"
+  compose="${ENES_COMPOSE_FILE:-docker-compose.enes.yml}"
+  env_file="${ENES_ENV_FILE:-.env.production}"
+  plan="$(ssh "${scp_opts[@]}" "$ENES_RELEASE_HOST" \
+    "cd '$remote_root' && docker compose --env-file '$env_file' -f '$compose' \
+       exec -T cloud python scripts/prune_releases.py --reja")" || return 1
+  # Nomlarni QAYTA tekshiramiz: `rm` ga o'tadigan ro'yxat masofadagi
+  # buyruq chiqishidan keladi, ya'ni yo'l bo'ylab chiqib ketadigan yoki
+  # bo'sh joyli nom umuman o'tmasligi kerak.
+  plan="$(printf '%s\n' "$plan" | grep -E '^[A-Za-z0-9._-]+\.(exe|json)$' || true)"
+  if [[ -z "$plan" ]]; then
+    echo "   ✓ eski reliz yo'q, tozalash kerak emas"
+    return 0
+  fi
+  printf '%s\n' "$plan" \
+    | ssh "${scp_opts[@]}" "$ENES_RELEASE_HOST" \
+        "cd '$remote_dir' && xargs -r rm -f --" || return 1
+  echo "   ✓ o'chirildi: $(printf '%s\n' "$plan" | wc -l | tr -d ' ') fayl"
+}
+
+echo "→ Serverdagi eski relizlar tozalanmoqda (har prefiksda 3 juftlik qoladi)…"
+if ! prune_remote; then
+  echo "   ⚠ tozalash bajarilmadi — nashr o'z holida, keyin qo'lda:" >&2
+  echo "     docker compose exec -T cloud python scripts/prune_releases.py --reja" >&2
+fi
+
 echo
 echo "✓ $version nashr qilindi."
 echo

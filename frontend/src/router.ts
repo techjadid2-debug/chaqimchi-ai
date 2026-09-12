@@ -27,7 +27,14 @@ function pathMode(base: string) {
  *  ketgan.  Ular 404 yoki bosh sahifa emas, aynan o'sha joyni ochsin. */
 export type LegacyRoutes = Readonly<Record<string, readonly [string, string]>>;
 
-function readRoute(base: string, ids: readonly string[], fallback: string, legacy: LegacyRoutes = {}): { id: string; param: string; sub: string } {
+/* Standart qiymat MODUL darajasida: `legacy = {}` har chizishda yangi
+   obyekt yasaydi, ya'ni `useEffect` deps'ga qo'shilsa effekt har
+   renderda qayta ishga tushardi — shu sababdan u deps'dan tushirib
+   qoldirilgan edi va `popstate` eski xaritani ushlab turardi.
+   Barqaror havola ikkalasini ham hal qiladi. */
+const NO_LEGACY: LegacyRoutes = {};
+
+function readRoute(base: string, ids: readonly string[], fallback: string, legacy: LegacyRoutes = NO_LEGACY): { id: string; param: string; sub: string } {
   const source = pathMode(base)
     ? window.location.pathname.slice(base.length).replace(/^\/+/, "")
     : window.location.hash.replace(/^#\/?/, "");
@@ -52,7 +59,7 @@ function readRoute(base: string, ids: readonly string[], fallback: string, legac
  *  `param` — chuqur havola uchun: «diqqat talab qiladi» ro'yxatidan
  *  mijozga to'g'ridan-to'g'ri o'tiladi va brauzerning Orqasi ishlaydi
  *  (eski admin qoidasi, `#/mijozlar/<id>`). */
-export function usePanelRoute(base: string, ids: readonly string[], fallback: string, legacy: LegacyRoutes = {}) {
+export function usePanelRoute(base: string, ids: readonly string[], fallback: string, legacy: LegacyRoutes = NO_LEGACY) {
   const [route, setRoute] = useState(() => readRoute(base, ids, fallback, legacy));
   const active = route.id;
   const param = route.param;
@@ -67,7 +74,7 @@ export function usePanelRoute(base: string, ids: readonly string[], fallback: st
       window.removeEventListener("popstate", sync);
       window.removeEventListener("hashchange", sync);
     };
-  }, [base, ids, fallback]);
+  }, [base, ids, fallback, legacy]);
 
   const navigate = useCallback(
     (target: string, targetParam = "", targetSub = "") => {

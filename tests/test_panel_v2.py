@@ -792,3 +792,69 @@ def test_the_camera_page_has_only_one_heading() -> None:
     assert "{embedded ? null : <PageHeader" in evidence, "ichma-ich sarlavha chizilyapti"
     assert "embedded && dayPicker" in evidence, "kun tanlagich yo'qolgan"
     assert "embedded/>" in src("CameraDetail.tsx"), "kamera sahifasi propni bermaydi"
+
+
+def test_there_is_only_one_metric_card_component() -> None:
+    """Ikkita ko'rsatkich kartasi ikki panelda boshqacha ko'rinardi.
+
+    Ega paneli `StatCard` ga o'tgach admin eskisida (`MetricCard`)
+    qolib ketdi — aynan bitta karta, faqat o'zgarish va sparkline'siz.
+    `StatCard` ning o'sha proplari IXTIYORIY, ya'ni ikkinchi komponent
+    umuman kerak emas edi.
+    """
+    assert "export function MetricCard" not in src("components.tsx")
+    # Izohda nom sifatida uchraydi (nega o'chirilgani yozilgan), shuning
+    # uchun ISHLATILISHI qidiriladi: `<MetricCard`.
+    for name in ADMIN_FILES + OWNER_FILES:
+        assert "<MetricCard" not in src(name), f"{name}: eski karta qaytib kelgan"
+
+
+def test_the_dead_css_is_gone() -> None:
+    """Ishlatilmaydigan qoida keyingi odamni «bu qayerda chiziladi?»
+    degan qidiruvga yuboradi."""
+    css = (SRC / "styles.css").read_text(encoding="utf-8")
+    for rule in (".metric-grid-4", ".traffic-card", ".plan-heatmap"):
+        assert rule not in css, f"{rule}: o'lik qoida qaytib kelgan"
+
+
+def test_the_colours_come_from_the_tokens() -> None:
+    """Rang ikki joyda yozilsa palitra o'zgarganda biri eskirib qoladi.
+
+    `--heat-scale` xom RGB uchligi saqlaydi: kanvas `rgb()` satrini
+    emas, SON talab qiladi.
+    """
+    tokens = (Path(__file__).resolve().parents[1] / "cloud" / "static" / "tokens.css").read_text(
+        encoding="utf-8"
+    )
+    assert "--heat-scale:" in tokens, "issiqlik shkalasi tokenlarda yo'q"
+
+    heat = src("Heatmap.tsx")
+    assert '--heat-scale' in heat, "xarita shkalani tokendan o'qimaydi"
+    assert "HEAT_FALLBACK" in heat, "stil yuklanmagan holat uchun zaxira yo'q"
+
+    theme = src("theme.ts")
+    assert '"--surface"' in theme, "manzil qatori rangi tokendan o'qilmaydi"
+    assert "META_FALLBACK" in theme, "bootstrap uchun zaxira yo'q"
+
+
+def test_the_route_hook_watches_its_legacy_map() -> None:
+    """`legacy` deps'da yo'q edi — `popstate` eski xaritani ushlab turardi.
+
+    Standart qiymat modul darajasida bo'lishi SHART: `= {}` har
+    chizishda yangi obyekt yasaydi va effekt har renderda qayta ishga
+    tushardi (aynan shu sababdan dep tushirib qoldirilgan edi).
+    """
+    router = src("router.ts")
+    assert "const NO_LEGACY" in router, "barqaror standart qiymat yo'q"
+    assert "[base, ids, fallback, legacy]" in router, "`legacy` deps'da yo'q"
+    assert "legacy: LegacyRoutes = {}" not in router, (
+        "parametr standarti hamon har chizishda yangi obyekt yasaydi"
+    )
+
+
+def test_the_admin_has_one_telemetry_section() -> None:
+    """«Qurilmalar» va «Monitoring» AYNAN bir sahifani chizardi."""
+    admin = src("admin.tsx")
+    assert '{id:"devices"' not in admin, "menyuda ikkinchi qator qolgan"
+    # Eski xatcho'p ishlashi kerak — yo'naltirish orqali.
+    assert 'devices: ["monitoring"' in admin, "eski manzil yo'naltirilmaydi"

@@ -25,13 +25,32 @@ export type Theme = "light" | "dark" | "system";
  *  ikkisi ajralib ketsa sahifa bir zumga noto'g'ri rangda ochiladi. */
 export const THEME_KEY = "enes_theme";
 
-/** Brauzer manzil qatorining rangi (mobil).  Tokendagi sath rangi
- *  bilan bir xil bo'lsin, aks holda telefonda panel tepasida boshqa
- *  rangli chiziq turadi. */
-const META_COLOR: Record<"light" | "dark", string> = {
+/** Brauzer manzil qatorining rangi (mobil).
+ *
+ *  Qiymat `tokens.css` dagi `--surface` dan O'QILADI: bu yerda qo'lda
+ *  yozilsa palitra o'zgarganda telefonda panel tepasida boshqa rangli
+ *  chiziq qolib ketardi va buni faqat qurilmada ko'rish mumkin edi.
+ *
+ *  Zaxira qiymat baribir kerak: bu funksiya birinchi chizishdan OLDIN
+ *  ishlaydi (`owner.html` dagi bootstrap) va o'sha paytda stil hali
+ *  yuklanmagan bo'lishi mumkin — u holda `getComputedStyle` bo'sh
+ *  satr qaytaradi.  Zaxira tokenning joriy qiymati bilan bir xil. */
+const META_FALLBACK: Record<"light" | "dark", string> = {
   light: "#ffffff",
   dark: "#11161f",
 };
+
+function metaColor(mode: "light" | "dark"): string {
+  try {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue("--surface")
+      .trim();
+    if (value) return value;
+  } catch {
+    /* Stil hali yo'q yoki muhit brauzer emas (test). */
+  }
+  return META_FALLBACK[mode];
+}
 
 export function readTheme(): Theme {
   try {
@@ -61,7 +80,7 @@ export function applyTheme(theme: Theme): void {
   else root.dataset.theme = theme;
 
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", META_COLOR[resolveTheme(theme)]);
+  if (meta) meta.setAttribute("content", metaColor(resolveTheme(theme)));
 }
 
 export function saveTheme(theme: Theme): void {

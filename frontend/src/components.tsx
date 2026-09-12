@@ -81,22 +81,19 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
   return <section className={`card ${className}`}>{children}</section>;
 }
 
-export function MetricCard({ label, value, note, icon, tone = "blue" }: { label: string; value: ReactNode; note?: ReactNode; icon: string; tone?: string }) {
-  return <Card className="metric-card">
-    <div className={`metric-icon tone-${tone}`}><Icon name={icon} /></div>
-    <div className="metric-label">{label}</div>
-    <div className="metric-value">{value}</div>
-    {note ? <div className="metric-note">{note}</div> : null}
-  </Card>;
-}
-
 /** Ko'rsatkich kartasi: raqam + ixtiyoriy o'zgarish + ixtiyoriy
  *  tendensiya chizig'i.
  *
  *  `series` va `deltaPercent` — IXTIYORIY.  Server hali bermaydigan
  *  ko'rsatkich uchun karta ularsiz chiziladi: bo'sh sparkline yoki
  *  "0%" degan yolg'on o'sish ko'rsatgandan ko'ra hech narsa
- *  ko'rsatmagan yaxshi. */
+ *  ko'rsatmagan yaxshi.
+ *
+ *  Ilgari yonida `MetricCard` ham turardi — aynan shu karta,
+ *  o'zgarish va sparkline'siz.  Ega paneli `StatCard` ga o'tgach
+ *  admin eskisida qolib ketdi va ikkita KO'RSATKICH KARTASI ikki
+ *  panelda boshqacha ko'rinardi.  O'chirildi (2026-09-12): ixtiyoriy
+ *  proplarni bermaslik yetarli. */
 export function StatCard({ label, value, note, icon, tone = "blue", series, deltaPercent, deltaNote, goodWhenDown }: {
   label: string;
   value: ReactNode;

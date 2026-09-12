@@ -5,7 +5,7 @@
  * bo'lib qolardi.  `/assets/` mount'i har hostda bor, ya'ni docs
  * subdomeni ham o'sha faylni oladi.  `?v=` — kesh tokeni,
  * `tests/test_static_pages.py` uni fayl mazmuni bilan solishtiradi. */
-@import "/assets/tokens.css?v=92d5073829";
+@import "/assets/tokens.css?v=2ecf680323";
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--paper-2); color: var(--text); line-height: 1.65; }

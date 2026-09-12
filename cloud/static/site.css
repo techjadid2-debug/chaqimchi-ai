@@ -2,7 +2,7 @@
  * Ilgari shu yerda palitraning ikkinchi nusxasi turardi va sayt bilan
  * panel rangi ajralib ketishi mumkin edi.  `?v=` — kesh tokeni,
  * `tests/test_static_pages.py` uni fayl mazmuni bilan solishtiradi. */
-@import "tokens.css?v=92d5073829";
+@import "tokens.css?v=2ecf680323";
 
 /* ENES Monitoring — ommaviy sayt uslubi.
  *
@@ -37,7 +37,6 @@
 }
 .band { background: var(--band-bg); color: var(--band-fg); }
 /* Ochiq, lekin bir tonga botgan bo'lim (narx, kameralar). */
-.band-tint { --band-bg: var(--surface-inset); }
 .band-dark {
   --band-bg: #05070a;
   --band-surface: #11161f;

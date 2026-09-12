@@ -2,7 +2,7 @@ import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createRoot } from "react-dom/client";
 import { api, logout as serverLogout, copyText, downloadCsv, formatDateShort, formatDateUz, formatMoney, formatNumber, login, tokenFor } from "./api";
 import { t } from "./i18n";
-import { ActionMenu, AppShell, Avatar, Card, CopyField, EmptyState, ErrorStrip, LoginScreen, MetricCard, Modal, PageHeader, Pill, SearchPalette, Skeleton, useConfirm, useToast, type NavItem } from "./components";
+import { ActionMenu, AppShell, Avatar, Card, CopyField, EmptyState, ErrorStrip, LoginScreen, StatCard, Modal, PageHeader, Pill, SearchPalette, Skeleton, useConfirm, useToast, type NavItem } from "./components";
 import { AdminHome } from "./AdminHome";
 import { AdminCustomer } from "./AdminCustomer";
 import { AdminTeam } from "./AdminTeam";
@@ -47,7 +47,6 @@ const NAV_ITEMS:Array<{id:string;label?:string;key?:string;icon:string}> = [
   {id:"leads",key:"panel.nav.leads",icon:"invoice"},
   {id:"branches",label:"Filiallar",icon:"branch"},
   {id:"cameras",label:"Kameralar",icon:"camera"},
-  {id:"devices",label:"Qurilmalar",icon:"server"},
   {id:"plans",label:"Tariflar",icon:"card"},
   {id:"payments",label:"To‘lovlar",icon:"invoice"},
   {id:"finance",label:"Moliya",icon:"chart"},
@@ -59,6 +58,12 @@ const NAV_ITEMS:Array<{id:string;label?:string;key?:string;icon:string}> = [
 ];
 
 const ROUTE_IDS = NAV_ITEMS.map(item=>item.id);
+
+/* Eski bo'lim nomi → yangi bo'lim.  «Qurilmalar» va «Monitoring» AYNAN
+   bir sahifani chizardi (`<Telemetry/>`) va menyuda ikki qator
+   egallardi — admin qaysi biriga bosishini har safar o'ylardi.
+   Manzil yo'naltiriladi, ya'ni eski xatcho'q ishlaydi. */
+const LEGACY_ROUTES = { devices: ["monitoring", ""] } as const;
 const MOBILE_NAV = ["overview","customers","payments","monitoring"];
 
 function useAdminDashboard(authenticated:boolean, range:string) {
@@ -198,7 +203,7 @@ function PlansPage() {
     // Bo'sh katalog — «yuklanmadi» dan FARQLI holat: skelet to'xtaydi.
     .catch(reason=>{setData({features:[]});setError(reason instanceof Error?reason.message:"Katalog olinmadi");});},[]);
   useEffect(()=>{void load();},[load]);
-  return <><PageHeader title="Tariflar" subtitle="Versiyalangan narx katalogi; qo‘lda yozilgan soxta qiymat ko‘rsatilmaydi."/>{error?<ErrorStrip detail={error} onRetry={()=>{setData(null);void load();}}/>:null}{data?<><div className="metric-grid"><MetricCard label="Faol katalog" value={data.price_book?.label||"—"} note="Serverdagi nashr" icon="card"/><MetricCard label="AI funksiyalar" value={formatNumber(data.features.length)} note="Katalogdagi imkoniyatlar" icon="pulse"/><MetricCard label="USD kursi" value={formatMoney(data.price_book?.usd_rate_uzs)} note="Hisoblash manbasi" icon="chart"/><MetricCard label="Platforma bazasi" value={data.price_book?.base_fee_usd_cents==null?"—":`$${(data.price_book.base_fee_usd_cents/100).toFixed(0)}`} note="Oylik bazaviy haq" icon="server"/></div><Card><div className="card-head"><div><h2>Funksiyalar katalogi</h2><p>Bir kamera uchun oylik qiymat</p></div></div><div className="table-wrap"><table><thead><tr><th>Funksiya</th><th>Tur</th><th>Mijoz narxi</th><th>Ichki qiymat</th></tr></thead><tbody>{data.features.map(feature=><tr key={feature.code}><td><div className="table-title">{feature.name}</div><div className="table-sub">{feature.code}</div></td><td>{feature.category}</td><td>${(feature.monthly_usd_cents/100).toFixed(2)}</td><td>${(feature.cost_usd_cents/100).toFixed(2)}</td></tr>)}</tbody></table></div></Card></>:<Card><div className="card-body"><Skeleton height={190}/></div></Card>}</>;
+  return <><PageHeader title="Tariflar" subtitle="Versiyalangan narx katalogi; qo‘lda yozilgan soxta qiymat ko‘rsatilmaydi."/>{error?<ErrorStrip detail={error} onRetry={()=>{setData(null);void load();}}/>:null}{data?<><div className="metric-grid"><StatCard label="Faol katalog" value={data.price_book?.label||"—"} note="Serverdagi nashr" icon="card"/><StatCard label="AI funksiyalar" value={formatNumber(data.features.length)} note="Katalogdagi imkoniyatlar" icon="pulse"/><StatCard label="USD kursi" value={formatMoney(data.price_book?.usd_rate_uzs)} note="Hisoblash manbasi" icon="chart"/><StatCard label="Platforma bazasi" value={data.price_book?.base_fee_usd_cents==null?"—":`$${(data.price_book.base_fee_usd_cents/100).toFixed(0)}`} note="Oylik bazaviy haq" icon="server"/></div><Card><div className="card-head"><div><h2>Funksiyalar katalogi</h2><p>Bir kamera uchun oylik qiymat</p></div></div><div className="table-wrap"><table><thead><tr><th>Funksiya</th><th>Tur</th><th>Mijoz narxi</th><th>Ichki qiymat</th></tr></thead><tbody>{data.features.map(feature=><tr key={feature.code}><td><div className="table-title">{feature.name}</div><div className="table-sub">{feature.code}</div></td><td>{feature.category}</td><td>${(feature.monthly_usd_cents/100).toFixed(2)}</td><td>${(feature.cost_usd_cents/100).toFixed(2)}</td></tr>)}</tbody></table></div></Card></>:<Card><div className="card-body"><Skeleton height={190}/></div></Card>}</>;
 }
 
 /* Moliya: platforma va HAR MIJOZ nechchiga tushayapti.  Gemini xarajati
@@ -235,10 +240,10 @@ function FinancePage() {
     <PageHeader title="Moliya" subtitle={`${data.month} · kurs 1 $ = ${formatMoney(data.usd_rate_uzs)}`} actions={<select className="select" value={month||data.month} onChange={event=>setMonth(event.target.value)} aria-label="Oy">{financeMonths().map(m=><option key={m} value={m}>{m}</option>)}</select>}/>
     {!fixed.server_configured?<div className="alert-strip alert-warning"><Icon name="bell"/><div><strong>Server narxi kiritilmagan.</strong> Contabo oylik summasini serverdagi .env.production ga ENES_COST_SERVER_MONTHLY_USD qilib yozing.</div></div>:null}
     <div className="metric-grid">
-      <MetricCard label="Oylik daromad" value={formatMoney(totals.revenue_uzs)} note={`${totals.sites_paying} ta to‘lovchi mijoz`} icon="card" tone="green"/>
-      <MetricCard label="Tannarx (bizniki)" value={formatMoney(totals.cost_uzs)} note="infra + Gemini" icon="invoice" tone="red"/>
-      <MetricCard label="Foyda" value={formatMoney(totals.margin_uzs)} note={totals.margin_percent===null?"daromad − tannarx":`${totals.margin_percent}% · daromad − tannarx`} icon="chart" tone={totals.margin_uzs>=0?"green":"red"}/>
-      <MetricCard label="Mijozga jami tushadi" value={formatMoney(totals.customer_total_uzs)} note="obuna + o‘z toki" icon="pulse" tone="blue"/>
+      <StatCard label="Oylik daromad" value={formatMoney(totals.revenue_uzs)} note={`${totals.sites_paying} ta to‘lovchi mijoz`} icon="card" tone="green"/>
+      <StatCard label="Tannarx (bizniki)" value={formatMoney(totals.cost_uzs)} note="infra + Gemini" icon="invoice" tone="red"/>
+      <StatCard label="Foyda" value={formatMoney(totals.margin_uzs)} note={totals.margin_percent===null?"daromad − tannarx":`${totals.margin_percent}% · daromad − tannarx`} icon="chart" tone={totals.margin_uzs>=0?"green":"red"}/>
+      <StatCard label="Mijozga jami tushadi" value={formatMoney(totals.customer_total_uzs)} note="obuna + o‘z toki" icon="pulse" tone="blue"/>
     </div>
     <div className="dashboard-grid section-gap">
       <Card><div className="card-head"><div><h2>Doimiy xarajatlar</h2><p>Ulangan do‘konlar orasida teng bo‘linadi</p></div></div><div className="card-body">
@@ -335,8 +340,8 @@ function VisionAgentPage({sites}:{sites:Site[]}) {
 function GenericAdmin({id,param,data,onRefresh,onSelect}:{id:string;param:string;data:AdminDashboard;onRefresh:()=>Promise<void>;onSelect:(site:string)=>void}) {
   if(id==="customers") return <CustomersPage sites={data.sites} onRefresh={onRefresh} selected={param} onSelect={onSelect}/>;
   if(id==="branches") return <><PageHeader title="Filiallar" subtitle="Obuna va tizim holatini bitta ro‘yxatdan boshqaring."/><SiteTable sites={data.sites} searchable/></>;
-  if(id==="devices"||id==="monitoring") return <><PageHeader title={id==="devices"?"Qurilmalar":"Monitoring"} subtitle="Sotqin agentlari va haqiqiy resurs ko‘rsatkichlari."/><Telemetry items={data.telemetry}/></>;
-  if(id==="cameras") return <><PageHeader title="Kameralar" subtitle="Filiallar bo‘yicha ishlayotgan va e’tibor talab qiladigan kameralar."/><div className="metric-grid">{data.sites.map(site=><MetricCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.connection||"—"} icon="camera" tone={(site.cameras_active||0)>=(site.cameras_expected||1)?"green":"red"}/>)}</div></>;
+  if(id==="monitoring") return <><PageHeader title="Monitoring" subtitle="Qurilma agentlari va haqiqiy resurs ko‘rsatkichlari."/><Telemetry items={data.telemetry}/></>;
+  if(id==="cameras") return <><PageHeader title="Kameralar" subtitle="Filiallar bo‘yicha ishlayotgan va e’tibor talab qiladigan kameralar."/><div className="metric-grid">{data.sites.map(site=><StatCard key={site.id} label={site.name} value={`${formatNumber(site.cameras_active)} / ${formatNumber(site.cameras_expected)}`} note={site.connection||"—"} icon="camera" tone={(site.cameras_active||0)>=(site.cameras_expected||1)?"green":"red"}/>)}</div></>;
   if(id==="plans") return <PlansPage/>;
   if(id==="payments") return <PaymentsPage/>;
   if(id==="finance") return <FinancePage/>;
@@ -350,7 +355,7 @@ function GenericAdmin({id,param,data,onRefresh,onSelect}:{id:string;param:string
 
 function AdminApp() {
   const [authenticated,setAuthenticated] = useState(()=>Boolean(tokenFor("admin")));
-  const [active,navigateTo,param] = usePanelRoute("/admin", ROUTE_IDS, "overview");
+  const [active,navigateTo,param] = usePanelRoute("/admin", ROUTE_IDS, "overview", LEGACY_ROUTES);
   const [range,setRange] = useState("7d");
   const [busy,setBusy] = useState(false);
   const [loginError,setLoginError] = useState("");

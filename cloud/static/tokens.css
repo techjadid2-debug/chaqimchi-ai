@@ -58,6 +58,13 @@
      Bular BREND emas: ular hodisa jiddiyligini aytadi va rebrendda
      ataylab o'zgarmadi — mijoz qizilni "xato" deb o'qishga o'rgangan. */
   --green: #34a853;
+  /* Issiqlik xaritasi shkalasi — sovuqdan issiqqa besh nuqta.
+     Kanvas RGB SON talab qiladi, shuning uchun `rgb()` emas, xom
+     uchlik: `Heatmap.tsx: heatRgb` uni shu ko'rinishda o'qiydi.
+     Bir joyda turishi shart — ilgari beshta rang `Heatmap.tsx` da
+     qotirilgan edi va palitra o'zgarganda xarita eski ranglarda
+     qolardi. */
+  --heat-scale: 37 99 235, 34 211 238, 34 197 94, 250 204 21, 220 38 38;
   --green-soft: #e6f4ea;
   --green-ink: #08754d;
   --yellow: #fbbc05;

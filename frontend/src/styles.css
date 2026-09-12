@@ -84,7 +84,6 @@ h1,h2,h3,p { margin-top: 0; }
 
 /* ── Ko'rsatkich kartasi: o'zgarish + tendensiya ───────────────────── */
 .metric-grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
-.metric-grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
 .metric-grid-5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
 .metric-grid-6 { grid-template-columns: repeat(6, minmax(0,1fr)); }
 .stat-card { min-height: 168px; display: flex; flex-direction: column; }
@@ -113,7 +112,6 @@ h1,h2,h3,p { margin-top: 0; }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(0, .68fr); gap: 18px; }
 .split-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
 .stack { display: grid; align-content: start; gap: 18px; min-width: 0; }
-.traffic-card { min-height: 330px; }
 .chart-wrap { padding: 16px 18px 18px; }
 .chart { width: 100%; height: 210px; display: block; overflow: visible; }
 .chart-grid { stroke: var(--border); stroke-width: 1; }
@@ -468,7 +466,6 @@ tr:last-child td { border-bottom: 0; }
 .segmented button.active { background: var(--surface); color: var(--blue); box-shadow: var(--shadow); }
 .heatmap-wrap { padding: 16px 20px 20px; }
 .heatmap-wrap canvas { display: block; width: 100%; height: auto; max-height: 600px; border-radius: 13px; background: var(--surface-3); object-fit: cover; }
-.heatmap-wrap.plan-heatmap canvas { border: 1px solid var(--border); background: var(--surface-2); }
 /* Soat slayderi — issiqlik xaritasini vaqt bo'ylab surish. */
 .heat-scrub { display: flex; align-items: center; gap: 10px; padding: 4px 20px 0; flex-wrap: wrap; }
 .heat-scrub input[type="range"] { flex: 1; min-width: 160px; accent-color: var(--blue); }

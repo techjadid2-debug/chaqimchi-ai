@@ -13,8 +13,38 @@ type DayAnswer = { grid: number[][]; rows: number; cols: number; points?: number
 type HourBucket = { hour: number; grid: number[][]; points: number; frames: number };
 type HoursAnswer = { rows: number; cols: number; peak: number; points: number; hours: HourBucket[] };
 
+/* Shkala `tokens.css: --heat-scale` dan o'qiladi.
+ *
+ * Ilgari beshta rang shu faylda qotirilgan edi va palitra
+ * o'zgarganda xarita eski ranglarda qolardi — buni faqat ikki
+ * ekranni yonma-yon qo'yib ko'rish mumkin.  Kanvas RGB SON talab
+ * qiladi, shuning uchun token `rgb()` emas, xom uchlik saqlaydi.
+ *
+ * Zaxira qiymat tokenning joriy holati bilan bir xil: stil hali
+ * yuklanmagan bo'lsa (birinchi chizish) xarita rangsiz chiqmasin. */
+const HEAT_FALLBACK = [[37,99,235],[34,211,238],[34,197,94],[250,204,21],[220,38,38]];
+let heatStops: number[][] | null = null;
+
+function readHeatStops(): number[][] {
+  if (heatStops) return heatStops;
+  try {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue("--heat-scale");
+    const parsed = raw.split(",").map(part => part.trim().split(/\s+/).map(Number));
+    /* Har nuqta uchta son bo'lsin: token buzuq bo'lsa `NaN` kanvasda
+       ko'rinmas piksel beradi, ya'ni xarita jimgina bo'sh chiqardi. */
+    if (parsed.length >= 2 && parsed.every(stop => stop.length === 3 && stop.every(Number.isFinite))) {
+      heatStops = parsed;
+      return parsed;
+    }
+  } catch {
+    /* Stil yo'q yoki muhit brauzer emas (test). */
+  }
+  heatStops = HEAT_FALLBACK;
+  return HEAT_FALLBACK;
+}
+
 function heatRgb(ratio: number) {
-  const stops = [[37,99,235],[34,211,238],[34,197,94],[250,204,21],[220,38,38]];
+  const stops = readHeatStops();
   const x = Math.max(0, Math.min(1, ratio)) * (stops.length - 1);
   const i = Math.min(stops.length - 2, Math.floor(x)); const f = x - i;
   return stops[i].map((value, index) => Math.round(value + (stops[i + 1][index] - value) * f));

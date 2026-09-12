@@ -9,7 +9,7 @@
   <title>Tizim holati — ENES Monitoring</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/assets/favicon.png" type="image/png">
-  <link rel="stylesheet" href="/assets/site.css?v=1a3231b10b">
+  <link rel="stylesheet" href="/assets/site.css?v=5ec2692450">
 </head>
 <body class="utility-page">
   <!-- Ichki sahifa navigatsiyasi — ochiq fon.  Bosh sahifadagi qorong'i
@@ -56,6 +56,17 @@
   <main class="utility-main">
     <p class="eyebrow"><span></span> Tizim holati</p><h1>ENES Cloud</h1>
     <section class="utility-card status-panel"><span id="light" class="status-light"></span><div><h2 id="statusTitle" style="margin-bottom:6px">Tekshirilmoqda…</h2><p id="statusText" style="margin:0;color:var(--muted)">Server javobi kutilmoqda.</p></div></section>
+
+    <!-- Tekshiruvlar ro'yxati.  Server ularni allaqachon qaytarardi
+         (`/health/deep` → `checks[]`), sahifa esa javobni TASHLAB
+         yuborib faqat «ishlayapti / aloqa yo'q» derdi — ya'ni
+         nosozlikda mijoz ham, biz ham qaysi qism yiqilganini bu
+         sahifadan bilib olmasdik. -->
+    <section class="utility-card" id="checksCard" hidden>
+      <h2>Tekshiruvlar</h2>
+      <ul class="status-checks" id="checksList"></ul>
+      <p class="hint" id="checksUpdated"></p>
+    </section>
   </main>
   <!-- Umumiy footer — bosh sahifa bilan bir xil.  Uch tilli sahifalarga
      havola `page:` o'rinbosari bilan (ruscha sahifadan ruscha aloqaga),
@@ -83,6 +94,11 @@
     <a href="/oferta">Ommaviy oferta</a>
     <a href="/maxfiylik">Maxfiylik</a>
     <a href="/hamkorlik">Hamkorlik</a>
+    <!-- `/edu` ga havola FAQAT bosh sahifada bor edi, ya'ni ichki
+         sahifadan (oferta, o'rnatish, holat) unga yetib bo'lmasdi.
+         Futer har sahifada turadi — nav'ni shishirmasdan hal qiladi.
+         Sahifa o'zi faqat o'zbekcha, shuning uchun `page:` emas. -->
+    <a href="/edu">Ta’lim muassasalari</a>
     <a href="/aloqa">Aloqa</a>
     <a href="tel:+998932225070">+998 93 222 50 70</a>
     <a href="/rozilik-shabloni">Rozilik shabloni</a>
@@ -93,8 +109,15 @@
 </footer>
   <script type="application/json" id="page-text">
     {"upTitle": "Cloud ishlayapti", "upText": "Rasmiy sayt, panel va qurilma ulanish xizmati javob bermoqda.",
-     "downTitle": "Cloud bilan aloqa yo‘q", "downText": "Servis jamoasi holatni tekshirishi kerak."}
+     "downTitle": "Cloud bilan aloqa yo‘q", "downText": "Servis jamoasi holatni tekshirishi kerak.",
+     "partialTitle": "Tizimning bir qismi ishlamayapti", "partialText": "Quyidagi ro‘yxatda qaysi biri ekani ko‘rinadi.",
+     "timeout": "Server 8 soniyada javob bermadi.", "updated": "Yangilangan {time}",
+     "checkOk": "ishlayapti", "checkFailed": "javob bermadi",
+     "names": {"control_db": "Mijoz va obuna bazasi",
+               "event_db": "Hodisalar bazasi",
+               "media": "Rasm va klip saqlash",
+               "disk": "Server diski"}}
   </script>
-  <script src="/assets/status.js?v=bb04ad7cb3" defer></script>
+  <script src="/assets/status.js?v=7b6cba7451" defer></script>
 </body>
 </html>

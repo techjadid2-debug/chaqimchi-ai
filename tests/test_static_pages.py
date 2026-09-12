@@ -864,9 +864,20 @@ def test_the_offer_promises_no_more_than_the_code_delivers() -> None:
 
     for plan_key in ("boshlangich", "biznes"):
         plan = PLANS[plan_key]
-        price = f"{plan.monthly_price():,}".replace(",", " ")
-        assert price in offer, f"{plan_key} narxi ofertada boshqacha: {price}"
         assert f"{plan.max_cameras} tagacha" in offer, plan_key
+        # Summa ofertada UMUMAN yozilmaydi (2026-09-12).  Ilgari u
+        # qo'lda yozilgan va test uni katalog bilan solishtirib
+        # ushlab turardi — lekin bu yechim hujjatni har narx
+        # o'zgarishida tahrirlashni talab qilardi va bir kun
+        # unutilishi muqarrar edi.  Endi oferta amaldagi tarifga
+        # HAVOLA qiladi: ziddiyat imkoniyati yo'q.
+        price = f"{plan.monthly_price():,}".replace(",", " ")
+        assert price not in offer, (
+            f"{plan_key} narxi ofertaga qaytib yozilgan ({price}) — "
+            "u katalogdan ajralib ketadi; `/#narx` ga havola qoldiring"
+        )
+
+    assert offer.count('href="/#narx"') >= 2, "amaldagi tarifga havola yo'q"
 
     assert f"<td>{MEDIA_RETENTION_HOURS_DEFAULT} soat</td>" in offer, "media muddati"
     assert f"<b>{GRACE_DAYS} kun</b>" in offer, "qo'shimcha muddat"

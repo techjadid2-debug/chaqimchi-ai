@@ -233,3 +233,138 @@ def test_the_bot_name_comes_from_the_server(client: TestClient) -> None:
 
     rendered = client.get("/aloqa").text
     assert "__TELEGRAM_BOT_NAME__" not in rendered, "o'rinbosar almashtirilmagan"
+
+
+# ── Holat sahifasi: nosozlikda QAYSI qism yiqilganini aytadi ───────────
+
+
+def test_the_status_page_lists_the_checks() -> None:
+    """Server `checks[]` ni allaqachon qaytarardi, sahifa esa javobni
+    TASHLAB yuborib faqat «ishlayapti / aloqa yo'q» derdi — nosozlikda
+    mijoz ham, biz ham qaysi qism yiqilganini bu sahifadan bilib
+    olmasdik."""
+    js = (STATIC / "status.js").read_text(encoding="utf-8")
+    html = (STATIC / "status.html").read_text(encoding="utf-8")
+
+    assert 'id="checksList"' in html, "ro'yxat uchun joy yo'q"
+    assert "payload.checks" in js, "javobdagi tekshiruvlar o'qilmaydi"
+    # Ichki nom tarjimasi bo'lmasa o'sha nom chiqsin: yangi tekshiruv
+    # qo'shilganda sahifa uni JIM tashlab yuborishi eng yomon natija.
+    assert "|| name" in js
+
+
+def test_the_status_page_turns_red(tmp_path: Path) -> None:
+    """Ilgari faqat `online` sinfi bor edi va nosozlikda chiroq KULRANG
+    qolardi — aynan «hali tekshirilmoqda» bilan bir xil ko'rinish."""
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    js = (STATIC / "status.js").read_text(encoding="utf-8")
+
+    assert ".status-light.down" in css
+    assert 'classList.add("down")' in js
+
+
+def test_the_status_page_gives_up_after_a_timeout() -> None:
+    """Timeoutsiz sahifa «Tekshirilmoqda…» da ABADIY qotib qolardi —
+    brauzer so'rovni o'zi uzmaydi."""
+    js = (STATIC / "status.js").read_text(encoding="utf-8")
+
+    assert "AbortController" in js
+    assert "8000" in js, "kutish muddati yo'q"
+    assert "AbortError" in js, "timeout xatosi oddiy uzilishdan ajratilmagan"
+
+
+def test_the_status_page_distinguishes_partial_failure() -> None:
+    """«Aloqa yo'q» va «bir qismi ishlamayapti» — boshqa-boshqa holat
+    va mijoz uchun farqi bor."""
+    js = (STATIC / "status.js").read_text(encoding="utf-8")
+    assert "partialTitle" in js
+
+
+# ── Telefon menyusi ────────────────────────────────────────────────────
+
+
+def test_the_phone_menu_closes_on_an_outside_tap() -> None:
+    """Menyuni ochib sahifaning boshqa joyiga bosgan odam uni ochiq
+    qoldirib ketardi va u telefonda kontentning yarmini to'sardi."""
+    js = (STATIC / "site.js").read_text(encoding="utf-8")
+
+    assert "pointerdown" in js, "tashqariga bosish yopmaydi"
+    assert "summary.focus()" in js, "Escape'dan keyin fokus qaytmaydi"
+
+
+# ── Jadval, tegish maydoni, tanlagich ──────────────────────────────────
+
+
+def test_the_legal_tables_are_styled_and_scrollable() -> None:
+    """`site.css` da `table` uchun BITTA ham qoida yo'q edi: yuridik
+    hujjatdagi jadvallar telefonda ekrandan chiqib ketardi."""
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+
+    assert "\ntable {" in css, "umumiy jadval qoidasi yo'q"
+    assert "border-collapse" in css
+    assert "overflow-x: auto" in css, "telefonda jadval aylanmaydi"
+
+
+def test_the_footer_links_are_big_enough_to_tap() -> None:
+    """Futer havolalari ~20 px edi — telefonda barmoq bilan bosishga
+    juda kichik."""
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+    rule = css[css.index("footer > div a {"):]
+    rule = rule[: rule.index("}")]
+
+    assert "min-height: 40px" in rule, f"tegish maydoni kichik: {rule}"
+
+
+def test_the_calculator_select_has_a_name_and_a_tap_target() -> None:
+    """`<label>` ichida ikkita boshqaruv bor edi: brauzer yorliqni faqat
+    birinchisiga bog'laydi va skrinrider tanlagichni «nomsiz» deb
+    o'qirdi."""
+    js = (STATIC / "site.js").read_text(encoding="utf-8")
+    css = (STATIC / "site.css").read_text(encoding="utf-8")
+
+    assert 'aria-label="${label}"' in js
+    rule = css[css.index(".calc-feature select {"):]
+    assert "min-height: 40px" in rule[: rule.index("}")]
+
+
+# ── Til tanlagich va yetib boradigan sahifalar ─────────────────────────
+
+
+def test_a_uz_only_page_does_not_pretend_to_have_translations() -> None:
+    """Band bosilganda odam o'sha tildagi BOSH sahifaga tushardi —
+    buzilgan havola bilan bir xil taassurot."""
+    offer = (STATIC / "oferta.html").read_text(encoding="utf-8")
+    switch = offer[offer.index('class="lang-menu"'):]
+    switch = switch[: switch.index("</details>")]
+
+    assert 'aria-disabled="true"' in switch, "tarjimasiz band havola bo'lib qolgan"
+    assert 'href="/ru/"' not in switch, "ruscha band bosh sahifaga olib boradi"
+
+
+def test_every_page_can_reach_the_education_page() -> None:
+    """`/edu` ga havola FAQAT bosh sahifada edi — ichki sahifadan unga
+    yetib bo'lmasdi."""
+    for name in ("oferta.html", "status.html", "install.html", "site.ru.html"):
+        html = (STATIC / name).read_text(encoding="utf-8")
+        assert 'href="/edu"' in html, f"{name}: `/edu` ga havola yo'q"
+
+
+def test_every_indexable_page_has_a_social_card() -> None:
+    """Mijoz Telegramda `/oferta` yoki `/install` havolasini ulashsa
+    karta nomsiz va rasmsiz chiqardi — «ishonchsiz havola» taassuroti,
+    va aynan shu sahifalar sotuv jarayonida ulashiladi."""
+    for name in ("oferta.html", "privacy.html", "install.html", "edu.html", "site.html"):
+        html = (STATIC / name).read_text(encoding="utf-8")
+        assert 'property="og:title"' in html, f"{name}: OG kartasi yo'q"
+        assert 'rel="canonical"' in html, f"{name}: canonical yo'q"
+        # `og:url` va `canonical` bitta manzildan bo'lsin.
+        canonical = html[html.index('rel="canonical" href="') + 22:]
+        canonical = canonical[: canonical.index('"')]
+        assert f'property="og:url" content="{canonical}"' in html, f"{name}: manzillar ajralgan"
+
+
+def test_internal_links_use_the_canonical_privacy_url() -> None:
+    """`/privacy` va `/maxfiylik` bitta sahifa; canonical `/maxfiylik`.
+    Ichki havola non-canonical manzilga ishora qilmasin."""
+    for path in sorted((ROOT / "cloud" / "site").glob("*.html")):
+        assert 'href="/privacy"' not in path.read_text(encoding="utf-8"), path.name

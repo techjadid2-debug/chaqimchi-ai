@@ -10,7 +10,27 @@
   <title>ENES Edu — ta'lim muassasalari uchun</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/assets/favicon.png" type="image/png">
-  <link rel="stylesheet" href="/assets/site.css?v=1a3231b10b">
+  <!-- Ijtimoiy tarmoq kartasi (Open Graph) — BARCHA indekslanadigan
+     sahifada.  Ilgari u faqat bosh sahifada edi: mijoz Telegramda
+     `/oferta` yoki `/install` havolasini ulashsa karta nomsiz va
+     rasmsiz chiqardi — «ishonchsiz havola» degan taassurot beradi, va
+     aynan shu ikki sahifa sotuv jarayonida ulashiladi.
+
+     Sarlavha va izoh ATAYLAB sayt darajasida (`site.meta.*`): har
+     sahifa uchun alohida OG matni yozilsa ular vaqt o'tib sahifaning
+     o'z sarlavhasidan ajralib ketardi, va brend kartasi baribir
+     bir xil bo'lishi kerak.  Sahifaga XOS narsa — manzil.
+
+     `og:url` va `canonical` bitta manzildan: ikkisi ajralib ketsa
+     qidiruv tizimi qaysi biriga ishonishini o'zi tanlaydi. -->
+<link rel="canonical" href="__PUBLIC_ORIGIN__/edu">
+<meta property="og:title" content="Do‘kon uchun kamera analitikasi — ENES Monitoring">
+<meta property="og:description" content="Mavjud kameralaringiz mijozlar oqimini sanaydi, navbatni o‘lchaydi va tungi harakatdan xabar beradi. Video do‘konda qoladi.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="__PUBLIC_ORIGIN__/edu">
+<meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-enes.png">
+<meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/assets/site.css?v=5ec2692450">
   <style>
     /* Kalkulyatorga xos qoidalar SAHIFA ICHIDA.
        `site.css` ga qo'shilsa uni bo'lishadigan o'n bir sahifaning
@@ -95,7 +115,7 @@
       <a href="/aloqa">Aloqa</a>
     </div>
     <div class="nav-actions">
-      <details class="lang-menu"><summary aria-label="Til"><span>UZ</span></summary><div class="lang-menu-list"><a href="/edu" hreflang="uz" lang="uz" aria-current="true">O‘zbekcha</a><a href="/ru/" hreflang="ru" lang="ru">Русский</a><a href="/en/" hreflang="en" lang="en">English</a></div></details>
+      <details class="lang-menu"><summary aria-label="Til"><span>UZ</span></summary><div class="lang-menu-list"><a href="/edu" hreflang="uz" lang="uz" aria-current="true">O‘zbekcha</a><span lang="ru" aria-disabled="true" title="Bu sahifa hozircha faqat o‘zbekcha">Русский</span><span lang="en" aria-disabled="true" title="Bu sahifa hozircha faqat o‘zbekcha">English</span></div></details>
       <a class="text-link" href="__APP_URL__/owner">Mijoz kirishi</a>
       <a class="nav-cta" href="/#aloqa">Demo olish</a>
       <details class="nav-menu">
@@ -298,7 +318,7 @@
           <label for="website">Website</label>
           <input id="website" name="website" tabindex="-1" autocomplete="off">
         </div>
-        <p class="consent">Tugmani bosib, <a href="/privacy">maxfiylik shartlari</a>ga rozilik bildirasiz.</p>
+        <p class="consent">Tugmani bosib, <a href="/maxfiylik">maxfiylik shartlari</a>ga rozilik bildirasiz.</p>
         <button class="button form-button button-light" type="submit">Taklif so‘rash</button>
         <p id="eduStatus" class="form-status" role="status" aria-live="polite"></p>
       </form>
@@ -381,6 +401,11 @@
     <a href="/oferta">Ommaviy oferta</a>
     <a href="/maxfiylik">Maxfiylik</a>
     <a href="/hamkorlik">Hamkorlik</a>
+    <!-- `/edu` ga havola FAQAT bosh sahifada bor edi, ya'ni ichki
+         sahifadan (oferta, o'rnatish, holat) unga yetib bo'lmasdi.
+         Futer har sahifada turadi — nav'ni shishirmasdan hal qiladi.
+         Sahifa o'zi faqat o'zbekcha, shuning uchun `page:` emas. -->
+    <a href="/edu">Ta’lim muassasalari</a>
     <a href="/aloqa">Aloqa</a>
     <a href="tel:+998932225070">+998 93 222 50 70</a>
     <a href="/rozilik-shabloni">Rozilik shabloni</a>

@@ -1,0 +1,20 @@
+<!-- Ijtimoiy tarmoq kartasi (Open Graph) — BARCHA indekslanadigan
+     sahifada.  Ilgari u faqat bosh sahifada edi: mijoz Telegramda
+     `/oferta` yoki `/install` havolasini ulashsa karta nomsiz va
+     rasmsiz chiqardi — «ishonchsiz havola» degan taassurot beradi, va
+     aynan shu ikki sahifa sotuv jarayonida ulashiladi.
+
+     Sarlavha va izoh ATAYLAB sayt darajasida (`site.meta.*`): har
+     sahifa uchun alohida OG matni yozilsa ular vaqt o'tib sahifaning
+     o'z sarlavhasidan ajralib ketardi, va brend kartasi baribir
+     bir xil bo'lishi kerak.  Sahifaga XOS narsa — manzil.
+
+     `og:url` va `canonical` bitta manzildan: ikkisi ajralib ketsa
+     qidiruv tizimi qaysi biriga ishonishini o'zi tanlaydi. -->
+<link rel="canonical" href="__PUBLIC_ORIGIN__{{path}}">
+<meta property="og:title" content="{{site.meta.og_title}}">
+<meta property="og:description" content="{{site.meta.og_description}}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="__PUBLIC_ORIGIN__{{path}}">
+<meta property="og:image" content="__PUBLIC_ORIGIN__/assets/og-enes.png">
+<meta name="twitter:card" content="summary_large_image">

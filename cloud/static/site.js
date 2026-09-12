@@ -114,8 +114,29 @@
       if (event.target.closest("a")) menu.removeAttribute("open");
     });
   }
+  /* TASHQARIGA bosish ham yopadi.  Ilgari faqat havola va Escape
+     yopardi: menyuni ochib sahifaning boshqa joyiga bosgan odam uni
+     ochiq qoldirib ketardi va u telefonda kontentning yarmini
+     to'sardi — mijoz «sayt buzuq» deb o'ylardi.  Naqsh panelidagi
+     `ActionMenu` bilan bir xil. */
+  document.addEventListener("pointerdown", (event) => {
+    for (const menu of menus) {
+      if (menu.hasAttribute("open") && !menu.contains(event.target)) {
+        menu.removeAttribute("open");
+      }
+    }
+  });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") for (const menu of menus) menu.removeAttribute("open");
+    if (event.key !== "Escape") return;
+    for (const menu of menus) {
+      if (!menu.hasAttribute("open")) continue;
+      menu.removeAttribute("open");
+      /* Fokus menyuni ochgan tugmaga QAYTADI.  Usiz Escape'dan keyin
+         klaviatura bilan ishlaydigan odam sahifa boshiga tashlanardi
+         va menyuni qayta topishi kerak bo'lardi. */
+      const summary = menu.querySelector("summary");
+      if (summary) summary.focus();
+    }
   });
 
   // ── Yuklab olish holati ───────────────────────────────────────────────
@@ -254,13 +275,10 @@
       });
     });
 
-    // Hero'dagi narx ilgagi — eng arzon tarifdan (element bo'lsa).
-    const cheapest = plans.find((item) => item.price_kind === "fixed");
-    const heroPrice = document.getElementById("heroPrice");
-    if (heroPrice && cheapest) {
-      heroPrice.textContent = T("from_per_month", { price: money(cheapest.monthly_uzs) });
-      heroPrice.hidden = false;
-    }
+    /* Ilgari bu yerda hero'ga «... so'mdan» yozadigan blok turardi.
+       `#heroPrice` elementi dizayn-3 da olib tashlangan, ya'ni kod
+       jimgina hech narsa qilmaydi va `site.js.from_per_month` kaliti
+       ham o'lik — o'chirildi (2026-09-12). */
   }
 
   // ── Tarmoq kalkulyatori ───────────────────────────────────────────────
@@ -340,10 +358,15 @@
         // kalkulyator "nima tanlashim kerak?" degan savol bilan
         // boshlanardi va ko'pchilik shu yerda to'xtardi.
         const checked = index < 2 ? " checked" : "";
+        /* `<label>` ICHIDA ikkita boshqaruv bor edi (checkbox va
+           select) — brauzer yorliqni faqat birinchisiga bog'laydi va
+           skrinrider tanlagichni «nomsiz» deb o'qirdi.  Tanlagichga
+           o'z nomi beriladi; yorliq esa checkbox bilan qoladi. */
+        const label = esc(T("calc_cameras_for", { name: feature.name }));
         return `<label class="calc-feature">
           <input type="checkbox" value="${esc(feature.code)}"${checked}>
           <span>${esc(feature.name)}</span>
-          <select${checked ? "" : " disabled"}>${options}</select>
+          <select aria-label="${label}"${checked ? "" : " disabled"}>${options}</select>
         </label>`;
       })
       .join("");

@@ -111,7 +111,11 @@ h1, h2, h3 { margin-top: 0; letter-spacing: -.03em; line-height: 1.1; }
 .lang-menu summary::after { content: ""; width: 6px; height: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); }
 .lang-menu[open] summary::after { transform: translateY(1px) rotate(-135deg); }
 .lang-menu-list { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; display: grid; min-width: 160px; padding: 6px; border: 1px solid var(--band-border); border-radius: 12px; background: var(--band-surface); box-shadow: var(--band-shadow); }
-.lang-menu-list a { padding: 10px 12px; border-radius: 8px; color: var(--band-muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.lang-menu-list a, .lang-menu-list span { display: block; min-height: 40px; padding: 10px 12px; border-radius: 8px; color: var(--band-muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+/* Sahifa bu tilda yo'q — band havola EMAS.  Ilgari u o'sha tildagi
+   bosh sahifaga olib borardi va odam ofertani ruscha o'qimoqchi
+   bo'lib butunlay boshqa sahifaga tushardi. */
+.lang-menu-list span[aria-disabled="true"] { opacity: .45; cursor: default; }
 .lang-menu-list a:hover { background: var(--band-surface-2); color: var(--band-fg); }
 .lang-menu-list a[aria-current="true"] { color: var(--accent); }
 
@@ -293,7 +297,9 @@ h1 em { color: var(--accent); font-style: normal; }
    bo'lishi mumkin, shuning uchun u cho'ziladi va tanlov qotib turadi. */
 .calc-feature { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--band-border); border-radius: 12px; }
 .calc-feature span { flex: 1; min-width: 0; font-size: 14px; }
-.calc-feature select { padding: 7px 8px; border: 1px solid var(--band-border); border-radius: 8px; background: var(--band-bg); color: var(--band-fg); font: inherit; font-size: 13px; }
+/* 40 px: telefonda tanlagich balandligi ~30 px edi va barmoq bilan
+   ochilmasdi — kalkulyator amalda faqat desktopda ishlardi. */
+.calc-feature select { min-height: 40px; padding: 8px; border: 1px solid var(--band-border); border-radius: 8px; background: var(--band-bg); color: var(--band-fg); font: inherit; font-size: 13px; }
 /* Tanlanmagan funksiyaning kamera tanlovi ma'nosiz — o'chiriladi, lekin
    YO'QOLMAYDI: qator balandligi sakrab ketardi. */
 .calc-feature select:disabled { opacity: .45; }
@@ -347,10 +353,14 @@ h1 em { color: var(--accent); font-style: normal; }
  * kengligiga siqib qo'ygan edi. */
 footer { display: grid; grid-template-columns: auto minmax(240px, 1fr) minmax(0, 1.4fr); align-items: center; gap: 34px; padding: 42px max(24px, calc((100vw - 1180px) / 2)) 60px; border-top: 1px solid var(--band-border); color: var(--band-muted); font-size: 13px; }
 footer p { margin: 0; }
-footer > div { display: flex; flex-wrap: wrap; gap: 20px; min-width: 0; }
+footer > div { display: flex; flex-wrap: wrap; gap: 4px 20px; min-width: 0; }
 /* Mahsulot kimniki ekani — hamma ustun ostida, alohida qatorda. */
 .footer-powered { grid-column: 1 / -1; padding-top: 18px; border-top: 1px solid var(--band-border); color: var(--band-muted); font-size: 12px; }
-footer > div a { text-decoration: none; }
+/* Balandlik ≥40 px: futer havolalari ~20 px edi va telefonda
+   barmoq bilan bosishga juda kichik — mijoz oferta yoki maxfiylik
+   sahifasini ochishga bir necha marta urinardi.  `gap` kamayadi,
+   chunki `padding` uni qoplaydi. */
+footer > div a { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 0; text-decoration: none; }
 footer > div a:hover { color: var(--band-fg); }
 
 /* ── O'rnatish yo'riqnomasi (/install, /installer-guide) ──────────────
@@ -394,6 +404,36 @@ footer > div a:hover { color: var(--band-fg); }
 .status-panel { display: flex; gap: 14px; align-items: center; }
 .status-light { width: 16px; height: 16px; border-radius: 50%; background: #b8c0cc; }
 .status-light.online { background: var(--green); box-shadow: 0 0 0 8px rgba(52,168,83,.14); }
+/* ── Jadval ────────────────────────────────────────────────────────
+   `site.css` da `table` uchun BITTA ham qoida yo'q edi: oferta va
+   maxfiylik sahifalaridagi jadvallar brauzer standarti bilan
+   chizilardi (chegarasiz, tor, hizalanmagan) va telefonda ekrandan
+   chiqib ketardi — yuridik hujjatni telefonda o'qib bo'lmasdi.
+   `installer-guide.html` da `.port-table` uchun to'g'ri qilingan edi,
+   lekin u sahifa ichida yozilgan va boshqa sahifalarga tegmaydi. */
+table { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 11px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+/* Telefonda jadval ekrandan chiqmasin — o'zi aylanadi.  Butun
+   sahifaning gorizontal aylanishi TAQIQ, shuning uchun o'ram
+   jadvalning O'ZIDA. */
+@media (max-width: 700px) {
+  table { display: block; overflow-x: auto; }
+}
+
+/* Nosozlikda chiroq QIZIL.  Ilgari faqat `online` sinfi bor edi va
+   yiqilgan holat kulrang qolardi — aynan "hali tekshirilmoqda" bilan
+   bir xil ko'rinish. */
+.status-light.down { background: var(--red); box-shadow: 0 0 0 8px rgba(234,67,53,.14); }
+
+/* Tekshiruvlar ro'yxati. */
+.status-checks { display: grid; gap: 2px; margin: 14px 0 0; padding: 0; list-style: none; }
+.status-checks li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; min-height: 40px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.status-checks li:last-child { border-bottom: 0; }
+.status-checks b { font-variant-numeric: tabular-nums; }
+.status-checks .is-ok b, .status-checks li.is-ok b { color: var(--green); }
+.status-checks li.is-down b { color: var(--red); }
 
 @media (max-width: 1100px) and (min-width: 901px) {
   .hero { gap: 36px; }

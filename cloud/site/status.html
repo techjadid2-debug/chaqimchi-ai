@@ -13,11 +13,29 @@
   <main class="utility-main">
     <p class="eyebrow"><span></span> {{site.status.eyebrow}}</p><h1>{{site.status.h1}}</h1>
     <section class="utility-card status-panel"><span id="light" class="status-light"></span><div><h2 id="statusTitle" style="margin-bottom:6px">{{site.status.checking}}</h2><p id="statusText" style="margin:0;color:var(--muted)">{{site.status.waiting}}</p></div></section>
+
+    <!-- Tekshiruvlar ro'yxati.  Server ularni allaqachon qaytarardi
+         (`/health/deep` → `checks[]`), sahifa esa javobni TASHLAB
+         yuborib faqat «ishlayapti / aloqa yo'q» derdi — ya'ni
+         nosozlikda mijoz ham, biz ham qaysi qism yiqilganini bu
+         sahifadan bilib olmasdik. -->
+    <section class="utility-card" id="checksCard" hidden>
+      <h2>{{site.status.checks_title}}</h2>
+      <ul class="status-checks" id="checksList"></ul>
+      <p class="hint" id="checksUpdated"></p>
+    </section>
   </main>
   {{include:partials/footer.html}}
   <script type="application/json" id="page-text">
     {"upTitle": {{json:site.status.up_title}}, "upText": {{json:site.status.up_text}},
-     "downTitle": {{json:site.status.down_title}}, "downText": {{json:site.status.down_text}}}
+     "downTitle": {{json:site.status.down_title}}, "downText": {{json:site.status.down_text}},
+     "partialTitle": {{json:site.status.partial_title}}, "partialText": {{json:site.status.partial_text}},
+     "timeout": {{json:site.status.timeout}}, "updated": {{json:site.status.updated}},
+     "checkOk": {{json:site.status.check_ok}}, "checkFailed": {{json:site.status.check_failed}},
+     "names": {"control_db": {{json:site.status.check_control_db}},
+               "event_db": {{json:site.status.check_event_db}},
+               "media": {{json:site.status.check_media}},
+               "disk": {{json:site.status.check_disk}}}}
   </script>
   <script src="{{asset:status.js}}" defer></script>
 </body>

@@ -166,8 +166,20 @@ def lang_switch(page: Page, lang: str, texts: dict) -> str:
     """
     items = []
     for code in LANGS:
-        target = page.paths.get(code, LANG_PATHS[code])
+        target = page.paths.get(code)
         current = ' aria-current="true"' if code == lang else ""
+        if target is None:
+            # Sahifa BU TILDA yo'q (yuridik hujjat faqat o'zbekcha).
+            # Ilgari havola o'sha tildagi BOSH sahifaga olib borardi:
+            # odam ofertani ruscha o'qimoqchi bo'lib bosadi va butunlay
+            # boshqa sahifaga tushadi — bu buzilgan havola bilan bir xil
+            # taassurot.  Endi band tanlanmaydi va SABABI aytiladi.
+            label = texts[f"site.lang.{code}"]
+            items.append(
+                f'<span lang="{code}" aria-disabled="true"'
+                f' title="{texts["site.lang.only_uz"]}">{label}</span>'
+            )
+            continue
         items.append(
             f'<a href="{target}" hreflang="{code}" lang="{code}"{current}>{texts[f"site.lang.{code}"]}</a>'
         )

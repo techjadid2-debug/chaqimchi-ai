@@ -2,7 +2,8 @@
 <html lang="uz" data-theme="light">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ommaviy oferta — ENES Monitoring</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="icon" href="/assets/favicon.png" type="image/png"><meta name="description" content="ENES Monitoring xizmatining ommaviy oferta shartnomasi: xizmat doirasi, tariflar, to'lov, bekor qilish va javobgarlik chegarasi."><link rel="stylesheet" href="{{asset:site.css}}"></head>
+  <link rel="icon" href="/assets/favicon.png" type="image/png"><meta name="description" content="ENES Monitoring xizmatining ommaviy oferta shartnomasi: xizmat doirasi, tariflar, to'lov, bekor qilish va javobgarlik chegarasi.">{{include:partials/head-og.html}}
+  <link rel="stylesheet" href="{{asset:site.css}}"></head>
 <body class="utility-page">
   {{include:partials/nav-sub.html}}
 <main class="utility-main">
@@ -78,12 +79,20 @@
       </p>
 
       <h2>5. Tariflar va narx</h2>
+      <!-- Summa bu yerda QOTIRILMAYDI.  Narx katalogdan keladi va
+           sahifada qo'lda yozilgan son oferta bilan sayt o'rtasida
+           ziddiyat yaratadi — yuridik hujjatda bu eng qimmat xato.
+           Amaldagi tarif bosh sahifadagi narx bo'limida. -->
       <table>
         <tr><th>Tarif</th><th>Kamera</th><th>Oylik</th><th>Hodisa arxivi</th></tr>
-        <tr><td>Boshlang‘ich</td><td>2 tagacha</td><td>149 000 so‘m</td><td>30 kun</td></tr>
-        <tr><td>Biznes</td><td>4 tagacha</td><td>299 000 so‘m</td><td>30 kun</td></tr>
+        <tr><td>Boshlang‘ich</td><td>2 tagacha</td><td><a href="/#narx">amaldagi tarif</a></td><td>30 kun</td></tr>
+        <tr><td>Biznes</td><td>4 tagacha</td><td><a href="/#narx">amaldagi tarif</a></td><td>30 kun</td></tr>
         <tr><td>Tarmoq (bir nechta do‘kon)</td><td>Har do‘konda 4 tagacha</td><td>So‘rov bo‘yicha</td><td>90 kun</td></tr>
       </table>
+      <p class="hint">
+        Amaldagi oylik summa <a href="/#narx">bosh sahifadagi narx
+        bo‘limida</a> ko‘rsatiladi va hisob-faktura shu asosda ochiladi.
+      </p>
       <p class="hint">
         <b>Narx AQSh dollariga bog‘langan</b> va so‘mdagi summa hisob-faktura
         ochilgan kundagi kurs bo‘yicha hisoblanadi. Kurs o‘zgarsa keyingi

@@ -282,6 +282,39 @@ Telegram vaqtincha ishlamasa delivery `failed` bo‘ladi va exponential retry
 bilan qayta yuboriladi. Recipient lead yuborilgandan keyin ulansa, oxirgi 24
 soatdagi hali delivery yozuvi yo‘q leadlar navbatga qaytariladi.
 
+### 3.1 CSP majburiy rejimda — Caddy `--force-recreate` bilan
+
+2026-09-12 dan siyosat `Content-Security-Policy-Report-Only` emas,
+`Content-Security-Policy` (ikkala Caddyfile'da; tenglikni
+`tests/test_security_headers.py` qulflaydi).  Ya'ni siyosatga tushmagan
+inline skript endi **bloklanadi** — brauzer ekranda hech narsa
+ko'rsatmaydi, tugma shunchaki bosilmaydi.
+
+`deploy/Caddyfile*` o'zgargan har deployda:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.enes.yml \
+  up -d --no-deps --force-recreate caddy
+```
+
+**Oddiy `restart` KIFOYA QILMAYDI.** Caddyfile bitta fayl bo'lib
+bind-mount qilingan, bind-mount esa yo'lga emas inode'ga bog'lanadi;
+`rsync` faylni joyida o'zgartirmasdan yangi inode yozadi va konteyner
+eski nusxada qolib ketadi — `caddy reload` "muvaffaqiyatli" deb yozadi-yu,
+sarlavha o'zgarmaydi (`docs/DEPLOY_TARIFLAR.md` §3).
+
+Tasdiqlash — HOST fayli emas, jonli javob o'qilsin:
+
+```bash
+docker exec enes-caddy-1 sh -c "grep -c 'Content-Security-Policy-Report-Only' /etc/caddy/Caddyfile"  # 0
+curl -sI https://enes.uz | grep -i content-security-policy   # `-Report-Only` YO'Q
+```
+
+So'ng panelni (`/owner`, `/admin`) va usta sahifasini brauzer konsoli
+ochiq holda aylanib chiqing: bitta ham `Refused to …` xabari bo'lmasin.
+Xabar chiqsa yechim siyosatni bo'shatish emas — skriptni
+`/assets/*.js` ga chiqarish (`data-act` + delegatsiya naqshi).
+
 ## 4. Sotuvga ochish darvozasi
 
 Kod deployi apparat qabul testining o‘rnini bosmaydi. Quyidagilar tugamaguncha
